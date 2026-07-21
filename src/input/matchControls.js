@@ -76,13 +76,24 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     if (!charge) return;
     const held = performance.now() - charge.startedAt;
     const drag = charge.btnDrag;
-    const spikeCtx = lastGame && contextAction(lastGame) === 'spike';
+    const ctx = lastGame ? contextAction(lastGame) : null;
+    const spikeCtx = ctx === 'spike';
     if (spikeCtx) {
       jumpSignal = true; // 起跳＝放開瞬間（windup 由 main 轉表現層）
       jumpStartedAt = performance.now();
     }
+    let timing = held / CHARGE_MS;
+    if (ctx === 'receive' && lastGame) {
+      // Perfect 接球：放開瞬間球正好進可及範圍且下墜＝1.0（一傳最準）；
+      // 提前按＝0.7（緩衝出手的標準品質）。只加分不懲罰
+      const me = lastGame.players[playerId];
+      const a = lastGame.actors[playerId];
+      const b = lastGame.ball;
+      const near = Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * 1.1;
+      timing = near && b.vy < 0 && b.y <= standingReach(me) + 0.6 ? 1 : 0.7;
+    }
     queuedAction = {
-      timing: held / CHARGE_MS,
+      timing,
       gaze: charge.gaze,
       aimNdc: drag ? null : { ...pointerNdc },
       aimVec: drag && Math.hypot(drag.dx, drag.dy) > 14 ? { ...drag } : null,
@@ -239,20 +250,23 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         const reachable = near && b.vy < 0 && b.y <= standingReach(me) + 0.3;
         const claimedToMe = aiState?.claimId === playerId;
         if (canTouch && reachable && r.touches === 0) {
-          // 到位自動接（一傳是反射不是瞄準）
+          // 到位自動接（一傳是反射不是瞄準）；品質 0.6——主動抓 Perfect 才有更準的一傳
           action = 'receive';
           aim = localToWorld(me.teamId, 1.2, 1.2);
+          timing = 0.6;
         } else if (canTouch && reachable && claimedToMe && r.touches === 1) {
           // 這球歸你的二傳保底：自動舉給攻擊手
           action = 'set';
           const atk = aiState?.attackerId && game.actors[aiState.attackerId];
           const lane = atk ? -TEAM_SIDE[me.teamId] * atk.x : 2;
           aim = localToWorld(me.teamId, lane, 1.3);
+          timing = 0.75;
         } else if (canTouch && reachable && claimedToMe && r.touches === 2 &&
             b.y < SALVAGE_Y) {
           // 錯過扣球窗的保底：送安全球過網（主動跳扣永遠更強）
           action = 'receive';
           aim = localToWorld(me.teamId === 'A' ? 'B' : 'A', 0, 6.5);
+          timing = 0.6;
         }
       }
 

@@ -3,6 +3,8 @@
 export function createSfx() {
   let ctx = null;
 
+  let crowdStarted = false;
+
   function ensure() {
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -10,9 +12,55 @@ export function createSfx() {
       ctx = new AC();
     }
     if (ctx.state === 'suspended') ctx.resume();
+    if (!crowdStarted) startCrowd();
     return ctx;
   }
   window.addEventListener('pointerdown', ensure);
+
+  // 球場氛圍：低音量群眾雜訊底（loop），得分時 cheer 疊上去
+  function startCrowd() {
+    crowdStarted = true;
+    const len = ctx.sampleRate * 2;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let acc = 0;
+    for (let i = 0; i < len; i += 1) {
+      acc = acc * 0.98 + (Math.random() * 2 - 1) * 0.02; // 布朗雜訊≈人聲嗡嗡底
+      d[i] = acc;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.value = 0.05;
+    src.connect(lp).connect(g).connect(ctx.destination);
+    src.start();
+  }
+
+  // 得分歡呼：帶通雜訊湧起再退（~1.2 秒）
+  function cheer() {
+    if (!ensure()) return;
+    const t = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * 1.3);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1100;
+    bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.25);
+    src.connect(bp).connect(g).connect(ctx.destination);
+    src.start(t);
+  }
 
   // 爆裂：白噪音爆點＋低頻搥擊
   function crack(gainScale = 1) {
@@ -84,11 +132,13 @@ export function createSfx() {
       for (const e of events) {
         if (e.type === 'SERVE') crack(0.7);
         else if (e.type === 'BLOCK_TOUCH') thud();
+        else if (e.type === 'DEAD_BALL') cheer(); // 得分＝觀眾歡呼
         else if (e.type === 'TOUCH') {
           if (e.kind === 'spike') {
             if ((e.power ?? 1) < 0.45) thud(); // 輕吊＝悶短
             else crack(1);                     // 重扣＝爆裂
-          } else if (e.kind === 'receive' && e.touches === 3) thud(); // 第三擊安全球
+          } else if (e.kind === 'receive' && (e.power ?? 0) >= 0.95) ping(980); // Perfect！
+          else if (e.kind === 'receive' && e.touches === 3) thud(); // 第三擊安全球
           else if (e.kind === 'set') ping(760);
           else ping(600);
         }

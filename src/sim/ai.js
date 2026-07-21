@@ -207,7 +207,9 @@ function decideOne(game, aiState, playerId) {
     if (inReach) {
       const [action, aim] = chooseTouch(game, aiState, player, actor);
       if (action && ball.y <= touchCeiling(player, action)) {
-        return createIntent({ playerId, tick, action, aim });
+        // AI 觸球品質基準 0.75（玩家 Perfect 時機＝1.0 才有超越空間）；扣球力度全開
+        const timing = action === 'spike' ? 1 : 0.75;
+        return createIntent({ playerId, tick, action, aim, timing });
       }
     }
     // 站位：落點的下游側（順球飛行方向退 0.3m）——觸球點在身前、面向來球（真實接球站位）

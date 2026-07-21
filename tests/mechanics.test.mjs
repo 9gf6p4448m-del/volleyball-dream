@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, stepGame, receiveQualityMul, timingQualityMul, blockTimingMul, TUNING,
+  createGame, stepGame, receiveQualityMul, timingQualityMul, blockTimingMul,
+  receivePerfectMul, TUNING,
 } from '../src/sim/game.js';
 import { createPlayer, standingReach } from '../src/sim/player.js';
 import { createIntent } from '../src/sim/intent.js';
@@ -77,6 +78,13 @@ test('攔網時機：太晚/甜蜜/太早的成功率乘數', () => {
   assert.equal(blockTimingMul(1), TUNING.BLOCK_LATE_MUL);
   assert.equal(blockTimingMul(12), 1.0);
   assert.equal(blockTimingMul(40), TUNING.BLOCK_EARLY_MUL);
+});
+
+test('Perfect 接球：timing≥0.95 一傳更準；AI 基準 0.75 拿不到', () => {
+  assert.equal(receivePerfectMul(1), TUNING.PERFECT_RECV_ACC);
+  assert.equal(receivePerfectMul(0.95), TUNING.PERFECT_RECV_ACC);
+  assert.equal(receivePerfectMul(0.75), 1);
+  assert.equal(receivePerfectMul(0.6), 1);
 });
 
 test('高低手球質：高手 < 標準低手 < 貼地撲救（散佈乘數遞增）', () => {

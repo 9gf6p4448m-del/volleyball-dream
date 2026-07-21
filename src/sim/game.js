@@ -30,6 +30,7 @@ export const TUNING = {
   SWEET_LO: 0.7, SWEET_HI: 1.05, OVERCHARGE_T: 1.15,
   SWEET_ACC: 0.55,        // 甜蜜區散佈乘數（越小越準）
   OVER_ACC: 1.5,          // 超蓄散佈乘數
+  PERFECT_RECV_ACC: 0.5,  // Perfect 接球（timing≥0.95）的散佈乘數
   // 攔網時機判定：起跳到球過網的滯空 tick 數
   BLOCK_SWEET_MIN: 4, BLOCK_SWEET_MAX: 26,
   BLOCK_LATE_MUL: 0.6,    // 起跳太晚（手還沒到頂）
@@ -200,9 +201,10 @@ function executeTouch(state, intent, player, actor, ev) {
     ? computeDeception(from, intent.aim, intent.gaze)
     : { deceiveP: 0, errorBoost: 0 };
   // 高低手球質（接球）×出手品質（扣球甜蜜區/超蓄）：都收斂到散佈乘數
+  // 接球另吃 Perfect 時機（timing≥0.95＝球到瞬間出手，一傳更準）
   const rawT = intent.timing ?? 1;
   const qualityMul = intent.action === 'receive'
-    ? receiveQualityMul(from.y, player)
+    ? receiveQualityMul(from.y, player) * receivePerfectMul(rawT)
     : intent.action === 'spike'
       ? timingQualityMul(rawT)
       : 1;
@@ -302,6 +304,11 @@ export function timingQualityMul(t) {
   if (t >= TUNING.SWEET_LO && t <= TUNING.SWEET_HI) return TUNING.SWEET_ACC;
   if (t > TUNING.OVERCHARGE_T) return TUNING.OVER_ACC;
   return 1.0;
+}
+
+// Perfect 接球（純函式）：球到瞬間出手（timing≥0.95）＝一傳更準
+export function receivePerfectMul(t) {
+  return t >= 0.95 ? TUNING.PERFECT_RECV_ACC : 1;
 }
 
 // 攔網時機（純函式）：起跳後滯空 tick 數 → 攔網成功率乘數
