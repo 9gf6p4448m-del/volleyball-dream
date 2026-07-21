@@ -25,6 +25,10 @@ export const TUNING = {
   SPIKE_SPEED_BASE: 9,    // 扣球速度 = BASE + power × PER（m/s）
   SPIKE_SPEED_PER: 0.17,
   SPIKE_MIN_TIME: 0.18,   // 扣球最短飛行時間（避免零距離除法）
+  // H3 視線欺敵曲線（騙敵線性、失誤平方；試玩調參用，結構不變）
+  THETA_MAX_DEG: 45,      // 視線與實際擊球方向的最大有效夾角
+  DECEIVE_GAIN: 0.7,      // 騙過攔網機率 = min(θ/θmax,1) × 此值（線性）
+  ERROR_GAIN: 0.5,        // 自身失誤增量 = (θ/θmax)² × 此值（平方）
 };
 
 // teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = P1）
@@ -35,7 +39,7 @@ export function createGame({ seed = 1, teams } = {}) {
   for (const team of ['A', 'B']) {
     for (const p of rosters[team]) {
       players[p.id] = p;
-      actors[p.id] = { x: 0, z: 0, blockUntil: -1, lastTouchTick: -9999 };
+      actors[p.id] = { x: 0, z: 0, px: 0, pz: 0, blockUntil: -1, lastTouchTick: -9999 };
     }
   }
   const state = {
@@ -57,6 +61,7 @@ export function createGame({ seed = 1, teams } = {}) {
       possession: null,
       lastTouchTeam: null,
       lastToucherId: null,
+      deceiveP: 0,       // H3：當前扣球夾帶的騙敵機率（攔網結算用）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
     },
     events: [], // 完整事件日誌（測試/回放用）
@@ -70,6 +75,12 @@ export function createGame({ seed = 1, teams } = {}) {
 export function stepGame(state, intents = []) {
   if (state.phase === 'set_over') return [];
   const ev = [];
+
+  // 快照上一步位置：供 render 層插值（同 ball 的 px/py/pz 慣例）
+  for (const a of Object.values(state.actors)) {
+    a.px = a.x;
+    a.pz = a.z;
+  }
 
   for (const it of intents) {
     if (it.tick !== state.tick) continue; // 只吃本 tick 的 Intent（決定論保護）
@@ -155,8 +166,14 @@ function executeTouch(state, intent, player, actor, ev) {
   }
 
   // 依動作解球路；精度屬性決定落點散佈（control；發球用 serve 屬性）
-  const target = scatterTarget(state, intent.aim, player.attributes.control, intent.action);
   const from = { x: ball.x, y: ball.y, z: ball.z };
+  // H3：扣球帶視線欺敵——θ 越大越可能騙過攔網（線性），但自身落點越飄（平方）
+  const dec = intent.action === 'spike'
+    ? computeDeception(from, intent.aim, intent.gaze)
+    : { deceiveP: 0, errorBoost: 0 };
+  const target = scatterTarget(
+    state, intent.aim, player.attributes.control, intent.action, dec.errorBoost,
+  );
   let v;
   if (intent.action === 'spike') {
     v = spikeVelocity(
@@ -176,6 +193,7 @@ function executeTouch(state, intent, player, actor, ev) {
   rally.possession = team;
   rally.lastTouchTeam = team;
   rally.lastToucherId = player.id;
+  rally.deceiveP = dec.deceiveP;
   rally.profile = intent.action === 'spike' ? 'spike' : 'arc';
   rally.flightId += 1;
   rally.touchLockTick = state.tick;
@@ -201,6 +219,7 @@ function performServe(state, intent, ev) {
   rally.possession = team;
   rally.lastTouchTeam = team;
   rally.lastToucherId = player.id;
+  rally.deceiveP = 0;
   rally.profile = 'serve';
   rally.flightId += 1;
   actor.lastTouchTick = state.tick;
@@ -214,11 +233,31 @@ export function spikeSpeed(player) {
   return TUNING.SPIKE_SPEED_BASE + player.attributes.power * TUNING.SPIKE_SPEED_PER;
 }
 
+// H3 視線欺敵（純函式）：由擊球點、實際目標、視線目標算出
+// θ（水平夾角）、騙過攔網機率（線性）、自身失誤增量（平方）
+export function computeDeception(from, aim, gaze) {
+  if (!gaze || (gaze.x === aim.x && gaze.z === aim.z)) {
+    return { theta: 0, deceiveP: 0, errorBoost: 0 };
+  }
+  const aimAngle = Math.atan2(aim.x - from.x, aim.z - from.z);
+  const gazeAngle = Math.atan2(gaze.x - from.x, gaze.z - from.z);
+  let diff = Math.abs(aimAngle - gazeAngle);
+  if (diff > Math.PI) diff = Math.PI * 2 - diff;
+  const theta = (diff * 180) / Math.PI;
+  const t = Math.min(theta / TUNING.THETA_MAX_DEG, 1);
+  return {
+    theta,
+    deceiveP: t * TUNING.DECEIVE_GAIN,
+    errorBoost: t * t * TUNING.ERROR_GAIN,
+  };
+}
+
 // 落點散佈：精度屬性越高越準；兩次 rand 呼叫（角度、半徑），順序固定＝決定論
-function scatterTarget(state, aim, accuracyAttr, action) {
+// extraInaccuracy：H3 欺敵的失誤增量（平方項），直接疊加在精度虧損上
+function scatterTarget(state, aim, accuracyAttr, action, extraInaccuracy = 0) {
   const factor =
     action === 'set' ? 0.55 : action === 'spike' ? 1.2 : action === 'serve' ? 1.35 : 1.0;
-  const r = TUNING.SCATTER_MAX * (1 - accuracyAttr / 100) * factor;
+  const r = TUNING.SCATTER_MAX * ((1 - accuracyAttr / 100) * factor + extraInaccuracy);
   const angle = rand(state) * Math.PI * 2;
   const radius = rand(state) * r;
   return { x: aim.x + Math.cos(angle) * radius, z: aim.z + Math.sin(angle) * radius };
@@ -276,6 +315,9 @@ function tryBlock(state, toTeam, ev) {
   }
   if (!best) return false;
 
+  // H3：攔網手被扣球者的視線騙過 → 整手撲空（機率＝欺敵線性項）
+  if (state.rally.deceiveP > 0 && rand(state) < state.rally.deceiveP) return false;
+
   const chance = 0.12 + best.p.attributes.block * 0.004;
   if (rand(state) >= chance) return false; // 沒攔到，乾淨過網
 
@@ -287,6 +329,7 @@ function tryBlock(state, toTeam, ev) {
   r.touches = 0;
   r.lastTouchTeam = toTeam;
   r.lastToucherId = best.p.id;
+  r.deceiveP = 0;
   r.profile = 'arc';
   r.flightId += 1;
   ev.push({ type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id });
@@ -300,9 +343,11 @@ function isFrontRowOf(state, team, playerId) {
 }
 
 // 一分結算：把 match 事件補上 tick 收進事件流，接著佈置下一球或收局
+// DEAD_BALL 事件附上球當下座標（落點/犯規點），供回放與 UI 用
 function settlePoint(state, winner, reason, ev) {
+  const at = { x: state.ball.x, z: state.ball.z };
   for (const e of pointTo(state.match, winner, reason)) {
-    ev.push({ tick: state.tick, ...e });
+    ev.push(e.type === 'DEAD_BALL' ? { tick: state.tick, ...e, at } : { tick: state.tick, ...e });
   }
   if (state.match.setOver) {
     state.phase = 'set_over';
@@ -320,15 +365,17 @@ function setupServePhase(state) {
     const rot = state.match.rotations[team];
     rot.forEach((pid, idx) => {
       const pos = basePosition(team, idx + 1);
-      state.actors[pid].x = pos.x;
-      state.actors[pid].z = pos.z;
-      state.actors[pid].blockUntil = -1;
+      const a = state.actors[pid];
+      a.x = pos.x; a.z = pos.z;
+      a.px = pos.x; a.pz = pos.z; // 瞬移回位不做插值拖影
+      a.blockUntil = -1;
     });
   }
   const sid = serverId(state.match);
   const sp = servePosition(state.match.servingTeam);
-  state.actors[sid].x = sp.x;
-  state.actors[sid].z = sp.z;
+  const sa = state.actors[sid];
+  sa.x = sp.x; sa.z = sp.z;
+  sa.px = sp.x; sa.pz = sp.z;
 
   const b = state.ball;
   b.x = sp.x; b.y = 1.6; b.z = sp.z;
@@ -342,6 +389,7 @@ function setupServePhase(state) {
   r.possession = null;
   r.lastTouchTeam = null;
   r.lastToucherId = null;
+  r.deceiveP = 0;
   r.touchLockTick = -1;
 }
 

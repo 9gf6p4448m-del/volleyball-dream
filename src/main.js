@@ -1,16 +1,27 @@
 // 組裝層：固定步長累積器（模擬）＋ requestAnimationFrame（畫面，不鎖幀）
 // 架構鐵律：模擬（src/sim）只在 while 迴圈裡以 SIM_DT 推進；render 讀插值結果，兩者完全脫鉤
+// 預設＝Phase 1 比賽模式；?mode=bench 保留 Phase 0 基準測試場景（真機降規測試基準）
 import { SIM_DT, MAX_FRAME_DELTA } from './sim/constants.js';
 import { createWorld, stepWorld } from './sim/world.js';
+import { createGame, stepGame } from './sim/game.js';
+import { createAiState, aiCollectIntents } from './sim/ai.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
 import { createCourt } from './render/court.js';
 import { createPlayers } from './render/players.js';
+import { createMatchView } from './render/matchView.js';
 import { createBallView } from './render/ballView.js';
+import { createCameraRig } from './render/cameraRig.js';
 import { createCameraControls } from './input/cameraControls.js';
+import { createMatchControls } from './input/matchControls.js';
 import { createHud } from './ui/hud.js';
+import { createScoreboard } from './ui/scoreboard.js';
+import { createSfx } from './ui/sfx.js';
+
+const PLAYER_ID = 'A2'; // 玩家＝A 隊主攻手（design-brief 定案 #9）
 
 async function init() {
+  const params = new URLSearchParams(window.location.search);
   const quality = getQuality();
   const container = document.getElementById('app');
   const loadingEl = document.getElementById('loading');
@@ -21,10 +32,100 @@ async function init() {
   createLights(scene, quality);
   createCourt(scene, quality);
   const ballView = createBallView(scene, quality);
-  const controls = createCameraControls(camera, renderer.domElement);
   bindResize(renderer, camera);
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality));
 
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params };
+  if (params.get('mode') === 'bench') {
+    await runBench(ctx);
+  } else {
+    await runMatch(ctx);
+  }
+}
+
+// ---- Phase 1 比賽模式 ----
+
+async function runMatch(ctx) {
+  const { renderer, scene, camera, quality, ballView, hud, loadingEl, params } = ctx;
+
+  const seedParam = Number.parseInt(params.get('seed'), 10);
+  let seed = Number.isFinite(seedParam) ? seedParam : 20260721;
+
+  let game = createGame({ seed });
+  let aiState = createAiState();
+
+  let matchView;
+  try {
+    matchView = await createMatchView(scene, quality, game, PLAYER_ID);
+  } catch (err) {
+    loadingEl.textContent = `模型載入失敗：${err.message ?? err}`;
+    hud.error(`模型載入失敗（${quality.model}）`);
+    matchView = { count: 0, sync() {} };
+  }
+  if (matchView.count > 0) loadingEl.remove();
+
+  const rig = createCameraRig(camera, PLAYER_ID);
+  const controls = createMatchControls(renderer.domElement, camera, PLAYER_ID, rig);
+  const scoreboard = createScoreboard(PLAYER_ID);
+  const sfx = createSfx();
+
+  // 局終點擊 → 換種子再開一局
+  window.addEventListener('pointerdown', () => {
+    if (game.phase !== 'set_over') return;
+    seed += 1;
+    game = createGame({ seed });
+    aiState = createAiState();
+    window.__phase1.game = game;
+    window.__phase1.aiState = aiState;
+  });
+
+  // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
+  window.__phase1 = { game, aiState, renderer, scene, camera, quality, rig };
+
+  let last = performance.now();
+  let accumulator = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) last = performance.now();
+  });
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    let delta = (now - last) / 1000;
+    last = now;
+    if (delta > MAX_FRAME_DELTA) delta = MAX_FRAME_DELTA;
+    if (delta < 0) delta = 0;
+
+    accumulator += delta;
+    let simSteps = 0;
+    while (accumulator >= SIM_DT) {
+      // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
+      const intents = [
+        ...controls.collect(game),
+        ...aiCollectIntents(game, aiState, [PLAYER_ID]),
+      ];
+      const events = stepGame(game, intents);
+      if (events.length > 0) sfx.onEvents(events);
+      accumulator -= SIM_DT;
+      simSteps += 1;
+    }
+
+    const alpha = accumulator / SIM_DT;
+    ballView.sync(game.ball, alpha);
+    matchView.sync(game, alpha, delta);
+    rig.update(game, alpha);
+    scoreboard.update(game);
+    renderer.render(scene, camera);
+    hud.frame(now, delta, simSteps);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- Phase 0 基準測試模式（?mode=bench，保留降規測試基準）----
+
+async function runBench(ctx) {
+  const { renderer, scene, camera, quality, ballView, hud, loadingEl } = ctx;
+
+  const controls = createCameraControls(camera, renderer.domElement);
   let players;
   try {
     players = await createPlayers(scene, quality);
@@ -36,25 +137,20 @@ async function init() {
   if (players.count > 0) loadingEl.remove();
 
   const world = createWorld();
-  // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
   window.__phase0 = { world, renderer, scene, camera, quality };
   let last = performance.now();
   let accumulator = 0;
-
-  // 分頁切回時重設時鐘，避免一次灌入巨量 delta
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) last = performance.now();
   });
 
   function frame(now) {
     requestAnimationFrame(frame);
-
     let delta = (now - last) / 1000;
     last = now;
     if (delta > MAX_FRAME_DELTA) delta = MAX_FRAME_DELTA;
     if (delta < 0) delta = 0;
 
-    // 固定步長推進模擬（60Hz 恆定，與畫面幀率無關）
     accumulator += delta;
     let simSteps = 0;
     while (accumulator >= SIM_DT) {
@@ -63,7 +159,6 @@ async function init() {
       simSteps += 1;
     }
 
-    // 畫面層：插值讀取模擬狀態＋純視覺動畫
     ballView.sync(world.ball, accumulator / SIM_DT);
     players.update(delta);
     controls.update();
