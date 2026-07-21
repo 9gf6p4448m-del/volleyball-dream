@@ -20,13 +20,14 @@ export function createScoreboard(playerId) {
   const hintEl = el.querySelector('.hint');
 
   return {
-    update(game, isMyBall = false) {
+    // controlledId：全隊輪控下當前受控球員（未傳則用建立時的預設）
+    update(game, isMyBall = false, controlledId = playerId) {
       const { score } = game.match;
       const serve = game.match.servingTeam;
       lineEl.textContent = `${score.A} : ${score.B}`;
       hintEl.textContent = isMyBall
         ? '🟠 這球歸你！跑向藍色落點圈'
-        : hintFor(game, playerId, serve);
+        : hintFor(game, controlledId, serve);
     },
   };
 }

@@ -13,7 +13,8 @@ const RUN_BLEND_SPEED = 3.0; // 每秒動畫權重切換速率
 const TURN_LERP = 0.35;      // 轉身平滑（排球轉身要快，慢了看起來像背對球）
 const RUN_AT = 1.2;          // 高於此移速（m/s）視為跑動
 
-export async function createMatchView(scene, quality, game, highlightId, forcePose = null) {
+export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null) {
+  let highlightId = initialControlledId; // 全隊輪控：光圈與「你」標籤跟著受控者
   const gltf = await new GLTFLoader().loadAsync(
     `${import.meta.env.BASE_URL}models/${quality.model}`,
   );
@@ -85,6 +86,7 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
     triggerPose(playerId, type) {
       units[playerId]?.animator.trigger(type);
     },
+    setControlled(id) { highlightId = id; },
     // 「這球歸你」：光圈變橘紅＋放大脈動
     setHot(hot) {
       if (hot === ringHot) return;

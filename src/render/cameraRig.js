@@ -19,7 +19,8 @@ export const CAMERA_TUNING = {
   SPIKE_CAM_DIST: 3.0,    // 球距我小於此值且輪到第三擊 → 進入扣球一人稱
 };
 
-export function createCameraRig(camera, playerId) {
+export function createCameraRig(camera, initialPlayerId) {
+  let playerId = initialPlayerId; // 全隊輪控：跟著受控球員走
   let mode = 'third';
   let trans = 0;
   const fromPos = new THREE.Vector3();
@@ -43,6 +44,7 @@ export function createCameraRig(camera, playerId) {
   }
 
   return {
+    setPlayerId(id) { playerId = id; },
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     getMode() { return mode; },
 

@@ -7,6 +7,7 @@ import { createGame, stepGame } from './sim/game.js';
 import { createAiState, aiCollectIntents } from './sim/ai.js';
 import { predictLanding } from './sim/flight.js';
 import { landedCourtTeam } from './sim/rotation.js';
+import { serverId } from './sim/match.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
 import { createCourt } from './render/court.js';
@@ -24,7 +25,7 @@ import { createTouchUi } from './ui/touchUi.js';
 import { createCallButton } from './ui/callButton.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 
-const PLAYER_ID = 'A2'; // 玩家＝A 隊主攻手（design-brief 定案 #9）
+const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
 async function init() {
   // 遊戲頁禁右鍵選單與 iOS 捏合縮放（長按/拖曳是遊戲操作，不能跳原生 UI）
@@ -100,6 +101,11 @@ async function runMatch(ctx) {
     seed += 1;
     game = createGame({ seed, setTarget });
     aiState = createAiState();
+    controlledId = PLAYER_ID;
+    switchKey = '';
+    controls.setPlayerId(PLAYER_ID);
+    rig.setPlayerId(PLAYER_ID);
+    matchView.setControlled(PLAYER_ID);
     window.__phase1.game = game;
     window.__phase1.aiState = aiState;
   });
@@ -109,10 +115,46 @@ async function runMatch(ctx) {
   let vcrCurrent = { snapshot: null, steps: [] };
   let vcrLast = null;
 
+  // 全隊輪控：控制權跟著球權走，只在球權節點（flight/phase 變化）切換
+  let controlledId = PLAYER_ID;
+  let switchKey = '';
+  function desiredControlled() {
+    if (game.phase === 'serve') {
+      return game.match.servingTeam === 'A' ? serverId(game.match) : controlledId;
+    }
+    if (game.phase !== 'rally') return controlledId;
+    const claim = aiState.claimId;
+    if (claim && game.players[claim].teamId === 'A') return claim; // 球歸誰誰上
+    if (game.rally.possession === 'B') {
+      // 對方持球：控最靠近球的前排（攔網位）
+      const rot = game.match.rotations.A;
+      let best = rot[1];
+      for (const id of [rot[1], rot[2], rot[3]]) {
+        if (Math.abs(game.actors[id].x - game.ball.x) <
+            Math.abs(game.actors[best].x - game.ball.x)) best = id;
+      }
+      return best;
+    }
+    return controlledId;
+  }
+  function syncControlled() {
+    const key = `${game.phase}:${game.rally.flightId}:${aiState.claimId ?? ''}`;
+    if (key === switchKey) return;
+    switchKey = key;
+    const want = desiredControlled();
+    if (want !== controlledId) {
+      controlledId = want;
+      controls.setPlayerId(want);
+      rig.setPlayerId(want);
+      matchView.setControlled(want);
+    }
+  }
+
   // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
   window.__phase1 = {
     game, aiState, renderer, scene, camera, quality, rig,
-    vcr: () => vcrLast, // 上一球的回放資料
+    vcr: () => vcrLast,          // 上一球的回放資料
+    controlled: () => controlledId, // 當前受控球員（輪控除錯）
   };
 
   let last = performance.now();
@@ -136,11 +178,13 @@ async function runMatch(ctx) {
       if (game.phase === 'serve' && vcrCurrent.snapshot === null) {
         vcrCurrent.snapshot = structuredClone({ ...game, events: [] });
       }
+      // 全隊輪控：先依球權決定受控者，再收集 Intent
+      syncControlled();
       // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
-      const caller = controls.isCalling() ? PLAYER_ID : null;
+      const caller = controls.isCalling() ? controlledId : null;
       const intents = [
         ...controls.collect(game, aiState),
-        ...aiCollectIntents(game, aiState, [PLAYER_ID], caller),
+        ...aiCollectIntents(game, aiState, [controlledId], caller),
       ];
       if (vcrCurrent.snapshot) vcrCurrent.steps.push({ tick: game.tick, intents });
       const events = stepGame(game, intents);
@@ -173,18 +217,18 @@ async function runMatch(ctx) {
     } else {
       landingMarker.hide();
     }
-    // 「這球歸你」：AI 呼叫鎖定指到玩家 → 光圈變橘＋提示
-    const myBall = game.phase === 'rally' && aiState.claimId === PLAYER_ID;
+    // 「這球歸你」：AI 呼叫鎖定指到受控者 → 光圈變橘＋提示
+    const myBall = game.phase === 'rally' && aiState.claimId === controlledId;
     matchView.setHot(myBall);
     // 玩家按下起跳／攔網 → 立即播動作（後續由 sim 事件接手）
-    if (controls.consumeJumpSignal()) matchView.triggerPose(PLAYER_ID, 'windup');
-    if (controls.consumeBlockSignal()) matchView.triggerPose(PLAYER_ID, 'block');
+    if (controls.consumeJumpSignal()) matchView.triggerPose(controlledId, 'windup');
+    if (controls.consumeBlockSignal()) matchView.triggerPose(controlledId, 'block');
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha);
     matchView.sync(game, alpha, delta, frameEvents);
     rig.update(game, alpha);
-    scoreboard.update(game, myBall);
+    scoreboard.update(game, myBall, controlledId);
     touchUi.update(controls.uiState());
     const aimAt = controls.currentAimPoint();
     if (aimAt) aimMarker.show(aimAt);

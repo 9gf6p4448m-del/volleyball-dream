@@ -1,5 +1,5 @@
 // 首次操作教學卡：顯示一次（localStorage 記憶），點任意處關閉
-const FLAG = 'vd-tutorial-v4'; // 版本號變更＝更新後重新顯示一次
+const FLAG = 'vd-tutorial-v5'; // 版本號變更＝更新後重新顯示一次
 
 export function showTutorialOnce() {
   let seen = false;
@@ -23,6 +23,8 @@ export function showTutorialOnce() {
   el.innerHTML = `
     <div style="max-width:520px;padding:24px;line-height:1.9;font-size:15px">
       <div style="font-size:22px;font-weight:700;margin-bottom:14px">排球夢 — 怎麼玩</div>
+      <div style="margin-bottom:6px"><b>全隊輪控</b>：你自動控制「球要來的那個人」——<br>
+      看頭上「你」字＋腳下光圈就知道現在操作誰</div>
       <div>${moveHint}</div>
       <div>${actHint}</div>
       <div style="margin-top:10px;opacity:0.85">

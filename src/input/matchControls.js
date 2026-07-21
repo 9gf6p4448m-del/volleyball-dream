@@ -16,7 +16,8 @@ const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球
 const JUMP_WINDOW_MS = 750;  // 起跳滯空窗：按下＝起跳，須在窗內放開揮臂才是扣球
 const CALL_WINDOW_MS = 1500; // 喊球有效窗：喊聲維持這段時間，期間的來球歸你
 
-export function createMatchControls(domElement, camera, playerId, rig) {
+export function createMatchControls(domElement, camera, initialPlayerId, rig) {
+  let playerId = initialPlayerId; // 全隊輪控：main 依球權切換（setPlayerId）
   const keys = new Set();
   let joystick = null;              // { pointerId, ox, oy, dx, dy }
   let charge = null;                // { pointerId, startedAt, gaze }
@@ -208,6 +209,16 @@ export function createMatchControls(domElement, camera, playerId, rig) {
       }
     },
     isCharging() { return charge !== null; },
+    // 全隊輪控：切換受控球員（清掉舊人的蓄力/緩衝，避免指令錯掛）
+    setPlayerId(id) {
+      if (id === playerId) return;
+      playerId = id;
+      queuedAction = null;
+      charge = null;
+      jumpSignal = false;
+      blockSignal = false;
+    },
+    getPlayerId() { return playerId; },
     // 喊球（螢幕鈕呼叫；空白鍵走 keydown）
     call() { callAt = performance.now(); },
     isCalling() { return performance.now() - callAt < CALL_WINDOW_MS; },
