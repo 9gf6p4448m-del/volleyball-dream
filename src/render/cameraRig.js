@@ -33,10 +33,12 @@ export function createCameraRig(camera, initialPlayerId) {
   const curPos = new THREE.Vector3().copy(camera.position);
   const curTarget = new THREE.Vector3(0, 1, 0);
   let look = { x: 0, y: 0 }; // 指標 NDC（-1..1），一人稱視線用
+  let attackView = false;    // 進攻決策：切攻擊手視角越過網看攔網
 
   function desiredMode(game) {
     const me = game.players[playerId];
     if (!me) return 'third';
+    if (attackView) return 'attack'; // 讀攔網視角優先
     if (game.phase === 'serve' && serverId(game.match) === playerId) return 'first';
     if (game.phase === 'rally') {
       const r = game.rally;
@@ -50,6 +52,7 @@ export function createCameraRig(camera, initialPlayerId) {
 
   return {
     setPlayerId(id) { playerId = id; },
+    setAttackView(v) { attackView = v; },
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     getMode() { return mode; },
 
@@ -84,7 +87,12 @@ export function createCameraRig(camera, initialPlayerId) {
 
       const pos = new THREE.Vector3();
       const target = new THREE.Vector3();
-      if (mode === 'first') {
+      if (mode === 'attack') {
+        // 攻擊手身後略高，越過網看對面攔網手與空檔（讀攔網視角）
+        const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
+        pos.set(ax * 0.92, eye + 1.3, az + side * 2.0);
+        target.set(ax * 0.5, 1.7, az - side * 6.0);
+      } else if (mode === 'first') {
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
         const yaw = baseYaw(side) + look.x * CAMERA_TUNING.FP_YAW_RANGE * -side;
         const pitch = -0.12 + look.y * CAMERA_TUNING.FP_PITCH_RANGE;

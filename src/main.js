@@ -278,6 +278,8 @@ async function runMatch(ctx) {
     // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區
     let deciding = false;
     if (simpleMode) {
+      // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
+      rig.setAttackView(controls.isAttackMoment(game));
       const zones = attackPanel && controls.attackZones(game);
       // 球正下墜、還在可決策高度、尚未選區＝決策窗
       deciding = !!zones && game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
