@@ -75,7 +75,8 @@ async function runMatch(ctx) {
 
   let game = createGame({ seed, setTarget });
   let aiState = createAiState();
-  aiState.preferAttacker = simpleMode ? PLAYER_ID : null; // 舉球優先餵玩家＝多攻
+  // 舉球軟偏好：你在前排時 60% 舉給你、40% 給隊友（舉給隊友時你退防補位）
+  aiState.preferAttacker = simpleMode ? PLAYER_ID : null;
 
   let matchView;
   try {

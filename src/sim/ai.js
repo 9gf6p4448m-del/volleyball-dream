@@ -171,12 +171,17 @@ function arbitrate(game, team, landing, excludeId) {
 }
 
 // 攻擊手輪替：前排、非舉球員，以比分+flightId 循環（決定論的變化）
-// preferId：若該球員在候選內（前排、非舉球員）則優先選他（玩家進攻決策用）
+// preferId：軟偏好——在候選內時以 PREFER_RATE 機率優先（決定論 hash），
+// 其餘輪替給隊友：玩家參與度與「舉球也會分配隊友」的真實感兼顧
+const PREFER_RATE = 0.6;
 function pickAttacker(game, team, setterId, preferId) {
   const rot = game.match.rotations[team];
   const candidates = rot.filter((pid) => isFrontRow(rot, pid) && pid !== setterId);
   if (candidates.length === 0) return null;
-  if (preferId && candidates.includes(preferId)) return preferId;
+  if (preferId && candidates.includes(preferId) &&
+      hash01(game.rally.flightId * 977 + 131) < PREFER_RATE) {
+    return preferId;
+  }
   const { score } = game.match;
   return candidates[(score.A + score.B + game.rally.flightId) % candidates.length];
 }

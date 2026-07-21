@@ -67,7 +67,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     blockSignal = true;
   }
 
-  let lastGame = null; // pointer 事件在 collect 之外發生，需要最近一次的比賽狀態判情境
+  let lastGame = null;    // pointer 事件在 collect 之外發生，需要最近一次的比賽狀態判情境
+  let lastAiState = null; // 判「舉球是不是給我」（claim/attacker）用
 
   // 開始蓄力（指標路徑與按鈕路徑共用；扣球情境＝同時自動助跑，見 collect）
   function beginCharge(source) {
@@ -190,6 +191,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     // aiState：唯讀參考 AI 協調層的呼叫鎖定（誰的球）與攻擊手選擇，做輔助判斷
     collect(game, aiState = null) {
       lastGame = game;
+      lastAiState = aiState;
       // 非扣球時刻＝重置進攻選擇旗標（下次進攻重新彈面板）
       if (attackChosen && !this.isAttackMoment(game)) attackChosen = false;
       const tick = game.tick;
@@ -233,6 +235,40 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         const dz = tz - a.z;
         const len = Math.hypot(dx, dz);
         if (len > 0.12) move = { x: dx / len, z: dz / len };
+      } else if (game.phase === 'rally' && !charge && !blockPlan &&
+          Math.hypot(move.x, move.z) < 0.1) {
+        // 退防補位（攔網保護）：舉球給隊友時，自動退到攻擊手身後——
+        // 被攔回彈的球落在這裡，你救得起（也壓低「攔網直接得分」比例）
+        const r = game.rally;
+        const atkId = aiState?.attackerId;
+        if (r.possession === me.teamId && r.touches >= 1 &&
+            atkId && atkId !== playerId && aiState.claimId !== playerId) {
+          const atk = game.actors[atkId];
+          const side = TEAM_SIDE[me.teamId];
+          const tx = atk.x * 0.6;         // 略收向中線
+          const tz = atk.z + side * 2.3;  // 攻擊手身後（本方場內）
+          const dx = tx - a.x;
+          const dz = tz - a.z;
+          const len = Math.hypot(dx, dz);
+          if (len > 0.25) move = { x: dx / len, z: dz / len };
+        }
+      } else if (game.phase === 'rally' && !charge && !blockPlan &&
+          Math.hypot(move.x, move.z) < 0.1) {
+        // 攔網保護（coverage）：隊友攻擊時自動退到他身後補位——
+        // 被攔回彈的球落在這裡，你能救起（降低「攔網直接得分」的比例）
+        const r = game.rally;
+        const atkId = aiState?.attackerId;
+        if (r.possession === me.teamId && r.touches >= 1 &&
+            atkId && atkId !== playerId && aiState.claimId !== playerId) {
+          const atk = game.actors[atkId];
+          const side = TEAM_SIDE[me.teamId];
+          const tx = atk.x * 0.6;              // 略收向中線
+          const tz = atk.z + side * 2.3;       // 攻擊手身後（本方場內）
+          const dx = tx - a.x;
+          const dz = tz - a.z;
+          const len = Math.hypot(dx, dz);
+          if (len > 0.25) move = { x: dx / len, z: dz / len };
+        }
       }
 
       let action = null;
@@ -351,13 +387,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     currentContext() { return lastGame ? contextAction(lastGame) : null; },
 
     // ---- 進攻決策模式（簡化操作：讀攔網選攻擊區）----
-    // 是否輪到玩家扣球（前排、我方第三擊、球正下墜到可扣）
+    // 是否輪到玩家扣球：我方第三擊、前排、且**這顆舉球是給我的**（claim 指到我）
+    // ——舉給隊友時不彈面板（那時你退防補位），符合真實舉球分配
     isAttackMoment(game) {
       const me = game.players[playerId];
       const r = game.rally;
       if (game.phase !== 'rally' || r.possession !== me.teamId || r.touches !== 2) return false;
       if (!isFrontRow(game.match.rotations[me.teamId], playerId)) return false;
       if (r.lastToucherId === playerId) return false; // 舉球員不是攻擊手
+      if (lastAiState?.claimId !== playerId) return false; // 這球舉給隊友
       return true;
     },
     // 目前可選攻擊區（含讀攔網）；非扣球時刻回傳 null

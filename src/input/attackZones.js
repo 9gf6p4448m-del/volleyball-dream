@@ -20,10 +20,12 @@ export function attackZonesFor(game, attackerId) {
     game.match.rotations[opp][3]];
   const blockerXs = oppFront.map((id) => game.actors[id].x);
 
+  // 瞄準點＝防守站位的縫隙與邊線帶（不是往人身上打——後排基準位在 ±3/7 與 0/7）
+  const seamZ = -side * 5.2;             // 前後排之間的縫
   const zones = [
-    { key: 'line', label: '直線', aim: { x: sign * 3.3, z: deepZ }, power: 1 },
-    { key: 'cross', label: '斜線', aim: { x: -sign * 3.3, z: deepZ }, power: 1 },
-    { key: 'middle', label: '中路', aim: { x: 0, z: deepZ }, power: 1 },
+    { key: 'line', label: '直線', aim: { x: sign * 4.15, z: seamZ }, power: 1 },
+    { key: 'cross', label: '斜線', aim: { x: -sign * 3.9, z: -side * 6.3 }, power: 1 },
+    { key: 'middle', label: '中路', aim: { x: 0, z: -side * 5.0 }, power: 1 },
     { key: 'tip', label: '吊球', aim: { x: -sign * 1.2, z: shortZ }, power: 0.25 },
   ];
 
