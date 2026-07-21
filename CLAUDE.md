@@ -27,6 +27,8 @@ npm run deploy:pages   # gh-pages 部署（需 git remote）
 
 ## 工作流程約定（承 design-brief）
 
+- **需要試玩時直接更新上傳，不必先問**（2026-07-21 Sawmah 授權）：commit → `npm run deploy:pages`。
+
 - 每階段先產 kickoff 文件到 `docs/kickoffs/` → Claude.ai 專案討論 → 結論回填 → 實作 → 檢查點試玩。
 - 地基級任務（回合 AI 狀態機、動作/物理模擬核心、資料層設計）用 Fable；日常實作 sonnet。
 - 新架構級點子：Claude 主動提出 → Sawmah 拍板 → 當次寫入 design-brief。
