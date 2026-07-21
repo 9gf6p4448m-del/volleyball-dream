@@ -77,6 +77,10 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
 
   return {
     count: Object.keys(units).length,
+    // 輸入層要求播放姿勢（如玩家按下起跳的 windup；sim 事件觸發的仍走 routeEvents）
+    triggerPose(playerId, type) {
+      units[playerId]?.animator.trigger(type);
+    },
     // 「這球歸你」：光圈變橘紅＋放大脈動
     setHot(hot) {
       if (hot === ringHot) return;
@@ -105,11 +109,16 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
         const vz = (a.z - a.pz) / SIM_DT;
         const speed = Math.hypot(vx, vz);
 
-        // 朝向：移動時面向移動方向，靜止回望球網
+        // 朝向：rally 中所有人面向球（真實排球全程追球，後退＝墊步）；
+        // 非 rally 面向球網。移動方向不決定朝向——背對球接球是視覺破綻
         const team = gameState.players[id].teamId;
-        const targetYaw = speed > 0.3
-          ? Math.atan2(vx, vz)
-          : (TEAM_SIDE[team] === 1 ? Math.PI : 0);
+        const netYaw = TEAM_SIDE[team] === 1 ? Math.PI : 0;
+        let targetYaw = netYaw;
+        if (gameState.phase === 'rally') {
+          const bdx = gameState.ball.x - x;
+          const bdz = gameState.ball.z - z;
+          if (Math.hypot(bdx, bdz) > 0.25) targetYaw = Math.atan2(bdx, bdz);
+        }
         u.yaw += shortestArc(u.yaw, targetYaw) * TURN_LERP;
         u.inst.rotation.y = u.yaw;
 

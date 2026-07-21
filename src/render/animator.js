@@ -28,6 +28,12 @@ const POSES = {
     RightArm: [0, 0.15, 2.85], LeftArm: [0, 0.15, 2.85],
     Spine: [-0.05, 0, 0],
   },
+  // 起跳引臂（玩家按下起跳、尚未揮擊）：右臂後拉、左臂前指平衡
+  windup: {
+    RightArm: [0, 0.3, -0.7], RightForeArm: [0, 0, 0.5],
+    LeftArm: [0, 0.2, 1.6],
+    Spine: [-0.12, 0, 0],
+  },
 };
 
 // 軸向測試姿勢（?pose=t1/t2 調參用；找出手臂擺動軸後即棄用）
@@ -41,6 +47,7 @@ const ACTIONS = {
   spike: { pose: 'spike', dur: 0.62, jump: 0.5 },
   serve: { pose: 'spike', dur: 0.7, jump: 0.32 }, // 跳發共用揮臂、跳略小
   block: { pose: 'block', dur: 0.7, jump: 0.34 },
+  windup: { pose: 'windup', dur: 0.75, jump: 0.5 }, // 起跳滯空窗（揮擊由 spike 接手）
   t1: { pose: 't1', dur: 1, jump: 0 },
   t2: { pose: 't2', dur: 1, jump: 0 },
 };
@@ -62,10 +69,16 @@ export function createAnimator(inst) {
   const e = new THREE.Euler();
 
   return {
-    // 觸發一次性動作：'bump'|'overhead'|'spike'|'serve'|'block'
+    // 觸發一次性動作：'bump'|'overhead'|'spike'|'serve'|'block'|'windup'
     trigger(type) {
       const def = ACTIONS[type];
-      if (def) current = { def, t: 0 };
+      if (!def) return;
+      // 空中接續：跳躍中換動作（windup→spike 揮擊）延續跳躍弧，不落地重跳
+      const carry =
+        current && current.def.jump > 0 && def.jump > 0
+          ? Math.min(current.t / current.def.dur, 0.55) * def.dur
+          : 0;
+      current = { def, t: carry };
     },
     // 攔網窗開著時持續舉手（無需事件）
     setHold(type) { hold = type; },

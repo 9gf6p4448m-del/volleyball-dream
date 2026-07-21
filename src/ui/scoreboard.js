@@ -46,7 +46,7 @@ function hintFor(game, playerId, serve) {
   const r = game.rally;
   const me = game.players[playerId];
   if (r.possession === me.teamId && r.touches === 2) {
-    return '第三擊！按下＝視線（騙攔網）、放開＝實際擊球方向';
+    return '第三擊！按下＝起跳、放開＝揮臂（短點輕吊、蓄滿重扣）';
   }
   if (r.possession === me.teamId && r.touches === 1) {
     return '二傳中——點按可自己處理';

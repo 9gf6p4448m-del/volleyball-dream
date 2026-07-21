@@ -1,5 +1,5 @@
 // 首次操作教學卡：顯示一次（localStorage 記憶），點任意處關閉
-const FLAG = 'vd-tutorial-v2'; // 版本號變更＝更新後重新顯示一次
+const FLAG = 'vd-tutorial-v3'; // 版本號變更＝更新後重新顯示一次
 
 export function showTutorialOnce() {
   let seen = false;
@@ -28,8 +28,9 @@ export function showTutorialOnce() {
       <div style="margin-top:10px;opacity:0.85">
         <span style="color:#6ee7ff">青圈</span>＝來球落點，跑進去就會自動處理；<br>
         腳下光圈<span style="color:#ff8c42">變橘</span>＝這球歸你！<br>
-        按了不用抓準時機——0.6 秒內球到就出手；<br>
-        輪到你發球會等你；第三擊「看的方向」能騙攔網。
+        <b>第三擊：按下＝起跳、放開＝揮臂</b>——短點＝輕吊、蓄滿＝重扣；<br>
+        滯空時放開才是扣球，落地才放＝只能送安全球；<br>
+        輪到你發球會等你；「看的方向」能騙攔網。
       </div>
       <div style="margin-top:18px;font-size:13px;opacity:0.6">點擊任意處開始</div>
     </div>`;

@@ -144,6 +144,8 @@ async function runMatch(ctx) {
     // 「這球歸你」：AI 呼叫鎖定指到玩家 → 光圈變橘＋提示
     const myBall = game.phase === 'rally' && aiState.claimId === PLAYER_ID;
     matchView.setHot(myBall);
+    // 玩家按下起跳 → 立即播滯空引臂（揮擊由 sim 的 TOUCH 事件接手）
+    if (controls.consumeJumpSignal()) matchView.triggerPose(PLAYER_ID, 'windup');
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha);

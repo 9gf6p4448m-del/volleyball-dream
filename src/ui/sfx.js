@@ -85,8 +85,10 @@ export function createSfx() {
         if (e.type === 'SERVE') crack(0.7);
         else if (e.type === 'BLOCK_TOUCH') thud();
         else if (e.type === 'TOUCH') {
-          if (e.kind === 'spike') crack(1);
-          else if (e.kind === 'receive' && e.touches === 3) thud(); // 第三擊安全球＝輕吊
+          if (e.kind === 'spike') {
+            if ((e.power ?? 1) < 0.45) thud(); // 輕吊＝悶短
+            else crack(1);                     // 重扣＝爆裂
+          } else if (e.kind === 'receive' && e.touches === 3) thud(); // 第三擊安全球
           else if (e.kind === 'set') ping(760);
           else ping(600);
         }

@@ -25,6 +25,7 @@ export const TUNING = {
   SPIKE_SPEED_BASE: 9,    // 扣球速度 = BASE + power × PER（m/s）
   SPIKE_SPEED_PER: 0.17,
   SPIKE_MIN_TIME: 0.18,   // 扣球最短飛行時間（避免零距離除法）
+  TIP_SPEED_MIN: 0.55,    // 輕吊速度下限＝全力的 55%（timing=0 時）
   // H3 視線欺敵曲線（騙敵線性、失誤平方；試玩調參用，結構不變）
   THETA_MAX_DEG: 45,      // 視線與實際擊球方向的最大有效夾角
   DECEIVE_GAIN: 0.7,      // 騙過攔網機率 = min(θ/θmax,1) × 此值（線性）
@@ -183,15 +184,23 @@ function executeTouch(state, intent, player, actor, ev) {
   const dec = intent.action === 'spike'
     ? computeDeception(from, intent.aim, intent.gaze)
     : { deceiveP: 0, errorBoost: 0 };
+  // 高低手球質：接球觸點高度影響精度（高手乾淨、貼地撲救較飄）
+  const qualityMul = intent.action === 'receive'
+    ? receiveQualityMul(from.y, player)
+    : 1;
   const target = scatterTarget(
-    state, intent.aim, player.attributes.control, intent.action, dec.errorBoost,
+    state, intent.aim, player.attributes.control, intent.action,
+    dec.errorBoost, qualityMul,
   );
+  const timing = clamp01(intent.timing ?? 1);
   let v;
   if (intent.action === 'spike') {
+    // 蓄力輕重：timing 短＝輕吊（慢、弧墜）、蓄滿＝重扣（全速）
+    const speed = spikeSpeed(player) * (TUNING.TIP_SPEED_MIN + (1 - TUNING.TIP_SPEED_MIN) * timing);
     v = spikeVelocity(
       from,
       { x: target.x, y: BALL.RADIUS, z: target.z },
-      spikeSpeed(player),
+      speed,
       TUNING.SPIKE_MIN_TIME,
     );
   } else {
@@ -215,6 +224,7 @@ function executeTouch(state, intent, player, actor, ev) {
     type: 'TOUCH', tick: state.tick, team, playerId: player.id,
     kind: intent.action, touches: newCount,
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
+    power: Math.round(timing * 100) / 100, // 蓄力質量：表現層分輕吊/重扣音效用
   });
 }
 
@@ -268,12 +278,25 @@ export function computeDeception(from, aim, gaze) {
   };
 }
 
+// 高低手球質（純函式）：胸口以上高手＝精度佳、貼地撲救＝較飄
+export function receiveQualityMul(contactY, player) {
+  const shoulder = standingReach(player) * 0.62; // 約胸口高度
+  if (contactY >= shoulder) return 0.7;  // 高手接球
+  if (contactY < 0.55) return 1.35;      // 貼地撲救
+  return 1.0;                            // 標準低手墊球
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
 // 落點散佈：精度屬性越高越準；兩次 rand 呼叫（角度、半徑），順序固定＝決定論
-// extraInaccuracy：H3 欺敵的失誤增量（平方項），直接疊加在精度虧損上
-function scatterTarget(state, aim, accuracyAttr, action, extraInaccuracy = 0) {
+// extraInaccuracy：H3 欺敵的失誤增量（平方項）；qualityMul：高低手球質乘數
+function scatterTarget(state, aim, accuracyAttr, action, extraInaccuracy = 0, qualityMul = 1) {
   const factor =
     action === 'set' ? 0.55 : action === 'spike' ? 1.2 : action === 'serve' ? 1.35 : 1.0;
-  const r = TUNING.SCATTER_MAX * ((1 - accuracyAttr / 100) * factor + extraInaccuracy);
+  const r = TUNING.SCATTER_MAX *
+    ((1 - accuracyAttr / 100) * factor * qualityMul + extraInaccuracy);
   const angle = rand(state) * Math.PI * 2;
   const radius = rand(state) * r;
   return { x: aim.x + Math.cos(angle) * radius, z: aim.z + Math.sin(angle) * radius };

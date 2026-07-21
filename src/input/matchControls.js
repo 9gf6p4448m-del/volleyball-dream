@@ -13,6 +13,7 @@ const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
 const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
+const JUMP_WINDOW_MS = 750;  // 起跳滯空窗：按下＝起跳，須在窗內放開揮臂才是扣球
 
 export function createMatchControls(domElement, camera, playerId, rig) {
   const keys = new Set();
@@ -21,6 +22,8 @@ export function createMatchControls(domElement, camera, playerId, rig) {
   let queuedAction = null;          // { action, aim, gaze, timing }
   let pointerNdc = { x: 0, y: 0 };
   let pointerPx = { x: 0, y: 0 };   // 螢幕像素座標（觸控 UI 疊層用）
+  let jumpSignal = false;           // 本次按下觸發了起跳（main 轉給表現層播 windup）
+  let jumpStartedAt = 0;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -28,6 +31,8 @@ export function createMatchControls(domElement, camera, playerId, rig) {
   window.addEventListener('keydown', (e) => keys.add(e.code));
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());
+
+  let lastGame = null; // pointer 事件在 collect 之外發生，需要最近一次的比賽狀態判情境
 
   domElement.addEventListener('pointerdown', (e) => {
     // 觸控左 40% 螢幕＝走位搖桿；其餘（含滑鼠）＝動作指標
@@ -37,7 +42,13 @@ export function createMatchControls(domElement, camera, playerId, rig) {
     }
     if (charge) return;
     updateNdc(e);
-    charge = { pointerId: e.pointerId, startedAt: performance.now(), gaze: null };
+    charge = { pointerId: e.pointerId, startedAt: performance.now(), gaze: null, jumpAt: null };
+    // 第三擊情境：按下＝起跳（滯空窗內放開揮臂才算扣球，錯過窗＝安全球）
+    if (lastGame && contextAction(lastGame) === 'spike') {
+      charge.jumpAt = performance.now();
+      jumpSignal = true;
+      jumpStartedAt = charge.jumpAt;
+    }
   });
 
   domElement.addEventListener('pointermove', (e) => {
@@ -62,6 +73,8 @@ export function createMatchControls(domElement, camera, playerId, rig) {
         gaze: charge.gaze,             // 看哪＝蓄力期間的視線落點（進一人稱後由 rig 補）
         aimNdc: { ...pointerNdc },     // 往哪打＝放開瞬間的指向（collect 時換算場地座標）
         expiresTick: null,             // 出手緩衝視窗（首次 collect 時設定）
+        jumpAt: charge.jumpAt,         // 起跳時刻（扣球滯空窗判定用）
+        releasedAt: performance.now(),
       };
       charge = null;
     }
@@ -109,6 +122,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
     // 主迴圈每個固定步長呼叫；輸出與 AI 同型的 Intent（sim 不知來源）
     // aiState：唯讀參考 AI 協調層的呼叫鎖定（誰的球）與攻擊手選擇，做輔助判斷
     collect(game, aiState = null) {
+      lastGame = game;
       const tick = game.tick;
       const me = game.players[playerId];
       const a = game.actors[playerId];
@@ -125,6 +139,13 @@ export function createMatchControls(domElement, camera, playerId, rig) {
           queuedAction.expiresTick = tick + BUFFER_TICKS;
         }
         action = contextAction(game);
+        // 起跳時機窗：沒起跳或滯空已過就不能扣——降級成往瞄準點送安全球
+        if (action === 'spike') {
+          const okWindow =
+            queuedAction.jumpAt !== null &&
+            queuedAction.releasedAt - queuedAction.jumpAt <= JUMP_WINDOW_MS;
+          if (!okWindow) action = 'receive';
+        }
         const ground = groundPoint(queuedAction.aimNdc);
         if (ground) aim = ground;
         gaze = queuedAction.gaze ?? rig.gazePoint(game);
@@ -176,6 +197,12 @@ export function createMatchControls(domElement, camera, playerId, rig) {
       }
     },
     isCharging() { return charge !== null; },
+    // 玩家剛按下起跳（一次性訊號；main 轉給表現層播 windup 跳躍）
+    consumeJumpSignal() {
+      const s = jumpSignal;
+      jumpSignal = false;
+      return s;
+    },
 
     // 觸控 UI 疊層讀這裡畫搖桿/蓄力圈；render 層讀 aim 畫地面瞄準標記
     uiState() {
