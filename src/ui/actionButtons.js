@@ -14,11 +14,11 @@ export function createActionButtons(controls) {
     e.preventDefault();
     try { main.setPointerCapture(e.pointerId); } catch { /* 合成事件無實體指標，忽略 */ }
     dragging = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
-    controls.beginAction();
+    controls.beginAction(e.clientX, e.clientY);
   });
   main.addEventListener('pointermove', (e) => {
     if (!dragging || e.pointerId !== dragging.id) return;
-    controls.dragAction(e.clientX - dragging.ox, e.clientY - dragging.oy);
+    controls.dragAction(e.clientX - dragging.ox, e.clientY - dragging.oy, e.clientX, e.clientY);
   });
   const endMain = (e) => {
     if (!dragging || e.pointerId !== dragging.id) return;

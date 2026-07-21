@@ -293,9 +293,16 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       blockSignal = false;
     },
     getPlayerId() { return playerId; },
-    // NBA2K 式按鈕路徑（actionButtons UI 呼叫）
-    beginAction() { beginCharge('button'); },
-    dragAction(dx, dy) { if (charge?.btnDrag) charge.btnDrag = { dx, dy }; },
+    // NBA2K 式按鈕路徑（actionButtons UI 呼叫）；px/py＝拇指螢幕座標（蓄力圈定位用）
+    beginAction(px, py) {
+      if (px != null) pointerPx = { x: px, y: py };
+      beginCharge('button');
+    },
+    dragAction(dx, dy, px, py) {
+      if (!charge?.btnDrag) return;
+      charge.btnDrag = { dx, dy };
+      if (px != null) pointerPx = { x: px, y: py };
+    },
     endAction() { if (charge?.btnDrag) releaseCharge(); },
     pressBlock() { blockTap(); },
     // 當前情境動作（按鈕標籤用）：'serve'|'spike'|'set'|'block'|'receive'|null
@@ -326,8 +333,24 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         },
       };
     },
-    currentAimPoint() {
-      return charge ? groundPoint(pointerNdc) : null;
+    // 蓄力中的即時瞄準落點（地面圈）：按鈕路徑＝從球員投射拖曳方向（與出手一致）；
+    // 滑鼠路徑＝指標落地點。回傳 null＝不顯示
+    currentAimPoint(game) {
+      if (!charge) return null;
+      const g = game ?? lastGame;
+      if (!g) return null;
+      if (charge.btnDrag) {
+        const a = g.actors[playerId];
+        const d = charge.btnDrag;
+        const len = Math.hypot(d.dx, d.dy);
+        const side = TEAM_SIDE[g.players[playerId].teamId];
+        // 拖曳夠長＝該方向；未拖＝預設朝對場（給個起始參考點）
+        const dirx = len > 14 ? d.dx / len : 0;
+        const dirz = len > 14 ? d.dy / len : -side;
+        const dist = 3 + (Math.min(len, 130) / 130) * 6;
+        return { x: a.x + dirx * dist, z: a.z + dirz * dist };
+      }
+      return groundPoint(pointerNdc);
     },
   };
 }

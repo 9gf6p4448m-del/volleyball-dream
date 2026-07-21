@@ -331,7 +331,7 @@ async function runMatch(ctx) {
     scoreboard.update(game, myBall, controlledId);
     actionButtons.update(controls.currentContext());
     touchUi.update(controls.uiState());
-    const aimAt = controls.currentAimPoint();
+    const aimAt = controls.currentAimPoint(game);
     if (aimAt) aimMarker.show(aimAt);
     else aimMarker.hide();
     renderer.render(scene, camera);
