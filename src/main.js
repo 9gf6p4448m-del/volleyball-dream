@@ -97,6 +97,30 @@ async function runMatch(ctx) {
   const attackPanel = simpleMode ? createAttackPanel(controls) : null;
   const actionButtons = simpleMode ? null : createActionButtons(controls);
   let servedThisTurn = false; // 簡化模式：每次發球局自動發一次
+
+  // 讀攔網提示開關：開＝綠/紅標示（新手輔助）、關＝自己看攔網判斷（技術版）
+  let showHints = true;
+  try { showHints = localStorage.getItem('vd-hints') !== 'off'; } catch { /* 私密模式 */ }
+  if (simpleMode) {
+    const hintBtn = document.createElement('button');
+    const paint = () => { hintBtn.textContent = showHints ? '👁 提示:開' : '👁 提示:關'; };
+    hintBtn.style.cssText = [
+      'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
+      'right:calc(env(safe-area-inset-right, 0px) + 64px)',
+      'height:44px', 'padding:0 12px', 'border-radius:22px', 'border:none',
+      'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
+      'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
+      'touch-action:manipulation',
+    ].join(';');
+    paint();
+    hintBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      showHints = !showHints;
+      paint();
+      try { localStorage.setItem('vd-hints', showHints ? 'on' : 'off'); } catch { /* ignore */ }
+    });
+    document.body.appendChild(hintBtn);
+  }
   // 🎬 回放鈕：重看上一球的最後 3 秒（桌機 R 鍵）
   const replayBtn = document.createElement('button');
   replayBtn.textContent = '🎬';
@@ -257,7 +281,7 @@ async function runMatch(ctx) {
       const zones = attackPanel && controls.attackZones(game);
       // 球正下墜、還在可決策高度、尚未選區＝決策窗
       deciding = !!zones && game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
-      if (deciding) attackPanel.show(zones);
+      if (deciding) attackPanel.show(zones, showHints);
       else if (attackPanel) attackPanel.hide();
       // 自動發球：輪到玩家發球、哨音已過→自動發（發球決策留待下一階段）
       if (game.phase === 'serve') {
