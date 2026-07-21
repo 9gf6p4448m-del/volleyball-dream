@@ -5,8 +5,10 @@
 
 ## 現況
 
-- **Phase 0 已完成**（基準測試場景），等 Sawmah 真機 FPS 實測結果才進 Phase 1。
-- 通過 → 寫實美術定案；未通過 → 用 README 的 URL 參數逐項降規找上限。
+- **Phase 0 已完成並通過真機實測**（2026-07-21）→ 寫實比例美術定案。
+- **Phase 1 進行中**：地基級骨架（D1 資料層／D2 比賽狀態機／D3 回合 AI／D4 Intent 管線）已實作、
+  冷審修復完畢，待 Sawmah 依 `docs/kickoffs/phase1-skeleton-acceptance.md` 驗收放行 H 區手感層。
+  決策依據：`docs/kickoffs/phase1-kickoff-RESOLVED.md`。
 
 ## 架構鐵律（違反即停）
 
