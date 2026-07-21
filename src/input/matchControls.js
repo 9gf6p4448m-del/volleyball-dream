@@ -18,6 +18,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
   let charge = null;                // { pointerId, startedAt, gaze }
   let queuedAction = null;          // { action, aim, gaze, timing }
   let pointerNdc = { x: 0, y: 0 };
+  let pointerPx = { x: 0, y: 0 };   // 螢幕像素座標（觸控 UI 疊層用）
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -66,6 +67,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
   domElement.addEventListener('pointercancel', endPointer);
 
   function updateNdc(e) {
+    pointerPx = { x: e.clientX, y: e.clientY };
     pointerNdc = {
       x: (e.clientX / window.innerWidth) * 2 - 1,
       y: -(e.clientY / window.innerHeight) * 2 + 1,
@@ -140,6 +142,22 @@ export function createMatchControls(domElement, camera, playerId, rig) {
       return [createIntent({ playerId, tick, move, action, aim, gaze, timing })];
     },
     isCharging() { return charge !== null; },
+
+    // 觸控 UI 疊層讀這裡畫搖桿/蓄力圈；render 層讀 aim 畫地面瞄準標記
+    uiState() {
+      return {
+        joystick: joystick ? { ...joystick } : null,
+        charge: charge
+          ? {
+            x: pointerPx.x, y: pointerPx.y,
+            progress: Math.min((performance.now() - charge.startedAt) / CHARGE_MS, 1),
+          }
+          : null,
+      };
+    },
+    currentAimPoint() {
+      return charge ? groundPoint(pointerNdc) : null;
+    },
   };
 }
 

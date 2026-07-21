@@ -63,6 +63,19 @@ test('後排攻擊限制：後排球員於前區高點扣球 → BACK_ROW_ATTACK
   assert.equal(g.match.score.B, 1);
 });
 
+test('走位邊界：推整整 10 秒也越不過中線、出不了自由區', () => {
+  const g = createGame({ seed: 5 }); // 停在發球等待階段（無人發球），純測走位
+  // A2 往對面（-z）與往右（+x）狂推 600 tick
+  for (let i = 0; i < 600; i += 1) {
+    stepGame(g, [
+      createIntent({ playerId: 'A2', tick: g.tick, move: { x: 1, z: -1 }, aim: { x: 0, z: 0 } }),
+    ]);
+  }
+  const a = g.actors.A2;
+  assert.ok(a.z >= 0.12, `A 隊球員越過中線：z=${a.z}`);
+  assert.ok(a.x <= 4.5 + 3, `跑出自由區：x=${a.x}`);
+});
+
 test('對照組：前排球員同高度扣球合法', () => {
   const g = createGame({ seed: 3 });
   // A2 是 P2（前排）

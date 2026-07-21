@@ -14,13 +14,20 @@ import { createBallView } from './render/ballView.js';
 import { createCameraRig } from './render/cameraRig.js';
 import { createCameraControls } from './input/cameraControls.js';
 import { createMatchControls } from './input/matchControls.js';
+import { createAimMarker } from './render/aimMarker.js';
 import { createHud } from './ui/hud.js';
 import { createScoreboard } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
+import { createTouchUi } from './ui/touchUi.js';
+import { showTutorialOnce } from './ui/tutorial.js';
 
 const PLAYER_ID = 'A2'; // 玩家＝A 隊主攻手（design-brief 定案 #9）
 
 async function init() {
+  // 遊戲頁禁右鍵選單與 iOS 捏合縮放（長按/拖曳是遊戲操作，不能跳原生 UI）
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+
   const params = new URLSearchParams(window.location.search);
   const quality = getQuality();
   const container = document.getElementById('app');
@@ -68,6 +75,9 @@ async function runMatch(ctx) {
   const controls = createMatchControls(renderer.domElement, camera, PLAYER_ID, rig);
   const scoreboard = createScoreboard(PLAYER_ID);
   const sfx = createSfx();
+  const touchUi = createTouchUi();
+  const aimMarker = createAimMarker(scene);
+  showTutorialOnce();
 
   // 局終點擊 → 換種子再開一局
   window.addEventListener('pointerdown', () => {
@@ -114,6 +124,10 @@ async function runMatch(ctx) {
     matchView.sync(game, alpha, delta);
     rig.update(game, alpha);
     scoreboard.update(game);
+    touchUi.update(controls.uiState());
+    const aimAt = controls.currentAimPoint();
+    if (aimAt) aimMarker.show(aimAt);
+    else aimMarker.hide();
     renderer.render(scene, camera);
     hud.frame(now, delta, simSteps);
   }

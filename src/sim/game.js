@@ -4,7 +4,7 @@ import { SIM_DT, COURT, BALL } from './constants.js';
 import { createBall, stepBall } from './ball.js';
 import { createMatch, serverId, pointTo, isFourHits } from './match.js';
 import {
-  otherTeam, basePosition, servePosition,
+  TEAM_SIDE, otherTeam, basePosition, servePosition,
   isBackRow, isInFrontZone, landedCourtTeam,
 } from './rotation.js';
 import { createPlayer, standingReach, spikeReach, blockReach, moveSpeed } from './player.js';
@@ -103,9 +103,21 @@ function applyMove(state, actor, intent) {
   let { x = 0, z = 0 } = intent.move ?? {};
   const len = Math.hypot(x, z);
   if (len > 1) { x /= len; z /= len; }
-  const speed = moveSpeed(state.players[intent.playerId]);
-  actor.x += x * speed * SIM_DT;
-  actor.z += z * speed * SIM_DT;
+  const player = state.players[intent.playerId];
+  const speed = moveSpeed(player);
+
+  // 走位邊界：限本方半場＋自由區，不可越中線（貼網保留 0.12m）
+  // TODO Phase 2：越中線細則（腳可過線不干擾）——現簡化為硬牆
+  const maxX = COURT.WIDTH / 2 + COURT.FREE_ZONE - 0.2;
+  const maxZ = COURT.LENGTH / 2 + COURT.FREE_ZONE - 0.2;
+  const side = TEAM_SIDE[player.teamId];
+  actor.x = clamp(actor.x + x * speed * SIM_DT, -maxX, maxX);
+  const z2 = actor.z + z * speed * SIM_DT;
+  actor.z = side === 1 ? clamp(z2, 0.12, maxZ) : clamp(z2, -maxZ, -0.12);
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
 function tryAction(state, intent, ev) {
