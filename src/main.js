@@ -120,6 +120,9 @@ async function runMatch(ctx) {
   let controlledId = PLAYER_ID;
   let switchKey = '';
   let lastWindupFlight = -1; // AI 攻擊手起跳動畫：每個 flight 只播一次
+  // 打擊感（juice）：擊球定格與螢幕震動
+  let hitStopUntil = 0;
+  let shake = 0;
   function desiredControlled() {
     if (game.phase === 'serve') {
       return game.match.servingTeam === 'A' ? serverId(game.match) : controlledId;
@@ -173,6 +176,9 @@ async function runMatch(ctx) {
     if (delta > MAX_FRAME_DELTA) delta = MAX_FRAME_DELTA;
     if (delta < 0) delta = 0;
 
+    // 擊球定格（hit-stop）：短暫凍結模擬推進、畫面照跑——打擊的「頓」感
+    if (now < hitStopUntil) delta = 0;
+
     accumulator += delta;
     let simSteps = 0;
     const frameEvents = [];
@@ -202,6 +208,18 @@ async function runMatch(ctx) {
     if (frameEvents.length > 0) {
       sfx.onEvents(frameEvents);
       controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
+      // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
+      for (const e of frameEvents) {
+        if (e.type === 'TOUCH' && e.kind === 'spike') {
+          hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
+          shake = Math.max(shake, 0.12);
+        } else if (e.type === 'BLOCK_TOUCH') {
+          hitStopUntil = now + 60;
+          shake = Math.max(shake, 0.2);
+        } else if (e.type === 'DEAD_BALL') {
+          shake = Math.max(shake, 0.26);
+        }
+      }
     }
 
     // 操作輔助：來球落點圈（每個 flight 只預測一次，唯讀取用 sim 純函式）
@@ -240,6 +258,12 @@ async function runMatch(ctx) {
     ballView.sync(game.ball, alpha);
     matchView.sync(game, alpha, delta, frameEvents);
     rig.update(game, alpha);
+    // 螢幕震動：鏡頭位置疊隨機偏移、指數衰減（表現層，不碰 sim）
+    if (shake > 0.004) {
+      camera.position.x += (Math.random() - 0.5) * shake;
+      camera.position.y += (Math.random() - 0.5) * shake * 0.6;
+      shake *= 0.82;
+    }
     scoreboard.update(game, myBall, controlledId);
     actionButtons.update(controls.currentContext());
     touchUi.update(controls.uiState());

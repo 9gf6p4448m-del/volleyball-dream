@@ -176,13 +176,19 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       const a = game.actors[playerId];
       let move = readMove(keys, joystick, TEAM_SIDE[me.teamId]);
 
-      // 一體化助跑：扣球情境按住＝自動衝向球落點（搖桿有輸入時尊重手動微調）
-      if (charge && aiState?.landing && Math.hypot(move.x, move.z) < 0.1 &&
-          contextAction(game) === 'spike') {
-        const dx = aiState.landing.x - a.x;
-        const dz = aiState.landing.z - a.z;
+      // 自動走位（The Spike 式，設計主軸）：歸你的球自動跑到位——
+      // 含扣球助跑、接發、二傳；搖桿有輸入時尊重手動微調。走位挫折歸零，時機才是玩家的表達
+      if (game.phase === 'rally' && aiState?.landing &&
+          aiState.claimId === playerId && Math.hypot(move.x, move.z) < 0.1) {
+        const b = game.ball;
+        const sp = Math.hypot(b.vx, b.vz);
+        const off = sp > 0.5 ? 0.3 : 0; // 站落點下游側，觸球點在身前
+        const tx = aiState.landing.x + (off ? (b.vx / sp) * off : 0);
+        const tz = aiState.landing.z + (off ? (b.vz / sp) * off : 0);
+        const dx = tx - a.x;
+        const dz = tz - a.z;
         const len = Math.hypot(dx, dz);
-        if (len > 0.15) move = { x: dx / len, z: dz / len };
+        if (len > 0.12) move = { x: dx / len, z: dz / len };
       }
 
       let action = null;

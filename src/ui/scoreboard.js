@@ -18,6 +18,9 @@ export function createScoreboard(playerId) {
   document.body.appendChild(el);
   const lineEl = el.querySelector('.line');
   const hintEl = el.querySelector('.hint');
+  lineEl.style.transition = 'transform 0.12s ease-out, color 0.12s';
+  let lastTotal = 0;
+  let pulseTimer = null;
 
   return {
     // controlledId：全隊輪控下當前受控球員（未傳則用建立時的預設）
@@ -25,6 +28,18 @@ export function createScoreboard(playerId) {
       const { score } = game.match;
       const serve = game.match.servingTeam;
       lineEl.textContent = `${score.A} : ${score.B}`;
+      // 得分演出：比分跳動放大閃色
+      const total = score.A + score.B;
+      if (total !== lastTotal) {
+        lastTotal = total;
+        lineEl.style.transform = 'scale(1.45)';
+        lineEl.style.color = '#ffd166';
+        clearTimeout(pulseTimer);
+        pulseTimer = setTimeout(() => {
+          lineEl.style.transform = 'scale(1)';
+          lineEl.style.color = '#eef2fa';
+        }, 220);
+      }
       hintEl.textContent = isMyBall
         ? '🟠 這球歸你！跑向藍色落點圈'
         : hintFor(game, controlledId, serve);

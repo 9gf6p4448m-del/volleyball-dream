@@ -1,5 +1,9 @@
 // 排球的畫面呈現：讀取模擬狀態＋插值，不寫入任何模擬資料
 import * as THREE from 'three';
+import { SIM_DT } from '../sim/constants.js';
+
+const TRAIL_N = 10;       // 尾跡取樣點數
+const TRAIL_SPEED = 9;    // 球速高於此（m/s）才顯示尾跡（重扣/強發球）
 
 export function createBallView(scene, quality) {
   const mesh = new THREE.Mesh(
@@ -21,6 +25,18 @@ export function createBallView(scene, quality) {
   blob.position.y = 0.012;
   scene.add(blob);
 
+  // 高速球尾跡（重扣的速度感）：最近 N 個位置連線
+  const trailPos = new Float32Array(TRAIL_N * 3);
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  const trail = new THREE.Line(
+    trailGeo,
+    new THREE.LineBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.55 }),
+  );
+  trail.visible = false;
+  trail.frustumCulled = false;
+  scene.add(trail);
+
   return {
     // alpha = 累積器剩餘時間 / SIM_DT，於上一步與當前步之間插值
     sync(ball, alpha) {
@@ -31,6 +47,17 @@ export function createBallView(scene, quality) {
       mesh.rotation.x += 0.08; // 純視覺滾動
       blob.position.x = x;
       blob.position.z = z;
+
+      // 尾跡：往後平移取樣點、插入當前位置；只在高速時顯示
+      for (let i = TRAIL_N - 1; i > 0; i -= 1) {
+        trailPos[i * 3] = trailPos[(i - 1) * 3];
+        trailPos[i * 3 + 1] = trailPos[(i - 1) * 3 + 1];
+        trailPos[i * 3 + 2] = trailPos[(i - 1) * 3 + 2];
+      }
+      trailPos[0] = x; trailPos[1] = y; trailPos[2] = z;
+      trailGeo.attributes.position.needsUpdate = true;
+      const speed = Math.hypot(ball.x - ball.px, ball.y - ball.py, ball.z - ball.pz) / SIM_DT;
+      trail.visible = speed > TRAIL_SPEED;
       const h = Math.min(Math.max(y, 0), 8) / 8;
       blob.material.opacity = 0.4 * (1 - h * 0.8);
       const s = 1 + h * 1.5;
