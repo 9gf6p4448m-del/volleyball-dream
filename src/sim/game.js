@@ -26,6 +26,14 @@ export const TUNING = {
   SPIKE_SPEED_PER: 0.17,
   SPIKE_MIN_TIME: 0.18,   // 扣球最短飛行時間（避免零距離除法）
   TIP_SPEED_MIN: 0.55,    // 輕吊速度下限＝全力的 55%（timing=0 時）
+  // 出手品質（2K 式甜蜜區）：蓄力進度落在甜蜜區＝準、超蓄＝飄
+  SWEET_LO: 0.7, SWEET_HI: 1.05, OVERCHARGE_T: 1.15,
+  SWEET_ACC: 0.55,        // 甜蜜區散佈乘數（越小越準）
+  OVER_ACC: 1.5,          // 超蓄散佈乘數
+  // 攔網時機判定：起跳到球過網的滯空 tick 數
+  BLOCK_SWEET_MIN: 4, BLOCK_SWEET_MAX: 26,
+  BLOCK_LATE_MUL: 0.6,    // 起跳太晚（手還沒到頂）
+  BLOCK_EARLY_MUL: 0.55,  // 起跳太早（已在下墜）
   // H3 視線欺敵曲線（騙敵線性、失誤平方；試玩調參用，結構不變）
   THETA_MAX_DEG: 45,      // 視線與實際擊球方向的最大有效夾角
   DECEIVE_GAIN: 0.7,      // 騙過攔網機率 = min(θ/θmax,1) × 此值（線性）
@@ -41,7 +49,10 @@ export function createGame({ seed = 1, teams, setTarget } = {}) {
   for (const team of ['A', 'B']) {
     for (const p of rosters[team]) {
       players[p.id] = p;
-      actors[p.id] = { x: 0, z: 0, px: 0, pz: 0, blockUntil: -1, lastTouchTick: -9999 };
+      actors[p.id] = {
+        x: 0, z: 0, px: 0, pz: 0,
+        blockUntil: -1, blockStartTick: -9999, lastTouchTick: -9999,
+      };
     }
   }
   const state = {
@@ -140,6 +151,8 @@ function tryAction(state, intent, ev) {
 
   if (intent.action === 'block') {
     // 攔網＝開啟時機窗；是否攔到在球過網瞬間結算（tryBlock）
+    // 起跳時刻只在新窗開啟時記錄（連續 intent 延長窗但不重置起跳）——時機判定用
+    if (actor.blockUntil < state.tick) actor.blockStartTick = state.tick;
     actor.blockUntil = state.tick + TUNING.BLOCK_WINDOW;
     return;
   }
@@ -186,15 +199,19 @@ function executeTouch(state, intent, player, actor, ev) {
   const dec = intent.action === 'spike'
     ? computeDeception(from, intent.aim, intent.gaze)
     : { deceiveP: 0, errorBoost: 0 };
-  // 高低手球質：接球觸點高度影響精度（高手乾淨、貼地撲救較飄）
+  // 高低手球質（接球）×出手品質（扣球甜蜜區/超蓄）：都收斂到散佈乘數
+  const rawT = intent.timing ?? 1;
   const qualityMul = intent.action === 'receive'
     ? receiveQualityMul(from.y, player)
-    : 1;
+    : intent.action === 'spike'
+      ? timingQualityMul(rawT)
+      : 1;
   const target = scatterTarget(
     state, intent.aim, player.attributes.control, intent.action,
     dec.errorBoost, qualityMul,
   );
-  const timing = clamp01(intent.timing ?? 1);
+  // 力度：封頂 1；超蓄（放太晚）力度也掉——手型跑掉了
+  const timing = rawT > TUNING.OVERCHARGE_T ? Math.min(clamp01(rawT), 0.85) : clamp01(rawT);
   let v;
   if (intent.action === 'spike') {
     // 蓄力輕重：timing 短＝輕吊（慢、弧墜）、蓄滿＝重扣（全速）
@@ -280,6 +297,20 @@ export function computeDeception(from, aim, gaze) {
   };
 }
 
+// 出手品質（純函式）：蓄力進度 t（可>1）→散佈乘數。甜蜜區線性外皆 1、超蓄劣化
+export function timingQualityMul(t) {
+  if (t >= TUNING.SWEET_LO && t <= TUNING.SWEET_HI) return TUNING.SWEET_ACC;
+  if (t > TUNING.OVERCHARGE_T) return TUNING.OVER_ACC;
+  return 1.0;
+}
+
+// 攔網時機（純函式）：起跳後滯空 tick 數 → 攔網成功率乘數
+export function blockTimingMul(airTicks) {
+  if (airTicks < TUNING.BLOCK_SWEET_MIN) return TUNING.BLOCK_LATE_MUL;
+  if (airTicks > TUNING.BLOCK_SWEET_MAX) return TUNING.BLOCK_EARLY_MUL;
+  return 1.0;
+}
+
 // 高低手球質（純函式）：胸口以上高手＝精度佳、貼地撲救＝較飄
 export function receiveQualityMul(contactY, player) {
   const shoulder = standingReach(player) * 0.62; // 約胸口高度
@@ -359,7 +390,9 @@ function tryBlock(state, toTeam, ev) {
   // H3：攔網手被扣球者的視線騙過 → 整手撲空（機率＝欺敵線性項）
   if (state.rally.deceiveP > 0 && rand(state) < state.rally.deceiveP) return false;
 
-  const chance = 0.12 + best.p.attributes.block * 0.004;
+  // 時機判定：起跳太晚（手沒到頂）或太早（下墜中）攔網率打折
+  const airTicks = state.tick - best.actor.blockStartTick;
+  const chance = (0.12 + best.p.attributes.block * 0.004) * blockTimingMul(airTicks);
   if (rand(state) >= chance) return false; // 沒攔到，乾淨過網
 
   // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零

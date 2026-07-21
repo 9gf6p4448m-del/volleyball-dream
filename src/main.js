@@ -22,7 +22,6 @@ import { createHud } from './ui/hud.js';
 import { createScoreboard } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
-import { createCallButton } from './ui/callButton.js';
 import { createActionButtons } from './ui/actionButtons.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 
@@ -87,7 +86,6 @@ async function runMatch(ctx) {
   const scoreboard = createScoreboard(PLAYER_ID);
   const sfx = createSfx();
   const touchUi = createTouchUi();
-  createCallButton(() => controls.call()); // 喊球鈕（桌機＝空白鍵）
   const actionButtons = createActionButtons(controls); // 主動作鈕＋攔網鈕（桌機＝J/K）
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點
   // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點（僅顯示落在我方半場的）
@@ -121,6 +119,7 @@ async function runMatch(ctx) {
   const teamControl = params.get('teamcontrol') === '1';
   let controlledId = PLAYER_ID;
   let switchKey = '';
+  let lastWindupFlight = -1; // AI 攻擊手起跳動畫：每個 flight 只播一次
   function desiredControlled() {
     if (game.phase === 'serve') {
       return game.match.servingTeam === 'A' ? serverId(game.match) : controlledId;
@@ -182,13 +181,12 @@ async function runMatch(ctx) {
       if (game.phase === 'serve' && vcrCurrent.snapshot === null) {
         vcrCurrent.snapshot = structuredClone({ ...game, events: [] });
       }
-      // 全隊輪控：先依球權決定受控者，再收集 Intent
+      // 先依球權決定受控者（固定模式下不動），再收集 Intent
       syncControlled();
       // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
-      const caller = controls.isCalling() ? controlledId : null;
       const intents = [
         ...controls.collect(game, aiState),
-        ...aiCollectIntents(game, aiState, [controlledId], caller),
+        ...aiCollectIntents(game, aiState, [controlledId]),
       ];
       if (vcrCurrent.snapshot) vcrCurrent.steps.push({ tick: game.tick, intents });
       const events = stepGame(game, intents);
@@ -224,9 +222,19 @@ async function runMatch(ctx) {
     // 「這球歸你」：AI 呼叫鎖定指到受控者 → 光圈變橘＋提示
     const myBall = game.phase === 'rally' && aiState.claimId === controlledId;
     matchView.setHot(myBall);
-    // 玩家按下起跳／攔網 → 立即播動作（後續由 sim 事件接手）
+    // 玩家放開起跳／點攔網 → 立即播動作（後續由 sim 事件接手）
     if (controls.consumeJumpSignal()) matchView.triggerPose(controlledId, 'windup');
     if (controls.consumeBlockSignal()) matchView.triggerPose(controlledId, 'block');
+    // AI 攻擊手「先跳後揮」：第三擊球下墜接近攻擊手時先播起跳引臂（觸球才揮臂）
+    if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId &&
+        aiState.claimId !== controlledId && aiState.flightId !== lastWindupFlight) {
+      const atk = game.actors[aiState.claimId];
+      const b = game.ball;
+      if (b.vy < 0 && b.y < 3.6 && Math.hypot(b.x - atk.x, b.z - atk.z) < 2.2) {
+        lastWindupFlight = aiState.flightId;
+        matchView.triggerPose(aiState.claimId, 'windup');
+      }
+    }
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha);

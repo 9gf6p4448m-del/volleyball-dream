@@ -23,10 +23,11 @@ const POSES = {
     LeftArm: [0, 0.5, 0.9],
     Spine: [-0.15, 0, 0],
   },
-  // 攔網：雙臂垂直上舉、掌面向前
+  // 攔網：雙臂垂直上舉過頂、掌面向前（與低手墊球嚴格區隔）
   block: {
-    RightArm: [0, 0.15, 2.85], LeftArm: [0, 0.15, 2.85],
-    Spine: [-0.05, 0, 0],
+    RightArm: [0, 0.12, 3.05], LeftArm: [0, 0.12, 3.05],
+    RightForeArm: [0, 0, 0.15], LeftForeArm: [0, 0, 0.15],
+    Spine: [-0.08, 0, 0], Neck: [-0.15, 0, 0],
   },
   // 起跳引臂（玩家按下起跳、尚未揮擊）：右臂後拉、左臂前指平衡
   windup: {
@@ -106,7 +107,7 @@ export function createAnimator(inst) {
       }
       if (!poseName && hold) {
         poseName = ACTIONS[hold].pose;
-        weight = 0.85;
+        weight = 1.0; // 持姿全權重：攔網舉手要一眼可辨
       }
 
       if (poseName && weight > 0) {

@@ -13,8 +13,7 @@ const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
 const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
-const JUMP_WINDOW_MS = 750;  // 起跳滯空窗：按下＝起跳，須在窗內放開揮臂才是扣球
-const CALL_WINDOW_MS = 1500; // 喊球有效窗：喊聲維持這段時間，期間的來球歸你
+const JUMP_WINDOW_MS = 900;  // 放開＝起跳揮擊後的出手有效窗
 
 export function createMatchControls(domElement, camera, initialPlayerId, rig) {
   let playerId = initialPlayerId; // 全隊輪控：main 依球權切換（setPlayerId）
@@ -27,23 +26,24 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
   let jumpSignal = false;           // 本次按下觸發了起跳（main 轉給表現層播 windup）
   let jumpStartedAt = 0;
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
-  let callAt = -Infinity;           // 喊球時刻（空白鍵／喊球鈕）
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-      callAt = performance.now(); // 空白鍵＝喊球（這球我的）
+    if ((e.code === 'KeyJ' || e.code === 'Space') && !e.repeat) {
       e.preventDefault();
+      beginCharge('key'); // J／空白鍵＝主動作蓄力
       return;
     }
-    if (e.code === 'KeyJ' && !e.repeat) { beginCharge('key'); return; } // J＝主動作蓄力
-    if (e.code === 'KeyK' && !e.repeat) { blockTap(); return; }         // K＝攔網
+    if (e.code === 'KeyK' && !e.repeat) { blockTap(); return; } // K＝攔網
     keys.add(e.code);
   });
   window.addEventListener('keyup', (e) => {
-    if (e.code === 'KeyJ' && charge?.pointerId === 'key') { releaseCharge(); return; }
+    if ((e.code === 'KeyJ' || e.code === 'Space') && charge?.pointerId === 'key') {
+      releaseCharge();
+      return;
+    }
     keys.delete(e.code);
   });
   window.addEventListener('blur', () => keys.clear());
@@ -60,33 +60,34 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
 
   let lastGame = null; // pointer 事件在 collect 之外發生，需要最近一次的比賽狀態判情境
 
-  // 開始蓄力（指標路徑與按鈕路徑共用；扣球情境按下＝起跳）
+  // 開始蓄力（指標路徑與按鈕路徑共用；扣球情境＝同時自動助跑，見 collect）
   function beginCharge(source) {
     if (charge) return;
     charge = {
       pointerId: source, startedAt: performance.now(),
-      gaze: null, jumpAt: null,
+      gaze: null,
       btnDrag: source === 'button' ? { dx: 0, dy: 0 } : null,
     };
-    if (lastGame && contextAction(lastGame) === 'spike') {
-      charge.jumpAt = performance.now();
-      jumpSignal = true;
-      jumpStartedAt = charge.jumpAt;
-    }
   }
 
-  // 結束蓄力 → 出手排queue（aimVec＝按鈕拖曳方向；aimNdc＝球場指標）
+  // 結束蓄力 → 出手排 queue；扣球情境＝放開那一刻起跳揮擊（一體化）
+  // timing 不封頂：>1.15 ＝超蓄（sim 判品質劣化，如 2K 出手太晚）
   function releaseCharge() {
     if (!charge) return;
     const held = performance.now() - charge.startedAt;
     const drag = charge.btnDrag;
+    const spikeCtx = lastGame && contextAction(lastGame) === 'spike';
+    if (spikeCtx) {
+      jumpSignal = true; // 起跳＝放開瞬間（windup 由 main 轉表現層）
+      jumpStartedAt = performance.now();
+    }
     queuedAction = {
-      timing: Math.min(held / CHARGE_MS, 1),
+      timing: held / CHARGE_MS,
       gaze: charge.gaze,
       aimNdc: drag ? null : { ...pointerNdc },
       aimVec: drag && Math.hypot(drag.dx, drag.dy) > 14 ? { ...drag } : null,
       expiresTick: null,
-      jumpAt: charge.jumpAt,
+      jumpAt: spikeCtx ? performance.now() : null,
       releasedAt: performance.now(),
     };
     charge = null;
@@ -173,7 +174,16 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       const tick = game.tick;
       const me = game.players[playerId];
       const a = game.actors[playerId];
-      const move = readMove(keys, joystick, TEAM_SIDE[me.teamId]);
+      let move = readMove(keys, joystick, TEAM_SIDE[me.teamId]);
+
+      // 一體化助跑：扣球情境按住＝自動衝向球落點（搖桿有輸入時尊重手動微調）
+      if (charge && aiState?.landing && Math.hypot(move.x, move.z) < 0.1 &&
+          contextAction(game) === 'spike') {
+        const dx = aiState.landing.x - a.x;
+        const dz = aiState.landing.z - a.z;
+        const len = Math.hypot(dx, dz);
+        if (len > 0.15) move = { x: dx / len, z: dz / len };
+      }
 
       let action = null;
       let aim = { x: 0, z: -6.5 * TEAM_SIDE[me.teamId] }; // 預設瞄對方深區
@@ -270,9 +280,6 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     pressBlock() { blockTap(); },
     // 當前情境動作（按鈕標籤用）：'serve'|'spike'|'set'|'block'|'receive'|null
     currentContext() { return lastGame ? contextAction(lastGame) : null; },
-    // 喊球（螢幕鈕呼叫；空白鍵走 keydown）
-    call() { callAt = performance.now(); },
-    isCalling() { return performance.now() - callAt < CALL_WINDOW_MS; },
     // 玩家剛按下起跳（一次性訊號；main 轉給表現層播 windup 跳躍）
     consumeJumpSignal() {
       const s = jumpSignal;
@@ -287,14 +294,16 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
 
     // 觸控 UI 疊層讀這裡畫搖桿/蓄力圈；render 層讀 aim 畫地面瞄準標記
     uiState() {
+      if (!charge) return { joystick: joystick ? { ...joystick } : null, charge: null };
+      const p = (performance.now() - charge.startedAt) / CHARGE_MS;
       return {
         joystick: joystick ? { ...joystick } : null,
-        charge: charge
-          ? {
-            x: pointerPx.x, y: pointerPx.y,
-            progress: Math.min((performance.now() - charge.startedAt) / CHARGE_MS, 1),
-          }
-          : null,
+        charge: {
+          x: pointerPx.x, y: pointerPx.y,
+          progress: p,
+          sweet: p >= 0.7 && p <= 1.05, // 甜蜜區：放開＝最準（綠）
+          over: p > 1.15,               // 超蓄：品質劣化（紅）
+        },
       };
     },
     currentAimPoint() {

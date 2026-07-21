@@ -25,12 +25,14 @@ export function createTouchUi() {
       }
 
       if (ui.charge) {
-        place(ring, ui.charge.x, ui.charge.y);
-        // 蓄力進度 → 圓環顏色由淡轉實、微放大
-        const p = ui.charge.progress;
-        ring.style.borderColor = `rgba(110,231,255,${0.25 + p * 0.7})`;
-        ring.style.transform =
-          `translate(-50%,-50%) scale(${1 + p * 0.35})`;
+        const c = ui.charge;
+        place(ring, c.x, c.y);
+        // 出手品質表（2K 式）：藍＝蓄力中、綠＝甜蜜區（放開最準）、紅＝超蓄（會飄）
+        const p = Math.min(c.progress, 1);
+        const rgb = c.over ? '255,91,91' : c.sweet ? '96,255,160' : '110,231,255';
+        ring.style.borderColor = `rgba(${rgb},${0.4 + p * 0.6})`;
+        ring.style.borderWidth = c.sweet ? '6px' : '4px';
+        ring.style.transform = `translate(-50%,-50%) scale(${1 + p * 0.35})`;
       } else {
         hide(ring);
       }

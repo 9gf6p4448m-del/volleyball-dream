@@ -1,7 +1,9 @@
 // 機制包：蓄力輕重（timing→扣球速度）與高低手球質（觸點高度→精度）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, stepGame, receiveQualityMul, TUNING } from '../src/sim/game.js';
+import {
+  createGame, stepGame, receiveQualityMul, timingQualityMul, blockTimingMul, TUNING,
+} from '../src/sim/game.js';
 import { createPlayer, standingReach } from '../src/sim/player.js';
 import { createIntent } from '../src/sim/intent.js';
 
@@ -56,6 +58,25 @@ test('TOUCH 事件帶 power（表現層分輕吊/重扣音效）', () => {
   ]);
   const touch = ev.find((e) => e.type === 'TOUCH');
   assert.equal(touch.power, 0.3);
+});
+
+test('出手品質：甜蜜區最準、超蓄最飄、其餘標準', () => {
+  assert.equal(timingQualityMul(0.85), TUNING.SWEET_ACC);  // 甜蜜區
+  assert.equal(timingQualityMul(0.3), 1.0);                // 提前放
+  assert.equal(timingQualityMul(1.3), TUNING.OVER_ACC);    // 超蓄
+  assert.ok(TUNING.SWEET_ACC < 1 && TUNING.OVER_ACC > 1);
+});
+
+test('超蓄懲罰：timing 1.3 的扣球比蓄滿慢（力度掉到 0.85）', () => {
+  const full = spikeSpeedWithTiming(21, 1);
+  const over = spikeSpeedWithTiming(21, 1.3);
+  assert.ok(over < full, `超蓄未變慢：${over.toFixed(1)} vs ${full.toFixed(1)}`);
+});
+
+test('攔網時機：太晚/甜蜜/太早的成功率乘數', () => {
+  assert.equal(blockTimingMul(1), TUNING.BLOCK_LATE_MUL);
+  assert.equal(blockTimingMul(12), 1.0);
+  assert.equal(blockTimingMul(40), TUNING.BLOCK_EARLY_MUL);
 });
 
 test('高低手球質：高手 < 標準低手 < 貼地撲救（散佈乘數遞增）', () => {
