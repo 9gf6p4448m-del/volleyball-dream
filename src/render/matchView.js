@@ -3,13 +3,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { SIM_DT } from '../sim/constants.js';
-import { TEAM_SIDE } from '../sim/rotation.js';
+import { TEAM_SIDE, positionOf } from '../sim/rotation.js';
 import { createAnimator } from './animator.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
+const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
 
 const RUN_BLEND_SPEED = 3.0; // 每秒動畫權重切換速率
-const TURN_LERP = 0.18;      // 轉身平滑
+const TURN_LERP = 0.35;      // 轉身平滑（排球轉身要快，慢了看起來像背對球）
 const RUN_AT = 1.2;          // 高於此移速（m/s）視為跑動
 
 export async function createMatchView(scene, quality, game, highlightId, forcePose = null) {
@@ -47,6 +48,9 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
     units[p.id] = {
       inst, mixer, idle, run, runWeight: 0, yaw: inst.rotation.y,
       animator: createAnimator(inst),
+      tag: makeTag(scene),
+      tagText: '',
+      tagY: p.height.current + 0.45,
     };
   }
 
@@ -105,19 +109,38 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
         const z = a.pz + (a.z - a.pz) * alpha;
         u.inst.position.set(x, 0, z);
 
+        // 頭上標籤：輪轉位置編號（P1–P6；玩家標「你」）——輪轉可目視驗證
+        const team0 = gameState.players[id].teamId;
+        const pos = positionOf(gameState.match.rotations[team0], id);
+        const text = (id === highlightId ? '你P' : 'P') + pos;
+        if (text !== u.tagText) {
+          u.tagText = text;
+          drawTag(u.tag, text, TAG_COLORS[team0]);
+        }
+        u.tag.sprite.position.set(x, u.tagY, z);
+
         const vx = (a.x - a.px) / SIM_DT;
         const vz = (a.z - a.pz) / SIM_DT;
         const speed = Math.hypot(vx, vz);
 
         // 朝向：rally 中所有人面向球（真實排球全程追球，後退＝墊步）；
-        // 非 rally 面向球網。移動方向不決定朝向——背對球接球是視覺破綻
+        // 球到近身/頭頂時改面向「來球方向」（球速反向）——接球者面對球飛來的那側
         const team = gameState.players[id].teamId;
         const netYaw = TEAM_SIDE[team] === 1 ? Math.PI : 0;
         let targetYaw = netYaw;
         if (gameState.phase === 'rally') {
-          const bdx = gameState.ball.x - x;
-          const bdz = gameState.ball.z - z;
-          if (Math.hypot(bdx, bdz) > 0.25) targetYaw = Math.atan2(bdx, bdz);
+          const b = gameState.ball;
+          const bdx = b.x - x;
+          const bdz = b.z - z;
+          if (Math.hypot(bdx, bdz) > 1.1) {
+            targetYaw = Math.atan2(bdx, bdz);
+          } else {
+            const bvx = b.x - b.px;
+            const bvz = b.z - b.pz;
+            targetYaw = Math.hypot(bvx, bvz) > 1e-4
+              ? Math.atan2(-bvx, -bvz) // 面向來球
+              : u.yaw;
+          }
         }
         u.yaw += shortestArc(u.yaw, targetYaw) * TURN_LERP;
         u.inst.rotation.y = u.yaw;
@@ -146,4 +169,34 @@ function shortestArc(from, to) {
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
+}
+
+// ---- 頭上標籤（canvas sprite）----
+
+function makeTag(scene) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 56;
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }),
+  );
+  sprite.scale.set(0.9, 0.4, 1);
+  sprite.renderOrder = 5;
+  scene.add(sprite);
+  return { sprite, canvas, texture };
+}
+
+function drawTag(tag, text, color) {
+  const ctx = tag.canvas.getContext('2d');
+  ctx.clearRect(0, 0, 128, 56);
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(12,16,26,0.85)';
+  ctx.strokeText(text, 64, 28);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 64, 28);
+  tag.texture.needsUpdate = true;
 }

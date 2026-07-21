@@ -19,9 +19,11 @@ const POSITION_TEMPLATE = [
 ];
 
 // 隊伍視角座標 → 世界座標
+// 對映經畫面實證（07-21 修正）：A 隊（z>0、鏡頭後方）的「右」＝世界 +x＝螢幕右，
+// 故 x = side * lx；B 隊自動鏡像。發球員在近端畫面右下＝真實轉播視角
 export function localToWorld(team, lx, lz) {
   const side = TEAM_SIDE[team];
-  return { x: -side * lx, z: side * lz };
+  return { x: side * lx, z: side * lz };
 }
 
 // rotation：長度 6 的 playerId 陣列，index 0 = P1

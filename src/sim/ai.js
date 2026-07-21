@@ -210,7 +210,13 @@ function decideOne(game, aiState, playerId) {
         return createIntent({ playerId, tick, action, aim });
       }
     }
-    return moveIntent(playerId, tick, actor, aiState.landing);
+    // 站位：落點的下游側（順球飛行方向退 0.3m）——觸球點在身前、面向來球（真實接球站位）
+    const sp = Math.hypot(ball.vx, ball.vz);
+    const off = sp > 0.5 ? 0.3 : 0;
+    return moveIntent(playerId, tick, actor, {
+      x: aiState.landing.x + (off ? (ball.vx / sp) * off : 0),
+      z: aiState.landing.z + (off ? (ball.vz / sp) * off : 0),
+    });
   }
 
   // 攔網手：對方持球進攻節奏中，前排沿網追蹤球的 x；對方起扣即開時機窗

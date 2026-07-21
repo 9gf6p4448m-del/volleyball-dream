@@ -60,8 +60,13 @@ async function runMatch(ctx) {
 
   const seedParam = Number.parseInt(params.get('seed'), 10);
   let seed = Number.isFinite(seedParam) ? seedParam : 20260721;
+  // 快速局預設 15 分（?points=25 打正式局；deuce 規則不變）
+  const pointsParam = Number.parseInt(params.get('points'), 10);
+  const setTarget = Number.isFinite(pointsParam)
+    ? Math.min(Math.max(pointsParam, 5), 25)
+    : 15;
 
-  let game = createGame({ seed });
+  let game = createGame({ seed, setTarget });
   let aiState = createAiState();
 
   let matchView;
@@ -93,7 +98,7 @@ async function runMatch(ctx) {
   window.addEventListener('pointerdown', () => {
     if (game.phase !== 'set_over') return;
     seed += 1;
-    game = createGame({ seed });
+    game = createGame({ seed, setTarget });
     aiState = createAiState();
     window.__phase1.game = game;
     window.__phase1.aiState = aiState;
@@ -171,8 +176,9 @@ async function runMatch(ctx) {
     // 「這球歸你」：AI 呼叫鎖定指到玩家 → 光圈變橘＋提示
     const myBall = game.phase === 'rally' && aiState.claimId === PLAYER_ID;
     matchView.setHot(myBall);
-    // 玩家按下起跳 → 立即播滯空引臂（揮擊由 sim 的 TOUCH 事件接手）
+    // 玩家按下起跳／攔網 → 立即播動作（後續由 sim 事件接手）
     if (controls.consumeJumpSignal()) matchView.triggerPose(PLAYER_ID, 'windup');
+    if (controls.consumeBlockSignal()) matchView.triggerPose(PLAYER_ID, 'block');
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha);

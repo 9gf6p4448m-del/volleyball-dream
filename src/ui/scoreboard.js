@@ -52,7 +52,7 @@ function hintFor(game, playerId, serve) {
     return '二傳中——點按可自己處理';
   }
   if (r.possession && r.possession !== me.teamId) {
-    return '對方進攻：走位卡防守位；前排可點按攔網';
+    return '對方進攻：前排點一下＝跳攔網；後排卡防守位';
   }
   return '走位到球落點會自動墊球';
 }

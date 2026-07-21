@@ -17,7 +17,7 @@ export const TUNING = {
   REACH_RADIUS: 1.3,      // 觸球水平可及距離（m）
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）
-  BLOCK_WINDOW: 24,       // block intent 的有效 tick 窗口
+  BLOCK_WINDOW: 48,       // block intent 的有效 tick 窗口（0.8s，手機反應時間友善）
   BLOCK_REACH_X: 1.1,     // 攔網水平涵蓋半徑（m）
   SERVE_APEX: 4.6,        // 各球路弧頂高度（m）
   RECEIVE_APEX: 4.8,
@@ -33,7 +33,8 @@ export const TUNING = {
 };
 
 // teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = P1）
-export function createGame({ seed = 1, teams } = {}) {
+// setTarget：局分（預設 25；快速局可傳 15）
+export function createGame({ seed = 1, teams, setTarget } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
   const actors = {};
@@ -51,6 +52,7 @@ export function createGame({ seed = 1, teams } = {}) {
     match: createMatch({
       rotationA: rosters.A.map((p) => p.id),
       rotationB: rosters.B.map((p) => p.id),
+      ...(setTarget ? { target: setTarget } : {}),
     }),
     phase: 'serve', // 'serve' | 'rally' | 'set_over'
     serveReadyTick: 0,

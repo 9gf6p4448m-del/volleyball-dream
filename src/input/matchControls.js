@@ -25,6 +25,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
   let pointerPx = { x: 0, y: 0 };   // 螢幕像素座標（觸控 UI 疊層用）
   let jumpSignal = false;           // 本次按下觸發了起跳（main 轉給表現層播 windup）
   let jumpStartedAt = 0;
+  let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
   let callAt = -Infinity;           // 喊球時刻（空白鍵／喊球鈕）
 
   const raycaster = new THREE.Raycaster();
@@ -119,7 +120,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
     if (r.possession === me.teamId && r.touches === 2) return 'spike';
     if (r.possession === me.teamId && r.touches === 1) return 'set';
     const a = game.actors[playerId];
-    const nearNet = Math.abs(a.z) < 3.2;
+    const nearNet = Math.abs(a.z) < 4.2; // 前區＋一步內都可起攔（手機容錯）
     if (r.possession && r.possession !== me.teamId &&
         isFrontRow(game.match.rotations[me.teamId], playerId) && nearNet) {
       return 'block';
@@ -148,6 +149,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
           queuedAction.expiresTick = tick + BUFFER_TICKS;
         }
         action = contextAction(game);
+        if (action === 'block') blockSignal = true; // 立即視覺回饋（跳攔動作）
         // 起跳時機窗：沒起跳或滯空已過就不能扣——降級成往瞄準點送安全球
         if (action === 'spike') {
           const okWindow =
@@ -213,6 +215,11 @@ export function createMatchControls(domElement, camera, playerId, rig) {
     consumeJumpSignal() {
       const s = jumpSignal;
       jumpSignal = false;
+      return s;
+    },
+    consumeBlockSignal() {
+      const s = blockSignal;
+      blockSignal = false;
       return s;
     },
 

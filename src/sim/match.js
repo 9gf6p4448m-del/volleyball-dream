@@ -4,12 +4,13 @@
 // TODO Phase 2：輪轉站位違例、雙擊(double contact)完整判定、持球、觸網犯規、標誌桿(antenna)外過網
 import { rotateLineup, otherTeam } from './rotation.js';
 
-export const SET_TARGET = 25; // rally point 制，需領先 2 分（deuce 完整實作）
+export const SET_TARGET = 25; // 正式局：rally point 制，需領先 2 分（deuce 完整實作）
 
-export function createMatch({ rotationA, rotationB, servingTeam = 'A' }) {
+export function createMatch({ rotationA, rotationB, servingTeam = 'A', target = SET_TARGET }) {
   return {
     score: { A: 0, B: 0 },
     servingTeam,
+    target, // 局分（快速局可設 15；deuce 規則不變）
     rotations: { A: [...rotationA], B: [...rotationB] }, // index 0 = P1
     setOver: false,
     winner: null,
@@ -38,7 +39,7 @@ export function pointTo(match, team, reason) {
     events.push({ type: 'ROTATE', team });
   }
 
-  if (setWon(match.score, team)) {
+  if (setWon(match.score, team, match.target)) {
     match.setOver = true;
     match.winner = team;
     events.push({ type: 'SET_END', winner: team, score: { ...match.score } });
@@ -47,11 +48,11 @@ export function pointTo(match, team, reason) {
   return events;
 }
 
-// 25 分且領先 2 分才贏；24-24 之後續打到領先 2（deuce 是 rally point 的靈魂，不簡化）
-export function setWon(score, team) {
+// 達局分且領先 2 分才贏；平手續打到領先 2（deuce 是 rally point 的靈魂，不簡化）
+export function setWon(score, team, target = SET_TARGET) {
   const mine = score[team];
   const theirs = score[otherTeam(team)];
-  return mine >= SET_TARGET && mine - theirs >= 2;
+  return mine >= target && mine - theirs >= 2;
 }
 
 // 觸球上限：第 4 次觸球即犯規（攔網觸球不計入，由呼叫端排除）
