@@ -23,6 +23,7 @@ import { createScoreboard } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
 import { createCallButton } from './ui/callButton.js';
+import { createActionButtons } from './ui/actionButtons.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
@@ -87,6 +88,7 @@ async function runMatch(ctx) {
   const sfx = createSfx();
   const touchUi = createTouchUi();
   createCallButton(() => controls.call()); // 喊球鈕（桌機＝空白鍵）
+  const actionButtons = createActionButtons(controls); // 主動作鈕＋攔網鈕（桌機＝J/K）
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點
   // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點（僅顯示落在我方半場的）
   const assistOn = params.get('assist') !== 'off';
@@ -115,7 +117,8 @@ async function runMatch(ctx) {
   let vcrCurrent = { snapshot: null, steps: [] };
   let vcrLast = null;
 
-  // 全隊輪控：控制權跟著球權走，只在球權節點（flight/phase 變化）切換
+  // 控制模式：預設固定主攻手（07-21 Sawmah 試玩後定案）；?teamcontrol=1 開全隊輪控實驗
+  const teamControl = params.get('teamcontrol') === '1';
   let controlledId = PLAYER_ID;
   let switchKey = '';
   function desiredControlled() {
@@ -138,6 +141,7 @@ async function runMatch(ctx) {
     return controlledId;
   }
   function syncControlled() {
+    if (!teamControl) return; // 固定主攻手模式
     const key = `${game.phase}:${game.rally.flightId}:${aiState.claimId ?? ''}`;
     if (key === switchKey) return;
     switchKey = key;
@@ -229,6 +233,7 @@ async function runMatch(ctx) {
     matchView.sync(game, alpha, delta, frameEvents);
     rig.update(game, alpha);
     scoreboard.update(game, myBall, controlledId);
+    actionButtons.update(controls.currentContext());
     touchUi.update(controls.uiState());
     const aimAt = controls.currentAimPoint();
     if (aimAt) aimMarker.show(aimAt);

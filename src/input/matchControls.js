@@ -38,27 +38,72 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       e.preventDefault();
       return;
     }
+    if (e.code === 'KeyJ' && !e.repeat) { beginCharge('key'); return; } // J＝主動作蓄力
+    if (e.code === 'KeyK' && !e.repeat) { blockTap(); return; }         // K＝攔網
     keys.add(e.code);
   });
-  window.addEventListener('keyup', (e) => keys.delete(e.code));
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyJ' && charge?.pointerId === 'key') { releaseCharge(); return; }
+    keys.delete(e.code);
+  });
   window.addEventListener('blur', () => keys.clear());
+
+  // 攔網：一點即出（獨立按鈕/K 鍵；不經蓄力）
+  function blockTap() {
+    queuedAction = {
+      timing: 1, gaze: null, aimNdc: null, aimVec: null,
+      forceAction: 'block', expiresTick: null, jumpAt: null,
+      releasedAt: performance.now(),
+    };
+    blockSignal = true;
+  }
 
   let lastGame = null; // pointer 事件在 collect 之外發生，需要最近一次的比賽狀態判情境
 
-  domElement.addEventListener('pointerdown', (e) => {
-    // 觸控左 40% 螢幕＝走位搖桿；其餘（含滑鼠）＝動作指標
-    if (e.pointerType === 'touch' && e.clientX < window.innerWidth * 0.4 && !joystick) {
-      joystick = { pointerId: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 };
-      return;
-    }
+  // 開始蓄力（指標路徑與按鈕路徑共用；扣球情境按下＝起跳）
+  function beginCharge(source) {
     if (charge) return;
-    updateNdc(e);
-    charge = { pointerId: e.pointerId, startedAt: performance.now(), gaze: null, jumpAt: null };
-    // 第三擊情境：按下＝起跳（滯空窗內放開揮臂才算扣球，錯過窗＝安全球）
+    charge = {
+      pointerId: source, startedAt: performance.now(),
+      gaze: null, jumpAt: null,
+      btnDrag: source === 'button' ? { dx: 0, dy: 0 } : null,
+    };
     if (lastGame && contextAction(lastGame) === 'spike') {
       charge.jumpAt = performance.now();
       jumpSignal = true;
       jumpStartedAt = charge.jumpAt;
+    }
+  }
+
+  // 結束蓄力 → 出手排queue（aimVec＝按鈕拖曳方向；aimNdc＝球場指標）
+  function releaseCharge() {
+    if (!charge) return;
+    const held = performance.now() - charge.startedAt;
+    const drag = charge.btnDrag;
+    queuedAction = {
+      timing: Math.min(held / CHARGE_MS, 1),
+      gaze: charge.gaze,
+      aimNdc: drag ? null : { ...pointerNdc },
+      aimVec: drag && Math.hypot(drag.dx, drag.dy) > 14 ? { ...drag } : null,
+      expiresTick: null,
+      jumpAt: charge.jumpAt,
+      releasedAt: performance.now(),
+    };
+    charge = null;
+  }
+
+  domElement.addEventListener('pointerdown', (e) => {
+    // 觸控：左 40% 螢幕＝走位搖桿；其餘不做事（出手一律走右側按鈕，防誤觸）
+    if (e.pointerType === 'touch') {
+      if (e.clientX < window.innerWidth * 0.4 && !joystick) {
+        joystick = { pointerId: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 };
+      }
+      return;
+    }
+    // 滑鼠：球場指標瞄準＋蓄力（桌機仍可用滑鼠玩）
+    updateNdc(e);
+    if (!charge) {
+      beginCharge(e.pointerId);
     }
   });
 
@@ -78,16 +123,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     }
     if (charge && e.pointerId === charge.pointerId) {
       updateNdc(e);
-      const held = performance.now() - charge.startedAt;
-      queuedAction = {
-        timing: Math.min(held / CHARGE_MS, 1),
-        gaze: charge.gaze,             // 看哪＝蓄力期間的視線落點（進一人稱後由 rig 補）
-        aimNdc: { ...pointerNdc },     // 往哪打＝放開瞬間的指向（collect 時換算場地座標）
-        expiresTick: null,             // 出手緩衝視窗（首次 collect 時設定）
-        jumpAt: charge.jumpAt,         // 起跳時刻（扣球滯空窗判定用）
-        releasedAt: performance.now(),
-      };
-      charge = null;
+      releaseCharge();
     }
   };
   domElement.addEventListener('pointerup', endPointer);
@@ -149,8 +185,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         if (queuedAction.expiresTick === null) {
           queuedAction.expiresTick = tick + BUFFER_TICKS;
         }
-        action = contextAction(game);
-        if (action === 'block') blockSignal = true; // 立即視覺回饋（跳攔動作）
+        action = queuedAction.forceAction ?? contextAction(game);
+        if (action === 'block' && !queuedAction.forceAction) blockSignal = true;
         // 起跳時機窗：沒起跳或滯空已過就不能扣——降級成往瞄準點送安全球
         if (action === 'spike') {
           const okWindow =
@@ -158,8 +194,16 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
             queuedAction.releasedAt - queuedAction.jumpAt <= JUMP_WINDOW_MS;
           if (!okWindow) action = 'receive';
         }
-        const ground = groundPoint(queuedAction.aimNdc);
-        if (ground) aim = ground;
+        if (queuedAction.aimVec) {
+          // 按鈕拖曳瞄準：螢幕向量→場地方向（上＝朝對場、右＝+x），距離隨拖曳長度 3–9m
+          const d = queuedAction.aimVec;
+          const len = Math.hypot(d.dx, d.dy) || 1;
+          const dist = 3 + (Math.min(len, 130) / 130) * 6;
+          aim = { x: a.x + (d.dx / len) * dist, z: a.z + (d.dy / len) * dist };
+        } else if (queuedAction.aimNdc) {
+          const ground = groundPoint(queuedAction.aimNdc);
+          if (ground) aim = ground;
+        }
         gaze = queuedAction.gaze ?? rig.gazePoint(game);
         timing = queuedAction.timing;
         // 發球等哨音沒有時限；其他動作逾時作廢
@@ -219,6 +263,13 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       blockSignal = false;
     },
     getPlayerId() { return playerId; },
+    // NBA2K 式按鈕路徑（actionButtons UI 呼叫）
+    beginAction() { beginCharge('button'); },
+    dragAction(dx, dy) { if (charge?.btnDrag) charge.btnDrag = { dx, dy }; },
+    endAction() { if (charge?.btnDrag) releaseCharge(); },
+    pressBlock() { blockTap(); },
+    // 當前情境動作（按鈕標籤用）：'serve'|'spike'|'set'|'block'|'receive'|null
+    currentContext() { return lastGame ? contextAction(lastGame) : null; },
     // 喊球（螢幕鈕呼叫；空白鍵走 keydown）
     call() { callAt = performance.now(); },
     isCalling() { return performance.now() - callAt < CALL_WINDOW_MS; },

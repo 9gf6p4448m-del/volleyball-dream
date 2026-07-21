@@ -1,5 +1,5 @@
 // 首次操作教學卡：顯示一次（localStorage 記憶），點任意處關閉
-const FLAG = 'vd-tutorial-v5'; // 版本號變更＝更新後重新顯示一次
+const FLAG = 'vd-tutorial-v6'; // 版本號變更＝更新後重新顯示一次
 
 export function showTutorialOnce() {
   let seen = false;
@@ -11,8 +11,8 @@ export function showTutorialOnce() {
     ? '<b>左半螢幕</b> 按住拖曳＝走位搖桿'
     : '<b>WASD / 方向鍵</b>＝走位';
   const actHint = isTouch
-    ? '<b>右半螢幕</b> 按住＝蓄力（按下那一眼＝視線）<br>拖曳＝瞄準落點 → 放開＝出手'
-    : '<b>滑鼠</b> 按住＝蓄力（按下那一眼＝視線）<br>拖曳＝瞄準落點 → 放開＝出手';
+    ? '<b>右側大鈕</b>（發球/扣球/舉球/墊球隨情境變）：<br>按住＝蓄力、從鈕上拖出＝瞄準方向、放開＝出手<br><b>攔網鈕</b>＝一點就跳攔'
+    : '<b>滑鼠按住</b>或 <b>J 鍵</b>＝蓄力（滑鼠位置＝瞄準）、放開＝出手<br><b>K 鍵</b>＝跳攔網';
 
   const el = document.createElement('div');
   el.style.cssText = [
@@ -23,8 +23,7 @@ export function showTutorialOnce() {
   el.innerHTML = `
     <div style="max-width:520px;padding:24px;line-height:1.9;font-size:15px">
       <div style="font-size:22px;font-weight:700;margin-bottom:14px">排球夢 — 怎麼玩</div>
-      <div style="margin-bottom:6px"><b>全隊輪控</b>：你自動控制「球要來的那個人」——<br>
-      看頭上「你」字＋腳下光圈就知道現在操作誰</div>
+      <div style="margin-bottom:6px">你＝<b>主攻手</b>（頭上「你」字＋腳下光圈那位）</div>
       <div>${moveHint}</div>
       <div>${actHint}</div>
       <div style="margin-top:10px;opacity:0.85">
