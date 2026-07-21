@@ -42,16 +42,15 @@ const POSES = {
     LeftArm: [0, 0.25, 0.5],
     Spine: [0.4, 0, 0],
   },
-  // 攔網：雙手打直垂直上舉、平行同寬（手肘鎖直——負值抵銷待機的自然彎曲）
+  // 攔網：方向式手臂（armAim＝上臂在「模型空間」指向的方向；數學求解不猜軸）
+  // 手肘/手腕回 T-Pose 直臂基準——雙手打直、完美對稱、不受待機動畫汙染
   blockUp: {
-    RightArm: [0, 0.08, 2.95], LeftArm: [0, 0.08, 2.95],
-    RightForeArm: [0, 0, -0.15], LeftForeArm: [0, 0, -0.15],
     Spine: [0.06, 0, 0], Neck: [-0.1, 0, 0],
+    armAim: { x: 0, y: 1, z: 0.18 }, // 直上微前（模型 +z＝面向）
   },
   blockPunch: { // 頂點「蓋」：雙臂前壓過網、身體前撲
-    RightArm: [0, 0.06, 2.6], LeftArm: [0, 0.06, 2.6],
-    RightForeArm: [0, 0, -0.15], LeftForeArm: [0, 0, -0.15],
     Spine: [0.24, 0, 0],
+    armAim: { x: 0, y: 0.78, z: 0.63 },
   },
   // 起跳引臂（玩家按下起跳、揮擊由 spike 接手）＝借用扣球引臂
   windup: {
@@ -96,6 +95,11 @@ const RELEASE_MS = 0.2;  // 收勢淡出秒數
 const LAND_FROM = 0.72;  // 跳躍動作進度超過此值＝下降段，疊落地緩衝
 
 const BONE_KEYS = ['RightArm', 'LeftArm', 'RightForeArm', 'LeftForeArm', 'Spine', 'Neck'];
+// 絕對姿勢的手臂鏈（以 T-Pose 為基準定位，兩手完美對稱、不受待機動畫影響）
+const ABS_KEYS = [
+  'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
+  'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
+];
 
 // 取姿勢在某骨的加法旋轉（缺＝零）
 function poseRot(pose, key) {
@@ -103,9 +107,9 @@ function poseRot(pose, key) {
 }
 const ZERO = [0, 0, 0];
 
-export function createAnimator(inst) {
+export function createAnimator(inst, tposeRef = null) {
   const bones = {};
-  for (const key of BONE_KEYS) {
+  for (const key of [...new Set([...BONE_KEYS, ...ABS_KEYS])]) {
     // GLTFLoader 會消毒節點名（mixamorig:RightArm → mixamorigRightArm），兩種都試
     bones[key] = inst.getObjectByName(`mixamorig${key}`)
       ?? inst.getObjectByName(`mixamorig:${key}`) ?? null;
@@ -113,6 +117,12 @@ export function createAnimator(inst) {
   let current = null; // { seq, t }
   let hold = null;    // 持續姿勢（攔網窗）：'block' | null
   const q = new THREE.Quaternion();
+  const qAbs = new THREE.Quaternion();
+  const qWorld = new THREE.Quaternion();
+  const qParent = new THREE.Quaternion();
+  const vWorld = new THREE.Vector3();
+  const vLocal = new THREE.Vector3();
+  const vAxis = new THREE.Vector3();
   const e = new THREE.Euler();
 
   // 累積某骨在給定「已插值姿勢對」下的加法旋轉，寫進 out[key]
@@ -137,6 +147,16 @@ export function createAnimator(inst) {
       ];
     }
     out.crouch = (pa.crouch ?? 0) + ((pb.crouch ?? 0) - (pa.crouch ?? 0)) * f;
+    // 方向式手臂：兩關鍵的 armAim 向量插值（單邊缺時沿用另一邊）
+    const aa = pa.armAim ?? pb.armAim;
+    const ab = pb.armAim ?? pa.armAim;
+    out.armAim = aa
+      ? {
+        x: aa.x + (ab.x - aa.x) * f,
+        y: aa.y + (ab.y - aa.y) * f,
+        z: aa.z + (ab.z - aa.z) * f,
+      }
+      : null;
   }
 
   const blended = {};
@@ -197,6 +217,29 @@ export function createAnimator(inst) {
           e.set(rot[0] * weight, rot[1] * weight, rot[2] * weight);
           q.setFromEuler(e);
           bone.quaternion.multiply(q); // 疊加在 Idle/Run 取樣之上
+        }
+        // 方向式手臂：解「上臂骨軸 → 目標世界方向」的局部四元數（不猜歐拉軸）
+        // 手肘/手腕 slerp 回 T-Pose 直臂基準——雙手打直、左右對稱
+        if (usePose.armAim && tposeRef) {
+          inst.getWorldQuaternion(qWorld);
+          vWorld.set(usePose.armAim.x, usePose.armAim.y, usePose.armAim.z)
+            .normalize()
+            .applyQuaternion(qWorld); // 模型空間 → 世界
+          for (const side of ['Right', 'Left']) {
+            const arm = bones[`${side}Arm`];
+            const fore = bones[`${side}ForeArm`];
+            if (!arm || !fore) continue;
+            vAxis.copy(fore.position).normalize(); // 骨軸（局部恆定：指向子骨）
+            arm.parent.getWorldQuaternion(qParent);
+            vLocal.copy(vWorld).applyQuaternion(qParent.invert());
+            qAbs.setFromUnitVectors(vAxis, vLocal);
+            arm.quaternion.slerp(qAbs, weight);
+            const refF = tposeRef[`${side}ForeArm`];
+            if (refF) fore.quaternion.slerp(refF, weight);
+            const hand = bones[`${side}Hand`];
+            const refH = tposeRef[`${side}Hand`];
+            if (hand && refH) hand.quaternion.slerp(refH, weight);
+          }
         }
         if (usePose.crouch) jumpY -= usePose.crouch * weight;
       }

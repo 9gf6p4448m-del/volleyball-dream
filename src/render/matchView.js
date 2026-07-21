@@ -27,6 +27,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   const idleClip = clips.find((c) => c.name === 'Idle') ?? clips[0] ?? null;
   const runClip = clips.find((c) => c.name === 'Run')
     ?? clips.find((c) => c.name === 'Walk') ?? idleClip;
+  const tposeClip = clips.find((c) => c.name === 'TPose') ?? null;
 
   const units = {};
   for (const p of Object.values(game.players)) {
@@ -44,11 +45,24 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     const mixer = new THREE.AnimationMixer(inst);
     const idle = idleClip ? mixer.clipAction(idleClip) : null;
     const run = runClip && runClip !== idleClip ? mixer.clipAction(runClip) : null;
+
+    // 取 T-Pose 基準（絕對姿勢用）：暫時只播 TPose 取樣一幀、記下手臂鏈的局部旋轉
+    let tposeRef = null;
+    if (tposeClip) {
+      const tp = mixer.clipAction(tposeClip);
+      tp.play();
+      tp.setEffectiveWeight(1);
+      mixer.update(0.001);
+      tposeRef = captureArmRef(inst);
+      tp.stop();
+      mixer.uncacheAction(tposeClip);
+    }
     if (idle) { idle.play(); idle.setEffectiveWeight(1); }
     if (run) { run.play(); run.setEffectiveWeight(0); }
+
     units[p.id] = {
       inst, mixer, idle, run, runWeight: 0, yaw: inst.rotation.y,
-      animator: createAnimator(inst),
+      animator: createAnimator(inst, tposeRef),
       tag: makeTag(scene),
       tagText: '',
       tagY: p.height.current + 0.45,
@@ -172,6 +186,21 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       }
     },
   };
+}
+
+// 取樣手臂鏈（肩/上臂/前臂/手）在 T-Pose 的局部旋轉——絕對姿勢的乾淨基準
+const ARM_REF_KEYS = [
+  'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
+  'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
+];
+function captureArmRef(inst) {
+  const ref = {};
+  for (const key of ARM_REF_KEYS) {
+    const bone = inst.getObjectByName(`mixamorig${key}`)
+      ?? inst.getObjectByName(`mixamorig:${key}`);
+    if (bone) ref[key] = bone.quaternion.clone();
+  }
+  return ref;
 }
 
 function shortestArc(from, to) {
