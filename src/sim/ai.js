@@ -76,8 +76,8 @@ function ensureFlightPlan(game, aiState) {
       (p) => p.currentRole === 'setter' && p.id !== r.lastToucherId,
     );
     aiState.claimId = setter ? setter.id : arbitrate(game, team, landing, r.lastToucherId);
-    // 同時選定攻擊手（前排、非舉球員），供舉球目標與第三擊呼叫用
-    aiState.attackerId = pickAttacker(game, team, aiState.claimId);
+    // 同時選定攻擊手（前排、非舉球員）；preferAttacker 前排時優先餵給他（玩家攻擊頻率）
+    aiState.attackerId = pickAttacker(game, team, aiState.claimId, aiState.preferAttacker);
   } else if (r.possession === team && r.touches === 2) {
     // 第三擊：先前選定的攻擊手；不成立則仲裁補位
     const atk = aiState.attackerId;
@@ -170,10 +170,12 @@ function arbitrate(game, team, landing, excludeId) {
 }
 
 // 攻擊手輪替：前排、非舉球員，以比分+flightId 循環（決定論的變化）
-function pickAttacker(game, team, setterId) {
+// preferId：若該球員在候選內（前排、非舉球員）則優先選他（玩家進攻決策用）
+function pickAttacker(game, team, setterId, preferId) {
   const rot = game.match.rotations[team];
   const candidates = rot.filter((pid) => isFrontRow(rot, pid) && pid !== setterId);
   if (candidates.length === 0) return null;
+  if (preferId && candidates.includes(preferId)) return preferId;
   const { score } = game.match;
   return candidates[(score.A + score.B + game.rally.flightId) % candidates.length];
 }

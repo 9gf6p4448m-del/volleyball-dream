@@ -1,18 +1,21 @@
 // 首次操作教學卡：顯示一次（localStorage 記憶），點任意處關閉
-const FLAG = 'vd-tutorial-v7'; // 版本號變更＝更新後重新顯示一次
+const FLAG = 'vd-tutorial-v8'; // 版本號變更＝更新後重新顯示一次
 
-export function showTutorialOnce() {
+// simple＝簡化操作模式（預設）：只教進攻決策；classic 模式教全手動
+export function showTutorialOnce(simple = true) {
   let seen = false;
   try { seen = !!localStorage.getItem(FLAG); } catch { /* 私密模式等，直接顯示 */ }
   if (seen) return;
 
   const isTouch = 'ontouchstart' in window;
-  const moveHint = isTouch
-    ? '<b>左半螢幕</b> 按住拖曳＝走位搖桿'
-    : '<b>WASD / 方向鍵</b>＝走位';
-  const actHint = isTouch
-    ? '<b>右側大鈕</b>（發球/扣球/舉球/墊球隨情境變）：<br>按住＝蓄力（扣球會自動助跑衝向球）、拖出＝瞄準、放開＝起跳出手<br><b>攔網鈕</b>＝一點就跳攔（跳太早太晚都攔不好）'
-    : '<b>滑鼠按住</b>或 <b>J/空白鍵</b>＝蓄力（滑鼠位置＝瞄準）、放開＝出手<br><b>K 鍵</b>＝跳攔網';
+  const body = simple
+    ? `<div style="margin-bottom:8px">接發、舉球、防守、走位、發球——<b>全部自動</b></div>
+       <div style="line-height:2">你只做一件事：<b>進攻決策</b><br>
+       輪到你隊扣球時，時間放慢、彈出攻擊區按鈕：<br>
+       <span style="color:#60ffa0">綠＝空檔</span>、<span style="color:#ff5b5b">紅✋＝被攔網守住</span><br>
+       <b>點綠色的區</b>＝往那裡扣、乾淨得分<br>
+       直線／斜線／中路／<b>吊球</b>（攔網跳起來就吊短球）</div>`
+    : `<div>${isTouch ? '<b>左半螢幕</b>走位；<b>右側大鈕</b>蓄力/拖曳瞄準/放開出手' : '<b>WASD</b>走位；<b>J/滑鼠</b>蓄力出手、<b>K</b>攔網'}</div>`;
 
   const el = document.createElement('div');
   el.style.cssText = [
@@ -21,17 +24,9 @@ export function showTutorialOnce() {
     'color:#eef2fa', 'font-family:system-ui,sans-serif', 'text-align:center',
   ].join(';');
   el.innerHTML = `
-    <div style="max-width:520px;padding:24px;line-height:1.9;font-size:15px">
+    <div style="max-width:520px;padding:24px;line-height:1.7;font-size:15px">
       <div style="font-size:22px;font-weight:700;margin-bottom:14px">排球夢 — 怎麼玩</div>
-      <div style="margin-bottom:6px">你＝<b>主攻手</b>（頭上「你」字＋腳下光圈那位）</div>
-      <div>${moveHint}</div>
-      <div>${actHint}</div>
-      <div style="margin-top:10px;opacity:0.85">
-        <span style="color:#6ee7ff">青圈</span>＝來球落點（<span style="color:#ff5b5b">變紅＝出界，別碰</span>）；<br>
-        腳下光圈<span style="color:#ff8c42">變橘</span>＝這球歸你！<br>
-        蓄力圈<span style="color:#60ffa0">變綠＝甜蜜區</span>放開最準、<span style="color:#ff5b5b">變紅＝超蓄</span>會飄；<br>
-        短點＝輕吊、蓄滿＝重扣；輪到你發球會等你；「看的方向」能騙攔網。
-      </div>
+      ${body}
       <div style="margin-top:18px;font-size:13px;opacity:0.6">點擊任意處開始</div>
     </div>`;
   document.body.appendChild(el);

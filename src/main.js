@@ -23,6 +23,7 @@ import { createScoreboard } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
 import { createActionButtons } from './ui/actionButtons.js';
+import { createAttackPanel } from './ui/attackPanel.js';
 import { createFloatText } from './ui/floatText.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 
@@ -68,8 +69,13 @@ async function runMatch(ctx) {
     ? Math.min(Math.max(pointsParam, 5), 25)
     : 15;
 
+  // 簡化操作模式（預設）：接發/舉球/防守/走位/發球全自動，玩家只做進攻決策（讀攔網選攻擊區）
+  // ?classic=1 回到全手動操作
+  const simpleMode = params.get('classic') !== '1';
+
   let game = createGame({ seed, setTarget });
   let aiState = createAiState();
+  aiState.preferAttacker = simpleMode ? PLAYER_ID : null; // 舉球優先餵玩家＝多攻
 
   let matchView;
   try {
@@ -87,7 +93,10 @@ async function runMatch(ctx) {
   const scoreboard = createScoreboard(PLAYER_ID);
   const sfx = createSfx();
   const touchUi = createTouchUi();
-  const actionButtons = createActionButtons(controls); // 主動作鈕＋攔網鈕（桌機＝J/K）
+  // 簡化模式：只給進攻決策面板；經典模式：全手動的主動作鈕＋攔網鈕
+  const attackPanel = simpleMode ? createAttackPanel(controls) : null;
+  const actionButtons = simpleMode ? null : createActionButtons(controls);
+  let servedThisTurn = false; // 簡化模式：每次發球局自動發一次
   // 🎬 回放鈕：重看上一球的最後 3 秒（桌機 R 鍵）
   const replayBtn = document.createElement('button');
   replayBtn.textContent = '🎬';
@@ -103,13 +112,13 @@ async function runMatch(ctx) {
     startReplay();
   });
   document.body.appendChild(replayBtn);
-  const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點
+  const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點（僅顯示落在我方半場的）
   const assistOn = params.get('assist') !== 'off';
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6);
   let assistFlight = -1;
   let assistLanding = null;
-  showTutorialOnce();
+  showTutorialOnce(simpleMode);
 
   // 局終點擊 → 換種子再開一局
   window.addEventListener('pointerdown', () => {
@@ -117,11 +126,14 @@ async function runMatch(ctx) {
     seed += 1;
     game = createGame({ seed, setTarget });
     aiState = createAiState();
+    aiState.preferAttacker = simpleMode ? PLAYER_ID : null;
     controlledId = PLAYER_ID;
     switchKey = '';
     replay = null;
     vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
     vcrCurrent = { snapshot: null, steps: [] };
+    servedThisTurn = false;
+    if (attackPanel) attackPanel.hide();
     controls.setPlayerId(PLAYER_ID);
     rig.setPlayerId(PLAYER_ID);
     matchView.setControlled(PLAYER_ID);
@@ -234,13 +246,35 @@ async function runMatch(ctx) {
       camera.lookAt(0, 0.6, 0);
       renderer.render(scene, camera);
       hud.frame(now, delta, 0);
+      if (attackPanel) attackPanel.hide();
       if (replay.idx >= replay.steps.length) replay = null; // 播完回現場
       return;
     }
 
+    // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區
+    let deciding = false;
+    if (simpleMode) {
+      const zones = attackPanel && controls.attackZones(game);
+      // 球正下墜、還在可決策高度、尚未選區＝決策窗
+      deciding = !!zones && game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
+      if (deciding) attackPanel.show(zones);
+      else if (attackPanel) attackPanel.hide();
+      // 自動發球：輪到玩家發球、哨音已過→自動發（發球決策留待下一階段）
+      if (game.phase === 'serve') {
+        if (game.match.servingTeam === 'A' && game.tick >= game.serveReadyTick && !servedThisTurn) {
+          controls.serveNow(game);
+          servedThisTurn = true;
+        }
+      } else {
+        servedThisTurn = false;
+      }
+    }
+
     // 擊球定格（hit-stop）：短暫凍結模擬推進、畫面照跑——打擊的「頓」感
     if (now < hitStopUntil) delta = 0;
-    // 重扣慢動作：定格後 0.4 秒半速（時間膨脹只作用在推進率，決定論不碰）
+    // 進攻決策窗＝放慢給玩家讀攔網選區（時間膨脹只作用推進率，決定論不碰）
+    else if (deciding) delta *= 0.4;
+    // 重扣慢動作：定格後 0.4 秒半速
     else if (now < slowUntil) delta *= 0.35;
 
     accumulator += delta;
@@ -333,9 +367,9 @@ async function runMatch(ctx) {
       shake *= 0.82;
     }
     scoreboard.update(game, myBall, controlledId);
-    actionButtons.update(controls.currentContext());
+    if (actionButtons) actionButtons.update(controls.currentContext());
     touchUi.update(controls.uiState());
-    const aimAt = controls.currentAimPoint(game);
+    const aimAt = simpleMode ? null : controls.currentAimPoint(game);
     if (aimAt) aimMarker.show(aimAt);
     else aimMarker.hide();
     renderer.render(scene, camera);

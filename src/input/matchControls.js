@@ -7,6 +7,7 @@ import { serverId } from '../sim/match.js';
 import { TEAM_SIDE, isFrontRow, localToWorld } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
+import { attackZonesFor } from './attackZones.js';
 
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
@@ -26,6 +27,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
   let jumpSignal = false;           // 本次按下觸發了起跳（main 轉給表現層播 windup）
   let jumpStartedAt = 0;
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
+  let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -187,6 +189,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     // aiState：唯讀參考 AI 協調層的呼叫鎖定（誰的球）與攻擊手選擇，做輔助判斷
     collect(game, aiState = null) {
       lastGame = game;
+      // 非扣球時刻＝重置進攻選擇旗標（下次進攻重新彈面板）
+      if (attackChosen && !this.isAttackMoment(game)) attackChosen = false;
       const tick = game.tick;
       const me = game.players[playerId];
       const a = game.actors[playerId];
@@ -227,7 +231,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
             : performance.now() - queuedAction.jumpAt;
           if (airborneMs > JUMP_WINDOW_MS) action = 'receive';
         }
-        if (queuedAction.aimVec) {
+        if (queuedAction.aimWorld) {
+          aim = queuedAction.aimWorld; // 進攻決策：直接指定世界落點（點選攻擊區）
+        } else if (queuedAction.aimVec) {
           // 按鈕拖曳瞄準：螢幕向量→場地方向（上＝朝對場、右＝+x），距離隨拖曳長度 3–9m
           const d = queuedAction.aimVec;
           const len = Math.hypot(d.dx, d.dy) || 1;
@@ -239,9 +245,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         }
         gaze = queuedAction.gaze ?? rig.gazePoint(game);
         timing = queuedAction.timing;
-        // 發球等哨音沒有時限；其他動作逾時作廢
+        // 進攻決策的扣球：保持有效到球可扣（不用 36-tick 緩衝），球掉太低才放棄讓 auto 保底
+        // 發球等哨音沒有時限；其餘動作逾時作廢
         const waitingServe = game.phase === 'serve' && action === 'serve';
-        if (!waitingServe && tick >= queuedAction.expiresTick) queuedAction = null;
+        if (queuedAction.attack) {
+          if (game.ball.y < 1.3) queuedAction = null;
+        } else if (!waitingServe && tick >= queuedAction.expiresTick) {
+          queuedAction = null;
+        }
       } else if (charge && rig.getMode() === 'first' && !charge.gaze) {
         // 一人稱蓄力中：按下當下的視線＝gaze（看哪），之後拖到別處放開＝aim（打哪）
         charge.gaze = rig.gazePoint(game);
@@ -313,6 +324,44 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     pressBlock() { blockTap(); },
     // 當前情境動作（按鈕標籤用）：'serve'|'spike'|'set'|'block'|'receive'|null
     currentContext() { return lastGame ? contextAction(lastGame) : null; },
+
+    // ---- 進攻決策模式（簡化操作：讀攔網選攻擊區）----
+    // 是否輪到玩家扣球（前排、我方第三擊、球正下墜到可扣）
+    isAttackMoment(game) {
+      const me = game.players[playerId];
+      const r = game.rally;
+      if (game.phase !== 'rally' || r.possession !== me.teamId || r.touches !== 2) return false;
+      if (!isFrontRow(game.match.rotations[me.teamId], playerId)) return false;
+      if (r.lastToucherId === playerId) return false; // 舉球員不是攻擊手
+      return true;
+    },
+    // 目前可選攻擊區（含讀攔網）；非扣球時刻回傳 null
+    attackZones(game) {
+      return this.isAttackMoment(game) ? attackZonesFor(game, playerId) : null;
+    },
+    // 選定攻擊區 → 排入強制扣球（自動起跳、球到即扣，瞄該區）
+    chooseAttack(zone) {
+      jumpSignal = true;
+      attackChosen = true;
+      queuedAction = {
+        timing: zone.power, gaze: null, aimWorld: zone.aim,
+        aimNdc: null, aimVec: null, forceAction: 'spike',
+        expiresTick: null, jumpAt: performance.now(), attack: true,
+      };
+    },
+    // 本次扣球是否已選區（main 用來停止彈面板）
+    attackPending() { return attackChosen; },
+    // 一鍵發球（簡化操作：發到預設深區）
+    serveNow(game) {
+      const me = game.players[playerId];
+      if (game.phase !== 'serve' || serverId(game.match) !== playerId) return;
+      const oppTeam = me.teamId === 'A' ? 'B' : 'A';
+      const target = localToWorld(oppTeam, 1.5, 7.5);
+      queuedAction = {
+        timing: 1, gaze: null, aimWorld: target, aimNdc: null, aimVec: null,
+        forceAction: 'serve', expiresTick: null, jumpAt: null,
+      };
+    },
     // 玩家剛按下起跳（一次性訊號；main 轉給表現層播 windup 跳躍）
     consumeJumpSignal() {
       const s = jumpSignal;
