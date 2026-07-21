@@ -28,13 +28,17 @@ export function createAiState() {
   return {
     flightId: -1, planTick: 0, landing: null, landingTeam: null,
     claimId: null, attackerId: null,
+    letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
+    calledFlight: -1,  // 玩家喊球已搶下的 flight（一球一次、不可反悔）
   };
 }
 
 // 蒐集本 tick 全部 AI 的 Intent（excludeIds＝玩家操控者，AI 不代打）
+// callerId＝正在喊球的玩家：把本 flight 的呼叫鎖定搶過來，隊友退讓（一球一次）
 // 輸出與玩家輸入同型的 Intent、走同一條管線進 sim —— sim 不知來源
-export function aiCollectIntents(game, aiState, excludeIds = []) {
+export function aiCollectIntents(game, aiState, excludeIds = [], callerId = null) {
   ensureFlightPlan(game, aiState);
+  applyPlayerCall(game, aiState, callerId);
   const intents = [];
   for (const playerId of Object.keys(game.players)) {
     if (excludeIds.includes(playerId)) continue;
@@ -56,6 +60,7 @@ function ensureFlightPlan(game, aiState) {
   aiState.landing = landing;
   aiState.landingTeam = landing ? (landing.z >= 0 ? 'A' : 'B') : null;
   aiState.claimId = null;
+  aiState.letDrop = false;
 
   if (!landing || !aiState.landingTeam) return;
   const team = aiState.landingTeam;
@@ -80,10 +85,60 @@ function ensureFlightPlan(game, aiState) {
         ? atk
         : arbitrate(game, team, landing, r.lastToucherId);
   } else {
-    // 來球（發球/對方攻擊/自由球）：責任區仲裁
-    aiState.claimId = arbitrate(game, team, landing, r.lastToucherId);
+    // 來球（發球/對方攻擊/自由球）：先判界內外，再責任區仲裁
+    // 出界判斷（含誤差）：明顯出界＝放球讓它落地得分；壓線球寧可接（寧搶錯）
+    const claimer = arbitrate(game, team, landing, r.lastToucherId);
+    const outDist = landingOutDistance(landing);
+    if (outDist > 0 && claimer && outDist > judgeMargin(game, claimer)) {
+      aiState.claimId = null;
+      aiState.letDrop = true; // 全隊看它出界
+    } else {
+      aiState.claimId = claimer;
+    }
     aiState.attackerId = null;
   }
+}
+
+// 玩家喊球：把本 flight 的鎖定搶過來（一球只能喊一次、喊了不可反悔——呼叫即鎖定）
+function applyPlayerCall(game, aiState, callerId) {
+  if (!callerId || game.phase !== 'rally') return;
+  if (aiState.calledFlight === aiState.flightId) return;
+  const caller = game.players[callerId];
+  if (!caller || aiState.landingTeam !== caller.teamId) return;
+  if (aiState.claimId === callerId) return;
+  aiState.claimId = callerId;
+  aiState.letDrop = false; // 玩家喊了就是要打，出界與否自己負責
+  aiState.calledFlight = aiState.flightId;
+}
+
+// 落點超出界線的距離（0＝界內；壓線算界內）
+function landingOutDistance(landing) {
+  const dx = Math.max(0, Math.abs(landing.x) - COURT.WIDTH / 2);
+  const dz = Math.max(0, Math.abs(landing.z) - COURT.LENGTH / 2);
+  return Math.hypot(dx, dz);
+}
+
+// 出界判斷邊際：reaction 越高看得越準（邊際越小、越敢放）；
+// 以 flight+球員的純 hash 加抖動——同局重跑完全一致（決定論），但球球不同
+function judgeMargin(game, playerId) {
+  const p = game.players[playerId];
+  const base = 0.55 - p.attributes.reaction * 0.005;
+  const jitter = (hash01(game.rally.flightId * 131 + idHash(playerId)) - 0.5) * 0.3;
+  return Math.max(0.08, base + jitter);
+}
+
+function hash01(n) {
+  let x = Math.imul(n | 0, 2654435761);
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x45d9f3b);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+function idHash(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = h * 31 + id.charCodeAt(i);
+  return h;
 }
 
 // 「誰接球」仲裁（定死，決定論）：

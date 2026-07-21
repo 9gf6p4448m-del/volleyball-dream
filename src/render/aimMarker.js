@@ -22,5 +22,8 @@ export function createAimMarker(scene, color = 0xffc857, radius = 0.42) {
     hide() {
       ring.visible = false;
     },
+    setColor(hex) {
+      ring.material.color.setHex(hex);
+    },
   };
 }

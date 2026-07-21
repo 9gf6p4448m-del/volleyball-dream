@@ -14,13 +14,13 @@ export function runFullSet(seed) {
   while (g.phase !== 'set_over' && g.tick < MAX_TICKS) {
     const intents = aiCollectIntents(g, ai);
     if (g.phase === 'rally') {
-      // 例外：落點方觸球數已用盡（如扣球掛網彈回）→ 依規則放球讓它落地，不算互讓
+      // 例外：觸球數用盡（規則放球）或判斷出界（故意放）→ 不算互讓
       const exhausted =
         ai.landingTeam &&
         g.rally.possession === ai.landingTeam &&
         g.rally.touches >= 3;
-      // E2 不互讓：可合法觸球時，永遠有唯一被呼叫鎖定的接球者
-      if (!exhausted) {
+      // E2 不互讓：可合法觸球且判斷界內時，永遠有唯一被呼叫鎖定的接球者
+      if (!exhausted && !ai.letDrop) {
         assert.ok(ai.claimId, `tick ${g.tick} 沒有人被指派接球（互讓破綻）`);
       }
       // E3 不打架：同一 flight 的指派不可撤銷、不換人

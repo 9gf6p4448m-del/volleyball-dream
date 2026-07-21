@@ -14,6 +14,7 @@ const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
 const JUMP_WINDOW_MS = 750;  // 起跳滯空窗：按下＝起跳，須在窗內放開揮臂才是扣球
+const CALL_WINDOW_MS = 1500; // 喊球有效窗：喊聲維持這段時間，期間的來球歸你
 
 export function createMatchControls(domElement, camera, playerId, rig) {
   const keys = new Set();
@@ -24,11 +25,19 @@ export function createMatchControls(domElement, camera, playerId, rig) {
   let pointerPx = { x: 0, y: 0 };   // 螢幕像素座標（觸控 UI 疊層用）
   let jumpSignal = false;           // 本次按下觸發了起跳（main 轉給表現層播 windup）
   let jumpStartedAt = 0;
+  let callAt = -Infinity;           // 喊球時刻（空白鍵／喊球鈕）
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-  window.addEventListener('keydown', (e) => keys.add(e.code));
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      callAt = performance.now(); // 空白鍵＝喊球（這球我的）
+      e.preventDefault();
+      return;
+    }
+    keys.add(e.code);
+  });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());
 
@@ -197,6 +206,9 @@ export function createMatchControls(domElement, camera, playerId, rig) {
       }
     },
     isCharging() { return charge !== null; },
+    // 喊球（螢幕鈕呼叫；空白鍵走 keydown）
+    call() { callAt = performance.now(); },
+    isCalling() { return performance.now() - callAt < CALL_WINDOW_MS; },
     // 玩家剛按下起跳（一次性訊號；main 轉給表現層播 windup 跳躍）
     consumeJumpSignal() {
       const s = jumpSignal;

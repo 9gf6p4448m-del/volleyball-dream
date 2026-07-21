@@ -6,6 +6,7 @@ import { createWorld, stepWorld } from './sim/world.js';
 import { createGame, stepGame } from './sim/game.js';
 import { createAiState, aiCollectIntents } from './sim/ai.js';
 import { predictLanding } from './sim/flight.js';
+import { landedCourtTeam } from './sim/rotation.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
 import { createCourt } from './render/court.js';
@@ -20,6 +21,7 @@ import { createHud } from './ui/hud.js';
 import { createScoreboard } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
+import { createCallButton } from './ui/callButton.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 
 const PLAYER_ID = 'A2'; // 玩家＝A 隊主攻手（design-brief 定案 #9）
@@ -78,6 +80,7 @@ async function runMatch(ctx) {
   const scoreboard = createScoreboard(PLAYER_ID);
   const sfx = createSfx();
   const touchUi = createTouchUi();
+  createCallButton(() => controls.call()); // 喊球鈕（桌機＝空白鍵）
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點
   // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點（僅顯示落在我方半場的）
   const assistOn = params.get('assist') !== 'off';
@@ -96,8 +99,16 @@ async function runMatch(ctx) {
     window.__phase1.aiState = aiState;
   });
 
+  // VCR 資料底（Phase 2 回放用）：每球錄「發球前快照＋整球 Intent 流」
+  // 決定論保證：快照＋同序 Intent 重新模擬＝逐格重現
+  let vcrCurrent = { snapshot: null, steps: [] };
+  let vcrLast = null;
+
   // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
-  window.__phase1 = { game, aiState, renderer, scene, camera, quality, rig };
+  window.__phase1 = {
+    game, aiState, renderer, scene, camera, quality, rig,
+    vcr: () => vcrLast, // 上一球的回放資料
+  };
 
   let last = performance.now();
   let accumulator = 0;
@@ -116,12 +127,24 @@ async function runMatch(ctx) {
     let simSteps = 0;
     const frameEvents = [];
     while (accumulator >= SIM_DT) {
+      // 每球開錄：發球佈陣完成、尚未錄過 → 快照當下狀態
+      if (game.phase === 'serve' && vcrCurrent.snapshot === null) {
+        vcrCurrent.snapshot = structuredClone({ ...game, events: [] });
+      }
       // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
+      const caller = controls.isCalling() ? PLAYER_ID : null;
       const intents = [
         ...controls.collect(game, aiState),
-        ...aiCollectIntents(game, aiState, [PLAYER_ID]),
+        ...aiCollectIntents(game, aiState, [PLAYER_ID], caller),
       ];
-      frameEvents.push(...stepGame(game, intents));
+      if (vcrCurrent.snapshot) vcrCurrent.steps.push({ tick: game.tick, intents });
+      const events = stepGame(game, intents);
+      frameEvents.push(...events);
+      // 死球＝一球結束：本球錄影歸檔、開新錄影
+      if (events.some((e) => e.type === 'DEAD_BALL')) {
+        vcrLast = vcrCurrent;
+        vcrCurrent = { snapshot: null, steps: [] };
+      }
       accumulator -= SIM_DT;
       simSteps += 1;
     }
@@ -136,8 +159,12 @@ async function runMatch(ctx) {
         assistFlight = game.rally.flightId;
         assistLanding = predictLanding(game.ball);
       }
-      if (assistLanding && assistLanding.z > 0) landingMarker.show(assistLanding);
-      else landingMarker.hide();
+      if (assistLanding && assistLanding.z > 0) {
+        // 紅圈＝預測出界（別碰它！）；青圈＝界內來球
+        const isOut = landedCourtTeam(assistLanding.x, assistLanding.z) === null;
+        landingMarker.setColor(isOut ? 0xff5b5b : 0x6ee7ff);
+        landingMarker.show(assistLanding);
+      } else landingMarker.hide();
     } else {
       landingMarker.hide();
     }
