@@ -21,6 +21,7 @@ const AI = {
   SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
   ATTACK_LZ: 1.3,         // 舉球目標深度
   BLOCK_LZ: 0.6,          // 攔網站位深度
+  BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
 };
 
 // AI 協調層狀態：每個 flight 算一次、鎖定到 flight 結束（呼叫鎖定的實作）
@@ -224,11 +225,14 @@ function decideOne(game, aiState, playerId) {
     });
   }
 
-  // 攔網手：對方持球進攻節奏中，前排沿網追蹤球的 x；對方起扣即開時機窗
+  // 攔網手：對方持球進攻節奏中，前排沿網組牆；對方起扣即開時機窗
+  // 分工：中前(P3)正對球、右前(P2)/左前(P4)各偏一個間距——散開成牆不疊人
   const opponentHasBall = r.possession && r.possession !== team;
   if (opponentHasBall && isFrontRow(game.match.rotations[team], playerId)) {
+    const pos = positionOf(game.match.rotations[team], playerId);
+    const lane = pos === 3 ? 0 : pos === 2 ? 1 : -1; // 隊伍視角：右=+1
     const netSpot = {
-      x: clampCourtX(game.ball.x),
+      x: clampCourtX(game.ball.x + TEAM_SIDE[team] * lane * AI.BLOCK_SPREAD),
       z: TEAM_SIDE[team] * AI.BLOCK_LZ,
     };
     const action = r.profile === 'spike' && aiState.landingTeam === team ? 'block' : null;

@@ -42,16 +42,16 @@ const POSES = {
     LeftArm: [0, 0.25, 0.5],
     Spine: [0.4, 0, 0],
   },
-  // 攔網：雙臂垂直上舉過頂、掌面向前（與低手墊球嚴格區隔）
+  // 攔網：雙手打直垂直上舉、平行同寬（手肘鎖直——負值抵銷待機的自然彎曲）
   blockUp: {
-    RightArm: [0, 0.12, 3.05], LeftArm: [0, 0.12, 3.05],
-    RightForeArm: [0, 0, 0.12], LeftForeArm: [0, 0, 0.12],
-    Spine: [-0.08, 0, 0], Neck: [-0.12, 0, 0],
+    RightArm: [0, 0.08, 2.95], LeftArm: [0, 0.08, 2.95],
+    RightForeArm: [0, 0, -0.15], LeftForeArm: [0, 0, -0.15],
+    Spine: [0.06, 0, 0], Neck: [-0.1, 0, 0],
   },
-  blockPunch: { // 攔網頂點「壓手」蓋過網：手腕前撲
-    RightArm: [0, 0.1, 3.2], LeftArm: [0, 0.1, 3.2],
-    RightForeArm: [0, 0, 0.3], LeftForeArm: [0, 0, 0.3],
-    Spine: [0.05, 0, 0],
+  blockPunch: { // 頂點「蓋」：雙臂前壓過網、身體前撲
+    RightArm: [0, 0.06, 2.6], LeftArm: [0, 0.06, 2.6],
+    RightForeArm: [0, 0, -0.15], LeftForeArm: [0, 0, -0.15],
+    Spine: [0.24, 0, 0],
   },
   // 起跳引臂（玩家按下起跳、揮擊由 spike 接手）＝借用扣球引臂
   windup: {
