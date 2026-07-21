@@ -4,12 +4,15 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { SIM_DT } from '../sim/constants.js';
 import { TEAM_SIDE } from '../sim/rotation.js';
+import { createAnimator } from './animator.js';
+
+const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 
 const RUN_BLEND_SPEED = 3.0; // 每秒動畫權重切換速率
 const TURN_LERP = 0.18;      // 轉身平滑
 const RUN_AT = 1.2;          // 高於此移速（m/s）視為跑動
 
-export async function createMatchView(scene, quality, game, highlightId) {
+export async function createMatchView(scene, quality, game, highlightId, forcePose = null) {
   const gltf = await new GLTFLoader().loadAsync(
     `${import.meta.env.BASE_URL}models/${quality.model}`,
   );
@@ -41,7 +44,10 @@ export async function createMatchView(scene, quality, game, highlightId) {
     const run = runClip && runClip !== idleClip ? mixer.clipAction(runClip) : null;
     if (idle) { idle.play(); idle.setEffectiveWeight(1); }
     if (run) { run.play(); run.setEffectiveWeight(0); }
-    units[p.id] = { inst, mixer, idle, run, runWeight: 0, yaw: inst.rotation.y };
+    units[p.id] = {
+      inst, mixer, idle, run, runWeight: 0, yaw: inst.rotation.y,
+      animator: createAnimator(inst),
+    };
   }
 
   // 玩家操控者足下光圈（公平線索：一眼找到自己）
@@ -53,11 +59,35 @@ export async function createMatchView(scene, quality, game, highlightId) {
   ring.position.y = 0.02;
   scene.add(ring);
 
+  // 比賽事件 → 姿勢觸發（表現層唯讀路由）
+  function routeEvents(events) {
+    for (const e of events) {
+      const u = units[e.playerId];
+      if (!u) continue;
+      if (e.type === 'SERVE') u.animator.trigger('serve');
+      else if (e.type === 'BLOCK_TOUCH') u.animator.trigger('block');
+      else if (e.type === 'TOUCH') {
+        if (e.kind === 'spike') u.animator.trigger('spike');
+        else if (e.kind === 'set') u.animator.trigger('overhead');
+        else u.animator.trigger(e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
+      }
+    }
+  }
+
   return {
     count: Object.keys(units).length,
-    // alpha＝步間插值；dt＝畫面幀時間（僅驅動動畫混合，不影響 sim）
-    sync(gameState, alpha, dt) {
+    // alpha＝步間插值；dt＝畫面幀時間；frameEvents＝本幀 sim 事件（驅動姿勢）
+    sync(gameState, alpha, dt, frameEvents = []) {
+      routeEvents(frameEvents);
       for (const [id, u] of Object.entries(units)) {
+        // 攔網窗開著＝持續舉手備戰；forcePose＝恆定持姿（?pose= 調角度用）
+        if (forcePose) {
+          u.animator.setHold(forcePose);
+        } else {
+          u.animator.setHold(
+            gameState.actors[id].blockUntil >= gameState.tick ? 'block' : null,
+          );
+        }
         const a = gameState.actors[id];
         const x = a.px + (a.x - a.px) * alpha;
         const z = a.pz + (a.z - a.pz) * alpha;
@@ -82,6 +112,8 @@ export async function createMatchView(scene, quality, game, highlightId) {
         if (u.run) u.run.setEffectiveWeight(u.runWeight);
         if (u.idle) u.idle.setEffectiveWeight(1 - u.runWeight * 0.85);
         u.mixer.update(dt);
+        // 姿勢層疊在 mixer 取樣之上；回傳值＝跳躍/屈膝的垂直位移
+        u.inst.position.y = u.animator.update(dt);
 
         if (id === highlightId) {
           ring.position.x = x;

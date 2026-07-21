@@ -63,7 +63,8 @@ async function runMatch(ctx) {
 
   let matchView;
   try {
-    matchView = await createMatchView(scene, quality, game, PLAYER_ID);
+    // ?pose=bump|overhead|spike|block|serve：強制循環播放單一姿勢（調角度用）
+    matchView = await createMatchView(scene, quality, game, PLAYER_ID, params.get('pose'));
   } catch (err) {
     loadingEl.textContent = `模型載入失敗：${err.message ?? err}`;
     hud.error(`模型載入失敗（${quality.model}）`);
@@ -107,21 +108,22 @@ async function runMatch(ctx) {
 
     accumulator += delta;
     let simSteps = 0;
+    const frameEvents = [];
     while (accumulator >= SIM_DT) {
       // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
       const intents = [
         ...controls.collect(game),
         ...aiCollectIntents(game, aiState, [PLAYER_ID]),
       ];
-      const events = stepGame(game, intents);
-      if (events.length > 0) sfx.onEvents(events);
+      frameEvents.push(...stepGame(game, intents));
       accumulator -= SIM_DT;
       simSteps += 1;
     }
+    if (frameEvents.length > 0) sfx.onEvents(frameEvents);
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha);
-    matchView.sync(game, alpha, delta);
+    matchView.sync(game, alpha, delta, frameEvents);
     rig.update(game, alpha);
     scoreboard.update(game);
     touchUi.update(controls.uiState());

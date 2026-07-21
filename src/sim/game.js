@@ -211,7 +211,11 @@ function executeTouch(state, intent, player, actor, ev) {
   rally.touchLockTick = state.tick;
   actor.lastTouchTick = state.tick;
 
-  ev.push({ type: 'TOUCH', tick: state.tick, team, playerId: player.id, kind: intent.action, touches: newCount });
+  ev.push({
+    type: 'TOUCH', tick: state.tick, team, playerId: player.id,
+    kind: intent.action, touches: newCount,
+    ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
+  });
 }
 
 function performServe(state, intent, ev) {
