@@ -120,6 +120,8 @@ async function runMatch(ctx) {
     controlledId = PLAYER_ID;
     switchKey = '';
     replay = null;
+    vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
+    vcrCurrent = { snapshot: null, steps: [] };
     controls.setPlayerId(PLAYER_ID);
     rig.setPlayerId(PLAYER_ID);
     matchView.setControlled(PLAYER_ID);
@@ -181,6 +183,8 @@ async function runMatch(ctx) {
   }
   function syncControlled() {
     if (!teamControl) return; // 固定主攻手模式
+    // 蓄力中不切人：切了會清掉這次蓄力、玩家放開時靜默無回饋（延後到蓄力結束）
+    if (controls.isCharging()) return;
     const key = `${game.phase}:${game.rally.flightId}:${aiState.claimId ?? ''}`;
     if (key === switchKey) return;
     switchKey = key;
@@ -222,7 +226,7 @@ async function runMatch(ctx) {
         replay.acc -= SIM_DT;
       }
       const rAlpha = Math.min(replay.acc / SIM_DT, 1);
-      ballView.sync(replay.state.ball, rAlpha);
+      ballView.sync(replay.state.ball, rAlpha, delta);
       matchView.sync(replay.state, rAlpha, delta, []);
       aimMarker.hide();
       landingMarker.hide();
@@ -319,9 +323,9 @@ async function runMatch(ctx) {
     }
 
     const alpha = accumulator / SIM_DT;
-    ballView.sync(game.ball, alpha);
+    ballView.sync(game.ball, alpha, delta);
     matchView.sync(game, alpha, delta, frameEvents);
-    rig.update(game, alpha);
+    rig.update(game, alpha, delta);
     // 螢幕震動：鏡頭位置疊隨機偏移、指數衰減（表現層，不碰 sim）
     if (shake > 0.004) {
       camera.position.x += (Math.random() - 0.5) * shake;

@@ -40,7 +40,8 @@ export function aiCollectIntents(game, aiState, excludeIds = [], callerId = null
   ensureFlightPlan(game, aiState);
   applyPlayerCall(game, aiState, callerId);
   const intents = [];
-  for (const playerId of Object.keys(game.players)) {
+  // 以輪轉名單的顯式順序遍歷（不靠 Object.keys 插入序；接生涯資料換 id 型別也不變序）
+  for (const playerId of [...game.match.rotations.A, ...game.match.rotations.B]) {
     if (excludeIds.includes(playerId)) continue;
     const it = decideOne(game, aiState, playerId);
     if (it) intents.push(it);
@@ -323,6 +324,7 @@ function clampCourtX(x) {
   return Math.max(-lim, Math.min(lim, x));
 }
 
+// 以輪轉序回傳隊伍名單（顯式順序，不靠 Object.values 插入序）
 function teamRoster(game, team) {
-  return Object.values(game.players).filter((p) => p.teamId === team);
+  return game.match.rotations[team].map((id) => game.players[id]);
 }

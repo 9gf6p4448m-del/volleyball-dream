@@ -5,24 +5,29 @@ import { COURT } from '../sim/constants.js';
 import { serverId } from '../sim/match.js';
 import { TEAM_SIDE } from '../sim/rotation.js';
 
-// 【試玩必調】H2 可調參數：銜接幀數（3–5）、鏡位、俯角
+// 【試玩必調】H2 可調參數：銜接時間、鏡位、俯角
 export const CAMERA_TUNING = {
-  TRANSITION_FRAMES: 4,   // 過場運鏡幀數
+  TRANSITION_SEC: 0.07,   // 過場運鏡時長（秒，與幀率脫鉤）
   THIRD_BACK: 5.4,        // 三人稱：在球員身後的距離
   THIRD_HEIGHT: 3.8,      // 三人稱：鏡頭高度（升高俯角＝H4 縱深可讀性）
   LOOK_AHEAD: 4.5,        // 三人稱：注視點超前距離（朝網）
   LOOK_HEIGHT: 1.0,
-  FOLLOW_LERP: 0.14,      // 三人稱跟隨平滑
+  FOLLOW_K: 9,            // 三人稱跟隨收斂率（1/秒，指數衰減；越大越黏）
   FP_EYE_RATIO: 0.93,     // 一人稱眼高 = 身高 × 此值
   FP_YAW_RANGE: 1.05,     // 一人稱左右視角範圍（弧度）
   FP_PITCH_RANGE: 0.5,
   SPIKE_CAM_DIST: 3.0,    // 球距我小於此值且輪到第三擊 → 進入扣球一人稱
 };
 
+// 幀率無關的平滑係數：每幀吃掉的比例＝1-e^(-k·dt)，任何 fps 下同樣的秒級收斂
+export function smoothFactor(k, dt) {
+  return 1 - Math.exp(-k * Math.max(dt, 0));
+}
+
 export function createCameraRig(camera, initialPlayerId) {
   let playerId = initialPlayerId; // 全隊輪控：跟著受控球員走
   let mode = 'third';
-  let trans = 0;
+  let trans = 0; // 剩餘過場時間（秒）
   const fromPos = new THREE.Vector3();
   const fromTarget = new THREE.Vector3();
   const curPos = new THREE.Vector3().copy(camera.position);
@@ -62,7 +67,7 @@ export function createCameraRig(camera, initialPlayerId) {
       return { x: a.x + dir.x * t, z: a.z + dir.z * t };
     },
 
-    update(game, alpha) {
+    update(game, alpha, dt = 1 / 60) {
       const me = game.players[playerId];
       const a = game.actors[playerId];
       const side = TEAM_SIDE[me.teamId];
@@ -72,7 +77,7 @@ export function createCameraRig(camera, initialPlayerId) {
       const want = desiredMode(game);
       if (want !== mode) {
         mode = want;
-        trans = CAMERA_TUNING.TRANSITION_FRAMES; // H2：極短過場運鏡
+        trans = CAMERA_TUNING.TRANSITION_SEC; // H2：極短過場運鏡（秒，與幀率脫鉤）
         fromPos.copy(curPos);
         fromTarget.copy(curTarget);
       }
@@ -101,13 +106,14 @@ export function createCameraRig(camera, initialPlayerId) {
       }
 
       if (trans > 0) {
-        const t = 1 - trans / (CAMERA_TUNING.TRANSITION_FRAMES + 1);
+        trans = Math.max(0, trans - dt);
+        const t = 1 - trans / CAMERA_TUNING.TRANSITION_SEC;
         curPos.lerpVectors(fromPos, pos, easeOut(t));
         curTarget.lerpVectors(fromTarget, target, easeOut(t));
-        trans -= 1;
       } else if (mode === 'third') {
-        curPos.lerp(pos, CAMERA_TUNING.FOLLOW_LERP);
-        curTarget.lerp(target, CAMERA_TUNING.FOLLOW_LERP);
+        const f = smoothFactor(CAMERA_TUNING.FOLLOW_K, dt);
+        curPos.lerp(pos, f);
+        curTarget.lerp(target, f);
       } else {
         curPos.copy(pos);
         curTarget.copy(target);

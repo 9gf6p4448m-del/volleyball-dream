@@ -38,13 +38,13 @@ export function createBallView(scene, quality) {
   scene.add(trail);
 
   return {
-    // alpha = 累積器剩餘時間 / SIM_DT，於上一步與當前步之間插值
-    sync(ball, alpha) {
+    // alpha = 累積器剩餘時間 / SIM_DT，於上一步與當前步之間插值；dt＝幀時間（視覺滾動用）
+    sync(ball, alpha, dt = 1 / 60) {
       const x = ball.px + (ball.x - ball.px) * alpha;
       const y = ball.py + (ball.y - ball.py) * alpha;
       const z = ball.pz + (ball.z - ball.pz) * alpha;
       mesh.position.set(x, y, z);
-      mesh.rotation.x += 0.08; // 純視覺滾動
+      mesh.rotation.x += 4.8 * dt; // 純視覺滾動（與幀率脫鉤）
       blob.position.x = x;
       blob.position.z = z;
 

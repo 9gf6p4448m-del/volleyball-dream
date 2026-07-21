@@ -29,6 +29,16 @@ test('computeDeception 曲線形狀：騙敵線性、失誤平方、θmax 封頂
   const wide = computeDeception(from, aimF, { x: 0, z: 7 }); // 180°
   assert.equal(wide.deceiveP, TUNING.DECEIVE_GAIN);
   assert.equal(wide.errorBoost, TUNING.ERROR_GAIN);
+
+  // 退化護欄：瞄準點/視線點與擊球點重合 → 零欺敵（不假拉滿）
+  assert.deepEqual(
+    computeDeception(from, { x: from.x, z: from.z }, { x: -5, z: -5 }),
+    { theta: 0, deceiveP: 0, errorBoost: 0 },
+  );
+  assert.deepEqual(
+    computeDeception(from, aimF, { x: from.x, z: from.z }),
+    { theta: 0, deceiveP: 0, errorBoost: 0 },
+  );
 });
 
 // 佈置一顆 A 隊第三擊扣球情境：A2 高點扣；withBlock 時 B2 網前開攔網窗

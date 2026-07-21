@@ -46,14 +46,20 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     }
     keys.delete(e.code);
   });
-  window.addEventListener('blur', () => keys.clear());
+  // 失焦：清走位鍵，並作廢蓄力——否則失焦期間放開的鍵收不到 keyup，
+  // 回來後 charge 殘留會吞掉下次按鍵、或用過期 startedAt 出爆表 timing 的怪球
+  window.addEventListener('blur', () => {
+    keys.clear();
+    charge = null;
+    jumpSignal = false;
+    blockSignal = false;
+  });
 
   // 攔網：一點即出（獨立按鈕/K 鍵；不經蓄力）
   function blockTap() {
     queuedAction = {
       timing: 1, gaze: null, aimNdc: null, aimVec: null,
       forceAction: 'block', expiresTick: null, jumpAt: null,
-      releasedAt: performance.now(),
     };
     blockSignal = true;
   }
@@ -98,8 +104,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       aimNdc: drag ? null : { ...pointerNdc },
       aimVec: drag && Math.hypot(drag.dx, drag.dy) > 14 ? { ...drag } : null,
       expiresTick: null,
-      jumpAt: spikeCtx ? performance.now() : null,
-      releasedAt: performance.now(),
+      jumpAt: spikeCtx ? performance.now() : null, // 起跳時刻（滯空窗判定，活時間比較）
     };
     charge = null;
   }
@@ -214,12 +219,13 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         }
         action = queuedAction.forceAction ?? contextAction(game);
         if (action === 'block' && !queuedAction.forceAction) blockSignal = true;
-        // 起跳時機窗：沒起跳或滯空已過就不能扣——降級成往瞄準點送安全球
+        // 起跳滯空窗：放開起跳後 JUMP_WINDOW_MS 內是扣球窗，超過（落地了）降級安全球
+        // 用「現在」與起跳時刻比較（活時間）；jumpAt/releasedAt 同時設定會讓比較恆真＝死邏輯
         if (action === 'spike') {
-          const okWindow =
-            queuedAction.jumpAt !== null &&
-            queuedAction.releasedAt - queuedAction.jumpAt <= JUMP_WINDOW_MS;
-          if (!okWindow) action = 'receive';
+          const airborneMs = queuedAction.jumpAt === null
+            ? Infinity
+            : performance.now() - queuedAction.jumpAt;
+          if (airborneMs > JUMP_WINDOW_MS) action = 'receive';
         }
         if (queuedAction.aimVec) {
           // 按鈕拖曳瞄準：螢幕向量→場地方向（上＝朝對場、右＝+x），距離隨拖曳長度 3–9m

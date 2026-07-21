@@ -283,9 +283,11 @@ export function spikeSpeed(player) {
 // H3 視線欺敵（純函式）：由擊球點、實際目標、視線目標算出
 // θ（水平夾角）、騙過攔網機率（線性）、自身失誤增量（平方）
 export function computeDeception(from, aim, gaze) {
-  if (!gaze || (gaze.x === aim.x && gaze.z === aim.z)) {
-    return { theta: 0, deceiveP: 0, errorBoost: 0 };
-  }
+  const NIL = { theta: 0, deceiveP: 0, errorBoost: 0 };
+  if (!gaze || (gaze.x === aim.x && gaze.z === aim.z)) return NIL;
+  // 退化護欄：瞄準點或視線點與擊球點重合 → atan2(0,0) 會算出假角度、假拉滿欺敵
+  if ((aim.x === from.x && aim.z === from.z) ||
+      (gaze.x === from.x && gaze.z === from.z)) return NIL;
   const aimAngle = Math.atan2(aim.x - from.x, aim.z - from.z);
   const gazeAngle = Math.atan2(gaze.x - from.x, gaze.z - from.z);
   let diff = Math.abs(aimAngle - gazeAngle);
