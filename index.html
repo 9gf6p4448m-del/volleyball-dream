@@ -11,8 +11,13 @@
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>排球夢 — Phase 1 單場對戰</title>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { height: 100%; overflow: hidden; background: #1c2230; }
+      * {
+        margin: 0; padding: 0; box-sizing: border-box;
+        /* 遊戲頁全域禁文字選取/長按選單（iOS 長按=蓄力操作，不能跳出拷貝翻譯） */
+        -webkit-user-select: none; user-select: none;
+        -webkit-touch-callout: none;
+      }
+      html, body { height: 100%; overflow: hidden; background: #1c2230; touch-action: none; }
       #app canvas { display: block; touch-action: none; }
       #hud {
         position: fixed;
@@ -44,7 +49,7 @@
         z-index: 20;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-BB2TN1oU.js"></script>
+    <script type="module" crossorigin src="./assets/index-CogpfFVS.js"></script>
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="app"></div>
