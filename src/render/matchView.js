@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { SIM_DT } from '../sim/constants.js';
-import { TEAM_SIDE, positionOf } from '../sim/rotation.js';
+import { TEAM_SIDE, positionOf, isFrontRow } from '../sim/rotation.js';
 import { createAnimator } from './animator.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
@@ -98,12 +98,20 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     sync(gameState, alpha, dt, frameEvents = []) {
       routeEvents(frameEvents);
       for (const [id, u] of Object.entries(units)) {
-        // 攔網窗開著＝持續舉手備戰；forcePose＝恆定持姿（?pose= 調角度用）
+        // 舉手備戰：①攔網窗開著（真的在攔）②對方進攻組織中且我在網前（攔網就位）
+        // ——②讓攻擊方「讀攔網」時真的看得到那道手牆與縫隙（純視覺，起跳時機仍歸 sim）
         if (forcePose) {
           u.animator.setHold(forcePose);
         } else {
+          const teamB = gameState.players[id].teamId;
+          const r = gameState.rally;
+          const ready =
+            gameState.phase === 'rally' &&
+            r.possession && r.possession !== teamB && r.touches >= 1 &&
+            isFrontRow(gameState.match.rotations[teamB], id) &&
+            Math.abs(gameState.actors[id].z) < 2.2;
           u.animator.setHold(
-            gameState.actors[id].blockUntil >= gameState.tick ? 'block' : null,
+            gameState.actors[id].blockUntil >= gameState.tick || ready ? 'block' : null,
           );
         }
         const a = gameState.actors[id];
