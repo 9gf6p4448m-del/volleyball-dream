@@ -33,11 +33,16 @@ export function attackZonesFor(game, attackerId) {
   return zones;
 }
 
+// 攻擊路線在網面（z=0）通過的 x（攻守兩端共用：讀攔網、攔網站位計算）
+export function crossingXOf(from, aim) {
+  const t = from.z / (from.z - aim.z);
+  return from.x + (aim.x - from.x) * t;
+}
+
 // 這條攻擊路線過網瞬間的 x 是否落在某攔網手涵蓋範圍內（吊球走高球過網、視為不被攔）
 function isBlocked(from, aim, blockerXs, key) {
   if (key === 'tip') return false;
-  const t = from.z / (from.z - aim.z);        // z 過零（網）的時刻比例
-  const netX = from.x + (aim.x - from.x) * t;
+  const netX = crossingXOf(from, aim);
   if (Math.abs(netX) > COURT.WIDTH / 2 + 0.3) return false; // 打邊線外側攔不到
   return blockerXs.some((bx) => Math.abs(bx - netX) < BLOCK_COVER_X);
 }

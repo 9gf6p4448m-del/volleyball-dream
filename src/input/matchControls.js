@@ -7,7 +7,7 @@ import { serverId } from '../sim/match.js';
 import { TEAM_SIDE, isFrontRow, localToWorld } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
-import { attackZonesFor } from './attackZones.js';
+import { attackZonesFor, crossingXOf } from './attackZones.js';
 
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
@@ -28,6 +28,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
   let jumpStartedAt = 0;
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
   let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
+  let blockPlan = null;             // 攔網決策：{ x:攔網站位|null(退防), jumped, until }
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -196,6 +197,29 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       const a = game.actors[playerId];
       let move = readMove(keys, joystick, TEAM_SIDE[me.teamId]);
 
+      // 攔網決策執行：自動走到封線位；對方起扣瞬間自動跳攔（決策＝選線，時機自動）
+      if (blockPlan) {
+        const r = game.rally;
+        const expired = performance.now() > blockPlan.until ||
+          game.phase !== 'rally' || r.possession === me.teamId;
+        if (expired) {
+          blockPlan = null;
+        } else {
+          if (blockPlan.x !== null && Math.hypot(move.x, move.z) < 0.1) {
+            const tx = blockPlan.x;
+            const tz = TEAM_SIDE[me.teamId] * 0.6; // 網前攔網位
+            const dx = tx - a.x;
+            const dz = tz - a.z;
+            const len = Math.hypot(dx, dz);
+            if (len > 0.12) move = { x: dx / len, z: dz / len };
+          }
+          if (blockPlan.x !== null && !blockPlan.jumped && r.profile === 'spike') {
+            blockPlan.jumped = true; // 對方扣了 → 跳攔
+            blockTap();
+          }
+        }
+      }
+
       // 自動走位（The Spike 式，設計主軸）：歸你的球自動跑到位——
       // 含扣球助跑、接發、二傳；搖桿有輸入時尊重手動微調。走位挫折歸零，時機才是玩家的表達
       if (game.phase === 'rally' && aiState?.landing &&
@@ -308,6 +332,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       charge = null;
       jumpSignal = false;
       blockSignal = false;
+      blockPlan = null;
     },
     getPlayerId() { return playerId; },
     // NBA2K 式按鈕路徑（actionButtons UI 呼叫）；px/py＝拇指螢幕座標（蓄力圈定位用）
@@ -351,17 +376,57 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     },
     // 本次扣球是否已選區（main 用來停止彈面板）
     attackPending() { return attackChosen; },
-    // 一鍵發球（簡化操作：發到預設深區）
-    serveNow(game) {
+    // 發球（決策選區；未指定則發預設深區）
+    serveNow(game, aim = null) {
       const me = game.players[playerId];
       if (game.phase !== 'serve' || serverId(game.match) !== playerId) return;
       const oppTeam = me.teamId === 'A' ? 'B' : 'A';
-      const target = localToWorld(oppTeam, 1.5, 7.5);
+      const target = aim ?? localToWorld(oppTeam, 1.5, 7.5);
       queuedAction = {
         timing: 1, gaze: null, aimWorld: target, aimNdc: null, aimVec: null,
         forceAction: 'serve', expiresTick: null, jumpAt: null,
       };
     },
+    // 發球目標區選項（對方半場，隊伍視角換算世界座標）
+    serveZones(game) {
+      const me = game.players[playerId];
+      const opp = me.teamId === 'A' ? 'B' : 'A';
+      return [
+        { key: 'dl', label: '深左', aim: localToWorld(opp, 2.8, 7.8) },
+        { key: 'dm', label: '深中', aim: localToWorld(opp, 0, 8.0) },
+        { key: 'dr', label: '深右', aim: localToWorld(opp, -2.8, 7.8) },
+        { key: 'short', label: '短球', aim: localToWorld(opp, 0, 3.6) },
+      ];
+    },
+
+    // ---- 攔網決策（防守面的讀取：他選線、你封線）----
+    // 對方第三擊將至且我在前排＝攔網決策時刻
+    isDefendMoment(game, aiState) {
+      const me = game.players[playerId];
+      const r = game.rally;
+      if (game.phase !== 'rally' || !r.possession || r.possession === me.teamId) return false;
+      if (r.touches !== 2) return false;
+      if (!isFrontRow(game.match.rotations[me.teamId], playerId)) return false;
+      return !!(aiState?.claimId && game.players[aiState.claimId]?.teamId === r.possession);
+    },
+    // 攔網選項：封直線/封斜線（站到該線過網點）/退防（不攔）
+    blockOptions(game, aiState) {
+      const atkId = aiState?.claimId;
+      if (!atkId) return null;
+      const zones = attackZonesFor(game, atkId); // 對方攻擊手的可打路線
+      const atk = game.actors[atkId];
+      const opts = [];
+      for (const z of zones) {
+        if (z.key === 'line') opts.push({ key: 'line', label: '封直線', x: crossingXOf(atk, z.aim) });
+        if (z.key === 'cross') opts.push({ key: 'cross', label: '封斜線', x: crossingXOf(atk, z.aim) });
+      }
+      opts.push({ key: 'off', label: '退防', x: null });
+      return opts;
+    },
+    chooseBlock(option) {
+      blockPlan = { x: option.x, jumped: false, until: performance.now() + 5000 };
+    },
+    blockPlanPending() { return blockPlan !== null; },
     // 玩家剛按下起跳（一次性訊號；main 轉給表現層播 windup 跳躍）
     consumeJumpSignal() {
       const s = jumpSignal;

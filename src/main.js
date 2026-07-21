@@ -23,7 +23,7 @@ import { createScoreboard } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
 import { createActionButtons } from './ui/actionButtons.js';
-import { createAttackPanel } from './ui/attackPanel.js';
+import { createZonePanel } from './ui/zonePanel.js';
 import { createFloatText } from './ui/floatText.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 
@@ -93,10 +93,10 @@ async function runMatch(ctx) {
   const scoreboard = createScoreboard(PLAYER_ID);
   const sfx = createSfx();
   const touchUi = createTouchUi();
-  // 簡化模式：只給進攻決策面板；經典模式：全手動的主動作鈕＋攔網鈕
-  const attackPanel = simpleMode ? createAttackPanel(controls) : null;
+  // 簡化模式：決策面板（攻擊/發球/攔網共用）；經典模式：全手動按鈕
+  const panel = simpleMode ? createZonePanel() : null;
   const actionButtons = simpleMode ? null : createActionButtons(controls);
-  let servedThisTurn = false; // 簡化模式：每次發球局自動發一次
+  let servedThisTurn = false; // 每個發球回合只處理一次發球決策
 
   // 讀攔網提示開關：開＝綠/紅標示（新手輔助）、關＝自己看攔網判斷（技術版）
   let showHints = true;
@@ -157,7 +157,7 @@ async function runMatch(ctx) {
     vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
     vcrCurrent = { snapshot: null, steps: [] };
     servedThisTurn = false;
-    if (attackPanel) attackPanel.hide();
+    if (panel) panel.hide();
     controls.setPlayerId(PLAYER_ID);
     rig.setPlayerId(PLAYER_ID);
     matchView.setControlled(PLAYER_ID);
@@ -270,7 +270,7 @@ async function runMatch(ctx) {
       camera.lookAt(0, 0.6, 0);
       renderer.render(scene, camera);
       hud.frame(now, delta, 0);
-      if (attackPanel) attackPanel.hide();
+      if (panel) panel.hide();
       if (replay.idx >= replay.steps.length) replay = null; // 播完回現場
       return;
     }
@@ -280,19 +280,52 @@ async function runMatch(ctx) {
     if (simpleMode) {
       // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
       rig.setAttackView(controls.isAttackMoment(game));
-      const zones = attackPanel && controls.attackZones(game);
-      // 球正下墜、還在可決策高度、尚未選區＝決策窗
-      deciding = !!zones && game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
-      if (deciding) attackPanel.show(zones, showHints);
-      else if (attackPanel) attackPanel.hide();
-      // 自動發球：輪到玩家發球、哨音已過→自動發（發球決策留待下一階段）
-      if (game.phase === 'serve') {
-        if (game.match.servingTeam === 'A' && game.tick >= game.serveReadyTick && !servedThisTurn) {
-          controls.serveNow(game);
-          servedThisTurn = true;
+      const zones = controls.attackZones(game);
+      // ①進攻決策：球正下墜、可決策高度、尚未選區
+      const attackDeciding =
+        !!zones && game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
+      // ②攔網決策：對方第三擊將至、我在前排、尚未選線
+      const defendDeciding =
+        controls.isDefendMoment(game, aiState) && !controls.blockPlanPending() &&
+        game.ball.vy < 0 && game.ball.y > 2.0;
+      // ③發球決策：發球員是受控玩家本人（AI 隊友發球自動）、哨音已過、尚未選
+      const serveDeciding =
+        game.phase === 'serve' && serverId(game.match) === controlledId &&
+        game.tick >= game.serveReadyTick && !servedThisTurn;
+      if (game.phase !== 'serve') servedThisTurn = false;
+
+      deciding = attackDeciding || defendDeciding; // 攻/防決策窗＝時間放慢
+      if (attackDeciding) {
+        panel.show(
+          showHints ? '選攻擊區！' : '看攔網、選攻擊區！',
+          zones.map((z) => ({
+            key: z.key,
+            label: showHints ? z.label + (z.blocked ? ' ✋' : '') : z.label,
+            color: showHints ? (z.blocked ? 'red' : 'green') : 'neutral',
+            zone: z,
+          })),
+          (it) => controls.chooseAttack(it.zone),
+        );
+      } else if (defendDeciding) {
+        const opts = controls.blockOptions(game, aiState);
+        if (opts) {
+          panel.show(
+            '他要扣了——封哪條線？',
+            opts.map((o) => ({ key: o.key, label: o.label, color: 'neutral', opt: o })),
+            (it) => controls.chooseBlock(it.opt),
+          );
         }
+      } else if (serveDeciding) {
+        panel.show(
+          '選發球目標！',
+          controls.serveZones(game).map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z })),
+          (it) => {
+            controls.serveNow(game, it.zone.aim);
+            servedThisTurn = true;
+          },
+        );
       } else {
-        servedThisTurn = false;
+        panel.hide();
       }
     }
 
