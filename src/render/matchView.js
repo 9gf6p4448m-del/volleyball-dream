@@ -50,7 +50,7 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
     };
   }
 
-  // 玩家操控者足下光圈（公平線索：一眼找到自己）
+  // 玩家操控者足下光圈（一眼找到自己；「這球歸你」時轉橘紅示警）
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.42, 0.55, 40),
     new THREE.MeshBasicMaterial({ color: 0x6ee7ff, transparent: true, opacity: 0.85 }),
@@ -58,6 +58,7 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.02;
   scene.add(ring);
+  let ringHot = false;
 
   // 比賽事件 → 姿勢觸發（表現層唯讀路由）
   function routeEvents(events) {
@@ -76,6 +77,13 @@ export async function createMatchView(scene, quality, game, highlightId, forcePo
 
   return {
     count: Object.keys(units).length,
+    // 「這球歸你」：光圈變橘紅＋放大脈動
+    setHot(hot) {
+      if (hot === ringHot) return;
+      ringHot = hot;
+      ring.material.color.setHex(hot ? 0xff8c42 : 0x6ee7ff);
+      ring.scale.setScalar(hot ? 1.35 : 1);
+    },
     // alpha＝步間插值；dt＝畫面幀時間；frameEvents＝本幀 sim 事件（驅動姿勢）
     sync(gameState, alpha, dt, frameEvents = []) {
       routeEvents(frameEvents);

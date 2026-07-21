@@ -20,11 +20,13 @@ export function createScoreboard(playerId) {
   const hintEl = el.querySelector('.hint');
 
   return {
-    update(game) {
+    update(game, isMyBall = false) {
       const { score } = game.match;
       const serve = game.match.servingTeam;
       lineEl.textContent = `${score.A} : ${score.B}`;
-      hintEl.textContent = hintFor(game, playerId, serve);
+      hintEl.textContent = isMyBall
+        ? '🟠 這球歸你！跑向藍色落點圈'
+        : hintFor(game, playerId, serve);
     },
   };
 }

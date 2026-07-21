@@ -11,6 +11,8 @@ import { TUNING } from '../sim/game.js';
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
 const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
+const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
+const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
 
 export function createMatchControls(domElement, camera, playerId, rig) {
   const keys = new Set();
@@ -59,6 +61,7 @@ export function createMatchControls(domElement, camera, playerId, rig) {
         timing: Math.min(held / CHARGE_MS, 1),
         gaze: charge.gaze,             // 看哪＝蓄力期間的視線落點（進一人稱後由 rig 補）
         aimNdc: { ...pointerNdc },     // 往哪打＝放開瞬間的指向（collect 時換算場地座標）
+        expiresTick: null,             // 出手緩衝視窗（首次 collect 時設定）
       };
       charge = null;
     }
@@ -104,7 +107,8 @@ export function createMatchControls(domElement, camera, playerId, rig) {
 
   return {
     // 主迴圈每個固定步長呼叫；輸出與 AI 同型的 Intent（sim 不知來源）
-    collect(game) {
+    // aiState：唯讀參考 AI 協調層的呼叫鎖定（誰的球）與攻擊手選擇，做輔助判斷
+    collect(game, aiState = null) {
       const tick = game.tick;
       const me = game.players[playerId];
       const a = game.actors[playerId];
@@ -116,30 +120,60 @@ export function createMatchControls(domElement, camera, playerId, rig) {
       let timing = 1;
 
       if (queuedAction) {
+        // 出手緩衝：放開後持續投遞到成功（onEvents 清除）或逾時——按了就會打
+        if (queuedAction.expiresTick === null) {
+          queuedAction.expiresTick = tick + BUFFER_TICKS;
+        }
         action = contextAction(game);
         const ground = groundPoint(queuedAction.aimNdc);
         if (ground) aim = ground;
         gaze = queuedAction.gaze ?? rig.gazePoint(game);
         timing = queuedAction.timing;
-        queuedAction = null;
+        // 發球等哨音沒有時限；其他動作逾時作廢
+        const waitingServe = game.phase === 'serve' && action === 'serve';
+        if (!waitingServe && tick >= queuedAction.expiresTick) queuedAction = null;
       } else if (charge && rig.getMode() === 'first' && !charge.gaze) {
         // 一人稱蓄力中：按下當下的視線＝gaze（看哪），之後拖到別處放開＝aim（打哪）
         charge.gaze = rig.gazePoint(game);
-      } else if (game.phase === 'rally') {
-        // 到位自動接（接發是反射）：球進可及範圍且下墜、輪到我方可觸 → 自動墊往舉球點
+      } else if (game.phase === 'rally' && !charge) {
+        // 自動輔助（玩家沒出手時的反射與保底；主動操作永遠優先）
         const r = game.rally;
-        const canTouch = r.touches < 3 &&
-          !(r.profile === 'serve' && r.lastTouchTeam === me.teamId);
         const b = game.ball;
+        const canTouch = r.touches < 3 &&
+          !(r.profile === 'serve' && r.lastTouchTeam === me.teamId) &&
+          r.lastToucherId !== playerId;
         const near = Math.hypot(b.x - a.x, b.z - a.z) <= AUTO_RECEIVE_DIST;
-        if (canTouch && near && b.vy < 0 && b.y <= standingReach(me) + 0.3 &&
-            r.lastToucherId !== playerId && r.touches === 0) {
+        const reachable = near && b.vy < 0 && b.y <= standingReach(me) + 0.3;
+        const claimedToMe = aiState?.claimId === playerId;
+        if (canTouch && reachable && r.touches === 0) {
+          // 到位自動接（一傳是反射不是瞄準）
           action = 'receive';
-          aim = localToWorld(me.teamId, 1.2, 1.2); // 墊向我方舉球點
+          aim = localToWorld(me.teamId, 1.2, 1.2);
+        } else if (canTouch && reachable && claimedToMe && r.touches === 1) {
+          // 這球歸你的二傳保底：自動舉給攻擊手
+          action = 'set';
+          const atk = aiState?.attackerId && game.actors[aiState.attackerId];
+          const lane = atk ? -TEAM_SIDE[me.teamId] * atk.x : 2;
+          aim = localToWorld(me.teamId, lane, 1.3);
+        } else if (canTouch && reachable && claimedToMe && r.touches === 2 &&
+            b.y < SALVAGE_Y) {
+          // 錯過扣球窗的保底：送安全球過網（主動跳扣永遠更強）
+          action = 'receive';
+          aim = localToWorld(me.teamId === 'A' ? 'B' : 'A', 0, 6.5);
         }
       }
 
       return [createIntent({ playerId, tick, move, action, aim, gaze, timing })];
+    },
+    // 出手成功（sim 發出我的觸球/發球事件）→ 清掉緩衝
+    onEvents(events) {
+      if (!queuedAction) return;
+      for (const e of events) {
+        if ((e.type === 'TOUCH' || e.type === 'SERVE') && e.playerId === playerId) {
+          queuedAction = null;
+          return;
+        }
+      }
     },
     isCharging() { return charge !== null; },
 

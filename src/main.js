@@ -5,6 +5,7 @@ import { SIM_DT, MAX_FRAME_DELTA } from './sim/constants.js';
 import { createWorld, stepWorld } from './sim/world.js';
 import { createGame, stepGame } from './sim/game.js';
 import { createAiState, aiCollectIntents } from './sim/ai.js';
+import { predictLanding } from './sim/flight.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
 import { createCourt } from './render/court.js';
@@ -77,7 +78,12 @@ async function runMatch(ctx) {
   const scoreboard = createScoreboard(PLAYER_ID);
   const sfx = createSfx();
   const touchUi = createTouchUi();
-  const aimMarker = createAimMarker(scene);
+  const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點
+  // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點（僅顯示落在我方半場的）
+  const assistOn = params.get('assist') !== 'off';
+  const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6);
+  let assistFlight = -1;
+  let assistLanding = null;
   showTutorialOnce();
 
   // 局終點擊 → 換種子再開一局
@@ -112,20 +118,38 @@ async function runMatch(ctx) {
     while (accumulator >= SIM_DT) {
       // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
       const intents = [
-        ...controls.collect(game),
+        ...controls.collect(game, aiState),
         ...aiCollectIntents(game, aiState, [PLAYER_ID]),
       ];
       frameEvents.push(...stepGame(game, intents));
       accumulator -= SIM_DT;
       simSteps += 1;
     }
-    if (frameEvents.length > 0) sfx.onEvents(frameEvents);
+    if (frameEvents.length > 0) {
+      sfx.onEvents(frameEvents);
+      controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
+    }
+
+    // 操作輔助：來球落點圈（每個 flight 只預測一次，唯讀取用 sim 純函式）
+    if (assistOn && game.phase === 'rally') {
+      if (assistFlight !== game.rally.flightId) {
+        assistFlight = game.rally.flightId;
+        assistLanding = predictLanding(game.ball);
+      }
+      if (assistLanding && assistLanding.z > 0) landingMarker.show(assistLanding);
+      else landingMarker.hide();
+    } else {
+      landingMarker.hide();
+    }
+    // 「這球歸你」：AI 呼叫鎖定指到玩家 → 光圈變橘＋提示
+    const myBall = game.phase === 'rally' && aiState.claimId === PLAYER_ID;
+    matchView.setHot(myBall);
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha);
     matchView.sync(game, alpha, delta, frameEvents);
     rig.update(game, alpha);
-    scoreboard.update(game);
+    scoreboard.update(game, myBall);
     touchUi.update(controls.uiState());
     const aimAt = controls.currentAimPoint();
     if (aimAt) aimMarker.show(aimAt);

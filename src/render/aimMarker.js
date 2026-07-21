@@ -1,11 +1,11 @@
 // 瞄準標記：蓄力時在地面顯示落點圈（讀輸入層的瞄準點，不碰 sim）
 import * as THREE from 'three';
 
-export function createAimMarker(scene) {
+export function createAimMarker(scene, color = 0xffc857, radius = 0.42) {
   const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.3, 0.42, 32),
+    new THREE.RingGeometry(radius - 0.12, radius, 32),
     new THREE.MeshBasicMaterial({
-      color: 0xffc857, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+      color, transparent: true, opacity: 0.9, side: THREE.DoubleSide,
     }),
   );
   ring.rotation.x = -Math.PI / 2;
