@@ -1,0 +1,53 @@
+// 賽末收束——生涯結果落檔（純資料流：吃 game 終局狀態＋careerCtx，寫入 store）
+// node 可測（store 可注入假體）；three.js/DOM 一概不進本檔。
+// 開賽標記也住這裡：生涯場次的「開始→結束」生命週期收在同一模組。
+import {
+  recordResult, mergeScouting, markPending,
+} from '../career/careerState.js';
+import { matchStatsFor, growthPointsFor } from '../career/growth.js';
+
+// 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
+export function markMatchStarted(careerCtx) {
+  careerCtx.store.saveCareer(markPending(careerCtx.career, careerCtx.matchEntry.id));
+}
+
+// 介面契約（tests/app-career.test.js 把關）：
+// settleCareerMatch({ careerCtx, game, playerId, feintsUsed }) → { saveOk, won }
+// - 局終當下呼叫一次（先落檔再顯示結算畫面——點擊返回前進度已保住）
+// - stage 3：從事件日誌統計表現→成長點數；假動作熟練度場終一次累積
+// - 情蒐入庫：這場對手看到的我（宿敵同 id 跨賽段累積——「他們記得你」）
+export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 }) {
+  const myTeam = game.players[playerId].teamId; // 生涯主角固定 A 隊
+  const s = game.match.score;
+  const won = game.match.winner === myTeam;
+  const stats = matchStatsFor(game.events, playerId, myTeam);
+  let saveOk = true;
+  if (feintsUsed > 0) {
+    careerCtx.player.techniques.feintUses =
+      (careerCtx.player.techniques.feintUses ?? 0) + feintsUsed;
+    saveOk = careerCtx.store.savePlayer(careerCtx.player) && saveOk;
+  }
+  const scouted = mergeScouting(
+    careerCtx.career, careerCtx.matchEntry.opponentId, game.scoutTally[playerId],
+  );
+  saveOk = careerCtx.store.saveCareer(recordResult(scouted, {
+    matchId: careerCtx.matchEntry.id,
+    won,
+    scoreFor: myTeam === 'A' ? s.A : s.B,
+    scoreAgainst: myTeam === 'A' ? s.B : s.A,
+    gp: growthPointsFor(stats, won),
+    stats,
+  })) && saveOk;
+  return { saveOk, won };
+}
+
+// 局終點擊返回生涯的網址（保留測試/操作相關參數）；pathname 由呼叫端給（window 不進本檔）
+export function careerReturnUrl(params, pathname) {
+  const back = new URLSearchParams();
+  back.set('career', 'resume');
+  for (const k of ['points', 'classic', 'assist']) {
+    const v = params.get(k);
+    if (v !== null) back.set(k, v);
+  }
+  return `${pathname}?${back.toString()}`;
+}
