@@ -34,6 +34,7 @@ export function createCameraRig(camera, initialPlayerId) {
   const curTarget = new THREE.Vector3(0, 1, 0);
   let look = { x: 0, y: 0 }; // 指標 NDC（-1..1），一人稱視線用
   let attackView = false;    // 進攻決策：切攻擊手視角越過網看攔網
+  let spikeMine = false;     // 這球第三擊是否分配給我（claim）——舉給隊友不搶鏡
 
   function desiredMode(game) {
     const me = game.players[playerId];
@@ -45,7 +46,9 @@ export function createCameraRig(camera, initialPlayerId) {
       const a = game.actors[playerId];
       const near = Math.hypot(game.ball.x - a.x, game.ball.z - a.z)
         < CAMERA_TUNING.SPIKE_CAM_DIST;
-      if (r.possession === me.teamId && r.touches === 2 && near) return 'first'; // 扣球視角
+      // 扣球一人稱：限定「這球舉給我」——舉給隊友時球恰好飛過我頭上不得劫持鏡頭
+      // （防守/補位全程三人稱：原設計即無防守一人稱）
+      if (r.possession === me.teamId && r.touches === 2 && near && spikeMine) return 'first';
     }
     return 'third';
   }
@@ -53,7 +56,9 @@ export function createCameraRig(camera, initialPlayerId) {
   return {
     setPlayerId(id) { playerId = id; },
     setAttackView(v) { attackView = v; },
+    setSpikeMine(v) { spikeMine = v; },
     setLook(nx, ny) { look = { x: nx, y: ny }; },
+    resetLook() { look = { x: 0, y: 0 }; },
     getMode() { return mode; },
 
     // 一人稱視線落點（gaze）：視線方向與地面的交點——餵給扣球 Intent 的「看哪」

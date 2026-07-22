@@ -302,7 +302,7 @@ async function runMatch(ctx) {
       deciding = attackDeciding || defendDeciding; // 攻/防決策窗＝時間放慢
       if (attackDeciding) {
         panel.show(
-          showHints ? '選攻擊區！' : '看攔網、選攻擊區！',
+          showHints ? '選攻擊區！（按A滑B＝假動作）' : '看攔網選區！（按A滑B＝假動作）',
           zones.map((z) => ({
             key: z.key,
             label: showHints ? z.label + (z.blocked ? ' ✋' : '') : z.label,
@@ -310,6 +310,10 @@ async function runMatch(ctx) {
             zone: z,
           })),
           (it) => controls.chooseAttack(it.zone),
+          (fromIt, toIt) => {
+            controls.chooseAttackFake(fromIt.zone, toIt.zone);
+            floatText.show('假動作!');
+          },
         );
       } else if (defendDeciding) {
         const opts = controls.blockOptions(game, aiState);
@@ -429,6 +433,7 @@ async function runMatch(ctx) {
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha, delta);
     matchView.sync(game, alpha, delta, frameEvents);
+    rig.setSpikeMine(aiState?.claimId === controlledId); // 扣球一人稱只認「舉給我」
     rig.update(game, alpha, delta);
     // 螢幕震動：鏡頭位置疊隨機偏移、指數衰減（表現層，不碰 sim）
     if (shake > 0.004) {

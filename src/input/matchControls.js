@@ -159,7 +159,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       x: (e.clientX / window.innerWidth) * 2 - 1,
       y: -(e.clientY / window.innerHeight) * 2 + 1,
     };
-    rig.setLook(pointerNdc.x, pointerNdc.y);
+    // 一人稱視線只在蓄力拖瞄中跟指標（classic 的看A打B）；
+    // 平時不跟——防「游標停在底部面板 → 一進一人稱就低頭看地板」的視線污染
+    if (charge) rig.setLook(pointerNdc.x, pointerNdc.y);
   }
 
   // 指標 → 地面座標（瞄準用）
@@ -412,10 +414,17 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
       jumpSignal = true;
       attackChosen = true;
       queuedAction = {
-        timing: zone.power, gaze: null, aimWorld: zone.aim,
+        // gaze=aim＝誠實出手（零欺敵、零散佈懲罰）；假動作才走 chooseAttackFake
+        timing: zone.power, gaze: { x: zone.aim.x, z: zone.aim.z }, aimWorld: zone.aim,
         aimNdc: null, aimVec: null, forceAction: 'spike',
         expiresTick: null, jumpAt: performance.now(), attack: true,
       };
+    },
+    // 假動作扣球（按A滑B）：視線鎖假區（gaze）、實打真區——吃 sim 的 H3 欺敵
+    // （夾角越大越可能騙過攔網、但自身落點越飄；騙沒騙由 sim 決定論結算）
+    chooseAttackFake(fakeZone, realZone) {
+      this.chooseAttack(realZone);
+      queuedAction.gaze = { x: fakeZone.aim.x, z: fakeZone.aim.z };
     },
     // 本次扣球是否已選區（main 用來停止彈面板）
     attackPending() { return attackChosen; },
@@ -423,6 +432,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     serveNow(game, aim = null) {
       const me = game.players[playerId];
       if (game.phase !== 'serve' || serverId(game.match) !== playerId) return;
+      rig.resetLook(); // 發球一人稱歸正視（清掉殘留視線）
       const oppTeam = me.teamId === 'A' ? 'B' : 'A';
       const target = aim ?? localToWorld(oppTeam, 1.5, 7.5);
       queuedAction = {
