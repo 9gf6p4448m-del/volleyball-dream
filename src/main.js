@@ -32,7 +32,8 @@ import { showTutorialOnce } from './ui/tutorial.js';
 import { createSetOverOverlay } from './ui/setOverOverlay.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
-import { matchSeed, careerMatchSetup, recordResult } from './career/careerState.js';
+import { matchSeed, careerMatchSetup, recordResult, mergeScouting } from './career/careerState.js';
+import { buildScoutTape } from './career/scoutTape.js';
 import { matchStatsFor, growthPointsFor, blockReadTier } from './career/growth.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
@@ -111,9 +112,19 @@ async function runMatch(ctx, careerCtx = null) {
     : null;
   let game = createGame({
     seed, setTarget,
-    ...(careerSetup ? { teams: careerSetup.teams, aiProfiles: careerSetup.aiProfiles } : {}),
+    ...(careerSetup ? {
+      teams: careerSetup.teams,
+      aiProfiles: careerSetup.aiProfiles,
+      ...(careerSetup.scoutRead ? { scoutRead: careerSetup.scoutRead } : {}),
+    } : {}),
   });
   let aiState = createAiState();
+
+  // stage 5 情蒐錄影帶：賽前播對手預演的 2-3 球關鍵回放（決定論預生成；點擊跳過）
+  const tapeClips = careerSetup
+    ? buildScoutTape(seed, careerSetup.teams, careerSetup.aiProfiles)
+    : [];
+  let tapeIdx = 0;
 
   // stage 3 技術閘門：生涯未解鎖的決策選項不出現（快速比賽預設全開）；
   // 熟練度/能力只在開場讀一次——場中不變，決定論與 VCR 乾淨
@@ -300,6 +311,25 @@ async function runMatch(ctx, careerCtx = null) {
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR') startReplay(); // 桌機 R＝回放上一球
   });
+  // 情蒐錄影帶：吃同一條 replay 管線（tape 旗標）；尾段 4 秒、略快於一般回放
+  const TAPE_TAIL = 240;
+  function startTapeClip() {
+    const clip = tapeClips[tapeIdx];
+    if (!clip) return;
+    const state = structuredClone(clip.snapshot);
+    const startIdx = Math.max(0, clip.steps.length - TAPE_TAIL);
+    for (let i = 0; i < startIdx; i += 1) stepGame(state, clip.steps[i].intents);
+    replay = { state, steps: clip.steps, idx: startIdx, acc: 0, tape: true };
+    floatText.show(`📼 情蒐：對手關鍵球 ${tapeIdx + 1}/${tapeClips.length}（點擊跳過）`, '#6ee7ff', 2000);
+    tapeIdx += 1;
+  }
+  window.addEventListener('pointerdown', () => {
+    if (replay?.tape) { // 跳過整卷情蒐
+      replay = null;
+      tapeIdx = tapeClips.length;
+      floatText.show('跳過情蒐——比賽開始！', '#9fb0cc', 1000);
+    }
+  });
   function desiredControlled() {
     if (game.phase === 'serve') {
       return game.match.servingTeam === 'A' ? serverId(game.match) : controlledId;
@@ -340,7 +370,9 @@ async function runMatch(ctx, careerCtx = null) {
     game, aiState, renderer, scene, camera, quality, rig,
     vcr: () => vcrLast,          // 上一球的回放資料
     controlled: () => controlledId, // 當前受控球員（輪控除錯）
+    tapeCount: tapeClips.length, // 情蒐錄影帶卷數（測試用）
   };
+  if (tapeClips.length) startTapeClip(); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
 
   let last = performance.now();
   let accumulator = 0;
@@ -373,7 +405,14 @@ async function runMatch(ctx, careerCtx = null) {
       renderer.render(scene, camera);
       hud.frame(now, delta, 0);
       if (panel) panel.hide();
-      if (replay.idx >= replay.steps.length) replay = null; // 播完回現場
+      if (replay.idx >= replay.steps.length) {
+        const wasTape = replay.tape;
+        replay = null; // 播完回現場
+        if (wasTape) {
+          if (tapeIdx < tapeClips.length) startTapeClip(); // 下一卷
+          else floatText.show('情蒐結束——比賽開始！', '#ffd166', 1500);
+        }
+      }
       return;
     }
 
@@ -622,7 +661,11 @@ async function runMatch(ctx, careerCtx = null) {
             (careerCtx.player.techniques.feintUses ?? 0) + feintsUsedThisMatch;
           careerCtx.store.savePlayer(careerCtx.player);
         }
-        careerCtx.store.saveCareer(recordResult(careerCtx.career, {
+        // 情蒐入庫：這場對手看到的我（宿敵同 id 跨賽段累積——「他們記得你」）
+        const scouted = mergeScouting(
+          careerCtx.career, careerCtx.matchEntry.opponentId, game.scoutTally[PLAYER_ID],
+        );
+        careerCtx.store.saveCareer(recordResult(scouted, {
           matchId: careerCtx.matchEntry.id,
           won,
           scoreFor: myTeam === 'A' ? s.A : s.B,

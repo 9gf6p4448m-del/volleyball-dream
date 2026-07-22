@@ -117,13 +117,23 @@ export const EVENT_DEFS = [
       { speaker: '教練', text: '全國賽，單淘汰——輸一場就收隊回家。放開打，別留手。' },
     ],
   },
+  // 宿敵差分（stage 5）：小組賽對曜石的勝敗決定再遇的對話——scouting 記憶同步生效
   {
-    id: 'rematch',
+    id: 'rematch-won',
     moment: 'pre',
-    when: { matchId: 'national-sf' },
+    when: { matchId: 'national-sf', wonVs: 'obsidian' },
     lines: [
-      { speaker: '隊長（MB）', text: '曜石。他們記得你小組賽怎麼打的——這次他們是衝著你來的。' },
-      { speaker: '二傳（S）', text: '那正好。小組賽的帳，今天當面算。' },
+      { speaker: '隊長（MB）', text: '曜石。小組賽輸給我們之後，他們把你的每一球都看了三遍。' },
+      { speaker: '二傳（S）', text: '他們衝著你來的。慣用的線路會被讀死——換節奏，或者用騙的。' },
+    ],
+  },
+  {
+    id: 'rematch-lost',
+    moment: 'pre',
+    when: { matchId: 'national-sf', lostVs: 'obsidian' },
+    lines: [
+      { speaker: '隊長（MB）', text: '又是曜石。小組賽欠他們一場——今天當面討回來。' },
+      { speaker: '二傳（S）', text: '他們記得你怎麼打的。上次的套路不會再通——拿出新的東西。' },
     ],
   },
 ];
@@ -163,6 +173,12 @@ function matchesWhen(when, { career, last, next }) {
       case 'lastMatchId':
         if (last?.matchId !== val) return false;
         break;
+      case 'wonVs': // 曾勝過該隊（宿敵差分用）
+        if (!ctxCareerHasResult(career, val, true)) return false;
+        break;
+      case 'lostVs':
+        if (!ctxCareerHasResult(career, val, false)) return false;
+        break;
       case 'playedCount':
         if (career.results.length !== val) return false;
         break;
@@ -177,4 +193,8 @@ function matchesWhen(when, { career, last, next }) {
     }
   }
   return true;
+}
+
+function ctxCareerHasResult(career, opponentId, won) {
+  return career.results.some((r) => r.opponentId === opponentId && !!r.won === won);
 }

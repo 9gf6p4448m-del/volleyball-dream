@@ -59,9 +59,10 @@ export const TUNING = {
 
 // teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = 1 號位）
 // setTarget：局分（預設 25；快速局可傳 15）
-// aiProfiles = { A?, B? }：每隊 AI 風格參數（tipRate/dumpRate/powerServeRate），
-// 生涯對手參數檔由此注入；未給的隊伍用 ai.js 預設值（見 aiProfileOf）
-export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
+// aiProfiles = { A?, B? }：每隊 AI 風格參數（tipRate/dumpRate/jumpServeRate…）
+// scoutRead = { A?|B?: { targetId, read(0-1), zones:{line,cross,middle,tip} } }：
+// stage 5 情蒐——該隊對 targetId 的歷史攻擊分佈讀取（攔網向慣用線收攏）
+export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
   const actors = {};
@@ -80,6 +81,8 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
     tick: 0,
     seed, // 原始種子（AI 決策 hash 的混合項——跨場次變化、同種子可重現）
     aiProfiles: aiProfiles ?? null,
+    scoutRead: scoutRead ?? null, // 情蒐讀取（對手讀我的慣用線；生涯注入）
+    scoutTally: {},  // 情蒐統計（playerId→intent 分佈；場末由生涯層收走跨場累積）
     trustDyn: {},    // stage 4 場內動態信任（playerId→偏移；場末即散）
     trustStreak: {}, // 連續得分/失誤計數（正＝連得、負＝連失）
     rngState: seedRng(seed),
@@ -101,6 +104,7 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
       lastTouchTeam: null,
       lastToucherId: null,
       deceiveP: 0,       // H3：當前扣球夾帶的騙敵機率（攔網結算用）
+      lastSpikeZone: null, // 本波扣球的線路分類（line/cross/middle/tip；情蒐讀取用）
       serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
     },
@@ -163,6 +167,43 @@ function applyMove(state, actor, intent) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// ---- stage 5 情蒐（Scouting）----
+
+// 扣球線路分類：吊球看力度、其餘看橫向——與攻擊手同側＝直線、對側＝斜線
+// （用 intent.aim 而非散佈後落點：情蒐讀的是「意圖習慣」）
+export function classifySpikeZone(actorX, aimX, power) {
+  if (power <= 0.45) return 'tip';
+  if (Math.abs(aimX) < 1.8) return 'middle';
+  const side = actorX >= 0 ? 1 : -1;
+  return (aimX >= 0 ? 1 : -1) === side ? 'line' : 'cross';
+}
+
+function scoutTallyOf(state, pid) {
+  if (!state.scoutTally[pid]) {
+    state.scoutTally[pid] = {
+      zones: { line: 0, cross: 0, middle: 0, tip: 0 },
+      feints: 0, spikes: 0,
+      serves: { jumps: 0, floats: 0, total: 0 },
+    };
+  }
+  return state.scoutTally[pid];
+}
+
+// 情蒐讀取的攔網乘子：慣用線（分佈占比>0.35）被讀死、反常線（<0.15）出其不意。
+// read＝對手強度參數（弱隊 0＝不讀）；樣本 <6 球不讀（避免小樣本亂收攏）
+export function scoutBlockMul(state, blockTeam) {
+  const sc = state.scoutRead?.[blockTeam];
+  const zone = state.rally.lastSpikeZone;
+  if (!sc || !zone || state.rally.lastToucherId !== sc.targetId) return 1;
+  const z = sc.zones ?? {};
+  const total = (z.line ?? 0) + (z.cross ?? 0) + (z.middle ?? 0) + (z.tip ?? 0);
+  if (total < 6) return 1;
+  const share = (z[zone] ?? 0) / total;
+  if (share > 0.35) return 1 + (sc.read ?? 0) * (share - 0.35) * 1.8;
+  if (share < 0.15) return Math.max(0.6, 1 - (sc.read ?? 0) * 0.25);
+  return 1;
 }
 
 // 回溯窗最舊的一筆＝約 TAKEOFF_LOOKBACK_TICKS 個 tick 前的位置（近似起跳離地位置）；
@@ -326,6 +367,17 @@ function executeTouch(state, intent, player, actor, ev) {
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
   ball.px = ball.x; ball.py = ball.y; ball.pz = ball.z;
 
+  // stage 5 情蒐統計：扣球線路/假動作進 intent 分佈（跨場累積由生涯層收走）
+  if (intent.action === 'spike') {
+    const zone = classifySpikeZone(actor.x, intent.aim.x, timing);
+    rally.lastSpikeZone = zone;
+    const tal = scoutTallyOf(state, player.id);
+    tal.zones[zone] += 1;
+    tal.spikes += 1;
+    if (dec.deceiveP > 0) tal.feints += 1;
+  } else {
+    rally.lastSpikeZone = null;
+  }
   rally.touches = newCount;
   rally.possession = team;
   rally.lastTouchTeam = team;
@@ -387,6 +439,11 @@ function performServe(state, intent, ev) {
   const power = (intent.timing ?? 1) > 1.1;
   const float = !power && intent.style === 'float';
   rally.serveStyle = float ? 'float' : null;
+  // 情蒐統計：發球風格偏好
+  const stal = scoutTallyOf(state, player.id).serves;
+  stal.total += 1;
+  if (power) stal.jumps += 1;
+  if (float) stal.floats += 1;
   const target = scatterTarget(
     state, intent.aim, player.attributes.serve, 'serve', 0,
     power ? TUNING.POWER_SERVE_SCATTER : float ? TUNING.FLOAT_SCATTER : 1,
@@ -539,7 +596,9 @@ function tryBlock(state, toTeam, ev) {
 
   // 時機判定：起跳太晚（手沒到頂）或太早（下墜中）攔網率打折
   const airTicks = state.tick - best.actor.blockStartTick;
-  const chance = (0.12 + best.p.attributes.block * 0.004) * blockTimingMul(airTicks);
+  // stage 5 情蒐讀取：對被讀者的慣用線收攏（假動作的 deceive 骰在上方——騙贏免讀）
+  const chance = (0.12 + best.p.attributes.block * 0.004) * blockTimingMul(airTicks) *
+    scoutBlockMul(state, toTeam);
   if (rand(state) >= chance) return false; // 沒攔到，乾淨過網
 
   // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零

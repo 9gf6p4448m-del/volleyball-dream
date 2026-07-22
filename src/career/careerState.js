@@ -181,14 +181,41 @@ export function careerTeams(player, opponentDef = null) {
   return teams;
 }
 
-// 生涯單場開賽包：種子＋兩隊 roster＋對手 AI 風格——main.js 一次拿齊餵 createGame
+// stage 5 情蒐：把單場 scoutTally 併入生涯（per 對手——「這隊看過我什麼」；
+// 宿敵＝同隊 id 跨賽段自然沿用同一份記憶）
+export function mergeScouting(career, opponentId, tally) {
+  if (!tally) return career;
+  const prev = career.scouting?.[opponentId] ?? {
+    zones: { line: 0, cross: 0, middle: 0, tip: 0 },
+    feints: 0, spikes: 0,
+  };
+  const merged = {
+    zones: {
+      line: prev.zones.line + (tally.zones?.line ?? 0),
+      cross: prev.zones.cross + (tally.zones?.cross ?? 0),
+      middle: prev.zones.middle + (tally.zones?.middle ?? 0),
+      tip: prev.zones.tip + (tally.zones?.tip ?? 0),
+    },
+    feints: prev.feints + (tally.feints ?? 0),
+    spikes: prev.spikes + (tally.spikes ?? 0),
+  };
+  return { ...career, scouting: { ...(career.scouting ?? {}), [opponentId]: merged } };
+}
+
+// 生涯單場開賽包：種子＋兩隊 roster＋對手 AI 風格＋情蒐讀取——main.js 一次拿齊餵 createGame
 export function careerMatchSetup(career, player, matchEntry) {
   const def = opponentById(matchEntry.opponentId);
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
+  // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
+  const seen = career.scouting?.[matchEntry.opponentId];
+  const scoutRead = seen && (def.scoutRead ?? 0) > 0
+    ? { B: { targetId: 'A2', read: def.scoutRead, zones: seen.zones } }
+    : undefined;
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, def),
     aiProfiles: { B: { ...def.ai } },
+    ...(scoutRead ? { scoutRead } : {}),
     opponent: def,
   };
 }

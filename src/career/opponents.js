@@ -1,5 +1,6 @@
 // Phase 2 stage 2 — 對手參數檔（純資料；數值差×風格差）
 // trait＝識別特徵：供劇情層與情蒐錄影帶（stage 5）引用；賽前敵情一行字
+// scoutRead＝情蒐讀取強度（0-1：讀你的慣用線收攏攔網；弱隊不讀）
 // level＝全屬性基準；attrBias＝全隊屬性偏移；roleBias＝角色屬性偏移；
 // trustBias＝舉球分配傾向（疊在基準 trust 上）；heights＝六槽身高
 // （槽序同 lineup：S/OH/MB/OPP/OH/MB）；ai＝風格機率（皆決定論 hash 消費）
@@ -14,6 +15,7 @@ export const OPPONENTS = [
     roleBias: {},
     trustBias: {},
     heights: [1.80, 1.85, 1.92, 1.86, 1.83, 1.90],
+    scoutRead: 0,
     ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25 }, // 控制系：飄浮發球
   },
   {
@@ -26,6 +28,7 @@ export const OPPONENTS = [
     roleBias: {},
     trustBias: {},
     heights: [1.81, 1.84, 1.90, 1.85, 1.83, 1.89],
+    scoutRead: 0.25,
     ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15 },
   },
   {
@@ -38,6 +41,7 @@ export const OPPONENTS = [
     roleBias: { middle: { block: 10, jump: 8, power: 4 } },
     trustBias: { middle: 22 },
     heights: [1.83, 1.87, 1.98, 1.89, 1.85, 1.96],
+    scoutRead: 0.7,
     ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05 },
   },
   {
@@ -50,6 +54,7 @@ export const OPPONENTS = [
     roleBias: {},
     trustBias: {},
     heights: [1.84, 1.89, 1.95, 1.91, 1.87, 1.93],
+    scoutRead: 0.5,
     ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2 }, // 發球輪就是得分輪
   },
   {
@@ -62,6 +67,7 @@ export const OPPONENTS = [
     roleBias: { outside: { power: 6 } },
     trustBias: { outside: 8 },
     heights: [1.86, 1.92, 1.99, 1.94, 1.90, 1.97],
+    scoutRead: 0.9,
     ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1 },
   },
 ];
