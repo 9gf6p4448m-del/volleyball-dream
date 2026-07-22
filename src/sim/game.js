@@ -50,7 +50,9 @@ export const TUNING = {
 
 // teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = 1 號位）
 // setTarget：局分（預設 25；快速局可傳 15）
-export function createGame({ seed = 1, teams, setTarget } = {}) {
+// aiProfiles = { A?, B? }：每隊 AI 風格參數（tipRate/dumpRate/powerServeRate），
+// 生涯對手參數檔由此注入；未給的隊伍用 ai.js 預設值（見 aiProfileOf）
+export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
   const actors = {};
@@ -67,6 +69,7 @@ export function createGame({ seed = 1, teams, setTarget } = {}) {
   const state = {
     tick: 0,
     seed, // 原始種子（AI 決策 hash 的混合項——跨場次變化、同種子可重現）
+    aiProfiles: aiProfiles ?? null,
     rngState: seedRng(seed),
     players,
     actors,
@@ -216,6 +219,10 @@ function tryAction(state, intent, ev) {
   if (state.tick - actor.lastTouchTick < TUNING.TOUCH_COOLDOWN) return;
   // 發球飛行中，發球方全隊不得觸球（發球必須過網；掛網落回本方＝自然失分）
   if (rally.profile === 'serve' && player.teamId === rally.lastTouchTeam) return;
+  // 球在對方半場（未過網）不得觸球——隔網打球只有攔網（tryBlock）一條路。
+  // 沒這道閘，網前防守者的 reach 會跨網碰到對方組織中的球，
+  // 又因觸球計數不分隊被記成第 4 擊——防守方莫名被吹四擊犯規的根源
+  if (ball.z * TEAM_SIDE[player.teamId] < 0) return;
 
   const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
   if (dist > TUNING.REACH_RADIUS) return;
@@ -228,7 +235,9 @@ function tryAction(state, intent, ev) {
 function executeTouch(state, intent, player, actor, ev) {
   const { rally, ball } = state;
   const team = player.teamId;
-  const newCount = rally.touches + 1;
+  // 觸球數屬於持球方：非持球方的觸球（如攔網回彈落在對側）從 1 起算，
+  // 不得繼承前一隊的計數——共用計數器曾把防守方第一觸誤記成第 4 擊
+  const newCount = team === rally.possession ? rally.touches + 1 : 1;
 
   // 規則：觸球上限 3（第 4 次觸球即犯規）
   if (isFourHits(newCount)) {

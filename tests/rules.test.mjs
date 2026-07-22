@@ -114,3 +114,52 @@ test('對照組：前排球員同高度扣球合法', () => {
   assert.ok(touch && touch.kind === 'spike');
   assert.ok(!ev.some((e) => e.type === 'DEAD_BALL'));
 });
+
+test('隔網禁觸：對方組織中的球（未過網）防守方碰不到、不得誤吹四擊', () => {
+  const g = createGame({ seed: 11 });
+  // 佈景：B 隊已三擊、扣球剛出手仍在 B 半場網前；A 網前防守者在可及範圍
+  // （實掃 30 種子 173 次誤吹的標準現場——修前此景必吹 A 隊 FOUR_HITS）
+  g.phase = 'rally';
+  const r = g.rally;
+  r.profile = 'spike';
+  r.possession = 'B';
+  r.touches = 3;
+  r.lastTouchTeam = 'B';
+  r.lastToucherId = 'B2';
+  const b = g.ball;
+  b.x = 1.4; b.y = 2.5; b.z = -0.3;
+  b.vx = 0; b.vy = -0.5; b.vz = 4.5;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  g.actors.A3.x = 1.5; g.actors.A3.z = 0.6;
+
+  const ev = stepGame(g, [
+    createIntent({ playerId: 'A3', tick: g.tick, action: 'receive', aim: { x: 0, z: 6 } }),
+  ]);
+  assert.equal(ev.find((e) => e.type === 'DEAD_BALL'), undefined, '不得吹任何犯規');
+  assert.equal(ev.find((e) => e.type === 'TOUCH'), undefined, '球在對方半場不得觸球');
+});
+
+test('觸球計數隨持球方重置：換邊第一觸＝1，不繼承對方計數', () => {
+  const g = createGame({ seed: 12 });
+  // 佈景：球在 A 半場、possession 仍掛 B 且 touches=3（攔網回彈落對側類情境）
+  g.phase = 'rally';
+  const r = g.rally;
+  r.profile = 'arc';
+  r.possession = 'B';
+  r.touches = 3;
+  r.lastTouchTeam = 'B';
+  r.lastToucherId = 'B1';
+  const b = g.ball;
+  b.x = 0; b.y = 1.5; b.z = 4;
+  b.vx = 0; b.vy = -1; b.vz = 0;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  g.actors.A5.x = 0; g.actors.A5.z = 4.2;
+
+  const ev = stepGame(g, [
+    createIntent({ playerId: 'A5', tick: g.tick, action: 'receive', aim: { x: 0, z: 2 } }),
+  ]);
+  const touch = ev.find((e) => e.type === 'TOUCH');
+  assert.ok(touch, '本方半場的球可以觸');
+  assert.equal(touch.touches, 1, '換權第一觸應計 1');
+  assert.equal(ev.find((e) => e.type === 'DEAD_BALL'), undefined);
+});
