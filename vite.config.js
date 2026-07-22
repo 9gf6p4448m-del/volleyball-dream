@@ -3,6 +3,22 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './', // 相對路徑：GitHub Pages 子路徑或任何靜態主機都能跑
+  build: {
+    rollupOptions: {
+      output: {
+        // Phase 3 W1 bundle 分割：three（表現層最大宗）／sim 純核心／ui+career 面板層。
+        // 動機＝高頻部署下的快取粒度——改 UI 不必重抓 three；全部 chunk 仍是
+        // 首屏靜態 import（vite 自動 modulepreload，無瀑布延遲）、PWA 預快取照涵蓋
+        manualChunks(id) {
+          const p = id.replace(/\\/g, '/');
+          if (p.includes('node_modules/three')) return 'three';
+          if (p.includes('/src/sim/')) return 'sim';
+          if (p.includes('/src/ui/') || p.includes('/src/career/')) return 'ui';
+          return undefined; // render/app/input/入口 → 主 chunk
+        },
+      },
+    },
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
