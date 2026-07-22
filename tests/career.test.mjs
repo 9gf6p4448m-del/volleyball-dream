@@ -162,7 +162,7 @@ test('buildOpponentTeam：level＋風格偏移落到屬性與 trust', () => {
   assert.equal(obsidian[2].trust.fromSetter, 42); // 20 + trustBias.middle 22（快攻隊 MB 高分配）
   assert.equal(obsidian[1].attributes.block, 60); // 非 MB 不吃 roleBias
   const wave = buildOpponentTeam(opponentById('white-wave'));
-  assert.equal(wave[1].attributes.power, 52); // 56 + attrBias.power(-4)
+  assert.equal(wave[1].attributes.power, 53); // 57 + attrBias.power(-4)（07-22 平衡微調後）
   for (const p of wave) for (const k of ATTRIBUTE_KEYS) {
     assert.ok(p.attributes[k] >= 0 && p.attributes[k] <= 100);
   }
