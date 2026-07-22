@@ -235,6 +235,10 @@ export function attackPointsOf(game, team, setterId, passTier = 'perfect') {
       } else if (role === 'opposite') pts.push({ pid, kind: 'right', rowFactor: 1 });
       // S 前排不進池；libero 前排不存在（預留）
     } else if (passTier !== 'poor') {
+      // 後排攻擊需會後排攻擊技術（Player.techniques.pipe；預設 1＝AI/快速比賽不變，
+      // 生涯新人 0＝二傳不舉給不會後排攻擊的人——否則地板球權會逼出送分自由球）
+      const canBackAttack = (p.techniques?.pipe ?? 1) >= 1;
+      if (!canBackAttack) continue;
       if (role === 'outside') pts.push({ pid, kind: 'pipe', rowFactor: 0.5 });
       else if (role === 'opposite') pts.push({ pid, kind: 'dball', rowFactor: 0.5 });
       // MB/S 後排不進池；libero（Phase 2+）後排替換於此掛鉤
