@@ -209,6 +209,32 @@ export function attackPointsOf(game, team, setterId, excludeId) {
   return pts;
 }
 
+// 站位交換（真實排球：發球觸球後前排跑職責位）——OH 左翼、MB 中、OPP/前排 S 右翼；
+// 後排 Phase 1 不換位（自由人/後排防守專位 Phase 2 掛鉤）
+export function dutyPosition(game, team, playerId) {
+  const rot = game.match.rotations[team];
+  if (isFrontRow(rot, playerId)) {
+    const role = game.players[playerId].currentRole;
+    const lx = role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
+    return localToWorld(team, lx, 3);
+  }
+  return basePosition(team, positionOf(rot, playerId));
+}
+
+// 二傳落點：前排已換位 → 固定翼側（OH 左、OPP 右）、快攻恆在舉球員面前低弧；
+// 後排點不換位 → 跟攻擊手站位側、壓攻擊線後（合法起跳）
+export function setAimFor(game, team, attackerId, kind) {
+  if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
+  if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
+  if (kind === 'right') return { lx: 3, lz: 1.3, t: 0.75 };
+  if ((kind === 'pipe' || kind === 'dball') && attackerId) {
+    const pos = positionOf(game.match.rotations[team], attackerId);
+    const base = basePosition(team, pos);
+    return { lx: TEAM_SIDE[team] * base.x * 0.6, lz: 3.6, t: 0.75 };
+  }
+  return { lx: 2, lz: AI.ATTACK_LZ, t: 0.75 };
+}
+
 // 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust.fromSetter）
 function pickAttackPoint(game, team, setterId, excludeId) {
   const pts = attackPointsOf(game, team, setterId, excludeId);
@@ -266,8 +292,11 @@ function decideOne(game, aiState, playerId) {
   }
 
   // 攔網手（職責制）：MB＝攔網軸正對球、近側翼組雙人攔網、遠側翼撤退補吊球
+  // 例外：來球是發球/高球（非扣球）飛向我方＝接發局面，前排不貼網、去跑站位交換
   const opponentHasBall = r.possession && r.possession !== team;
-  if (opponentHasBall && isFrontRow(game.match.rotations[team], playerId)) {
+  const receivingArc = aiState.landingTeam === team && r.profile !== 'spike';
+  if (opponentHasBall && !receivingArc &&
+      isFrontRow(game.match.rotations[team], playerId)) {
     const pos = positionOf(game.match.rotations[team], playerId);
     // MB 恆為軸（追球）；翼依站位側偏一個間距
     const lane = player.currentRole === 'middle' ? 0 : pos === 2 ? 1 : pos === 4 ? -1
@@ -297,8 +326,8 @@ function decideOne(game, aiState, playerId) {
     return moveIntent(playerId, tick, actor, localToWorld(team, 2.2, 1.2));
   }
 
-  // 其餘人回輪轉基準位待命
-  return moveIntent(playerId, tick, actor, homePosition(game, team, playerId));
+  // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位
+  return moveIntent(playerId, tick, actor, dutyPosition(game, team, playerId));
 }
 
 // 觸球選擇：第一擊墊給舉球點、第二擊舉給攻擊手、第三擊前排扣球／其餘送安全球
@@ -309,16 +338,7 @@ function chooseTouch(game, aiState, player, actor) {
     return ['receive', localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz)];
   }
   if (r.touches === 1) {
-    // 二傳目標依攻擊點類型（職責制）：左翼/右翼高球、中央快攻（低弧）、後排 pipe/D
-    const kind = aiState.attackKind;
-    const AIMS = {
-      left: { lx: -3, lz: 1.3, t: 0.75 },
-      right: { lx: 3, lz: 1.3, t: 0.75 },
-      quick: { lx: 0, lz: 1.0, t: 0.4 },   // t<0.5＝sim 用低弧快球（簡版快攻）
-      pipe: { lx: -1.5, lz: 3.6, t: 0.75 }, // 攻擊線後（後排攻擊合法起跳點）
-      dball: { lx: 2.5, lz: 3.6, t: 0.75 },
-    };
-    const a2 = AIMS[kind] ?? { lx: 2, lz: AI.ATTACK_LZ, t: 0.75 };
+    const a2 = setAimFor(game, team, aiState.attackerId, aiState.attackKind);
     return ['set', localToWorld(team, a2.lx, a2.lz), a2.t];
   }
   // 第三擊：前排——或後排但站在攻擊線後（後排攻擊合法）——球夠高且能過網才扣

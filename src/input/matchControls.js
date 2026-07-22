@@ -8,6 +8,7 @@ import { TEAM_SIDE, isFrontRow, localToWorld } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
+import { dutyPosition } from '../sim/ai.js';
 
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
@@ -237,12 +238,12 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
         if (len > 0.12) move = { x: dx / len, z: dz / len };
       } else if (game.phase === 'rally' && !charge && !blockPlan &&
           Math.hypot(move.x, move.z) < 0.1) {
-        // 退防補位（攔網保護）：舉球給隊友時，自動退到攻擊手身後——
-        // 被攔回彈的球落在這裡，你救得起（也壓低「攔網直接得分」比例）
         const r = game.rally;
         const atkId = aiState?.attackerId;
         if (r.possession === me.teamId && r.touches >= 1 &&
             atkId && atkId !== playerId && aiState.claimId !== playerId) {
+          // 退防補位（攔網保護）：舉球給隊友時，自動退到攻擊手身後——
+          // 被攔回彈的球落在這裡，你救得起（也壓低「攔網直接得分」比例）
           const atk = game.actors[atkId];
           const side = TEAM_SIDE[me.teamId];
           const tx = atk.x * 0.6;         // 略收向中線
@@ -251,23 +252,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
           const dz = tz - a.z;
           const len = Math.hypot(dx, dz);
           if (len > 0.25) move = { x: dx / len, z: dz / len };
-        }
-      } else if (game.phase === 'rally' && !charge && !blockPlan &&
-          Math.hypot(move.x, move.z) < 0.1) {
-        // 攔網保護（coverage）：隊友攻擊時自動退到他身後補位——
-        // 被攔回彈的球落在這裡，你能救起（降低「攔網直接得分」的比例）
-        const r = game.rally;
-        const atkId = aiState?.attackerId;
-        if (r.possession === me.teamId && r.touches >= 1 &&
-            atkId && atkId !== playerId && aiState.claimId !== playerId) {
-          const atk = game.actors[atkId];
-          const side = TEAM_SIDE[me.teamId];
-          const tx = atk.x * 0.6;              // 略收向中線
-          const tz = atk.z + side * 2.3;       // 攻擊手身後（本方場內）
-          const dx = tx - a.x;
-          const dz = tz - a.z;
+        } else if (aiState?.claimId !== playerId) {
+          // 站位交換（真實排球）：待命時自動跑職責位——前排 OH 左翼/MB 中/OPP 右翼
+          // （發球觸球後換位；後排回輪轉基準位）。搖桿有輸入時尊重手動
+          const t = dutyPosition(game, me.teamId, playerId);
+          const dx = t.x - a.x;
+          const dz = t.z - a.z;
           const len = Math.hypot(dx, dz);
-          if (len > 0.25) move = { x: dx / len, z: dz / len };
+          if (len > 0.3) move = { x: dx / len, z: dz / len };
         }
       }
 

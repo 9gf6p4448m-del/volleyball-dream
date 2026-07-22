@@ -7,7 +7,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createGame, stepGame } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents, attackPointsOf } from '../src/sim/ai.js';
+import {
+  createAiState, aiCollectIntents, attackPointsOf, setAimFor, dutyPosition,
+} from '../src/sim/ai.js';
+import { rotateLineup } from '../src/sim/rotation.js';
 import { trustToWeights, pickByWeights, updateTrust } from '../src/sim/trust.js';
 import { velocityForApex } from '../src/sim/flight.js';
 
@@ -129,6 +132,63 @@ test('updateTrust 介面：存在、夾限 0–100、且遊戲內（trust.js 之
   };
   walk(root);
   assert.deepEqual(offenders, [], 'Phase 1 遊戲內不得呼叫 updateTrust');
+});
+
+test('站位交換：前排職責位 OH 左翼/MB 中/OPP 右翼，不隨輪轉漂移；後排回基準位', () => {
+  const g = createGame({ seed: 7 });
+  // 初始輪轉：A2(OH) 在 P2 右前——職責位仍是左翼（換位）
+  assert.deepEqual(dutyPosition(g, 'A', 'A2'), { x: -3, z: 3 }, '前排 OH 職責位應在左翼');
+  assert.deepEqual(dutyPosition(g, 'A', 'A3'), { x: 0, z: 3 });  // MB 中
+  assert.deepEqual(dutyPosition(g, 'A', 'A4'), { x: 3, z: 3 });  // OPP 右
+  // 後排（A5 在 P5）＝輪轉基準位，不換位
+  assert.deepEqual(dutyPosition(g, 'A', 'A5'), { x: -3, z: 7 });
+  // B 隊鏡像
+  assert.deepEqual(dutyPosition(g, 'B', 'B2'), { x: 3, z: -3 });
+});
+
+test('換位制攻擊點：前排高球固定翼側（OH 左、OPP 右），不隨輪轉變', () => {
+  const g = createGame({ seed: 7 });
+  assert.equal(setAimFor(g, 'A', 'A2', 'left').lx, -3);
+  assert.equal(setAimFor(g, 'A', 'A4', 'right').lx, 3);
+  g.match.rotations.A = rotateLineup(g.match.rotations.A); // 輪轉後仍固定
+  assert.equal(setAimFor(g, 'A', 'A5', 'left').lx, -3);
+});
+
+test('接發不貼網：發球/高球飛向我方時，前排非接球者跑職責位而非網前', () => {
+  // B 發深球到 A：A2(OH,P2 右前) 應往左翼職責位移動（x 往負向），不是貼網 z→0.6
+  const g = createGame({ seed: 9 });
+  g.phase = 'rally';
+  const r = g.rally;
+  r.profile = 'arc';
+  r.possession = 'B';
+  r.touches = 0;
+  r.lastTouchTeam = 'B';
+  r.lastToucherId = 'B1';
+  const b = g.ball;
+  b.x = 0; b.y = 2.5; b.z = -5;
+  const v = velocityForApex(b, { x: 0, y: 0.105, z: 7.5 }, 5);
+  b.vx = v.vx; b.vy = v.vy; b.vz = v.vz;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  r.flightId += 1;
+  const ai = createAiState();
+  for (let i = 0; i < 55 && g.phase === 'rally'; i += 1) {
+    stepGame(g, aiCollectIntents(g, ai));
+  }
+  const a2 = g.actors.A2;
+  assert.ok(a2.x < 1.5, `A2 應向左翼換位（x 實得 ${a2.x.toFixed(2)}）`);
+  assert.ok(a2.z > 2.0, `A2 接發時不該貼網（z 實得 ${a2.z.toFixed(2)}）`);
+});
+
+test('後排攻擊點也跟側：P1 右後舉右半、P5 左後舉左半，皆壓攻擊線後', () => {
+  const g = createGame({ seed: 8 });
+  g.match.rotations.A = rotateLineup(g.match.rotations.A); // 輪1格：A2(OH) 到 P1（右後）
+  const right = setAimFor(g, 'A', 'A2', 'pipe');
+  assert.ok(right.lx > 0 && right.lz > 3.0, `右後 pipe 應舉右半攻擊線後，實得 ${JSON.stringify(right)}`);
+  g.match.rotations.A = rotateLineup(g.match.rotations.A);
+  g.match.rotations.A = rotateLineup(g.match.rotations.A); // 輪3格：A2(OH) 到 P5（左後）
+  assert.equal(g.match.rotations.A[4], 'A2', '輪轉推導錯誤（測試前提）');
+  const left = setAimFor(g, 'A', 'A2', 'pipe');
+  assert.ok(left.lx < 0 && left.lz > 3.0, `左後 pipe 應舉左半攻擊線後，實得 ${JSON.stringify(left)}`);
 });
 
 test('舉球員插上：我方受球階段 S 從 P1 後場跑向網前舉球點', () => {
