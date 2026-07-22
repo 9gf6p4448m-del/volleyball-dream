@@ -87,16 +87,18 @@ function ensureFlightPlan(game, aiState) {
     );
     aiState.claimId = setter?.id ?? backup?.id
       ?? arbitrate(game, team, landing, r.lastToucherId);
-    // 攻擊分配：站位合法池（AND）× trust 權重（傾向），決定論抽選
-    const pick = pickAttackPoint(game, team, aiState.claimId);
+    // 攻擊分配：一傳品質決定戰術分支（到位＝全池/可用＝無快攻/勉強＝只剩兩翼高球）
+    // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
+    const tier = passTierOf(team, landing);
+    const pick = pickAttackPoint(game, team, aiState.claimId, tier);
     aiState.attackerId = pick?.pid ?? null;
     aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
-    // S 二次球（偶發）：S 前排、一傳到位（落點近網）→ 小機率直接處理第二球
+    // S 二次球（偶發）：S 前排、一傳完美到位 → 小機率直接處理第二球
     aiState.setterDump =
       !!aiState.claimId &&
       game.players[aiState.claimId].currentRole === 'setter' &&
       isFrontRow(game.match.rotations[team], aiState.claimId) &&
-      TEAM_SIDE[team] * landing.z < 3.2 &&
+      tier === 'perfect' &&
       hash01(game.rally.flightId * 331 + 7 + (game.seed ?? 0)) < AI.DUMP_RATE;
   } else if (r.possession === team && r.touches === 2) {
     // 第三擊：先前選定的攻擊手；不成立則仲裁補位
@@ -205,7 +207,9 @@ function arbitrate(game, team, landing, excludeId, formationExempt = false) {
 // 前排：OH=左翼(left)、MB=快攻(quick)、OPP=右翼(right)
 // 後排：OH=pipe、OPP=D 球（後排點 rowFactor 0.5）；S 與 MB 後排不進池
 // 接一傳者【不】排除——一、三擊非連續觸球合法，接完打第三球是真實常態
-export function attackPointsOf(game, team, setterId) {
+// passTier（一傳品質戰術分支）：'perfect'＝全池、'ok'＝無快攻（MB 出池）、
+// 'poor'＝只剩兩翼高球（快攻要完美一傳、後排攻擊要像樣一傳——真實排球鐵律）
+export function attackPointsOf(game, team, setterId, passTier = 'perfect') {
   const rot = game.match.rotations[team];
   const pts = [];
   for (const pid of rot) {
@@ -215,16 +219,24 @@ export function attackPointsOf(game, team, setterId) {
     const role = p.currentRole;
     if (front) {
       if (role === 'outside') pts.push({ pid, kind: 'left', rowFactor: 1 });
-      else if (role === 'middle') pts.push({ pid, kind: 'quick', rowFactor: 1 });
-      else if (role === 'opposite') pts.push({ pid, kind: 'right', rowFactor: 1 });
+      else if (role === 'middle' && passTier === 'perfect') {
+        pts.push({ pid, kind: 'quick', rowFactor: 1 });
+      } else if (role === 'opposite') pts.push({ pid, kind: 'right', rowFactor: 1 });
       // S 前排不進池；libero 前排不存在（預留）
-    } else {
+    } else if (passTier !== 'poor') {
       if (role === 'outside') pts.push({ pid, kind: 'pipe', rowFactor: 0.5 });
       else if (role === 'opposite') pts.push({ pid, kind: 'dball', rowFactor: 0.5 });
       // MB/S 後排不進池；libero（Phase 2+）後排替換於此掛鉤
     }
   }
   return pts;
+}
+
+// 一傳品質分檔：落點距舉球點的距離（真實排球：快攻吃完美一傳、後排攻擊吃像樣一傳）
+export function passTierOf(team, landing) {
+  const spot = localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
+  const d = Math.hypot(landing.x - spot.x, landing.z - spot.z);
+  return d < 1.2 ? 'perfect' : d < 3 ? 'ok' : 'poor';
 }
 
 // 站位交換（真實排球：發球觸球後前後排都跑職責位）——
@@ -275,8 +287,8 @@ export function setAimFor(game, team, attackerId, kind) {
 }
 
 // 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust.fromSetter）
-function pickAttackPoint(game, team, setterId) {
-  const pts = attackPointsOf(game, team, setterId);
+function pickAttackPoint(game, team, setterId, passTier = 'perfect') {
+  const pts = attackPointsOf(game, team, setterId, passTier);
   if (pts.length === 0) return null;
   const entries = pts.map((pt) => ({
     ...pt, trust: game.players[pt.pid].trust.fromSetter,
