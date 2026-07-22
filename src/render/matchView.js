@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { SIM_DT } from '../sim/constants.js';
 import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
-import { createGeoCharacter } from './geoCharacter.js';
+import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
@@ -18,11 +18,16 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   let highlightId = initialControlledId;
   const castShadow = quality.shadowSize > 0;
 
+  // InstancedMesh 池（每種幾何一池＝10 draw calls，取代每人 16 個獨立 Mesh）；
+  // root 骨架不再加入 scene——它只是不可見的關節 Object3D 樹，逐幀由 sync() 手動
+  // updateMatrixWorld 後讀 matrixWorld 寫進池（見下方 sync 尾端）
+  const playerList = Object.values(game.players);
+  const pool = createGeoPool(scene, castShadow, playerList.length);
+
   const units = {};
-  for (const p of Object.values(game.players)) {
-    const rig = createGeoCharacter(p.id, p.teamId, p.height.current, castShadow, p.currentRole === 'libero');
+  for (const p of playerList) {
+    const rig = createGeoCharacter(pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero');
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網
-    scene.add(rig.root);
     units[p.id] = {
       rig,
       animator: createGeoAnimator(rig),
@@ -32,6 +37,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       tagY: p.height.current + 0.45,
     };
   }
+  pool.finishColors();
 
   // 灰塵粒子池（跳躍落地/死球落點的塵土——夜賽聚光燈下的空氣感）
   const dust = createDust(scene);
@@ -141,11 +147,17 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         u.rig.root.position.set(x, bodyY, z);
         u.rig.root.rotation.y = u.yaw;
 
+        // root 不在 scene 裡（無 Mesh 可畫），手動推一次 matrixWorld，
+        // 再把各部件 slot 的世界矩陣寫進 InstancedMesh 池
+        u.rig.root.updateMatrixWorld(true);
+        for (const part of u.rig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+
         if (id === highlightId) {
           ring.position.x = x;
           ring.position.z = z;
         }
       }
+      pool.markDirty();
       dust.update(dt);
     },
   };
