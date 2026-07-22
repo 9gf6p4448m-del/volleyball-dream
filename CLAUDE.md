@@ -32,7 +32,11 @@
   救低球、出手即倒地 0.7s；魚躍鈕＋L 鍵＋簡化模式 Space）；**技術改故事線傳授**
   （六場六招見 `events.js` teach-*，輸贏都教；成長點數專注屬性層）；跨版本存檔
   `normalizeCareerPlayer` 一次性遷移（`t.v` 標記）。蓄力只活在 `?classic=1`。
-  後續：stage 5 Scouting AI＋情蒐錄影帶＋宿敵種子。
+  **stage 5 已上線**：Scouting AI（`scoutTally` intent 分佈統計＋`scoutRead` 對手讀取——
+  攔網 `scoutBlockMul` 慣用線收攏/反常線折扣；假動作骰在讀取前＝解法）＋情蒐錄影帶
+  （`scoutTape.js` 決定論預生成、開賽先播可跳過）＋宿敵種子（`career.scouting` 跨場
+  累積＋rematch 差分對話 wonVs/lostVs）。
+  後續：stage 6 自由人替換（含 trust 池成員變動）→ stage 7 收尾。
 
 ## 架構鐵律（違反即停）
 
