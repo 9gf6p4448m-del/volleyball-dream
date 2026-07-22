@@ -7,9 +7,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,glb,webmanifest}'],
-        // soldier.glb 約 2.2MB，放寬單檔預快取上限讓模型可離線
-        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        // 主遊戲零模型檔（幾何球員）；soldier.glb 只剩 ?mode=bench 用，改按需載入不預快取
+        globPatterns: ['**/*.{js,css,html,png,webmanifest}'],
       },
       manifest: {
         name: '排球夢',
@@ -20,8 +19,8 @@ export default defineConfig({
         scope: '.',
         display: 'standalone',
         orientation: 'landscape',
-        background_color: '#1c2230',
-        theme_color: '#1c2230',
+        background_color: '#0b0e1a',
+        theme_color: '#0b0e1a',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },

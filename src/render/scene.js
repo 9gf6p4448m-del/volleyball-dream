@@ -18,10 +18,11 @@ export function createRenderer(container, quality) {
   return renderer;
 }
 
+// 夜賽氛圍（vow3d 剪影美學的排球版）：暗色場館＋球場聚光——人物從背景跳出來
 export function createScene() {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1c2230);
-  scene.fog = new THREE.Fog(0x1c2230, 35, 70);
+  scene.background = new THREE.Color(0x0b0e1a);
+  scene.fog = new THREE.Fog(0x0b0e1a, 28, 62);
   return scene;
 }
 
@@ -38,23 +39,39 @@ export function createCamera() {
 }
 
 export function createLights(scene, quality) {
-  const hemi = new THREE.HemisphereLight(0xdde7ff, 0x3a3f4a, 0.9);
+  // 底光：冷藍夜色（壓暗——聚光燈才有戲）
+  const hemi = new THREE.HemisphereLight(0x4a5a8c, 0x141821, 0.5);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-  sun.position.set(10, 18, 8);
+  // 主燈：暖白「場館頂燈」（唯一影燈——效能不加價）
+  const key = new THREE.DirectionalLight(0xffefd8, 2.6);
+  key.position.set(8, 20, 6);
   if (quality.shadowSize > 0) {
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(quality.shadowSize, quality.shadowSize);
-    sun.shadow.camera.left = -14;
-    sun.shadow.camera.right = 14;
-    sun.shadow.camera.top = 14;
-    sun.shadow.camera.bottom = -14;
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 45;
-    sun.shadow.bias = -0.0004;
+    key.castShadow = true;
+    key.shadow.mapSize.set(quality.shadowSize, quality.shadowSize);
+    key.shadow.camera.left = -14;
+    key.shadow.camera.right = 14;
+    key.shadow.camera.top = 14;
+    key.shadow.camera.bottom = -14;
+    key.shadow.camera.near = 1;
+    key.shadow.camera.far = 45;
+    key.shadow.bias = -0.0004;
   }
-  scene.add(sun);
+  scene.add(key);
+
+  // 逆光：冷藍輪廓光（剪影感——人物邊緣從暗背景切出來）
+  const rim = new THREE.DirectionalLight(0x5f7dff, 0.7);
+  rim.position.set(-9, 12, -14);
+  scene.add(rim);
+
+  // 球場聚光光池 ×2（不投影的氛圍燈：兩個半場各一盞暖光錐）
+  for (const sz of [7, -7]) {
+    const spot = new THREE.SpotLight(0xffe6bf, 260, 40, 0.62, 0.55, 1.6);
+    spot.position.set(0, 15, sz * 0.55);
+    spot.target.position.set(0, 0, sz * 0.6);
+    scene.add(spot);
+    scene.add(spot.target);
+  }
 }
 
 export function bindResize(renderer, camera) {
