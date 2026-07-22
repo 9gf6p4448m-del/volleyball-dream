@@ -36,6 +36,16 @@
       #hud .fps span { font-size: 14px; font-weight: 400; opacity: 0.7; }
       #hud .stats { font-size: 12px; line-height: 1.5; white-space: pre-line; opacity: 0.9; }
       #hud .settings { font-size: 11px; margin-top: 4px; opacity: 0.6; }
+      /* 極簡 HUD（預設遊玩模式）：只留小 FPS 角標；?hud=1 才是完整偵錯版 */
+      #hud.hud-min { background: transparent; padding: 6px 10px; }
+      #hud.hud-min .fps { font-size: 13px; font-weight: 600; opacity: 0.45; }
+      #hud.hud-min .fps span { font-size: 10px; }
+      #hud.hud-min .stats, #hud.hud-min .settings { display: none; }
+      /* 錯誤訊息任何模式都要浮出 */
+      #hud.hud-min .stats.hud-error {
+        display: block; color: #ff8a8a;
+        background: rgba(12, 16, 26, 0.85); padding: 4px 8px; border-radius: 8px;
+      }
       #loading {
         position: fixed;
         inset: 0;
@@ -49,7 +59,7 @@
         z-index: 20;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-C4Dr1vrO.js"></script>
+    <script type="module" crossorigin src="./assets/index-_wnLBmG0.js"></script>
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="app"></div>
