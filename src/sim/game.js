@@ -13,7 +13,7 @@ import { seedRng, rand } from './rng.js';
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
-  SERVE_DEAD_TICKS: 60,   // 死球哨音到可發球的間隔
+  SERVE_DEAD_TICKS: 110,  // 死球哨音到可發球的間隔（1.8s：慶祝/喘息的比賽節拍）
   REACH_RADIUS: 1.3,      // 觸球水平可及距離（m）
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）

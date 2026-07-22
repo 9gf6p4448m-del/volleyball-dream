@@ -88,6 +88,11 @@ const SEQUENCES = {
     dur: 0.75, jump: 0.5, land: false,
     keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }],
   },
+  // 得分慶祝：雙手高舉小跳（借攔網舉手姿勢）——比賽的情緒節拍
+  cheer: {
+    dur: 0.9, jump: 0.26, land: false,
+    keys: [{ at: 0, p: 'blockUp' }, { at: 1, p: 'blockUp' }],
+  },
 };
 
 const ATTACK_MS = 0.08;  // 進入姿勢的淡入秒數

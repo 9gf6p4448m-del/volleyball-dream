@@ -40,6 +40,31 @@ export function createSfx() {
     src.start();
   }
 
+  // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）
+  function whistle(durMs = 450) {
+    if (!ensure()) return;
+    const t = ctx.currentTime;
+    const dur = durMs / 1000;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 2650;
+    const trill = ctx.createOscillator(); // 顫音（豆哨滾珠感）
+    trill.frequency.value = 55;
+    const trillGain = ctx.createGain();
+    trillGain.gain.value = 320;
+    trill.connect(trillGain).connect(osc.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+    g.gain.setValueAtTime(0.16, t + dur - 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t);
+    trill.start(t);
+    osc.stop(t + dur);
+    trill.stop(t + dur);
+  }
+
   // 得分歡呼：帶通雜訊湧起再退（~1.2 秒）
   function cheer() {
     if (!ensure()) return;
@@ -128,11 +153,12 @@ export function createSfx() {
 
   // 比賽事件 → 音色映射（閉眼能分：扣=爆裂、攔/輕吊=悶短、墊/舉=脆彈）
   return {
+    whistle,
     onEvents(events) {
       for (const e of events) {
         if (e.type === 'SERVE') crack(0.7);
         else if (e.type === 'BLOCK_TOUCH') thud();
-        else if (e.type === 'DEAD_BALL') cheer(); // 得分＝觀眾歡呼
+        else if (e.type === 'DEAD_BALL') { whistle(480); cheer(); } // 死球哨＋觀眾歡呼
         else if (e.type === 'TOUCH') {
           if (e.kind === 'spike') {
             if ((e.power ?? 1) < 0.45) thud(); // 輕吊＝悶短

@@ -29,6 +29,19 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     ?? clips.find((c) => c.name === 'Walk') ?? idleClip;
   const tposeClip = clips.find((c) => c.name === 'TPose') ?? null;
 
+  // 隊服顏色：兩隊各一組共享材質（A＝藍白、B＝暗紅）——第一眼分隊
+  const teamMats = { A: new Map(), B: new Map() };
+  const TEAM_TINT = { A: new THREE.Color(0.62, 0.78, 1.15), B: new THREE.Color(1.2, 0.62, 0.58) };
+  function jerseyMaterial(orig, teamId) {
+    const cache = teamMats[teamId];
+    if (!cache.has(orig)) {
+      const m = orig.clone();
+      m.color = m.color.clone().multiply(TEAM_TINT[teamId]);
+      cache.set(orig, m);
+    }
+    return cache.get(orig);
+  }
+
   const units = {};
   for (const p of Object.values(game.players)) {
     const inst = cloneSkeleton(source);
@@ -38,6 +51,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       if (o.isMesh) {
         o.castShadow = castShadow;
         o.frustumCulled = false; // 蒙皮動作超出原始包圍盒，關掉避免消失
+        o.material = jerseyMaterial(o.material, p.teamId); // 隊服套色
       }
     });
     scene.add(inst);

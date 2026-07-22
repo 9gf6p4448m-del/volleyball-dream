@@ -98,6 +98,7 @@ async function runMatch(ctx) {
   const panel = simpleMode ? createZonePanel() : null;
   const actionButtons = simpleMode ? null : createActionButtons(controls);
   let servedThisTurn = false; // 每個發球回合只處理一次發球決策
+  let whistledServe = false;  // 每個發球回合只吹一次發球前短哨
 
   // 讀攔網提示開關：開＝綠/紅標示（新手輔助）、關＝自己看攔網判斷（技術版）
   let showHints = true;
@@ -294,6 +295,12 @@ async function runMatch(ctx) {
         game.phase === 'serve' && serverId(game.match) === controlledId &&
         game.tick >= game.serveReadyTick && !servedThisTurn;
       if (game.phase !== 'serve') servedThisTurn = false;
+      // 發球前短哨（裁判示意發球）：每個發球回合一次
+      if (game.phase === 'serve' && game.tick >= game.serveReadyTick && !whistledServe) {
+        whistledServe = true;
+        sfx.whistle(200);
+      }
+      if (game.phase !== 'serve') whistledServe = false;
 
       deciding = attackDeciding || defendDeciding; // 攻/防決策窗＝時間放慢
       if (attackDeciding) {
@@ -377,6 +384,11 @@ async function runMatch(ctx) {
           shake = Math.max(shake, 0.2);
         } else if (e.type === 'DEAD_BALL') {
           shake = Math.max(shake, 0.26);
+        } else if (e.type === 'SCORE') {
+          // 得分慶祝：得分隊全員雙手高舉小跳（情緒節拍）
+          for (const id of game.match.rotations[e.team]) {
+            matchView.triggerPose(id, 'cheer');
+          }
         } else if (e.type === 'TOUCH' && e.kind === 'receive' &&
             e.playerId === controlledId && (e.power ?? 0) >= 0.95) {
           floatText.show('PERFECT!'); // 球到瞬間出手的完美一傳
