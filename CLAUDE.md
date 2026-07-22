@@ -24,7 +24,10 @@
   **stage 3 已上線**：成長雙層——`src/career/growth.js`（事件歸因→點數、屬性 +1 上限 90、
   技術解鎖：吊球/假動作/強力發球/後排 pipe；生涯新人全鎖、快速比賽全開）；假動作熟練度
   →sim 騙敵乘子（`player.js feintMasteryMul`）；讀攔網提示綁 reaction 三檔。
-  後續：stage 4 信任動態＋trust 地板＋輕量事件。
+  **stage 4 已上線**：場內動態信任（`state.trustDyn` 連得＋/連失−、effectiveTrust 即時反映
+  分配）＋trust 地板（`Player.trust.floorShare` 生涯主角 0.27 保底球權）＋資料驅動事件表
+  （`src/career/events.js` 宣告式 when 條件；updateTrust＝劇情層專用、sim 內禁呼叫）。
+  後續：stage 5 Scouting AI＋情蒐錄影帶＋宿敵種子。
 
 ## 架構鐵律（違反即停）
 
