@@ -10,7 +10,7 @@ import {
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
-import { dutyPosition, coverPosition } from '../sim/ai.js';
+import { dutyPosition } from '../sim/ai.js';
 
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
@@ -266,20 +266,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       } else if (game.phase === 'rally' && !charge && !blockPlan &&
           !(freeMove && manualOwned) && // 自由模式：接管後 cover/職責位自動全放手
           Math.hypot(move.x, move.z) < 0.1) {
-        const r = game.rally;
-        const atkId = aiState?.attackerId;
-        if (r.possession === me.teamId && atkId && atkId !== playerId &&
-            aiState.claimId !== playerId &&
-            ((r.touches === 2 && game.ball.vy < 0) ||
-              (r.touches === 3 && r.profile === 'spike'))) {
-          // Cover（攻擊掩護）：與 AI 共用 coverPosition——彈回區在攻擊者與網之間
-          // （前排貼網壓低、後排周邊補位；後排攻擊時不再被拉到攻擊者身後）
-          const t = coverPosition(game, me.teamId, playerId, atkId);
-          const dx = t.x - a.x;
-          const dz = t.z - a.z;
-          const len = Math.hypot(dx, dz);
-          if (len > 0.25) move = { x: dx / len, z: dz / len };
-        } else if (aiState?.claimId !== playerId) {
+        // Cover 掩護不再自動帶位（拍板 07-22 推翻原第 8 題）：該站哪掩護
+        // 是排球的隱性知識——玩家實戰中自己體會；AI 隊友的 cover 照舊（ai.js）
+        if (aiState?.claimId !== playerId) {
           // 站位交換（真實排球）：待命時自動跑職責位——前排 OH 左翼/MB 中/OPP 右翼
           // （發球觸球後換位；後排回輪轉基準位）。搖桿有輸入時尊重手動
           const t = dutyPosition(game, me.teamId, playerId);

@@ -1,5 +1,5 @@
 // 首次操作教學卡：顯示一次（localStorage 記憶），點任意處關閉
-const FLAG = 'vd-tutorial-v9'; // 版本號變更＝更新後重新顯示一次
+const FLAG = 'vd-tutorial-v10'; // 版本號變更＝更新後重新顯示一次
 
 // simple＝簡化操作模式（預設）：只教進攻決策；classic 模式教全手動
 export function showTutorialOnce(simple = true) {
@@ -9,12 +9,14 @@ export function showTutorialOnce(simple = true) {
 
   const isTouch = 'ontouchstart' in window;
   const body = simple
-    ? `<div style="margin-bottom:8px">走位、接球、舉球——<b>全部自動</b>；你只做三種<b>決策</b>：</div>
+    ? `<div style="margin-bottom:8px">每球開始系統<b>帶你就位</b>；${isTouch ? '推<b>左半螢幕搖桿</b>' : '按 <b>WASD</b>'}即<b>接管走位</b>——這球歸你跑：</div>
        <div style="line-height:2">
-       ⚔️ <b>進攻</b>：輪到你扣球→時間放慢，讀攔網選攻擊區<br>
-       （<span style="color:#60ffa0">綠＝空檔</span>、<span style="color:#ff5b5b">紅✋＝被封</span>；吊球專治起跳的攔網）<br>
-       🧱 <b>攔網</b>：對方要扣→選「封直線／封斜線／退防」<br>
-       🏐 <b>發球</b>：輪你發球→選目標區（深左／深中／深右／短球）</div>`
+       ⚔️ <b>進攻</b>：舉球給你→時間放慢，讀攔網選攻擊區<br>
+       （<span style="color:#60ffa0">綠＝空檔</span>、<span style="color:#ff5b5b">紅✋＝被封</span>；按A滑B＝假動作）<br>
+       🧱 <b>攔網</b>：對方要扣→自己沿網卡位、${isTouch ? '點一下' : '<b>K</b>'}起跳封他<br>
+       🏐 <b>發球</b>：輪你發球→面板選球路與落點<br>
+       🤿 <b>魚躍</b>：右側大鈕亮起＝搆得到→拍下去飛身救球<br>
+       💡 隊友扣球時該站哪掩護？——打著打著你會懂的</div>`
     : `<div>${isTouch ? '<b>左半螢幕</b>走位；<b>右側大鈕</b>蓄力/拖曳瞄準/放開出手' : '<b>WASD</b>走位；<b>J/滑鼠</b>蓄力出手、<b>K</b>攔網'}</div>`;
 
   const el = document.createElement('div');

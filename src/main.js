@@ -199,33 +199,10 @@ async function runMatch(ctx, careerCtx = null) {
     });
     document.body.appendChild(hintBtn);
   }
-  // 🎮 自由操控切換（Sawmah 拍板：熟手模式）：接球/扣球/攔網不自動走位、
-  // 攔網面板收起改全手動；戰術跑位/發球歸位/Cover 照舊自動
-  let freeMove = false;
-  try { freeMove = localStorage.getItem('vd-control') === 'free'; } catch { /* 私密模式 */ }
-  controls.setFreeMove(freeMove);
-  if (simpleMode) {
-    const ctlBtn = document.createElement('button');
-    const paintCtl = () => { ctlBtn.textContent = freeMove ? '🎮 操控:自由' : '🎮 操控:自動'; };
-    ctlBtn.style.cssText = [
-      'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
-      'right:calc(env(safe-area-inset-right, 0px) + 170px)',
-      'height:44px', 'padding:0 12px', 'border-radius:22px', 'border:none',
-      'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
-      'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
-      'touch-action:manipulation',
-    ].join(';');
-    paintCtl();
-    ctlBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      freeMove = !freeMove;
-      controls.setFreeMove(freeMove);
-      paintCtl();
-      floatText.show(freeMove ? '自由操控：走位交給你' : '自動操控：走位交給系統', '#6ee7ff', 1400);
-      try { localStorage.setItem('vd-control', freeMove ? 'free' : 'auto'); } catch { /* ignore */ }
-    });
-    document.body.appendChild(ctlBtn);
-  }
+  // 操控定案（拍板 07-22）：自動模式退役、自由語義轉正——系統帶位、碰搖桿接管；
+  // cover 掩護不帶不教，讓玩家實戰中自己悟（排球的隱性知識）
+  const freeMove = true;
+  controls.setFreeMove(true);
 
   // 🎬 回放鈕：重看上一球的最後 3 秒（桌機 R 鍵）
   const replayBtn = document.createElement('button');
