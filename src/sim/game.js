@@ -45,7 +45,7 @@ export const TUNING = {
   ERROR_GAIN: 0.5,        // 自身失誤增量 = (θ/θmax)² × 此值（平方）
 };
 
-// teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = P1）
+// teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = 1 號位）
 // setTarget：局分（預設 25；快速局可傳 15）
 export function createGame({ seed = 1, teams, setTarget } = {}) {
   const rosters = teams ?? createDefaultTeams();
@@ -499,7 +499,7 @@ function tryBlock(state, toTeam, ev) {
 function isFrontRowOf(state, team, playerId) {
   const rot = state.match.rotations[team];
   const idx = rot.indexOf(playerId);
-  return idx === 1 || idx === 2 || idx === 3; // P2/P3/P4
+  return idx === 1 || idx === 2 || idx === 3; // 2/3/4 號位
 }
 
 // 一分結算：把 match 事件補上 tick 收進事件流，接著佈置下一球或收局

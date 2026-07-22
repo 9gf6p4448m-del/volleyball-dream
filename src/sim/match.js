@@ -11,7 +11,7 @@ export function createMatch({ rotationA, rotationB, servingTeam = 'A', target = 
     score: { A: 0, B: 0 },
     servingTeam,
     target, // 局分（快速局可設 15；deuce 規則不變）
-    rotations: { A: [...rotationA], B: [...rotationB] }, // index 0 = P1
+    rotations: { A: [...rotationA], B: [...rotationB] }, // index 0 = 1 號位
     setOver: false,
     winner: null,
   };

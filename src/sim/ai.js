@@ -23,6 +23,9 @@ const AI = {
   ATTACK_LZ: 1.3,         // 舉球目標深度
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
+  TIP_RATE: 0.18,         // AI 第三擊輕吊機率（攻擊分支：不被讀死）
+  DUMP_RATE: 0.07,        // S 前排二次球機率（球到位時偶發）
+  DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
 };
 
 // AI 協調層狀態：每個 flight 算一次、鎖定到 flight 結束（呼叫鎖定的實作）
@@ -30,6 +33,7 @@ export function createAiState() {
   return {
     flightId: -1, planTick: 0, landing: null, landingTeam: null,
     claimId: null, attackerId: null, attackKind: null,
+    setterDump: false, // S 前排二次球（本 flight 決定論抽選）
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
     calledFlight: -1,  // 玩家喊球已搶下的 flight（一球一次、不可反悔）
   };
@@ -87,6 +91,13 @@ function ensureFlightPlan(game, aiState) {
     const pick = pickAttackPoint(game, team, aiState.claimId, r.lastToucherId);
     aiState.attackerId = pick?.pid ?? null;
     aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
+    // S 二次球（偶發）：S 前排、一傳到位（落點近網）→ 小機率直接處理第二球
+    aiState.setterDump =
+      !!aiState.claimId &&
+      game.players[aiState.claimId].currentRole === 'setter' &&
+      isFrontRow(game.match.rotations[team], aiState.claimId) &&
+      TEAM_SIDE[team] * landing.z < 3.2 &&
+      hash01(game.rally.flightId * 331 + 7) < AI.DUMP_RATE;
   } else if (r.possession === team && r.touches === 2) {
     // 第三擊：先前選定的攻擊手；不成立則仲裁補位
     const atk = aiState.attackerId;
@@ -354,6 +365,18 @@ function decideOne(game, aiState, playerId) {
     return it;
   }
 
+  // Dig 收縮（防守陣型 v0）：對方組織/起扣時，後排向球側收縮就防守位
+  if (opponentHasBall && !receivingArc &&
+      !isFrontRow(game.match.rotations[team], playerId)) {
+    const d = dutyPosition(game, team, playerId);
+    const ballLx = TEAM_SIDE[team] * game.ball.x;
+    const shift = Math.max(-1.2, Math.min(1.2, ballLx * AI.DIG_SHIFT));
+    return moveIntent(playerId, tick, actor, {
+      x: d.x + TEAM_SIDE[team] * shift,
+      z: d.z - TEAM_SIDE[team] * 0.8, // 收前 0.8m（lz 7→6.2）：防守預備深度
+    });
+  }
+
   // 舉球員插上：我方接球階段（來球未觸），S 先跑到網前右側舉球點就位（前後排皆然）
   if (player.currentRole === 'setter' && r.possession !== team &&
       aiState.landingTeam === team && !aiState.letDrop) {
@@ -382,6 +405,10 @@ function chooseTouch(game, aiState, player, actor) {
     return ['receive', localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz)];
   }
   if (r.touches === 1) {
+    if (aiState.setterDump && player.currentRole === 'setter') {
+      // S 二次球：輕推對方淺區（前排第二擊過網合法；讓對手不敢放掉第二球）
+      return ['spike', localToWorld(otherTeam(team), 1.5, 2.6), 0.3];
+    }
     const a2 = setAimFor(game, team, aiState.attackerId, aiState.attackKind);
     return ['set', localToWorld(team, a2.lx, a2.lz), a2.t];
   }
@@ -393,7 +420,15 @@ function chooseTouch(game, aiState, player, actor) {
     lzNow > COURT.ATTACK_LINE + 0.05; // 後排：攻擊線後起跳＝合法
   const canSpike =
     legalSpike && game.ball.y >= AI.SPIKE_MIN_Y && spikeClearsNet(game, player, target);
-  if (canSpike) return ['spike', target];
+  if (canSpike) {
+    // 攻擊選擇分支：小機率輕吊淺區（決定論 hash，不耗 game rng）——重扣仍是主體
+    const tipRoll = hash01(game.rally.flightId * 563 + idHash(player.id));
+    if (tipRoll < AI.TIP_RATE) {
+      const tipLx = tipRoll < AI.TIP_RATE / 2 ? -1.2 : 1.2; // 吊左/右淺區
+      return ['spike', localToWorld(otherTeam(team), tipLx, 2.3), 0.35];
+    }
+    return ['spike', target];
+  }
   return ['receive', localToWorld(otherTeam(team), 0, 6.5)];
 }
 

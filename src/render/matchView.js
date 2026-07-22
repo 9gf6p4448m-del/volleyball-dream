@@ -3,12 +3,14 @@
 // 動畫由 geoAnimator 程序化驅動——載入零等待、軸向全掌控
 import * as THREE from 'three';
 import { SIM_DT } from '../sim/constants.js';
-import { TEAM_SIDE, positionOf, isFrontRow } from '../sim/rotation.js';
+import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
 import { createGeoCharacter } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
+// 頭上標籤＝排球標準角色縮寫（命名統一：廢除 P1–P6 泛稱）
+const ROLE_TAG = { setter: 'S', outside: 'OH', middle: 'MB', opposite: 'OPP', libero: 'L' };
 
 const TURN_K = 25; // 轉身收斂率（1/秒，指數衰減；排球轉身要快，慢了像背對球）
 
@@ -91,10 +93,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const x = a.px + (a.x - a.px) * alpha;
         const z = a.pz + (a.z - a.pz) * alpha;
 
-        // 頭上標籤：輪轉位置編號（P1–P6；玩家標「你」）——輪轉可目視驗證
+        // 頭上標籤：角色縮寫（S/OH/MB/OPP；玩家標「你·」前綴）
         const team0 = gameState.players[id].teamId;
-        const pos = positionOf(gameState.match.rotations[team0], id);
-        const text = (id === highlightId ? '你P' : 'P') + pos;
+        const text = (id === highlightId ? '你·' : '') +
+          (ROLE_TAG[gameState.players[id].currentRole] ?? '?');
         if (text !== u.tagText) {
           u.tagText = text;
           drawTag(u.tag, text, TAG_COLORS[team0]);

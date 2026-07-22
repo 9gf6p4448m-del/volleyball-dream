@@ -15,7 +15,7 @@ export function attackZonesFor(game, attackerId) {
   const shortZ = -side * 1.9;            // 吊球短區（貼網後）
   const sign = a.x >= 0 ? 1 : -1;        // 攻擊手所在半邊
 
-  // 對方前排攔網手的 x（P2/P3/P4）
+  // 對方前排攔網手的 x（2/3/4 號位）
   const oppFront = [game.match.rotations[opp][1], game.match.rotations[opp][2],
     game.match.rotations[opp][3]];
   const blockerXs = oppFront.map((id) => game.actors[id].x);

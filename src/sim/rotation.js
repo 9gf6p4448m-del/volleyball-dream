@@ -1,4 +1,4 @@
-// 輪轉與站位（純函式）— FIVB 位置編號：P1 右後(發球) P2 右前 P3 中前 P4 左前 P5 左後 P6 中後
+// 輪轉與站位（純函式）— FIVB 號位：1 後右(發球) 2 前右 3 前中 4 前左 5 後左 6 後中
 // 隊伍座標：team 'A' 佔 z>0（side=+1）、'B' 佔 z<0（side=-1）；網在 z=0
 import { COURT } from './constants.js';
 
@@ -10,12 +10,12 @@ export function otherTeam(team) {
 
 // 站位模板（隊伍視角）：lx = 面向網時的右手向、lz = 距網深度
 const POSITION_TEMPLATE = [
-  { lx: 3, lz: 7 },   // P1 右後
-  { lx: 3, lz: 3 },   // P2 右前
-  { lx: 0, lz: 3 },   // P3 中前
-  { lx: -3, lz: 3 },  // P4 左前
-  { lx: -3, lz: 7 },  // P5 左後
-  { lx: 0, lz: 7 },   // P6 中後
+  { lx: 3, lz: 7 },   // 1 號位 後右
+  { lx: 3, lz: 3 },   // 2 號位 前右
+  { lx: 0, lz: 3 },   // 3 號位 前中
+  { lx: -3, lz: 3 },  // 4 號位 前左
+  { lx: -3, lz: 7 },  // 5 號位 後左
+  { lx: 0, lz: 7 },   // 6 號位 後中
 ];
 
 // 隊伍視角座標 → 世界座標
@@ -26,8 +26,8 @@ export function localToWorld(team, lx, lz) {
   return { x: side * lx, z: side * lz };
 }
 
-// rotation：長度 6 的 playerId 陣列，index 0 = P1
-// 得發球權時輪轉：新 P1 ← 舊 P2（順時針推一格）
+// rotation：長度 6 的 playerId 陣列，index 0 = 1 號位
+// 得發球權時輪轉：新 1 號位 ← 舊 2 號位（順時針推一格）
 export function rotateLineup(rotation) {
   return [...rotation.slice(1), rotation[0]];
 }
@@ -53,7 +53,7 @@ export function isBackRow(rotation, playerId) {
   return pos === 1 || pos === 5 || pos === 6;
 }
 
-// 發球點（世界座標）：P1 後方、端線外
+// 發球點（世界座標）：1 號位後方、端線外
 export function servePosition(team) {
   return localToWorld(team, 2, COURT.LENGTH / 2 + 0.7);
 }
