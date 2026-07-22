@@ -202,6 +202,24 @@ export function mergeScouting(career, opponentId, tally) {
   return { ...career, scouting: { ...(career.scouting ?? {}), [opponentId]: merged } };
 }
 
+// stage 6 自由人（第 7 人）：防守專精數值——高反應/速度/控制、低攻擊系
+export function buildLibero(team, name, level = 60) {
+  const d = Math.min(100, level + 14);
+  return createPlayer({
+    id: `${team}L`,
+    name,
+    teamId: team,
+    naturalRole: 'libero',
+    currentRole: 'libero',
+    height: 1.72,
+    trust: 5, // 自由人不進攻擊池；留極低值防呆
+    attributes: {
+      jump: 40, power: 40, reaction: d, stamina: 70,
+      speed: d - 2, control: d - 2, serve: 30, block: 30,
+    },
+  });
+}
+
 // 生涯單場開賽包：種子＋兩隊 roster＋對手 AI 風格＋情蒐讀取——main.js 一次拿齊餵 createGame
 export function careerMatchSetup(career, player, matchEntry) {
   const def = opponentById(matchEntry.opponentId);
@@ -216,6 +234,11 @@ export function careerMatchSetup(career, player, matchEntry) {
     teams: careerTeams(player, def),
     aiProfiles: { B: { ...def.ai } },
     ...(scoutRead ? { scoutRead } : {}),
+    // stage 6 自由人：雙方都有（我方固定隊友、對方吃參數檔強度）
+    liberos: {
+      A: buildLibero('A', '小守'),
+      B: buildLibero('B', `${def.name}·自由人`, def.level),
+    },
     opponent: def,
   };
 }

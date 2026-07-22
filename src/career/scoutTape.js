@@ -10,11 +10,12 @@ const MAX_CLIPS = 3;
 const MIN_RALLY_STEPS = 90;    // 太短的球（發球直接墜地類）不值得播
 
 // 回傳 [{ snapshot, steps }...]（至多 3 段，優先多拍精彩球）；素材不足回空陣列
-export function buildScoutTape(seed, teams, aiProfiles) {
+export function buildScoutTape(seed, teams, aiProfiles, liberos = null) {
   const g = createGame({
     seed: (seed + TAPE_SEED_OFFSET) % 1000000007,
     teams,
     ...(aiProfiles ? { aiProfiles } : {}),
+    ...(liberos ? { liberos } : {}),
   });
   const ai = createAiState();
   const clips = [];

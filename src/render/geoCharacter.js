@@ -10,6 +10,11 @@ const TEAM_KIT = {
   A: { jersey: 0x2e7bff, shorts: 0x16223f, trim: 0xbfd8ff },
   B: { jersey: 0xff5340, shorts: 0x3c1512, trim: 0xffd2c4 },
 };
+// 自由人異色球衣（FIVB：與全隊對比色）——A 隊金黃、B 隊米白
+const LIBERO_KIT = {
+  A: { jersey: 0xffc531, shorts: 0x16223f, trim: 0x6b5410 },
+  B: { jersey: 0xf2f4f8, shorts: 0x3c1512, trim: 0x9aa0ab },
+};
 // 膚色與髮色池（依 id 決定論取用——12 人不撞臉的精緻感）
 const SKINS = [0xe8b08c, 0xd99a72, 0xc98a63, 0xa9714f, 0x8a5a3d];
 const HAIRS = [0x20242c, 0x33261c, 0x3d2e1e, 0x151820, 0x4a3423];
@@ -57,9 +62,9 @@ function mat(color) {
 
 // 建一名球員。回傳 { root, joints }——joints 供 geoAnimator 驅動：
 // spine/neck、r/lShoulder、r/lElbow、r/lHip、r/lKnee（rotation 全從 0 起算）
-export function createGeoCharacter(playerId, teamId, height, castShadow) {
+export function createGeoCharacter(playerId, teamId, height, castShadow, isLibero = false) {
   const g = geometries();
-  const kit = TEAM_KIT[teamId];
+  const kit = isLibero ? LIBERO_KIT[teamId] : TEAM_KIT[teamId];
   const h = idHash(playerId);
   const skin = mat(SKINS[h % SKINS.length]);
   const hair = mat(HAIRS[(h >> 3) % HAIRS.length]);

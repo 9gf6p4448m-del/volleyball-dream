@@ -62,12 +62,15 @@ export const TUNING = {
 // aiProfiles = { A?, B? }：每隊 AI 風格參數（tipRate/dumpRate/jumpServeRate…）
 // scoutRead = { A?|B?: { targetId, read(0-1), zones:{line,cross,middle,tip} } }：
 // stage 5 情蒐——該隊對 targetId 的歷史攻擊分佈讀取（攔網向慣用線收攏）
-export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead } = {}) {
+// liberos = { A?: Player, B?: Player }：stage 6 自由人（第 7 人）——死球時自動
+// 替換後排 MB、輪到前排/發球位自動換回（結構上不可能發球/攔網）
+export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
   const actors = {};
   for (const team of ['A', 'B']) {
-    for (const p of rosters[team]) {
+    const extra = liberos?.[team] ? [liberos[team]] : [];
+    for (const p of [...rosters[team], ...extra]) {
       players[p.id] = p;
       actors[p.id] = {
         x: 0, z: 0, px: 0, pz: 0,
@@ -82,6 +85,11 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead }
     seed, // 原始種子（AI 決策 hash 的混合項——跨場次變化、同種子可重現）
     aiProfiles: aiProfiles ?? null,
     scoutRead: scoutRead ?? null, // 情蒐讀取（對手讀我的慣用線；生涯注入）
+    liberos: liberos
+      ? Object.fromEntries(Object.entries(liberos)
+          .filter(([, p]) => p)
+          .map(([t, p]) => [t, { liberoId: p.id, replacedId: null }]))
+      : null,
     scoutTally: {},  // 情蒐統計（playerId→intent 分佈；場末由生涯層收走跨場累積）
     trustDyn: {},    // stage 4 場內動態信任（playerId→偏移；場末即散）
     trustStreak: {}, // 連續得分/失誤計數（正＝連得、負＝連失）
@@ -280,6 +288,10 @@ function tryAction(state, intent, ev) {
   // 又因觸球計數不分隊被記成第 4 擊——防守方莫名被吹四擊犯規的根源
   if (ball.z * TEAM_SIDE[player.teamId] < 0) return;
 
+  // 自由人不得完成高於網上緣的攻擊（FIVB 19.3.1.2 精神；低球處理合法）
+  if (intent.action === 'spike' && player.currentRole === 'libero' && ball.y > COURT.NET_HEIGHT) {
+    return;
+  }
   // 魚躍救球：技術資格（未學不會撲）；出手即倒地——撲空一樣躺（風險換範圍）
   const isDive = intent.action === 'dive';
   if (isDive && (player.techniques?.dive ?? 1) < 1) return;
@@ -646,8 +658,53 @@ function settlePoint(state, winner, reason, ev) {
   }
 }
 
+// stage 6 自由人替換（死球時執行；FIVB 精神：替換不計次、不得發球/前排）：
+// 輪到前排或發球位（idx 0-3）→ 原 MB 回場；後排（idx 4/5）出現 MB → 自由人換入。
+// 被換下的人停放板凳位；事件進 state.events（完整日誌）
+function applyLiberoSwaps(state) {
+  if (!state.liberos) return;
+  for (const team of ['A', 'B']) {
+    const lib = state.liberos[team];
+    if (!lib) continue;
+    const rot = state.match.rotations[team];
+    const li = rot.indexOf(lib.liberoId);
+    if (li >= 0 && li <= 3) {
+      rot[li] = lib.replacedId;
+      state.events.push({
+        type: 'LIBERO_SWAP', tick: state.tick, team,
+        inId: lib.replacedId, outId: lib.liberoId,
+      });
+      lib.replacedId = null;
+    }
+    if (!rot.includes(lib.liberoId)) {
+      for (const idx of [4, 5]) {
+        const pid = rot[idx];
+        if (state.players[pid].currentRole === 'middle') {
+          lib.replacedId = pid;
+          rot[idx] = lib.liberoId;
+          state.events.push({
+            type: 'LIBERO_SWAP', tick: state.tick, team,
+            inId: lib.liberoId, outId: pid,
+          });
+          break;
+        }
+      }
+    }
+    // 板凳停放：不在輪轉上的隊員到場邊席位（純視覺位置；無 intent 不參與）
+    for (const p of Object.values(state.players)) {
+      if (p.teamId !== team || rot.includes(p.id)) continue;
+      const a = state.actors[p.id];
+      a.x = -6.6;
+      a.z = TEAM_SIDE[team] * 10.6;
+      a.px = a.x;
+      a.pz = a.z;
+    }
+  }
+}
+
 // 佈置發球局面：全員回輪轉基準位、發球員到發球點、球置於發球員手上
 function setupServePhase(state) {
+  applyLiberoSwaps(state); // 死球即換（換完再歸位，自由人直接站進職責位）
   state.phase = 'serve';
   state.serveReadyTick = state.tick + TUNING.SERVE_DEAD_TICKS;
 

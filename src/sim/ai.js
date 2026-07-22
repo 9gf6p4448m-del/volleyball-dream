@@ -267,7 +267,8 @@ export function dutyPosition(game, team, playerId) {
     const lx = role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
     return localToWorld(team, lx, 3);
   }
-  const lx = role === 'outside' ? 0 : role === 'middle' ? -3 : 3;
+  // 自由人接手 MB 的左後職責位（stage 6 掛鉤兌現）
+  const lx = role === 'outside' ? 0 : (role === 'middle' || role === 'libero') ? -3 : 3;
   return localToWorld(team, lx, 7);
 }
 
@@ -285,7 +286,7 @@ export function coverPosition(game, team, playerId, attackerId) {
     const dutyLx = role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
     return localToWorld(team, dutyLx * 0.6 + atkLx * 0.3, 1.3);
   }
-  if (role === 'middle') return localToWorld(team, 0, 6.6); // 深位保險（長彈回）
+  if (role === 'middle' || role === 'libero') return localToWorld(team, 0, 6.6); // 深位保險（長彈回）
   const sideLx = role === 'outside' ? -1.5 : 1.5;
   const lx = Math.max(-4.2, Math.min(4.2, atkLx + sideLx));
   return localToWorld(team, lx, Math.min(atkLz + 1.5, 7.5));
@@ -461,8 +462,9 @@ function chooseTouch(game, aiState, player, actor) {
   const target = spikeTarget(game, team);
   const lzNow = TEAM_SIDE[team] * actor.z;
   const legalSpike =
-    isFrontRow(game.match.rotations[team], player.id) ||
-    lzNow > COURT.ATTACK_LINE + 0.05; // 後排：攻擊線後起跳＝合法
+    player.currentRole !== 'libero' && // 自由人不得攻擊（sim 端另有高球硬閘）
+    (isFrontRow(game.match.rotations[team], player.id) ||
+      lzNow > COURT.ATTACK_LINE + 0.05); // 後排：攻擊線後起跳＝合法
   const canSpike =
     legalSpike && game.ball.y >= AI.SPIKE_MIN_Y && spikeClearsNet(game, player, target);
   if (canSpike) {

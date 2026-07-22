@@ -32,7 +32,9 @@ import { showTutorialOnce } from './ui/tutorial.js';
 import { createSetOverOverlay } from './ui/setOverOverlay.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
-import { matchSeed, careerMatchSetup, recordResult, mergeScouting } from './career/careerState.js';
+import {
+  matchSeed, careerMatchSetup, recordResult, mergeScouting, buildLibero,
+} from './career/careerState.js';
 import { buildScoutTape } from './career/scoutTape.js';
 import { matchStatsFor, growthPointsFor, blockReadTier } from './career/growth.js';
 
@@ -110,8 +112,13 @@ async function runMatch(ctx, careerCtx = null) {
   const careerSetup = careerCtx
     ? careerMatchSetup(careerCtx.career, careerCtx.player, careerCtx.matchEntry)
     : null;
+  // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才）
+  const liberos = careerSetup?.liberos ?? {
+    A: buildLibero('A', 'A隊自由人'),
+    B: buildLibero('B', 'B隊自由人'),
+  };
   let game = createGame({
-    seed, setTarget,
+    seed, setTarget, liberos,
     ...(careerSetup ? {
       teams: careerSetup.teams,
       aiProfiles: careerSetup.aiProfiles,
@@ -122,7 +129,7 @@ async function runMatch(ctx, careerCtx = null) {
 
   // stage 5 情蒐錄影帶：賽前播對手預演的 2-3 球關鍵回放（決定論預生成；點擊跳過）
   const tapeClips = careerSetup
-    ? buildScoutTape(seed, careerSetup.teams, careerSetup.aiProfiles)
+    ? buildScoutTape(seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos)
     : [];
   let tapeIdx = 0;
 

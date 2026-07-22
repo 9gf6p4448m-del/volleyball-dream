@@ -20,7 +20,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
 
   const units = {};
   for (const p of Object.values(game.players)) {
-    const rig = createGeoCharacter(p.id, p.teamId, p.height.current, castShadow);
+    const rig = createGeoCharacter(p.id, p.teamId, p.height.current, castShadow, p.currentRole === 'libero');
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網
     scene.add(rig.root);
     units[p.id] = {
