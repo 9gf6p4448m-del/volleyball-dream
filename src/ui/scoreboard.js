@@ -13,9 +13,11 @@ const BUBBLE = {
 export function createScoreboard(playerId) {
   const el = document.createElement('div');
   el.id = 'scoreboard';
+  // 注意：容器不用 transform 置中（transform 會把子元素的 position:fixed 劫持成
+  // 相對容器——橫持手機的泡泡停靠要用真 fixed），改 left/right:0＋flex 置中
   el.style.cssText = [
     'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
-    'left:50%', 'transform:translateX(-50%)', 'z-index:10',
+    'left:0', 'right:0', 'z-index:10',
     'display:flex', 'flex-direction:column', 'align-items:center', 'gap:7px',
     'font-family:system-ui,sans-serif', 'text-align:center',
     'pointer-events:none', 'user-select:none',
@@ -28,22 +30,33 @@ export function createScoreboard(playerId) {
       <div class="line" style="font-size:clamp(30px, 8vw, 38px);font-weight:800;
         letter-spacing:2px;line-height:1.15">0 : 0</div>
     </div>
-    <div class="bubble" style="position:relative;display:none;max-width:min(84vw,460px);
-      padding:9px 18px;border-radius:14px;border:2.5px solid #101420;background:#f7f9ff;
-      box-shadow:0 3px 0 rgba(8,10,18,0.55);transition:opacity 120ms ease">
-      <div class="tail" style="position:absolute;top:-7px;left:50%;width:13px;height:13px;
-        transform:translateX(-50%) rotate(45deg);background:#f7f9ff;
-        border-left:2.5px solid #101420;border-top:2.5px solid #101420"></div>
-      <div class="btext" style="position:relative;font-weight:800;
-        font-size:clamp(15px, 4.2vw, 18px);letter-spacing:1px;line-height:1.45"></div>
+    <div class="bubble" style="display:none;background:#f7f9ff;transition:opacity 120ms ease">
+      <div class="tail" style="background:#f7f9ff"></div>
+      <div class="btext"></div>
     </div>
   `;
   document.body.appendChild(el);
-  // 局點徽章脈動動畫（注入一次）
+  // 局點脈動＋泡泡版面（版面走樣式表才能掛 media query：
+  // 桌面/直式＝比分下方置中；矮視窗（橫持手機）＝停靠左上角，不擋網前視線帶）
   if (!document.getElementById('vd-pulse-style')) {
     const st = document.createElement('style');
     st.id = 'vd-pulse-style';
-    st.textContent = '@keyframes vd-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.55;transform:scale(1.08)}}';
+    st.textContent = `
+@keyframes vd-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.55;transform:scale(1.08)}}
+#scoreboard .bubble{position:relative;max-width:min(84vw,460px);padding:9px 18px;
+  border-radius:14px;border:2.5px solid #101420;box-shadow:0 3px 0 rgba(8,10,18,0.55)}
+#scoreboard .tail{position:absolute;top:-7px;left:50%;width:13px;height:13px;
+  transform:translateX(-50%) rotate(45deg);
+  border-left:2.5px solid #101420;border-top:2.5px solid #101420}
+#scoreboard .btext{position:relative;font-weight:800;letter-spacing:1px;line-height:1.45;
+  font-size:clamp(15px, 4.2vw, 18px)}
+@media (max-height: 520px) {
+  #scoreboard .bubble{position:fixed;left:calc(env(safe-area-inset-left, 0px) + 10px);
+    top:calc(env(safe-area-inset-top, 0px) + 36px);max-width:min(44vw, 340px);
+    padding:6px 12px;text-align:left}
+  #scoreboard .tail{display:none}
+  #scoreboard .btext{font-size:14px;letter-spacing:0.5px}
+}`;
     document.head.appendChild(st);
   }
   const lineEl = el.querySelector('.line');
