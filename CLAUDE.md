@@ -20,8 +20,11 @@
   `src/career/opponents.js`（level/attrBias/roleBias/trustBias/ai 風格/識別特徵）＋
   錦標賽流程（小組 3 場保底→全國賽單淘汰：八強鐵霧/準決賽再遇曜石/決賽天鷹；
   落敗＝止步、全勝＝冠軍）；AI 風格經 `createGame({aiProfiles})` 注入
-  （`ai.js aiProfileOf`：tipRate/dumpRate/powerServeRate）；存檔 v1→v2 自動遷移。
-  後續：stage 3 成長雙層＋能力閘門。
+  （`ai.js aiProfileOf`：tipRate/dumpRate/powerServeRate）；存檔自動遷移（現為 v3）。
+  **stage 3 已上線**：成長雙層——`src/career/growth.js`（事件歸因→點數、屬性 +1 上限 90、
+  技術解鎖：吊球/假動作/強力發球/後排 pipe；生涯新人全鎖、快速比賽全開）；假動作熟練度
+  →sim 騙敵乘子（`player.js feintMasteryMul`）；讀攔網提示綁 reaction 三檔。
+  後續：stage 4 信任動態＋trust 地板＋輕量事件。
 
 ## 架構鐵律（違反即停）
 
