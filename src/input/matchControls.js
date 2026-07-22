@@ -10,7 +10,7 @@ import {
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
-import { dutyPosition } from '../sim/ai.js';
+import { dutyPosition, coverPosition } from '../sim/ai.js';
 
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
@@ -256,16 +256,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
           Math.hypot(move.x, move.z) < 0.1) {
         const r = game.rally;
         const atkId = aiState?.attackerId;
-        if (r.possession === me.teamId && r.touches >= 1 &&
-            atkId && atkId !== playerId && aiState.claimId !== playerId) {
-          // 退防補位（攔網保護）：舉球給隊友時，自動退到攻擊手身後——
-          // 被攔回彈的球落在這裡，你救得起（也壓低「攔網直接得分」比例）
-          const atk = game.actors[atkId];
-          const side = TEAM_SIDE[me.teamId];
-          const tx = atk.x * 0.6;         // 略收向中線
-          const tz = atk.z + side * 2.3;  // 攻擊手身後（本方場內）
-          const dx = tx - a.x;
-          const dz = tz - a.z;
+        if (r.possession === me.teamId && atkId && atkId !== playerId &&
+            aiState.claimId !== playerId &&
+            ((r.touches === 2 && game.ball.vy < 0) ||
+              (r.touches === 3 && r.profile === 'spike'))) {
+          // Cover（攻擊掩護）：與 AI 共用 coverPosition——彈回區在攻擊者與網之間
+          // （前排貼網壓低、後排周邊補位；後排攻擊時不再被拉到攻擊者身後）
+          const t = coverPosition(game, me.teamId, playerId, atkId);
+          const dx = t.x - a.x;
+          const dz = t.z - a.z;
           const len = Math.hypot(dx, dz);
           if (len > 0.25) move = { x: dx / len, z: dz / len };
         } else if (aiState?.claimId !== playerId) {

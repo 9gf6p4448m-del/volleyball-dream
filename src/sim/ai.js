@@ -97,7 +97,8 @@ function ensureFlightPlan(game, aiState) {
   } else {
     // 來球（發球/對方攻擊/自由球）：先判界內外，再責任區仲裁
     // 出界判斷（含誤差）：明顯出界＝放球讓它落地得分；壓線球寧可接（寧搶錯）
-    const claimer = arbitrate(game, team, landing, r.lastToucherId);
+    // 發球接發＝陣型排除 S/前排 MB（見 arbitrate）
+    const claimer = arbitrate(game, team, landing, r.lastToucherId, r.profile === 'serve');
     const outDist = landingOutDistance(landing);
     if (outDist > 0 && claimer && outDist > judgeMargin(game, claimer)) {
       aiState.claimId = null;
@@ -155,7 +156,10 @@ function idHash(id) {
 // 「誰接球」仲裁（定死，決定論）：
 // 1. 責任區＝各人輪轉基準位的勢力範圍（比基準位到落點距離）
 // 2. 交界時比當前位置距離　3. 仍平手比固定 ID 序
-function arbitrate(game, team, landing, excludeId) {
+// serveReception=true（發球接發）：S 與前排 MB【陣型排除】不進候選——
+// 真實接發陣型把他們藏起來（S 要舉球、前排 MB 要快攻）；剩餘四人涵蓋全場，
+// 任何落點都在可達距離內，無需緊急例外。非發球來球（dig）仍用權重縮小責任區
+function arbitrate(game, team, landing, excludeId, serveReception = false) {
   const rot = game.match.rotations[team];
   let best = null;
   for (const pid of rot) {
@@ -163,11 +167,12 @@ function arbitrate(game, team, landing, excludeId) {
     const pos = positionOf(rot, pid);
     const base = basePosition(team, pos);
     let zoneDist = Math.hypot(base.x - landing.x, base.z - landing.z);
-    // 接發豁免（職責制）：S 責任區大幅縮小（他接了就沒人舉球）、前排 MB 縮小
-    // ——一傳主力落在兩 OH＋OPP；用權重而非硬排除，極端近球仍寧搶錯
     const role = game.players[pid].currentRole;
+    const frontMb = role === 'middle' && isFrontRow(rot, pid);
+    if (serveReception && (role === 'setter' || frontMb)) continue;
+    // dig 豁免（權重制）：S 責任區大幅縮小（他接了就沒人舉球）、前排 MB 縮小
     if (role === 'setter') zoneDist *= 3;
-    else if (role === 'middle' && isFrontRow(rot, pid)) zoneDist *= 1.8;
+    else if (frontMb) zoneDist *= 1.8;
     const nowDist = Math.hypot(
       game.actors[pid].x - landing.x, game.actors[pid].z - landing.z,
     );
@@ -222,6 +227,26 @@ export function dutyPosition(game, team, playerId) {
   }
   const lx = role === 'outside' ? 0 : role === 'middle' ? -3 : 3;
   return localToWorld(team, lx, 7);
+}
+
+// Cover（攻擊掩護）站位——彈回區在「攻擊者與網之間」：
+// 前排非攻擊手貼網壓低（職責線收向攻擊者側）；後排非攻擊手：
+// OH 左側補、OPP/S 右側補（攻擊者周邊）、MB 留深位保險。前後排攻擊點通用——
+// 後排攻擊時前排三人正是主要 cover 者（貼網），不會被拉到攻擊者身後
+export function coverPosition(game, team, playerId, attackerId) {
+  const rot = game.match.rotations[team];
+  const role = game.players[playerId].currentRole;
+  const atk = game.actors[attackerId];
+  const atkLx = TEAM_SIDE[team] * atk.x;
+  const atkLz = TEAM_SIDE[team] * atk.z;
+  if (isFrontRow(rot, playerId)) {
+    const dutyLx = role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
+    return localToWorld(team, dutyLx * 0.6 + atkLx * 0.3, 1.3);
+  }
+  if (role === 'middle') return localToWorld(team, 0, 6.6); // 深位保險（長彈回）
+  const sideLx = role === 'outside' ? -1.5 : 1.5;
+  const lx = Math.max(-4.2, Math.min(4.2, atkLx + sideLx));
+  return localToWorld(team, lx, Math.min(atkLz + 1.5, 7.5));
 }
 
 // 二傳落點：前後排皆已換位 → 各攻擊點固定（真實排球的進攻座標）
@@ -333,6 +358,16 @@ function decideOne(game, aiState, playerId) {
   if (player.currentRole === 'setter' && r.possession !== team &&
       aiState.landingTeam === team && !aiState.letDrop) {
     return moveIntent(playerId, tick, actor, localToWorld(team, 2.2, 1.2));
+  }
+
+  // Cover（攻擊掩護）：我方攻擊起跳/出手階段，非攻擊手就掩護位——
+  // 二傳下墜（攻擊者進入起跳流程）起動、扣球飛行中維持（等攔回彈）
+  if (r.possession === team && aiState.attackerId && aiState.attackerId !== playerId &&
+      ((r.touches === 2 && game.ball.vy < 0) ||
+        (r.touches === 3 && r.profile === 'spike'))) {
+    return moveIntent(
+      playerId, tick, actor, coverPosition(game, team, playerId, aiState.attackerId),
+    );
   }
 
   // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位

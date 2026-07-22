@@ -108,6 +108,7 @@ export function stepGame(state, intents = []) {
     applyMove(state, actor, it);
     if (it.action) tryAction(state, it, ev);
   }
+  separateTeammates(state); // 同隊避讓：走位後解重疊（穿模/疊人）
 
   if (state.phase === 'rally') stepRally(state, ev);
 
@@ -137,6 +138,40 @@ function applyMove(state, actor, intent) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// 同隊避讓：兩人擠進 SEP_RADIUS 內時對稱讓位（每 tick 上限 SEP_PUSH）——
+// 只解「穿模/疊人」的觀感問題，不動任何職責/跑位邏輯；
+// 輪轉序成對檢查＋完全重合時固定軸分開＝決定論；邊界 clamp 與 applyMove 同源
+const SEP_RADIUS = 0.55;
+const SEP_PUSH = 0.08; // 每 tick 讓位上限：兩人合計 0.16m/tick > 全速對衝的合攏速度
+function separateTeammates(state) {
+  const maxX = COURT.WIDTH / 2 + COURT.FREE_ZONE - 0.2;
+  const maxZ = COURT.LENGTH / 2 + COURT.FREE_ZONE - 0.2;
+  for (const team of ['A', 'B']) {
+    const rot = state.match.rotations[team];
+    const side = TEAM_SIDE[team];
+    const zLo = side === 1 ? 0.12 : -maxZ;
+    const zHi = side === 1 ? maxZ : -0.12;
+    for (let i = 0; i < rot.length; i += 1) {
+      for (let j = i + 1; j < rot.length; j += 1) {
+        const a = state.actors[rot[i]];
+        const b = state.actors[rot[j]];
+        let dx = b.x - a.x;
+        let dz = b.z - a.z;
+        let d = Math.hypot(dx, dz);
+        if (d >= SEP_RADIUS) continue;
+        if (d < 1e-6) { dx = 1; dz = 0; d = 1; } // 完全重合：固定軸分開
+        const push = Math.min((SEP_RADIUS - d) / 2, SEP_PUSH);
+        const nx = (dx / d) * push;
+        const nz = (dz / d) * push;
+        a.x = clamp(a.x - nx, -maxX, maxX);
+        b.x = clamp(b.x + nx, -maxX, maxX);
+        a.z = clamp(a.z - nz, zLo, zHi);
+        b.z = clamp(b.z + nz, zLo, zHi);
+      }
+    }
+  }
 }
 
 function tryAction(state, intent, ev) {
