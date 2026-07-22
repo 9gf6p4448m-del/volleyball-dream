@@ -33,7 +33,7 @@ import { createSetOverOverlay } from './ui/setOverOverlay.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
 import {
-  matchSeed, careerMatchSetup, recordResult, mergeScouting, buildLibero,
+  matchSeed, careerMatchSetup, recordResult, mergeScouting, buildLibero, markPending,
 } from './career/careerState.js';
 import { buildScoutTape } from './career/scoutTape.js';
 import { matchStatsFor, growthPointsFor, blockReadTier } from './career/growth.js';
@@ -112,6 +112,8 @@ async function runMatch(ctx, careerCtx = null) {
   const careerSetup = careerCtx
     ? careerMatchSetup(careerCtx.career, careerCtx.player, careerCtx.matchEntry)
     : null;
+  // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
+  if (careerCtx) careerCtx.store.saveCareer(markPending(careerCtx.career, careerCtx.matchEntry.id));
   // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才）
   const liberos = careerSetup?.liberos ?? {
     A: buildLibero('A', 'A隊自由人'),
@@ -242,14 +244,18 @@ async function runMatch(ctx, careerCtx = null) {
   document.body.appendChild(replayBtn);
   // 魚躍鈕（主動技，故事線習得）：來球搆不到但撲得到時亮起；桌機 L 鍵
   // （Space/J 是主動作蓄力、K 是攔網——L 順位相鄰）
+  // 試玩回饋 07-22：改右側（慣用手）＋常駐兩態（暗＝不可用、亮＝撲！）——
+  // 閃現式按鈕在手機上根本來不及按
   const diveBtn = document.createElement('button');
   diveBtn.textContent = '魚躍!';
   diveBtn.style.cssText = [
-    'position:fixed', 'left:calc(env(safe-area-inset-left, 0px) + 18px)', 'bottom:45%',
-    'width:70px', 'height:70px', 'border-radius:50%', 'border:3px solid #101420',
-    'background:rgba(255,120,96,0.94)', 'color:#1a0e08', 'font-size:17px', 'font-weight:800',
+    'position:fixed', 'right:calc(env(safe-area-inset-right, 0px) + 16px)', 'bottom:38%',
+    'width:74px', 'height:74px', 'border-radius:50%', 'border:3px solid #101420',
+    'background:rgba(70,80,100,0.5)', 'color:rgba(255,255,255,0.4)',
+    'font-size:17px', 'font-weight:800',
     'z-index:16', 'cursor:pointer', 'touch-action:manipulation', 'display:none',
     'box-shadow:0 3px 0 rgba(8,10,18,0.55)',
+    'transition:background 120ms ease, color 120ms ease, transform 120ms ease',
   ].join(';');
   diveBtn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
@@ -736,7 +742,11 @@ async function runMatch(ctx, careerCtx = null) {
         const d = Math.hypot(landing.x - meActor.x, landing.z - meActor.z);
         diveReady = d > 1.1 && d <= 3.4;
       }
-      diveBtn.style.display = diveReady ? 'block' : 'none';
+      // 常駐兩態：rally 中恆顯示（暗＝不可用），可撲瞬間亮起放大（試玩回饋：閃現按不到）
+      diveBtn.style.display = simpleMode && game.phase !== 'set_over' && !replay ? 'block' : 'none';
+      diveBtn.style.background = diveReady ? 'rgba(255,120,96,0.95)' : 'rgba(70,80,100,0.5)';
+      diveBtn.style.color = diveReady ? '#1a0e08' : 'rgba(255,255,255,0.4)';
+      diveBtn.style.transform = diveReady ? 'scale(1.12)' : 'scale(1)';
     }
     scoreboard.update(game, myBall, controlledId,
       commentary ? commentary.line(game, aiState, controlledId, now) : undefined);

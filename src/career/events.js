@@ -90,13 +90,15 @@ export const EVENT_DEFS = [
     ],
   },
   {
+    // 拍板 2026-07-22：提前到小組第三場（原排準決賽賽後——scouting 讀取最兇的
+    // 準決賽/決賽反而沒工具用，時序自相矛盾；提前後=曜石預告要讀你→假動作正是答案
     id: 'teach-feint',
     moment: 'post',
-    when: { lastMatchId: 'national-sf' },
+    when: { lastMatchId: 'group-3' },
     effect: { unlock: 'feint' },
     lines: [
-      { speaker: '曜石體中・隊長', text: '整場都在讀你。你看哪、打哪——太老實了。' },
-      { speaker: '曜石體中・隊長', text: '會被讀的人，才需要學騙。眼睛看左、手打右——去騙下一個讀你的人。' },
+      { speaker: '曜石體中・隊長', text: '你的每一球，我們都記下來了。再遇到的時候——你那些慣用線，一條都過不了。' },
+      { speaker: '曜石體中・隊長', text: '會被讀的人，才需要學騙。眼睛看左、手打右——當作見面禮，拿去。' },
     ],
   },
   {

@@ -137,23 +137,23 @@ test('存檔正名遷移：powerServe→jumpServe、stage3 前存檔全鎖、缺
   assert.equal(taught.techniques.jumpServe, 1, 'v:2 標記後跳發不受遷移影響');
 });
 
-test('故事傳授鏈：六場六招、輸贏都教、決賽前隊長授跳發', () => {
+test('故事傳授鏈：六場六招、輸贏都教、假動作提前到小組第三場（拍板 07-22）', () => {
   let c = createCareer({ seed: 1 });
   const teachOf = (moment) => dueEvents(c, moment).filter((e) => e.effect?.unlock);
-  const playAndTeach = (matchId, won, expectTech) => {
+  const playAndTeach = (matchId, won, expectTechs) => {
     c = recordResult(c, { matchId, won, scoreFor: won ? 25 : 20, scoreAgainst: won ? 20 : 25 });
     const teaches = teachOf('post');
-    assert.deepEqual(teaches.map((e) => e.effect.unlock), [expectTech],
-      `${matchId} 賽後應傳授 ${expectTech}`);
+    assert.deepEqual(teaches.map((e) => e.effect.unlock), expectTechs,
+      `${matchId} 賽後應傳授 ${expectTechs.join('+') || '（無）'}`);
     for (const e of dueEvents(c, 'post')) c = recordEvent(c, e.id);
   };
   for (const e of dueEvents(c, 'pre')) c = recordEvent(c, e.id); // 開幕對話清場
-  playAndTeach('group-1', true, 'tip');
-  playAndTeach('group-2', false, 'dive');    // 輸球也教
-  playAndTeach('group-3', true, 'pipe');
-  playAndTeach('national-qf', true, 'floatServe');
-  playAndTeach('national-sf', true, 'feint');
-  // 決賽前：隊長授跳發（pre 事件）
+  playAndTeach('group-1', true, ['tip']);
+  playAndTeach('group-2', false, ['dive']);           // 輸球也教
+  playAndTeach('group-3', true, ['pipe', 'feint']);   // 曜石雙授：pipe＋假動作
+  // 假動作在 scouting 讀取生效（QF read 0.5/SF 0.7）之前已到手——時序矛盾已修
+  playAndTeach('national-qf', true, ['floatServe']);
+  playAndTeach('national-sf', true, []);              // 準決賽賽後不再有傳授
   const preFinal = dueEvents(c, 'pre').filter((e) => e.effect?.unlock);
-  assert.deepEqual(preFinal.map((e) => e.effect.unlock), ['jumpServe']);
+  assert.deepEqual(preFinal.map((e) => e.effect.unlock), ['jumpServe']); // 決賽前隊長授跳發
 });

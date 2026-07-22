@@ -75,14 +75,32 @@ export function matchSeed(career, matchId) {
   return (h % 1000000007) || 1;
 }
 
+// 開賽標記（拍板 07-22 堵中途退出）：pending 落檔＝這場開打了；
+// 完賽由 recordResult 清除；沒完賽就回生涯畫面＝resolveForfeit 記棄賽敗
+export function markPending(career, matchId) {
+  return { ...career, pendingMatch: matchId };
+}
+
+// 棄賽裁決：pending 未完賽＝記 0:25 敗（無成長點）；已完賽＝只清標記
+export function resolveForfeit(career) {
+  const pid = career.pendingMatch;
+  if (!pid) return career;
+  if (career.results.some((r) => r.matchId === pid)) {
+    const { pendingMatch, ...rest } = career; // 真移除鍵（undefined 鍵會壞 roundtrip 比對）
+    return rest;
+  }
+  return recordResult(career, { matchId: pid, won: false, scoreFor: 0, scoreAgainst: 25 });
+}
+
 // 記錄一場結果（不可變更新）；同場重複記錄＝原樣返回（局終畫面重入保護）
 // gp＝本場獲得的成長點數（累加進 growthPoints）；stats＝表現摘要（成長畫面顯示用）
 export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp = 0, stats = null }) {
   const entry = career.schedule.find((m) => m.id === matchId);
   if (!entry) throw new Error(`recordResult：賽程裡沒有比賽 ${matchId}`);
   if (career.results.some((r) => r.matchId === matchId)) return career;
+  const { pendingMatch, ...base } = career; // 完賽即清開賽標記（真移除鍵）
   return {
-    ...career,
+    ...base,
     growthPoints: (career.growthPoints ?? 0) + (gp | 0),
     results: [
       ...career.results,
@@ -109,7 +127,7 @@ export function createCareerPlayer(name) {
     naturalRole: 'outside',
     currentRole: 'outside',
     height: 1.88,
-    trust: 60,
+    trust: 40, // 拍板 07-22：60→40——「打好球→球權變多」的成長弧要看得見（地板 0.27 保底）
     attributes: {
       jump: 60, power: 62, reaction: 60, stamina: 60,
       speed: 62, control: 68, serve: 60, block: 58,

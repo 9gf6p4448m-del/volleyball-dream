@@ -2,7 +2,7 @@
 // 夜賽同色系；動態文字一律 textContent（匯入的存檔名字不可信，不走 innerHTML）
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
-  careerStage, opponentById, normalizeCareerPlayer,
+  careerStage, opponentById, normalizeCareerPlayer, resolveForfeit,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
 import { dueEvents, recordEvent } from '../career/events.js';
@@ -201,10 +201,18 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
 
   // ---- 生涯視圖（隊伍戰績＋賽程）----
   function renderCareer() {
-    const career = store.loadCareer();
+    let career = store.loadCareer();
     const player = store.loadPlayer();
     if (!career || !player) { renderHome(); return; }
     normalizeCareerPlayer(player); // 跨版本存檔補正（顯示與開賽同一套語意）
+    // 拍板 07-22：中途退出＝棄賽敗（開賽 pending 標記未清＝沒打完就跑）
+    const settled = resolveForfeit(career);
+    if (settled !== career) {
+      const forfeited = settled.results.length > career.results.length;
+      store.saveCareer(settled);
+      career = settled;
+      if (forfeited) setMsg('上一場中途離開——依規記為棄賽敗（0:25）');
+    }
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）
     const postEvs = dueEvents(career, 'post');
     if (postEvs.length) {
