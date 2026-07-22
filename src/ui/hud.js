@@ -1,14 +1,16 @@
-// FPS/效能 HUD：FPS、render 更新率（幀時間）、模擬步率、三角形數、draw calls
-export function createHud(el, renderer, settingsText) {
+// FPS/效能 HUD。預設極簡：只留一枚小 FPS 角標（偵錯全文擋遊玩視野）；
+// ?hud=1 或 bench 模式＝完整偵錯資訊（幀時間/模擬步率/三角形/draw calls）
+export function createHud(el, renderer, settingsText, full = false) {
   const safeSettings = escapeHtml(settingsText);
   let frames = 0;
   let msSum = 0;
   let steps = 0;
   let lastReport = performance.now();
 
+  if (!full) el.classList.add('hud-min');
   el.innerHTML = `
     <div class="fps">— <span>FPS</span></div>
-    <div class="stats">量測中…</div>
+    <div class="stats">${full ? '量測中…' : ''}</div>
     <div class="settings">${safeSettings}</div>
   `;
   const fpsEl = el.querySelector('.fps');
@@ -41,6 +43,7 @@ export function createHud(el, renderer, settingsText) {
       lastReport = now;
     },
     error(message) {
+      statsEl.classList.add('hud-error'); // 極簡模式也要浮出錯誤（不能無聲吞掉）
       statsEl.textContent = `錯誤：${message}`;
     },
   };

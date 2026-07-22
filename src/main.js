@@ -54,7 +54,9 @@ async function init() {
   createArena(scene); // 夜賽場館：看台/觀眾/廣告板（純視覺）
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
-  const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality));
+  // HUD：預設極簡（小 FPS 角標）；?hud=1 或 bench 基準場景＝完整偵錯資訊
+  const fullHud = params.get('hud') === '1' || params.get('mode') === 'bench';
+  const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality), fullHud);
 
   const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights };
   if (params.get('mode') === 'bench') {

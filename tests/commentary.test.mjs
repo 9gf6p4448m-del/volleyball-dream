@@ -1,4 +1,5 @@
 // 即時播報引擎（純文字邏輯；時間注入、零 DOM）
+// line() 回傳 { text, kind }：action＝可操作提示、beat＝節奏點、ambient＝環境句
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,46 +23,52 @@ function makeGame({
   };
 }
 
-test('可操作提示：輪到我發球／舉球給我，永遠壓過節奏點', () => {
+test('可操作提示（kind=action）：輪到我發球／舉球給我，永遠壓過節奏點', () => {
   const c = createCommentary();
-  const serveGame = makeGame({ servingTeam: 'A' });
-  assert.equal(c.line(serveGame, null, ME, 0), '你發球——從面板選個落點！');
+  const serve = c.line(makeGame({ servingTeam: 'A' }), null, ME, 0);
+  assert.equal(serve.text, '你發球——從面板選個落點！');
+  assert.equal(serve.kind, 'action');
 
   // 塞一個節奏點，再進入「舉球給我」情境——提示必須蓋過節奏點
   const rally = makeGame({ phase: 'rally', touches: 1, possession: 'A' });
   c.onEvents([{ type: 'BLOCK_TOUCH' }], rally, null, 1000, ME);
-  const ai = { claimId: ME };
-  assert.equal(c.line(rally, ai, ME, 1100), '舉球給你——讀攔網、點攻擊區！');
+  const line = c.line(rally, { claimId: ME }, ME, 1100);
+  assert.equal(line.text, '舉球給你——讀攔網、點攻擊區！');
+  assert.equal(line.kind, 'action');
 });
 
-test('環境句：他隊發球顯示隊名；生涯開場 0:0 顯示敵情', () => {
+test('環境句（kind=ambient）：他隊發球顯示隊名；生涯開場 0:0 顯示敵情', () => {
   const plain = createCommentary();
-  assert.equal(plain.line(makeGame({ servingTeam: 'B' }), null, ME, 0), '對方發球');
+  const l1 = plain.line(makeGame({ servingTeam: 'B' }), null, ME, 0);
+  assert.equal(l1.text, '對方發球');
+  assert.equal(l1.kind, 'ambient');
 
   const withOpp = createCommentary({ name: '白浪高中', trait: '防守黏得可怕' });
-  assert.equal(withOpp.line(makeGame({ servingTeam: 'B' }), null, ME, 0),
+  assert.equal(withOpp.line(makeGame({ servingTeam: 'B' }), null, ME, 0).text,
     '對手 白浪高中：防守黏得可怕');
   // 比分不是 0:0 之後改報發球隊
-  assert.equal(withOpp.line(makeGame({ servingTeam: 'B', score: { A: 1, B: 0 } }), null, ME, 0),
+  assert.equal(withOpp.line(makeGame({ servingTeam: 'B', score: { A: 1, B: 0 } }), null, ME, 0).text,
     '白浪高中發球');
 });
 
-test('節奏點 TTL：快攻舉球顯示、過期後消失', () => {
+test('節奏點（kind=beat）TTL：快攻舉球顯示、過期後消失', () => {
   const c = createCommentary();
   const g = makeGame({ phase: 'rally', touches: 2, possession: 'B', flightId: 3 });
   c.onEvents([{ type: 'TOUCH', kind: 'set', playerId: 'B1' }], g,
     { attackerId: 'B1', attackKind: 'quick' }, 1000, ME);
-  assert.equal(c.line(g, null, ME, 1500), '中路快攻——！');
-  assert.equal(c.line(g, null, ME, 5000), ''); // TTL 過期、拍數不足→安靜
+  const line = c.line(g, null, ME, 1500);
+  assert.equal(line.text, '中路快攻——！');
+  assert.equal(line.kind, 'beat');
+  assert.equal(c.line(g, null, ME, 5000).text, ''); // TTL 過期、拍數不足→安靜
 });
 
 test('輕吊與全力重扣依 power 分辨', () => {
   const c = createCommentary();
   const g = makeGame({ phase: 'rally', touches: 3, possession: 'B' });
   c.onEvents([{ type: 'TOUCH', kind: 'spike', playerId: 'B1', touches: 3, power: 0.3 }], g, null, 0, ME);
-  assert.equal(c.line(g, null, ME, 100), '輕吊——！');
+  assert.equal(c.line(g, null, ME, 100).text, '輕吊——！');
   c.onEvents([{ type: 'TOUCH', kind: 'spike', playerId: 'B1', touches: 3, power: 1 }], g, null, 200, ME);
-  assert.equal(c.line(g, null, ME, 300), '白浪高中1號 全力重扣！');
+  assert.equal(c.line(g, null, ME, 300).text, '白浪高中1號 全力重扣！');
 });
 
 test('敘事：連下 3 分／追平／逆轉（同一分只講最大的事）', () => {
@@ -69,7 +76,7 @@ test('敘事：連下 3 分／追平／逆轉（同一分只講最大的事）',
   const feed = (score, team, now) => {
     const g = makeGame({ phase: 'rally', score });
     c.onEvents([{ type: 'SCORE', team, score }], g, null, now, ME);
-    return c.line(makeGame({ phase: 'rally', score }), null, ME, now + 10);
+    return c.line(makeGame({ phase: 'rally', score }), null, ME, now + 10).text;
   };
   assert.equal(feed({ A: 1, B: 0 }, 'A', 0), '');            // 連 1：安靜
   assert.equal(feed({ A: 2, B: 0 }, 'A', 100), '');          // 連 2：安靜
@@ -85,9 +92,9 @@ test('長 rally 拍數：SERVE 起算、第 8 拍起播', () => {
   const g = makeGame({ phase: 'rally', flightId: 2 });
   c.onEvents([{ type: 'SERVE', playerId: 'B1' }], makeGame({ flightId: 2 }), null, 0, ME);
   g.rally.flightId = 9; // 9-2=7 拍：未達門檻
-  assert.equal(c.line(g, null, ME, 9000), '');
+  assert.equal(c.line(g, null, ME, 9000).text, '');
   g.rally.flightId = 10; // 8 拍
-  assert.equal(c.line(g, null, ME, 9000), '第 8 拍攻防！');
+  assert.equal(c.line(g, null, ME, 9000).text, '第 8 拍攻防！');
 });
 
 test('commentary 純度：零 DOM、零內部時間源（時間全外部注入）', () => {

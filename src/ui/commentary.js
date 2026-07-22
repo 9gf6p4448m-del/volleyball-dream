@@ -80,33 +80,37 @@ export function createCommentary(opponentDef = null) {
       }
     },
 
-    // 每 frame 取當前該顯示的一行；'' ＝這一刻安靜
+    // 每 frame 取當前該顯示的一行：{ text, kind }
+    // kind：'action'＝可操作提示（泡泡琥珀色）、'beat'＝節奏點（pop 進場）、
+    // 'ambient'＝環境句（淡入不 pop——拍數這類高頻變化不能一直彈）；text ''＝安靜
     line(game, aiState, controlledId, now) {
-      if (game.phase === 'set_over') return '';
+      if (game.phase === 'set_over') return { text: '', kind: 'ambient' };
       const me = game.players[controlledId];
       // 1) 可操作提示（永遠壓過播報——玩家該做事的時刻不能被蓋台）
       if (game.phase === 'serve') {
-        if (serverId(game.match) === controlledId) return '你發球——從面板選個落點！';
+        if (serverId(game.match) === controlledId) {
+          return { text: '你發球——從面板選個落點！', kind: 'action' };
+        }
       } else if (
         aiState?.claimId === controlledId &&
         game.rally.possession === me?.teamId &&
         (game.rally.touches === 1 || game.rally.touches === 2)
       ) {
-        return '舉球給你——讀攔網、點攻擊區！';
+        return { text: '舉球給你——讀攔網、點攻擊區！', kind: 'action' };
       }
       // 2) 事件節奏點（未過期）
-      if (beat && now < beat.until) return beat.text;
+      if (beat && now < beat.until) return { text: beat.text, kind: 'beat' };
       // 3) 環境句
       if (game.phase === 'serve') {
         const { score } = game.match;
         if (opponentDef && score.A === 0 && score.B === 0) {
-          return `對手 ${opponentDef.name}：${opponentDef.trait}`;
+          return { text: `對手 ${opponentDef.name}：${opponentDef.trait}`, kind: 'ambient' };
         }
-        return `${teamLabel(game, game.match.servingTeam, controlledId)}發球`;
+        return { text: `${teamLabel(game, game.match.servingTeam, controlledId)}發球`, kind: 'ambient' };
       }
       const rallyN = game.rally.flightId - rallyStartFlight;
-      if (rallyN >= LONG_RALLY_AT) return `第 ${rallyN} 拍攻防！`;
-      return '';
+      if (rallyN >= LONG_RALLY_AT) return { text: `第 ${rallyN} 拍攻防！`, kind: 'ambient' };
+      return { text: '', kind: 'ambient' };
     },
   };
 }
