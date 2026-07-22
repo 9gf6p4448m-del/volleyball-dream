@@ -128,6 +128,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       for (const [id, u] of Object.entries(units)) {
         // 舉手備戰：①攔網窗開著（真的在攔）②對方進攻組織中且我在網前（攔網就位）
         // ——②讓攻擊方「讀攔網」時真的看得到那道手牆與縫隙（純視覺，起跳時機仍歸 sim）
+        let blockDuty = false; // 攔網職責中（備戰或跳攔）→ 動作與朝向都鎖向網
         if (forcePose) {
           u.animator.setHold(forcePose);
         } else {
@@ -138,9 +139,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
             r.possession && r.possession !== teamB && r.touches >= 1 &&
             isFrontRow(gameState.match.rotations[teamB], id) &&
             Math.abs(gameState.actors[id].z) < 2.2;
-          u.animator.setHold(
-            gameState.actors[id].blockUntil >= gameState.tick || ready ? 'block' : null,
-          );
+          blockDuty = gameState.actors[id].blockUntil >= gameState.tick || ready;
+          u.animator.setHold(blockDuty ? 'block' : null);
         }
         const a = gameState.actors[id];
         const x = a.px + (a.x - a.px) * alpha;
@@ -161,12 +161,13 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const vz = (a.z - a.pz) / SIM_DT;
         const speed = Math.hypot(vx, vz);
 
-        // 朝向：rally 中所有人面向球（真實排球全程追球，後退＝墊步）；
+        // 朝向（職責制）：攔網職責中鎖面向網（手牆與身體同向——修頭身撕裂）；
+        // 其餘 rally 中面向球（真實排球全程追球，後退＝墊步）；
         // 球到近身/頭頂時改面向「來球方向」（球速反向）——接球者面對球飛來的那側
         const team = gameState.players[id].teamId;
         const netYaw = TEAM_SIDE[team] === 1 ? Math.PI : 0;
         let targetYaw = netYaw;
-        if (gameState.phase === 'rally') {
+        if (gameState.phase === 'rally' && !blockDuty) {
           const b = gameState.ball;
           const bdx = b.x - x;
           const bdz = b.z - z;

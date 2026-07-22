@@ -1,7 +1,7 @@
 // 進攻決策：依攻擊手位置與對方攔網，算出可選攻擊區＋讀攔網（哪區被封/空檔）
 // 純函式，讀 game 狀態不寫回；供 UI 顯示與出手瞄準共用
 import { COURT } from '../sim/constants.js';
-import { TEAM_SIDE, otherTeam } from '../sim/rotation.js';
+import { TEAM_SIDE, otherTeam, isFrontRow } from '../sim/rotation.js';
 
 const BLOCK_COVER_X = 1.1; // 攔網手涵蓋的水平半徑（m）——落在此範圍內＝被封
 
@@ -26,8 +26,11 @@ export function attackZonesFor(game, attackerId) {
     { key: 'line', label: '直線', aim: { x: sign * 4.15, z: seamZ }, power: 1 },
     { key: 'cross', label: '斜線', aim: { x: -sign * 3.9, z: -side * 6.3 }, power: 1 },
     { key: 'middle', label: '中路', aim: { x: 0, z: -side * 5.0 }, power: 1 },
-    { key: 'tip', label: '吊球', aim: { x: -sign * 1.2, z: shortZ }, power: 0.25 },
   ];
+  // 吊球僅前排（後排攻擊距網太遠、吊不進短區）
+  if (isFrontRow(game.match.rotations[team], attackerId)) {
+    zones.push({ key: 'tip', label: '吊球', aim: { x: -sign * 1.2, z: shortZ }, power: 0.25 });
+  }
 
   for (const z of zones) {
     z.blocked = isBlocked(a, z.aim, blockerXs, z.key);

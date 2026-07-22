@@ -15,6 +15,7 @@ export function createPlayer({
   currentRole = 'outside', // 玩家實選的位置
   height = 1.85,
   attributes = {},
+  trust = 50, // 舉球員對此人的信任初值（攻擊分配權重來源）
 } = {}) {
   const attrs = {};
   for (const k of ATTRIBUTE_KEYS) {
@@ -39,7 +40,7 @@ export function createPlayer({
       receive: 1,
       emergencySet: 1,
     },
-    trust: { fromSetter: 50 }, // Phase 3 信任戰術掛鉤；Phase 1 只進結構、不驅動邏輯
+    trust: { fromSetter: clampAttr(trust) }, // 攻擊分配權重來源；動態升降 Phase 3（trust.js updateTrust）
   };
 }
 

@@ -387,13 +387,12 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     currentContext() { return lastGame ? contextAction(lastGame) : null; },
 
     // ---- 進攻決策模式（簡化操作：讀攔網選攻擊區）----
-    // 是否輪到玩家扣球：我方第三擊、前排、且**這顆舉球是給我的**（claim 指到我）
-    // ——舉給隊友時不彈面板（那時你退防補位），符合真實舉球分配
+    // 是否輪到玩家扣球：我方第三擊、且**這顆舉球分配給我**（claim 指到我）
+    // ——不限前排：後排被分配 pipe 也觸發（起跳點合法性由 AI 舉球目標＋sim 規則把關）
     isAttackMoment(game) {
       const me = game.players[playerId];
       const r = game.rally;
       if (game.phase !== 'rally' || r.possession !== me.teamId || r.touches !== 2) return false;
-      if (!isFrontRow(game.match.rotations[me.teamId], playerId)) return false;
       if (r.lastToucherId === playerId) return false; // 舉球員不是攻擊手
       if (lastAiState?.claimId !== playerId) return false; // 這球舉給隊友
       return true;

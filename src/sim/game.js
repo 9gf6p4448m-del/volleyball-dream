@@ -22,6 +22,7 @@ export const TUNING = {
   SERVE_APEX: 4.6,        // 各球路弧頂高度（m）
   RECEIVE_APEX: 4.8,
   SET_APEX: 5.2,
+  QUICK_APEX: 3.4,        // 快攻低弧（set 且 timing<0.5 時採用——MB 簡版快攻）
   SPIKE_SPEED_BASE: 9,    // 扣球速度 = BASE + power × PER（m/s）
   SPIKE_SPEED_PER: 0.17,
   SPIKE_MIN_TIME: 0.18,   // 扣球最短飛行時間（避免零距離除法）
@@ -225,7 +226,9 @@ function executeTouch(state, intent, player, actor, ev) {
       TUNING.SPIKE_MIN_TIME,
     );
   } else {
-    const apex = intent.action === 'set' ? TUNING.SET_APEX : TUNING.RECEIVE_APEX;
+    const apex = intent.action === 'set'
+      ? (rawT < 0.5 ? TUNING.QUICK_APEX : TUNING.SET_APEX)
+      : TUNING.RECEIVE_APEX;
     v = velocityForApex(from, { x: target.x, y: BALL.RADIUS, z: target.z }, apex);
   }
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
@@ -478,13 +481,15 @@ function setupServePhase(state) {
 
 // ---- 預設隊伍（測試/示範用；正式生涯隊伍由 Phase 2+ 資料驅動）----
 
+// trust＝舉球員信任初值（攻擊分配權重）：主攻手槽（index 1，玩家）60、其餘 20
+// ——後排點另吃 rowFactor 0.5（見 ai.js attackPointsOf），等效 10
 const DEFAULT_LINEUP = [
-  { role: 'setter', height: 1.83 },
-  { role: 'outside', height: 1.88 },
-  { role: 'middle', height: 1.96 },
-  { role: 'opposite', height: 1.9 },
-  { role: 'outside', height: 1.86 },
-  { role: 'middle', height: 1.94 },
+  { role: 'setter', height: 1.83, trust: 20 },
+  { role: 'outside', height: 1.88, trust: 60 },
+  { role: 'middle', height: 1.96, trust: 20 },
+  { role: 'opposite', height: 1.9, trust: 20 },
+  { role: 'outside', height: 1.86, trust: 20 },
+  { role: 'middle', height: 1.94, trust: 20 },
 ];
 
 export function createDefaultTeams() {
@@ -497,6 +502,7 @@ export function createDefaultTeams() {
         naturalRole: slot.role,
         currentRole: slot.role,
         height: slot.height,
+        trust: slot.trust,
         attributes: {
           jump: 60, power: 62, reaction: 60, stamina: 60,
           speed: 62, control: 68, serve: 60, block: 58,
