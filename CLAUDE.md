@@ -8,10 +8,15 @@
 - **Phase 0 已完成並通過真機實測**（2026-07-21）。**美術路線 2026-07-22 轉向**（Sawmah 裁定）：
   寫實蒙皮模型 → vow3d 式幾何關節球員（`geoCharacter.js`＋`geoAnimator.js`，零模型檔）＋
   夜賽聚光燈氛圍；姿勢/比例調參直接改該兩檔常數。
-- **Phase 1 進行中**：骨架（D1–D4）已驗收通過（2026-07-21，含冷審 CRITICAL 修復）；
-  H 區手感層 v1 已接上（五動作/混合視角/欺敵曲線/三線索），**試玩調參中**——
-  可調參數集中在 `game.js TUNING`、`cameraRig.js CAMERA_TUNING`、`ai.js` 頂部常數。
-  決策依據：`docs/kickoffs/phase1-kickoff-RESOLVED.md`；`?mode=bench` 保留 Phase 0 基準場景。
+- **Phase 1 已結案**（2026-07-22，快照見 `docs/phase1-final-status.md`）；可調參數集中在
+  `game.js TUNING`、`cameraRig.js CAMERA_TUNING`、`ai.js` 頂部常數；`?mode=bench` 保留
+  Phase 0 基準場景、`?classic=1` 全手動操作。
+- **Phase 2 生涯模式進行中**（九題＋新機制全定案：`docs/kickoffs/phase2-decisions-RESOLVED.md`；
+  結論回填版 `docs/kickoffs/phase2-kickoff.md`）。**stage 1 存檔層＋生涯外框已上線**：
+  預設入口＝生涯選單（`?quick=1` 直達單場、`?career=resume` 開機直入賽程視圖）；
+  存檔 `vd-career-v1`／`vd-career-player-v1` 分 key＋JSON 匯出匯入；生涯層在
+  `src/career/`（careerState 純函式＋careerStore 可注入介面卡）、UI 在
+  `src/ui/careerScreen.js`；局終先落檔再返回生涯。後續：stage 2 對手參數化＋錦標賽流程。
 
 ## 架構鐵律（違反即停）
 

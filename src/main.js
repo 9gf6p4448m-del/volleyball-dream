@@ -28,6 +28,9 @@ import { createZonePanel } from './ui/zonePanel.js';
 import { createFloatText } from './ui/floatText.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 import { createSetOverOverlay } from './ui/setOverOverlay.js';
+import { createCareerScreen } from './ui/careerScreen.js';
+import { createCareerStore } from './career/careerStore.js';
+import { matchSeed, careerTeams, recordResult } from './career/careerState.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
@@ -54,31 +57,51 @@ async function init() {
   const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
+  } else if (params.get('quick') === '1') {
+    await runMatch(ctx, null); // 快速比賽直達（測試腳本/舊連結用）
   } else {
-    await runMatch(ctx);
+    showCareerEntry(ctx); // Phase 2 預設入口：生涯畫面（選單/賽程）
   }
+}
+
+// Phase 2 生涯入口；比賽局終回寫結果後以 ?career=resume 導回賽程視圖
+function showCareerEntry(ctx) {
+  ctx.loadingEl.remove();
+  const store = createCareerStore();
+  const screen = createCareerScreen(store, {
+    onQuick: () => { runMatch(ctx, null); },
+    onPlay: ({ career, player, matchEntry }) => {
+      runMatch(ctx, { store, career, player, matchEntry });
+    },
+  });
+  const resume = ctx.params.get('career') === 'resume' && store.hasSave();
+  screen.show(resume ? 'career' : 'home');
 }
 
 // ---- Phase 1 比賽模式 ----
 
-async function runMatch(ctx) {
+async function runMatch(ctx, careerCtx = null) {
   const { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights } = ctx;
 
   const seedParam = Number.parseInt(params.get('seed'), 10);
-  // 預設種子＝每次開局隨機（sim 內部仍是決定論——同種子逐球重演）；
-  // ?seed= 指定＝可重現（回報 bug/測試用）。隨機化住在 main（sim 外），純度不變
-  let seed = Number.isFinite(seedParam) ? seedParam : (Date.now() % 1000000007);
-  // 快速局預設 15 分（?points=25 打正式局；deuce 規則不變）
+  // 種子優先序：?seed=（重現/測試）→ 生涯場次種子（生涯種子×場次 id 決定論導出）
+  // → 開局隨機（快速比賽；sim 內部仍是決定論——同種子逐球重演）。隨機化住在 main（sim 外）
+  let seed = Number.isFinite(seedParam) ? seedParam
+    : careerCtx ? matchSeed(careerCtx.career, careerCtx.matchEntry.id)
+      : (Date.now() % 1000000007);
+  // 正式局預設 25 分（deuce 規則不變；?points= 仍可覆寫測試用短局）
   const pointsParam = Number.parseInt(params.get('points'), 10);
   const setTarget = Number.isFinite(pointsParam)
     ? Math.min(Math.max(pointsParam, 5), 25)
-    : 15;
+    : 25;
 
   // 簡化操作模式（預設）：接發/舉球/防守/走位/發球全自動，玩家只做進攻決策（讀攔網選攻擊區）
   // ?classic=1 回到全手動操作
   const simpleMode = params.get('classic') !== '1';
 
-  let game = createGame({ seed, setTarget });
+  // 生涯模式：玩家 Player 餵進 A 隊主攻手槽（sim 不讀存檔——建隊參數注入）
+  const careerRosters = careerCtx ? careerTeams(careerCtx.player) : undefined;
+  let game = createGame({ seed, setTarget, ...(careerRosters ? { teams: careerRosters } : {}) });
   let aiState = createAiState();
 
   let matchView;
@@ -149,9 +172,19 @@ async function runMatch(ctx) {
   let assistLanding = null;
   showTutorialOnce(simpleMode);
 
-  // 局終點擊 → 換種子再開一局
+  // 局終點擊 → 生涯：回生涯畫面（結果已在局終當下落檔）；快速比賽：換種子再開一局
   window.addEventListener('pointerdown', () => {
     if (game.phase !== 'set_over') return;
+    if (careerCtx) {
+      const back = new URLSearchParams();
+      back.set('career', 'resume');
+      for (const k of ['points', 'classic', 'assist']) {
+        const v = params.get(k);
+        if (v !== null) back.set(k, v);
+      }
+      window.location.assign(`${window.location.pathname}?${back.toString()}`);
+      return;
+    }
     seed += 1;
     game = createGame({ seed, setTarget });
     aiState = createAiState();
@@ -472,10 +505,20 @@ async function runMatch(ctx) {
       camera.fov = fovTarget;
       camera.updateProjectionMatrix();
     }
-    // 局終結算過場（一次性）
+    // 局終結算過場（一次性）；生涯模式先落檔再顯示——點擊返回前進度已保住
     if (game.phase === 'set_over' && prevPhase !== 'set_over') {
+      if (careerCtx) {
+        const myTeam = game.players[PLAYER_ID].teamId; // 生涯主角固定 A 隊
+        const s = game.match.score;
+        careerCtx.store.saveCareer(recordResult(careerCtx.career, {
+          matchId: careerCtx.matchEntry.id,
+          won: game.match.winner === myTeam,
+          scoreFor: myTeam === 'A' ? s.A : s.B,
+          scoreAgainst: myTeam === 'A' ? s.B : s.A,
+        }));
+      }
       setOverOverlay.show(game.match.winner, game.match.score,
-        game.players[controlledId].teamId);
+        game.players[controlledId].teamId, careerCtx ? '點擊任意處返回生涯' : undefined);
     }
     prevPhase = game.phase;
     // 螢幕震動：鏡頭位置疊隨機偏移、指數衰減（表現層，不碰 sim）

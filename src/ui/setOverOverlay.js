@@ -19,11 +19,13 @@ export function createSetOverOverlay() {
   document.body.appendChild(el);
   const titleEl = el.querySelector('.title');
   const scoreEl = el.querySelector('.score');
+  const againEl = el.querySelector('.again');
 
   return {
-    // winner：'A'|'B'；playerTeam：玩家隊
-    show(winner, score, playerTeam) {
+    // winner：'A'|'B'；playerTeam：玩家隊；hint：點擊提示（生涯模式覆寫為「返回生涯」）
+    show(winner, score, playerTeam, hint) {
       const won = winner === playerTeam;
+      againEl.textContent = hint ?? '點擊任意處再來一局';
       titleEl.textContent = won ? '🏆 你贏了這一局！' : '這局輸了…再來！';
       titleEl.style.color = won ? '#ffd166' : '#ff8a8a';
       scoreEl.textContent = `${score.A} : ${score.B}`;
