@@ -34,12 +34,14 @@ export function createCameraRig(camera, initialPlayerId) {
   const curTarget = new THREE.Vector3(0, 1, 0);
   let look = { x: 0, y: 0 }; // 指標 NDC（-1..1），一人稱視線用
   let attackView = false;    // 進攻決策：切攻擊手視角越過網看攔網
+  let defendView = false; // 攔網第一視角旗標（main 每幀依防守時刻設定）
   let spikeMine = false;     // 這球第三擊是否分配給我（claim）——舉給隊友不搶鏡
 
   function desiredMode(game) {
     const me = game.players[playerId];
     if (!me) return 'third';
     if (attackView) return 'attack'; // 讀攔網視角優先
+    if (defendView) return 'defend'; // 攔網第一視角（隔網讀對面攻擊手）
     if (game.phase === 'serve' && serverId(game.match) === playerId) return 'first';
     if (game.phase === 'rally') {
       const r = game.rally;
@@ -56,6 +58,7 @@ export function createCameraRig(camera, initialPlayerId) {
   return {
     setPlayerId(id) { playerId = id; },
     setAttackView(v) { attackView = v; },
+    setDefendView(v) { defendView = v; },
     setSpikeMine(v) { spikeMine = v; },
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
@@ -92,7 +95,12 @@ export function createCameraRig(camera, initialPlayerId) {
 
       const pos = new THREE.Vector3();
       const target = new THREE.Vector3();
-      if (mode === 'attack') {
+      if (mode === 'defend') {
+        // 攔網手身後略高，隔網看對面攻擊手的助跑與起跳（守方讀攻擊——與攻擊視角對稱）
+        const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
+        pos.set(ax * 0.92, eye + 1.15, az + side * 1.7);
+        target.set(ax * 0.6, 2.0, az - side * 5.0);
+      } else if (mode === 'attack') {
         // 攻擊手身後略高，越過網看對面攔網手與空檔（讀攔網視角）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
         pos.set(ax * 0.92, eye + 1.3, az + side * 2.0);

@@ -33,6 +33,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
   let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
   let blockPlan = null;             // 攔網決策：{ x:攔網站位|null(退防), jumped, until }
+  let freeMove = false;             // 自由操控：接球/扣球/攔網不自動走位（戰術跑位照舊）
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -242,7 +243,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
 
       // 自動走位（The Spike 式，設計主軸）：歸你的球自動跑到位——
       // 含扣球助跑、接發、二傳；搖桿有輸入時尊重手動微調。走位挫折歸零，時機才是玩家的表達
-      if (game.phase === 'rally' && aiState?.landing &&
+      // 自由操控模式：這段整個關掉——跑不跑得到位是你的技術（保底出手照舊）
+      if (!freeMove && game.phase === 'rally' && aiState?.landing &&
           aiState.claimId === playerId && Math.hypot(move.x, move.z) < 0.1) {
         const b = game.ball;
         const sp = Math.hypot(b.vx, b.vz);
@@ -493,9 +495,11 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       return opts;
     },
     chooseBlock(option) {
+      if (freeMove) return; // 自由操控：攔網全手動（面板已收）
       blockPlan = { x: option.x, jumped: false, until: performance.now() + 5000 };
     },
     blockPlanPending() { return blockPlan !== null; },
+    setFreeMove(v) { freeMove = !!v; if (v) blockPlan = null; },
     // 玩家剛按下起跳（一次性訊號；main 轉給表現層播 windup 跳躍）
     consumeJumpSignal() {
       const s = jumpSignal;

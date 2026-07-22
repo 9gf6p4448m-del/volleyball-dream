@@ -197,6 +197,34 @@ async function runMatch(ctx, careerCtx = null) {
     });
     document.body.appendChild(hintBtn);
   }
+  // 🎮 自由操控切換（Sawmah 拍板：熟手模式）：接球/扣球/攔網不自動走位、
+  // 攔網面板收起改全手動；戰術跑位/發球歸位/Cover 照舊自動
+  let freeMove = false;
+  try { freeMove = localStorage.getItem('vd-control') === 'free'; } catch { /* 私密模式 */ }
+  controls.setFreeMove(freeMove);
+  if (simpleMode) {
+    const ctlBtn = document.createElement('button');
+    const paintCtl = () => { ctlBtn.textContent = freeMove ? '🎮 操控:自由' : '🎮 操控:自動'; };
+    ctlBtn.style.cssText = [
+      'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
+      'right:calc(env(safe-area-inset-right, 0px) + 170px)',
+      'height:44px', 'padding:0 12px', 'border-radius:22px', 'border:none',
+      'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
+      'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
+      'touch-action:manipulation',
+    ].join(';');
+    paintCtl();
+    ctlBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      freeMove = !freeMove;
+      controls.setFreeMove(freeMove);
+      paintCtl();
+      floatText.show(freeMove ? '自由操控：走位交給你' : '自動操控：走位交給系統', '#6ee7ff', 1400);
+      try { localStorage.setItem('vd-control', freeMove ? 'free' : 'auto'); } catch { /* ignore */ }
+    });
+    document.body.appendChild(ctlBtn);
+  }
+
   // 🎬 回放鈕：重看上一球的最後 3 秒（桌機 R 鍵）
   const replayBtn = document.createElement('button');
   replayBtn.textContent = '🎬';
@@ -438,10 +466,13 @@ async function runMatch(ctx, careerCtx = null) {
       const attackDeciding =
         !!zones && (canPipe || !meBackRow) &&
         game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
-      // ②攔網決策：對方第三擊將至、我在前排、尚未選線
-      const defendDeciding =
-        controls.isDefendMoment(game, aiState) && !controls.blockPlanPending() &&
+      // ②攔網決策：對方第三擊將至、我在前排；自由模式收面板（全手動讀線），
+      // 但慢速窗與攔網第一視角照給——時間留給你自己站位抓時機
+      const defendMoment =
+        controls.isDefendMoment(game, aiState) &&
         game.ball.vy < 0 && game.ball.y > 2.0;
+      rig.setDefendView(defendMoment);
+      const defendDeciding = !freeMove && defendMoment && !controls.blockPlanPending();
       // ③發球決策：發球員是受控玩家本人（AI 隊友發球自動）、哨音已過、尚未選
       const serveDeciding =
         game.phase === 'serve' && serverId(game.match) === controlledId &&
@@ -454,7 +485,7 @@ async function runMatch(ctx, careerCtx = null) {
       }
       if (game.phase !== 'serve') whistledServe = false;
 
-      deciding = attackDeciding || defendDeciding; // 攻/防決策窗＝時間放慢
+      deciding = attackDeciding || defendDeciding || (freeMove && defendMoment); // 攻/防決策窗＝時間放慢
       // 讀攔網 slow 檔：決策窗開了 0.6 秒才上色（讀得慢）；instant 即時；none 恆中性
       if (attackDeciding) {
         if (attackDecidingSince < 0) attackDecidingSince = now;
