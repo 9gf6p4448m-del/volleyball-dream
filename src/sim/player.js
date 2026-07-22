@@ -16,6 +16,7 @@ export function createPlayer({
   height = 1.85,
   attributes = {},
   trust = 50, // 舉球員對此人的信任初值（攻擊分配權重來源）
+  trustFloor = 0, // 保底球權地板（stage 4：生涯主角 0.27；一般球員無地板）
   techniques = {}, // 覆寫技術解鎖/熟練度（生涯新人鎖起步、預設全開）
 } = {}) {
   const attrs = {};
@@ -49,7 +50,8 @@ export function createPlayer({
       feintUses: 8,  // 假動作使用次數（熟練度）；8＝1.0 基準乘子
       ...techniques,
     },
-    trust: { fromSetter: clampAttr(trust) }, // 攻擊分配權重來源；動態升降 Phase 3（trust.js updateTrust）
+    // fromSetter＝持久 baseline（劇情事件經 updateTrust 調整）；floorShare＝保底球權
+    trust: { fromSetter: clampAttr(trust), floorShare: trustFloor },
   };
 }
 

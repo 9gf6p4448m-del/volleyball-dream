@@ -12,7 +12,7 @@ import { standingReach, spikeReach } from './player.js';
 import { predictLanding, spikeVelocity, heightAtNet } from './flight.js';
 import { createIntent } from './intent.js';
 import { TUNING, spikeSpeed } from './game.js';
-import { trustToWeights, pickByWeights } from './trust.js';
+import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 
 const AI = {
   SERVE_DELAY: 30,        // 可發球後再等的 tick 數（模擬哨音到發球的節奏）
@@ -297,14 +297,17 @@ export function setAimFor(game, team, attackerId, kind) {
   return { lx: 2, lz: AI.ATTACK_LZ, t: 0.75 };
 }
 
-// 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust.fromSetter）
+// 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust）
+// stage 4：有效 trust＝baseline＋場內動態（連得/連失）；floorShare＝保底球權地板
 function pickAttackPoint(game, team, setterId, passTier = 'perfect') {
   const pts = attackPointsOf(game, team, setterId, passTier);
   if (pts.length === 0) return null;
   const entries = pts.map((pt) => ({
-    ...pt, trust: game.players[pt.pid].trust.fromSetter,
+    ...pt,
+    trust: effectiveTrust(game, game.players[pt.pid]),
+    floorShare: game.players[pt.pid].trust.floorShare ?? 0,
   }));
-  const weights = trustToWeights(entries);
+  const weights = applyFloorShare(entries, trustToWeights(entries));
   const roll = hash01(game.rally.flightId * 977 + 131 + (game.seed ?? 0));
   return pickByWeights(entries, weights, roll);
 }

@@ -113,12 +113,13 @@ test('手動調高隊友 trust → 分配明顯偏向該隊友（參數化生效
     `A3 trust=80 後分配率 ${shareA3.toFixed(3)} 應≈${(80 / 170).toFixed(3)}`);
 });
 
-test('updateTrust 介面：存在、夾限 0–100、且遊戲內（trust.js 之外）無任何呼叫', () => {
+test('updateTrust 介面：夾限 0–100；stage 4 起為劇情層專用（sim 場內動態走 trustDyn）', () => {
   const p = { trust: { fromSetter: 95 } };
   assert.equal(updateTrust(p, 20), 100);
   assert.equal(updateTrust(p, -300), 0);
-  // 靜態掃描：src/ 全樹除 trust.js 外不得出現 updateTrust 呼叫（Phase 1 不驅動行為）
-  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
+  // 邊界收斂：sim（src/sim）內不得呼叫 updateTrust——場內動態一律走 state.trustDyn，
+  // Player baseline 只有劇情事件層（UI）可動
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'sim');
   const offenders = [];
   const walk = (dir) => {
     for (const ent of readdirSync(dir, { withFileTypes: true })) {
@@ -131,7 +132,7 @@ test('updateTrust 介面：存在、夾限 0–100、且遊戲內（trust.js 之
     }
   };
   walk(root);
-  assert.deepEqual(offenders, [], 'Phase 1 遊戲內不得呼叫 updateTrust');
+  assert.deepEqual(offenders, [], 'sim 內不得呼叫 updateTrust（場內動態走 trustDyn）');
 });
 
 test('站位交換：前排 OH左/MB中/OPP右、後排 OH後中/S右後/MB左後，不隨輪轉漂移', () => {

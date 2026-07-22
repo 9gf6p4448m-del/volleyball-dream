@@ -114,6 +114,7 @@ export function createCareerPlayer(name) {
       jump: 60, power: 62, reaction: 60, stamina: 60,
       speed: 62, control: 68, serve: 60, block: 58,
     },
+    trustFloor: 0.27, // 保底 25–30% 球權（決策第 3 題：玩家不得淪為觀眾）
     // 生涯新人技術層全鎖起步（成長體感＝「我能做新的事」）；快速比賽維持全開
     techniques: { tip: 0, powerServe: 0, pipe: 0, feint: 0, feintUses: 0 },
   });
@@ -151,6 +152,8 @@ export function careerTeams(player, opponentDef = null) {
   if (player?.id !== 'A2' || player?.teamId !== 'A') {
     throw new Error('careerTeams：生涯主角必須是 A 隊 A2（主攻手槽）');
   }
+  // stage 4 前的舊存檔補正：主角保底球權地板（下次存檔即固定下來）
+  if (player.trust.floorShare === undefined) player.trust.floorShare = 0.27;
   const teams = createDefaultTeams();
   teams.A[1] = player;
   if (opponentDef) teams.B = buildOpponentTeam(opponentDef);

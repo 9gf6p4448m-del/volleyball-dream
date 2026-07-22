@@ -7,6 +7,8 @@ import {
 import {
   GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, unlockTechnique,
 } from '../career/growth.js';
+import { dueEvents, recordEvent } from '../career/events.js';
+import { updateTrust } from '../sim/trust.js';
 
 const COLOR = {
   bg: 'linear-gradient(180deg, #070a12 0%, #0b1120 55%, #070a12 100%)',
@@ -49,6 +51,69 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     }
   });
   document.body.appendChild(fileInput);
+
+  // ---- stage 4 劇情對話框（輕量：文字、無立繪；點擊逐句推進）----
+  const dlg = el('div', [
+    'position:fixed', 'inset:0', 'z-index:34', 'display:none',
+    'background:rgba(4,6,12,0.5)', 'align-items:flex-end', 'justify-content:center',
+    'padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 26px)',
+  ]);
+  const dlgCard = el('div', [
+    'width:min(480px, 92vw)', `background:${COLOR.card}`, 'border-radius:16px',
+    'border:1px solid #2c3a58', 'padding:16px 20px', 'cursor:pointer',
+    'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+  ]);
+  const dlgSpeaker = el('div', [
+    'font-size:13px', 'font-weight:800', `color:${COLOR.gold}`, 'letter-spacing:2px',
+  ]);
+  const dlgText = el('div', [
+    'font-size:15px', `color:${COLOR.text}`, 'line-height:1.6', 'margin-top:6px',
+    'text-align:left', 'min-height:44px',
+  ]);
+  const dlgHint = el('div', [
+    'font-size:11px', `color:${COLOR.dim}`, 'text-align:right', 'margin-top:8px',
+  ], '▼ 點擊繼續');
+  dlgCard.appendChild(dlgSpeaker);
+  dlgCard.appendChild(dlgText);
+  dlgCard.appendChild(dlgHint);
+  dlg.appendChild(dlgCard);
+  document.body.appendChild(dlg);
+
+  let dlgState = null; // { queue:[{speaker,text}], onDone }
+  function dialogPlay(events, onDone) {
+    const queue = events.flatMap((e) => e.lines);
+    if (!queue.length) { onDone(); return; }
+    dlgState = { queue, onDone };
+    dlg.style.display = 'flex';
+    paintLine();
+  }
+  function paintLine() {
+    const line = dlgState.queue[0];
+    dlgSpeaker.textContent = line.speaker;
+    dlgText.textContent = line.text;
+  }
+  dlg.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (!dlgState) return;
+    dlgState.queue.shift();
+    if (dlgState.queue.length) { paintLine(); return; }
+    dlg.style.display = 'none';
+    const done = dlgState.onDone;
+    dlgState = null;
+    done();
+  });
+
+  // 事件入帳＋效果套用（先落檔再播對話——中斷不掉進度），對話播完接 after
+  function fireEvents(evs, career, player, after) {
+    let c = career;
+    for (const e of evs) {
+      c = recordEvent(c, e.id);
+      if (e.effect?.trust) updateTrust(player, e.effect.trust); // 持久 baseline（劇情層專用路徑）
+    }
+    store.saveCareer(c);
+    store.savePlayer(player);
+    dialogPlay(evs, after);
+  }
 
   function exportSave() {
     try {
@@ -134,6 +199,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const career = store.loadCareer();
     const player = store.loadPlayer();
     if (!career || !player) { renderHome(); return; }
+    // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）
+    const postEvs = dueEvents(career, 'post');
+    if (postEvs.length) {
+      fireEvents(postEvs, career, player, () => renderCareer());
+      return;
+    }
     root.replaceChildren();
     setMsg('');
     const rec = careerRecord(career);
@@ -143,7 +214,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
     ], `${career.playerName}・你·OH`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
-      `戰績 ${rec.wins} 勝 ${rec.losses} 敗`));
+      `戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
     const stage = careerStage(career);
 
@@ -208,8 +279,14 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         `本屆戰績 ${rec.wins} 勝 ${rec.losses} 敗——從主選單開新生涯再挑戰`));
     } else if (next) {
       root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, () => {
-        hide();
-        onPlay({ career, player, matchEntry: next });
+        // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
+        const start = () => {
+          hide();
+          onPlay({ career: store.loadCareer() ?? career, player, matchEntry: next });
+        };
+        const preEvs = dueEvents(career, 'pre');
+        if (preEvs.length) fireEvents(preEvs, career, player, start);
+        else start();
       }));
       const trait = opponentById(next.opponentId)?.trait;
       if (trait) {

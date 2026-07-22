@@ -13,6 +13,7 @@ import {
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal } from './rotationRules.js';
+import { applyAttackOutcome } from './trust.js';
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
@@ -72,6 +73,8 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
     tick: 0,
     seed, // 原始種子（AI 決策 hash 的混合項——跨場次變化、同種子可重現）
     aiProfiles: aiProfiles ?? null,
+    trustDyn: {},    // stage 4 場內動態信任（playerId→偏移；場末即散）
+    trustStreak: {}, // 連續得分/失誤計數（正＝連得、負＝連失）
     rngState: seedRng(seed),
     players,
     actors,
@@ -534,6 +537,16 @@ function isFrontRowOf(state, team, playerId) {
 // 一分結算：把 match 事件補上 tick 收進事件流，接著佈置下一球或收局
 // DEAD_BALL 事件附上球當下座標（落點/犯規點），供回放與 UI 用
 function settlePoint(state, winner, reason, ev) {
+  // stage 4 信任動態歸因：攻擊直接定勝負的球——殺進＝＋、打出界＝−（連續加碼）
+  // 只認乾淨歸因（最後觸球＝扣球）；攔網回彈等混合責任不記帳
+  const r = state.rally;
+  if (r.profile === 'spike' && r.lastToucherId) {
+    if (reason === 'BALL_IN' && r.lastTouchTeam === winner) {
+      applyAttackOutcome(state, r.lastToucherId, true);
+    } else if (reason === 'OUT' && r.lastTouchTeam !== winner) {
+      applyAttackOutcome(state, r.lastToucherId, false);
+    }
+  }
   const at = { x: state.ball.x, z: state.ball.z };
   for (const e of pointTo(state.match, winner, reason)) {
     ev.push(e.type === 'DEAD_BALL' ? { tick: state.tick, ...e, at } : { tick: state.tick, ...e });
