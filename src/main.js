@@ -179,6 +179,7 @@ async function runMatch(ctx) {
   const setOverOverlay = createSetOverOverlay();
   let prevPhase = game.phase;
   let fovPunchUntil = 0;
+  let rallyStartFlight = 0; // 本球起始 flight（rally 長度＝歡呼強度）
 
   // 控制模式：預設固定主攻手（07-21 Sawmah 試玩後定案）；?teamcontrol=1 開全隊輪控實驗
   const teamControl = params.get('teamcontrol') === '1';
@@ -390,10 +391,11 @@ async function runMatch(ctx) {
       simSteps += 1;
     }
     if (frameEvents.length > 0) {
-      sfx.onEvents(frameEvents);
+      sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - rallyStartFlight });
       controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
       // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
       for (const e of frameEvents) {
+        if (e.type === 'SERVE') rallyStartFlight = game.rally.flightId;
         if (e.type === 'TOUCH' && e.kind === 'spike') {
           hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
           if ((e.power ?? 1) >= 0.7) slowUntil = now + 450; // 重扣＝定格接慢動作
@@ -451,7 +453,8 @@ async function runMatch(ctx) {
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha, delta);
-    court.update(delta, game.ball); // 網面受擊波動（純視覺）
+    const netHitPower = court.update(delta, game.ball); // 網面受擊波動（純視覺）
+    if (netHitPower > 0) sfx.netHit(netHitPower);
     matchView.sync(game, alpha, delta, frameEvents);
     rig.setSpikeMine(aiState?.claimId === controlledId); // 扣球一人稱只認「舉給我」
     rig.update(game, alpha, delta);
@@ -459,13 +462,14 @@ async function runMatch(ctx) {
     const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
     lights.setTension(tension, delta);
     sfx.setHeartbeat(tension);
-    // 得分運鏡：FOV 推近彈回（0.7s 正弦曲線）
-    if (now < fovPunchUntil) {
-      const p = (fovPunchUntil - now) / 700;
-      camera.fov = 55 - 6.5 * Math.sin(Math.PI * (1 - p));
-      camera.updateProjectionMatrix();
-    } else if (camera.fov !== 55) {
-      camera.fov = 55;
+    sfx.setCrowdLevel(tension && game.phase === 'serve' ? 0.016 : 0.05); // 局點發球前屏息
+    // 鏡頭語言：得分 FOV punch＋重扣慢動作收緊（望遠壓縮感）
+    const punchFov = now < fovPunchUntil
+      ? 6.5 * Math.sin(Math.PI * (1 - (fovPunchUntil - now) / 700)) : 0;
+    const slowFov = now < slowUntil ? 3.5 : 0;
+    const fovTarget = 55 - punchFov - slowFov;
+    if (Math.abs(camera.fov - fovTarget) > 0.01) {
+      camera.fov = fovTarget;
       camera.updateProjectionMatrix();
     }
     // 局終結算過場（一次性）

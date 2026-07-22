@@ -19,6 +19,7 @@ export function createCourt(scene, quality) {
   return {
     group,
     update(dt, ball) {
+      let hitPower = 0; // 本幀觸網力度（回傳給呼叫端配音效）
       if (ball) {
         const nearNet = Math.abs(ball.z) < 0.35 && ball.y < COURT.NET_HEIGHT + 0.2;
         if (nearNet && prevVz !== 0 && Math.sign(ball.vz) !== Math.sign(prevVz) &&
@@ -26,17 +27,18 @@ export function createCourt(scene, quality) {
           wobble.amp = Math.min(0.16, 0.03 + Math.abs(prevVz) * 0.012);
           wobble.x = ball.x;
           wobble.t = 0;
+          hitPower = Math.min(1, Math.abs(prevVz) / 12);
         }
         prevVz = ball.vz;
       }
-      if (wobble.amp <= 0.001) return;
+      if (wobble.amp <= 0.001) return hitPower;
       wobble.t += dt;
       const decay = wobble.amp * Math.exp(-4.5 * wobble.t);
       if (decay < 0.001) {
         wobble.amp = 0;
         net.geometry.attributes.position.array.set(base);
         net.geometry.attributes.position.needsUpdate = true;
-        return;
+        return hitPower;
       }
       const pos = net.geometry.attributes.position;
       for (let i = 0; i < pos.count; i += 1) {
@@ -47,6 +49,7 @@ export function createCourt(scene, quality) {
           decay * fall * Math.sin(wobble.t * 22 - d * 2.2);
       }
       pos.needsUpdate = true;
+      return hitPower;
     },
   };
 }

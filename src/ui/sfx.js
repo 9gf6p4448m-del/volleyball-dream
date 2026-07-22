@@ -38,6 +38,14 @@ export function createSfx() {
     g.gain.value = 0.05;
     src.connect(lp).connect(g).connect(ctx.destination);
     src.start();
+    crowdGain = g;
+  }
+
+  // 群眾音量目標（局點發球前屏息＝壓低；得分後回常態）——平滑過渡
+  let crowdGain = null;
+  function setCrowdLevel(level) {
+    if (!ctx || !crowdGain) return;
+    crowdGain.gain.setTargetAtTime(level, ctx.currentTime, 0.5);
   }
 
   // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）
@@ -65,11 +73,11 @@ export function createSfx() {
     trill.stop(t + dur);
   }
 
-  // 得分歡呼：帶通雜訊湧起再退（~1.2 秒）
-  function cheer() {
+  // 得分歡呼：帶通雜訊湧起再退（~1.2 秒）；scale＝強度（長 rally 歡呼加倍）
+  function cheer(scale = 1) {
     if (!ensure()) return;
     const t = ctx.currentTime;
-    const len = Math.floor(ctx.sampleRate * 1.3);
+    const len = Math.floor(ctx.sampleRate * (1.1 + 0.35 * scale));
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
@@ -81,10 +89,47 @@ export function createSfx() {
     bp.Q.value = 0.7;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.001, t);
-    g.gain.exponentialRampToValueAtTime(0.22, t + 0.18);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 1.25);
+    g.gain.exponentialRampToValueAtTime(0.22 * scale, t + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.05 + 0.35 * scale);
     src.connect(bp).connect(g).connect(ctx.destination);
     src.start(t);
+  }
+
+  // 觸網音：中低頻悶「啪」帶餘震（配網面波動視覺）
+  function netHit(power = 1) {
+    if (!ensure()) return;
+    const t = ctx.currentTime;
+    const noise = ctx.createBufferSource();
+    const len = Math.floor(ctx.sampleRate * 0.12);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    noise.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 320;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.3 * Math.min(power, 1), t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    noise.connect(bp).connect(g).connect(ctx.destination);
+    noise.start(t);
+  }
+
+  // 地板落球：深沉短擊（死球的「結束感」）
+  function floorThud() {
+    if (!ensure()) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, t);
+    osc.frequency.exponentialRampToValueAtTime(48, t + 0.16);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.32, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.22);
   }
 
   // 爆裂：白噪音爆點＋低頻搥擊
@@ -183,11 +228,18 @@ export function createSfx() {
   return {
     whistle,
     setHeartbeat,
-    onEvents(events) {
+    setCrowdLevel,
+    netHit,
+    onEvents(events, opts = {}) {
       for (const e of events) {
         if (e.type === 'SERVE') crack(0.7);
         else if (e.type === 'BLOCK_TOUCH') thud();
-        else if (e.type === 'DEAD_BALL') { whistle(480); cheer(); } // 死球哨＋觀眾歡呼
+        else if (e.type === 'DEAD_BALL') {
+          // 音層：落地悶擊 → 哨音 → 歡呼（長 rally 歡呼加倍）
+          floorThud();
+          whistle(480);
+          cheer(Math.min(1 + (opts.rallyFlights ?? 0) / 10, 1.8));
+        }
         else if (e.type === 'TOUCH') {
           if (e.kind === 'spike') {
             if ((e.power ?? 1) < 0.45) thud(); // 輕吊＝悶短

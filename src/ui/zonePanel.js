@@ -25,6 +25,14 @@ export function createZonePanel() {
   ].join(';');
   document.body.appendChild(title);
 
+  // 進場動畫 keyframes（注入一次）：按鈕自下滑入、逐顆錯開
+  if (!document.getElementById('vd-pop-style')) {
+    const st = document.createElement('style');
+    st.id = 'vd-pop-style';
+    st.textContent = '@keyframes vd-pop{from{opacity:0;transform:translateY(16px) scale(0.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+    document.head.appendChild(st);
+  }
+
   let btns = [];
   let shownKey = '';
 
@@ -32,7 +40,7 @@ export function createZonePanel() {
   // ——攻擊面板的「看A打B」手勢；未傳 onFake 的面板維持點下即選（發球/攔網要快）
   function rebuild(items, onChoose, onFake) {
     for (const b of btns) b.remove();
-    btns = items.map((it) => {
+    btns = items.map((it, i) => {
       const b = document.createElement('button');
       b.textContent = it.label;
       b.dataset.zoneKey = it.key;
@@ -42,6 +50,7 @@ export function createZonePanel() {
         'color:#12131a', 'font-size:17px', 'font-weight:800',
         'font-family:system-ui,sans-serif', 'touch-action:none', 'cursor:pointer',
         'box-shadow:0 2px 10px rgba(0,0,0,0.4)',
+        `animation:vd-pop 0.2s ease-out ${i * 0.04}s both`,
       ].join(';');
       b.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
