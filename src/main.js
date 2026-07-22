@@ -26,6 +26,7 @@ import { createTouchUi } from './ui/touchUi.js';
 import { createActionButtons } from './ui/actionButtons.js';
 import { createZonePanel } from './ui/zonePanel.js';
 import { createFloatText } from './ui/floatText.js';
+import { createPointBanner, derivePointInfo } from './ui/pointBanner.js';
 import { showTutorialOnce } from './ui/tutorial.js';
 import { createSetOverOverlay } from './ui/setOverOverlay.js';
 import { createCareerScreen } from './ui/careerScreen.js';
@@ -224,6 +225,10 @@ async function runMatch(ctx, careerCtx = null) {
   let slowUntil = 0;
   let shake = 0;
   const floatText = createFloatText();
+  // 得分原因面板：死球後顯示「誰得分＋為什麼」（殺球/ACE/出界/犯規…）
+  const pointBanner = createPointBanner();
+  let lastTouch = null;   // 最後觸球 { team, playerId, kind }——死球時推導得分原因用
+  let pendingDead = null; // DEAD_BALL 先到、SCORE 緊隨（同批事件）：湊齊才顯示面板
 
   // VCR 回放：重播＝從快照重新模擬（決定論保證逐格一致）；只播最後 3 秒、半速
   let replay = null; // { state, steps, idx, acc }
@@ -429,6 +434,12 @@ async function runMatch(ctx, careerCtx = null) {
       // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
       for (const e of frameEvents) {
         if (e.type === 'SERVE') rallyStartFlight = game.rally.flightId;
+        // 得分原因面板：追蹤最後觸球（含發球/攔網）；DEAD_BALL+SCORE 湊齊即顯示
+        if (e.type === 'TOUCH' || e.type === 'SERVE') {
+          lastTouch = { team: e.team, playerId: e.playerId, kind: e.kind ?? 'serve' };
+        } else if (e.type === 'BLOCK_TOUCH') {
+          lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
+        }
         if (e.type === 'TOUCH' && e.kind === 'spike') {
           hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
           if ((e.power ?? 1) >= 0.7) slowUntil = now + 450; // 重扣＝定格接慢動作
@@ -438,12 +449,21 @@ async function runMatch(ctx, careerCtx = null) {
           shake = Math.max(shake, 0.2);
         } else if (e.type === 'DEAD_BALL') {
           shake = Math.max(shake, 0.26);
-          if (e.reason === 'POSITIONAL_FAULT') floatText.show('站位犯規!');
+          pendingDead = { reason: e.reason };
         } else if (e.type === 'SCORE') {
           // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
           fovPunchUntil = now + 700;
           for (const id of game.match.rotations[e.team]) {
             matchView.triggerPose(id, 'cheer');
+          }
+          if (pendingDead) {
+            pointBanner.show(derivePointInfo({
+              reason: pendingDead.reason, winner: e.team,
+              myTeam: game.players[controlledId]?.teamId,
+              lastTouch, controlledId, score: e.score,
+            }));
+            pendingDead = null;
+            lastTouch = null;
           }
         } else if (e.type === 'TOUCH' && e.kind === 'receive' &&
             e.playerId === controlledId && (e.power ?? 0) >= 0.95) {

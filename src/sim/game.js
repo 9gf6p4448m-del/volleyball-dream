@@ -43,6 +43,9 @@ export const TUNING = {
   THETA_MAX_DEG: 45,      // 視線與實際擊球方向的最大有效夾角
   DECEIVE_GAIN: 0.7,      // 騙過攔網機率 = min(θ/θmax,1) × 此值（線性）
   ERROR_GAIN: 0.5,        // 自身失誤增量 = (θ/θmax)² × 此值（平方）
+  // 後排攻擊合法性判定的位置回溯窗（0.4s＠60Hz）：治標近似「起跳離地位置」，
+  // 真正的滯空狀態機留給 Phase 2；見 takeoffZ()
+  TAKEOFF_LOOKBACK_TICKS: 24,
 };
 
 // teams = { A: [6 個 Player], B: [6 個 Player] }；陣列順序即開局輪轉（index 0 = 1 號位）
@@ -57,6 +60,7 @@ export function createGame({ seed = 1, teams, setTarget } = {}) {
       actors[p.id] = {
         x: 0, z: 0, px: 0, pz: 0,
         blockUntil: -1, blockStartTick: -9999, lastTouchTick: -9999,
+        zHistory: [], // 每 tick 推入舊 z（見 takeoffZ）；固定長度＝回溯窗
       };
     }
   }
@@ -96,10 +100,13 @@ export function stepGame(state, intents = []) {
   if (state.phase === 'set_over') return [];
   const ev = [];
 
-  // 快照上一步位置：供 render 層插值（同 ball 的 px/py/pz 慣例）
+  // 快照上一步位置：供 render 層插值（同 ball 的 px/py/pz 慣例）；
+  // 同時推入 zHistory（回溯窗），供後排攻擊合法性判定近似起跳位置用
   for (const a of Object.values(state.actors)) {
     a.px = a.x;
     a.pz = a.z;
+    a.zHistory.push(a.z);
+    if (a.zHistory.length > TUNING.TAKEOFF_LOOKBACK_TICKS) a.zHistory.shift();
   }
 
   for (const it of intents) {
@@ -139,6 +146,12 @@ function applyMove(state, actor, intent) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// 回溯窗最舊的一筆＝約 TAKEOFF_LOOKBACK_TICKS 個 tick 前的位置（近似起跳離地位置）；
+// 開局未滿窗時退化為目前可得的最舊資料，最終退回 actor.z
+function takeoffZ(actor) {
+  return actor.zHistory.length > 0 ? actor.zHistory[0] : actor.z;
 }
 
 // 同隊避讓：兩人擠進 SEP_RADIUS 內時對稱讓位（每 tick 上限 SEP_PUSH）——
@@ -222,12 +235,14 @@ function executeTouch(state, intent, player, actor, ev) {
     settlePoint(state, otherTeam(team), 'FOUR_HITS', ev);
     return;
   }
-  // 規則：後排攻擊限制（後排球員於前區、高於網上緣完成攻擊＝違例）
-  // TODO Phase 2：依起跳腳離地位置判定（現以觸球當下位置簡化）
+  // 規則：後排攻擊限制（後排球員於前區、高於網上緣完成攻擊＝違例）。
+  // 用回溯窗位置（takeoffZ）近似起跳離地瞬間，而非觸球當下位置——
+  // 助跑扣球時人本就會在空中前飄越線，真規則看的是起跳腳位置，不是觸球位置。
+  // TODO Phase 2：換成真正的滯空狀態機（記錄實際起跳 tick）取代此近似
   if (
     intent.action === 'spike' &&
     isBackRow(state.match.rotations[team], player.id) &&
-    isInFrontZone(team, actor.z) &&
+    isInFrontZone(team, takeoffZ(actor)) &&
     ball.y > COURT.NET_HEIGHT
   ) {
     settlePoint(state, otherTeam(team), 'BACK_ROW_ATTACK', ev);

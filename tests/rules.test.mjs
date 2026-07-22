@@ -63,6 +63,30 @@ test('後排攻擊限制：後排球員於前區高點扣球 → BACK_ROW_ATTACK
   assert.equal(g.match.score.B, 1);
 });
 
+test('後排攻擊誤判修正：起跳前在線後、觸球時已助跑飄過線 → 不判 BACK_ROW_ATTACK', () => {
+  const g = createGame({ seed: 3 });
+  g.actors.A5.x = 0; g.actors.A5.z = 5; // 起跳前：合法後排位置（z>3）
+  rigRally(g, { x: 0, y: 2.6, z: 1.5 });
+  g.rally.touches = 2; // 第三擊＝攻擊
+
+  // 助跑：20 tick（< TAKEOFF_LOOKBACK_TICKS=24）內線性跑出前區；每 tick 固定球高，
+  // 隔絕物理墜球對「ball.y > NET_HEIGHT」判定的干擾，單純測位置回溯窗
+  const steps = 20;
+  for (let i = 1; i <= steps; i += 1) {
+    g.actors.A5.z = 5 - (5 - 1.5) * (i / steps);
+    g.ball.x = 0; g.ball.y = 2.6; g.ball.z = 1.5; g.ball.vx = 0; g.ball.vy = -1; g.ball.vz = 0;
+    stepGame(g, []);
+  }
+  assert.ok(g.actors.A5.z < 3, '助跑後應已進入前區（測試前提）');
+
+  g.ball.x = 0; g.ball.y = 2.6; g.ball.z = 1.5; g.ball.vx = 0; g.ball.vy = -1; g.ball.vz = 0;
+  const ev = stepGame(g, [
+    createIntent({ playerId: 'A5', tick: g.tick, action: 'spike', aim: { x: 0, z: -6 } }),
+  ]);
+  const foul = ev.find((e) => e.type === 'DEAD_BALL' && e.reason === 'BACK_ROW_ATTACK');
+  assert.equal(foul, undefined, '起跳當下在線後、觸球時前飄過線應視為合法後排攻擊');
+});
+
 test('走位邊界：推整整 10 秒也越不過中線、出不了自由區', () => {
   const g = createGame({ seed: 5 }); // 停在發球等待階段（無人發球），純測走位
   // A2 往對面（-z）與往右（+x）狂推 600 tick
