@@ -36,7 +36,10 @@
   攔網 `scoutBlockMul` 慣用線收攏/反常線折扣；假動作骰在讀取前＝解法）＋情蒐錄影帶
   （`scoutTape.js` 決定論預生成、開賽先播可跳過）＋宿敵種子（`career.scouting` 跨場
   累積＋rematch 差分對話 wonVs/lostVs）。
-  後續：stage 6 自由人替換（含 trust 池成員變動）→ stage 7 收尾。
+  **stage 6 已上線**：自由人（`createGame({liberos})` 第 7 人；`applyLiberoSwaps` 死球
+  自動替換後排 MB／前排換回；結構上不可能發球/攔網＋高球攻擊硬閘；異色球衣 A 金/B 白；
+  生涯我方「小守」、對方吃參數檔）。
+  後續：stage 7 收尾（平衡調參＋生涯首輪完整試玩＋kickoff 結論回填＋文件歸檔）。
 
 ## 架構鐵律（違反即停）
 
