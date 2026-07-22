@@ -34,6 +34,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
   let blockPlan = null;             // 攔網決策：{ x:攔網站位|null(退防), jumped, until }
   let freeMove = false;             // 自由操控：接球/扣球/攔網不自動走位（戰術跑位照舊）
+  let manualOwned = false;          // 自由模式：本球玩家已接管走位（碰過搖桿＝整球歸你；發球階段重置）
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -206,6 +207,13 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       const a = game.actors[playerId];
       let move = readMove(keys, joystick, TEAM_SIDE[me.teamId]);
 
+      // 自由模式接管語義（拍板 07-22）：自動走位只負責「帶你就位」——
+      // rally 中一碰搖桿＝整球歸你（cover/職責位不再拉回）；發球階段重置重新帶位
+      if (game.phase === 'serve') manualOwned = false;
+      else if (freeMove && game.phase === 'rally' && Math.hypot(move.x, move.z) >= 0.1) {
+        manualOwned = true;
+      }
+
       // 攔網決策執行：自動走到封線位；對方起扣瞬間自動跳攔（決策＝選線，時機自動）
       if (blockPlan) {
         const r = game.rally;
@@ -256,6 +264,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         const len = Math.hypot(dx, dz);
         if (len > 0.12) move = { x: dx / len, z: dz / len };
       } else if (game.phase === 'rally' && !charge && !blockPlan &&
+          !(freeMove && manualOwned) && // 自由模式：接管後 cover/職責位自動全放手
           Math.hypot(move.x, move.z) < 0.1) {
         const r = game.rally;
         const atkId = aiState?.attackerId;
