@@ -381,6 +381,7 @@ async function runMatch(ctx) {
           shake = Math.max(shake, 0.2);
         } else if (e.type === 'DEAD_BALL') {
           shake = Math.max(shake, 0.26);
+          if (e.reason === 'POSITIONAL_FAULT') floatText.show('站位犯規!');
         } else if (e.type === 'SCORE') {
           // 得分慶祝：得分隊全員雙手高舉小跳（情緒節拍）
           for (const id of game.match.rotations[e.team]) {

@@ -10,6 +10,7 @@ import {
 import { createPlayer, standingReach, spikeReach, blockReach, moveSpeed } from './player.js';
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
+import { isRotationLegal } from './rotationRules.js';
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
@@ -252,11 +253,41 @@ function executeTouch(state, intent, player, actor, ev) {
   });
 }
 
+// 規則引擎配接層：把單點球員轉成 rotationRules 的 lineup（隊伍視角座標）
+// 現行 sim 無腳部模型＝每人一隻虛擬腳；發球階段無跳躍＝恆著地
+export function lineupOf(state, team) {
+  const side = TEAM_SIDE[team];
+  const sid = serverId(state.match);
+  return state.match.rotations[team].map((pid, idx) => {
+    const a = state.actors[pid];
+    return {
+      zone: idx + 1,
+      feet: [{ x: side * a.x + COURT.WIDTH / 2, y: side * a.z, grounded: true }],
+      isServer: pid === sid && team === state.match.servingTeam,
+    };
+  });
+}
+
 function performServe(state, intent, ev) {
   const { ball, rally } = state;
   const player = state.players[intent.playerId];
   const actor = state.actors[intent.playerId];
   const team = player.teamId;
+
+  // 7.5 位置錯誤：發球擊球瞬間判接發球方站位（7.4 發球方全隊豁免輪轉站位、
+  // 僅檢場內包含）；犯規＝發球方直接得分、球不發出
+  const recv = otherTeam(team);
+  const recvCheck = isRotationLegal(lineupOf(state, recv), false);
+  const servCheck = isRotationLegal(lineupOf(state, team), true);
+  const faulty = !recvCheck.legal ? recv : !servCheck.legal ? team : null;
+  if (faulty) {
+    ev.push({
+      type: 'POSITIONAL_FAULT', tick: state.tick, team: faulty,
+      faults: (faulty === recv ? recvCheck : servCheck).faults,
+    });
+    settlePoint(state, otherTeam(faulty), 'POSITIONAL_FAULT', ev);
+    return;
+  }
 
   const contactY = Math.max(spikeReach(player) * 0.92, 2.2); // 跳發擊球點
   ball.x = actor.x; ball.y = contactY; ball.z = actor.z;

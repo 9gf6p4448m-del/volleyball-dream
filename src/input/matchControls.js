@@ -4,7 +4,9 @@
 import * as THREE from 'three';
 import { createIntent } from '../sim/intent.js';
 import { serverId } from '../sim/match.js';
-import { TEAM_SIDE, isFrontRow, localToWorld } from '../sim/rotation.js';
+import {
+  TEAM_SIDE, isFrontRow, localToWorld, positionOf, basePosition,
+} from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
@@ -221,6 +223,18 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
             blockTap();
           }
         }
+      }
+
+      // 發球階段自動歸位（FIVB 7.5：發球瞬間站位違規＝對方得分）——
+      // 沒推搖桿就走回輪轉基準位；堅持推著亂站＝吃真實站位犯規（發球員不歸位）
+      if (game.phase === 'serve' && playerId !== serverId(game.match) &&
+          Math.hypot(move.x, move.z) < 0.1) {
+        const pos = positionOf(game.match.rotations[me.teamId], playerId);
+        const t = basePosition(me.teamId, pos);
+        const dx = t.x - a.x;
+        const dz = t.z - a.z;
+        const len = Math.hypot(dx, dz);
+        if (len > 0.3) move = { x: dx / len, z: dz / len };
       }
 
       // 自動走位（The Spike 式，設計主軸）：歸你的球自動跑到位——

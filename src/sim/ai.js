@@ -297,10 +297,10 @@ function decideOne(game, aiState, playerId) {
   const receivingArc = aiState.landingTeam === team && r.profile !== 'spike';
   if (opponentHasBall && !receivingArc &&
       isFrontRow(game.match.rotations[team], playerId)) {
-    const pos = positionOf(game.match.rotations[team], playerId);
-    // MB 恆為軸（追球）；翼依站位側偏一個間距
-    const lane = player.currentRole === 'middle' ? 0 : pos === 2 ? 1 : pos === 4 ? -1
-      : pos === 3 ? 0 : 1;
+    // 換位制攔網線：OH 恆左翼、MB 恆軸（追球）、OPP/前排 S 恆右翼——
+    // 角色定線保證三線互斥，任何輪轉都不疊人（前排恆為三對角各一）
+    const role = player.currentRole;
+    const lane = role === 'middle' ? 0 : role === 'outside' ? -1 : 1;
     const laneOff = TEAM_SIDE[team] * lane * AI.BLOCK_SPREAD;
     // 遠側翼（球在對側且離中線夠遠）＝不參與攔網、撤退到攻擊線附近補吊球
     const farWing = lane !== 0 && Math.abs(game.ball.x) > 1.8 &&
@@ -310,10 +310,18 @@ function decideOne(game, aiState, playerId) {
         x: laneOff * 2, z: TEAM_SIDE[team] * 2.6,
       });
     }
-    const netSpot = {
-      x: clampCourtX(game.ball.x + laneOff),
-      z: TEAM_SIDE[team] * AI.BLOCK_LZ,
-    };
+    // 邊線夾擠防疊（真實合牆：翼守標誌桿、MB 收內側肩並牆）——
+    // 翼吃 clamp 貼邊即可；MB 發現近側翼被邊線壓進間距內時自己往內讓。
+    // 兩人各自從同樣輸入算出一致結論（純函式無共享狀態），且讓位方向恆向內＝永不交叉
+    let nx = clampCourtX(game.ball.x + laneOff);
+    if (lane === 0) {
+      const bs = Math.sign(game.ball.x);
+      const nearWingX = clampCourtX(game.ball.x + bs * AI.BLOCK_SPREAD);
+      if (bs !== 0 && Math.abs(nearWingX - nx) < AI.BLOCK_SPREAD * 0.9) {
+        nx = nearWingX - bs * AI.BLOCK_SPREAD;
+      }
+    }
+    const netSpot = { x: nx, z: TEAM_SIDE[team] * AI.BLOCK_LZ };
     const action = r.profile === 'spike' && aiState.landingTeam === team ? 'block' : null;
     const it = moveIntent(playerId, tick, actor, netSpot);
     if (action) it.action = 'block';
