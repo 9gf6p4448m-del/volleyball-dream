@@ -56,6 +56,29 @@ test('界內落地：殺球/ACE/攔網得分；受控玩家親手殺球有專屬
   assert.equal(block.title, '攔網得分');
 });
 
+test('吊球依力度與殺球分辨：得分/出界/專屬文案；power 缺席視為全力', () => {
+  const tip = derivePointInfo({
+    ...base, reason: 'BALL_IN', winner: 'B',
+    lastTouch: { team: 'B', playerId: 'B1', kind: 'spike', power: 0.35 },
+  });
+  assert.equal(tip.title, '吊球得分');
+  const myTip = derivePointInfo({
+    ...base, reason: 'BALL_IN', winner: 'A',
+    lastTouch: { team: 'A', playerId: 'A2', kind: 'spike', power: 0.25 },
+  });
+  assert.equal(myTip.title, '你的吊球得分！');
+  const tipOut = derivePointInfo({
+    ...base, reason: 'OUT', winner: 'A',
+    lastTouch: { team: 'B', playerId: 'B1', kind: 'spike', power: 0.3 },
+  });
+  assert.equal(tipOut.title, '吊球出界');
+  const noPower = derivePointInfo({
+    ...base, reason: 'BALL_IN', winner: 'A',
+    lastTouch: { team: 'A', playerId: 'A4', kind: 'spike' },
+  });
+  assert.equal(noPower.title, '殺球得分'); // 舊事件形狀相容
+});
+
 test('界內落地但最後觸球方＝失分方：處理失誤（自家把球弄掉）', () => {
   const info = derivePointInfo({
     ...base, reason: 'BALL_IN', winner: 'B',

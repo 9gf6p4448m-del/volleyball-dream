@@ -23,11 +23,17 @@ const BANNER_CSS = `
 }
 `;
 
+// 吊球判定：spike 動作但力度低（玩家吊球 timing 0.25、AI 輕吊 0.35）——
+// 與 commentary.js 的 TIP_POWER 同一條界線
+const TIP_POWER = 0.45;
+
 // 事件流 → 面板內容（純函式）。
-// lastTouch = { team, playerId, kind: 'serve'|'receive'|'set'|'spike'|'block' } | null
+// lastTouch = { team, playerId, kind: 'serve'|'receive'|'set'|'spike'|'block', power? } | null
 export function derivePointInfo({ reason, winner, myTeam, lastTouch, controlledId, score }) {
   const mine = winner === myTeam;
   const kind = lastTouch?.kind;
+  // 吊球＝低力度扣球（power 缺席時視為全力，維持舊行為）
+  const isTip = kind === 'spike' && (lastTouch?.power ?? 1) <= TIP_POWER;
   let title;
   let icon;
   if (reason === 'POSITIONAL_FAULT') { title = '站位犯規'; icon = '🚫'; }
@@ -36,13 +42,17 @@ export function derivePointInfo({ reason, winner, myTeam, lastTouch, controlledI
   else if (reason === 'OUT') {
     icon = '📏';
     title = kind === 'serve' ? '發球出界'
+      : isTip ? '吊球出界'
       : kind === 'spike' ? '扣球出界'
       : kind === 'block' ? '攔網出界'
       : '擊球出界';
   } else if (lastTouch && lastTouch.team === winner) {
     // BALL_IN 且最後觸球方＝得分方：攻擊落地
     if (kind === 'serve') { title = 'ACE！發球直得'; icon = '🎯'; }
-    else if (kind === 'spike') {
+    else if (isTip) {
+      title = mine && lastTouch.playerId === controlledId ? '你的吊球得分！' : '吊球得分';
+      icon = '🪶';
+    } else if (kind === 'spike') {
       title = mine && lastTouch.playerId === controlledId ? '你的殺球得分！' : '殺球得分';
       icon = '💥';
     } else if (kind === 'block') { title = '攔網得分'; icon = '🧱'; }

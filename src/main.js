@@ -446,7 +446,7 @@ async function runMatch(ctx, careerCtx = null) {
         if (e.type === 'SERVE') rallyStartFlight = game.rally.flightId;
         // 得分原因面板：追蹤最後觸球（含發球/攔網）；DEAD_BALL+SCORE 湊齊即顯示
         if (e.type === 'TOUCH' || e.type === 'SERVE') {
-          lastTouch = { team: e.team, playerId: e.playerId, kind: e.kind ?? 'serve' };
+          lastTouch = { team: e.team, playerId: e.playerId, kind: e.kind ?? 'serve', power: e.power };
         } else if (e.type === 'BLOCK_TOUCH') {
           lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
         }
