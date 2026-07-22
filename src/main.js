@@ -21,6 +21,7 @@ import { createMatchControls } from './input/matchControls.js';
 import { createAimMarker } from './render/aimMarker.js';
 import { createHud } from './ui/hud.js';
 import { createScoreboard, setPointTeam } from './ui/scoreboard.js';
+import { createCommentary } from './ui/commentary.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
 import { createActionButtons } from './ui/actionButtons.js';
@@ -125,6 +126,8 @@ async function runMatch(ctx, careerCtx = null) {
   const rig = createCameraRig(camera, PLAYER_ID);
   const controls = createMatchControls(renderer.domElement, camera, PLAYER_ID, rig);
   const scoreboard = createScoreboard(PLAYER_ID);
+  // 即時播報（決策模式）：取代舊版操作提示行；classic 走 scoreboard 內建舊提示
+  const commentary = simpleMode ? createCommentary(careerSetup?.opponent ?? null) : null;
   const sfx = createSfx();
   const touchUi = createTouchUi();
   // 簡化模式：決策面板（攻擊/發球/攔網共用）；經典模式：全手動按鈕
@@ -437,6 +440,7 @@ async function runMatch(ctx, careerCtx = null) {
     if (frameEvents.length > 0) {
       sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - rallyStartFlight });
       controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
+      if (commentary) commentary.onEvents(frameEvents, game, aiState, now, controlledId);
       // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
       for (const e of frameEvents) {
         if (e.type === 'SERVE') rallyStartFlight = game.rally.flightId;
@@ -553,7 +557,8 @@ async function runMatch(ctx, careerCtx = null) {
       camera.position.y += (Math.random() - 0.5) * shake * 0.6;
       shake *= 0.82;
     }
-    scoreboard.update(game, myBall, controlledId);
+    scoreboard.update(game, myBall, controlledId,
+      commentary ? commentary.line(game, aiState, controlledId, now) : undefined);
     if (actionButtons) actionButtons.update(controls.currentContext());
     touchUi.update(controls.uiState());
     const aimAt = simpleMode ? null : controls.currentAimPoint(game);

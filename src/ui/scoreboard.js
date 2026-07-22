@@ -15,7 +15,8 @@ export function createScoreboard(playerId) {
     <div class="setpt" style="display:none;font-size:13px;font-weight:800;letter-spacing:3px;
       margin-bottom:1px;animation:vd-pulse 0.9s ease-in-out infinite"></div>
     <div class="line" style="font-size:26px;font-weight:700;letter-spacing:2px">0 : 0</div>
-    <div class="hint" style="font-size:12px;opacity:0.85;margin-top:2px"></div>
+    <div class="hint" style="font-size:12px;opacity:0.85;margin-top:2px;
+      max-width:min(78vw,420px);line-height:1.4"></div>
   `;
   document.body.appendChild(el);
   // 局點徽章脈動動畫（注入一次）
@@ -34,7 +35,8 @@ export function createScoreboard(playerId) {
 
   return {
     // controlledId：全隊輪控下當前受控球員（未傳則用建立時的預設）
-    update(game, isMyBall = false, controlledId = playerId) {
+    // hintText：外部播報行（決策模式的即時播報；undefined＝classic 舊版操作提示）
+    update(game, isMyBall = false, controlledId = playerId, hintText = undefined) {
       const { score } = game.match;
       const serve = game.match.servingTeam;
       lineEl.textContent = `${score.A} : ${score.B}`;
@@ -50,9 +52,11 @@ export function createScoreboard(playerId) {
           lineEl.style.color = '#eef2fa';
         }, 220);
       }
-      hintEl.textContent = isMyBall
-        ? '🟠 這球歸你！跑向藍色落點圈'
-        : hintFor(game, controlledId, serve);
+      hintEl.textContent = hintText !== undefined
+        ? hintText
+        : isMyBall
+          ? '🟠 這球歸你！跑向藍色落點圈'
+          : hintFor(game, controlledId, serve);
 
       // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）
       const spTeam = setPointTeam(game);
