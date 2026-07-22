@@ -48,6 +48,67 @@ export const EVENT_DEFS = [
       { speaker: '二傳（S）', text: '你手感燙起來了。之後的球，會更常到你手上。' },
     ],
   },
+  // ---- 技術傳授線（改版裁定：技術經故事習得，每場一招；輸贏都教——敗者也有收穫）----
+  {
+    id: 'teach-tip',
+    moment: 'post',
+    when: { lastMatchId: 'group-1' },
+    effect: { unlock: 'tip' },
+    lines: [
+      { speaker: '北原工商・隊長', text: '你只會全力打直球啊，新人。力量不夠的時候——用腦子打。' },
+      { speaker: '北原工商・隊長', text: '看好，手腕放軟、指尖推球。這叫吊球。拿去用吧。' },
+    ],
+  },
+  {
+    id: 'teach-dive',
+    moment: 'post',
+    when: { lastMatchId: 'group-2' },
+    effect: { unlock: 'dive' },
+    lines: [
+      { speaker: '白浪高中・自由人', text: '看到我們救了幾顆你們以為落地的球嗎？防守不是站著等球來。' },
+      { speaker: '白浪高中・自由人', text: '撲出去。會痛，但球不會落地。這叫魚躍——送你了。' },
+    ],
+  },
+  {
+    id: 'teach-pipe',
+    moment: 'post',
+    when: { lastMatchId: 'group-3' },
+    effect: { unlock: 'pipe' },
+    lines: [
+      { speaker: '曜石體中・MB', text: '你的進攻只有前排三公尺。我們的進攻，是整片場地。' },
+      { speaker: '曜石體中・MB', text: '後排起跳、攻擊線後起飛——pipe。學會它，你才算立體。' },
+    ],
+  },
+  {
+    id: 'teach-float',
+    moment: 'post',
+    when: { lastMatchId: 'national-qf' },
+    effect: { unlock: 'floatServe' },
+    lines: [
+      { speaker: '鐵霧工業・王牌發球手', text: '光有力氣的發球，練十年也就那樣。最難接的球——是不轉的球。' },
+      { speaker: '鐵霧工業・王牌發球手', text: '掌根擊球心、瞬間停腕。飄浮球會自己跳舞。' },
+    ],
+  },
+  {
+    id: 'teach-feint',
+    moment: 'post',
+    when: { lastMatchId: 'national-sf' },
+    effect: { unlock: 'feint' },
+    lines: [
+      { speaker: '曜石體中・隊長', text: '整場都在讀你。你看哪、打哪——太老實了。' },
+      { speaker: '曜石體中・隊長', text: '會被讀的人，才需要學騙。眼睛看左、手打右——去騙下一個讀你的人。' },
+    ],
+  },
+  {
+    id: 'teach-jump',
+    moment: 'pre',
+    when: { matchId: 'national-final' },
+    effect: { unlock: 'jumpServe' },
+    lines: [
+      { speaker: '隊長（MB）', text: '決賽了。把我壓箱的東西給你——跳躍發球，我們隊史上只有兩個人發得動。' },
+      { speaker: '隊長（MB）', text: '助跑、拋球、當它是扣球打下去。去吧，把天鷹轟下來。' },
+    ],
+  },
   {
     id: 'nationals',
     moment: 'pre',
@@ -98,6 +159,9 @@ function matchesWhen(when, { career, last, next }) {
         break;
       case 'wonLast':
         if (!last || !!last.won !== val) return false;
+        break;
+      case 'lastMatchId':
+        if (last?.matchId !== val) return false;
         break;
       case 'playedCount':
         if (career.results.length !== val) return false;

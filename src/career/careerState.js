@@ -115,8 +115,12 @@ export function createCareerPlayer(name) {
       speed: 62, control: 68, serve: 60, block: 58,
     },
     trustFloor: 0.27, // 保底 25–30% 球權（決策第 3 題：玩家不得淪為觀眾）
-    // 生涯新人技術層全鎖起步（成長體感＝「我能做新的事」）；快速比賽維持全開
-    techniques: { tip: 0, powerServe: 0, pipe: 0, feint: 0, feintUses: 0 },
+    // 生涯新人技術層全鎖起步，經故事線傳授習得（每場賽後對手/隊長教一招）
+    // v:2＝技術欄位語意版本（normalizeCareerPlayer 的一次性遷移標記）
+    techniques: {
+      tip: 0, pipe: 0, feint: 0, feintUses: 0,
+      jumpServe: 0, floatServe: 0, dive: 0, v: 2,
+    },
   });
 }
 
@@ -146,14 +150,31 @@ export function buildOpponentTeam(def) {
   });
 }
 
+// 跨版本存檔補正（就地修正；開賽與生涯畫面渲染都會跑，下次存檔即固定）：
+// ①主角保底球權地板 ②powerServe→jumpServe 正名（發球體系改版）
+// ③stage 3 前存檔的 jumpServe:1 是舊熟練度語意→歸零 ④新技術缺欄＝未解鎖
+export function normalizeCareerPlayer(player) {
+  if (player.trust.floorShare === undefined) player.trust.floorShare = 0.27;
+  const t = player.techniques ?? (player.techniques = {});
+  // 一次性遷移（t.v 標記）：改版前的 jumpServe 一律是舊熟練度語意——
+  // 只有買過強力發球（powerServe:1）者換得跳發；標記後永不再動（傳授所得不受影響）
+  if (!t.v) {
+    t.jumpServe = t.powerServe ?? 0;
+    delete t.powerServe;
+    t.v = 2;
+  }
+  for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive']) t[k] = t[k] ?? 0;
+  t.feintUses = t.feintUses ?? 0;
+  return player;
+}
+
 // 生涯比賽建隊：我隊＝預設隊伍＋玩家 Player 塞回主攻手槽；
 // 對手隊＝參數檔建隊（未給 def＝預設 B 隊，維持 stage 1 相容）
 export function careerTeams(player, opponentDef = null) {
   if (player?.id !== 'A2' || player?.teamId !== 'A') {
     throw new Error('careerTeams：生涯主角必須是 A 隊 A2（主攻手槽）');
   }
-  // stage 4 前的舊存檔補正：主角保底球權地板（下次存檔即固定下來）
-  if (player.trust.floorShare === undefined) player.trust.floorShare = 0.27;
+  normalizeCareerPlayer(player);
   const teams = createDefaultTeams();
   teams.A[1] = player;
   if (opponentDef) teams.B = buildOpponentTeam(opponentDef);

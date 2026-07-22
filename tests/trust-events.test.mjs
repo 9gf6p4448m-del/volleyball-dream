@@ -102,13 +102,14 @@ test('事件表：宣告式條件觸發、once 不重複、未知條件鍵安全
     matchId: 'group-1', won: true, scoreFor: 25, scoreAgainst: 20, gp: 6,
     stats: { kills: 5, tipKills: 1, aces: 0, blockPoints: 0, perfects: 0, spikes: 12 },
   });
-  assert.deepEqual(dueEvents(c, 'post').map((e) => e.id), ['first-win', 'hot-hand']);
-  // 賽前對曜石（group-3 前）：mb-warn 要等下一場輪到曜石
-  c = recordEvent(recordEvent(c, 'first-win'), 'hot-hand');
-  assert.equal(dueEvents(c, 'pre').length, 0); // 下一場是 group-2 白浪：無事件
+  assert.deepEqual(dueEvents(c, 'post').map((e) => e.id),
+    ['first-win', 'hot-hand', 'teach-tip']); // 首勝＋手感＋北原傳授吊球
+  c = recordEvent(recordEvent(recordEvent(c, 'first-win'), 'hot-hand'), 'teach-tip');
+  assert.equal(dueEvents(c, 'pre').length, 0); // 下一場是 group-2 白浪：無賽前事件
   c = recordResult(c, { matchId: 'group-2', won: false, scoreFor: 20, scoreAgainst: 25 });
-  assert.deepEqual(dueEvents(c, 'post').map((e) => e.id), ['first-loss']);
-  c = recordEvent(c, 'first-loss');
+  assert.deepEqual(dueEvents(c, 'post').map((e) => e.id),
+    ['first-loss', 'teach-dive']); // 首敗＋白浪傳授魚躍（輸球也教）
+  c = recordEvent(recordEvent(c, 'first-loss'), 'teach-dive');
   assert.deepEqual(dueEvents(c, 'pre').map((e) => e.id), ['mb-warn']); // 下一場曜石
   // 事件表健全性：id 唯一、對話非空、moment 合法
   assert.equal(new Set(EVENT_DEFS.map((e) => e.id)).size, EVENT_DEFS.length);

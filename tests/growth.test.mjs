@@ -77,17 +77,17 @@ test('unlockTechnique：0→1、重複解鎖拒絕、假動作熟練度從 0 起
   const pf = unlockTechnique(p, 'feint');
   assert.equal(pf.techniques.feint, 1);
   assert.equal(pf.techniques.feintUses, 0);
-  assert.equal(TECH_DEFS.length, 4);
+  assert.equal(TECH_DEFS.length, 6); // 吊球/魚躍/pipe/飄浮/假動作/跳發
 });
 
 test('技術閘門起點：生涯新人全鎖、預設球員（快速比賽/AI）全開', () => {
   const rookie = createCareerPlayer('小夢');
-  for (const k of ['tip', 'powerServe', 'pipe', 'feint']) {
+  for (const k of ['tip', 'pipe', 'feint', 'jumpServe', 'floatServe', 'dive']) {
     assert.equal(rookie.techniques[k], 0, `${k} 應鎖定`);
   }
   assert.equal(rookie.techniques.feintUses, 0);
   const dflt = createPlayer({ id: 'X', teamId: 'A' });
-  for (const k of ['tip', 'powerServe', 'pipe', 'feint']) {
+  for (const k of ['tip', 'pipe', 'feint', 'jumpServe', 'floatServe', 'dive']) {
     assert.equal(dflt.techniques[k], 1, `${k} 預設應全開`);
   }
   assert.equal(dflt.techniques.feintUses, 8);

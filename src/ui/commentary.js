@@ -35,6 +35,8 @@ export function createCommentary(opponentDef = null) {
         if (e.type === 'SERVE') {
           rallyStartFlight = game.rally.flightId;
           if (e.playerId !== controlledId) setBeat(`${nameOf(game, e.playerId)} 發球`, now, 1400);
+        } else if (e.type === 'TOUCH' && e.kind === 'dive') {
+          setBeat(`${nameOf(game, e.playerId)} 魚躍救球！！`, now);
         } else if (e.type === 'TOUCH' && e.kind === 'receive' && game.rally.touches === 1) {
           // 只播有戲的一傳：Perfect 或貼地撈球（逐球碎唸會蓋掉重要節奏點）
           if ((e.power ?? 0) >= PERFECT_POWER) {

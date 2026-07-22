@@ -35,7 +35,9 @@ export function aiProfileOf(game, team) {
   return {
     tipRate: p?.tipRate ?? AI.TIP_RATE,
     dumpRate: p?.dumpRate ?? AI.DUMP_RATE,
-    powerServeRate: p?.powerServeRate ?? 0, // 預設 AI 不用強力發球（維持穩定）
+    // 發球風格（預設 AI 全穩定）；powerServeRate 為 jumpServeRate 改名前的舊鍵（相容）
+    jumpServeRate: p?.jumpServeRate ?? p?.powerServeRate ?? 0,
+    floatServeRate: p?.floatServeRate ?? 0,
   };
 }
 
@@ -327,14 +329,17 @@ function decideOne(game, aiState, playerId) {
   if (game.phase === 'serve') {
     if (playerId === serverId(game.match)) {
       if (tick >= game.serveReadyTick + AI.SERVE_DELAY) {
-        // 風格參數 powerServeRate：AI 改用強力發球（timing>1.1＝低平快＋散佈放大，
-        // 與玩家「強○」同一條 sim 路徑）；hash 吃比分＋發球員＋種子——決定論、逐球變化
+        // 發球風格（與玩家同一條 sim 路徑）：跳發＝timing>1.1、飄浮＝style 'float'；
+        // hash 吃比分＋發球員＋種子——決定論、逐球變化；機率帶：[0,jump)跳、[jump,jump+float)飄
         const { score } = game.match;
-        const powerRoll = hash01(score.A * 37 + score.B * 101 + idHash(playerId) + (game.seed ?? 0));
-        const power = powerRoll < aiProfileOf(game, team).powerServeRate;
+        const prof = aiProfileOf(game, team);
+        const roll = hash01(score.A * 37 + score.B * 101 + idHash(playerId) + (game.seed ?? 0));
+        const jump = roll < prof.jumpServeRate;
+        const float = !jump && roll < prof.jumpServeRate + prof.floatServeRate;
         return createIntent({
           playerId, tick, action: 'serve', aim: serveTarget(game, team),
-          ...(power ? { timing: 1.15 } : {}),
+          ...(jump ? { timing: 1.15 } : {}),
+          ...(float ? { style: 'float' } : {}),
         });
       }
       return null; // 發球員原地等節奏

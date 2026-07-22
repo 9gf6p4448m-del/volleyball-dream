@@ -24,8 +24,14 @@ export const TUNING = {
   BLOCK_WINDOW: 48,       // block intent 的有效 tick 窗口（0.8s，手機反應時間友善）
   BLOCK_REACH_X: 1.1,     // 攔網水平涵蓋半徑（m）
   SERVE_APEX: 4.6,        // 各球路弧頂高度（m）
-  POWER_SERVE_APEX: 3.5,  // 強力發球低平弧（timing>1.1；力量換準度）
-  POWER_SERVE_SCATTER: 1.45, // 強力發球散佈放大倍率
+  POWER_SERVE_APEX: 3.5,  // 跳躍發球低平弧（timing>1.1；力量換準度）
+  POWER_SERVE_SCATTER: 1.45, // 跳躍發球散佈放大倍率
+  FLOAT_APEX_MUL: 0.8,    // 飄浮發球弧頂縮減（較平、帶進撲朔感）
+  FLOAT_SCATTER: 1.05,    // 飄浮發球自身散佈（略增；重點在對方難接）
+  FLOAT_RECEIVE_MUL: 1.28, // 飄浮球接發品質懲罰（一傳散佈放大→對方戰術分支被壓）
+  DIVE_REACH_MUL: 1.8,    // 魚躍可及半徑倍率（一次性大延伸）
+  DIVE_MAX_Y: 1.15,       // 魚躍只救低球（貼地撲救，不是跳接）
+  DIVE_RECOVER_TICKS: 42, // 撲出去後倒地恢復（0.7s）——撲空也一樣（風險換範圍）
   RECEIVE_APEX: 4.8,
   SET_APEX: 5.2,
   QUICK_APEX: 3.4,        // 快攻低弧（set 且 timing<0.5 時採用——MB 簡版快攻）
@@ -65,6 +71,7 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
       actors[p.id] = {
         x: 0, z: 0, px: 0, pz: 0,
         blockUntil: -1, blockStartTick: -9999, lastTouchTick: -9999,
+        divedUntil: -1, // 魚躍倒地恢復期（此前不得移動/觸球）
         zHistory: [], // 每 tick 推入舊 z（見 takeoffZ）；固定長度＝回溯窗
       };
     }
@@ -94,6 +101,7 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles } = {}) {
       lastTouchTeam: null,
       lastToucherId: null,
       deceiveP: 0,       // H3：當前扣球夾帶的騙敵機率（攔網結算用）
+      serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
     },
     events: [], // 完整事件日誌（測試/回放用）
@@ -136,6 +144,7 @@ export function stepGame(state, intents = []) {
 // ---- Intent 消費 ----
 
 function applyMove(state, actor, intent) {
+  if (state.tick < actor.divedUntil) return; // 魚躍倒地恢復中：不能移動
   let { x = 0, z = 0 } = intent.move ?? {};
   const len = Math.hypot(x, z);
   if (len > 1) { x /= len; z /= len; }
@@ -219,9 +228,10 @@ function tryAction(state, intent, ev) {
     return;
   }
 
-  // receive / set / spike：觸球嘗試
+  // receive / set / spike / dive：觸球嘗試
   if (rally.touchLockTick === state.tick) return; // 本 tick 已有人觸球
   if (state.tick - actor.lastTouchTick < TUNING.TOUCH_COOLDOWN) return;
+  if (state.tick < actor.divedUntil) return; // 魚躍倒地恢復中：不得再觸球
   // 發球飛行中，發球方全隊不得觸球（發球必須過網；掛網落回本方＝自然失分）
   if (rally.profile === 'serve' && player.teamId === rally.lastTouchTeam) return;
   // 球在對方半場（未過網）不得觸球——隔網打球只有攔網（tryBlock）一條路。
@@ -229,9 +239,16 @@ function tryAction(state, intent, ev) {
   // 又因觸球計數不分隊被記成第 4 擊——防守方莫名被吹四擊犯規的根源
   if (ball.z * TEAM_SIDE[player.teamId] < 0) return;
 
+  // 魚躍救球：技術資格（未學不會撲）；出手即倒地——撲空一樣躺（風險換範圍）
+  const isDive = intent.action === 'dive';
+  if (isDive && (player.techniques?.dive ?? 1) < 1) return;
+  if (isDive) actor.divedUntil = state.tick + TUNING.DIVE_RECOVER_TICKS;
+
   const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
-  if (dist > TUNING.REACH_RADIUS) return;
-  const maxY = intent.action === 'spike' ? spikeReach(player) : standingReach(player) + 0.35;
+  if (dist > TUNING.REACH_RADIUS * (isDive ? TUNING.DIVE_REACH_MUL : 1)) return;
+  const maxY = intent.action === 'spike' ? spikeReach(player)
+    : isDive ? TUNING.DIVE_MAX_Y
+      : standingReach(player) + 0.35;
   if (ball.y > maxY || ball.y < BALL.RADIUS) return;
 
   executeTouch(state, intent, player, actor, ev);
@@ -274,8 +291,13 @@ function executeTouch(state, intent, player, actor, ev) {
   // 高低手球質（接球）×出手品質（扣球甜蜜區/超蓄）：都收斂到散佈乘數
   // 接球另吃 Perfect 時機（timing≥0.95＝球到瞬間出手，一傳更準）
   const rawT = intent.timing ?? 1;
-  const qualityMul = intent.action === 'receive'
-    ? receiveQualityMul(from.y, player) * receivePerfectMul(rawT)
+  // 飄浮發球的接發懲罰：不轉的球最難接乾淨（只吃發球首觸；魚躍視同接球）
+  const floatMul =
+    rally.profile === 'serve' && rally.serveStyle === 'float' &&
+    (intent.action === 'receive' || intent.action === 'dive')
+      ? TUNING.FLOAT_RECEIVE_MUL : 1;
+  const qualityMul = (intent.action === 'receive' || intent.action === 'dive')
+    ? receiveQualityMul(from.y, player) * receivePerfectMul(rawT) * floatMul
     : intent.action === 'spike'
       ? timingQualityMul(rawT)
       : 1;
@@ -360,13 +382,20 @@ function performServe(state, intent, ev) {
 
   const contactY = Math.max(spikeReach(player) * 0.92, 2.2); // 跳發擊球點
   ball.x = actor.x; ball.y = contactY; ball.z = actor.z;
-  // 強力發球（timing>1.1，玩家決策「強○」）：低平快弧＋散佈放大——力量換準度
+  // 發球三式：穩定（預設）／跳躍（timing>1.1：低平快＋散佈放大——力量換準度）
+  // ／飄浮（style 'float'：弧較平、自身散佈略增，殺傷在對方接發品質懲罰）
   const power = (intent.timing ?? 1) > 1.1;
+  const float = !power && intent.style === 'float';
+  rally.serveStyle = float ? 'float' : null;
   const target = scatterTarget(
     state, intent.aim, player.attributes.serve, 'serve', 0,
-    power ? TUNING.POWER_SERVE_SCATTER : 1,
+    power ? TUNING.POWER_SERVE_SCATTER : float ? TUNING.FLOAT_SCATTER : 1,
   );
-  const apex = Math.max(power ? TUNING.POWER_SERVE_APEX : TUNING.SERVE_APEX, contactY + 0.35);
+  const apex = Math.max(
+    power ? TUNING.POWER_SERVE_APEX
+      : float ? TUNING.SERVE_APEX * TUNING.FLOAT_APEX_MUL : TUNING.SERVE_APEX,
+    contactY + 0.35,
+  );
   const v = velocityForApex(ball, { x: target.x, y: BALL.RADIUS, z: target.z }, apex);
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
   ball.px = ball.x; ball.py = ball.y; ball.pz = ball.z;
@@ -571,6 +600,7 @@ function setupServePhase(state) {
       a.x = pos.x; a.z = pos.z;
       a.px = pos.x; a.pz = pos.z; // 瞬移回位不做插值拖影
       a.blockUntil = -1;
+      a.divedUntil = -1; // 死球即起身（倒地恢復不跨球）
     });
   }
   const sid = serverId(state.match);

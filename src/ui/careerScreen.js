@@ -2,11 +2,9 @@
 // 夜賽同色系；動態文字一律 textContent（匯入的存檔名字不可信，不走 innerHTML）
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
-  careerStage, opponentById,
+  careerStage, opponentById, normalizeCareerPlayer,
 } from '../career/careerState.js';
-import {
-  GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, unlockTechnique,
-} from '../career/growth.js';
+import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
 import { dueEvents, recordEvent } from '../career/events.js';
 import { updateTrust } from '../sim/trust.js';
 
@@ -109,6 +107,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     for (const e of evs) {
       c = recordEvent(c, e.id);
       if (e.effect?.trust) updateTrust(player, e.effect.trust); // 持久 baseline（劇情層專用路徑）
+      if (e.effect?.unlock) {
+        // 故事線傳授：冪等解鎖（點數時代已買過的不受影響）
+        const k = e.effect.unlock;
+        player.techniques[k] = Math.max(1, player.techniques[k] ?? 0);
+        if (k === 'feint') player.techniques.feintUses = player.techniques.feintUses || 0;
+      }
     }
     store.saveCareer(c);
     store.savePlayer(player);
@@ -199,6 +203,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const career = store.loadCareer();
     const player = store.loadPlayer();
     if (!career || !player) { renderHome(); return; }
+    normalizeCareerPlayer(player); // 跨版本存檔補正（顯示與開賽同一套語意）
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）
     const postEvs = dueEvents(career, 'post');
     if (postEvs.length) {
@@ -356,30 +361,25 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     }
     box.appendChild(grid);
 
-    // 技術層（主要成長：解鎖新決策選項）
+    // 技術層：故事線傳授習得（不花點）——這裡只展示進度，吊胃口但不爆雷
     for (const t of TECH_DEFS) {
       const unlocked = (player.techniques?.[t.key] ?? 0) >= 1;
       const row = el('div', [
         'display:flex', 'justify-content:space-between', 'align-items:center', 'gap:10px',
       ]);
       const info = el('div', ['flex:1', 'text-align:left']);
-      const title = t.name + (t.key === 'feint' && unlocked
-        ? `（熟練 ${player.techniques.feintUses ?? 0}）` : '');
-      info.appendChild(el('div', ['font-size:14px', 'font-weight:700'], title));
-      info.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.4'], t.desc));
+      const title = unlocked
+        ? t.name + (t.key === 'feint' ? `（熟練 ${player.techniques.feintUses ?? 0}）` : '')
+        : '？？？';
+      info.appendChild(el('div', ['font-size:14px', 'font-weight:700',
+        unlocked ? '' : `color:${COLOR.dim}`], title));
+      info.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.4'],
+        unlocked ? t.desc : '未習得——比賽裡自有人教你'));
       row.appendChild(info);
-      if (unlocked) {
-        row.appendChild(el('div', [
-          'font-size:13px', 'font-weight:700', `color:${COLOR.gold}`, 'white-space:nowrap',
-        ], '✓ 已解鎖'));
-      } else {
-        const can = gp >= t.cost;
-        const b = smallButton(`解鎖 ${t.cost} 點`, () => {
-          if (can) spend(() => unlockTechnique(player, t.key), t.cost);
-        });
-        if (!can) b.style.opacity = '0.4';
-        row.appendChild(b);
-      }
+      row.appendChild(el('div', [
+        'font-size:13px', 'font-weight:700', 'white-space:nowrap',
+        `color:${unlocked ? COLOR.gold : COLOR.dim}`,
+      ], unlocked ? '✓ 已習得' : '—'));
       box.appendChild(row);
     }
     return box;

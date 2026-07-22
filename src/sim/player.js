@@ -41,12 +41,14 @@ export function createPlayer({
       block: 1,
       receive: 1,
       emergencySet: 1,
-      // Phase 2 stage 3 決策選項解鎖（0＝未解鎖）：預設全開＝快速比賽/AI 行為不變；
-      // 生涯新人由 createCareerPlayer 覆寫為 0 起步（成長體感＝我能做新的事）
+      // Phase 2 決策選項解鎖（0＝未解鎖）：預設全開＝快速比賽/AI 行為不變；
+      // 生涯新人由 createCareerPlayer 覆寫為 0 起步，經故事線傳授習得
+      // （jumpServe 直接沿用上方既有欄位＝跳躍發球解鎖旗標）
       tip: 1,        // 攻擊面板「吊球」
-      powerServe: 1, // 發球面板「強力」球路
+      floatServe: 1, // 發球面板「飄浮」球路
       pipe: 1,       // 後排攻擊面板（手動 pipe）
       feint: 1,      // 按A滑B 假動作
+      dive: 1,       // 魚躍救球（主動技）
       feintUses: 8,  // 假動作使用次數（熟練度）；8＝1.0 基準乘子
       ...techniques,
     },

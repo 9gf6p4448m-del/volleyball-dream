@@ -120,8 +120,11 @@ async function runMatch(ctx, careerCtx = null) {
   const tech = careerCtx ? (game.players[PLAYER_ID].techniques ?? {}) : null;
   const canTip = !tech || (tech.tip ?? 0) >= 1;
   const canPipe = !tech || (tech.pipe ?? 0) >= 1;
-  const canPowerServe = !tech || (tech.powerServe ?? 0) >= 1;
+  const canJumpServe = !tech || (tech.jumpServe ?? 0) >= 1;
+  const canFloatServe = !tech || (tech.floatServe ?? 0) >= 1;
   const canFeint = !tech || (tech.feint ?? 0) >= 1;
+  const canDive = !tech || (tech.dive ?? 0) >= 1;
+  let diveReady = false; // 魚躍鈕當幀可用性（Space 鍵共用判定）
   // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
   const readTier = careerCtx ? blockReadTier(game.players[PLAYER_ID]) : 'instant';
   let feintsUsedThisMatch = 0; // 假動作熟練度：場終一次累積寫回 Player
@@ -139,7 +142,7 @@ async function runMatch(ctx, careerCtx = null) {
   if (matchView.count > 0) loadingEl.remove();
 
   const rig = createCameraRig(camera, PLAYER_ID);
-  const controls = createMatchControls(renderer.domElement, camera, PLAYER_ID, rig);
+  const controls = createMatchControls(renderer.domElement, camera, PLAYER_ID, rig, simpleMode);
   const scoreboard = createScoreboard(PLAYER_ID);
   // 即時播報（決策模式）：取代舊版操作提示行；classic 走 scoreboard 內建舊提示
   const commentary = simpleMode ? createCommentary(careerSetup?.opponent ?? null) : null;
@@ -190,6 +193,30 @@ async function runMatch(ctx, careerCtx = null) {
     startReplay();
   });
   document.body.appendChild(replayBtn);
+  // 魚躍鈕（主動技，故事線習得）：來球搆不到但撲得到時亮起；桌機 L 鍵
+  // （Space/J 是主動作蓄力、K 是攔網——L 順位相鄰）
+  const diveBtn = document.createElement('button');
+  diveBtn.textContent = '魚躍!';
+  diveBtn.style.cssText = [
+    'position:fixed', 'left:calc(env(safe-area-inset-left, 0px) + 18px)', 'bottom:45%',
+    'width:70px', 'height:70px', 'border-radius:50%', 'border:3px solid #101420',
+    'background:rgba(255,120,96,0.94)', 'color:#1a0e08', 'font-size:17px', 'font-weight:800',
+    'z-index:16', 'cursor:pointer', 'touch-action:manipulation', 'display:none',
+    'box-shadow:0 3px 0 rgba(8,10,18,0.55)',
+  ].join(';');
+  diveBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (diveReady) controls.diveNow(game);
+  });
+  document.body.appendChild(diveBtn);
+  window.addEventListener('keydown', (e) => {
+    // 簡化模式 Space＝魚躍（蓄力已讓位）；L 鍵兩模式通用
+    const diveKey = e.code === 'KeyL' || (simpleMode && e.code === 'Space');
+    if (diveKey && !e.repeat && diveReady) {
+      e.preventDefault();
+      controls.diveNow(game);
+    }
+  });
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點（僅顯示落在我方半場的）
   const assistOn = params.get('assist') !== 'off';
@@ -419,17 +446,24 @@ async function runMatch(ctx, careerCtx = null) {
       } else if (serveDeciding) {
         // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
         const zs = controls.serveZones(game);
+        const styleHint = [
+          canFloatServe ? '藍＝飄浮' : null,
+          canJumpServe ? '橘＝跳發' : null,
+        ].filter(Boolean).join('、');
         panel.show(
-          canPowerServe ? '選發球目標！（橘＝強力）' : '選發球目標！',
+          styleHint ? `選發球目標！（${styleHint}）` : '選發球目標！',
           [
-            ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, power: false })),
-            // 強力球路＝技術解鎖項（生涯未解鎖不出現）
-            ...(canPowerServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
-              key: `p-${z.key}`, label: `強${z.label.slice(1)}`, color: 'orange', zone: z, power: true,
+            ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, style: null })),
+            // 飄浮/跳躍球路＝故事線傳授的技術（未習得不出現）
+            ...(canFloatServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
+              key: `f-${z.key}`, label: `飄${z.label.slice(1)}`, color: 'cyan', zone: z, style: 'float',
+            })) : []),
+            ...(canJumpServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
+              key: `j-${z.key}`, label: `跳${z.label.slice(1)}`, color: 'orange', zone: z, style: 'jump',
             })) : []),
           ],
           (it) => {
-            controls.serveNow(game, it.zone.aim, it.power);
+            controls.serveNow(game, it.zone.aim, it.style);
             servedThisTurn = true;
           },
         );
@@ -600,6 +634,20 @@ async function runMatch(ctx, careerCtx = null) {
       camera.position.x += (Math.random() - 0.5) * shake;
       camera.position.y += (Math.random() - 0.5) * shake * 0.6;
       shake *= 0.82;
+    }
+    // 魚躍鈕可用性：來球落我方半場、正常可及外撲救範圍內、未倒地（Space 版共用 diveReady）
+    if (canDive) {
+      const meActor = game.actors[controlledId];
+      const landing = aiState?.landing;
+      diveReady = game.phase === 'rally' && !replay &&
+        game.tick >= meActor.divedUntil &&
+        !!landing && aiState.landingTeam === game.players[controlledId].teamId &&
+        game.ball.vy < 0;
+      if (diveReady) {
+        const d = Math.hypot(landing.x - meActor.x, landing.z - meActor.z);
+        diveReady = d > 1.1 && d <= 3.4;
+      }
+      diveBtn.style.display = diveReady ? 'block' : 'none';
     }
     scoreboard.update(game, myBall, controlledId,
       commentary ? commentary.line(game, aiState, controlledId, now) : undefined);

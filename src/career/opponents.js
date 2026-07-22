@@ -14,7 +14,7 @@ export const OPPONENTS = [
     roleBias: {},
     trustBias: {},
     heights: [1.80, 1.85, 1.92, 1.86, 1.83, 1.90],
-    ai: { tipRate: 0.06, dumpRate: 0.04, powerServeRate: 0 },
+    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25 }, // 控制系：飄浮發球
   },
   {
     id: 'white-wave',
@@ -26,7 +26,7 @@ export const OPPONENTS = [
     roleBias: {},
     trustBias: {},
     heights: [1.81, 1.84, 1.90, 1.85, 1.83, 1.89],
-    ai: { tipRate: 0.22, dumpRate: 0.08, powerServeRate: 0 },
+    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15 },
   },
   {
     id: 'obsidian',
@@ -38,7 +38,7 @@ export const OPPONENTS = [
     roleBias: { middle: { block: 10, jump: 8, power: 4 } },
     trustBias: { middle: 22 },
     heights: [1.83, 1.87, 1.98, 1.89, 1.85, 1.96],
-    ai: { tipRate: 0.1, dumpRate: 0.1, powerServeRate: 0.05 },
+    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05 },
   },
   {
     id: 'iron-mist',
@@ -50,7 +50,7 @@ export const OPPONENTS = [
     roleBias: {},
     trustBias: {},
     heights: [1.84, 1.89, 1.95, 1.91, 1.87, 1.93],
-    ai: { tipRate: 0.08, dumpRate: 0.06, powerServeRate: 0.45 },
+    ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2 }, // 發球輪就是得分輪
   },
   {
     id: 'sky-hawk',
@@ -62,7 +62,7 @@ export const OPPONENTS = [
     roleBias: { outside: { power: 6 } },
     trustBias: { outside: 8 },
     heights: [1.86, 1.92, 1.99, 1.94, 1.90, 1.97],
-    ai: { tipRate: 0.1, dumpRate: 0.08, powerServeRate: 0.25 },
+    ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1 },
   },
 ];
 

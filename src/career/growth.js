@@ -25,12 +25,15 @@ export const GROWABLE_ATTRS = [
   { key: 'block', name: '攔網' },
 ];
 
-// 技術層解鎖項（生涯新人全鎖起步；快速比賽預設全開）
+// 技術層（生涯新人全鎖起步；快速比賽預設全開）——經故事線傳授習得，不花點數
+// （改版裁定 2026-07-22：每場賽後對手/隊長教一招；成長點數專注屬性層）
 export const TECH_DEFS = [
-  { key: 'tip', name: '吊球', cost: 4, desc: '攻擊面板新增「吊球」——騙重心的輕放' },
-  { key: 'feint', name: '假動作', cost: 4, desc: '按A滑B視線騙攔網；越用越純熟' },
-  { key: 'powerServe', name: '強力發球', cost: 5, desc: '發球面板新增強力球路——力量換準度' },
-  { key: 'pipe', name: '後排 pipe', cost: 6, desc: '輪到後排也能主導進攻（後排攻擊面板）' },
+  { key: 'tip', name: '吊球', desc: '攻擊面板新增「吊球」——騙重心的輕放' },
+  { key: 'dive', name: '魚躍救球', desc: '救球鈕：撲向搆不到的球——撲空會倒地' },
+  { key: 'pipe', name: '後排 pipe', desc: '輪到後排也能主導進攻（後排攻擊面板）' },
+  { key: 'floatServe', name: '飄浮發球', desc: '不轉的球最難接——破壞對方一傳品質' },
+  { key: 'feint', name: '假動作', desc: '按A滑B視線騙攔網；越用越純熟' },
+  { key: 'jumpServe', name: '跳躍發球', desc: '最強的發球——力量換準度' },
 ];
 
 // 從 sim 事件日誌統計玩家表現（歸因法與 pointBanner 同：得分前最後觸球者）
