@@ -23,8 +23,8 @@ export const OPPONENTS = [
     name: '白浪高中',
     style: 'defense',
     trait: '防守黏得可怕——救球救不完，還愛用吊球打亂你的節奏',
-    level: 56,
-    attrBias: { reaction: 8, speed: 5, power: -4 },
+    level: 57, // 平衡治具 07-22：group-2 勝率 92%>group-1 86% 倒掛——加黏不加暴力
+    attrBias: { reaction: 10, speed: 6, power: -4 },
     roleBias: {},
     trustBias: {},
     heights: [1.81, 1.84, 1.90, 1.85, 1.83, 1.89],
