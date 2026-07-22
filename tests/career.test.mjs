@@ -7,7 +7,7 @@ import {
   careerMatchSetup, careerStage, nextMatch, recordResult, careerRecord, matchSeed,
   serializeCareer, deserializeCareer, OPPONENTS, opponentById,
 } from '../src/career/careerState.js';
-import { createCareerStore, CAREER_KEY, PLAYER_KEY } from '../src/career/careerStore.js';
+import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
 import { deserializePlayer, serializePlayer, ATTRIBUTE_KEYS } from '../src/sim/player.js';
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents, aiProfileOf } from '../src/sim/ai.js';
@@ -231,9 +231,9 @@ test('jumpServeRate 行為驗證：跳發隊的發球更平更快', () => {
     `跳躍發球應明顯更快（stable=${stable.toFixed(2)} jump=${jump.toFixed(2)}）`);
 });
 
-// ---- careerStore（stage 1）----
+// ---- careerStore（stage 1；Phase 3 W1 起改單一 key schema v2 後端，API 不變）----
 
-test('careerStore：career 與 Player 分 key 存讀 roundtrip', () => {
+test('careerStore：career 與 Player 經單一 v2 key 存讀 roundtrip', () => {
   const storage = fakeStorage();
   const store = createCareerStore(storage);
   const career = createCareer({ seed: 8, playerName: '阿夢' });
@@ -241,21 +241,21 @@ test('careerStore：career 與 Player 分 key 存讀 roundtrip', () => {
   assert.equal(store.hasSave(), false);
   assert.ok(store.saveCareer(career));
   assert.ok(store.savePlayer(player));
-  assert.ok(storage._map.has(CAREER_KEY) && storage._map.has(PLAYER_KEY));
+  assert.ok(storage._map.has(SAVE_KEY));
   assert.deepEqual(store.loadCareer(), career);
   assert.deepEqual(store.loadPlayer(), player);
 });
 
 test('careerStore：壞檔安全降級為 null 不炸', () => {
   const storage = fakeStorage();
-  storage.setItem(CAREER_KEY, '{"version":2,壞掉');
-  storage.setItem(PLAYER_KEY, 'not json');
+  storage.setItem(SAVE_KEY, '{"schemaVersion":2,壞掉');
   const store = createCareerStore(storage);
   assert.equal(store.loadCareer(), null);
   assert.equal(store.loadPlayer(), null);
+  assert.equal(store.hasSave(), false);
 });
 
-test('careerStore：匯出→清空→匯入 roundtrip（含 v1 匯入升級）', () => {
+test('careerStore：匯出→清空→匯入 roundtrip（schema v2 單包格式）', () => {
   const store = createCareerStore(fakeStorage());
   const career = playThrough(createCareer({ seed: 3, playerName: 'IO' }), [false]);
   store.saveCareer(career);

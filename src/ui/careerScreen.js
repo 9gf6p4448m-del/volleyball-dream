@@ -140,6 +140,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
   function renderHome() {
     root.replaceChildren();
     setMsg('');
+    // schema v2（Phase 3 W1）：偵測到 Phase 2 舊存檔已被清空——如實告知，不留懸念
+    if (store.wasLegacyReset?.()) {
+      setMsg('Phase 2 存檔不相容，已重置——新的名冊時代從這裡開始');
+    }
     root.appendChild(el('div', [
       'font-size:52px', 'font-weight:900', 'letter-spacing:10px',
       `color:${COLOR.gold}`, 'text-shadow:0 4px 24px rgba(0,0,0,0.8)',

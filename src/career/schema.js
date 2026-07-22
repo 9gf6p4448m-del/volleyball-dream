@@ -1,0 +1,142 @@
+// Phase 3 W1 — 存檔 Schema v2（結構定型＋版本遷移機制；純函式，零 DOM/IO）
+// 單一存檔物件取代 Phase 2 的雙 key（vd-career-v1 / vd-career-player-v1）。
+// 頂層鍵一次補齊：Phase 3 四系統（roster/recruitment/lineup/season）欄位結構定實、
+// 內容留空（W2–W5 逐週填入）；Phase 4 預留鍵（career/story）只留空物件、不猜內容。
+//
+// 欄位設計依據（Phase 3 kickoff 第 1–4 題拍板結論）：
+// 每隊 1 名招牌球員、招募條件跨賽季累積、隊友自動成長（玩家點數只管自己）、
+// 名冊上限 10、線性多賽季（對手升級、宿敵記憶延續）。
+import { deserializePlayer } from '../sim/player.js';
+import { CAREER_VERSION, deserializeCareer } from './careerState.js';
+
+export const SCHEMA_VERSION = 2;
+
+// v2 完整骨架。career（現行 careerState 物件）與 player 可為 null（建檔中間態）。
+export function createSaveV2({ career = null, player = null, prev = null } = {}) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    // 主角——沿用既有 serializePlayer 格式（sim/player.js 定義；不在此擴充）
+    player,
+    // 名冊（W2 填入）：members[] 元素形狀＝{ id, name, origin(來源隊 id|'starter'),
+    //   role, attributes, growth(成長曲線參數), dna(原隊參數 DNA 標記) }
+    roster: prev?.roster ?? { capacity: 10, members: [] },
+    // 招募（W4 填入）：progress[opponentId]＝條件進度（跨賽季累積——拍板結論）；
+    //   recruited[]＝已達成入隊的球員 id
+    recruitment: prev?.recruitment ?? { progress: {}, recruited: [] },
+    // 先發編排（W3 填入，啟用 FIVB 7.7 驗證器）：starters＝6 人輪轉序（null＝未排，
+    //   沿用預設陣容）；libero＝自由人 id；rotationStart＝輪轉起點（0-5）
+    lineup: prev?.lineup ?? { starters: null, libero: null, rotationStart: 0 },
+    // 賽季（W5 接輪迴）：index＝賽季序號（線性多賽季遞增）；其餘＝現行生涯資料歸戶。
+    // careerStage 一律由 results 衍生（careerState.careerStage()）——Phase 2 拍板
+    // 「不存衍生狀態防不同步」，schema 不設此欄位
+    season: career ? seasonFromCareer(career, prev) : emptySeason(),
+    // Phase 4 預留：內容本週不定型，保持空物件（不要猜）
+    career: prev?.career ?? {},
+    story: prev?.story ?? {},
+  };
+}
+
+function emptySeason() {
+  return {
+    index: 1,
+    seed: null, playerName: null,
+    schedule: [], results: [],
+    growthPoints: 0,
+    scouting: {}, // 宿敵記憶（per 對手 id；跨賽季累積）
+  };
+}
+
+// 現行 career 物件（careerState v3 形狀）→ season 欄位；index 等 v2 專屬欄位
+// 從既有存檔（prev）沿用
+export function seasonFromCareer(career, prev = null) {
+  return {
+    index: prev?.season?.index ?? 1,
+    seed: career.seed,
+    playerName: career.playerName,
+    schedule: career.schedule,
+    results: career.results,
+    growthPoints: career.growthPoints ?? 0,
+    scouting: career.scouting ?? {},
+    ...(career.pendingMatch !== undefined ? { pendingMatch: career.pendingMatch } : {}),
+  };
+}
+
+// season → 現行 career 物件視圖（W1 過渡期：runtime 邏輯仍吃 careerState v3 形狀，
+// W2–W5 逐步把邏輯搬到 v2 鍵上後此視圖退役）。鍵集合與原物件一致（roundtrip 恆等）
+export function careerViewOf(save) {
+  const s = save.season;
+  if (!s || s.seed === null || s.seed === undefined) return null;
+  return {
+    version: CAREER_VERSION,
+    seed: s.seed,
+    playerName: s.playerName,
+    schedule: s.schedule,
+    results: s.results,
+    growthPoints: s.growthPoints ?? 0,
+    ...(Object.keys(s.scouting ?? {}).length > 0 ? { scouting: s.scouting } : {}),
+    ...(s.pendingMatch !== undefined ? { pendingMatch: s.pendingMatch } : {}),
+  };
+}
+
+// ---- 版本遷移機制 ----
+// 骨架本週定型、實際遷移一條都不提供：v1（Phase 2 雙 key 舊制）拍板不相容——
+// 存取層偵測到舊 key 走「清空＋提示重置」，不進 migrate。
+// Phase 4 之後要真遷移時：在 MIGRATIONS 註冊 fromVersion→fn，鏈式走到現版。
+
+export class IncompatibleSaveError extends Error {
+  constructor(fromVersion) {
+    super(`存檔版本 ${fromVersion} 不相容（無遷移路徑）`);
+    this.name = 'IncompatibleSaveError';
+    this.fromVersion = fromVersion;
+  }
+}
+
+// fromVersion → (save) => save'（升一版）。v1 刻意缺席＝不相容。
+export const MIGRATIONS = {};
+
+// 版本分派：從 fromVersion 逐級升到 SCHEMA_VERSION；缺遷移步驟即擲 Incompatible。
+// table 可注入（測試用）；正式路徑吃模組層 MIGRATIONS
+export function migrate(save, fromVersion, table = MIGRATIONS) {
+  let version = fromVersion;
+  let current = save;
+  while (version < SCHEMA_VERSION) {
+    const step = table[version];
+    if (!step) throw new IncompatibleSaveError(fromVersion);
+    current = step(current);
+    version += 1;
+  }
+  return current;
+}
+
+// ---- 序列化與驗證 ----
+
+export function serializeSave(save) {
+  return JSON.stringify(save);
+}
+
+const TOP_KEYS = ['player', 'roster', 'recruitment', 'lineup', 'season', 'career', 'story'];
+
+// 嚴格驗證（匯入用；讀檔的優雅降級由存取層 try/catch 包）：
+// 結構壞、版本無路徑、season/player 內容不合法一律 throw
+export function deserializeSave(json) {
+  let raw = JSON.parse(json);
+  if (typeof raw !== 'object' || raw === null) throw new Error('存檔不是物件');
+  if ((raw.schemaVersion ?? 1) > SCHEMA_VERSION) {
+    throw new Error(`存檔版本 ${raw.schemaVersion} 較新（本版支援至 ${SCHEMA_VERSION}）`);
+  }
+  if (raw.schemaVersion !== SCHEMA_VERSION) {
+    raw = migrate(raw, raw.schemaVersion ?? 1);
+  }
+  for (const k of TOP_KEYS) {
+    if (raw[k] === undefined) throw new Error(`存檔缺頂層鍵：${k}`);
+  }
+  if (typeof raw.roster.capacity !== 'number' || !Array.isArray(raw.roster.members)) {
+    throw new Error('roster 結構不合法（需 capacity:number 與 members:array）');
+  }
+  // season 內容沿用 careerState 的完整語意驗證（含賽程對手 id 存在性）
+  const view = careerViewOf(raw);
+  if (view) deserializeCareer(JSON.stringify(view));
+  // player 沿用 sim/player 的欄位驗證（null＝建檔中間態，容許）
+  if (raw.player !== null) deserializePlayer(JSON.stringify(raw.player));
+  return raw;
+}
