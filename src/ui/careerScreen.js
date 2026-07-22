@@ -21,7 +21,10 @@ const COLOR = {
 export function createCareerScreen(store, { onPlay, onQuick }) {
   const root = el('div', [
     'position:fixed', 'inset:0', 'z-index:30', 'display:none',
-    'flex-direction:column', 'align-items:center', 'justify-content:center',
+    // safe center：內容高於視窗時退化為 flex-start——修手機頂部被裁切、捲不到
+    // 的經典陷阱（center＋overflow 會把上緣裁掉）；不支援 safe 的瀏覽器整條
+    // 宣告失效＝flex-start，同樣不裁切
+    'flex-direction:column', 'align-items:center', 'justify-content:safe center',
     'gap:14px', `background:${COLOR.bg}`, `color:${COLOR.text}`,
     'font-family:system-ui,sans-serif', 'user-select:none', 'overflow-y:auto',
     'padding:calc(env(safe-area-inset-top, 0px) + 24px) 20px 40px',

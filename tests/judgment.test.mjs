@@ -1,4 +1,4 @@
-// 出界判斷與喊球：明顯出界放球、壓線寧接（寧搶錯）、玩家喊球搶下鎖定
+// 出界判斷：明顯出界放球、壓線寧接（寧搶錯）；喊球機制已於 stage 7 整組移除
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, stepGame } from '../src/sim/game.js';
@@ -49,27 +49,6 @@ test('壓線邊際球（出界 5cm）：寧可接（誤判空間下限保護）'
     aiCollectIntents(g, ai);
     assert.ok(ai.claimId, `seed ${seed} 壓線球沒人接（違反寧搶錯）`);
   }
-});
-
-test('玩家喊球：搶下本 flight 鎖定、同球不反悔、放球判斷被蓋過', () => {
-  // 出界球也硬喊——喊了就是你的（出界與否自己負責）
-  const g = rigIncoming(4, 9.5); // 落 A 半場外側（A2 是 A 隊）
-  const ai = createAiState();
-  aiCollectIntents(g, ai); // 先讓 AI 規劃（可能放球）
-  aiCollectIntents(g, ai, [], 'A2');
-  assert.equal(ai.claimId, 'A2');
-  assert.equal(ai.letDrop, false);
-  assert.equal(ai.calledFlight, ai.flightId);
-  // 同 flight 內鎖定不因後續 collect 改變
-  aiCollectIntents(g, ai, []);
-  assert.equal(ai.claimId, 'A2');
-});
-
-test('喊球只對自己半場的來球有效（對面場的球喊不到）', () => {
-  const g = rigIncoming(6, -8.5); // 落 B 半場
-  const ai = createAiState();
-  aiCollectIntents(g, ai, [], 'A2');
-  assert.ok(ai.claimId?.startsWith('B'), '喊球不該搶到對面半場的球');
 });
 
 test('放球後整球流程：落地判 OUT、送球方失分', () => {

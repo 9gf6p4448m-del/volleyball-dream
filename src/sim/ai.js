@@ -48,16 +48,13 @@ export function createAiState() {
     claimId: null, attackerId: null, attackKind: null,
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
-    calledFlight: -1,  // 玩家喊球已搶下的 flight（一球一次、不可反悔）
   };
 }
 
 // 蒐集本 tick 全部 AI 的 Intent（excludeIds＝玩家操控者，AI 不代打）
-// callerId＝正在喊球的玩家：把本 flight 的呼叫鎖定搶過來，隊友退讓（一球一次）
 // 輸出與玩家輸入同型的 Intent、走同一條管線進 sim —— sim 不知來源
-export function aiCollectIntents(game, aiState, excludeIds = [], callerId = null) {
+export function aiCollectIntents(game, aiState, excludeIds = []) {
   ensureFlightPlan(game, aiState);
-  applyPlayerCall(game, aiState, callerId);
   const intents = [];
   // 以輪轉名單的顯式順序遍歷（不靠 Object.keys 插入序；接生涯資料換 id 型別也不變序）
   for (const playerId of [...game.match.rotations.A, ...game.match.rotations.B]) {
@@ -135,18 +132,6 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackerId = null;
     aiState.attackKind = null;
   }
-}
-
-// 玩家喊球：把本 flight 的鎖定搶過來（一球只能喊一次、喊了不可反悔——呼叫即鎖定）
-function applyPlayerCall(game, aiState, callerId) {
-  if (!callerId || game.phase !== 'rally') return;
-  if (aiState.calledFlight === aiState.flightId) return;
-  const caller = game.players[callerId];
-  if (!caller || aiState.landingTeam !== caller.teamId) return;
-  if (aiState.claimId === callerId) return;
-  aiState.claimId = callerId;
-  aiState.letDrop = false; // 玩家喊了就是要打，出界與否自己負責
-  aiState.calledFlight = aiState.flightId;
 }
 
 // 落點超出界線的距離（0＝界內；壓線算界內）

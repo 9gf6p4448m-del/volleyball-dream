@@ -11,35 +11,14 @@
 - **Phase 1 已結案**（2026-07-22，快照見 `docs/phase1-final-status.md`）；可調參數集中在
   `game.js TUNING`、`cameraRig.js CAMERA_TUNING`、`ai.js` 頂部常數；`?mode=bench` 保留
   Phase 0 基準場景、`?classic=1` 全手動操作。
-- **Phase 2 生涯模式進行中**（九題＋新機制全定案：`docs/kickoffs/phase2-decisions-RESOLVED.md`；
-  結論回填版 `docs/kickoffs/phase2-kickoff.md`）。**stage 1 存檔層＋生涯外框已上線**：
-  預設入口＝生涯選單（`?quick=1` 直達單場、`?career=resume` 開機直入賽程視圖）；
-  存檔 `vd-career-v1`／`vd-career-player-v1` 分 key＋JSON 匯出匯入；生涯層在
-  `src/career/`（careerState 純函式＋careerStore 可注入介面卡）、UI 在
-  `src/ui/careerScreen.js`；局終先落檔再返回生涯。**stage 2 已上線**：對手參數檔
-  `src/career/opponents.js`（level/attrBias/roleBias/trustBias/ai 風格/識別特徵）＋
-  錦標賽流程（小組 3 場保底→全國賽單淘汰：八強鐵霧/準決賽再遇曜石/決賽天鷹；
-  落敗＝止步、全勝＝冠軍）；AI 風格經 `createGame({aiProfiles})` 注入
-  （`ai.js aiProfileOf`：tipRate/dumpRate/powerServeRate）；存檔自動遷移（現為 v3）。
-  **stage 3 已上線**：成長雙層——`src/career/growth.js`（事件歸因→點數、屬性 +1 上限 90、
-  技術解鎖：吊球/假動作/強力發球/後排 pipe；生涯新人全鎖、快速比賽全開）；假動作熟練度
-  →sim 騙敵乘子（`player.js feintMasteryMul`）；讀攔網提示綁 reaction 三檔。
-  **stage 4 已上線**：場內動態信任（`state.trustDyn` 連得＋/連失−、effectiveTrust 即時反映
-  分配）＋trust 地板（`Player.trust.floorShare` 生涯主角 0.27 保底球權）＋資料驅動事件表
-  （`src/career/events.js` 宣告式 when 條件；updateTrust＝劇情層專用、sim 內禁呼叫）。
-  **技術體系改版已上線**（Sawmah 拍板 2026-07-22）：發球三式（穩定/飄浮 `style:'float'`
-  接發懲罰/跳躍＝強力正名 `techniques.jumpServe`）；魚躍救球（`dive` action：reach×1.8
-  救低球、出手即倒地 0.7s；魚躍鈕＋L 鍵＋簡化模式 Space）；**技術改故事線傳授**
-  （六場六招見 `events.js` teach-*，輸贏都教；成長點數專注屬性層）；跨版本存檔
-  `normalizeCareerPlayer` 一次性遷移（`t.v` 標記）。蓄力只活在 `?classic=1`。
-  **stage 5 已上線**：Scouting AI（`scoutTally` intent 分佈統計＋`scoutRead` 對手讀取——
-  攔網 `scoutBlockMul` 慣用線收攏/反常線折扣；假動作骰在讀取前＝解法）＋情蒐錄影帶
-  （`scoutTape.js` 決定論預生成、開賽先播可跳過）＋宿敵種子（`career.scouting` 跨場
-  累積＋rematch 差分對話 wonVs/lostVs）。
-  **stage 6 已上線**：自由人（`createGame({liberos})` 第 7 人；`applyLiberoSwaps` 死球
-  自動替換後排 MB／前排換回；結構上不可能發球/攔網＋高球攻擊硬閘；異色球衣 A 金/B 白；
-  生涯我方「小守」、對方吃參數檔）。
-  後續：stage 7 收尾（平衡調參＋生涯首輪完整試玩＋kickoff 結論回填＋文件歸檔）。
+- **Phase 2 生涯模式已結案**（2026-07-22，**權威快照＝`docs/phase2-final-status.md`**，
+  含系統清單/平衡基準/拍板變更紀錄/已知債務）。要點：生涯錦標賽（小組保底 3 場→
+  全國賽單淘汰）、技術故事線傳授、成長點數＋信任地板、Scouting AI＋情蒐錄影帶＋宿敵、
+  自由人、發球三式＋魚躍、帶位接管操控（cover 自悟）、棄賽機制、160 自動化測試。
+  生涯層在 `src/career/`；平衡治具 `tools/balance-sim.mjs`（node 跑勝率曲線）；
+  存檔 `vd-career-v1`/`vd-career-player-v1` 雙 key 自動遷移。
+- **Phase 3 待拍板**：`docs/kickoffs/phase3-kickoff.md`（招募條件制/名冊/先發編排/
+  賽季制/決賽終調/技術債第 0 項）——帶去 Claude.ai 討論後回填開工。
 
 ## 架構鐵律（違反即停）
 

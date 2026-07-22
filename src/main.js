@@ -199,10 +199,6 @@ async function runMatch(ctx, careerCtx = null) {
     });
     document.body.appendChild(hintBtn);
   }
-  // 操控定案（拍板 07-22）：自動模式退役、自由語義轉正——系統帶位、碰搖桿接管；
-  // cover 掩護不帶不教，讓玩家實戰中自己悟（排球的隱性知識）
-  const freeMove = true;
-  controls.setFreeMove(true);
 
   // 🎬 回放鈕：重看上一球的最後 3 秒（桌機 R 鍵）
   const replayBtn = document.createElement('button');
@@ -455,7 +451,6 @@ async function runMatch(ctx, careerCtx = null) {
         controls.isDefendMoment(game, aiState) &&
         game.ball.vy < 0 && game.ball.y > 2.0;
       rig.setDefendView(defendMoment);
-      const defendDeciding = !freeMove && defendMoment && !controls.blockPlanPending();
       // ③發球決策：發球員是受控玩家本人（AI 隊友發球自動）、哨音已過、尚未選
       const serveDeciding =
         game.phase === 'serve' && serverId(game.match) === controlledId &&
@@ -468,7 +463,7 @@ async function runMatch(ctx, careerCtx = null) {
       }
       if (game.phase !== 'serve') whistledServe = false;
 
-      deciding = attackDeciding || defendDeciding || (freeMove && defendMoment); // 攻/防決策窗＝時間放慢
+      deciding = attackDeciding || defendMoment; // 攻/防決策窗＝時間放慢（防守窗給你站位抓時機）
       // 讀攔網 slow 檔：決策窗開了 0.6 秒才上色（讀得慢）；instant 即時；none 恆中性
       if (attackDeciding) {
         if (attackDecidingSince < 0) attackDecidingSince = now;
@@ -495,18 +490,6 @@ async function runMatch(ctx, careerCtx = null) {
             floatText.show('假動作!');
           },
         );
-      } else if (defendDeciding) {
-        const opts = controls.blockOptions(game, aiState);
-        if (opts) {
-          panel.show(
-            '他要扣了——封哪條線？',
-            opts.map((o) => ({ key: o.key, label: o.label, color: 'neutral', opt: o })),
-            (it) => {
-              controls.chooseBlock(it.opt);
-              floatText.show(`${it.opt.label}！`); // 按下立即回饋（起跳時機仍由 sim 抓最優）
-            },
-          );
-        }
       } else if (serveDeciding) {
         // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
         const zs = controls.serveZones(game);
