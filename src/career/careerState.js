@@ -6,7 +6,8 @@ import { createPlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { createDefaultTeams } from '../sim/game.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 
-export const CAREER_VERSION = 2; // v1（僅小組 3 場）→ v2：全國賽單淘汰入賽程，deserialize 自動遷移
+// v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
+export const CAREER_VERSION = 3;
 
 // 完整賽程模板：小組單循環 3 場（輸球照樣打下一場）＋全國賽三輪（單淘汰）。
 // 準決賽刻意再遇小組對手曜石體中——宿敵種子（stage 5 scouting 記憶）掛這裡
@@ -31,7 +32,8 @@ export function createCareer({ seed, playerName = '小夢' } = {}) {
     seed: seed >>> 0,
     playerName,
     schedule: SCHEDULE_TEMPLATE.map((m) => ({ ...m })),
-    results: [], // { matchId, opponentId, won, scoreFor, scoreAgainst }
+    results: [], // { matchId, opponentId, won, scoreFor, scoreAgainst, gp?, stats? }
+    growthPoints: 0, // 未分配的成長點數（stage 3；花點結果落在 Player 上）
   };
 }
 
@@ -74,12 +76,14 @@ export function matchSeed(career, matchId) {
 }
 
 // 記錄一場結果（不可變更新）；同場重複記錄＝原樣返回（局終畫面重入保護）
-export function recordResult(career, { matchId, won, scoreFor, scoreAgainst }) {
+// gp＝本場獲得的成長點數（累加進 growthPoints）；stats＝表現摘要（成長畫面顯示用）
+export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp = 0, stats = null }) {
   const entry = career.schedule.find((m) => m.id === matchId);
   if (!entry) throw new Error(`recordResult：賽程裡沒有比賽 ${matchId}`);
   if (career.results.some((r) => r.matchId === matchId)) return career;
   return {
     ...career,
+    growthPoints: (career.growthPoints ?? 0) + (gp | 0),
     results: [
       ...career.results,
       {
@@ -88,6 +92,8 @@ export function recordResult(career, { matchId, won, scoreFor, scoreAgainst }) {
         won: !!won,
         scoreFor: scoreFor | 0,
         scoreAgainst: scoreAgainst | 0,
+        gp: gp | 0,
+        ...(stats ? { stats } : {}),
       },
     ],
   };
@@ -108,6 +114,8 @@ export function createCareerPlayer(name) {
       jump: 60, power: 62, reaction: 60, stamina: 60,
       speed: 62, control: 68, serve: 60, block: 58,
     },
+    // 生涯新人技術層全鎖起步（成長體感＝「我能做新的事」）；快速比賽維持全開
+    techniques: { tip: 0, powerServe: 0, pipe: 0, feint: 0, feintUses: 0 },
   });
 }
 
@@ -169,20 +177,28 @@ export function serializeCareer(career) {
 
 export function deserializeCareer(json) {
   let raw = JSON.parse(json);
-  // v1（stage 1 存檔：僅小組 3 場、帶固定 stage 欄位）→ v2：換完整賽程模板，戰績保留
+  // v1（stage 1：僅小組 3 場、帶固定 stage 欄位）→ v2 形狀：換完整賽程模板，戰績保留
   if (raw.version === 1) {
     raw = {
-      version: CAREER_VERSION,
+      version: 2,
       seed: raw.seed,
       playerName: raw.playerName,
       schedule: SCHEDULE_TEMPLATE.map((m) => ({ ...m })),
       results: raw.results,
     };
   }
+  // v2 → v3：補 growthPoints；既往場次追認每場 4 點（stage 3 前打的比賽不白打）
+  if (raw.version === 2) {
+    raw = {
+      ...raw,
+      version: CAREER_VERSION,
+      growthPoints: (raw.results?.length ?? 0) * 4,
+    };
+  }
   if (raw.version !== CAREER_VERSION) {
     throw new Error(`生涯存檔版本不符：${raw.version}（需 ${CAREER_VERSION}）`);
   }
-  for (const field of ['seed', 'playerName', 'schedule', 'results']) {
+  for (const field of ['seed', 'playerName', 'schedule', 'results', 'growthPoints']) {
     if (raw[field] === undefined) throw new Error(`生涯存檔缺欄位：${field}`);
   }
   if (!Array.isArray(raw.schedule) || !Array.isArray(raw.results)) {

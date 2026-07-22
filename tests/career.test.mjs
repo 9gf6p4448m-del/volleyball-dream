@@ -111,6 +111,7 @@ test('v1 存檔遷移：舊小組賽程換完整模板、戰績保留', () => {
   assert.equal(c.version, CAREER_VERSION);
   assert.equal(c.schedule.length, 6);
   assert.equal(c.results.length, 1);
+  assert.equal(c.growthPoints, 4); // v3 遷移：既往 1 場追認 4 點
   assert.equal(careerStage(c), 'group');
   assert.equal(nextMatch(c).id, 'group-2'); // 戰績接續、不重打第一場
 });

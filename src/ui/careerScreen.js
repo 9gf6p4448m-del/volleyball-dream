@@ -4,6 +4,9 @@ import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
   careerStage, opponentById,
 } from '../career/careerState.js';
+import {
+  GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, unlockTechnique,
+} from '../career/growth.js';
 
 const COLOR = {
   bg: 'linear-gradient(180deg, #070a12 0%, #0b1120 55%, #070a12 100%)',
@@ -141,6 +144,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     ], `${career.playerName}・你·OH`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
       `戰績 ${rec.wins} 勝 ${rec.losses} 敗`));
+    root.appendChild(growthSection(career, player));
     const stage = careerStage(career);
 
     // 賽程列（兩區共用）：勝負／下一場／鎖定／止步後不再進行
@@ -220,6 +224,88 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
     root.appendChild(ioRow);
     root.appendChild(msgEl);
+  }
+
+  // stage 3 成長區：點數/上場表現/屬性加點（次要）/技術解鎖（主要）
+  function growthSection(career, player) {
+    const gp = career.growthPoints ?? 0;
+    const box = el('div', [
+      'display:flex', 'flex-direction:column', 'gap:9px', `background:${COLOR.card}`,
+      'border-radius:14px', 'padding:12px 16px', 'width:min(340px, 92vw)', 'margin-top:4px',
+    ]);
+    const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
+    head.appendChild(el('div', [
+      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px',
+    ], '成長'));
+    head.appendChild(el('div', [
+      'font-size:15px', 'font-weight:800', `color:${gp > 0 ? COLOR.gold : COLOR.dim}`,
+    ], `點數 ${gp}`));
+    box.appendChild(head);
+
+    const last = career.results[career.results.length - 1];
+    if (last?.stats) {
+      const st = last.stats;
+      box.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'text-align:left'],
+        `上場：殺球${st.kills}｜吊球${st.tipKills}｜ACE${st.aces}｜攔網${st.blockPoints}｜Perfect ${st.perfects}（＋${last.gp ?? 0} 點）`));
+    }
+
+    const spend = (mutate, cost) => {
+      try {
+        store.savePlayer(mutate());
+        store.saveCareer({ ...career, growthPoints: gp - cost });
+        renderCareer();
+      } catch (err) {
+        setMsg(String(err.message ?? err));
+      }
+    };
+
+    // 屬性層（1 點＝+1，上限 90）
+    const grid = el('div', ['display:grid', 'grid-template-columns:repeat(3,1fr)', 'gap:6px']);
+    for (const a of GROWABLE_ATTRS) {
+      const v = player.attributes[a.key];
+      const can = gp >= 1 && v < GROWTH.ATTR_CAP;
+      const b = el('button', [
+        'height:38px', 'border-radius:10px', 'border:1px solid #2c3a58', 'font-size:13px',
+        'cursor:pointer', 'touch-action:manipulation', 'font-weight:600',
+        can ? `background:rgba(30,40,64,0.9);color:${COLOR.text}`
+          : `background:transparent;color:${COLOR.dim};opacity:0.5`,
+      ], `${a.name} ${v} ＋`);
+      b.disabled = !can;
+      b.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        if (can) spend(() => spendAttribute(player, a.key), 1);
+      });
+      grid.appendChild(b);
+    }
+    box.appendChild(grid);
+
+    // 技術層（主要成長：解鎖新決策選項）
+    for (const t of TECH_DEFS) {
+      const unlocked = (player.techniques?.[t.key] ?? 0) >= 1;
+      const row = el('div', [
+        'display:flex', 'justify-content:space-between', 'align-items:center', 'gap:10px',
+      ]);
+      const info = el('div', ['flex:1', 'text-align:left']);
+      const title = t.name + (t.key === 'feint' && unlocked
+        ? `（熟練 ${player.techniques.feintUses ?? 0}）` : '');
+      info.appendChild(el('div', ['font-size:14px', 'font-weight:700'], title));
+      info.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.4'], t.desc));
+      row.appendChild(info);
+      if (unlocked) {
+        row.appendChild(el('div', [
+          'font-size:13px', 'font-weight:700', `color:${COLOR.gold}`, 'white-space:nowrap',
+        ], '✓ 已解鎖'));
+      } else {
+        const can = gp >= t.cost;
+        const b = smallButton(`解鎖 ${t.cost} 點`, () => {
+          if (can) spend(() => unlockTechnique(player, t.key), t.cost);
+        });
+        if (!can) b.style.opacity = '0.4';
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    }
+    return box;
   }
 
   function hide() { root.style.display = 'none'; }

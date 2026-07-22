@@ -16,6 +16,7 @@ export function createPlayer({
   height = 1.85,
   attributes = {},
   trust = 50, // 舉球員對此人的信任初值（攻擊分配權重來源）
+  techniques = {}, // 覆寫技術解鎖/熟練度（生涯新人鎖起步、預設全開）
 } = {}) {
   const attrs = {};
   for (const k of ATTRIBUTE_KEYS) {
@@ -33,15 +34,30 @@ export function createPlayer({
     },
     attributes: attrs,
     techniques: {
-      // 解鎖與熟練度，Phase 2+ 長內容；Phase 1 先放主攻手用得到的
+      // 熟練度（Phase 1 既有鉤子，未消費）
       spike: 1,
       jumpServe: 1,
       block: 1,
       receive: 1,
       emergencySet: 1,
+      // Phase 2 stage 3 決策選項解鎖（0＝未解鎖）：預設全開＝快速比賽/AI 行為不變；
+      // 生涯新人由 createCareerPlayer 覆寫為 0 起步（成長體感＝我能做新的事）
+      tip: 1,        // 攻擊面板「吊球」
+      powerServe: 1, // 發球面板「強力」球路
+      pipe: 1,       // 後排攻擊面板（手動 pipe）
+      feint: 1,      // 按A滑B 假動作
+      feintUses: 8,  // 假動作使用次數（熟練度）；8＝1.0 基準乘子
+      ...techniques,
     },
     trust: { fromSetter: clampAttr(trust) }, // 攻擊分配權重來源；動態升降 Phase 3（trust.js updateTrust）
   };
+}
+
+// 假動作熟練度：使用次數→騙敵成功率乘子。8 次＝1.0（既有平衡基準）、
+// 新手 0.6 起步、上限 1.2；舊存檔缺欄位視同基準（不動舊行為）
+export function feintMasteryMul(p) {
+  const uses = p.techniques?.feintUses ?? 8;
+  return Math.min(1.2, 0.6 + uses * 0.05);
 }
 
 function clampAttr(v) {

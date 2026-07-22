@@ -6,7 +6,7 @@ import { createWorld, stepWorld } from './sim/world.js';
 import { createGame, stepGame } from './sim/game.js';
 import { createAiState, aiCollectIntents } from './sim/ai.js';
 import { predictLanding } from './sim/flight.js';
-import { landedCourtTeam } from './sim/rotation.js';
+import { landedCourtTeam, isBackRow } from './sim/rotation.js';
 import { serverId } from './sim/match.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
@@ -33,6 +33,7 @@ import { createSetOverOverlay } from './ui/setOverOverlay.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
 import { matchSeed, careerMatchSetup, recordResult } from './career/careerState.js';
+import { matchStatsFor, growthPointsFor, blockReadTier } from './career/growth.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
@@ -114,6 +115,18 @@ async function runMatch(ctx, careerCtx = null) {
   });
   let aiState = createAiState();
 
+  // stage 3 技術閘門：生涯未解鎖的決策選項不出現（快速比賽預設全開）；
+  // 熟練度/能力只在開場讀一次——場中不變，決定論與 VCR 乾淨
+  const tech = careerCtx ? (game.players[PLAYER_ID].techniques ?? {}) : null;
+  const canTip = !tech || (tech.tip ?? 0) >= 1;
+  const canPipe = !tech || (tech.pipe ?? 0) >= 1;
+  const canPowerServe = !tech || (tech.powerServe ?? 0) >= 1;
+  const canFeint = !tech || (tech.feint ?? 0) >= 1;
+  // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
+  const readTier = careerCtx ? blockReadTier(game.players[PLAYER_ID]) : 'instant';
+  let feintsUsedThisMatch = 0; // 假動作熟練度：場終一次累積寫回 Player
+  let attackDecidingSince = -1; // slow 檔的上色計時起點
+
   let matchView;
   try {
     // ?pose=bump|overhead|spike|block|serve：強制循環播放單一姿勢（調角度用）
@@ -141,7 +154,8 @@ async function runMatch(ctx, careerCtx = null) {
   // 讀攔網提示開關：開＝綠/紅標示（新手輔助）、關＝自己看攔網判斷（技術版）
   let showHints = true;
   try { showHints = localStorage.getItem('vd-hints') !== 'off'; } catch { /* 私密模式 */ }
-  if (simpleMode) {
+  if (readTier === 'none') showHints = false; // 生涯 reaction 太低：讀攔網能力未開（練反應解鎖）
+  if (simpleMode && readTier !== 'none') {
     const hintBtn = document.createElement('button');
     const paint = () => { hintBtn.textContent = showHints ? '👁 提示:開' : '👁 提示:關'; };
     hintBtn.style.cssText = [
@@ -340,10 +354,16 @@ async function runMatch(ctx, careerCtx = null) {
     if (simpleMode) {
       // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
       rig.setAttackView(controls.isAttackMoment(game));
-      const zones = controls.attackZones(game);
+      // 技術閘門：吊球未解鎖＝面板無吊球；後排 pipe 未解鎖＝後排不彈面板（保底出手照舊）
+      const zonesRaw = controls.attackZones(game);
+      const zones = zonesRaw && zonesRaw.filter((z) => z.key !== 'tip' || canTip);
+      const meBackRow = isBackRow(
+        game.match.rotations[game.players[controlledId].teamId], controlledId,
+      );
       // ①進攻決策：球正下墜、可決策高度、尚未選區
       const attackDeciding =
-        !!zones && game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
+        !!zones && (canPipe || !meBackRow) &&
+        game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
       // ②攔網決策：對方第三擊將至、我在前排、尚未選線
       const defendDeciding =
         controls.isDefendMoment(game, aiState) && !controls.blockPlanPending() &&
@@ -361,17 +381,28 @@ async function runMatch(ctx, careerCtx = null) {
       if (game.phase !== 'serve') whistledServe = false;
 
       deciding = attackDeciding || defendDeciding; // 攻/防決策窗＝時間放慢
+      // 讀攔網 slow 檔：決策窗開了 0.6 秒才上色（讀得慢）；instant 即時；none 恆中性
       if (attackDeciding) {
+        if (attackDecidingSince < 0) attackDecidingSince = now;
+      } else {
+        attackDecidingSince = -1;
+      }
+      const hintsLive = showHints && (readTier === 'instant' ||
+        (readTier === 'slow' && attackDecidingSince >= 0 && now - attackDecidingSince > 600));
+      if (attackDeciding) {
+        const feintHint = canFeint ? '（按A滑B＝假動作）' : '';
         panel.show(
-          showHints ? '選攻擊區！（按A滑B＝假動作）' : '看攔網選區！（按A滑B＝假動作）',
+          (hintsLive ? '選攻擊區！' : '看攔網選區！') + feintHint,
           zones.map((z) => ({
             key: z.key,
-            label: showHints ? z.label + (z.blocked ? ' ✋' : '') : z.label,
-            color: showHints ? (z.blocked ? 'red' : 'green') : 'neutral',
+            label: hintsLive ? z.label + (z.blocked ? ' ✋' : '') : z.label,
+            color: hintsLive ? (z.blocked ? 'red' : 'green') : 'neutral',
             zone: z,
           })),
           (it) => controls.chooseAttack(it.zone),
           (fromIt, toIt) => {
+            if (!canFeint) { controls.chooseAttack(toIt.zone); return; } // 未解鎖：滑到哪打哪（誠實）
+            feintsUsedThisMatch += 1;
             controls.chooseAttackFake(fromIt.zone, toIt.zone);
             floatText.show('假動作!');
           },
@@ -389,12 +420,13 @@ async function runMatch(ctx, careerCtx = null) {
         // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
         const zs = controls.serveZones(game);
         panel.show(
-          '選發球目標！（橘＝強力）',
+          canPowerServe ? '選發球目標！（橘＝強力）' : '選發球目標！',
           [
             ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, power: false })),
-            ...zs.filter((z) => z.key !== 'short').map((z) => ({
+            // 強力球路＝技術解鎖項（生涯未解鎖不出現）
+            ...(canPowerServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
               key: `p-${z.key}`, label: `強${z.label.slice(1)}`, color: 'orange', zone: z, power: true,
-            })),
+            })) : []),
           ],
           (it) => {
             controls.serveNow(game, it.zone.aim, it.power);
@@ -542,11 +574,21 @@ async function runMatch(ctx, careerCtx = null) {
       if (careerCtx) {
         const myTeam = game.players[PLAYER_ID].teamId; // 生涯主角固定 A 隊
         const s = game.match.score;
+        const won = game.match.winner === myTeam;
+        // stage 3：從事件日誌統計表現→成長點數；假動作熟練度場終一次累積
+        const stats = matchStatsFor(game.events, PLAYER_ID, myTeam);
+        if (feintsUsedThisMatch > 0) {
+          careerCtx.player.techniques.feintUses =
+            (careerCtx.player.techniques.feintUses ?? 0) + feintsUsedThisMatch;
+          careerCtx.store.savePlayer(careerCtx.player);
+        }
         careerCtx.store.saveCareer(recordResult(careerCtx.career, {
           matchId: careerCtx.matchEntry.id,
-          won: game.match.winner === myTeam,
+          won,
           scoreFor: myTeam === 'A' ? s.A : s.B,
           scoreAgainst: myTeam === 'A' ? s.B : s.A,
+          gp: growthPointsFor(stats, won),
+          stats,
         }));
       }
       setOverOverlay.show(game.match.winner, game.match.score,

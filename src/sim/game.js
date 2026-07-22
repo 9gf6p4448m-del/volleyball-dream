@@ -7,7 +7,9 @@ import {
   TEAM_SIDE, otherTeam, basePosition, servePosition,
   isBackRow, isInFrontZone, landedCourtTeam,
 } from './rotation.js';
-import { createPlayer, standingReach, spikeReach, blockReach, moveSpeed } from './player.js';
+import {
+  createPlayer, standingReach, spikeReach, blockReach, moveSpeed, feintMasteryMul,
+} from './player.js';
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal } from './rotationRules.js';
@@ -264,6 +266,8 @@ function executeTouch(state, intent, player, actor, ev) {
   const dec = intent.action === 'spike'
     ? computeDeception(from, intent.aim, intent.gaze)
     : { deceiveP: 0, errorBoost: 0 };
+  // 假動作熟練度（stage 3）：騙敵成功率×使用次數乘子（生涯 0.6 起步→1.2；預設 1.0 不變）
+  if (dec.deceiveP > 0) dec.deceiveP *= feintMasteryMul(player);
   // 高低手球質（接球）×出手品質（扣球甜蜜區/超蓄）：都收斂到散佈乘數
   // 接球另吃 Perfect 時機（timing≥0.95＝球到瞬間出手，一傳更準）
   const rawT = intent.timing ?? 1;
