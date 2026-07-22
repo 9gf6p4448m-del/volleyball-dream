@@ -129,6 +129,7 @@ async function runMatch(ctx, careerCtx = null) {
   const readTier = careerCtx ? blockReadTier(game.players[PLAYER_ID]) : 'instant';
   let feintsUsedThisMatch = 0; // 假動作熟練度：場終一次累積寫回 Player
   let attackDecidingSince = -1; // slow 檔的上色計時起點
+  let slowEaseFrom = -1e9; // 決策窗結束時刻（時間膨脹 0.4→1.0 緩出的起點）
 
   let matchView;
   try {
@@ -440,7 +441,10 @@ async function runMatch(ctx, careerCtx = null) {
           panel.show(
             '他要扣了——封哪條線？',
             opts.map((o) => ({ key: o.key, label: o.label, color: 'neutral', opt: o })),
-            (it) => controls.chooseBlock(it.opt),
+            (it) => {
+              controls.chooseBlock(it.opt);
+              floatText.show(`${it.opt.label}！`); // 按下立即回饋（起跳時機仍由 sim 抓最優）
+            },
           );
         }
       } else if (serveDeciding) {
@@ -474,8 +478,10 @@ async function runMatch(ctx, careerCtx = null) {
 
     // 擊球定格（hit-stop）：短暫凍結模擬推進、畫面照跑——打擊的「頓」感
     if (now < hitStopUntil) delta = 0;
-    // 進攻決策窗＝放慢給玩家讀攔網選區（時間膨脹只作用推進率，決定論不碰）
-    else if (deciding) delta *= 0.4;
+    // 進攻/防守決策窗＝放慢（時間膨脹只作用推進率，決定論不碰）
+    else if (deciding) { delta *= 0.4; slowEaseFrom = now; }
+    // 決策窗結束的緩出：0.35s 內 0.4→1.0 漸變——瞬間回速會讓攔網/出手看起來慢半拍
+    else if (now - slowEaseFrom < 350) delta *= 0.4 + 0.6 * ((now - slowEaseFrom) / 350);
     // 重扣慢動作：定格後 0.4 秒半速
     else if (now < slowUntil) delta *= 0.35;
 
