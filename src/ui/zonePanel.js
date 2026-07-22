@@ -3,6 +3,7 @@
 const COLORS = {
   green: 'rgba(96,255,160,0.92)',
   red: 'rgba(255,91,91,0.9)',
+  orange: 'rgba(255,176,76,0.94)', // 強力發球
   neutral: 'rgba(200,214,235,0.92)',
 };
 

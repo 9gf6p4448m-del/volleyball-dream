@@ -428,15 +428,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig) {
     },
     // 本次扣球是否已選區（main 用來停止彈面板）
     attackPending() { return attackChosen; },
-    // 發球（決策選區；未指定則發預設深區）
-    serveNow(game, aim = null) {
+    // 發球（決策選區；power=強力發球：低平快＋散佈大；未指定 aim 則發預設深區）
+    serveNow(game, aim = null, power = false) {
       const me = game.players[playerId];
       if (game.phase !== 'serve' || serverId(game.match) !== playerId) return;
       rig.resetLook(); // 發球一人稱歸正視（清掉殘留視線）
       const oppTeam = me.teamId === 'A' ? 'B' : 'A';
       const target = aim ?? localToWorld(oppTeam, 1.5, 7.5);
       queuedAction = {
-        timing: 1, gaze: null, aimWorld: target, aimNdc: null, aimVec: null,
+        timing: power ? 1.2 : 1, gaze: null, aimWorld: target, aimNdc: null, aimVec: null,
         forceAction: 'serve', expiresTick: null, jumpAt: null,
       };
     },

@@ -209,29 +209,30 @@ export function attackPointsOf(game, team, setterId, excludeId) {
   return pts;
 }
 
-// 站位交換（真實排球：發球觸球後前排跑職責位）——OH 左翼、MB 中、OPP/前排 S 右翼；
-// 後排 Phase 1 不換位（自由人/後排防守專位 Phase 2 掛鉤）
+// 站位交換（真實排球：發球觸球後前後排都跑職責位）——
+// 前排：OH 左翼、MB 中、OPP/S 右翼
+// 後排：OH 後中（pipe 準備位）、OPP/S 右後（D 球/插上起點）、MB 左後
+// （自由人 Phase 2 於左後替換後排 MB 掛鉤）
 export function dutyPosition(game, team, playerId) {
   const rot = game.match.rotations[team];
+  const role = game.players[playerId].currentRole;
   if (isFrontRow(rot, playerId)) {
-    const role = game.players[playerId].currentRole;
     const lx = role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
     return localToWorld(team, lx, 3);
   }
-  return basePosition(team, positionOf(rot, playerId));
+  const lx = role === 'outside' ? 0 : role === 'middle' ? -3 : 3;
+  return localToWorld(team, lx, 7);
 }
 
-// 二傳落點：前排已換位 → 固定翼側（OH 左、OPP 右）、快攻恆在舉球員面前低弧；
-// 後排點不換位 → 跟攻擊手站位側、壓攻擊線後（合法起跳）
+// 二傳落點：前後排皆已換位 → 各攻擊點固定（真實排球的進攻座標）
+// 前排 OH 左翼/OPP 右翼高球、MB 面前低弧快攻；
+// 後排 pipe 中路偏左（後中 OH）、D 球右路（右後 OPP）——皆壓攻擊線後（合法起跳）
 export function setAimFor(game, team, attackerId, kind) {
   if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
   if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
   if (kind === 'right') return { lx: 3, lz: 1.3, t: 0.75 };
-  if ((kind === 'pipe' || kind === 'dball') && attackerId) {
-    const pos = positionOf(game.match.rotations[team], attackerId);
-    const base = basePosition(team, pos);
-    return { lx: TEAM_SIDE[team] * base.x * 0.6, lz: 3.6, t: 0.75 };
-  }
+  if (kind === 'pipe') return { lx: -1, lz: 3.6, t: 0.75 };
+  if (kind === 'dball') return { lx: 2.6, lz: 3.6, t: 0.75 };
   return { lx: 2, lz: AI.ATTACK_LZ, t: 0.75 };
 }
 

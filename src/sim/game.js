@@ -21,6 +21,8 @@ export const TUNING = {
   BLOCK_WINDOW: 48,       // block intent 的有效 tick 窗口（0.8s，手機反應時間友善）
   BLOCK_REACH_X: 1.1,     // 攔網水平涵蓋半徑（m）
   SERVE_APEX: 4.6,        // 各球路弧頂高度（m）
+  POWER_SERVE_APEX: 3.5,  // 強力發球低平弧（timing>1.1；力量換準度）
+  POWER_SERVE_SCATTER: 1.45, // 強力發球散佈放大倍率
   RECEIVE_APEX: 4.8,
   SET_APEX: 5.2,
   QUICK_APEX: 3.4,        // 快攻低弧（set 且 timing<0.5 時採用——MB 簡版快攻）
@@ -291,8 +293,14 @@ function performServe(state, intent, ev) {
 
   const contactY = Math.max(spikeReach(player) * 0.92, 2.2); // 跳發擊球點
   ball.x = actor.x; ball.y = contactY; ball.z = actor.z;
-  const target = scatterTarget(state, intent.aim, player.attributes.serve, 'serve');
-  const v = velocityForApex(ball, { x: target.x, y: BALL.RADIUS, z: target.z }, TUNING.SERVE_APEX);
+  // 強力發球（timing>1.1，玩家決策「強○」）：低平快弧＋散佈放大——力量換準度
+  const power = (intent.timing ?? 1) > 1.1;
+  const target = scatterTarget(
+    state, intent.aim, player.attributes.serve, 'serve', 0,
+    power ? TUNING.POWER_SERVE_SCATTER : 1,
+  );
+  const apex = Math.max(power ? TUNING.POWER_SERVE_APEX : TUNING.SERVE_APEX, contactY + 0.35);
+  const v = velocityForApex(ball, { x: target.x, y: BALL.RADIUS, z: target.z }, apex);
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
   ball.px = ball.x; ball.py = ball.y; ball.pz = ball.z;
 

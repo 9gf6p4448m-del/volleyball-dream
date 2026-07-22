@@ -325,11 +325,18 @@ async function runMatch(ctx) {
           );
         }
       } else if (serveDeciding) {
+        // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
+        const zs = controls.serveZones(game);
         panel.show(
-          '選發球目標！',
-          controls.serveZones(game).map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z })),
+          '選發球目標！（橘＝強力）',
+          [
+            ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, power: false })),
+            ...zs.filter((z) => z.key !== 'short').map((z) => ({
+              key: `p-${z.key}`, label: `強${z.label.slice(1)}`, color: 'orange', zone: z, power: true,
+            })),
+          ],
           (it) => {
-            controls.serveNow(game, it.zone.aim);
+            controls.serveNow(game, it.zone.aim, it.power);
             servedThisTurn = true;
           },
         );
