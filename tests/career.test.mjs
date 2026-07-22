@@ -276,3 +276,9 @@ test('careerStore：storage 寫入炸掉時回 false 不中斷', () => {
   });
   assert.equal(store.saveCareer(createCareer({ seed: 1 })), false);
 });
+
+test('deserializeCareer 語意驗證：未知對手 id 直接拒絕（匯入不留炸彈）', () => {
+  const bad = createCareer({ seed: 1 });
+  bad.schedule[0] = { ...bad.schedule[0], opponentId: 'ghost-team' };
+  assert.throws(() => deserializeCareer(serializeCareer(bad)), /未知對手/);
+});

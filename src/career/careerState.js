@@ -280,6 +280,8 @@ export function deserializeCareer(json) {
   }
   for (const m of raw.schedule) {
     if (!m.id || !m.opponentId) throw new Error('生涯存檔賽程項缺 id/opponentId');
+    // 語意驗證：對手必須存在於參數檔——擋掉匯入壞資料在「出戰」當下才炸頁
+    if (!opponentById(m.opponentId)) throw new Error(`生涯存檔含未知對手：${m.opponentId}`);
   }
   return raw;
 }

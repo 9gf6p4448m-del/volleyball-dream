@@ -114,8 +114,9 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         if (k === 'feint') player.techniques.feintUses = player.techniques.feintUses || 0;
       }
     }
-    store.saveCareer(c);
-    store.savePlayer(player);
+    const okCareer = store.saveCareer(c);
+    const okPlayer = store.savePlayer(player);
+    if (!okCareer || !okPlayer) setMsg('⚠ 存檔寫入失敗——事件進度可能未保存');
     dialogPlay(evs, after);
   }
 
@@ -333,8 +334,13 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
 
     const spend = (mutate, cost) => {
       try {
-        store.savePlayer(mutate());
-        store.saveCareer({ ...career, growthPoints: gp - cost });
+        // 先扣點、再存屬性，且逐一查寫入結果——反序＋不查回傳在配額爆掉時
+        // 會變成「屬性已加、點數沒扣」的免費點數 bug（技術債審查 CRITICAL）
+        const okCareer = store.saveCareer({ ...career, growthPoints: gp - cost });
+        const okPlayer = okCareer && store.savePlayer(mutate());
+        if (!okCareer || !okPlayer) {
+          setMsg('⚠ 存檔寫入失敗——瀏覽器儲存空間不可用，本次變更未保存');
+        }
         renderCareer();
       } catch (err) {
         setMsg(String(err.message ?? err));

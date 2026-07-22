@@ -694,23 +694,25 @@ async function runMatch(ctx, careerCtx = null) {
         const won = game.match.winner === myTeam;
         // stage 3：從事件日誌統計表現→成長點數；假動作熟練度場終一次累積
         const stats = matchStatsFor(game.events, PLAYER_ID, myTeam);
+        let saveOk = true;
         if (feintsUsedThisMatch > 0) {
           careerCtx.player.techniques.feintUses =
             (careerCtx.player.techniques.feintUses ?? 0) + feintsUsedThisMatch;
-          careerCtx.store.savePlayer(careerCtx.player);
+          saveOk = careerCtx.store.savePlayer(careerCtx.player) && saveOk;
         }
         // 情蒐入庫：這場對手看到的我（宿敵同 id 跨賽段累積——「他們記得你」）
         const scouted = mergeScouting(
           careerCtx.career, careerCtx.matchEntry.opponentId, game.scoutTally[PLAYER_ID],
         );
-        careerCtx.store.saveCareer(recordResult(scouted, {
+        saveOk = careerCtx.store.saveCareer(recordResult(scouted, {
           matchId: careerCtx.matchEntry.id,
           won,
           scoreFor: myTeam === 'A' ? s.A : s.B,
           scoreAgainst: myTeam === 'A' ? s.B : s.A,
           gp: growthPointsFor(stats, won),
           stats,
-        }));
+        })) && saveOk;
+        if (!saveOk) floatText.show('⚠ 戰績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
       }
       setOverOverlay.show(game.match.winner, game.match.score,
         game.players[controlledId].teamId, careerCtx ? '點擊任意處返回生涯' : undefined);
