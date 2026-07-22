@@ -11,6 +11,7 @@ import { serverId } from './sim/match.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
 import { createCourt } from './render/court.js';
+import { createArena } from './render/arena.js';
 import { createPlayers } from './render/players.js';
 import { createMatchView } from './render/matchView.js';
 import { createBallView } from './render/ballView.js';
@@ -43,12 +44,13 @@ async function init() {
   const scene = createScene();
   const camera = createCamera();
   createLights(scene, quality);
-  createCourt(scene, quality);
+  const court = createCourt(scene, quality);
+  createArena(scene); // 夜賽場館：看台/觀眾/廣告板（純視覺）
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality));
 
-  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params };
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else {
@@ -59,7 +61,7 @@ async function init() {
 // ---- Phase 1 比賽模式 ----
 
 async function runMatch(ctx) {
-  const { renderer, scene, camera, quality, ballView, hud, loadingEl, params } = ctx;
+  const { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court } = ctx;
 
   const seedParam = Number.parseInt(params.get('seed'), 10);
   // 預設種子＝每次開局隨機（sim 內部仍是決定論——同種子逐球重演）；
@@ -441,6 +443,7 @@ async function runMatch(ctx) {
 
     const alpha = accumulator / SIM_DT;
     ballView.sync(game.ball, alpha, delta);
+    court.update(delta, game.ball); // 網面受擊波動（純視覺）
     matchView.sync(game, alpha, delta, frameEvents);
     rig.setSpikeMine(aiState?.claimId === controlledId); // 扣球一人稱只認「舉給我」
     rig.update(game, alpha, delta);

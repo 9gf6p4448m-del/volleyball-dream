@@ -33,6 +33,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     };
   }
 
+  // 灰塵粒子池（跳躍落地/死球落點的塵土——夜賽聚光燈下的空氣感）
+  const dust = createDust(scene);
+
   // 玩家操控者足下光圈（一眼找到自己；「這球歸你」時轉橘紅示警）
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.42, 0.55, 40),
@@ -55,6 +58,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         else if (e.kind === 'set') u.animator.trigger('overhead');
         else u.animator.trigger(e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
       }
+    }
+    // 死球落點塵土（e.at＝球落地/犯規點）
+    for (const e of events) {
+      if (e.type === 'DEAD_BALL' && e.at) dust.burst(e.at.x, e.at.z, 10, 0.9);
     }
   }
 
@@ -128,6 +135,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         u.yaw += shortestArc(u.yaw, targetYaw) * (1 - Math.exp(-TURN_K * dt));
 
         const bodyY = u.animator.update(dt, speed);
+        // 跳躍落地塵土：從空中回到地面的瞬間
+        if ((u.lastBodyY ?? 0) > 0.18 && bodyY <= 0.03) dust.burst(x, z, 6, 0.55);
+        u.lastBodyY = bodyY;
         u.rig.root.position.set(x, bodyY, z);
         u.rig.root.rotation.y = u.yaw;
 
@@ -136,6 +146,58 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           ring.position.z = z;
         }
       }
+      dust.update(dt);
+    },
+  };
+}
+
+// ---- 灰塵粒子池（單一 Points、96 槽循環使用；死粒子藏到地下）----
+function createDust(scene) {
+  const N = 96;
+  const pos = new Float32Array(N * 3).fill(-100);
+  const vel = new Float32Array(N * 3);
+  const life = new Float32Array(N);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const points = new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xb9a389, size: 0.09, transparent: true, opacity: 0.55,
+    depthWrite: false,
+  }));
+  points.frustumCulled = false;
+  scene.add(points);
+  let cursor = 0;
+  let h = 2166136261; // 決定論偽亂數（視覺層；不碰 sim rng）
+  const rnd = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822519);
+    return ((h >>> 0) % 1000) / 1000;
+  };
+  return {
+    burst(x, z, n, power) {
+      for (let k = 0; k < n; k += 1) {
+        const i = cursor;
+        cursor = (cursor + 1) % N;
+        const ang = rnd() * Math.PI * 2;
+        const sp = (0.4 + rnd() * 0.9) * power;
+        pos[i * 3] = x; pos[i * 3 + 1] = 0.06; pos[i * 3 + 2] = z;
+        vel[i * 3] = Math.cos(ang) * sp;
+        vel[i * 3 + 1] = 0.8 + rnd() * 1.2 * power;
+        vel[i * 3 + 2] = Math.sin(ang) * sp;
+        life[i] = 0.4 + rnd() * 0.25;
+      }
+    },
+    update(dt) {
+      let alive = false;
+      for (let i = 0; i < N; i += 1) {
+        if (life[i] <= 0) continue;
+        alive = true;
+        life[i] -= dt;
+        if (life[i] <= 0) { pos[i * 3 + 1] = -100; continue; }
+        vel[i * 3 + 1] -= 4.5 * dt;
+        pos[i * 3] += vel[i * 3] * dt;
+        pos[i * 3 + 1] = Math.max(0.02, pos[i * 3 + 1] + vel[i * 3 + 1] * dt);
+        pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+      }
+      if (alive) geo.attributes.position.needsUpdate = true;
     },
   };
 }

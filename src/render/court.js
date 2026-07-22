@@ -8,10 +8,47 @@ export function createCourt(scene, quality) {
 
   buildFloor(group, receiveShadow);
   buildLines(group);
-  buildNet(group);
+  const net = buildNet(group);
   group.traverse((o) => { if (o.isMesh) o.matrixAutoUpdate = false; });
   scene.add(group);
-  return group;
+
+  // 網面波動：球觸網回彈（vz 翻向且貼網）觸發，漣漪自撞擊點擴散、指數衰減
+  const base = net.geometry.attributes.position.array.slice();
+  const wobble = { amp: 0, x: 0, t: 0 };
+  let prevVz = 0;
+  return {
+    group,
+    update(dt, ball) {
+      if (ball) {
+        const nearNet = Math.abs(ball.z) < 0.35 && ball.y < COURT.NET_HEIGHT + 0.2;
+        if (nearNet && prevVz !== 0 && Math.sign(ball.vz) !== Math.sign(prevVz) &&
+            Math.abs(prevVz) > 0.8) {
+          wobble.amp = Math.min(0.16, 0.03 + Math.abs(prevVz) * 0.012);
+          wobble.x = ball.x;
+          wobble.t = 0;
+        }
+        prevVz = ball.vz;
+      }
+      if (wobble.amp <= 0.001) return;
+      wobble.t += dt;
+      const decay = wobble.amp * Math.exp(-4.5 * wobble.t);
+      if (decay < 0.001) {
+        wobble.amp = 0;
+        net.geometry.attributes.position.array.set(base);
+        net.geometry.attributes.position.needsUpdate = true;
+        return;
+      }
+      const pos = net.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i += 1) {
+        const vx = base[i * 3];
+        const d = Math.abs(vx - wobble.x);
+        const fall = Math.max(0, 1 - d / 3.5);
+        pos.array[i * 3 + 2] = base[i * 3 + 2] +
+          decay * fall * Math.sin(wobble.t * 22 - d * 2.2);
+      }
+      pos.needsUpdate = true;
+    },
+  };
 }
 
 function buildFloor(group, receiveShadow) {
@@ -68,9 +105,9 @@ function buildNet(group) {
   const span = COURT.WIDTH + COURT.NET_OVERHANG * 2;
   const netBottom = COURT.NET_HEIGHT - COURT.NET_BAND;
 
-  // 網面：程序化格紋貼圖（不依賴外部圖檔）
+  // 網面：程序化格紋貼圖（不依賴外部圖檔）；分段網格供受擊波動頂點動畫
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(span, COURT.NET_BAND),
+    new THREE.PlaneGeometry(span, COURT.NET_BAND, 48, 6),
     new THREE.MeshStandardMaterial({
       map: makeNetTexture(span),
       transparent: true,
@@ -119,6 +156,7 @@ function buildNet(group) {
     antenna.position.set(sx * COURT.WIDTH / 2, COURT.NET_HEIGHT - 0.4 + 0.02, 0);
     group.add(antenna);
   }
+  return mesh;
 }
 
 function makeNetTexture(span) {
