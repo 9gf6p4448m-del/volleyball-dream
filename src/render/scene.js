@@ -72,6 +72,18 @@ export function createLights(scene, quality) {
     scene.add(spot);
     scene.add(spot.target);
   }
+
+  // 局點張力：底光再壓、輪廓光加強（戲劇性收攏）——幀率無關指數收斂
+  let tension = 0;
+  return {
+    setTension(active, dt) {
+      const t = active ? 1 : 0;
+      tension += (t - tension) * (1 - Math.exp(-3 * dt));
+      hemi.intensity = 0.5 - 0.22 * tension;
+      rim.intensity = 0.7 + 0.55 * tension;
+      key.intensity = 2.6 - 0.25 * tension;
+    },
+  };
 }
 
 export function bindResize(renderer, camera) {

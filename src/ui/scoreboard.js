@@ -12,12 +12,22 @@ export function createScoreboard(playerId) {
     'pointer-events:none', 'user-select:none',
   ].join(';');
   el.innerHTML = `
+    <div class="setpt" style="display:none;font-size:13px;font-weight:800;letter-spacing:3px;
+      margin-bottom:1px;animation:vd-pulse 0.9s ease-in-out infinite"></div>
     <div class="line" style="font-size:26px;font-weight:700;letter-spacing:2px">0 : 0</div>
     <div class="hint" style="font-size:12px;opacity:0.85;margin-top:2px"></div>
   `;
   document.body.appendChild(el);
+  // 局點徽章脈動動畫（注入一次）
+  if (!document.getElementById('vd-pulse-style')) {
+    const st = document.createElement('style');
+    st.id = 'vd-pulse-style';
+    st.textContent = '@keyframes vd-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.55;transform:scale(1.08)}}';
+    document.head.appendChild(st);
+  }
   const lineEl = el.querySelector('.line');
   const hintEl = el.querySelector('.hint');
+  const setPtEl = el.querySelector('.setpt');
   lineEl.style.transition = 'transform 0.12s ease-out, color 0.12s';
   let lastTotal = 0;
   let pulseTimer = null;
@@ -43,8 +53,28 @@ export function createScoreboard(playerId) {
       hintEl.textContent = isMyBall
         ? '🟠 這球歸你！跑向藍色落點圈'
         : hintFor(game, controlledId, serve);
+
+      // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）
+      const spTeam = setPointTeam(game);
+      const myTeam = game.players[controlledId]?.teamId;
+      if (spTeam && game.phase !== 'set_over') {
+        setPtEl.style.display = 'block';
+        setPtEl.textContent = spTeam === myTeam ? '🔥 局點' : '⚠ 對方局點';
+        setPtEl.style.color = spTeam === myTeam ? '#ffd166' : '#ff6b6b';
+      } else {
+        setPtEl.style.display = 'none';
+      }
     },
   };
+}
+
+// 局點判定：下一分即可收局（含 deuce：須領先 1 且達 target-1 以上）
+export function setPointTeam(game) {
+  const { score, target } = game.match;
+  for (const [team, other] of [['A', 'B'], ['B', 'A']]) {
+    if (score[team] + 1 >= target && score[team] + 1 - score[other] >= 2) return team;
+  }
+  return null;
 }
 
 function hintFor(game, playerId, serve) {

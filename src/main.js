@@ -20,13 +20,14 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createMatchControls } from './input/matchControls.js';
 import { createAimMarker } from './render/aimMarker.js';
 import { createHud } from './ui/hud.js';
-import { createScoreboard } from './ui/scoreboard.js';
+import { createScoreboard, setPointTeam } from './ui/scoreboard.js';
 import { createSfx } from './ui/sfx.js';
 import { createTouchUi } from './ui/touchUi.js';
 import { createActionButtons } from './ui/actionButtons.js';
 import { createZonePanel } from './ui/zonePanel.js';
 import { createFloatText } from './ui/floatText.js';
 import { showTutorialOnce } from './ui/tutorial.js';
+import { createSetOverOverlay } from './ui/setOverOverlay.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
@@ -43,14 +44,14 @@ async function init() {
   const renderer = createRenderer(container, quality);
   const scene = createScene();
   const camera = createCamera();
-  createLights(scene, quality);
+  const lights = createLights(scene, quality);
   const court = createCourt(scene, quality);
   createArena(scene); // 夜賽場館：看台/觀眾/廣告板（純視覺）
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality));
 
-  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court };
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else {
@@ -61,7 +62,7 @@ async function init() {
 // ---- Phase 1 比賽模式 ----
 
 async function runMatch(ctx) {
-  const { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court } = ctx;
+  const { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights } = ctx;
 
   const seedParam = Number.parseInt(params.get('seed'), 10);
   // 預設種子＝每次開局隨機（sim 內部仍是決定論——同種子逐球重演）；
@@ -160,6 +161,7 @@ async function runMatch(ctx) {
     vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
     vcrCurrent = { snapshot: null, steps: [] };
     servedThisTurn = false;
+    setOverOverlay.hide();
     if (panel) panel.hide();
     controls.setPlayerId(PLAYER_ID);
     rig.setPlayerId(PLAYER_ID);
@@ -172,6 +174,11 @@ async function runMatch(ctx) {
   // 決定論保證：快照＋同序 Intent 重新模擬＝逐格重現
   let vcrCurrent = { snapshot: null, steps: [] };
   let vcrLast = null;
+
+  // 批次二情緒節拍：局終結算過場＋得分 FOV punch＋局點張力
+  const setOverOverlay = createSetOverOverlay();
+  let prevPhase = game.phase;
+  let fovPunchUntil = 0;
 
   // 控制模式：預設固定主攻手（07-21 Sawmah 試玩後定案）；?teamcontrol=1 開全隊輪控實驗
   const teamControl = params.get('teamcontrol') === '1';
@@ -398,7 +405,8 @@ async function runMatch(ctx) {
           shake = Math.max(shake, 0.26);
           if (e.reason === 'POSITIONAL_FAULT') floatText.show('站位犯規!');
         } else if (e.type === 'SCORE') {
-          // 得分慶祝：得分隊全員雙手高舉小跳（情緒節拍）
+          // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
+          fovPunchUntil = now + 700;
           for (const id of game.match.rotations[e.team]) {
             matchView.triggerPose(id, 'cheer');
           }
@@ -447,6 +455,25 @@ async function runMatch(ctx) {
     matchView.sync(game, alpha, delta, frameEvents);
     rig.setSpikeMine(aiState?.claimId === controlledId); // 扣球一人稱只認「舉給我」
     rig.update(game, alpha, delta);
+    // 局點張力：燈光收攏＋心跳（deuce 內建於 setPointTeam 判定）
+    const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
+    lights.setTension(tension, delta);
+    sfx.setHeartbeat(tension);
+    // 得分運鏡：FOV 推近彈回（0.7s 正弦曲線）
+    if (now < fovPunchUntil) {
+      const p = (fovPunchUntil - now) / 700;
+      camera.fov = 55 - 6.5 * Math.sin(Math.PI * (1 - p));
+      camera.updateProjectionMatrix();
+    } else if (camera.fov !== 55) {
+      camera.fov = 55;
+      camera.updateProjectionMatrix();
+    }
+    // 局終結算過場（一次性）
+    if (game.phase === 'set_over' && prevPhase !== 'set_over') {
+      setOverOverlay.show(game.match.winner, game.match.score,
+        game.players[controlledId].teamId);
+    }
+    prevPhase = game.phase;
     // 螢幕震動：鏡頭位置疊隨機偏移、指數衰減（表現層，不碰 sim）
     if (shake > 0.004) {
       camera.position.x += (Math.random() - 0.5) * shake;

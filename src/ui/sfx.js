@@ -151,9 +151,38 @@ export function createSfx() {
     osc.stop(t + 0.09);
   }
 
+  // 局點心跳：低頻 lub-dub 循環（張力時開），音量克制不搶戲
+  let heartTimer = null;
+  function thump(t, freq, gain) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.6, t + 0.1);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.16);
+  }
+  function setHeartbeat(on) {
+    if (on && !heartTimer) {
+      heartTimer = setInterval(() => {
+        if (!ensure()) return;
+        const t = ctx.currentTime;
+        thump(t, 62, 0.12);        // lub
+        thump(t + 0.22, 55, 0.08); // dub
+      }, 1150);
+    } else if (!on && heartTimer) {
+      clearInterval(heartTimer);
+      heartTimer = null;
+    }
+  }
+
   // 比賽事件 → 音色映射（閉眼能分：扣=爆裂、攔/輕吊=悶短、墊/舉=脆彈）
   return {
     whistle,
+    setHeartbeat,
     onEvents(events) {
       for (const e of events) {
         if (e.type === 'SERVE') crack(0.7);
