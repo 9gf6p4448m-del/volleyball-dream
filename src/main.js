@@ -62,7 +62,9 @@ async function runMatch(ctx) {
   const { renderer, scene, camera, quality, ballView, hud, loadingEl, params } = ctx;
 
   const seedParam = Number.parseInt(params.get('seed'), 10);
-  let seed = Number.isFinite(seedParam) ? seedParam : 20260721;
+  // 預設種子＝每次開局隨機（sim 內部仍是決定論——同種子逐球重演）；
+  // ?seed= 指定＝可重現（回報 bug/測試用）。隨機化住在 main（sim 外），純度不變
+  let seed = Number.isFinite(seedParam) ? seedParam : (Date.now() % 1000000007);
   // 快速局預設 15 分（?points=25 打正式局；deuce 規則不變）
   const pointsParam = Number.parseInt(params.get('points'), 10);
   const setTarget = Number.isFinite(pointsParam)

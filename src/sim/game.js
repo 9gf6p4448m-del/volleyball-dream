@@ -62,6 +62,7 @@ export function createGame({ seed = 1, teams, setTarget } = {}) {
   }
   const state = {
     tick: 0,
+    seed, // 原始種子（AI 決策 hash 的混合項——跨場次變化、同種子可重現）
     rngState: seedRng(seed),
     players,
     actors,

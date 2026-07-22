@@ -97,7 +97,7 @@ function ensureFlightPlan(game, aiState) {
       game.players[aiState.claimId].currentRole === 'setter' &&
       isFrontRow(game.match.rotations[team], aiState.claimId) &&
       TEAM_SIDE[team] * landing.z < 3.2 &&
-      hash01(game.rally.flightId * 331 + 7) < AI.DUMP_RATE;
+      hash01(game.rally.flightId * 331 + 7 + (game.seed ?? 0)) < AI.DUMP_RATE;
   } else if (r.possession === team && r.touches === 2) {
     // 第三擊：先前選定的攻擊手；不成立則仲裁補位
     const atk = aiState.attackerId;
@@ -108,8 +108,8 @@ function ensureFlightPlan(game, aiState) {
   } else {
     // 來球（發球/對方攻擊/自由球）：先判界內外，再責任區仲裁
     // 出界判斷（含誤差）：明顯出界＝放球讓它落地得分；壓線球寧可接（寧搶錯）
-    // 發球接發＝陣型排除 S/前排 MB（見 arbitrate）
-    const claimer = arbitrate(game, team, landing, r.lastToucherId, r.profile === 'serve');
+    // 非殺球來球（發球/free ball）＝陣型排除 S/前排 MB（見 arbitrate）
+    const claimer = arbitrate(game, team, landing, r.lastToucherId, r.profile !== 'spike');
     const outDist = landingOutDistance(landing);
     if (outDist > 0 && claimer && outDist > judgeMargin(game, claimer)) {
       aiState.claimId = null;
@@ -146,7 +146,7 @@ function landingOutDistance(landing) {
 function judgeMargin(game, playerId) {
   const p = game.players[playerId];
   const base = 0.55 - p.attributes.reaction * 0.005;
-  const jitter = (hash01(game.rally.flightId * 131 + idHash(playerId)) - 0.5) * 0.3;
+  const jitter = (hash01(game.rally.flightId * 131 + idHash(playerId) + (game.seed ?? 0)) - 0.5) * 0.3;
   return Math.max(0.08, base + jitter);
 }
 
@@ -167,10 +167,11 @@ function idHash(id) {
 // 「誰接球」仲裁（定死，決定論）：
 // 1. 責任區＝各人輪轉基準位的勢力範圍（比基準位到落點距離）
 // 2. 交界時比當前位置距離　3. 仍平手比固定 ID 序
-// serveReception=true（發球接發）：S 與前排 MB【陣型排除】不進候選——
-// 真實接發陣型把他們藏起來（S 要舉球、前排 MB 要快攻）；剩餘四人涵蓋全場，
-// 任何落點都在可達距離內，無需緊急例外。非發球來球（dig）仍用權重縮小責任區
-function arbitrate(game, team, landing, excludeId, serveReception = false) {
+// formationExempt=true（發球接發＋free ball 等非殺球來球）：S 與前排 MB
+// 【陣型排除】不進候選——真實排球連 free ball 都不讓 S 接第一球（他要舉球）、
+// 前排 MB 要準備快攻；剩餘四人涵蓋全場，慢球飛行時間內任何落點都可達。
+// 只有對方【殺球】的 dig 不得已（權重制縮小責任區、極近仍救）
+function arbitrate(game, team, landing, excludeId, formationExempt = false) {
   const rot = game.match.rotations[team];
   let best = null;
   for (const pid of rot) {
@@ -180,8 +181,8 @@ function arbitrate(game, team, landing, excludeId, serveReception = false) {
     let zoneDist = Math.hypot(base.x - landing.x, base.z - landing.z);
     const role = game.players[pid].currentRole;
     const frontMb = role === 'middle' && isFrontRow(rot, pid);
-    if (serveReception && (role === 'setter' || frontMb)) continue;
-    // dig 豁免（權重制）：S 責任區大幅縮小（他接了就沒人舉球）、前排 MB 縮小
+    if (formationExempt && (role === 'setter' || frontMb)) continue;
+    // 殺球 dig 豁免（權重制）：S 責任區大幅縮小（他接了就沒人舉球）、前排 MB 縮小
     if (role === 'setter') zoneDist *= 3;
     else if (frontMb) zoneDist *= 1.8;
     const nowDist = Math.hypot(
@@ -280,7 +281,7 @@ function pickAttackPoint(game, team, setterId, excludeId) {
     ...pt, trust: game.players[pt.pid].trust.fromSetter,
   }));
   const weights = trustToWeights(entries);
-  const roll = hash01(game.rally.flightId * 977 + 131);
+  const roll = hash01(game.rally.flightId * 977 + 131 + (game.seed ?? 0));
   return pickByWeights(entries, weights, roll);
 }
 
@@ -422,7 +423,7 @@ function chooseTouch(game, aiState, player, actor) {
     legalSpike && game.ball.y >= AI.SPIKE_MIN_Y && spikeClearsNet(game, player, target);
   if (canSpike) {
     // 攻擊選擇分支：小機率輕吊淺區（決定論 hash，不耗 game rng）——重扣仍是主體
-    const tipRoll = hash01(game.rally.flightId * 563 + idHash(player.id));
+    const tipRoll = hash01(game.rally.flightId * 563 + idHash(player.id) + (game.seed ?? 0));
     if (tipRoll < AI.TIP_RATE) {
       const tipLx = tipRoll < AI.TIP_RATE / 2 ? -1.2 : 1.2; // 吊左/右淺區
       return ['spike', localToWorld(otherTeam(team), tipLx, 2.3), 0.35];

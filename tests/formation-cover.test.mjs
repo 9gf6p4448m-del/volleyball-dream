@@ -46,12 +46,21 @@ test('接發陣型 v0：短球落前排 MB 面前，前排 MB 不得接發', () 
   assert.ok(ai.claimId);
 });
 
-test('dig 不受排除影響：對方攻擊（非發球）落 S 腳邊，S 仍可救球（權重制）', () => {
+test('free ball 也排除 S：對方回長球（arc）落 S 區附近，S 不接（他要舉球）', () => {
   const g = rigIncoming(5, 'arc', 0, 7.5);
   g.match.rotations.A = rotateLineup(g.match.rotations.A); // S 到 6 號位
   const ai = createAiState();
   aiCollectIntents(g, ai);
-  assert.equal(ai.claimId, 'A1', 'dig 情境 S 責任區內仍該他救（×3 權重下最近）');
+  assert.notEqual(ai.claimId, 'A1', 'free ball 的第一球不得由 S 接');
+  assert.ok(ai.claimId);
+});
+
+test('殺球 dig 不受排除影響：對方殺球落 S 腳邊，S 仍可救球（權重制）', () => {
+  const g = rigIncoming(5, 'spike', 0, 7.5);
+  g.match.rotations.A = rotateLineup(g.match.rotations.A); // S 到 6 號位
+  const ai = createAiState();
+  aiCollectIntents(g, ai);
+  assert.equal(ai.claimId, 'A1', '殺球 dig：S 責任區內仍該他救（×3 權重下最近）');
 });
 
 test('cover 站位原則：後排攻擊時前排貼網、不被拉到攻擊者身後（試玩實證修復）', () => {
