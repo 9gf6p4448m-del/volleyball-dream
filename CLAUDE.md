@@ -27,6 +27,11 @@
   **stage 4 已上線**：場內動態信任（`state.trustDyn` 連得＋/連失−、effectiveTrust 即時反映
   分配）＋trust 地板（`Player.trust.floorShare` 生涯主角 0.27 保底球權）＋資料驅動事件表
   （`src/career/events.js` 宣告式 when 條件；updateTrust＝劇情層專用、sim 內禁呼叫）。
+  **技術體系改版已上線**（Sawmah 拍板 2026-07-22）：發球三式（穩定/飄浮 `style:'float'`
+  接發懲罰/跳躍＝強力正名 `techniques.jumpServe`）；魚躍救球（`dive` action：reach×1.8
+  救低球、出手即倒地 0.7s；魚躍鈕＋L 鍵＋簡化模式 Space）；**技術改故事線傳授**
+  （六場六招見 `events.js` teach-*，輸贏都教；成長點數專注屬性層）；跨版本存檔
+  `normalizeCareerPlayer` 一次性遷移（`t.v` 標記）。蓄力只活在 `?classic=1`。
   後續：stage 5 Scouting AI＋情蒐錄影帶＋宿敵種子。
 
 ## 架構鐵律（違反即停）
