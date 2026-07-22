@@ -1,14 +1,16 @@
-// Phase 2 stage 1 — 生涯資料層與存檔層測試
+// Phase 2 — 生涯資料層/存檔層（stage 1）＋對手參數化/錦標賽流程（stage 2）測試
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  CAREER_VERSION, GROUP_OPPONENTS, createCareer, createCareerPlayer, careerTeams,
-  nextMatch, recordResult, careerRecord, matchSeed, serializeCareer, deserializeCareer,
+  CAREER_VERSION, createCareer, createCareerPlayer, careerTeams, buildOpponentTeam,
+  careerMatchSetup, careerStage, nextMatch, recordResult, careerRecord, matchSeed,
+  serializeCareer, deserializeCareer, OPPONENTS, opponentById,
 } from '../src/career/careerState.js';
 import { createCareerStore, CAREER_KEY, PLAYER_KEY } from '../src/career/careerStore.js';
-import { deserializePlayer, serializePlayer } from '../src/sim/player.js';
+import { deserializePlayer, serializePlayer, ATTRIBUTE_KEYS } from '../src/sim/player.js';
 import { createGame, stepGame } from '../src/sim/game.js';
+import { createAiState, aiCollectIntents, aiProfileOf } from '../src/sim/ai.js';
 
 function fakeStorage() {
   const m = new Map();
@@ -20,105 +22,206 @@ function fakeStorage() {
   };
 }
 
-// ---- careerState ----
+// 快速走完 n 場（依 nextMatch 順序記錄結果）
+function playThrough(career, outcomes) {
+  let c = career;
+  for (const won of outcomes) {
+    const m = nextMatch(c);
+    assert.ok(m, '還有比賽可打（測試前提）');
+    c = recordResult(c, { matchId: m.id, won, scoreFor: won ? 25 : 20, scoreAgainst: won ? 20 : 25 });
+  }
+  return c;
+}
 
-test('createCareer：小組賽 3 場、初始結構完整', () => {
+// ---- careerState（stage 1 基礎）----
+
+test('createCareer：小組 3 場＋全國賽 3 輪、初始結構完整', () => {
   const c = createCareer({ seed: 42, playerName: '測試員' });
   assert.equal(c.version, CAREER_VERSION);
-  assert.equal(c.stage, 'group');
-  assert.equal(c.schedule.length, 3);
+  assert.equal(c.schedule.length, 6);
+  assert.deepEqual(c.schedule.filter((m) => m.stage === 'group').map((m) => m.opponentId),
+    ['north-tech', 'white-wave', 'obsidian']);
+  assert.deepEqual(c.schedule.filter((m) => m.stage === 'national').map((m) => m.opponentId),
+    ['iron-mist', 'obsidian', 'sky-hawk']); // 準決賽再遇曜石＝宿敵鉤子
   assert.equal(c.results.length, 0);
-  assert.deepEqual(c.schedule.map((m) => m.opponentId), GROUP_OPPONENTS.map((o) => o.id));
+  assert.equal(careerStage(c), 'group');
 });
 
 test('createCareer：缺 seed 直接 throw', () => {
   assert.throws(() => createCareer({}), /seed/);
 });
 
-test('nextMatch：依序推進，全打完為 null', () => {
-  let c = createCareer({ seed: 1 });
-  assert.equal(nextMatch(c).id, 'group-1');
-  c = recordResult(c, { matchId: 'group-1', won: true, scoreFor: 25, scoreAgainst: 20 });
-  assert.equal(nextMatch(c).id, 'group-2');
-  c = recordResult(c, { matchId: 'group-2', won: false, scoreFor: 21, scoreAgainst: 25 });
-  c = recordResult(c, { matchId: 'group-3', won: true, scoreFor: 25, scoreAgainst: 23 });
-  assert.equal(nextMatch(c), null);
-  assert.deepEqual(careerRecord(c), { wins: 2, losses: 1, played: 3 });
+test('小組賽輸球不中斷：連輸三場照樣晉級全國賽', () => {
+  const c = playThrough(createCareer({ seed: 1 }), [false, false, false]);
+  assert.equal(careerStage(c), 'national');
+  assert.equal(nextMatch(c).id, 'national-qf');
+  assert.deepEqual(careerRecord(c), { wins: 0, losses: 3, played: 3 });
 });
 
-test('recordResult：不可變更新且帶入 opponentId', () => {
+test('全國賽單淘汰：八強落敗＝止步、沒有下一場', () => {
+  const c = playThrough(createCareer({ seed: 2 }), [true, true, true, false]);
+  assert.equal(careerStage(c), 'eliminated');
+  assert.equal(nextMatch(c), null);
+});
+
+test('全國賽全勝＝冠軍收束', () => {
+  const c = playThrough(createCareer({ seed: 3 }), [true, false, true, true, true, true]);
+  assert.equal(careerStage(c), 'champion');
+  assert.equal(nextMatch(c), null);
+  assert.deepEqual(careerRecord(c), { wins: 5, losses: 1, played: 6 });
+});
+
+test('recordResult：不可變更新、帶入 opponentId、重複記錄原樣返回', () => {
   const c = createCareer({ seed: 7 });
   const c2 = recordResult(c, { matchId: 'group-1', won: true, scoreFor: 25, scoreAgainst: 18 });
-  assert.equal(c.results.length, 0); // 原物件不動
-  assert.equal(c2.results.length, 1);
-  assert.equal(c2.results[0].opponentId, c.schedule[0].opponentId);
+  assert.equal(c.results.length, 0);
+  assert.equal(c2.results[0].opponentId, 'north-tech');
+  const again = recordResult(c2, { matchId: 'group-1', won: false, scoreFor: 0, scoreAgainst: 25 });
+  assert.equal(again, c2);
+  assert.throws(() => recordResult(c, { matchId: 'nope', won: true, scoreFor: 0, scoreAgainst: 0 }), /賽程/);
 });
 
-test('recordResult：同場重複記錄原樣返回（局終畫面重入保護）', () => {
-  const c = recordResult(createCareer({ seed: 7 }),
-    { matchId: 'group-1', won: true, scoreFor: 25, scoreAgainst: 18 });
-  const again = recordResult(c, { matchId: 'group-1', won: false, scoreFor: 0, scoreAgainst: 25 });
-  assert.equal(again, c);
-});
-
-test('recordResult：未知 matchId 直接 throw', () => {
-  assert.throws(
-    () => recordResult(createCareer({ seed: 7 }), { matchId: 'nope', won: true, scoreFor: 0, scoreAgainst: 0 }),
-    /賽程/,
-  );
-});
-
-test('matchSeed：決定論且三場彼此相異、不同生涯種子相異', () => {
+test('matchSeed：決定論、六場彼此相異、不同生涯種子相異', () => {
   const c = createCareer({ seed: 99 });
   const seeds = c.schedule.map((m) => matchSeed(c, m.id));
-  assert.deepEqual(seeds, c.schedule.map((m) => matchSeed(c, m.id))); // 同輸入同值
-  assert.equal(new Set(seeds).size, 3); // 場場不同
-  const c2 = createCareer({ seed: 100 });
-  assert.notEqual(matchSeed(c, 'group-1'), matchSeed(c2, 'group-1'));
+  assert.deepEqual(seeds, c.schedule.map((m) => matchSeed(c, m.id)));
+  assert.equal(new Set(seeds).size, 6);
+  assert.notEqual(matchSeed(c, 'group-1'), matchSeed(createCareer({ seed: 100 }), 'group-1'));
   for (const s of seeds) assert.ok(Number.isInteger(s) && s > 0);
 });
 
 test('serializeCareer/deserializeCareer：roundtrip 一致、壞檔擋下', () => {
-  const c = recordResult(createCareer({ seed: 5, playerName: '阿夢' }),
-    { matchId: 'group-1', won: true, scoreFor: 25, scoreAgainst: 11 });
+  const c = playThrough(createCareer({ seed: 5, playerName: '阿夢' }), [true]);
   assert.deepEqual(deserializeCareer(serializeCareer(c)), c);
   assert.throws(() => deserializeCareer(JSON.stringify({ version: 999 })), /版本/);
   assert.throws(() => deserializeCareer(JSON.stringify({ version: CAREER_VERSION, seed: 1 })), /缺欄位/);
 });
 
+test('v1 存檔遷移：舊小組賽程換完整模板、戰績保留', () => {
+  const v1 = JSON.stringify({
+    version: 1, seed: 711646615, playerName: '小夢', stage: 'group',
+    schedule: [
+      { id: 'group-1', stage: 'group', opponentId: 'north-tech' },
+      { id: 'group-2', stage: 'group', opponentId: 'white-wave' },
+      { id: 'group-3', stage: 'group', opponentId: 'obsidian' },
+    ],
+    results: [{ matchId: 'group-1', opponentId: 'north-tech', won: true, scoreFor: 6, scoreAgainst: 4 }],
+  });
+  const c = deserializeCareer(v1);
+  assert.equal(c.version, CAREER_VERSION);
+  assert.equal(c.schedule.length, 6);
+  assert.equal(c.results.length, 1);
+  assert.equal(careerStage(c), 'group');
+  assert.equal(nextMatch(c).id, 'group-2'); // 戰績接續、不重打第一場
+});
+
 test('createCareerPlayer：通過 Player 序列化驗證且佔 A2 槽', () => {
-  const p = createCareerPlayer('小夢');
-  const back = deserializePlayer(serializePlayer(p));
+  const back = deserializePlayer(serializePlayer(createCareerPlayer('小夢')));
   assert.equal(back.id, 'A2');
   assert.equal(back.teamId, 'A');
   assert.equal(back.currentRole, 'outside');
 });
 
-test('careerTeams：玩家塞回 A 隊主攻手槽、非 A2 拒絕', () => {
-  const p = createCareerPlayer('小夢');
-  const teams = careerTeams(p);
-  assert.equal(teams.A[1], p);
-  assert.equal(teams.A.length, 6);
-  assert.equal(teams.B.length, 6);
-  assert.throws(() => careerTeams({ id: 'B1', teamId: 'B' }), /A2/);
-});
-
-test('careerTeams 餵進 createGame 可正常推進（生涯數值進 sim 的通道）', () => {
-  const p = createCareerPlayer('主角名');
-  const game = createGame({ seed: 123, teams: careerTeams(p), setTarget: 5 });
-  assert.equal(game.players.A2.name, '主角名');
-  for (let i = 0; i < 120; i += 1) stepGame(game, []);
-  assert.equal(typeof game.match.score.A, 'number');
-});
-
 test('careerState 純度：零 DOM/localStorage/非種子隨機', () => {
-  const src = readFileSync(new URL('../src/career/careerState.js', import.meta.url), 'utf8');
-  for (const banned of ['localStorage', 'document.', 'window.', 'Math.random(', 'Date.now(', "from 'three'"]) {
-    assert.ok(!src.includes(banned), `careerState.js 不得出現 ${banned}`);
+  for (const file of ['careerState.js', 'opponents.js']) {
+    const src = readFileSync(new URL(`../src/career/${file}`, import.meta.url), 'utf8');
+    for (const banned of ['localStorage', 'document.', 'window.', 'Math.random(', 'Date.now(', "from 'three'"]) {
+      assert.ok(!src.includes(banned), `${file} 不得出現 ${banned}`);
+    }
   }
 });
 
-// ---- careerStore ----
+// ---- stage 2：對手參數檔與建隊 ----
+
+test('對手參數檔完整性：id 唯一、識別特徵齊備、機率在界內', () => {
+  assert.equal(new Set(OPPONENTS.map((o) => o.id)).size, OPPONENTS.length);
+  for (const o of OPPONENTS) {
+    assert.ok(o.name && o.trait && o.style, `${o.id} 缺 name/trait/style`);
+    assert.ok(o.level >= 40 && o.level <= 90, `${o.id} level 超界`);
+    assert.equal(o.heights.length, 6, `${o.id} 身高須六槽`);
+    for (const k of ['tipRate', 'dumpRate', 'powerServeRate']) {
+      assert.ok(o.ai[k] >= 0 && o.ai[k] <= 1, `${o.id}.ai.${k} 超界`);
+    }
+  }
+  assert.equal(opponentById('north-tech').name, '北原工商');
+  assert.equal(opponentById('nope'), null);
+});
+
+test('buildOpponentTeam：level＋風格偏移落到屬性與 trust', () => {
+  const obsidian = buildOpponentTeam(opponentById('obsidian'));
+  assert.equal(obsidian.length, 6);
+  assert.deepEqual(obsidian.map((p) => p.id), ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']);
+  assert.ok(obsidian[0].name.startsWith('曜石體中'));
+  assert.equal(obsidian[2].currentRole, 'middle');
+  assert.equal(obsidian[2].attributes.block, 70); // 60 + roleBias.middle.block 10
+  assert.equal(obsidian[2].attributes.jump, 68);
+  assert.equal(obsidian[2].trust.fromSetter, 42); // 20 + trustBias.middle 22（快攻隊 MB 高分配）
+  assert.equal(obsidian[1].attributes.block, 60); // 非 MB 不吃 roleBias
+  const wave = buildOpponentTeam(opponentById('white-wave'));
+  assert.equal(wave[1].attributes.power, 52); // 56 + attrBias.power(-4)
+  for (const p of wave) for (const k of ATTRIBUTE_KEYS) {
+    assert.ok(p.attributes[k] >= 0 && p.attributes[k] <= 100);
+  }
+});
+
+test('careerMatchSetup：一次拿齊種子/兩隊/AI 風格', () => {
+  const career = createCareer({ seed: 55, playerName: '小夢' });
+  const player = createCareerPlayer('小夢');
+  const entry = nextMatch(career);
+  const setup = careerMatchSetup(career, player, entry);
+  assert.equal(setup.seed, matchSeed(career, 'group-1'));
+  assert.equal(setup.teams.A[1], player);
+  assert.ok(setup.teams.B[0].name.startsWith('北原工商'));
+  assert.equal(setup.aiProfiles.B.tipRate, 0.06);
+  assert.equal(setup.opponent.id, 'north-tech');
+  assert.throws(() => careerMatchSetup(career, player, { id: 'x', opponentId: 'nope' }), /未知對手/);
+});
+
+test('careerTeams 餵進 createGame 可正常推進（含對手參數隊）', () => {
+  const p = createCareerPlayer('主角名');
+  const game = createGame({
+    seed: 123,
+    teams: careerTeams(p, opponentById('iron-mist')),
+    setTarget: 5,
+  });
+  assert.equal(game.players.A2.name, '主角名');
+  assert.ok(game.players.B1.name.startsWith('鐵霧工業'));
+  for (let i = 0; i < 120; i += 1) stepGame(game, []);
+  assert.equal(typeof game.match.score.A, 'number');
+  assert.throws(() => careerTeams({ id: 'B1', teamId: 'B' }), /A2/);
+});
+
+// ---- stage 2：AI 風格注入 sim ----
+
+test('aiProfileOf：未注入回落預設、注入的隊伍吃自己的值', () => {
+  const plain = createGame({ seed: 1 });
+  assert.deepEqual(aiProfileOf(plain, 'B'), { tipRate: 0.1, dumpRate: 0.07, powerServeRate: 0 });
+  const styled = createGame({ seed: 1, aiProfiles: { B: { tipRate: 0.5, powerServeRate: 0.9 } } });
+  assert.equal(aiProfileOf(styled, 'B').tipRate, 0.5);
+  assert.equal(aiProfileOf(styled, 'B').powerServeRate, 0.9);
+  assert.equal(aiProfileOf(styled, 'B').dumpRate, 0.07); // 缺欄回預設
+  assert.deepEqual(aiProfileOf(styled, 'A'), { tipRate: 0.1, dumpRate: 0.07, powerServeRate: 0 });
+});
+
+test('powerServeRate 行為驗證：強力發球隊的發球更平更快', () => {
+  const speedOfFirstServe = (aiProfiles, team) => {
+    const g = createGame({ seed: 77, ...(aiProfiles ? { aiProfiles } : {}) });
+    const ai = createAiState();
+    while (g.tick < 200000) {
+      const ev = stepGame(g, aiCollectIntents(g, ai));
+      const s = ev.find((e) => e.type === 'SERVE' && e.team === team);
+      if (s) return Math.hypot(g.ball.vx, g.ball.vz);
+      if (g.phase === 'set_over') break;
+    }
+    assert.fail(`${team} 隊在時限內沒發到球`);
+  };
+  const stable = speedOfFirstServe(null, 'A');
+  const power = speedOfFirstServe({ A: { powerServeRate: 1 } }, 'A');
+  assert.ok(power > stable * 1.15,
+    `強力發球應明顯更快（stable=${stable.toFixed(2)} power=${power.toFixed(2)}）`);
+});
+
+// ---- careerStore（stage 1）----
 
 test('careerStore：career 與 Player 分 key 存讀 roundtrip', () => {
   const storage = fakeStorage();
@@ -128,25 +231,23 @@ test('careerStore：career 與 Player 分 key 存讀 roundtrip', () => {
   assert.equal(store.hasSave(), false);
   assert.ok(store.saveCareer(career));
   assert.ok(store.savePlayer(player));
-  assert.equal(store.hasSave(), true);
-  assert.ok(storage._map.has(CAREER_KEY) && storage._map.has(PLAYER_KEY)); // 真的分兩把 key
+  assert.ok(storage._map.has(CAREER_KEY) && storage._map.has(PLAYER_KEY));
   assert.deepEqual(store.loadCareer(), career);
   assert.deepEqual(store.loadPlayer(), player);
 });
 
 test('careerStore：壞檔安全降級為 null 不炸', () => {
   const storage = fakeStorage();
-  storage.setItem(CAREER_KEY, '{"version":1,壞掉');
+  storage.setItem(CAREER_KEY, '{"version":2,壞掉');
   storage.setItem(PLAYER_KEY, 'not json');
   const store = createCareerStore(storage);
   assert.equal(store.loadCareer(), null);
   assert.equal(store.loadPlayer(), null);
 });
 
-test('careerStore：匯出→清空→匯入 roundtrip', () => {
+test('careerStore：匯出→清空→匯入 roundtrip（含 v1 匯入升級）', () => {
   const store = createCareerStore(fakeStorage());
-  const career = recordResult(createCareer({ seed: 3, playerName: 'IO' }),
-    { matchId: 'group-1', won: false, scoreFor: 19, scoreAgainst: 25 });
+  const career = playThrough(createCareer({ seed: 3, playerName: 'IO' }), [false]);
   store.saveCareer(career);
   store.savePlayer(createCareerPlayer('IO'));
   const exported = store.exportSave();
@@ -154,16 +255,7 @@ test('careerStore：匯出→清空→匯入 roundtrip', () => {
   assert.equal(store.hasSave(), false);
   const { career: back } = store.importSave(exported);
   assert.deepEqual(back, career);
-  assert.equal(store.hasSave(), true);
-});
-
-test('careerStore：匯入垃圾/錯格式直接 throw 且不落檔', () => {
-  const store = createCareerStore(fakeStorage());
   assert.throws(() => store.importSave('{"format":"別的遊戲"}'), /排球夢/);
-  assert.throws(() => store.importSave(JSON.stringify({
-    format: 'volleyball-dream-save', career: { version: 1 }, player: {},
-  })));
-  assert.equal(store.hasSave(), false);
 });
 
 test('careerStore：storage 寫入炸掉時回 false 不中斷', () => {

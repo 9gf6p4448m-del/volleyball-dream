@@ -28,6 +28,17 @@ const AI = {
   DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
 };
 
+// 每隊 AI 風格參數：生涯對手參數檔經 createGame({ aiProfiles }) 注入；
+// 未注入（快速比賽/我方）一律回落 AI 預設值——行為與 stage 2 之前完全一致
+export function aiProfileOf(game, team) {
+  const p = game.aiProfiles?.[team];
+  return {
+    tipRate: p?.tipRate ?? AI.TIP_RATE,
+    dumpRate: p?.dumpRate ?? AI.DUMP_RATE,
+    powerServeRate: p?.powerServeRate ?? 0, // 預設 AI 不用強力發球（維持穩定）
+  };
+}
+
 // AI 協調層狀態：每個 flight 算一次、鎖定到 flight 結束（呼叫鎖定的實作）
 export function createAiState() {
   return {
@@ -99,7 +110,7 @@ function ensureFlightPlan(game, aiState) {
       game.players[aiState.claimId].currentRole === 'setter' &&
       isFrontRow(game.match.rotations[team], aiState.claimId) &&
       tier === 'perfect' &&
-      hash01(game.rally.flightId * 331 + 7 + (game.seed ?? 0)) < AI.DUMP_RATE;
+      hash01(game.rally.flightId * 331 + 7 + (game.seed ?? 0)) < aiProfileOf(game, team).dumpRate;
   } else if (r.possession === team && r.touches === 2) {
     // 第三擊：先前選定的攻擊手；不成立則仲裁補位
     const atk = aiState.attackerId;
@@ -309,7 +320,15 @@ function decideOne(game, aiState, playerId) {
   if (game.phase === 'serve') {
     if (playerId === serverId(game.match)) {
       if (tick >= game.serveReadyTick + AI.SERVE_DELAY) {
-        return createIntent({ playerId, tick, action: 'serve', aim: serveTarget(game, team) });
+        // 風格參數 powerServeRate：AI 改用強力發球（timing>1.1＝低平快＋散佈放大，
+        // 與玩家「強○」同一條 sim 路徑）；hash 吃比分＋發球員＋種子——決定論、逐球變化
+        const { score } = game.match;
+        const powerRoll = hash01(score.A * 37 + score.B * 101 + idHash(playerId) + (game.seed ?? 0));
+        const power = powerRoll < aiProfileOf(game, team).powerServeRate;
+        return createIntent({
+          playerId, tick, action: 'serve', aim: serveTarget(game, team),
+          ...(power ? { timing: 1.15 } : {}),
+        });
       }
       return null; // 發球員原地等節奏
     }
@@ -436,9 +455,11 @@ function chooseTouch(game, aiState, player, actor) {
     legalSpike && game.ball.y >= AI.SPIKE_MIN_Y && spikeClearsNet(game, player, target);
   if (canSpike) {
     // 攻擊選擇分支：小機率輕吊淺區（決定論 hash，不耗 game rng）——重扣仍是主體
+    // 機率吃每隊風格參數（防守隊愛吊、紀律隊少吊）
+    const { tipRate } = aiProfileOf(game, team);
     const tipRoll = hash01(game.rally.flightId * 563 + idHash(player.id) + (game.seed ?? 0));
-    if (tipRoll < AI.TIP_RATE) {
-      const tipLx = tipRoll < AI.TIP_RATE / 2 ? -1.2 : 1.2; // 吊左/右淺區
+    if (tipRoll < tipRate) {
+      const tipLx = tipRoll < tipRate / 2 ? -1.2 : 1.2; // 吊左/右淺區
       return ['spike', localToWorld(otherTeam(team), tipLx, 2.3), 0.35];
     }
     return ['spike', target];

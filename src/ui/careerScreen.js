@@ -2,6 +2,7 @@
 // 夜賽同色系；動態文字一律 textContent（匯入的存檔名字不可信，不走 innerHTML）
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
+  careerStage, opponentById,
 } from '../career/careerState.js';
 
 const COLOR = {
@@ -140,14 +141,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     ], `${career.playerName}・你·OH`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
       `戰績 ${rec.wins} 勝 ${rec.losses} 敗`));
-    root.appendChild(el('div', [
-      'font-size:15px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:8px',
-    ], '地區賽・小組循環'));
+    const stage = careerStage(career);
 
-    const list = el('div', [
-      'display:flex', 'flex-direction:column', 'gap:8px', 'width:min(340px, 92vw)',
-    ]);
-    for (const m of career.schedule) {
+    // 賽程列（兩區共用）：勝負／下一場／鎖定／止步後不再進行
+    const rowFor = (m) => {
       const result = career.results.find((r) => r.matchId === m.id);
       const isNext = next?.id === m.id;
       const row = el('div', [
@@ -155,35 +152,68 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         'height:52px', 'padding:0 16px', 'border-radius:12px', `background:${COLOR.card}`,
         `border:1px solid ${isNext ? COLOR.cyan : 'transparent'}`,
       ]);
-      row.appendChild(el('div', ['font-size:16px', 'font-weight:600'], opponentName(m.opponentId)));
+      const title = m.label ? `${m.label}・${opponentName(m.opponentId)}` : opponentName(m.opponentId);
+      row.appendChild(el('div', ['font-size:16px', 'font-weight:600'], title));
+      let status;
       if (result) {
-        row.appendChild(el('div', [
+        status = el('div', [
           'font-size:15px', 'font-weight:700',
           `color:${result.won ? COLOR.gold : COLOR.red}`,
-        ], `${result.won ? '勝' : '負'} ${result.scoreFor}:${result.scoreAgainst}`));
+        ], `${result.won ? '勝' : '負'} ${result.scoreFor}:${result.scoreAgainst}`);
+      } else if (isNext) {
+        status = el('div', ['font-size:14px', `color:${COLOR.cyan}`], '▶ 下一場');
+      } else if (stage === 'eliminated') {
+        status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '—');
+      } else if (m.stage === 'national' && stage === 'group') {
+        status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '🔒');
       } else {
-        row.appendChild(el('div', [
-          'font-size:14px', `color:${isNext ? COLOR.cyan : COLOR.dim}`,
-        ], isNext ? '▶ 下一場' : '未開打'));
+        status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '未開打');
       }
-      list.appendChild(row);
-    }
-    const lockedRow = el('div', [
-      'display:flex', 'align-items:center', 'justify-content:center', 'height:44px',
-      'border-radius:12px', 'background:rgba(18,24,40,0.5)', `color:${COLOR.dim}`,
-      'font-size:14px', 'border:1px dashed #2c3a58',
-    ], '🔒 全國賽——地區賽完賽後開放（下一階段）');
-    list.appendChild(lockedRow);
+      row.appendChild(status);
+      return row;
+    };
+
+    const list = el('div', [
+      'display:flex', 'flex-direction:column', 'gap:8px', 'width:min(340px, 92vw)',
+    ]);
+    list.appendChild(el('div', [
+      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
+    ], '地區賽・小組循環'));
+    for (const m of career.schedule.filter((x) => x.stage === 'group')) list.appendChild(rowFor(m));
+    list.appendChild(el('div', [
+      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:8px',
+    ], '全國賽・單淘汰'));
+    for (const m of career.schedule.filter((x) => x.stage === 'national')) list.appendChild(rowFor(m));
     root.appendChild(list);
 
-    if (next) {
+    if (stage === 'champion') {
+      root.appendChild(el('div', [
+        'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
+        'letter-spacing:2px',
+      ], '🏆 全國冠軍！'));
+      root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
+        `生涯首冠達成（${rec.wins} 勝 ${rec.losses} 敗）`));
+    } else if (stage === 'eliminated') {
+      const lost = career.results.find((r) => !r.won &&
+        career.schedule.find((m) => m.id === r.matchId)?.stage === 'national');
+      const lostLabel = career.schedule.find((m) => m.id === lost?.matchId)?.label ?? '全國賽';
+      root.appendChild(el('div', [
+        'font-size:20px', 'font-weight:800', `color:${COLOR.red}`, 'margin-top:8px',
+      ], `止步${lostLabel}`));
+      root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
+        `本屆戰績 ${rec.wins} 勝 ${rec.losses} 敗——從主選單開新生涯再挑戰`));
+    } else if (next) {
       root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, () => {
         hide();
         onPlay({ career, player, matchEntry: next });
       }));
-    } else {
-      root.appendChild(el('div', ['font-size:15px', `color:${COLOR.gold}`, 'margin-top:6px'],
-        `地區賽完賽（${rec.wins} 勝 ${rec.losses} 敗）——全國賽於下一階段開發開放`));
+      const trait = opponentById(next.opponentId)?.trait;
+      if (trait) {
+        root.appendChild(el('div', [
+          'font-size:13px', `color:${COLOR.dim}`, 'max-width:min(340px, 92vw)',
+          'text-align:center', 'line-height:1.5',
+        ], `敵情：${trait}`));
+      }
     }
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
     ioRow.appendChild(smallButton('返回主選單', renderHome));

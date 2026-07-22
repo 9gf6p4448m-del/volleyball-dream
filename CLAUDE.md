@@ -16,7 +16,12 @@
   預設入口＝生涯選單（`?quick=1` 直達單場、`?career=resume` 開機直入賽程視圖）；
   存檔 `vd-career-v1`／`vd-career-player-v1` 分 key＋JSON 匯出匯入；生涯層在
   `src/career/`（careerState 純函式＋careerStore 可注入介面卡）、UI 在
-  `src/ui/careerScreen.js`；局終先落檔再返回生涯。後續：stage 2 對手參數化＋錦標賽流程。
+  `src/ui/careerScreen.js`；局終先落檔再返回生涯。**stage 2 已上線**：對手參數檔
+  `src/career/opponents.js`（level/attrBias/roleBias/trustBias/ai 風格/識別特徵）＋
+  錦標賽流程（小組 3 場保底→全國賽單淘汰：八強鐵霧/準決賽再遇曜石/決賽天鷹；
+  落敗＝止步、全勝＝冠軍）；AI 風格經 `createGame({aiProfiles})` 注入
+  （`ai.js aiProfileOf`：tipRate/dumpRate/powerServeRate）；存檔 v1→v2 自動遷移。
+  後續：stage 3 成長雙層＋能力閘門。
 
 ## 架構鐵律（違反即停）
 

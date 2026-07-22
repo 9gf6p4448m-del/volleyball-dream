@@ -31,7 +31,7 @@ import { showTutorialOnce } from './ui/tutorial.js';
 import { createSetOverOverlay } from './ui/setOverOverlay.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
-import { matchSeed, careerTeams, recordResult } from './career/careerState.js';
+import { matchSeed, careerMatchSetup, recordResult } from './career/careerState.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
@@ -100,9 +100,15 @@ async function runMatch(ctx, careerCtx = null) {
   // ?classic=1 回到全手動操作
   const simpleMode = params.get('classic') !== '1';
 
-  // 生涯模式：玩家 Player 餵進 A 隊主攻手槽（sim 不讀存檔——建隊參數注入）
-  const careerRosters = careerCtx ? careerTeams(careerCtx.player) : undefined;
-  let game = createGame({ seed, setTarget, ...(careerRosters ? { teams: careerRosters } : {}) });
+  // 生涯模式：玩家 Player 餵進 A 隊主攻手槽＋對手參數檔建隊與 AI 風格
+  // （sim 不讀存檔——一律建隊參數注入）
+  const careerSetup = careerCtx
+    ? careerMatchSetup(careerCtx.career, careerCtx.player, careerCtx.matchEntry)
+    : null;
+  let game = createGame({
+    seed, setTarget,
+    ...(careerSetup ? { teams: careerSetup.teams, aiProfiles: careerSetup.aiProfiles } : {}),
+  });
   let aiState = createAiState();
 
   let matchView;
