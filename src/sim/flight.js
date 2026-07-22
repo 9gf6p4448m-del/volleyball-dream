@@ -1,5 +1,5 @@
 // 彈道工具（純函式）— 給定起點/目標解出擊球初速；落點預測直接複用 stepBall 物理
-import { BALL, SIM_DT } from './constants.js';
+import { BALL, COURT, SIM_DT } from './constants.js';
 import { stepBall } from './ball.js';
 
 const G = -BALL.GRAVITY; // 正值重力
@@ -33,11 +33,22 @@ export function velocityForTime(from, to, T) {
   };
 }
 
-// 扣球球路（快速平直）：速度標量 → 初速向量
+// 扣球球路：速度標量 → 初速向量；跨網時帶「網口淨空約束」——
+// 直線彈道從攻擊線後（pipe/D 球）或近網輕吊都過不了網，需要時自動拉長
+// 飛行時間讓球帶弧越網（真實 pipe/吊球本來就是弧線）。前排全力扣的直線
+// 本就淨空 → T 不變、速度不受影響。
 // AI 的過網預判與 sim 的實際擊球共用此函式（單一公式來源，不得各自手刻）
+const NET_CLEARANCE = COURT.NET_HEIGHT + BALL.RADIUS + 0.12; // 網口最低通過高度
 export function spikeVelocity(from, to, speed, minTime) {
   const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
-  return velocityForTime(from, to, Math.max(d / speed, minTime));
+  let T = Math.max(d / speed, minTime);
+  if ((from.z > 0) !== (to.z > 0)) {
+    const f = from.z / (from.z - to.z); // 網面（z=0）落在全程的比例位置
+    const need = NET_CLEARANCE - from.y - f * (to.y - from.y);
+    const denom = 0.5 * G * f * (1 - f);
+    if (need > 0 && denom > 1e-9) T = Math.max(T, Math.sqrt(need / denom));
+  }
+  return velocityForTime(from, to, T);
 }
 
 // 該球路通過網面（z=0）時的高度；不會過網（vz 同向或為零）回傳 null

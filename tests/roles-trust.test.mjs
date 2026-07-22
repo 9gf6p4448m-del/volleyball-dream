@@ -53,7 +53,7 @@ test('二傳備援：S 剛接一傳 → OPP(A4) 代舉', () => {
 
 test('攻擊點池站位合法性：S 與後排 MB 不進池；前排三點＋後排 pipe/dball', () => {
   const g = createGame({ seed: 3 });
-  const pts = attackPointsOf(g, 'A', 'A1', null);
+  const pts = attackPointsOf(g, 'A', 'A1');
   const byId = Object.fromEntries(pts.map((p) => [p.pid, p]));
   assert.ok(!byId.A1, 'S 不得進攻擊點池');
   assert.ok(!byId.A6, '後排 MB 不得進池（無後排快攻）');

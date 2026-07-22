@@ -88,7 +88,7 @@ function ensureFlightPlan(game, aiState) {
     aiState.claimId = setter?.id ?? backup?.id
       ?? arbitrate(game, team, landing, r.lastToucherId);
     // 攻擊分配：站位合法池（AND）× trust 權重（傾向），決定論抽選
-    const pick = pickAttackPoint(game, team, aiState.claimId, r.lastToucherId);
+    const pick = pickAttackPoint(game, team, aiState.claimId);
     aiState.attackerId = pick?.pid ?? null;
     aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
     // S 二次球（偶發）：S 前排、一傳到位（落點近網）→ 小機率直接處理第二球
@@ -204,11 +204,12 @@ function arbitrate(game, team, landing, excludeId, formationExempt = false) {
 // 攻擊點池（職責制）：站位合法性（AND）決定資格、trust 決定傾向
 // 前排：OH=左翼(left)、MB=快攻(quick)、OPP=右翼(right)
 // 後排：OH=pipe、OPP=D 球（後排點 rowFactor 0.5）；S 與 MB 後排不進池
-export function attackPointsOf(game, team, setterId, excludeId) {
+// 接一傳者【不】排除——一、三擊非連續觸球合法，接完打第三球是真實常態
+export function attackPointsOf(game, team, setterId) {
   const rot = game.match.rotations[team];
   const pts = [];
   for (const pid of rot) {
-    if (pid === setterId || pid === excludeId) continue;
+    if (pid === setterId) continue;
     const p = game.players[pid];
     const front = isFrontRow(rot, pid);
     const role = p.currentRole;
@@ -274,8 +275,8 @@ export function setAimFor(game, team, attackerId, kind) {
 }
 
 // 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust.fromSetter）
-function pickAttackPoint(game, team, setterId, excludeId) {
-  const pts = attackPointsOf(game, team, setterId, excludeId);
+function pickAttackPoint(game, team, setterId) {
+  const pts = attackPointsOf(game, team, setterId);
   if (pts.length === 0) return null;
   const entries = pts.map((pt) => ({
     ...pt, trust: game.players[pt.pid].trust.fromSetter,
