@@ -789,7 +789,15 @@ async function runBench(ctx) {
 init();
 
 // PWA service worker（僅存在於 vite 建置環境；測試直接 import sim 模組不經過這裡）
+// autoUpdate 的更新在「下次重整」才生效＝玩家永遠慢一版；改為新 SW 接管瞬間
+// 自動重載一次拿到最新版。只在載入初期（<15s）重載——絕不打斷進行中的比賽
 if ('serviceWorker' in navigator) {
+  let swRefreshed = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swRefreshed || performance.now() > 15000) return;
+    swRefreshed = true;
+    window.location.reload();
+  });
   import('virtual:pwa-register')
     .then(({ registerSW }) => registerSW({ immediate: true }))
     .catch(() => { /* dev 模式無 SW，忽略 */ });
