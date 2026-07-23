@@ -9,8 +9,9 @@ import {
   createCareerStore, SAVE_KEY, LEGACY_CAREER_KEY, LEGACY_PLAYER_KEY, SAVE_FORMAT,
 } from '../src/career/careerStore.js';
 import {
-  createCareer, createCareerPlayer, markPending, mergeScouting,
+  createCareer, createCareerPlayer, markPending, mergeScouting, recordResult,
 } from '../src/career/careerState.js';
+import { recordEvent, dueEvents } from '../src/career/events.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 
 function fakeStorage() {
@@ -53,6 +54,35 @@ test('careerViewOf：season → careerState v3 視圖 roundtrip 恆等（含選�
   career = markPending(career, 'group-1');
   const view = careerViewOf(createSaveV2({ career }));
   assert.deepEqual(view, career); // 鍵集合與值完全一致（W1 過渡期邏輯層繼續吃這形狀）
+});
+
+test('career.events 存檔來回留存（防賽後對話無限重跳；W1 漏存回歸）', () => {
+  let career = createCareer({ seed: 7, playerName: '事件' });
+  career = recordEvent(career, 'teach-tip');
+  career = recordEvent(career, 'first-loss');
+  // seasonFromCareer 寫入→careerViewOf 讀回，events 必須原樣保留
+  const view = careerViewOf(createSaveV2({ career }));
+  assert.deepEqual(view.events, ['teach-tip', 'first-loss']);
+});
+
+test('已觸發賽後事件經 store 來回後不再重觸發（無限重跳的實況重現）', () => {
+  const store = createCareerStore(fakeStorage());
+  let career = createCareer({ seed: 42, playerName: '測試' });
+  store.saveCareer(career);
+  store.savePlayer(createCareerPlayer('測試'));
+  // 模擬棄賽敗 group-1 → 賽後事件 teach-tip/first-loss 應觸發
+  career = recordResult(career, { matchId: 'group-1', won: false, scoreFor: 0, scoreAgainst: 25 });
+  store.saveCareer(career);
+  career = store.loadCareer();
+  const firstDue = dueEvents(career, 'post').map((e) => e.id);
+  assert.ok(firstDue.includes('teach-tip'), '第一次應觸發 teach-tip');
+  // fireEvents 入帳＋存檔的等效：recordEvent 後 saveCareer
+  let c = career;
+  for (const id of firstDue) c = recordEvent(c, id);
+  store.saveCareer(c);
+  // 點擊繼續→renderCareer→loadCareer 的等效：重載後不得再觸發
+  const reloaded = store.loadCareer();
+  assert.deepEqual(dueEvents(reloaded, 'post'), [], '來回後不得重觸發（否則無限重跳卡死）');
 });
 
 test('migrate：版本分派骨架——v1 無路徑擲 Incompatible、鏈式可走、同版本原樣', () => {
