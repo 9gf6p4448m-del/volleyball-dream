@@ -50,8 +50,9 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const hints = createHintToggle(simpleMode, gates.readTier);
   const replayBtn = createReplayButton(handlers);
   const diveBtn = createDiveButton(handlers);
-  // A6（拍板）：生涯賽才給「離開」——中途離開＝棄賽敗 0:25，離開前自訂確認彈窗
-  const leaveBtn = careerSetup ? createLeaveButton(params) : null;
+  // A6（拍板）：生涯賽才給「離開」——中途離開＝棄賽敗 0:25，離開前自訂確認彈窗；
+  // 另掛 beforeunload 雙保險（reload/關頁跳瀏覽器通用確認框，防誤觸吃敗場）
+  const leaveBtn = careerSetup ? createLeaveButton(params, game) : null;
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -68,10 +69,13 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   };
 }
 
-// A6 離開鈕（生涯賽）：左上角常駐；點擊彈自訂確認框——「中途離開將記棄賽敗（0:25）——
-// 確定離開？」。確認＝走既有 careerReturnUrl 導航回生涯畫面（pending 未清＝resolveForfeit
-// 記 0:25 敗，棄賽機制不變）。注意：瀏覽器 reload／上一頁／關頁無法掛此彈窗，仍直接記敗。
-function createLeaveButton(params) {
+// A6 離開鈕（生涯賽）：左上角常駐；點擊彈自訂確認框——「中途離開球場將記棄賽敗（0:25）
+// ——確定離開？」。確認＝走既有 careerReturnUrl 導航回生涯畫面（pending 未清＝
+// resolveForfeit 記 0:25 敗，棄賽機制不變）。
+// beforeunload 雙保險（拍板 07-23）：比賽未完賽時 reload／關頁跳瀏覽器通用確認框
+// （文字瀏覽器內建、不可自訂——安全限制）；完賽（set_over）或已按離開鈕確認＝不攔
+// （否則局終正常返回生涯也會被通用框擋一次）。手機 PWA 對 beforeunload 支援不一＝已知限制。
+function createLeaveButton(params, game) {
   const btn = document.createElement('button');
   btn.textContent = '✕ 離開';
   btn.style.cssText = [
@@ -96,7 +100,7 @@ function createLeaveButton(params) {
     'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
   ].join(';');
   const text = document.createElement('div');
-  text.textContent = '中途離開將記棄賽敗（0:25）——確定離開？';
+  text.textContent = '中途離開球場將記棄賽敗（0:25）——確定離開？';
   text.style.cssText = ['color:#eef2fa', 'font-size:15px', 'line-height:1.6', 'margin-bottom:16px'].join(';');
   const btnRow = document.createElement('div');
   btnRow.style.cssText = ['display:flex', 'gap:12px', 'justify-content:center'].join(';');
@@ -120,6 +124,14 @@ function createLeaveButton(params) {
   card.appendChild(btnRow);
   overlay.appendChild(card);
 
+  // beforeunload：未完賽攔（跳通用框）、完賽放行（局終點擊返回生涯不被擋）
+  const onBeforeUnload = (e) => {
+    if (game.phase === 'set_over') return;
+    e.preventDefault();
+    e.returnValue = ''; // 舊規格相容：非空值才觸發確認框
+  };
+  window.addEventListener('beforeunload', onBeforeUnload);
+
   const openDialog = (e) => { e.stopPropagation(); overlay.style.display = 'flex'; };
   const close = (e) => { e.stopPropagation(); overlay.style.display = 'none'; };
   btn.addEventListener('pointerdown', openDialog);
@@ -127,6 +139,8 @@ function createLeaveButton(params) {
   overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) close(e); });
   confirmBtn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
+    // 已在自訂框確認過＝先卸 beforeunload，避免導航時又跳一次通用框
+    window.removeEventListener('beforeunload', onBeforeUnload);
     window.location.assign(careerReturnUrl(params, window.location.pathname));
   });
   document.body.appendChild(btn);

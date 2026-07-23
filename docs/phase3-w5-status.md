@@ -28,9 +28,12 @@
   （標 TODO(naming)）。`nextSeasonBtn(label, openerKey)`：`advanceSeason` 成功後先播對應開場
   （衛冕 defend／止步捲土重來 comeback），播完 `renderCareer`。以按鈕點擊觸發＝每次進屆播一次
   （不靠 career.events 標記，故不受「已播事件跨屆保留」影響）。
-- **A6 離開確認**（本輪補）：`matchStage.js` 生涯賽才建左上「✕ 離開」按鈕＋自訂確認彈窗
-  「中途離開將記棄賽敗（0:25）——確定離開？」（確定離開／繼續比賽）。確認＝走既有
-  `careerReturnUrl` 導航回生涯畫面，pending 未清→`resolveForfeit` 記 0:25 敗——**棄賽機制不變**。
+- **A6 離開確認**（本輪補；Sawmah 07-23 二次拍板加雙保險）：`matchStage.js` 生涯賽才建左上
+  「✕ 離開」按鈕＋自訂確認彈窗「中途離開球場將記棄賽敗（0:25）——確定離開？」（確定離開／
+  繼續比賽）。確認＝走既有 `careerReturnUrl` 導航回生涯畫面，pending 未清→`resolveForfeit`
+  記 0:25 敗——**棄賽機制不變**。**beforeunload 雙保險**：比賽未完賽（phase≠set_over）時
+  reload／關頁跳瀏覽器通用確認框（文字瀏覽器內建不可自訂——安全限制，寫不了「離開球場」）；
+  完賽或已按離開鈕確認＝先卸監聽不攔（局終正常返回不被通用框擋）。
 
 ## 2. Part B 逐出機制
 
@@ -55,8 +58,8 @@
 |---|------|-----------|------|------|
 | D1 | `nextRecruitId` 回收防護 | 未明講實作 | 改 count-based → **max(members ∪ expelled 之 R 號)+1** | 原 count-based 在逐出移除成員後會**回收 R id 並與現存成員撞號**（既是真 bug、又違測試 4「R id 不回收」）。無 expelled 時與原 count+1 等價 → 回歸 byte-identical 成立（測試 6 佐證）。 |
 | D2 | 名冊上限「一行」 | 「roster.js 上限常數，一行」 | 改 **兩處**：`schema.js:23`（createSaveV2 預設，真正生效處）＋`roster.js:90`（openSlots `?? 12` 回退） | 只改 roster.js 回退**不生效**——新存檔容量由 createSaveV2 寫死，openSlots 讀 roster.capacity 而非回退。要達成「上限 12」目標必須改 schema.js:23。 |
-| D3 | 先發保護範圍 | 「`lineup.starters` 內不可逐」 | 一併擋 **現役自由人**（`lineup.libero === id`） | 白浪招募生（小浪）是 libero 角色，若設為現役自由人又被逐會孤兒化 `lineup.libero`（下次 ensureLineup 靜默重置陣容）。同類防護、防 latent bug；UI 提示併作「先發／自由人位」。 |
-| D4 | A6 確認彈窗載體 | 「離開前確認彈窗」（實測痛點＝reload/誤觸記敗） | 新增比賽中「離開」按鈕＋自訂彈窗（單一機制，全在 matchStage.js） | 忠於拍板**自訂文案**（reload/上一頁/關頁受 web 限制無法掛自訂彈窗）。**已知限制**：瀏覽器 reload/上一頁/關頁仍直接記 0:25 敗——若要連那些也擋需另加 `beforeunload` 通用對話框（文字由瀏覽器決定）。試玩後可再定。 |
+| D3 | 先發保護範圍 | 「`lineup.starters` 內不可逐」 | 一併擋 **現役自由人**（`lineup.libero === id`）——**Sawmah 07-23 確認保留** | 白浪招募生（小浪）是 libero 角色，若設為現役自由人又被逐會孤兒化 `lineup.libero`（下次 ensureLineup 靜默重置陣容）。同類防護、防 latent bug；UI 提示併作「先發／自由人位」。 |
+| D4 | A6 確認彈窗載體 | 「離開前確認彈窗」（實測痛點＝reload/誤觸記敗） | 「離開」按鈕＋自訂彈窗，**加 beforeunload 雙保險**（Sawmah 07-23 二次拍板選定） | 自訂文案只能掛自家按鈕；reload/關頁層由 beforeunload 補（通用框文字瀏覽器內建不可自訂）。完賽/已確認＝卸監聽不重複攔。**殘餘限制**：手機 PWA（standalone）對 beforeunload 支援不一；「上一頁」手勢在部分瀏覽器不觸發。 |
 | D5 | `applyExpel` 回傳語意 | 未明講 | 回傳 `writeSave` 的寫入布林（鏡像 applyRecruit）；不符資格＝no-op 但仍回寫入結果 | UI 已用 `canExpel` 先擋，no-op 僅競態/防線。測試以「狀態不變」而非回傳值驗證邊界擋下。 |
 | D6 | A6 自動化測試 | — | 無（DOM 層） | 比照專案慣例（matchStage/matchLoop 為 three.js/DOM，靠試玩；測試涵蓋 sim＋生涯純邏輯）。 |
 
