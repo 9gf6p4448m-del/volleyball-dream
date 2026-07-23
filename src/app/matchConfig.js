@@ -43,7 +43,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
   // ensureStarterRoster 補齊）餵進建隊——隊友具名/個性化/成長後屬性由此生效
   const careerSetup = careerCtx
     ? careerMatchSetup(
-      careerCtx.career, careerCtx.player, careerCtx.matchEntry, careerCtx.roster ?? null,
+      careerCtx.career, careerCtx.player, careerCtx.matchEntry,
+      careerCtx.roster ?? null, careerCtx.lineup ?? null,
     )
     : null;
   // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才）

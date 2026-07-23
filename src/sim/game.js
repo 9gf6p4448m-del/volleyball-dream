@@ -444,6 +444,15 @@ function performServe(state, intent, ev) {
     return;
   }
 
+  // 7.7 輪轉錯誤追溯扣分（cancelFaultPoints）的呼叫點——本輪只接線不啟用。
+  // W3 發球者由 match.rotations 決定論導出＝發球序結構上不可能違反 7.7，故此處無觸發源。
+  // 啟用條件：當 lineup 的發球序來源不再全經排陣預檢（lineup.js checkRotationOrder）時
+  // ——即 W4 招募後的中途換人／輪轉替補產生「未經預檢的發球者」——在此偵測到違序即發
+  //   ROTATION_FAULT（帶 faultTick=首次違序 tick），賽末結算改呼叫：
+  //     cancelFaultPoints(state.events, faultTick, faultTeam)  // rotationRules.js
+  //   取消犯規隊自 faultTick 起全部得分、對隊得分保留。
+  // 現不接執行碼：為不存在的路徑改賽中結算＝拿決定論穩定性換用不到的功能（見 W3 任務書）。
+
   const contactY = Math.max(spikeReach(player) * 0.92, 2.2); // 跳發擊球點
   ball.x = actor.x; ball.y = contactY; ball.z = actor.z;
   // 發球三式：穩定（預設）／跳躍（timing>1.1：低平快＋散佈放大——力量換準度）

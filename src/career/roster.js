@@ -7,6 +7,7 @@
 //   不得直接進 sim 決策（比賽行為一律走 member.attributes → createPlayer 既有參數路徑）
 import { buildLibero } from './careerState.js';
 import { GROWABLE_ATTRS, matchStatsFor } from './growth.js';
+import { defaultLineup } from './lineup.js';
 
 // ---- 成長模型參數（D2 拍板：表現歸因驅動、新人快老將慢、上限 85）----
 export const ROSTER_GROWTH = {
@@ -94,13 +95,23 @@ export function openSlots(roster) {
 // W1 期建立的 v2 存檔 members 是空的——第一次讀到就補具名 starter 隊伍。
 // members 非空＝已補齊，永不重建（玩家改過名/已成長的資料不得被蓋掉）。
 // 無存檔（快速比賽/未開生涯）→ null，不落任何東西。
+// W3：同一段升級邏輯一併補齊/遷移 lineup（starters:null 舊存檔→預設輪轉序＋trust 映射），
+// 冪等＝starters 非 null（玩家已排或已補齊）即不覆蓋。
 export function ensureStarterRoster(store) {
   const roster = store.loadRoster();
   if (!roster) return null;
-  if (roster.members.length > 0) return roster;
-  const filled = { ...roster, members: buildStarterMembers() };
-  store.saveRoster(filled);
-  return filled;
+  const members = roster.members.length > 0 ? roster.members : buildStarterMembers();
+  if (members !== roster.members) store.saveRoster({ ...roster, members });
+  ensureLineup(store, members);
+  return store.loadRoster();
+}
+
+// lineup 補齊/遷移（冪等）：starters 為 null（W1/W2 存檔或建檔中間態）→ 落預設陣容
+// （依 members 建 trust 映射）；starters 已存在＝玩家編排或前次補齊，原樣不動。
+function ensureLineup(store, members) {
+  const lineup = store.loadLineup();
+  if (!lineup || lineup.starters != null) return;
+  store.saveLineup(defaultLineup(members));
 }
 
 // ---- 自動成長（任務3：賽末結算接線，settleCareerMatch 呼叫）----

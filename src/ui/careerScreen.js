@@ -8,6 +8,7 @@ import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/gro
 import {
   ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
 } from '../career/roster.js';
+import { validateLineup, checkRotationOrder, defaultLineup } from '../career/lineup.js';
 import { dueEvents, recordEvent } from '../career/events.js';
 import { updateTrust } from '../sim/trust.js';
 
@@ -130,6 +131,158 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
   function hideCard() {
     cardOverlay.style.display = 'none';
     cardOverlay.replaceChildren();
+  }
+
+  // ---- W3 先發編排器（tap-to-swap；opt-in——不強制打斷出戰流程）----
+  const lineupOverlay = el('div', [
+    'position:fixed', 'inset:0', 'z-index:37', 'display:none',
+    'background:rgba(4,6,12,0.72)', 'align-items:flex-start', 'justify-content:center',
+    'overflow-y:auto',
+    'padding:calc(env(safe-area-inset-top, 0px) + 24px) 16px 40px',
+  ]);
+  lineupOverlay.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (e.target === lineupOverlay) closeLineup(); // 點外側＝取消編排（不出戰）
+  });
+  document.body.appendChild(lineupOverlay);
+  function closeLineup() {
+    lineupOverlay.style.display = 'none';
+    lineupOverlay.replaceChildren();
+  }
+
+  // 開啟排陣器：讀當前 lineup（ensureStarterRoster 已保證補齊）為工作副本，tap 兩格互換。
+  // 確認＝saveLineup（持久）＋onConfirm（接既有 pre-event→onPlay 流程）；點外側／無名冊＝取消。
+  function showLineupEditor(career, player, onConfirm) {
+    const roster = ensureStarterRoster(store);
+    if (!roster) { onConfirm(); return; }
+    const saved = store.loadLineup();
+    const members = roster.members;
+    const playerId = player.id;
+    let working = structuredClone(saved);
+    let selected = null;
+
+    const nameOf = (id) => (id === playerId
+      ? career.playerName
+      : (members.find((m) => m.id === id)?.name ?? id));
+    const roleOf = (id) => (id === playerId
+      ? (ROLE_ABBR[player.currentRole] ?? 'OH')
+      : (ROLE_ABBR[members.find((m) => m.id === id)?.role] ?? '?'));
+
+    const card = el('div', [
+      'width:min(400px, 94vw)', `background:${COLOR.card}`, 'border-radius:16px',
+      'border:1px solid #2c3a58', 'padding:16px 18px', 'display:flex', 'flex-direction:column',
+      'gap:10px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+    ]);
+
+    function paint() {
+      card.replaceChildren();
+      card.appendChild(el('div', [
+        'font-size:16px', 'font-weight:800', `color:${COLOR.gold}`, 'letter-spacing:2px',
+      ], '先發編排'));
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.5'],
+        selected === null
+          ? '點兩格互換位置；標「發」＝該局首發球位。'
+          : '再點一格與所選位置互換（點回原格取消選取）。'));
+
+      // 6 格輪轉序
+      const grid = el('div', ['display:flex', 'flex-direction:column', 'gap:6px']);
+      working.starters.forEach((id, i) => {
+        const isPlayer = id === playerId;
+        const isSel = selected === i;
+        const row = el('div', [
+          'display:flex', 'align-items:center', 'gap:10px', 'height:46px', 'padding:0 12px',
+          'border-radius:10px', 'cursor:pointer', 'touch-action:manipulation',
+          `background:${isPlayer ? 'rgba(255,209,102,0.14)' : 'rgba(30,40,64,0.55)'}`,
+          `border:2px solid ${isSel ? COLOR.cyan : 'transparent'}`,
+        ]);
+        row.appendChild(el('div', [
+          'font-size:12px', 'font-weight:800', `color:${COLOR.dim}`, 'width:16px',
+        ], String(i + 1)));
+        const nm = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'flex:1', 'min-width:0']);
+        nm.appendChild(el('div', ['font-size:15px', 'font-weight:700'], nameOf(id)));
+        if (isPlayer) nm.appendChild(badge('你', COLOR.gold, '#1a1405'));
+        row.appendChild(nm);
+        row.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], roleOf(id)));
+        if (i === working.rotationStart) row.appendChild(badge('發', COLOR.cyan, '#062430'));
+        row.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          if (selected === null) selected = i;
+          else if (selected === i) selected = null;
+          else {
+            const s = working.starters;
+            [s[selected], s[i]] = [s[i], s[selected]];
+            selected = null;
+          }
+          paint();
+        });
+        grid.appendChild(row);
+      });
+      card.appendChild(grid);
+
+      // 自由人（W3 唯一自由人 AL，唯讀）
+      const lib = members.find((m) => m.id === working.libero);
+      const libRow = el('div', [
+        'display:flex', 'align-items:center', 'gap:10px', 'height:40px', 'padding:0 12px',
+        'border-radius:10px', 'background:rgba(20,28,46,0.6)', 'border:1px dashed #33436a',
+      ]);
+      libRow.appendChild(el('div', [
+        'font-size:12px', 'font-weight:800', `color:${COLOR.dim}`, 'width:16px',
+      ], 'L'));
+      libRow.appendChild(el('div', ['font-size:14px', 'font-weight:700', 'flex:1'], lib?.name ?? '小守'));
+      libRow.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], '自由人'));
+      card.appendChild(libRow);
+
+      // 起始輪轉（rotationStart 0-5，顯示 1-6）
+      const rotWrap = el('div', ['display:flex', 'flex-direction:column', 'gap:6px']);
+      rotWrap.appendChild(el('div', [
+        'font-size:12px', `color:${COLOR.cyan}`, 'letter-spacing:2px',
+      ], '起始輪轉（首發球位）'));
+      const rotRow = el('div', ['display:flex', 'gap:6px']);
+      for (let n = 0; n < 6; n += 1) {
+        const active = working.rotationStart === n;
+        const b = el('button', [
+          'flex:1', 'height:34px', 'border-radius:8px', 'border:none', 'cursor:pointer',
+          'touch-action:manipulation', 'font-size:14px', 'font-weight:700',
+          active ? `background:${COLOR.cyan};color:#062430` : `background:rgba(30,40,64,0.9);color:${COLOR.dim}`,
+        ], String(n + 1));
+        b.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          working.rotationStart = n;
+          paint();
+        });
+        rotRow.appendChild(b);
+      }
+      rotWrap.appendChild(rotRow);
+      card.appendChild(rotWrap);
+
+      // 即時合法性（validateLineup 結構＋checkRotationOrder 7.7）
+      const v = validateLineup(working, members, playerId);
+      const rot = checkRotationOrder(working.starters, working.rotationStart);
+      const legal = v.valid && rot.legal;
+      const reason = !v.valid ? v.errors[0] : rot.reason;
+      card.appendChild(el('div', [
+        'font-size:13px', 'font-weight:700', 'min-height:18px',
+        `color:${legal ? '#7ee787' : COLOR.red}`,
+      ], legal ? '✓ 陣容合法（FIVB 7.7）' : `✗ ${reason}`));
+
+      const tools = el('div', ['display:flex', 'gap:8px', 'flex-wrap:wrap']);
+      tools.appendChild(smallButton('重置為預設', () => { working = defaultLineup(members); selected = null; paint(); }));
+      tools.appendChild(smallButton('沿用上次', () => { working = structuredClone(saved); selected = null; paint(); }));
+      card.appendChild(tools);
+
+      const confirm = button('✓ 確認出戰', legal, () => {
+        if (!legal) return;
+        store.saveLineup(working);
+        closeLineup();
+        onConfirm();
+      });
+      if (!legal) { confirm.style.opacity = '0.5'; confirm.style.cursor = 'not-allowed'; }
+      card.appendChild(confirm);
+    }
+
+    paint();
+    lineupOverlay.replaceChildren(card);
+    lineupOverlay.style.display = 'flex';
   }
 
   function showMemberCard(member, career) {
@@ -465,16 +618,19 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
         `本屆戰績 ${rec.wins} 勝 ${rec.losses} 敗——從主選單開新生涯再挑戰`));
     } else if (next) {
-      root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, () => {
-        // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
-        const start = () => {
+      // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
+      const startMatch = () => {
+        const go = () => {
           hide();
           onPlay({ career: store.loadCareer() ?? career, player, matchEntry: next });
         };
         const preEvs = dueEvents(career, 'pre');
-        if (preEvs.length) fireEvents(preEvs, career, player, start);
-        else start();
-      }));
+        if (preEvs.length) fireEvents(preEvs, career, player, go);
+        else go();
+      };
+      // 出戰＝直接開賽（走已存/預設 lineup，不強制打斷）；先發編排＝opt-in 排陣後開賽
+      root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, startMatch));
+      root.appendChild(smallButton('⚙ 先發編排', () => showLineupEditor(career, player, startMatch)));
       const trait = opponentById(next.opponentId)?.trait;
       if (trait) {
         root.appendChild(el('div', [
@@ -615,4 +771,12 @@ function smallButton(label, onTap) {
   ], label);
   b.addEventListener('pointerdown', (e) => { e.stopPropagation(); onTap(); });
   return b;
+}
+
+// 小徽章（隊長／「你」／「發」首發位標記等）
+function badge(text, bg, fg) {
+  return el('div', [
+    'font-size:10px', 'font-weight:800', `background:${bg}`, `color:${fg}`,
+    'border-radius:6px', 'padding:1px 6px', 'letter-spacing:1px', 'flex:none',
+  ], text);
 }

@@ -5,6 +5,7 @@
 import { createPlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { createDefaultTeams } from '../sim/game.js';
 import { OPPONENTS, opponentById } from './opponents.js';
+import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 
 // v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
 export const CAREER_VERSION = 3;
@@ -186,34 +187,46 @@ export function normalizeCareerPlayer(player) {
   return player;
 }
 
-// 生涯比賽建隊：我隊＝預設隊伍＋玩家 Player 塞回主攻手槽；
-// 對手隊＝參數檔建隊（未給 def＝預設 B 隊，維持 stage 1 相容）。
-// W2 起：給 rosterMembers（save.roster.members）時，A 隊其餘五槽改吃名冊的
-// 具名＋個性化屬性；trust 槽位初值維持 BASE_TRUST（名冊不動信任結構），
-// 身高走 member.height（同既有基準）。未給名冊＝舊行為（測試/舊路徑相容）。
-export function careerTeams(player, opponentDef = null, rosterMembers = null) {
+// 生涯比賽建隊：我隊＝依先發輪轉序（lineup）展開名冊為 A 隊；對手隊＝參數檔建隊
+// （未給 def＝預設 B 隊，維持 stage 1 相容）。
+// W3 單一建隊路徑：給 rosterMembers 時一律依 lineup.starters 順序建 teams.A、
+// trust 跟人（trustOf 以 member id 查映射，換位不繼承他人信任），玩家（A2）擺在其
+// 於 starters 的位置、trust 恆取 save.player。未給 lineup＝取 defaultLineup（預設序
+// ＝W2 固定槽位同序，逐位等價——見 tests/lineup 等價閘）。未給名冊＝快速比賽相容
+// （主角塞主攻手槽、其餘預設隊員）。
+export function careerTeams(player, opponentDef = null, rosterMembers = null, lineup = null) {
   if (player?.id !== 'A2' || player?.teamId !== 'A') {
     throw new Error('careerTeams：生涯主角必須是 A 隊 A2（主攻手槽）');
   }
   normalizeCareerPlayer(player);
   const teams = createDefaultTeams();
-  teams.A[1] = player;
   if (rosterMembers) {
-    teams.A = teams.A.map((slot, i) => {
-      if (i === 1) return player;
-      const m = rosterMembers.find((x) => x.id === slot.id);
-      if (!m) return slot;
+    // starters 為 null（建檔中間態，schema 放行）亦回退預設——防未經 ensureStarterRoster
+    // 的呼叫端把 null 序餵進 effectiveOrder 崩比賽
+    const lu = (lineup?.starters == null) ? defaultLineup(rosterMembers) : lineup;
+    const order = effectiveOrder(lu.starters, lu.rotationStart);
+    teams.A = order.map((id) => {
+      if (id === player.id) return player;
+      const m = rosterMembers.find((x) => x.id === id);
+      if (!m) throw new Error(`careerTeams：先發 ${id} 不在名冊`);
       return createPlayer({
         id: m.id,
         name: m.name,
         teamId: 'A',
         naturalRole: m.role,
         currentRole: m.role,
-        height: m.height ?? FALLBACK_HEIGHTS[i],
-        trust: BASE_TRUST[i],
+        height: m.height ?? 1.85,
+        trust: trustOf(lu, m.id),
         attributes: { ...m.attributes },
       });
     });
+    // 主控球員必在先發（排球鐵律：玩家恆在場上）——缺 A2 會建出無主控的隊，
+    // sim 以 PLAYER_ID='A2' 找不到人（操控/trustFloor/鏡頭全失據）。W4 fieldIds>6 才可能觸發
+    if (!teams.A.some((p) => p.id === player.id)) {
+      throw new Error('careerTeams：先發未含主控球員 A2');
+    }
+  } else {
+    teams.A[1] = player;
   }
   if (opponentDef) teams.B = buildOpponentTeam(opponentDef);
   return teams;
@@ -259,8 +272,9 @@ export function buildLibero(team, name, level = 60) {
 }
 
 // 生涯單場開賽包：種子＋兩隊 roster＋對手 AI 風格＋情蒐讀取——main.js 一次拿齊餵 createGame
-// W2 起第 4 參數 roster（save.roster 或 null）：A 隊五槽與自由人吃名冊具名/個性化/成長後屬性
-export function careerMatchSetup(career, player, matchEntry, roster = null) {
+// W2 起第 4 參數 roster（save.roster 或 null）：A 隊五槽與自由人吃名冊具名/個性化/成長後屬性。
+// W3 起第 5 參數 lineup（save.lineup 或 null）：A 隊依先發輪轉序建隊、自由人由 lineup.libero 選。
+export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null) {
   const def = opponentById(matchEntry.opponentId);
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
   // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
@@ -270,16 +284,16 @@ export function careerMatchSetup(career, player, matchEntry, roster = null) {
     : undefined;
   const members = roster?.members ?? null;
   // 我方自由人：結構欄位（id/身高/trust/role）恆由 buildLibero 公式供給（D3 不動），
-  // 名冊成員 AL 存在時只覆寫 name＋attributes（承接自動成長後的數值）
+  // lineup.libero 指定的名冊成員存在時只覆寫 name＋attributes（承接自動成長後的數值）
   const liberoA = buildLibero('A', '小守');
-  const al = members?.find((m) => m.id === 'AL');
+  const al = members?.find((m) => m.id === (lineup?.libero ?? DEFAULT_LIBERO_ID));
   if (al) {
     liberoA.name = al.name;
     liberoA.attributes = { ...liberoA.attributes, ...al.attributes };
   }
   return {
     seed: matchSeed(career, matchEntry.id),
-    teams: careerTeams(player, def, members),
+    teams: careerTeams(player, def, members, lineup),
     aiProfiles: { B: { ...def.ai } },
     ...(scoutRead ? { scoutRead } : {}),
     // stage 6 自由人：雙方都有（我方固定隊友、對方吃參數檔強度）

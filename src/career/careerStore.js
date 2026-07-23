@@ -94,6 +94,15 @@ export function createCareerStore(storage) {
     saveRoster(roster) {
       return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), roster }));
     },
+    // W3 先發編排：整包 lineup 讀寫（{starters, libero, rotationStart, trust}）；
+    // 補齊/遷移/玩家排陣都走 RMW（其餘鍵原樣保留）
+    loadLineup() {
+      const save = loadSave();
+      return save ? structuredClone(save.lineup) : null;
+    },
+    saveLineup(lineup) {
+      return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), lineup }));
+    },
     savePlayer(player) {
       // 走 serializePlayer 正規化（沿用既有格式；three/函式參照擋在存檔外）
       const plain = JSON.parse(serializePlayer(player));

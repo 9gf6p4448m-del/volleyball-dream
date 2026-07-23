@@ -64,7 +64,9 @@ function showCareerEntry(ctx) {
     onQuick: () => { runMatch(ctx, null); },
     onPlay: ({ career, player, matchEntry }) => {
       // W2：出戰前補齊/讀取名冊（空名冊一次性升級），隊友屬性由名冊驅動
-      runMatch(ctx, { store, career, player, matchEntry, roster: ensureStarterRoster(store) });
+      // W3：ensureStarterRoster 一併補齊 lineup；先發輪轉序由 save.lineup 驅動建隊
+      const roster = ensureStarterRoster(store);
+      runMatch(ctx, { store, career, player, matchEntry, roster, lineup: store.loadLineup() });
     },
   });
   const resume = ctx.params.get('career') === 'resume' && store.hasSave();

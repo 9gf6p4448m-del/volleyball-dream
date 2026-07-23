@@ -8,6 +8,7 @@
 // 名冊上限 10、線性多賽季（對手升級、宿敵記憶延續）。
 import { deserializePlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { CAREER_VERSION, deserializeCareer } from './careerState.js';
+import { validateLineup } from './lineup.js';
 
 export const SCHEMA_VERSION = 2;
 
@@ -149,6 +150,15 @@ export function deserializeSave(json) {
     if (typeof m.dna !== 'object' || m.dna === null) {
       throw new Error(`名冊成員 ${m.id} 缺 dna 標記`);
     }
+  }
+  // W3 先發編排驗證（starters 非 null＝已排；null＝建檔中間態，容許不驗內容）：
+  // 長度 6/無重複/id 合法/自由人不入先發/rotationStart 0-5
+  if (typeof raw.lineup !== 'object' || raw.lineup === null) {
+    throw new Error('lineup 結構不合法（需物件）');
+  }
+  if (raw.lineup.starters != null) {
+    const { valid, errors } = validateLineup(raw.lineup, raw.roster.members, raw.player?.id);
+    if (!valid) throw new Error(`先發陣容不合法：${errors.join('；')}`);
   }
   // season 內容沿用 careerState 的完整語意驗證（含賽程對手 id 存在性）
   const view = careerViewOf(raw);
