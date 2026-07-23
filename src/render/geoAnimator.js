@@ -37,8 +37,10 @@ const SEQUENCES = {
   windup: { dur: 0.75, jump: 0.5, land: false, keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }] },
   cheer: { dur: 0.9, jump: 0.26, land: false, keys: [{ at: 0, p: 'blockUp' }, { at: 1, p: 'blockUp' }] },
   // 魚躍：備戰→撲出手臂前伸→趴地；dur≈倒地恢復（42tick/60≈0.7s），撲空也演完整套
-  // 備戰→撲出手臂前伸→趴地→撐地爬起→站回；爬起段(diveSprawl→divePush→bumpReady)避免殭屍彈起
-  dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.16, p: 'diveReach' }, { at: 0.46, p: 'diveSprawl' }, { at: 0.72, p: 'divePush' }, { at: 1, p: 'bumpReady' }] },
+  // 爬起自然化（Sawmah 07-23 試玩回報「爬起太快」，拍板純視覺調不動 sim 節奏）：
+  // 撲出/落地壓前（真實飛撲本就爆發）→ 趴住一拍（0.34-0.52 重量感）→ 撐地→起身；
+  // 搭配 matchView 的「先低姿爬回、後起身」曲線（該處緩動同輪調整）
+  dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.14, p: 'diveReach' }, { at: 0.34, p: 'diveSprawl' }, { at: 0.52, p: 'diveSprawl' }, { at: 0.74, p: 'divePush' }, { at: 1, p: 'bumpReady' }] },
 };
 
 const ATTACK_MS = 0.08;

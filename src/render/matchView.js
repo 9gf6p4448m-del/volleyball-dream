@@ -161,18 +161,21 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         if (a.divedUntil > gameState.tick) {
           const remain = a.divedUntil - gameState.tick; // 42→0
           const p = 1 - Math.max(0, remain) / DIVE_RECOVER; // 撲救進度 0→1
-          // 撲出位移三段：0-0.3 快速撲出、0.3-0.62 趴住、0.62-1 爬起收回（不再瞬間彈回原位）
+          // 爬起自然化（Sawmah 07-23：原「滑回與立起同時」＝站著溜冰＋線性回正＝殭屍彈起）：
+          // 滑回提前且緩動——大半發生在身體仍前傾時（低姿爬行感）；前傾晚收尾、緩動回正
+          const ease = (t) => t * t * (3 - 2 * t); // smoothstep：起緩收緩
+          // 撲出位移三段：0-0.3 快速撲出、0.3-0.5 趴住、0.5-0.86 低姿爬回；0.86 後原地起身
           let lungeP;
           if (p < 0.3) lungeP = (p / 0.3) ** 0.6;
-          else if (p < 0.62) lungeP = 1;
-          else lungeP = Math.max(0, 1 - ((p - 0.62) / 0.38) ** 1.4);
+          else if (p < 0.5) lungeP = 1;
+          else lungeP = 1 - ease(Math.min((p - 0.5) / 0.36, 1));
           diveX = Math.sin(u.yaw) * DIVE_LUNGE * lungeP;
           diveZ = Math.cos(u.yaw) * DIVE_LUNGE * lungeP;
-          // 前傾三段：0-0.24 前撲、0.24-0.6 貼地、0.6-1 起身回正（身體慢慢立起，非殭屍垂直彈）
+          // 前傾三段：0-0.24 前撲、0.24-0.62 貼地、0.62-1 撐起回正（先爬後起，收尾放緩）
           let tiltP;
           if (p < 0.24) tiltP = p / 0.24;
-          else if (p < 0.6) tiltP = 1;
-          else tiltP = Math.max(0, 1 - (p - 0.6) / 0.4);
+          else if (p < 0.62) tiltP = 1;
+          else tiltP = 1 - ease((p - 0.62) / 0.38);
           diveTilt = DIVE_TILT * tiltP;
           diveY = p < 0.4 ? DIVE_HOP * Math.sin((p / 0.4) * Math.PI) : 0; // 只撲出段微騰空、落地貼地
         }
