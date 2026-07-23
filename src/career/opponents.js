@@ -16,7 +16,7 @@ export const OPPONENTS = [
     trustBias: {},
     heights: [1.80, 1.85, 1.92, 1.86, 1.83, 1.90],
     scoutRead: 0,
-    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25 }, // 控制系：飄浮發球
+    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03 }, // 控制系：飄浮發球、防守韌性低（少魚躍）
   },
   {
     id: 'white-wave',
@@ -29,7 +29,7 @@ export const OPPONENTS = [
     trustBias: {},
     heights: [1.81, 1.84, 1.90, 1.85, 1.83, 1.89],
     scoutRead: 0.25,
-    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15 },
+    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15 }, // 防守隊招牌：拚命魚躍、球不落地不放棄
   },
   {
     id: 'obsidian',
@@ -42,7 +42,7 @@ export const OPPONENTS = [
     trustBias: { middle: 22 },
     heights: [1.83, 1.87, 1.98, 1.89, 1.85, 1.96],
     scoutRead: 0.7,
-    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05 },
+    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08 },
   },
   {
     id: 'iron-mist',
@@ -55,7 +55,7 @@ export const OPPONENTS = [
     trustBias: {},
     heights: [1.84, 1.89, 1.95, 1.91, 1.87, 1.93],
     scoutRead: 0.5,
-    ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2 }, // 發球輪就是得分輪
+    ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2, diveRate: 0.08 }, // 發球輪就是得分輪
   },
   {
     id: 'sky-hawk',
@@ -68,7 +68,7 @@ export const OPPONENTS = [
     trustBias: { outside: 8 },
     heights: [1.86, 1.92, 1.99, 1.94, 1.90, 1.97],
     scoutRead: 0.9,
-    ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1 },
+    ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1, diveRate: 0.13 }, // 強隊全能：積極魚躍
   },
 ];
 

@@ -294,7 +294,12 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, def, members, lineup),
-    aiProfiles: { B: { ...def.ai } },
+    aiProfiles: {
+      // 隊友魚躍綁玩家解鎖（教練傳授全隊）：玩家習得 dive 後全隊會撲救、之前不會；
+      // 其他 profile（tipRate 等）維持 aiProfileOf 預設。對手用 opponents 分級 def.ai.diveRate
+      A: { diveRate: (player.techniques?.dive ?? 0) >= 1 ? 0.16 : 0 },
+      B: { ...def.ai },
+    },
     ...(scoutRead ? { scoutRead } : {}),
     // stage 6 自由人：雙方都有（我方固定隊友、對方吃參數檔強度）
     liberos: {

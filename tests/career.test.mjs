@@ -200,7 +200,7 @@ test('careerTeams 餵進 createGame 可正常推進（含對手參數隊）', ()
 test('aiProfileOf：未注入回落預設、注入吃自己的值、舊鍵 powerServeRate 相容', () => {
   const plain = createGame({ seed: 1 });
   assert.deepEqual(aiProfileOf(plain, 'B'),
-    { tipRate: 0.1, dumpRate: 0.07, jumpServeRate: 0, floatServeRate: 0 });
+    { tipRate: 0.1, dumpRate: 0.07, jumpServeRate: 0, floatServeRate: 0, diveRate: 0.16 });
   const styled = createGame({
     seed: 1,
     aiProfiles: { B: { tipRate: 0.5, jumpServeRate: 0.9, floatServeRate: 0.3 } },

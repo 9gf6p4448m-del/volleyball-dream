@@ -29,6 +29,8 @@ const AI = {
   TIP_RATE: 0.1,          // AI 第三擊輕吊機率（攻擊分支：不被讀死；重扣為絕對主體）
   DUMP_RATE: 0.07,        // S 前排二次球機率（球到位時偶發）
   DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
+  DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
+  //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
 };
 
 // 每隊 AI 風格參數：生涯對手參數檔經 createGame({ aiProfiles }) 注入；
@@ -41,6 +43,7 @@ export function aiProfileOf(game, team) {
     // 發球風格（預設 AI 全穩定）；powerServeRate 為 jumpServeRate 改名前的舊鍵（相容）
     jumpServeRate: p?.jumpServeRate ?? p?.powerServeRate ?? 0,
     floatServeRate: p?.floatServeRate ?? 0,
+    diveRate: p?.diveRate ?? AI.DIVE_RATE, // 魚躍積極度（對手 opponents 分級／我方綁解鎖／快速比賽預設）
   };
 }
 
@@ -367,6 +370,25 @@ function decideOne(game, aiState, playerId) {
         // AI 觸球品質基準 0.75（玩家 Perfect＝1.0 才有超越空間）；快攻舉球帶 t<0.5（低弧）
         const timing = tOverride ?? (action === 'spike' ? 1 : 0.75);
         return createIntent({ playerId, tick, action, aim, timing });
+      }
+    }
+    // AI 魚躍救球（接噴救球／方案A 全隊 AI 魚躍）：接對方來球、正常站立搆不到、但魚躍
+    // 可及範圍內的低球，以 diveRate 機率撲救（對手 opponents 分級／我方綁玩家解鎖）。
+    // roll 吃 flightId＝一個 flight 只決定一次（撲/不撲固定，非每 tick 骰）；倒地 42tick
+    // 代價＋diveRate<1 是「球不落地不結束」與「rally 不爆長」的平衡閘
+    if (receivingIncoming && ball.vy < 0 && ball.y <= TUNING.DIVE_MAX_Y
+      && dist > TUNING.REACH_RADIUS
+      && dist <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL
+      && game.tick >= actor.divedUntil
+      && (player.techniques?.dive ?? 1) >= 1) {
+      const { diveRate } = aiProfileOf(game, team);
+      const roll = hash01(game.rally.flightId * 613 + idHash(playerId) + (game.seed ?? 0));
+      if (roll < diveRate) {
+        return createIntent({
+          playerId, tick, action: 'dive',
+          aim: localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz),
+          timing: 0.5,
+        });
       }
     }
     // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
