@@ -3,12 +3,12 @@
 //   個體層：待命 → 判來球 → 移動到位 → 執行動作 → 回位
 // 原則：寧可有人搶錯，不可兩人互讓（呼叫鎖定以 flightId 為鍵，天然不可撤銷、不打架）
 // 難度＝堪打等級：動作正確、不玩心理戰、不打刁鑽落點（強度調參 Phase 2+）
-import { BALL, COURT } from './constants.js';
+import { BALL, COURT, SIM_DT } from './constants.js';
 import { serverId } from './match.js';
 import {
   otherTeam, basePosition, localToWorld, isFrontRow, positionOf, TEAM_SIDE,
 } from './rotation.js';
-import { standingReach, spikeReach } from './player.js';
+import { standingReach, spikeReach, moveSpeed } from './player.js';
 import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
 import { createIntent } from './intent.js';
 import { TUNING, spikeSpeed } from './game.js';
@@ -52,6 +52,7 @@ export function createAiState() {
   return {
     flightId: -1, planTick: 0, landing: null, contactPoint: null, landingTeam: null,
     claimId: null, attackerId: null, attackKind: null,
+    backupId: null,    // 第二追球者（接噴救球）：主追者明顯趕不上時加派的備援
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
   };
@@ -85,6 +86,7 @@ function ensureFlightPlan(game, aiState) {
   aiState.contactPoint = predictContactPoint(game.ball, AI.RECV_CONTACT_Y);
   aiState.landingTeam = landing ? (landing.z >= 0 ? 'A' : 'B') : null;
   aiState.claimId = null;
+  aiState.backupId = null;
   aiState.letDrop = false;
 
   if (!landing || !aiState.landingTeam) return;
@@ -140,6 +142,31 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackerId = null;
     aiState.attackKind = null;
   }
+
+  // 第二追球者（接噴救球「球不落地不結束」）：主追球者明顯趕不上（噴遠的球、
+  // 職責制指派了追不到的人）→ 加派次近備援接力去救；主追趕得上＝零加派——
+  // 正常回合行為不變（回歸不擾動的關鍵閘）。備援與主追同一套 chase/觸球/魚躍邏輯。
+  // 例外：計畫中的攻擊 flight（第三擊且主追＝選定攻擊手）不加派——攻擊手是在空中
+  // 迎擊二傳（助跑進行中），落地可及性不是對的量尺；set 真噴掉仍有攻擊手追＋魚躍救
+  if (aiState.claimId && !aiState.letDrop
+    && !(r.touches === 2 && aiState.claimId === aiState.attackerId)
+    && !canReachLanding(game, aiState, aiState.claimId)) {
+    aiState.backupId = arbitrate(game, team, landing, [r.lastToucherId, aiState.claimId]);
+  }
+}
+
+// 可及性預估：含反應延遲，從當前位置起跑能否在球落地前趕到落點可及圈。
+// 寬鬆估（扣 REACH_RADIUS 緩衝）：估錯寧可「以為趕得上」——備援只在明顯來不及時
+// 加派。planTick＝本 flight 起算點（landing.ticks 同一基準）
+function canReachLanding(game, aiState, playerId) {
+  const { landing } = aiState;
+  if (!landing?.ticks) return true;
+  const p = game.players[playerId];
+  const a = game.actors[playerId];
+  const gap = Math.hypot(a.x - landing.x, a.z - landing.z) - TUNING.REACH_RADIUS;
+  if (gap <= 0) return true;
+  const runTicks = gap / (moveSpeed(p) * SIM_DT);
+  return reactionTicks(p) + runTicks <= landing.ticks;
 }
 
 // 落點超出界線的距離（0＝界內；壓線算界內）
@@ -180,10 +207,11 @@ function idHash(id) {
 // 前排 MB 要準備快攻；剩餘四人涵蓋全場，慢球飛行時間內任何落點都可達。
 // 只有對方【殺球】的 dig 不得已（權重制縮小責任區、極近仍救）
 function arbitrate(game, team, landing, excludeId, formationExempt = false) {
+  const excluded = Array.isArray(excludeId) ? excludeId : [excludeId];
   const rot = game.match.rotations[team];
   let best = null;
   for (const pid of rot) {
-    if (pid === excludeId) continue;
+    if (excluded.includes(pid)) continue;
     const pos = positionOf(rot, pid);
     const base = basePosition(team, pos);
     let zoneDist = Math.hypot(base.x - landing.x, base.z - landing.z);
@@ -344,11 +372,21 @@ function decideOne(game, aiState, playerId) {
   if (game.phase !== 'rally') return null;
   const r = game.rally;
 
-  // 被呼叫鎖定的接球者：先吃反應延遲（reaction 屬性），再移動到預測落點，球進可及範圍且下墜時出手
-  if (aiState.claimId === playerId && aiState.landing) {
+  // 被呼叫鎖定的接球者（主追或備援第二追球者，同一套邏輯）：
+  // 先吃反應延遲（reaction 屬性），再移動到預測落點，球進可及範圍且下墜時出手
+  if ((aiState.claimId === playerId || aiState.backupId === playerId) && aiState.landing) {
     if (tick - aiState.planTick < reactionTicks(player)) return null; // 判來球中，尚未起動
     const ball = game.ball;
     const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
+    // 備援禮讓：主追者本 tick 自己就搆得到（將出手且未倒地）＝備援不搶著觸球，
+    // 只跟著壓落點（防同 tick 雙觸把觸球數灌成 2）；主追搆不到時備援才接力出手
+    if (aiState.backupId === playerId && aiState.claimId) {
+      const pa = game.actors[aiState.claimId];
+      const pd = Math.hypot(ball.x - pa.x, ball.z - pa.z);
+      if (pd <= TUNING.REACH_RADIUS * AI.ATTEMPT_RADIUS && tick >= pa.divedUntil) {
+        return moveIntent(playerId, tick, actor, aiState.landing);
+      }
+    }
     // 走位深度（只作用於接對方來球的第一觸 receive/dig，不碰舉球/扣球——那是高點打）：
     // 球仍高於接球高度＝有時間走到位，用嚴門檻逼人站到球正下方（到位＝好一傳）；球墜破＝
     // 不能再等，放寬到極限勉強接（沒到位＝接噴，散佈大）。舉球/扣球維持原寬門檻。
@@ -372,11 +410,14 @@ function decideOne(game, aiState, playerId) {
         return createIntent({ playerId, tick, action, aim, timing });
       }
     }
-    // AI 魚躍救球（接噴救球／方案A 全隊 AI 魚躍）：接對方來球、正常站立搆不到、但魚躍
-    // 可及範圍內的低球，以 diveRate 機率撲救（對手 opponents 分級／我方綁玩家解鎖）。
+    // AI 魚躍救球（接噴救球／方案A 全隊 AI 魚躍）：正常站立搆不到、但魚躍可及範圍內
+    // 的低球，以 diveRate 機率撲救（對手 opponents 分級／我方綁玩家解鎖）。
+    // 接噴補完（07-23 拍板）：不再限對方來球（touches===0）——隊友噴掉的一傳/二傳
+    // （touches 1/2 的亂飛低球）主追與備援一樣可撲；第三觸撲救目標改過網安全球
+    // （撲回自家二傳點＝白送第 4 擊犯規）。
     // roll 吃 flightId＝一個 flight 只決定一次（撲/不撲固定，非每 tick 骰）；倒地 42tick
     // 代價＋diveRate<1 是「球不落地不結束」與「rally 不爆長」的平衡閘
-    if (receivingIncoming && ball.vy < 0 && ball.y <= TUNING.DIVE_MAX_Y
+    if (ball.vy < 0 && ball.y <= TUNING.DIVE_MAX_Y
       && dist > TUNING.REACH_RADIUS
       && dist <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL
       && game.tick >= actor.divedUntil
@@ -384,11 +425,10 @@ function decideOne(game, aiState, playerId) {
       const { diveRate } = aiProfileOf(game, team);
       const roll = hash01(game.rally.flightId * 613 + idHash(playerId) + (game.seed ?? 0));
       if (roll < diveRate) {
-        return createIntent({
-          playerId, tick, action: 'dive',
-          aim: localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz),
-          timing: 0.5,
-        });
+        const aim = r.touches === 2
+          ? localToWorld(otherTeam(team), 0, 6.5) // 第三觸：撲過網（安全球深區）
+          : localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
+        return createIntent({ playerId, tick, action: 'dive', aim, timing: 0.5 });
       }
     }
     // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
