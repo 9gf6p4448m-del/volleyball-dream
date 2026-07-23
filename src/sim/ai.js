@@ -9,7 +9,7 @@ import {
   otherTeam, basePosition, localToWorld, isFrontRow, positionOf, TEAM_SIDE,
 } from './rotation.js';
 import { standingReach, spikeReach } from './player.js';
-import { predictLanding, spikeVelocity, heightAtNet } from './flight.js';
+import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
 import { createIntent } from './intent.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
@@ -17,7 +17,10 @@ import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from '
 const AI = {
   SERVE_DELAY: 30,        // 可發球後再等的 tick 數（模擬哨音到發球的節奏）
   ARRIVE_EPS: 0.06,       // 到位判定（m），避免抖動
-  ATTEMPT_RADIUS: 0.95,   // 觸球嘗試距離 = REACH_RADIUS × 此係數
+  ATTEMPT_RADIUS: 0.95,   // 觸球嘗試距離（保底寬門檻）＝ REACH_RADIUS × 此係數
+  RECV_CONTACT_Y: 1.35,   // 接球舒適高度（走位深度：瞄球墜到此高度的水平位置＝接觸點）
+  RECV_BAND: 0.3,         // 接球高度帶半寬（球墜進 1.35±0.3 時抓「到位觸球」）
+  CLOSE_RADIUS: 0.45,     // 嚴門檻（球在接球帶內＝逼人站到球正下方才觸）＝ REACH_RADIUS × 此
   SPIKE_MIN_Y: COURT.NET_HEIGHT * 0.85, // 球低於此高度就不硬扣、改送安全球
   SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
   ATTACK_LZ: 1.3,         // 舉球目標深度
@@ -44,7 +47,7 @@ export function aiProfileOf(game, team) {
 // AI 協調層狀態：每個 flight 算一次、鎖定到 flight 結束（呼叫鎖定的實作）
 export function createAiState() {
   return {
-    flightId: -1, planTick: 0, landing: null, landingTeam: null,
+    flightId: -1, planTick: 0, landing: null, contactPoint: null, landingTeam: null,
     claimId: null, attackerId: null, attackKind: null,
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
@@ -75,6 +78,8 @@ function ensureFlightPlan(game, aiState) {
   aiState.planTick = game.tick;
   const landing = predictLanding(game.ball);
   aiState.landing = landing;
+  // 走位深度：接球者瞄「球墜到接球高度時的水平位置」（接觸點）而非地板落點
+  aiState.contactPoint = predictContactPoint(game.ball, AI.RECV_CONTACT_Y);
   aiState.landingTeam = landing ? (landing.z >= 0 ? 'A' : 'B') : null;
   aiState.claimId = null;
   aiState.letDrop = false;
@@ -341,7 +346,21 @@ function decideOne(game, aiState, playerId) {
     if (tick - aiState.planTick < reactionTicks(player)) return null; // 判來球中，尚未起動
     const ball = game.ball;
     const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
-    const inReach = dist <= TUNING.REACH_RADIUS * AI.ATTEMPT_RADIUS && ball.vy < 0;
+    // 走位深度（只作用於接對方來球的第一觸 receive/dig，不碰舉球/扣球——那是高點打）：
+    // 球仍高於接球高度＝有時間走到位，用嚴門檻逼人站到球正下方（到位＝好一傳）；球墜破＝
+    // 不能再等，放寬到極限勉強接（沒到位＝接噴，散佈大）。舉球/扣球維持原寬門檻。
+    const receivingIncoming = r.touches === 0; // 本波第一觸＝接對方來球（receive/dig）
+    let inReach;
+    if (receivingIncoming) {
+      // 接球帶內（1.35±0.3）用嚴門檻抓「人到位觸球」（人瞄接觸點、球墜到頭頂＝dist 小＝
+      // 好一傳）；墜破帶下緣＝來不及，寬門檻保底勉強接（沒到位＝接噴，散佈大）
+      const inBand = ball.y <= AI.RECV_CONTACT_Y + AI.RECV_BAND;
+      const belowBand = ball.y < AI.RECV_CONTACT_Y - AI.RECV_BAND;
+      const radius = belowBand ? AI.ATTEMPT_RADIUS : AI.CLOSE_RADIUS;
+      inReach = inBand && dist <= TUNING.REACH_RADIUS * radius && ball.vy < 0;
+    } else {
+      inReach = dist <= TUNING.REACH_RADIUS * AI.ATTEMPT_RADIUS && ball.vy < 0;
+    }
     if (inReach) {
       const [action, aim, tOverride] = chooseTouch(game, aiState, player, actor);
       if (action && ball.y <= touchCeiling(player, action)) {
@@ -350,12 +369,14 @@ function decideOne(game, aiState, playerId) {
         return createIntent({ playerId, tick, action, aim, timing });
       }
     }
-    // 站位：落點的下游側（順球飛行方向退 0.3m）——觸球點在身前、面向來球（真實接球站位）
+    // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
+    // 維持瞄地板落點。下游微偏＝觸球點在身前、面向來球（真實接球站位）
+    const target = (receivingIncoming && aiState.contactPoint) ? aiState.contactPoint : aiState.landing;
     const sp = Math.hypot(ball.vx, ball.vz);
-    const off = sp > 0.5 ? 0.3 : 0;
+    const off = sp > 0.5 ? 0.2 : 0;
     return moveIntent(playerId, tick, actor, {
-      x: aiState.landing.x + (off ? (ball.vx / sp) * off : 0),
-      z: aiState.landing.z + (off ? (ball.vz / sp) * off : 0),
+      x: target.x + (off ? (ball.vx / sp) * off : 0),
+      z: target.z + (off ? (ball.vz / sp) * off : 0),
     });
   }
 

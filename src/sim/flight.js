@@ -72,3 +72,20 @@ export function predictLanding(ball, maxTicks = 900) {
   }
   return null;
 }
+
+// 接觸點預測（走位深度）：球下墜途中「墜到接球舒適高度 contactY」時的水平位置——
+// 接球者瞄這個點才會真的站在球正下方（而非瞄地板落點、球墜落期間人被拋在後方）。
+// 用同一套 stepBall 物理，找第一次「由上墜破 contactY 且正在下墜」的 tick。
+// 球全程高於 contactY（如平飛快球）或已在其下 → 回退地板落點（predictLanding）。
+export function predictContactPoint(ball, contactY, maxTicks = 900) {
+  const b = { ...ball };
+  for (let i = 1; i <= maxTicks; i += 1) {
+    const prevY = b.y;
+    stepBall(b, SIM_DT);
+    if (b.vy < 0 && prevY > contactY && b.y <= contactY) {
+      return { x: b.x, z: b.z, ticks: i };
+    }
+    if (b.y <= BALL.RADIUS + 1e-9) break; // 已觸地仍未墜到 contactY（低平球）
+  }
+  return predictLanding(ball, maxTicks);
+}
