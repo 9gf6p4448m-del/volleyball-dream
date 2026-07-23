@@ -8,6 +8,7 @@ import {
   mergeScouting, careerStage,
 } from '../src/career/careerState.js';
 import { buildStarterMembers, applyRosterGrowth } from '../src/career/roster.js';
+import { buildRecruitMember, RECRUIT_TRUST } from '../src/career/recruitment.js';
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
@@ -16,8 +17,12 @@ const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
 const MAX_TICKS = 400000;
 // 治具隔離開關（W2 平衡歸因用）：
 // VD_NO_ROSTER=1＝不帶名冊（＝W1 前基準隊伍）；VD_NO_GROWTH=1＝帶名冊但關隊友成長
+// VD_FULL_ROSTER=1（W4 招募臂）＝滿 10 人名冊、三名最高強度轉學生（曜石 MB／鐵霧 OPP／
+// 天鷹 OH）以真實入隊初值 trust 10 頂上三個攻擊位——量測招募對勝率曲線的上移幅度
+// （只採數據、不設通過門檻；平衡調整留 W6）
 const USE_ROSTER = process.env.VD_NO_ROSTER !== '1';
 const USE_GROWTH = process.env.VD_NO_GROWTH !== '1';
+const USE_FULL_ROSTER = process.env.VD_FULL_ROSTER === '1';
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖
 const TEACH_AFTER = {
@@ -72,10 +77,30 @@ for (let run = 0; run < RUNS; run += 1) {
   const player = createCareerPlayer('治具');
   // W2 名冊管線（鏡像正式路徑）：具名個性化 starter＋逐場表現驅動成長
   let roster = { capacity: 10, members: buildStarterMembers() };
+  let lineup = null;
+  if (USE_FULL_ROSTER) {
+    // 招募臂：R1 曜石 MB／R2 鐵霧 OPP／R3 天鷹 OH（決定論生成，同正式入隊路徑）；
+    // 陣容＝[S, 玩家OH, R-MB, R-OPP, R-OH, MB]——對角 5-1 合法、轉學生頂上三攻擊位
+    const rIds = [];
+    for (const oppId of ['obsidian', 'iron-mist', 'sky-hawk']) {
+      const id = `R${rIds.length + 1}`;
+      roster.members.push(buildRecruitMember(oppId, career.seed, id));
+      rIds.push(id);
+    }
+    lineup = {
+      starters: ['A1', 'A2', rIds[0], rIds[1], rIds[2], 'A6'],
+      libero: 'AL',
+      rotationStart: 0,
+      trust: {
+        A1: 20, A3: 20, A4: 20, A5: 20, A6: 20,
+        [rIds[0]]: RECRUIT_TRUST, [rIds[1]]: RECRUIT_TRUST, [rIds[2]]: RECRUIT_TRUST,
+      },
+    };
+  }
   for (let mi = 0; mi < matchIds.length; mi += 1) {
     if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
     const entry = career.schedule[mi];
-    const setup = careerMatchSetup(career, player, entry, USE_ROSTER ? roster : null);
+    const setup = careerMatchSetup(career, player, entry, USE_ROSTER ? roster : null, lineup);
     const g = playMatch(setup);
     const won = g.match.winner === 'A';
     const s = g.match.score;

@@ -103,6 +103,33 @@ export function createCareerStore(storage) {
     saveLineup(lineup) {
       return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), lineup }));
     },
+    // W4 招募：整包 recruitment 讀寫（{progress, recruited}）；賽末累加走 RMW
+    loadRecruitment() {
+      const save = loadSave();
+      return save ? structuredClone(save.recruitment) : null;
+    },
+    saveRecruitment(recruitment) {
+      return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), recruitment }));
+    },
+    // W4 入隊：單次 RMW 原子寫入三處（名冊＋trust 顯式初值＋recruited 標記）——
+    // 分三筆寫在中途失敗會留下「入了名冊沒記 recruited」的重複入隊隱患
+    applyRecruit({ member, opponentId, trust }) {
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        return {
+          ...next,
+          roster: { ...next.roster, members: [...next.roster.members, member] },
+          lineup: {
+            ...next.lineup,
+            trust: { ...(next.lineup.trust ?? {}), [member.id]: trust },
+          },
+          recruitment: {
+            ...next.recruitment,
+            recruited: [...next.recruitment.recruited, opponentId],
+          },
+        };
+      });
+    },
     savePlayer(player) {
       // 走 serializePlayer 正規化（沿用既有格式；three/函式參照擋在存檔外）
       const plain = JSON.parse(serializePlayer(player));

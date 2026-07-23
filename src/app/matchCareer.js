@@ -6,6 +6,7 @@ import {
 } from '../career/careerState.js';
 import { matchStatsFor, growthPointsFor } from '../career/growth.js';
 import { applyRosterGrowth } from '../career/roster.js';
+import { accrueRecruitProgress } from '../career/recruitment.js';
 
 // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
 export function markMatchStarted(careerCtx) {
@@ -22,6 +23,10 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
   const s = game.match.score;
   const won = game.match.winner === myTeam;
   const stats = matchStatsFor(game.events, playerId, myTeam);
+  // W4 招募進度的重入防線：讀存檔現況判斷本場是否已結算過（recordResult 靠 results
+  // 冪等，但招募 progress 是累加器——重入會重複累加，要在寫入前擋）
+  const settledBefore = (careerCtx.store.loadCareer?.() ?? careerCtx.career)
+    .results.some((r) => r.matchId === careerCtx.matchEntry.id);
   let saveOk = true;
   if (feintsUsed > 0) {
     careerCtx.player.techniques.feintUses =
@@ -45,6 +50,19 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
   if (roster && roster.members.length > 0) {
     const grown = applyRosterGrowth(roster.members, game.events, myTeam, careerCtx.matchEntry.id);
     saveOk = careerCtx.store.saveRoster({ ...roster, members: grown }) && saveOk;
+  }
+  // W4 招募進度累加（跨賽季累積、永不重置）：勝場＋壯舉（事件流掃描）＋stage 軸。
+  // 入隊本身在返回生涯畫面時執行（settleRecruitJoins——同一次賽末流程鏈的收尾）
+  const recruitment = careerCtx.store.loadRecruitment?.() ?? null;
+  if (recruitment && !settledBefore) {
+    saveOk = careerCtx.store.saveRecruitment(accrueRecruitProgress(recruitment, {
+      opponentId: careerCtx.matchEntry.opponentId,
+      matchId: careerCtx.matchEntry.id,
+      won,
+      events: game.events,
+      playerId,
+      myTeam,
+    })) && saveOk;
   }
   return { saveOk, won };
 }

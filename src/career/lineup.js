@@ -5,8 +5,8 @@ import { isRotationOrderLegal } from '../sim/rotationRules.js';
 
 export const LINEUP_SIZE = 6;
 export const DEFAULT_LIBERO_ID = 'AL';
-// 預設輪轉序＝W2 固定槽位對映的同序（A1..A6、玩家 A2 在 index 1）——
-// 保證預設路徑與舊固定槽位建隊逐位等價（W3 驗收閘 2）。W4 名冊變動後再一般化。
+// W3 硬編碼預設序（保留給測試對照）：A1..A6、玩家 A2 在 index 1。
+// W4 起預設序由 defaultStarters() 依名冊動態建——7 人創隊名冊產出與本常數逐位等價。
 export const DEFAULT_STARTERS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'];
 // 信任跟人（拍板）：隊友 trust 以 member id 為鍵、換位不繼承他人信任。
 // 玩家（A2）trust 恆取 save.player（唯一權威），刻意不入本映射——避免雙真相。
@@ -18,12 +18,52 @@ function fieldMemberIds(members) {
   return (members ?? []).filter((m) => m.role !== 'libero').map((m) => m.id);
 }
 
-// 預設先發陣容：starters＝玩家＋5 隊友的預設序、libero＝AL、rotationStart=0、
-// trust＝隊友全 20 映射（玩家不入映射）。ensureStarterRoster 首次補齊即落此形狀。
-export function defaultLineup(members) {
+// W4 動態預設序：依 5-1 槽位樣式 [S,OH,MB,OPP,OH,MB] 從玩家＋名冊建合法預設——
+// 對角三組天然為 {S,OPP}/{OH,OH}/{MB,MB}，checkRoleStructure 恆過。
+// 候選佇列＝玩家（排自己角色佇列首位）＋members 名冊原序：7 人創隊名冊產出恰為
+// ['A1','A2','A3','A4','A5','A6']（與 W3 硬編碼逐位等價——驗收閘 2）；招募後預設
+// 仍是創隊六人（轉學生上場是玩家的排陣決定，不進預設）。
+const SLOT_ROLES = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
+export function defaultStarters(members, playerId = 'A2', playerRole = 'outside') {
+  const queues = { setter: [], outside: [], middle: [], opposite: [] };
+  if (queues[playerRole]) queues[playerRole].push(playerId);
+  for (const m of members ?? []) if (queues[m.role]) queues[m.role].push(m.id);
+  const used = new Set();
+  const starters = [];
+  for (const role of SLOT_ROLES) {
+    const cand = queues[role].find((id) => !used.has(id));
+    if (cand !== undefined) {
+      used.add(cand);
+      starters.push(cand);
+    }
+  }
+  // 防呆：某角色缺員（正常名冊結構上不會發生）→ 以未用場上球員遞補保長度 6，
+  // 讓 validateLineup 用具體理由擋、而不是在建隊當下崩
+  if (starters.length < LINEUP_SIZE) {
+    for (const id of [playerId, ...fieldMemberIds(members)]) {
+      if (starters.length >= LINEUP_SIZE) break;
+      if (!used.has(id)) {
+        used.add(id);
+        starters.push(id);
+      }
+    }
+  }
+  return starters;
+}
+
+// 預設先發陣容：starters＝動態預設序、libero＝名冊首位自由人（缺→AL）、
+// rotationStart=0、trust＝隊友全 20 映射（玩家不入映射；招募成員的實際 trust 由
+// 入隊流程顯式寫入活存檔，本預設值只作用於全新建檔）。
+export function defaultLineup(members, playerId = 'A2', playerRole = 'outside') {
   const trust = {};
   for (const id of fieldMemberIds(members)) trust[id] = DEFAULT_TEAMMATE_TRUST;
-  return { starters: [...DEFAULT_STARTERS], libero: DEFAULT_LIBERO_ID, rotationStart: 0, trust };
+  const libero = (members ?? []).find((m) => m.role === 'libero')?.id ?? DEFAULT_LIBERO_ID;
+  return {
+    starters: defaultStarters(members, playerId, playerRole),
+    libero,
+    rotationStart: 0,
+    trust,
+  };
 }
 
 // 結構驗證（schema 匯入路徑＋UI 排陣即時用）：長度 6、無重複、id 為合法場上球員

@@ -154,6 +154,15 @@ export function deserializeSave(json) {
       throw new Error(`名冊成員 ${m.id} 缺 dna 標記`);
     }
   }
+  // W4 招募驗證（輕量形狀檢查——progress 內容由 recruitment.js 讀取時以預設值容錯，
+  // 這裡只擋結構性壞資料；recruited 成員的存在性由名冊成員驗證涵蓋——origin 對映）
+  if (
+    typeof raw.recruitment !== 'object' || raw.recruitment === null
+    || typeof raw.recruitment.progress !== 'object' || raw.recruitment.progress === null
+    || !Array.isArray(raw.recruitment.recruited)
+  ) {
+    throw new Error('recruitment 結構不合法（需 progress:object 與 recruited:array）');
+  }
   // W3 先發編排驗證（starters 非 null＝已排；null＝建檔中間態，容許不驗內容）：
   // 長度 6/無重複/id 合法/自由人不入先發/rotationStart 0-5
   if (typeof raw.lineup !== 'object' || raw.lineup === null) {
