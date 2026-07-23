@@ -136,11 +136,14 @@ function createDiveButton(handlers) {
   return {
     el: diveBtn,
     setVisible(v) { diveBtn.style.display = v ? 'block' : 'none'; },
-    // 常駐兩態：暗＝不可用、亮＝可撲（放大＋暖色）
-    setReady(r) {
-      diveBtn.style.background = r ? 'rgba(255,120,96,0.95)' : 'rgba(70,80,100,0.5)';
-      diveBtn.style.color = r ? '#1a0e08' : 'rgba(255,255,255,0.4)';
-      diveBtn.style.transform = r ? 'scale(1.12)' : 'scale(1)';
+    // 三態（07-23 常駐可按拍板）：不可按（倒地/非 rally）＝暗灰；可按待命（rally）＝
+    // 暖橘可按感；球來提示（hint）＝強橘＋放大脈動。canDive 決定能不能按，hint 只加強調
+    setReady(canDive, hint = false) {
+      diveBtn.style.background = !canDive
+        ? 'rgba(70,80,100,0.5)'
+        : hint ? 'rgba(255,120,96,0.98)' : 'rgba(255,150,120,0.7)';
+      diveBtn.style.color = canDive ? '#1a0e08' : 'rgba(255,255,255,0.4)';
+      diveBtn.style.transform = hint ? 'scale(1.16)' : 'scale(1)';
     },
   };
 }

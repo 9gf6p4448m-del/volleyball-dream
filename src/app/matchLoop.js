@@ -447,23 +447,25 @@ function settleIfOver(s) {
   s.prevPhase = game.phase;
 }
 
-// 魚躍鈕可用性：來球落我方半場、正常可及外撲救範圍內、未倒地（Space 版共用 diveReady）
+// 魚躍鈕可用性（拍板 07-23 Sawmah：常駐可按、按下即撲——賭注交還玩家）：
+// diveReady＝可觸發＝rally 中、未倒地、非回放（不再要求球落在可及範圍——撲對了救球、
+// 撲空由 sim 結算倒地，天然懲罰即濫用防護）。原「球正往我方可及範圍落」判定降為純視覺
+// 提示 diveHint（脈動放大告訴玩家「機會來了」），不再閘住觸發。
 function updateDiveButton(s) {
   if (!s.gates.canDive) return;
   const { game, aiState, stage } = s;
   const meActor = game.actors[s.controlledId];
   const landing = aiState?.landing;
-  s.diveReady = game.phase === 'rally' && !s.replay &&
-    game.tick >= meActor.divedUntil &&
-    !!landing && aiState.landingTeam === game.players[s.controlledId].teamId &&
-    game.ball.vy < 0;
-  if (s.diveReady) {
+  s.diveReady = game.phase === 'rally' && !s.replay && game.tick >= meActor.divedUntil;
+  // 純提示：來球落我方半場、下墜、落點在外撲救範圍——鈕強調脈動，但不是按下前提
+  let hint = false;
+  if (s.diveReady && landing && aiState.landingTeam === game.players[s.controlledId].teamId
+    && game.ball.vy < 0) {
     const d = Math.hypot(landing.x - meActor.x, landing.z - meActor.z);
-    s.diveReady = d > 1.1 && d <= 3.4;
+    hint = d > 1.1 && d <= 3.4;
   }
-  // 常駐兩態：rally 中恆顯示（暗＝不可用），可撲瞬間亮起放大（試玩回饋：閃現按不到）
   stage.diveBtn.setVisible(s.config.simpleMode && game.phase !== 'set_over' && !s.replay);
-  stage.diveBtn.setReady(s.diveReady);
+  stage.diveBtn.setReady(s.diveReady, hint);
 }
 
 // 每幀主流程：時間膨脹 → 固定步長模擬 → 事件應用 → 表現層同步 → 渲染
