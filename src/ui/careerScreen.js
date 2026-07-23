@@ -9,7 +9,7 @@ import {
   ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
 } from '../career/roster.js';
 import {
-  validateLineup, checkRotationOrder, checkRoleStructure, defaultLineup,
+  validateLineup, checkRotationOrder, checkRoleStructure, defaultLineup, trustOf,
 } from '../career/lineup.js';
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
@@ -499,6 +499,33 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     // DNA 標記（描述性——招募時代 W4 起會標示來源隊風格）
     card.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`, 'text-align:left'],
       `DNA｜${member.dna.tag}（${member.dna.style}）`));
+
+    // W5 信任顯示（Sawmah 07-23 拍板）：二傳信任持久 baseline（lineup.trust 跟人映射，
+    // 逐出全隊 −5 在此可見）；場中動態加成不入卡。自由人不吃舉球分配＝不顯示。
+    // 玩家自己的信任在生涯抬頭（save.player 供給，不在此映射——雙真相防線）。
+    if (member.role !== 'libero') {
+      const tv = trustOf(store.loadLineup(), member.id);
+      const trow = el('div', ['display:flex', 'align-items:center', 'gap:8px', 'margin-top:2px']);
+      trow.appendChild(el('div', [
+        'width:56px', 'font-size:12px', 'text-align:left', `color:${COLOR.text}`,
+      ], '二傳信任'));
+      const tbar = el('div', [
+        'flex:1', 'height:7px', 'border-radius:4px', 'background:#141b2e',
+        'position:relative', 'overflow:hidden',
+      ]);
+      tbar.appendChild(el('div', [
+        `width:${Math.max(0, Math.min(100, tv))}%`, 'height:100%', 'position:absolute',
+        'left:0', `background:${COLOR.cyan}`,
+      ]));
+      trow.appendChild(tbar);
+      trow.appendChild(el('div', [
+        'width:56px', 'font-size:12px', 'font-weight:700', 'text-align:right',
+        `color:${COLOR.text}`,
+      ], `${tv}`));
+      card.appendChild(trow);
+      card.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:left'],
+        '信任影響舉球分配——高信任拿更多攻擊球權（逐出隊友會讓全隊信任下降）'));
+    }
 
     // 屬性列：可成長六項附成長量與 85 上限刻度；控制/體力灰顯（不開放成長）
     const gains = totalGains(member);
