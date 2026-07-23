@@ -139,7 +139,10 @@ function ensureFlightPlan(game, aiState) {
     // 非殺球來球（發球/free ball）＝陣型排除 S/前排 MB（見 arbitrate）
     const claimer = arbitrate(game, team, landing, r.lastToucherId, r.profile !== 'spike');
     const outDist = landingOutDistance(landing);
-    if (outDist > 0 && claimer && outDist > judgeMargin(game, claimer)) {
+    // 放球看出界的前提＝最後觸球是對方（落地出界我方得分）；自家擦手/觸過的球
+    // （攔網 graze 後 lastTouchTeam＝我方）出界＝送分——再遠也得追（07-23 擦手配套）
+    if (outDist > 0 && claimer && outDist > judgeMargin(game, claimer)
+      && r.lastTouchTeam !== team) {
       aiState.claimId = null;
       aiState.letDrop = true; // 全隊看它出界
     } else {

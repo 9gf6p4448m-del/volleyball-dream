@@ -62,6 +62,10 @@ export const TUNING = {
   BLOWN_CHANCE_MAX: 0.35,   // 機率上限（最惡劣品質）
   BLOWN_SPIKE_PRESSURE: 1.2, // 重扣壓迫：dig 的爆接判定品質加乘（只影響爆接、不動散佈）
   BLOWN_APEX: 1.9,          // 噴射球弧頂（低平＝滯空短、追起來像救火）
+  // 擦手（one-touch，07-23 拍板）：攔網三態的中間態——沒攔死但指尖擦到，
+  // 球改向擦進攔網方半場（不計觸球數；「touch！快救！」的真實攔網日常）
+  BLOCK_GRAZE_CHANCE: 0.22, // 擦手帶寬（攔死判定之後的第二段；同吃時機檔、不吃情蒐）
+  BLOCK_GRAZE_SLOW: 0.45,   // 擦手後穿越速度保留比（減速但仍常飛向深區/界外）
   // 攔網時機判定：起跳到球過網的滯空 tick 數
   BLOCK_SWEET_MIN: 4, BLOCK_SWEET_MAX: 26,
   BLOCK_LATE_MUL: 0.6,    // 起跳太晚（手還沒到頂）
@@ -693,10 +697,31 @@ function tryBlock(state, toTeam, ev) {
 
   // 時機判定：起跳太晚（手沒到頂）或太早（下墜中）攔網率打折
   const airTicks = state.tick - best.actor.blockStartTick;
+  const timingMul = blockTimingMul(airTicks);
   // stage 5 情蒐讀取：對被讀者的慣用線收攏（假動作的 deceive 骰在上方——騙贏免讀）
-  const chance = (0.12 + best.p.attributes.block * 0.004) * blockTimingMul(airTicks) *
+  const chance = (0.12 + best.p.attributes.block * 0.004) * timingMul *
     scoutBlockMul(state, toTeam);
-  if (rand(state) >= chance) return false; // 沒攔到，乾淨過網
+  // 三態攔網（Sawmah 07-23 拍板補擦手）：單一 roll 依序判攔死→擦手→乾淨過網
+  //（rand 呼叫數恆一次——rng 流與二態時代同節奏）
+  const roll = rand(state);
+  if (roll >= chance) {
+    // 擦手（one-touch）：沒攔死但指尖擦到——BLOCK_TOUCH 一樣不計 3 次觸球，
+    // 球減速＋上挑＋橫偏、續入攔網方半場（隊友三次觸球去救；常飛深區/出界＝
+    // 追出自由區救球的戲）。擦手帶寬只吃時機檔（碰到比攔死容易，不吃情蒐）
+    if (roll >= chance + TUNING.BLOCK_GRAZE_CHANCE * timingMul) return false; // 完全沒碰，乾淨過網
+    b.vz *= TUNING.BLOCK_GRAZE_SLOW;
+    b.vx = b.vx * 0.5 + (blownHash(state, `${best.p.id}:gx`) - 0.5) * 3;
+    b.vy = 1.6 + blownHash(state, `${best.p.id}:gy`) * 1.2;
+    const r = state.rally;
+    r.touches = 0;
+    r.lastTouchTeam = toTeam;
+    r.lastToucherId = best.p.id;
+    r.deceiveP = 0;
+    r.profile = 'arc';
+    r.flightId += 1;
+    ev.push({ type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id, graze: true });
+    return true;
+  }
 
   // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零
   b.vz = -b.vz * 0.35;

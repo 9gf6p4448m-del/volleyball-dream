@@ -61,7 +61,10 @@ export function createCommentary(opponentDef = null) {
             setBeat(`${nameOf(game, e.playerId)} 全力重扣！`, now);
           }
         } else if (e.type === 'BLOCK_TOUCH') {
-          setBeat('攔網碰到球！還活著！', now);
+          // 擦手＝球擦進攔網方半場（隊友快救）；攔死回彈＝攻方還活著
+          setBeat(e.graze
+            ? `${nameOf(game, e.playerId)} 指尖擦到！球還活著——快救！`
+            : '攔網碰到球！還活著！', now);
         } else if (e.type === 'SCORE') {
           const { score } = game.match;
           const total = score.A + score.B;
