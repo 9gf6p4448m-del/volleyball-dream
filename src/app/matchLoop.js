@@ -138,17 +138,19 @@ function startReplay(s) {
   s.stage.floatText.show('🎬 回放', '#ffd166', 1200);
 }
 
-// 學招預告（Sawmah 07-23 拍板：情蒐帶開頭字幕）：這場打完可偷學的技術——賽前給目標感。
-// 延遲 2.2s 接在「📼 情蒐」字幕（2s）之後，同一 floatText 位置不互蓋；跳過情蒐照樣顯示。
+// 學招預告（Sawmah 07-23 二輪拍板：字幕太快→對話框點擊逐句）：這場打完可偷學的技術
+// ——賽前給目標感。情蒐帶在背後照播（點對話框只推進台詞不跳過帶子）；
 // 輸贏都教（既有政策）故措辭不綁勝負；名稱查 TECH_DEFS（與成長區同一套語彙）
 function showTeachPreview(s) {
-  if (!s.careerCtx) return;
+  if (!s.careerCtx || !s.stage.teachDialog) return;
   const keys = upcomingTeach(s.careerCtx.career, s.careerCtx.matchEntry.id);
   if (!keys.length) return;
   const names = keys.map((k) => TECH_DEFS.find((t) => t.key === k)?.name ?? k).join('」與「');
-  setTimeout(() => {
-    s.stage.floatText.show(`👀 情蒐筆記：他們的「${names}」很有一手——盯緊了，偷學回來`, '#ffd166', 3400);
-  }, 2200);
+  const opp = s.config.careerSetup?.opponent?.name ?? '對手';
+  s.stage.teachDialog.show([ // TODO(naming)：教練台詞佔位，命名工程統一潤稿
+    { speaker: '教練', text: `情蒐筆記看了嗎？${opp}的「${names}」很有名——帶子裡就有，盯緊了。` },
+    { speaker: '教練', text: '打完這場，把它偷學回來。' },
+  ]);
 }
 
 // 情蒐錄影帶：吃同一條 replay 管線（tape 旗標）

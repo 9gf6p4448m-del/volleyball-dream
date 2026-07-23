@@ -53,6 +53,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // A6（拍板）：生涯賽才給「離開」——中途離開＝棄賽敗 0:25，離開前自訂確認彈窗；
   // 另掛 beforeunload 雙保險（reload/關頁跳瀏覽器通用確認框，防誤觸吃敗場）
   const leaveBtn = careerSetup ? createLeaveButton(params, game) : null;
+  // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
+  const teachDialog = careerSetup ? createTeachDialog() : null;
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -64,8 +66,59 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, hints, replayBtn, diveBtn, leaveBtn,
+    panel, actionButtons, hints, replayBtn, diveBtn, leaveBtn, teachDialog,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay,
+  };
+}
+
+// 學招預告對話框（點擊逐句；與 careerScreen 劇情對話框同視覺範式）：
+// 底部卡片，speaker 金字＋台詞＋「▼ 點擊繼續」；點卡片推進、stopPropagation
+// 不觸發「點擊跳過情蒐」的 window 監聽（情蒐帶在背後照播）
+function createTeachDialog() {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = [
+    'position:fixed', 'left:50%', 'transform:translateX(-50%)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 26px)',
+    'width:min(480px, 92vw)', 'z-index:30', 'display:none',
+    'background:rgba(18,24,40,0.92)', 'border-radius:16px', 'border:1px solid #2c3a58',
+    'padding:14px 18px', 'cursor:pointer', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+    'font-family:system-ui,sans-serif', 'user-select:none',
+  ].join(';');
+  const speaker = document.createElement('div');
+  speaker.style.cssText = 'font-size:13px;font-weight:800;color:#ffd166;letter-spacing:2px';
+  const text = document.createElement('div');
+  text.style.cssText = 'font-size:15px;color:#eef2fa;line-height:1.6;margin-top:6px;text-align:left';
+  const hint = document.createElement('div');
+  hint.textContent = '▼ 點擊繼續';
+  hint.style.cssText = 'font-size:11px;color:#9fb0cc;text-align:right;margin-top:8px';
+  wrap.appendChild(speaker);
+  wrap.appendChild(text);
+  wrap.appendChild(hint);
+  document.body.appendChild(wrap);
+
+  let queue = null;
+  const paint = () => {
+    speaker.textContent = queue[0].speaker;
+    text.textContent = queue[0].text;
+  };
+  wrap.addEventListener('pointerdown', (e) => {
+    e.stopPropagation(); // 點對話框＝推進台詞，不觸發跳過情蒐/其他 window 監聽
+    if (!queue) return;
+    queue.shift();
+    if (queue.length) {
+      paint();
+      return;
+    }
+    queue = null;
+    wrap.style.display = 'none';
+  });
+  return {
+    show(lines) {
+      if (!lines?.length) return;
+      queue = [...lines];
+      paint();
+      wrap.style.display = 'block';
+    },
   };
 }
 

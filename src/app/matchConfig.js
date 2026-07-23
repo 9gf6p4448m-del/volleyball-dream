@@ -4,7 +4,8 @@
 // 三段以明確資料介面銜接：config →（createGame）→ gates → stage → loop。
 import { careerMatchSetup, buildLibero } from '../career/careerState.js';
 import { matchSeed } from '../career/careerState.js';
-import { buildScoutTape } from '../career/scoutTape.js';
+import { buildScoutTape, TAPE_FEATURE_KEYS } from '../career/scoutTape.js';
+import { upcomingTeach } from '../career/events.js';
 import { blockReadTier } from '../career/growth.js';
 
 // 介面契約（tests/app-config.test.js 把關）：
@@ -61,8 +62,13 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
     } : {}),
   };
   // stage 5 情蒐錄影帶：賽前播對手預演的 2-3 球關鍵回放（決定論預生成；點擊跳過）
+  // W5+ 學招預告連動：這場會教的招→帶子剪輯偏好（吊球場收吊球片段；不可偵測者略過）
+  const teachFeature = careerCtx
+    ? (upcomingTeach(careerCtx.career, careerCtx.matchEntry.id)
+      .find((k) => TAPE_FEATURE_KEYS.has(k)) ?? null)
+    : null;
   const tapeClips = careerSetup
-    ? buildScoutTape(seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos)
+    ? buildScoutTape(seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos, teachFeature)
     : [];
 
   return {
