@@ -22,6 +22,8 @@ const AI = {
   RECV_BAND: 0.3,         // 接球高度帶半寬（球墜進 1.35±0.3 時抓「到位觸球」）
   CLOSE_RADIUS: 0.45,     // 嚴門檻（球在接球帶內＝逼人站到球正下方才觸）＝ REACH_RADIUS × 此
   SPIKE_MIN_Y: COURT.NET_HEIGHT * 0.85, // 球低於此高度就不硬扣、改送安全球
+  SPIKE_APPROACH_Y: 2.9,  // 扣球窗上緣（一氣呵成助跑的到位目標：球墜到此高度時人剛到）
+  APPROACH_LEAD: 12,      // 助跑提前量（tick）：比精算早到 0.2s＝短暫引臂接起跳，不罰站
   SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
   ATTACK_LZ: 1.3,         // 舉球目標深度
   BLOCK_LZ: 0.6,          // 攔網站位深度
@@ -53,6 +55,7 @@ export function createAiState() {
     flightId: -1, planTick: 0, landing: null, contactPoint: null, landingTeam: null,
     claimId: null, attackerId: null, attackKind: null,
     backupId: null,    // 第二追球者（接噴救球）：主追者明顯趕不上時加派的備援
+    hitPoint: null,    // 第三擊：球墜到扣球窗上緣的時空點（一氣呵成助跑的推遲起跑基準）
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
   };
@@ -87,6 +90,7 @@ function ensureFlightPlan(game, aiState) {
   aiState.landingTeam = landing ? (landing.z >= 0 ? 'A' : 'B') : null;
   aiState.claimId = null;
   aiState.backupId = null;
+  aiState.hitPoint = null;
   aiState.letDrop = false;
 
   if (!landing || !aiState.landingTeam) return;
@@ -127,6 +131,8 @@ function ensureFlightPlan(game, aiState) {
       atk && atk !== r.lastToucherId && game.players[atk]
         ? atk
         : arbitrate(game, team, landing, r.lastToucherId);
+    // 一氣呵成助跑（Sawmah 07-23）：記球墜到扣球窗上緣的時空點——攻擊手據此推遲起跑
+    aiState.hitPoint = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
   } else {
     // 來球（發球/對方攻擊/自由球）：先判界內外，再責任區仲裁
     // 出界判斷（含誤差）：明顯出界＝放球讓它落地得分；壓線球寧可接（寧搶錯）
@@ -429,6 +435,19 @@ function decideOne(game, aiState, playerId) {
           ? localToWorld(otherTeam(team), 0, 6.5) // 第三觸：撲過網（安全球深區）
           : localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
         return createIntent({ playerId, tick, action: 'dive', aim, timing: 0.5 });
+      }
+    }
+    // 一氣呵成助跑（Sawmah 07-23：攻擊手不提早到網前罰站）：計畫攻擊（第三擊且我＝
+    // 選定攻擊手）時，球墜到扣球窗還久（跑得到＋APPROACH_LEAD 餘裕）就留在職責位
+    // （助跑起點），進窗才全速衝——助跑→引臂→起跳→揮擊連續。快攻低弧（airtime 短）
+    // 與遠距補位（runTicks 大）自然不觸發＝照舊直衝，不影響能不能打到球
+    if (r.touches === 2 && aiState.attackerId === playerId
+      && aiState.hitPoint?.ticks && !inReach) {
+      const ticksLeft = aiState.hitPoint.ticks - (tick - aiState.planTick);
+      const gap = Math.hypot(aiState.hitPoint.x - actor.x, aiState.hitPoint.z - actor.z);
+      const runTicks = Math.max(0, gap - 0.4) / (moveSpeed(player) * SIM_DT);
+      if (ticksLeft > runTicks + AI.APPROACH_LEAD) {
+        return moveIntent(playerId, tick, actor, dutyPosition(game, team, playerId));
       }
     }
     // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
