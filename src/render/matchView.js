@@ -62,7 +62,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       else if (e.type === 'TOUCH') {
         if (e.kind === 'spike') u.animator.trigger('spike');
         else if (e.kind === 'set') u.animator.trigger('overhead');
-        else u.animator.trigger(e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
+        // kind==='dive'＝魚躍觸球：動畫由 sync 的 divedUntil 偵測負責（撲到/撲空都演），不走墊球
+        else if (e.kind !== 'dive') u.animator.trigger(e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
       }
     }
     // 死球落點塵土（e.at＝球落地/犯規點）
@@ -87,6 +88,13 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     sync(gameState, alpha, dt, frameEvents = []) {
       routeEvents(frameEvents);
       for (const [id, u] of Object.entries(units)) {
+        // 魚躍：偵測新倒地（divedUntil 剛跳到未來）→ 撲救動畫；撲到有 TOUCH、撲空無事件，
+        // 都靠這裡演，修「按魚躍站著不動」bug（sim 端已倒地、缺的是視覺）
+        const diveActor = gameState.actors[id];
+        if (diveActor.divedUntil > gameState.tick && diveActor.divedUntil !== u.lastDived) {
+          u.animator.trigger('dive');
+        }
+        u.lastDived = diveActor.divedUntil;
         // 舉手備戰：①攔網窗開著②對方進攻組織中且我在網前——攻擊方讀攔網看得到手牆
         let blockDuty = false;
         if (forcePose) {

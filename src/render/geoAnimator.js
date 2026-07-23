@@ -19,6 +19,9 @@ const POSES = {
   blockPunch: { rSh: [-2.52, 0.1], lSh: [-2.52, -0.1], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2 },
   windup: { rSh: [-2.35, -0.35], lSh: [-2.0, 0.15], rEl: -1.8, lEl: -0.3, spine: -0.2, neck: -0.18 },
   land: { spine: 0.2, crouch: 0.26 },
+  // 魚躍撲救：身體前傾撲低、雙臂前伸墊球（spine 大負＝前撲、crouch 深＝身體沉到近地）
+  diveReach: { rSh: [-1.35, -0.55], lSh: [-1.35, 0.55], rEl: 0, lEl: 0, spine: -0.7, neck: 0.28, crouch: 0.5 },
+  diveSprawl: { rSh: [-0.95, -0.5], lSh: [-0.95, 0.5], rEl: -0.15, lEl: -0.15, spine: -0.5, neck: 0.18, crouch: 0.92 },
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
@@ -30,6 +33,8 @@ const SEQUENCES = {
   block: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockUp' }, { at: 0.4, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
   windup: { dur: 0.75, jump: 0.5, land: false, keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }] },
   cheer: { dur: 0.9, jump: 0.26, land: false, keys: [{ at: 0, p: 'blockUp' }, { at: 1, p: 'blockUp' }] },
+  // 魚躍：備戰→撲出手臂前伸→趴地；dur≈倒地恢復（42tick/60≈0.7s），撲空也演完整套
+  dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.22, p: 'diveReach' }, { at: 1, p: 'diveSprawl' }] },
 };
 
 const ATTACK_MS = 0.08;
