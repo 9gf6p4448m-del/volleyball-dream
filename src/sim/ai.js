@@ -149,12 +149,14 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackKind = null;
   }
 
-  // 第二追球者（接噴救球「球不落地不結束」）：主追球者明顯趕不上（噴遠的球、
-  // 職責制指派了追不到的人）→ 加派次近備援接力去救；主追趕得上＝零加派——
-  // 正常回合行為不變（回歸不擾動的關鍵閘）。備援與主追同一套 chase/觸球/魚躍邏輯。
-  // 例外：計畫中的攻擊 flight（第三擊且主追＝選定攻擊手）不加派——攻擊手是在空中
-  // 迎擊二傳（助跑進行中），落地可及性不是對的量尺；set 真噴掉仍有攻擊手追＋魚躍救
+  // 第二追球者（接噴救球「球不落地不結束」）：限【自家噴球】——我方持球中
+  // （touches≥1）的亂飛球、主追球者明顯趕不上 → 加派次近備援接力去救；
+  // 主追趕得上＝零加派（正常回合行為不變的回歸閘）。
+  // 不含來球（touches===0）：防守自有責任區仲裁＋dig＋魚躍體系，且快速 flight
+  // （扣球/發球）是「球飛過身邊時攔截」，落地可及性不是對的量尺——探針實測
+  // 曾誤觸發 19% flight（07-23）。攻擊 flight（主追＝選定攻擊手）同理不加派。
   if (aiState.claimId && !aiState.letDrop
+    && r.possession === team && r.touches >= 1
     && !(r.touches === 2 && aiState.claimId === aiState.attackerId)
     && !canReachLanding(game, aiState, aiState.claimId)) {
     aiState.backupId = arbitrate(game, team, landing, [r.lastToucherId, aiState.claimId]);
@@ -429,8 +431,12 @@ function decideOne(game, aiState, playerId) {
       && game.tick >= actor.divedUntil
       && (player.techniques?.dive ?? 1) >= 1) {
       const { diveRate } = aiProfileOf(game, team);
+      // 救噴（自家持球中的亂球）不擲骰——最後希望，不撲＝必失分，真實球員一定撲；
+      // 接對方來球維持 diveRate 節流（rally 長度平衡閘）。探針實測擲骰版救噴 0 次
+      // （窗口僅最後 0.15s、再被 roll 過濾 84%＝實戰不可能出現）
+      const rescue = r.possession === team && r.touches >= 1;
       const roll = hash01(game.rally.flightId * 613 + idHash(playerId) + (game.seed ?? 0));
-      if (roll < diveRate) {
+      if (rescue || roll < diveRate) {
         const aim = r.touches === 2
           ? localToWorld(otherTeam(team), 0, 6.5) // 第三觸：撲過網（安全球深區）
           : localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
