@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { SIM_DT } from '../sim/constants.js';
 import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
+import { serverId } from '../sim/match.js';
 import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 
@@ -59,11 +60,15 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   let ringHot = false;
 
   // 比賽事件 → 姿勢觸發（表現層唯讀路由）
-  function routeEvents(events) {
+  function routeEvents(events, gameState) {
     for (const e of events) {
       const u = units[e.playerId];
       if (!u) continue;
-      if (e.type === 'SERVE') u.animator.trigger('serve');
+      if (e.type === 'SERVE') {
+        // 發球分式（07-24）：依本球式樣選動畫——跳發高跳全揮／飄浮站立推擊／穩定原樣
+        const style = gameState.rally.serveStyle;
+        u.animator.trigger(style === 'power' ? 'serveJump' : style === 'float' ? 'serveFloat' : 'serve');
+      }
       else if (e.type === 'BLOCK_TOUCH') u.animator.trigger('block');
       else if (e.type === 'TOUCH') {
         if (e.kind === 'spike') u.animator.trigger('spike');
@@ -92,7 +97,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     },
     // alpha＝步間插值；dt＝畫面幀時間；frameEvents＝本幀 sim 事件（驅動姿勢）
     sync(gameState, alpha, dt, frameEvents = []) {
-      routeEvents(frameEvents);
+      routeEvents(frameEvents, gameState);
       for (const [id, u] of Object.entries(units)) {
         // 魚躍：偵測新倒地（divedUntil 剛跳到未來）→ 撲救動畫；撲到有 TOUCH、撲空無事件，
         // 都靠這裡演，修「按魚躍站著不動」bug（sim 端已倒地、缺的是視覺）
@@ -105,6 +110,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         let blockDuty = false;
         if (forcePose) {
           u.animator.setHold(forcePose);
+        } else if (gameState.phase === 'serve' && serverId(gameState.match) === id
+          && u.animator.isIdle()) {
+          // 發球前持球預備（07-24 連貫性）：等哨/等面板期間捧球站位——
+          // 發球瞬間直接銜接分式揮擊，不再「罰站→憑空揮手」
+          u.animator.setHold('serveReady');
         } else {
           const teamB = gameState.players[id].teamId;
           const r = gameState.rally;

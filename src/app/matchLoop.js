@@ -214,7 +214,8 @@ function runReplayFrame(s, now, delta) {
     replay.acc -= SIM_DT;
   }
   const rAlpha = Math.min(replay.acc / SIM_DT, 1);
-  ctx.ballView.sync(replay.state.ball, rAlpha, delta);
+  ctx.ballView.sync(replay.state.ball, rAlpha, delta,
+    replay.state.rally?.profile === 'serve' && replay.state.rally?.serveStyle === 'float');
   stage.matchView.sync(replay.state, rAlpha, delta, []);
   stage.aimMarker.hide();
   stage.landingMarker.hide();
@@ -520,7 +521,8 @@ function frameStep(s, now) {
   const game = s.game;
 
   const alpha = s.accumulator / SIM_DT;
-  ctx.ballView.sync(game.ball, alpha, delta);
+  ctx.ballView.sync(game.ball, alpha, delta,
+    game.phase === 'rally' && game.rally.profile === 'serve' && game.rally.serveStyle === 'float');
   const netHitPower = ctx.court.update(delta, game.ball); // 網面受擊波動（純視覺）
   if (netHitPower > 0) stage.sfx.netHit(netHitPower);
   stage.matchView.sync(game, alpha, delta, frameEvents);

@@ -33,6 +33,29 @@ test('geoAnimator dive：撲空也演完整套、dur≈倒地時長後回待命'
   assert.ok(anim.isIdle(), 'dur 後應回待命（不卡在趴地）');
 });
 
+test('發球分式動畫：serveJump 高跳、serveFloat 站立零跳、serveReady 可 hold', () => {
+  // 跳發：擊球段有明顯騰空（jump 0.55）
+  const r1 = mkRig();
+  const a1 = createGeoAnimator(r1);
+  a1.trigger('serveJump');
+  let peak = 0;
+  for (let i = 0; i < 17; i += 1) peak = Math.max(peak, a1.update(0.05, 0));
+  assert.ok(peak > 0.3, `跳發應高跳（峰值 ${peak.toFixed(2)}）`);
+  // 飄浮：站立推擊、全程零騰空
+  const r2 = mkRig();
+  const a2 = createGeoAnimator(r2);
+  a2.trigger('serveFloat');
+  let top = -1;
+  for (let i = 0; i < 10; i += 1) top = Math.max(top, a2.update(0.05, 0));
+  assert.ok(top <= 0.02, `飄浮發球不應騰空（峰值 ${top.toFixed(2)}）`);
+  // serveReady：hold 姿勢可用（發球前捧球預備）
+  const r3 = mkRig();
+  const a3 = createGeoAnimator(r3);
+  a3.setHold('serveReady');
+  a3.update(0.05, 0);
+  assert.ok(r3.joints.rShoulder.rotation.x < -0.5, '捧球預備＝雙臂前伸');
+});
+
 test('geoAnimator：未知動作不崩（trigger 防呆）', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);

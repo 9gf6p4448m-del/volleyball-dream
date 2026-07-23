@@ -39,12 +39,22 @@ export function createBallView(scene, quality) {
 
   return {
     // alpha = 累積器剩餘時間 / SIM_DT，於上一步與當前步之間插值；dt＝幀時間（視覺滾動用）
-    sync(ball, alpha, dt = 1 / 60) {
+    // floatFlight＝飄浮發球飛行中（07-24）：不轉＋不規則小幅飄移（knuckle 亂流視覺）——
+    // 純渲染偏移不動 sim 落點；「殺傷」本體仍是 sim 接發品質懲罰，這裡補「看得到的飄」
+    sync(ball, alpha, dt = 1 / 60, floatFlight = false) {
       const x = ball.px + (ball.x - ball.px) * alpha;
       const y = ball.py + (ball.y - ball.py) * alpha;
       const z = ball.pz + (ball.z - ball.pz) * alpha;
-      mesh.position.set(x, y, z);
-      mesh.rotation.x += 4.8 * dt; // 純視覺滾動（與幀率脫鉤）
+      let fx = 0;
+      let fy = 0;
+      if (floatFlight) {
+        // 以軌跡位置驅動相位（決定論、不吃牆鐘）：雙頻疊加＝不規則抖動
+        const t = (x + z) * 7.3 + y * 3.1;
+        fx = (Math.sin(t * 2.7) + Math.sin(t * 6.1 + 1.7)) * 0.035;
+        fy = (Math.sin(t * 3.9 + 0.6) + Math.sin(t * 8.3)) * 0.03;
+      }
+      mesh.position.set(x + fx, y + fy, z);
+      mesh.rotation.x += (floatFlight ? 0.25 : 4.8) * dt; // 飄浮球＝不轉（近停）；其餘視覺滾動
       blob.position.x = x;
       blob.position.z = z;
 
