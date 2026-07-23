@@ -54,6 +54,14 @@ export const TUNING = {
   RECV_BASE_SLOPE: 0.029, // 每點技術降基準（技術 73＝自由人→約 0.68 好球）
   RECV_POS_MIN: 0.9,      // 走到位（r=0）到位修正（微獎）
   RECV_POS_RANGE: 0.2,    // 勉強（r=1）→×1.1（微罰；走位深度但不主導）
+  // 爆接（Sawmah 07-23 拍板「真噴」）：一傳品質過差→機率出低平噴射球而非健康高弧——
+  // 接噴救球（備援追球者＋救噴必撲魚躍）的戲劇來源。好接球（q<門檻）永不爆；
+  // 自由人（技術 73→q≈0.9）天生不爆＝身分保留
+  BLOWN_Q_MIN: 1.15,        // 品質散佈乘數超過此值進入爆接判定
+  BLOWN_CHANCE_SLOPE: 0.55, // 爆接機率＝(q−Q_MIN)×斜率
+  BLOWN_CHANCE_MAX: 0.35,   // 機率上限（最惡劣品質）
+  BLOWN_SPIKE_PRESSURE: 1.2, // 重扣壓迫：dig 的爆接判定品質加乘（只影響爆接、不動散佈）
+  BLOWN_APEX: 1.9,          // 噴射球弧頂（低平＝滯空短、追起來像救火）
   // 攔網時機判定：起跳到球過網的滯空 tick 數
   BLOCK_SWEET_MIN: 4, BLOCK_SWEET_MAX: 26,
   BLOCK_LATE_MUL: 0.6,    // 起跳太晚（手還沒到頂）
@@ -367,10 +375,22 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     : intent.action === 'spike'
       ? timingQualityMul(rawT)
       : 1;
-  const target = scatterTarget(
-    state, intent.aim, player.attributes.control, intent.action,
-    dec.errorBoost, qualityMul,
-  );
+  // 爆接判定（僅第一觸的接球類；純 hash 不動 rng 流——非爆接時間線 rand 消費順序不變）：
+  // 品質乘數（含發球/重扣壓迫）超過門檻→機率把出球換成低平噴射（真噴）
+  const blownQ = isReceiveLike && newCount === 1
+    ? qualityMul * (rally.profile === 'spike' ? TUNING.BLOWN_SPIKE_PRESSURE : 1)
+    : 0;
+  const blown = blownQ > TUNING.BLOWN_Q_MIN
+    && blownHash(state, player.id) < Math.min(
+      TUNING.BLOWN_CHANCE_MAX,
+      (blownQ - TUNING.BLOWN_Q_MIN) * TUNING.BLOWN_CHANCE_SLOPE,
+    );
+  const target = blown
+    ? blownTarget(state, from, player.id)
+    : scatterTarget(
+      state, intent.aim, player.attributes.control, intent.action,
+      dec.errorBoost, qualityMul,
+    );
   // 力度：封頂 1；超蓄（放太晚）力度也掉——手型跑掉了
   const timing = rawT > TUNING.OVERCHARGE_T ? Math.min(clamp01(rawT), 0.85) : clamp01(rawT);
   let v;
@@ -384,9 +404,10 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
       TUNING.SPIKE_MIN_TIME,
     );
   } else {
-    const apex = intent.action === 'set'
-      ? (rawT < 0.5 ? TUNING.QUICK_APEX : TUNING.SET_APEX)
-      : TUNING.RECEIVE_APEX;
+    const apex = blown ? TUNING.BLOWN_APEX
+      : intent.action === 'set'
+        ? (rawT < 0.5 ? TUNING.QUICK_APEX : TUNING.SET_APEX)
+        : TUNING.RECEIVE_APEX;
     v = velocityForApex(from, { x: target.x, y: BALL.RADIUS, z: target.z }, apex);
   }
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
@@ -419,7 +440,40 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
     power: Math.round(timing * 100) / 100, // 蓄力質量：表現層分輕吊/重扣音效用
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
+    ...(blown ? { blown: true } : {}), // 爆接標記（播報/探針用）
   });
+}
+
+// 爆接噴射落點：沿來球水平動量方向偏轉（hash 角 ±75°）、距離 2.5-5.5m——
+// 手臂沒吃住球、球帶著動量彈飛。夾限自由區內（球員活動範圍＝救援有戲）；
+// 不鎖半場＝可能噴過網（亂槍過網的真實混亂）
+function blownTarget(state, from, playerId) {
+  const { ball } = state;
+  const sp = Math.hypot(ball.vx, ball.vz);
+  const bx = sp > 0.3 ? ball.vx / sp : 0;
+  const bz = sp > 0.3 ? ball.vz / sp : (from.z >= 0 ? 1 : -1);
+  const ang = (blownHash(state, `${playerId}:a`) - 0.5) * (Math.PI * 5 / 6); // ±75°
+  const dist = 2.5 + blownHash(state, `${playerId}:b`) * 3;
+  const dx = bx * Math.cos(ang) - bz * Math.sin(ang);
+  const dz = bx * Math.sin(ang) + bz * Math.cos(ang);
+  const mx = COURT.WIDTH / 2 + COURT.FREE_ZONE - 0.6;
+  const mz = COURT.LENGTH / 2 + COURT.FREE_ZONE - 0.6;
+  return {
+    x: clamp(from.x + dx * dist, -mx, mx),
+    z: clamp(from.z + dz * dist, -mz, mz),
+  };
+}
+
+// 爆接專用 hash（FNV 風格：flightId×鍵×種子）：決定論且不消費 game rng——
+// 爆接判定不改變非爆接時間線的 rand 順序
+function blownHash(state, key) {
+  let h = (Math.imul(state.rally.flightId + 1, 2654435761) ^ (state.seed ?? 0)) >>> 0;
+  for (const ch of String(key)) {
+    h = (h ^ ch.codePointAt(0)) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
 }
 
 // 規則引擎配接層：把單點球員轉成 rotationRules 的 lineup（隊伍視角座標）

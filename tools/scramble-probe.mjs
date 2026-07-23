@@ -11,12 +11,16 @@ let backupTouches = 0; // 備援真的觸到球（接力成功）
 let divesIncoming = 0; // 接對方來球的魚躍（原有路徑，touches=1）
 let divesRescue = 0;   // 救噴魚躍（touches≥2＝救自家亂球，新路徑）
 let rallies = 0;
+let blowns = 0;        // 爆接（真噴）發生數
+let blownRescued = 0;  // 爆接後被隊友追回（下一觸同隊）
+let blownDied = 0;     // 爆接後直接死球
 
 for (let s = 1; s <= N; s += 1) {
   const g = createGame({ seed: s * 7919 + 3, setTarget: 25 });
   const ai = createAiState();
   let lastFlight = -1;
   let flightHadBackup = false;
+  let pendingBlown = null; // { team }：爆接後看下一事件（同隊觸＝追回、SCORE＝死球）
   while (g.phase !== 'set_over' && g.tick < 120000) {
     const intents = aiCollectIntents(g, ai);
     if (ai.flightId !== lastFlight) {
@@ -30,11 +34,23 @@ for (let s = 1; s <= N; s += 1) {
     for (const e of ev) {
       if (e.type === 'SERVE') rallies += 1;
       if (e.type === 'TOUCH') {
+        if (pendingBlown) {
+          if (e.team === pendingBlown.team) blownRescued += 1;
+          pendingBlown = null;
+        }
+        if (e.blown) {
+          blowns += 1;
+          pendingBlown = { team: e.team };
+        }
         if (e.kind === 'dive') {
           if (e.touches >= 2) divesRescue += 1;
           else divesIncoming += 1;
         }
         if (flightHadBackup && e.playerId === backupId) backupTouches += 1;
+      }
+      if (e.type === 'SCORE' && pendingBlown) {
+        blownDied += 1;
+        pendingBlown = null;
       }
     }
   }
@@ -47,4 +63,5 @@ console.log(`備援指派          ${backups}（${(backups / flights * 100).toFi
 console.log(`備援實際觸球      ${backupTouches}（接力成功）`);
 console.log(`魚躍·接對方來球   ${divesIncoming}（原有路徑）`);
 console.log(`魚躍·救自家噴球   ${divesRescue}（新路徑：touches≥2 的 dive）`);
-console.log(`每場平均：備援 ${(backups / N).toFixed(1)} 次、救噴魚躍 ${(divesRescue / N).toFixed(1)} 次`);
+console.log(`爆接（真噴）      ${blowns}（追回 ${blownRescued}／死球 ${blownDied}）`);
+console.log(`每場平均：爆接 ${(blowns / N).toFixed(1)} 次、備援 ${(backups / N).toFixed(1)} 次、救噴魚躍 ${(divesRescue / N).toFixed(1)} 次`);

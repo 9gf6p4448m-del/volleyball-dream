@@ -35,6 +35,9 @@ export function createCommentary(opponentDef = null) {
         if (e.type === 'SERVE') {
           rallyStartFlight = game.rally.flightId;
           if (e.playerId !== controlledId) setBeat(`${nameOf(game, e.playerId)} 發球`, now, 1400);
+        } else if (e.type === 'TOUCH' && e.blown) {
+          // 爆接（真噴）：接噴救球鏈的開場哨——優先於魚躍播報（撲到但接爆＝報爆）
+          setBeat(`${nameOf(game, e.playerId)} 接爆了——球飛了！`, now);
         } else if (e.type === 'TOUCH' && e.kind === 'dive') {
           setBeat(`${nameOf(game, e.playerId)} 魚躍救球！！`, now);
         } else if (e.type === 'TOUCH' && e.kind === 'receive' && game.rally.touches === 1) {
