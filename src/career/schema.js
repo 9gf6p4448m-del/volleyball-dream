@@ -45,6 +45,7 @@ function emptySeason() {
     growthPoints: 0,
     scouting: {}, // 宿敵記憶（per 對手 id；跨賽季累積）
     events: [], // 已觸發劇情事件 id 清單（防賽後對話重複觸發——不存會無限重跳）
+    titles: 0, // 奪冠次數（W5：難度綁成就——衛冕屆對手升級；止步不升級）
   };
 }
 
@@ -60,6 +61,7 @@ export function seasonFromCareer(career, prev = null) {
     growthPoints: career.growthPoints ?? 0,
     scouting: career.scouting ?? {},
     events: career.events ?? [], // 已觸發劇情事件 id（W1 漏存→賽後對話無限重跳，見 lessons）
+    titles: career.titles ?? 0, // W5 奪冠次數（投影欄位讀寫成對——events 漏存教訓）
     ...(career.pendingMatch !== undefined ? { pendingMatch: career.pendingMatch } : {}),
   };
 }
@@ -78,6 +80,7 @@ export function careerViewOf(save) {
     growthPoints: s.growthPoints ?? 0,
     ...(Object.keys(s.scouting ?? {}).length > 0 ? { scouting: s.scouting } : {}),
     ...(Array.isArray(s.events) && s.events.length > 0 ? { events: s.events } : {}),
+    ...((s.titles ?? 0) > 0 ? { titles: s.titles } : {}), // 非零才回讀（比照 scouting 慣例）
     ...(s.pendingMatch !== undefined ? { pendingMatch: s.pendingMatch } : {}),
   };
 }

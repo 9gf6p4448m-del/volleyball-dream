@@ -76,6 +76,27 @@ export function matchSeed(career, matchId) {
   return (h % 1000000007) || 1;
 }
 
+// W5 賽季輪迴（拍板 07-23：難度綁成就不綁屆數）：季末（奪冠/止步）→ 進入下一屆。
+// 保留：名冊成長/招募進度/宿敵記憶/技巧/已播事件（全在 career 之外或 spread 保留）；
+// 重置：賽程與戰績（新一屆六場）；seed 決定論衍生（同存檔重演一致、每屆場次種子不同）。
+// 止步＝對手維持原強度（你帶著成長回來——失敗的回報是變強重來，不是更難）；
+// 奪冠＝titles+1 → 衛冕屆對手升級（TITLE_LEVEL_BONUS×titles——全國都在研究衛冕軍）。
+export const TITLE_LEVEL_BONUS = 3; // 每座冠軍讓對手全屬性 +3（平衡幅度 W6 複核）
+export function advanceSeason(career) {
+  const stage = careerStage(career);
+  if (stage !== 'champion' && stage !== 'eliminated') return career; // 賽季未結束＝不動
+  let h = (career.seed ^ 0x9e3779b9) >>> 0;
+  h = Math.imul(h ^ 0x85ebca6b, 16777619) >>> 0;
+  const { pendingMatch, ...base } = career;
+  return {
+    ...base,
+    seed: (h % 1000000007) || 1, // 決定論鏈：下一屆種子由本屆種子衍生
+    schedule: SCHEDULE_TEMPLATE.map((m) => ({ ...m })),
+    results: [],
+    titles: (career.titles ?? 0) + (stage === 'champion' ? 1 : 0),
+  };
+}
+
 // 開賽標記（拍板 07-22 堵中途退出）：pending 落檔＝這場開打了；
 // 完賽由 recordResult 清除；沒完賽就回生涯畫面＝resolveForfeit 記棄賽敗
 export function markPending(career, matchId) {
@@ -275,8 +296,13 @@ export function buildLibero(team, name, level = 60) {
 // W2 起第 4 參數 roster（save.roster 或 null）：A 隊五槽與自由人吃名冊具名/個性化/成長後屬性。
 // W3 起第 5 參數 lineup（save.lineup 或 null）：A 隊依先發輪轉序建隊、自由人由 lineup.libero 選。
 export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null) {
-  const def = opponentById(matchEntry.opponentId);
-  if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
+  const baseDef = opponentById(matchEntry.opponentId);
+  if (!baseDef) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
+  // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度（難度綁成就不綁屆數）
+  const titles = career.titles ?? 0;
+  const def = titles > 0
+    ? { ...baseDef, level: baseDef.level + TITLE_LEVEL_BONUS * titles }
+    : baseDef;
   // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
   const seen = career.scouting?.[matchEntry.opponentId];
   const scoutRead = seen && (def.scoutRead ?? 0) > 0

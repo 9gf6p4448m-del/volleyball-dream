@@ -4,6 +4,7 @@
 // W2–W5 把 runtime 邏輯搬上 v2 鍵後再收斂。
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
+import { advanceSeason } from './careerState.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
   SCHEMA_VERSION,
@@ -102,6 +103,28 @@ export function createCareerStore(storage) {
     },
     saveLineup(lineup) {
       return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), lineup }));
+    },
+    // W5 賽季輪迴：季末（奪冠/止步）→ 下一屆。season 重置賽程戰績＋index+1；
+    // 名冊/招募/lineup/player/宿敵/已播事件全數保留（RMW 只動 season）。
+    // 賽季未結束＝no-op 回 false（防 UI 誤觸）
+    advanceSeason() {
+      const save = loadSave();
+      const view = save ? careerViewOf(save) : null;
+      if (!view) return false;
+      const next = advanceSeason(view);
+      if (next === view) return false; // 賽季未結束
+      return writeSave((prev) => ({
+        ...prev,
+        season: {
+          ...seasonFromCareer(next, prev),
+          index: (prev.season.index ?? 1) + 1,
+        },
+      }));
+    },
+    // 現在第幾屆（UI 顯示用）
+    seasonIndex() {
+      const save = loadSave();
+      return save?.season?.index ?? 1;
     },
     // W4 招募：整包 recruitment 讀寫（{progress, recruited}）；賽末累加走 RMW
     loadRecruitment() {

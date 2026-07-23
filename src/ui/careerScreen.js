@@ -806,9 +806,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const rec = careerRecord(career);
     const next = nextMatch(career);
 
+    const seasonN = store.seasonIndex?.() ?? 1;
     root.appendChild(el('div', [
       'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
-    ], `${career.playerName}・你·OH`));
+    ], `${career.playerName}・你·OH${seasonN > 1 ? `・第 ${seasonN} 屆` : ''}`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
       `戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
@@ -859,13 +860,22 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     for (const m of career.schedule.filter((x) => x.stage === 'national')) list.appendChild(rowFor(m));
     root.appendChild(list);
 
+    // W5 賽季輪迴：季末（奪冠/止步）→ 進入下一屆——名冊/招募/技巧/宿敵全保留。
+    // 難度綁成就：止步＝對手原強度（帶著成長捲土重來）；奪冠＝衛冕屆對手升級
+    const nextSeasonBtn = (label) => button(label, true, () => {
+      if (store.advanceSeason?.()) renderCareer();
+    });
     if (stage === 'champion') {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
         'letter-spacing:2px',
       ], '🏆 全國冠軍！'));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
-        `生涯首冠達成（${rec.wins} 勝 ${rec.losses} 敗）`));
+        `奪冠達成（${rec.wins} 勝 ${rec.losses} 敗）`));
+      root.appendChild(nextSeasonBtn('▶ 進入下一屆——衛冕之路'));
+      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`,
+        'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
+      '全國都在研究衛冕軍——來年的對手，會更強'));
     } else if (stage === 'eliminated') {
       const lost = career.results.find((r) => !r.won &&
         career.schedule.find((m) => m.id === r.matchId)?.stage === 'national');
@@ -874,7 +884,11 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         'font-size:20px', 'font-weight:800', `color:${COLOR.red}`, 'margin-top:8px',
       ], `止步${lostLabel}`));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
-        `本屆戰績 ${rec.wins} 勝 ${rec.losses} 敗——從主選單開新生涯再挑戰`));
+        `本屆戰績 ${rec.wins} 勝 ${rec.losses} 敗`));
+      root.appendChild(nextSeasonBtn('▶ 捲土重來——進入下一屆'));
+      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`,
+        'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
+      '名冊成長、招募進度、學會的技巧全數保留——變強的是你們'));
     } else if (next) {
       // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
       const startMatch = () => {
