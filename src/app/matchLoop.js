@@ -147,9 +147,19 @@ function showTeachPreview(s) {
   if (!keys.length) return;
   const names = keys.map((k) => TECH_DEFS.find((t) => t.key === k)?.name ?? k).join('」與「');
   const opp = s.config.careerSetup?.opponent?.name ?? '對手';
+  // 誠實文案（07-24 Sawmah 抓曜石場對話問題）：①帶子真的收到重點片段才提帶子——
+  // 曜石雙授只有 pipe 進得了帶（假動作 AI 不做），逐招掛保證＝空頭支票，故泛指「重點球」
+  // ②雙招用「它們」 ③開場不再問「看了嗎」（對話當下帶子才要播，時序怪）
+  const hasFeatured = s.config.tapeClips.some((c) => c.featured);
+  const them = keys.length > 1 ? '它們' : '它';
   s.stage.teachDialog.show([ // TODO(naming)：教練台詞佔位，命名工程統一潤稿
-    { speaker: '教練', text: `情蒐筆記看了嗎？${opp}的「${names}」很有名——帶子裡就有，盯緊了。` },
-    { speaker: '教練', text: '打完這場，把它偷學回來。' },
+    { speaker: '教練', text: `看好${opp}——「${names}」是他們的招牌。` },
+    {
+      speaker: '教練',
+      text: hasFeatured
+        ? `帶子裡有重點球，先看熟。打完這場，把${them}偷學回來。`
+        : `打完這場，把${them}偷學回來。`,
+    },
   ]);
 }
 
