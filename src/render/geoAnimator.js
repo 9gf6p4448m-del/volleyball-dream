@@ -23,6 +23,8 @@ const POSES = {
   // 手臂大幅前伸夠球＋抬頭看球。diveReach＝撲出觸球（雙臂前伸平墊）、diveSprawl＝落地撐地
   diveReach: { rSh: [-1.78, -0.3], lSh: [-1.78, 0.3], rEl: 0, lEl: 0, spine: 0.1, neck: 0.42, crouch: 0.1 },
   diveSprawl: { rSh: [-1.35, -0.26], lSh: [-1.35, 0.26], rEl: -0.12, lEl: -0.12, spine: 0.22, neck: 0.26, crouch: 0.32 },
+  // 爬起：雙手撐地（肘大彎）、身體半推起、收腿——恢復期的過渡，避免「垂直彈起」殭屍感
+  divePush: { rSh: [-0.5, -0.34], lSh: [-0.5, 0.34], rEl: -0.98, lEl: -0.98, spine: 0.32, neck: 0.05, crouch: 0.55 },
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
@@ -35,7 +37,8 @@ const SEQUENCES = {
   windup: { dur: 0.75, jump: 0.5, land: false, keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }] },
   cheer: { dur: 0.9, jump: 0.26, land: false, keys: [{ at: 0, p: 'blockUp' }, { at: 1, p: 'blockUp' }] },
   // 魚躍：備戰→撲出手臂前伸→趴地；dur≈倒地恢復（42tick/60≈0.7s），撲空也演完整套
-  dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.22, p: 'diveReach' }, { at: 1, p: 'diveSprawl' }] },
+  // 備戰→撲出手臂前伸→趴地→撐地爬起→站回；爬起段(diveSprawl→divePush→bumpReady)避免殭屍彈起
+  dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.16, p: 'diveReach' }, { at: 0.46, p: 'diveSprawl' }, { at: 0.72, p: 'divePush' }, { at: 1, p: 'bumpReady' }] },
 };
 
 const ATTACK_MS = 0.08;

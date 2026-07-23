@@ -161,11 +161,20 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         if (a.divedUntil > gameState.tick) {
           const remain = a.divedUntil - gameState.tick; // 42→0
           const p = 1 - Math.max(0, remain) / DIVE_RECOVER; // 撲救進度 0→1
-          const lungeP = Math.min(1, p / 0.35) ** 0.6; // 前 35% 快速撲出（減速曲線）、之後趴住
+          // 撲出位移三段：0-0.3 快速撲出、0.3-0.62 趴住、0.62-1 爬起收回（不再瞬間彈回原位）
+          let lungeP;
+          if (p < 0.3) lungeP = (p / 0.3) ** 0.6;
+          else if (p < 0.62) lungeP = 1;
+          else lungeP = Math.max(0, 1 - ((p - 0.62) / 0.38) ** 1.4);
           diveX = Math.sin(u.yaw) * DIVE_LUNGE * lungeP;
           diveZ = Math.cos(u.yaw) * DIVE_LUNGE * lungeP;
-          diveTilt = DIVE_TILT * Math.min(1, p / 0.28);
-          diveY = DIVE_HOP * Math.sin(Math.min(p / 0.45, 1) * Math.PI); // 撲出弧、落地歸零
+          // 前傾三段：0-0.24 前撲、0.24-0.6 貼地、0.6-1 起身回正（身體慢慢立起，非殭屍垂直彈）
+          let tiltP;
+          if (p < 0.24) tiltP = p / 0.24;
+          else if (p < 0.6) tiltP = 1;
+          else tiltP = Math.max(0, 1 - (p - 0.6) / 0.4);
+          diveTilt = DIVE_TILT * tiltP;
+          diveY = p < 0.4 ? DIVE_HOP * Math.sin((p / 0.4) * Math.PI) : 0; // 只撲出段微騰空、落地貼地
         }
         // 跳躍落地塵土：從空中回到地面的瞬間（含魚躍落地）
         const totalY = bodyY + diveY;
