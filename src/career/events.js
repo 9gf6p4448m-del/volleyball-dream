@@ -161,6 +161,18 @@ export const SEASON_OPENERS = {
   ],
 };
 
+// ---- 學招預告（Sawmah 07-23 拍板：情蒐帶開頭字幕）----
+// 這場打完會傳授、且尚未播過的技術（輸贏都教——既有政策）。從 EVENT_DEFS 導出＝
+// 自維護：教學鏈改場次/加招式，預告自動跟。只看 post＋lastMatchId（賽前 pre 傳授
+// 如決賽跳發，進場前已播完，無需預告）；跨屆已學（events 保留）不再預告。
+export function upcomingTeach(career, matchId) {
+  const triggered = career?.events ?? [];
+  return EVENT_DEFS
+    .filter((e) => e.moment === 'post' && e.when.lastMatchId === matchId
+      && e.effect?.unlock && !triggered.includes(e.id))
+    .map((e) => e.effect.unlock);
+}
+
 // 取當下應觸發的事件（依表序；已觸發者不重複）。
 // moment 'pre'＝出戰前（條件看下一場）；'post'＝賽後回到生涯畫面（條件看最後一場）
 export function dueEvents(career, moment) {

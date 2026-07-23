@@ -13,6 +13,8 @@ import { serverId } from '../sim/match.js';
 import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
 import { settleCareerMatch, careerReturnUrl } from './matchCareer.js';
+import { upcomingTeach } from '../career/events.js';
+import { TECH_DEFS } from '../career/growth.js';
 
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
@@ -31,6 +33,7 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     tapeCount: s.config.tapeClips.length, // 情蒐錄影帶卷數（測試用）
   };
   if (s.config.tapeClips.length) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
+  showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) s.last = performance.now();
   });
@@ -133,6 +136,19 @@ function startReplay(s) {
   for (let i = 0; i < startIdx; i += 1) stepGame(state, rec.steps[i].intents);
   s.replay = { state, steps: rec.steps, idx: startIdx, acc: 0 };
   s.stage.floatText.show('🎬 回放', '#ffd166', 1200);
+}
+
+// 學招預告（Sawmah 07-23 拍板：情蒐帶開頭字幕）：這場打完可偷學的技術——賽前給目標感。
+// 延遲 2.2s 接在「📼 情蒐」字幕（2s）之後，同一 floatText 位置不互蓋；跳過情蒐照樣顯示。
+// 輸贏都教（既有政策）故措辭不綁勝負；名稱查 TECH_DEFS（與成長區同一套語彙）
+function showTeachPreview(s) {
+  if (!s.careerCtx) return;
+  const keys = upcomingTeach(s.careerCtx.career, s.careerCtx.matchEntry.id);
+  if (!keys.length) return;
+  const names = keys.map((k) => TECH_DEFS.find((t) => t.key === k)?.name ?? k).join('」與「');
+  setTimeout(() => {
+    s.stage.floatText.show(`👀 情蒐筆記：他們的「${names}」很有一手——盯緊了，偷學回來`, '#ffd166', 3400);
+  }, 2200);
 }
 
 // 情蒐錄影帶：吃同一條 replay 管線（tape 旗標）

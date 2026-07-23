@@ -8,7 +8,9 @@ import {
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { createCareer, createCareerPlayer, careerTeams, recordResult } from '../src/career/careerState.js';
-import { EVENT_DEFS, dueEvents, recordEvent } from '../src/career/events.js';
+import {
+  EVENT_DEFS, dueEvents, recordEvent, upcomingTeach,
+} from '../src/career/events.js';
 
 test('applyAttackOutcome：連得加碼、連失加碼、動態偏移夾限 ±25', () => {
   const s = { trustDyn: {}, trustStreak: {} };
@@ -117,6 +119,21 @@ test('事件表：宣告式條件觸發、once 不重複、未知條件鍵安全
     assert.ok(['pre', 'post'].includes(e.moment));
     assert.ok(e.lines.length > 0 && e.lines.every((l) => l.speaker && l.text));
   }
+});
+
+test('upcomingTeach 學招預告：從教學鏈導出、已播不再預告、pre 傳授不預告', () => {
+  const career = createCareer({ seed: 7, playerName: '預告' });
+  // group-1＝吊球；group-3＝pipe＋假動作（雙授）；決賽跳發是 pre 傳授＝不預告
+  assert.deepEqual(upcomingTeach(career, 'group-1'), ['tip']);
+  assert.deepEqual(upcomingTeach(career, 'group-3'), ['pipe', 'feint']);
+  assert.deepEqual(upcomingTeach(career, 'national-qf'), ['floatServe']);
+  assert.deepEqual(upcomingTeach(career, 'national-final'), []);
+  // 已播過（跨屆 events 保留）＝不再預告
+  const taught = recordEvent(career, 'teach-tip');
+  assert.deepEqual(upcomingTeach(taught, 'group-1'), []);
+  // 無教學場次＝空；career 缺 events 欄位安全
+  assert.deepEqual(upcomingTeach(career, 'group-2'), ['dive']);
+  assert.deepEqual(upcomingTeach({ results: [] }, 'group-1'), ['tip']);
 });
 
 test('events.js 純度：零 DOM/存檔 IO/非種子隨機', () => {
