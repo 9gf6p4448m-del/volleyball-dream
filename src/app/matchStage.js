@@ -78,9 +78,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 function createLeaveButton(params, game) {
   const btn = document.createElement('button');
   btn.textContent = '✕ 離開';
+  // 位置：右上 🎬 回放鈕正下方（Sawmah 07-23 試玩回報：原左上會擋到播報泡泡與 FPS）
   btn.style.cssText = [
-    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
-    'left:calc(env(safe-area-inset-left, 0px) + 12px)',
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 60px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 12px)',
     'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
     'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
     'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
