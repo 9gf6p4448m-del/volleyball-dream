@@ -28,7 +28,9 @@ export const TUNING = {
   POWER_SERVE_SCATTER: 1.45, // 跳躍發球散佈放大倍率
   FLOAT_APEX_MUL: 0.8,    // 飄浮發球弧頂縮減（較平、帶進撲朔感）
   FLOAT_SCATTER: 1.05,    // 飄浮發球自身散佈（略增；重點在對方難接）
-  FLOAT_RECEIVE_MUL: 1.28, // 飄浮球接發品質懲罰（一傳散佈放大→對方戰術分支被壓）
+  FLOAT_RECEIVE_MUL: 1.15, // 飄浮球接發品質懲罰（07-24 真飄上線 1.28→1.15：站位被騙已是
+  //   有機難度來源，數字懲罰下調防雙重懲罰；balance A/B 校準）
+  FLOAT_DRIFT_ACC: 2.2,    // 真飄側向亂流加速度幅值（m/s²；雙頻曲線、總偏移 ~±0.3-0.5m）
   POWER_SERVE_RECEIVE_MUL: 1.34, // 跳躍發球接發懲罰（球快難墊；略高於飄浮＝正面對決最難接）
   DIVE_REACH_MUL: 1.8,    // 魚躍可及半徑倍率（一次性大延伸）
   DIVE_MAX_Y: 1.15,       // 魚躍只救低球（貼地撲救，不是跳接）
@@ -559,6 +561,7 @@ function performServe(state, intent, ev) {
   rally.deceiveP = 0;
   rally.profile = 'serve';
   rally.flightId += 1;
+  rally.serveTick = state.tick; // 真飄相位起點（飄浮發球側向亂流的時間基準）
   actor.lastTouchTick = state.tick;
 
   state.phase = 'rally';
@@ -646,6 +649,24 @@ function stepRally(state, ev) {
   const b = state.ball;
   const prevZ = b.z;
   const prevY = b.y;
+  // 真飄（07-24 拍板）：飄浮發球飛行中（首觸前）施加側向亂流加速度——力道曲線由
+  // seed×flightId hash 導出（決定論：同種子重演逐 tick 一致，非隨機）。
+  // 刻意住在 game 層而非 stepBall：predictLanding／AI 接觸點／玩家落點圈全用乾淨
+  // 彈道＝「不含飄」→ 接球方站位被騙是有機的（真實飄浮球的殺傷本體）。
+  // 過首觸即停（profile 換 arc/spike）；接發品質懲罰 FLOAT_RECEIVE_MUL 同輪下調防雙重懲罰
+  if (state.rally.profile === 'serve' && state.rally.serveStyle === 'float') {
+    const sp = Math.hypot(b.vx, b.vz);
+    if (sp > 1e-6) {
+      const t = (state.tick - (state.rally.serveTick ?? state.tick)) * SIM_DT;
+      const ph = blownHash(state, 'fd1') * Math.PI * 2;
+      const ph2 = blownHash(state, 'fd2') * Math.PI * 2;
+      const nx = -b.vz / sp; // 側向單位向量（垂直於飛行方向）——先取樣再改速度
+      const nz = b.vx / sp;
+      const acc = (Math.sin(t * 5.1 + ph) + 0.6 * Math.sin(t * 9.7 + ph2)) * TUNING.FLOAT_DRIFT_ACC;
+      b.vx += nx * acc * SIM_DT;
+      b.vz += nz * acc * SIM_DT;
+    }
+  }
   stepBall(b, SIM_DT);
 
   // 過網（z 正負翻越；掛網被彈回不算過網——collideNet 已把 z 還原回原側）
