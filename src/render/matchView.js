@@ -13,6 +13,11 @@ const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
 const ROLE_TAG = { setter: 'S', outside: 'OH', middle: 'MB', opposite: 'OPP', libero: 'L' };
 
 const TURN_K = 25; // 轉身收斂率（1/秒，指數衰減；排球轉身要快，慢了像背對球）
+// 魚躍飛撲視覺（純表現，sim 不含位移）：沿朝向撲出一段＋身體前傾接近水平
+const DIVE_RECOVER = 42;   // 同 sim TUNING.DIVE_RECOVER_TICKS（魚躍倒地恢復＝撲救動畫時長）
+const DIVE_LUNGE = 1.35;   // 撲出水平距離（m）
+const DIVE_TILT = 1.2;     // 撲出時身體前傾（rad，接近水平 1.57）
+const DIVE_HOP = 0.22;     // 撲出微騰空（m，飛撲離地的弧）
 
 export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null) {
   let highlightId = initialControlledId;
@@ -27,6 +32,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   const units = {};
   for (const p of playerList) {
     const rig = createGeoCharacter(pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero');
+    rig.root.rotation.order = 'YXZ'; // 先朝向(y)再前傾(x)——魚躍飛撲沿朝向前方傾倒才正確
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網
     units[p.id] = {
       rig,
@@ -149,11 +155,24 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         u.yaw += shortestArc(u.yaw, targetYaw) * (1 - Math.exp(-TURN_K * dt));
 
         const bodyY = u.animator.update(dt, speed);
-        // 跳躍落地塵土：從空中回到地面的瞬間
-        if ((u.lastBodyY ?? 0) > 0.18 && bodyY <= 0.03) dust.burst(x, z, 6, 0.55);
-        u.lastBodyY = bodyY;
-        u.rig.root.position.set(x, bodyY, z);
-        u.rig.root.rotation.y = u.yaw;
+        // 魚躍飛撲（純視覺）：dive 期間沿朝向前撲一段＋微騰空落地＋身體前傾接近水平——
+        // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）
+        let diveX = 0; let diveZ = 0; let diveTilt = 0; let diveY = 0;
+        if (a.divedUntil > gameState.tick) {
+          const remain = a.divedUntil - gameState.tick; // 42→0
+          const p = 1 - Math.max(0, remain) / DIVE_RECOVER; // 撲救進度 0→1
+          const lungeP = Math.min(1, p / 0.35) ** 0.6; // 前 35% 快速撲出（減速曲線）、之後趴住
+          diveX = Math.sin(u.yaw) * DIVE_LUNGE * lungeP;
+          diveZ = Math.cos(u.yaw) * DIVE_LUNGE * lungeP;
+          diveTilt = DIVE_TILT * Math.min(1, p / 0.28);
+          diveY = DIVE_HOP * Math.sin(Math.min(p / 0.45, 1) * Math.PI); // 撲出弧、落地歸零
+        }
+        // 跳躍落地塵土：從空中回到地面的瞬間（含魚躍落地）
+        const totalY = bodyY + diveY;
+        if ((u.lastBodyY ?? 0) > 0.18 && totalY <= 0.03) dust.burst(x + diveX, z + diveZ, 8, 0.7);
+        u.lastBodyY = totalY;
+        u.rig.root.position.set(x + diveX, totalY, z + diveZ);
+        u.rig.root.rotation.set(diveTilt, u.yaw, 0);
 
         // root 不在 scene 裡（無 Mesh 可畫），手動推一次 matrixWorld，
         // 再把各部件 slot 的世界矩陣寫進 InstancedMesh 池

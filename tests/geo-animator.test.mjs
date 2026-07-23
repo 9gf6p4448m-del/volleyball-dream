@@ -13,14 +13,14 @@ function mkRig() {
   return { joints, root: { rotation: { x: 0, y: 0, z: 0 }, position: { x: 0, y: 0, z: 0 } } };
 }
 
-test('geoAnimator dive：觸發後驅動撲救姿勢（前傾＋身體下沉＋手臂前伸）', () => {
+test('geoAnimator dive：驅動撲救姿勢（雙臂大幅前伸夠球）', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);
   anim.trigger('dive');
-  const bodyY = anim.update(0.35, 0); // 播到撲出/趴地段
-  assert.ok(rig.joints.spine.rotation.x < -0.1, `spine ${rig.joints.spine.rotation.x} 應前傾（撲低）`);
-  assert.ok(bodyY < -0.1, `bodyY ${bodyY} 應下沉（趴地）`);
-  assert.ok(rig.joints.rShoulder.rotation.x < -0.5, '手臂應前伸救球');
+  anim.update(0.35, 0); // 播到撲出/觸球段
+  // 身體前傾由 matchView 的 root.rotation.x 主導；geoAnimator 負責雙臂大幅前伸救球
+  assert.ok(rig.joints.rShoulder.rotation.x < -0.8, `右臂 ${rig.joints.rShoulder.rotation.x} 應大幅前伸`);
+  assert.ok(rig.joints.lShoulder.rotation.x < -0.8, '左臂應大幅前伸（雙臂平墊）');
 });
 
 test('geoAnimator dive：撲空也演完整套、dur≈倒地時長後回待命', () => {

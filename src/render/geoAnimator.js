@@ -19,9 +19,10 @@ const POSES = {
   blockPunch: { rSh: [-2.52, 0.1], lSh: [-2.52, -0.1], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2 },
   windup: { rSh: [-2.35, -0.35], lSh: [-2.0, 0.15], rEl: -1.8, lEl: -0.3, spine: -0.2, neck: -0.18 },
   land: { spine: 0.2, crouch: 0.26 },
-  // 魚躍撲救：身體前傾撲低、雙臂前伸墊球（spine 大負＝前撲、crouch 深＝身體沉到近地）
-  diveReach: { rSh: [-1.35, -0.55], lSh: [-1.35, 0.55], rEl: 0, lEl: 0, spine: -0.7, neck: 0.28, crouch: 0.5 },
-  diveSprawl: { rSh: [-0.95, -0.5], lSh: [-0.95, 0.5], rEl: -0.15, lEl: -0.15, spine: -0.5, neck: 0.18, crouch: 0.92 },
+  // 魚躍撲救（身體前傾由 matchView 的 root.rotation.x 主導＝接近水平飛撲）：這裡只管
+  // 手臂大幅前伸夠球＋抬頭看球。diveReach＝撲出觸球（雙臂前伸平墊）、diveSprawl＝落地撐地
+  diveReach: { rSh: [-1.78, -0.3], lSh: [-1.78, 0.3], rEl: 0, lEl: 0, spine: 0.1, neck: 0.42, crouch: 0.1 },
+  diveSprawl: { rSh: [-1.35, -0.26], lSh: [-1.35, 0.26], rEl: -0.12, lEl: -0.12, spine: 0.22, neck: 0.26, crouch: 0.32 },
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
