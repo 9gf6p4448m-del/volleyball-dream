@@ -33,15 +33,17 @@ export function featureHit(feature, ev, g) {
 }
 
 // 剪輯偏好：放大對手 B 的該招使用率（只影響帶子生成的無頭模擬，不碰正賽 profile）。
+// 偏好調兇（Sawmah 07-23 二輪：帶子裡沒該招＝預告對不上畫面，寧可誇張不可缺席）：
+// 帶子是「剪過的重點影片」，該招洗版是剪輯意圖不是模擬失真。
 // pipe 無 rate 參數（後排攻擊本就在 AI 攻擊池）＝不注入、純靠偵測挑片。
 function biasProfiles(aiProfiles, feature) {
   if (!feature || !aiProfiles?.B) return aiProfiles;
   const b = { ...aiProfiles.B };
-  if (feature === 'tip') b.tipRate = Math.max(b.tipRate ?? 0, 0.45);
-  else if (feature === 'dive') b.diveRate = Math.max(b.diveRate ?? 0, 0.5);
+  if (feature === 'tip') b.tipRate = Math.max(b.tipRate ?? 0, 0.7);
+  else if (feature === 'dive') b.diveRate = Math.max(b.diveRate ?? 0, 0.75);
   else if (feature === 'floatServe') {
-    b.floatServeRate = Math.max(b.floatServeRate ?? 0, 0.8);
-    b.jumpServeRate = 0; // 讓開發球式競爭，帶子裡飄浮球夠多
+    b.floatServeRate = 1; // 全部發飄浮
+    b.jumpServeRate = 0;
   }
   return { ...aiProfiles, B: b };
 }
