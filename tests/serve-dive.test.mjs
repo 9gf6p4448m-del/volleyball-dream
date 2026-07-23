@@ -30,7 +30,7 @@ test('發球三式：飄浮＝serveStyle+較平弧、跳發＝更快、穩定＝
   const jump = serveWith({ timing: 1.15 });
   assert.equal(stable.rally.serveStyle, null);
   assert.equal(float.rally.serveStyle, 'float');
-  assert.equal(jump.rally.serveStyle, null); // 跳發不是飄浮
+  assert.equal(jump.rally.serveStyle, 'power'); // 跳發記 'power'（07-23：接發懲罰吃得到跳發）
   assert.ok(float.ball.vy < stable.ball.vy, '飄浮弧頂較低（初始 vy 較小）');
   const speed = (g) => Math.hypot(g.ball.vx, g.ball.vz);
   assert.ok(speed(jump) > speed(stable) * 1.15, '跳發明顯更快');

@@ -87,14 +87,22 @@ test('Perfect 接球：timing≥0.95 一傳更準；AI 基準 0.75 拿不到', (
   assert.equal(receivePerfectMul(0.6), 1);
 });
 
-test('高低手球質：高手 < 標準低手 < 貼地撲救（散佈乘數遞增）', () => {
-  const p = createPlayer({ id: 'T', name: 't', teamId: 'A', height: 1.86 });
-  const shoulder = standingReach(p) * 0.62;
-  const high = receiveQualityMul(shoulder + 0.2, p);
-  const mid = receiveQualityMul(1.0, p);
-  const dig = receiveQualityMul(0.3, p);
-  assert.ok(high < mid && mid < dig, `${high} / ${mid} / ${dig} 未遞增`);
-  assert.equal(high, 0.7);
-  assert.equal(mid, 1.0);
-  assert.equal(dig, 1.35);
+test('接球品質吃技術屬性：高 control+reaction 球員接球明顯較準（自由人最強）', () => {
+  const reach = TUNING.REACH_RADIUS;
+  const libero = createPlayer({ id: 'L', name: 'l', teamId: 'A', height: 1.72, attributes: { control: 72, reaction: 74 } });
+  const normal = createPlayer({ id: 'N', name: 'n', teamId: 'A', height: 1.9, attributes: { control: 65, reaction: 60 } });
+  // 同樣的到位程度，自由人（技術高）散佈乘數明顯較低＝接得準
+  assert.ok(receiveQualityMul(1.0, reach, libero) < receiveQualityMul(1.0, reach, normal));
+});
+
+test('接球品質：到位程度為次要修正（走到位＜勉強搆，但不主導）', () => {
+  const p = createPlayer({ id: 'T', name: 't', teamId: 'A', height: 1.86, attributes: { control: 66, reaction: 62 } });
+  const reach = TUNING.REACH_RADIUS;
+  const onpoint = receiveQualityMul(0, reach, p);        // 走到球正下方
+  const stretch = receiveQualityMul(reach, reach, p);    // 極限勉強搆
+  assert.ok(onpoint < stretch, `到位 ${onpoint} 應優於勉強 ${stretch}`);
+  // 但到位修正是次要（±10% 量級），不像技術屬性那樣拉開大差距
+  assert.ok(stretch / onpoint < 1.3, '到位修正應為次要（<30% 差距）');
+  // 魚躍（dist 超過正常 reach）＝到位比例 clamp 到 1
+  assert.equal(receiveQualityMul(reach * 1.8, reach, p), stretch);
 });

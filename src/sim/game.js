@@ -29,6 +29,7 @@ export const TUNING = {
   FLOAT_APEX_MUL: 0.8,    // 飄浮發球弧頂縮減（較平、帶進撲朔感）
   FLOAT_SCATTER: 1.05,    // 飄浮發球自身散佈（略增；重點在對方難接）
   FLOAT_RECEIVE_MUL: 1.28, // 飄浮球接發品質懲罰（一傳散佈放大→對方戰術分支被壓）
+  POWER_SERVE_RECEIVE_MUL: 1.34, // 跳躍發球接發懲罰（球快難墊；略高於飄浮＝正面對決最難接）
   DIVE_REACH_MUL: 1.8,    // 魚躍可及半徑倍率（一次性大延伸）
   DIVE_MAX_Y: 1.15,       // 魚躍只救低球（貼地撲救，不是跳接）
   DIVE_RECOVER_TICKS: 42, // 撲出去後倒地恢復（0.7s）——撲空也一樣（風險換範圍）
@@ -44,6 +45,15 @@ export const TUNING = {
   SWEET_ACC: 0.55,        // 甜蜜區散佈乘數（越小越準）
   OVER_ACC: 1.5,          // 超蓄散佈乘數
   PERFECT_RECV_ACC: 0.5,  // Perfect 接球（timing≥0.95）的散佈乘數
+  // 接球品質（07-23 改版）：實測 AI 全隊接球都「站著勉強搆」（dist≈1.1、且不分角色，
+  // 因球一進可及範圍就接、非跑到正下方再接）→純到位不可行（全隊崩盤且速度優勢用不上）。
+  // 改以「接球技術＝(control+reaction)/2」為主軸（自由人最高＝接球最好）、到位程度為次要
+  // 修正（保留走位深度但不主導）；低姿勢一傳不再被觸球高度冤枉。
+  RECV_SKILL_MIN: 55,     // 技術基準下限（(control+reaction)/2＝此值→最差基準）
+  RECV_BASE_MAX: 1.2,     // 低技術接球基準散佈乘數（差）
+  RECV_BASE_SLOPE: 0.029, // 每點技術降基準（技術 73＝自由人→約 0.68 好球）
+  RECV_POS_MIN: 0.9,      // 走到位（r=0）到位修正（微獎）
+  RECV_POS_RANGE: 0.2,    // 勉強（r=1）→×1.1（微罰；走位深度但不主導）
   // 攔網時機判定：起跳到球過網的滯空 tick 數
   BLOCK_SWEET_MIN: 4, BLOCK_SWEET_MAX: 26,
   BLOCK_LATE_MUL: 0.6,    // 起跳太晚（手還沒到頂）
@@ -304,10 +314,10 @@ function tryAction(state, intent, ev) {
       : standingReach(player) + 0.35;
   if (ball.y > maxY || ball.y < BALL.RADIUS) return;
 
-  executeTouch(state, intent, player, actor, ev);
+  executeTouch(state, intent, player, actor, ev, dist);
 }
 
-function executeTouch(state, intent, player, actor, ev) {
+function executeTouch(state, intent, player, actor, ev, dist = 0) {
   const { rally, ball } = state;
   const team = player.teamId;
   // 觸球數屬於持球方：非持球方的觸球（如攔網回彈落在對側）從 1 起算，
@@ -344,13 +354,16 @@ function executeTouch(state, intent, player, actor, ev) {
   // 高低手球質（接球）×出手品質（扣球甜蜜區/超蓄）：都收斂到散佈乘數
   // 接球另吃 Perfect 時機（timing≥0.95＝球到瞬間出手，一傳更準）
   const rawT = intent.timing ?? 1;
-  // 飄浮發球的接發懲罰：不轉的球最難接乾淨（只吃發球首觸；魚躍視同接球）
-  const floatMul =
-    rally.profile === 'serve' && rally.serveStyle === 'float' &&
-    (intent.action === 'receive' || intent.action === 'dive')
-      ? TUNING.FLOAT_RECEIVE_MUL : 1;
-  const qualityMul = (intent.action === 'receive' || intent.action === 'dive')
-    ? receiveQualityMul(from.y, player) * receivePerfectMul(rawT) * floatMul
+  // 發球接發懲罰（只吃發球首觸；魚躍視同接球）：飄浮＝不轉難墊、跳發＝球快難接
+  const isReceiveLike = intent.action === 'receive' || intent.action === 'dive';
+  const serveRecvMul = rally.profile === 'serve' && isReceiveLike
+    ? (rally.serveStyle === 'float' ? TUNING.FLOAT_RECEIVE_MUL
+      : rally.serveStyle === 'power' ? TUNING.POWER_SERVE_RECEIVE_MUL : 1)
+    : 1;
+  // 接球品質＝到位程度（dist：走到球正下方＝穩、勉強搆＝飄）×控制屬性×Perfect 時機×
+  // 來球難度。魚躍一律用正常 reach 算到位比例＝r 恆偏大＝勉強救起（撲救本就飄）
+  const qualityMul = isReceiveLike
+    ? receiveQualityMul(dist, TUNING.REACH_RADIUS, player) * receivePerfectMul(rawT) * serveRecvMul
     : intent.action === 'spike'
       ? timingQualityMul(rawT)
       : 1;
@@ -405,6 +418,7 @@ function executeTouch(state, intent, player, actor, ev) {
     kind: intent.action, touches: newCount,
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
     power: Math.round(timing * 100) / 100, // 蓄力質量：表現層分輕吊/重扣音效用
+    dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
   });
 }
 
@@ -459,7 +473,9 @@ function performServe(state, intent, ev) {
   // ／飄浮（style 'float'：弧較平、自身散佈略增，殺傷在對方接發品質懲罰）
   const power = (intent.timing ?? 1) > 1.1;
   const float = !power && intent.style === 'float';
-  rally.serveStyle = float ? 'float' : null;
+  // 跳發也記式樣（原本只記 float）——接發懲罰要吃得到跳發，否則跳發只是自己球快、
+  // 對接發方毫無額外難度（07-23 補：跳發跳飄都更難接）
+  rally.serveStyle = power ? 'power' : float ? 'float' : null;
   // 情蒐統計：發球風格偏好
   const stal = scoutTallyOf(state, player.id).serves;
   stal.total += 1;
@@ -536,12 +552,18 @@ export function blockTimingMul(airTicks) {
   return 1.0;
 }
 
-// 高低手球質（純函式）：胸口以上高手＝精度佳、貼地撲救＝較飄
-export function receiveQualityMul(contactY, player) {
-  const shoulder = standingReach(player) * 0.62; // 約胸口高度
-  if (contactY >= shoulder) return 0.7;  // 高手接球
-  if (contactY < 0.55) return 1.35;      // 貼地撲救
-  return 1.0;                            // 標準低手墊球
+// 接球品質（純函式，07-23 改版）：主軸＝接球技術（control 手穩＋reaction 判斷到位），
+// 自由人最高＝接球最好；次要＝到位程度（走到球正下方微獎、勉強搆微罰）。取代舊「觸球
+// 高度」判準——低姿勢墊球不再冤枉。技術主導的理由：實測 AI 接球 dist≈1.1 不分角色
+// （球進範圍就接），純到位既無法讓自由人突出、又會全隊崩盤（見 TUNING.RECV_* 註）。
+export function receiveQualityMul(dist, reach, player) {
+  const a = player.attributes;
+  const skill = (a.control + a.reaction) / 2; // 接球技術
+  const base = Math.max(
+    0.5, TUNING.RECV_BASE_MAX - (skill - TUNING.RECV_SKILL_MIN) * TUNING.RECV_BASE_SLOPE,
+  );
+  const r = Math.min(1, Math.max(0, dist) / reach); // 到位程度（次要修正）
+  return base * (TUNING.RECV_POS_MIN + TUNING.RECV_POS_RANGE * r);
 }
 
 function clamp01(v) {
