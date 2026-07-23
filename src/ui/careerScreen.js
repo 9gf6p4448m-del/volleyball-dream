@@ -1058,6 +1058,13 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       grid.appendChild(b);
     }
     box.appendChild(grid);
+    // 屬性說明（07-24 Sawmah：玩家不知道加點強化什麼）——與技術層 desc 同格式
+    const attrHelp = el('div', ['display:flex', 'flex-direction:column', 'gap:2px', 'margin-top:2px']);
+    for (const a of GROWABLE_ATTRS) {
+      attrHelp.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`,
+        'text-align:left', 'line-height:1.45'], `${a.name}｜${a.desc}`));
+    }
+    box.appendChild(attrHelp);
 
     // 技術層：故事線傳授習得（不花點）——這裡只展示進度，吊胃口但不爆雷
     for (const t of TECH_DEFS) {

@@ -16,13 +16,16 @@ export const GROWTH = {
 };
 
 // 屬性層可加點清單（control/stamina 不開放：前者是手感基準、後者 stage 未接線）
+// desc（07-24 Sawmah：玩家不知道加點強化什麼）＝sim 實際接線的誠實描述——
+// power→spikeSpeed、jump→spikeReach/blockReach、reaction→起動/出界判斷/讀攔網檔位/
+// 接球技術(與 control 平均)、speed→moveSpeed/defenseRange、serve→發球散佈、block→攔網成功率
 export const GROWABLE_ATTRS = [
-  { key: 'power', name: '力量' },
-  { key: 'jump', name: '彈跳' },
-  { key: 'reaction', name: '反應' }, // 讀攔網提示檔位的來源（見 blockReadTier）
-  { key: 'speed', name: '速度' },
-  { key: 'serve', name: '發球' },
-  { key: 'block', name: '攔網' },
+  { key: 'power', name: '力量', desc: '扣球球速——重扣更快更難救' },
+  { key: 'jump', name: '彈跳', desc: '起跳高度——扣球點與攔網都更高' },
+  { key: 'reaction', name: '反應', desc: '起動更快、出界判斷更準、讀攔網更清、一傳更穩' }, // blockReadTier 來源
+  { key: 'speed', name: '速度', desc: '跑速與防守範圍——追得到更多球' },
+  { key: 'serve', name: '發球', desc: '發球落點更準——跳發/飄浮也穩' },
+  { key: 'block', name: '攔網', desc: '攔網成功率——攔死與擦手機率' },
 ];
 
 // 技術層（生涯新人全鎖起步；快速比賽預設全開）——經故事線傳授習得，不花點數
