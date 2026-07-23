@@ -1,4 +1,4 @@
-import{i as Et,c as Ce,a as At,A as je,u as St,d as Rt,s as It,b as Ot,e as Pt,f as zt,g as Lt,h as Bt,j as lt}from"./sim-DN2CoQPs.js";function ri(e,t,i,n=!1){const o=_t(i);let r=0,c=0,s=0,l=performance.now();n||e.classList.add("hud-min"),e.innerHTML=`
+import{i as Et,c as Ce,a as At,A as je,u as St,d as Rt,s as It,b as Ot,e as Pt,f as zt,g as Lt,h as Bt,j as lt}from"./sim-CvGZ5_Wt.js";function ri(e,t,i,n=!1){const o=_t(i);let r=0,c=0,s=0,l=performance.now();n||e.classList.add("hud-min"),e.innerHTML=`
     <div class="fps">— <span>FPS</span></div>
     <div class="stats">${n?"量測中…":""}</div>
     <div class="settings">${o}</div>
