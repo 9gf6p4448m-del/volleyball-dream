@@ -55,6 +55,34 @@ export function validateLineup(lineup, members, playerId = null) {
   return { valid: errors.length === 0, errors };
 }
 
+// 5-1 對位結構（Sawmah 拍板 07-23：強制對角，杜絕同角色職責位衝突）：
+// 輪轉序對角三組（1-4／2-5／3-6 號位）必須恰為 {S,OPP}／{OH,OH}／{MB,MB} 各一組。
+// 如此任何輪轉的前排恆為「舉球線＋OH＋MB」各一人，換位職責位（OH 左翼/MB 中/
+// OPP·S 右翼，見 sim dutyPosition）永不相撞；亂序（如兩 MB 相鄰）會讓同排兩人
+// 搶同一職責位。強制層＝UI 互換限制＋ensureLineup 重置；schema 匯入不擋（防 brick 舊檔）。
+export function checkRoleStructure(starters, members, playerId = null, playerRole = 'outside') {
+  if (!Array.isArray(starters) || starters.length !== LINEUP_SIZE) {
+    return { legal: false, reason: `先發須為 ${LINEUP_SIZE} 人` };
+  }
+  const roleOf = (id) => (id === playerId ? playerRole : members?.find((m) => m.id === id)?.role);
+  const PAIR_KEYS = new Set(['opposite|setter', 'outside|outside', 'middle|middle']);
+  const found = [];
+  for (let i = 0; i < 3; i += 1) {
+    const key = [roleOf(starters[i]), roleOf(starters[i + 3])].sort().join('|');
+    if (!PAIR_KEYS.has(key)) {
+      return {
+        legal: false,
+        reason: `${i + 1} 與 ${i + 4} 號位須為對角配對（S–OPP／OH–OH／MB–MB）——否則換位職責相撞`,
+      };
+    }
+    found.push(key);
+  }
+  if (new Set(found).size !== 3) {
+    return { legal: false, reason: '對角三組須為 S–OPP、OH–OH、MB–MB 各一（5-1 對位）' };
+  }
+  return { legal: true, reason: null };
+}
+
 // 依 rotationStart 旋轉先發序＝該局實際輪轉序（index 0＝起始 1 號位＝首發球者）。
 export function effectiveOrder(starters, rotationStart = 0) {
   const n = starters.length;

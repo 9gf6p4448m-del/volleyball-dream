@@ -7,7 +7,7 @@
 //   不得直接進 sim 決策（比賽行為一律走 member.attributes → createPlayer 既有參數路徑）
 import { buildLibero } from './careerState.js';
 import { GROWABLE_ATTRS, matchStatsFor } from './growth.js';
-import { defaultLineup } from './lineup.js';
+import { defaultLineup, validateLineup, checkRoleStructure } from './lineup.js';
 
 // ---- 成長模型參數（D2 拍板：表現歸因驅動、新人快老將慢、上限 85）----
 export const ROSTER_GROWTH = {
@@ -107,11 +107,23 @@ export function ensureStarterRoster(store) {
 }
 
 // lineup 補齊/遷移（冪等）：starters 為 null（W1/W2 存檔或建檔中間態）→ 落預設陣容
-// （依 members 建 trust 映射）；starters 已存在＝玩家編排或前次補齊，原樣不動。
+// （依 members 建 trust 映射）；starters 已存在且合法＝玩家編排或前次補齊，原樣不動。
+// 對位防護（拍板 07-23）：對位規則上線前存的衝突陣（或匯入的壞序）→ 重置 starters/
+// libero/rotationStart 為預設、保留 trust 映射——治壞陣不 brick 整包存檔。
 function ensureLineup(store, members) {
   const lineup = store.loadLineup();
-  if (!lineup || lineup.starters != null) return;
-  store.saveLineup(defaultLineup(members));
+  if (!lineup) return;
+  if (lineup.starters == null) {
+    store.saveLineup(defaultLineup(members));
+    return;
+  }
+  const ok = validateLineup(lineup, members, 'A2').valid // 主角恆 A2（main.js PLAYER_ID）
+    && checkRoleStructure(lineup.starters, members, 'A2').legal;
+  if (!ok) {
+    const fresh = defaultLineup(members);
+    const keepTrust = lineup.trust && typeof lineup.trust === 'object' ? lineup.trust : fresh.trust;
+    store.saveLineup({ ...fresh, trust: keepTrust });
+  }
 }
 
 // ---- 自動成長（任務3：賽末結算接線，settleCareerMatch 呼叫）----

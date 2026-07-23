@@ -4,7 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LINEUP_SIZE, DEFAULT_STARTERS, DEFAULT_LIBERO_ID,
-  defaultLineup, validateLineup, checkRotationOrder, effectiveOrder, trustOf,
+  defaultLineup, validateLineup, checkRotationOrder, checkRoleStructure,
+  effectiveOrder, trustOf,
 } from '../src/career/lineup.js';
 import { createCareer, createCareerPlayer, careerTeams, careerMatchSetup } from '../src/career/careerState.js';
 import { buildStarterMembers, ensureStarterRoster } from '../src/career/roster.js';
@@ -163,15 +164,51 @@ test('ensureStarterRoster：補齊 lineup 為預設陣容', () => {
 test('ensureStarterRoster：不覆蓋玩家已排陣容（冪等）', () => {
   const { store } = storeW2Save();
   ensureStarterRoster(store); // 首補
-  // 玩家自排：換序＋改起始輪轉＋調一個信任
+  // 玩家自排（對位合法：OH 對換你↔小飛）＋改起始輪轉＋調一個信任
   const edited = {
-    starters: ['A5', 'A2', 'A3', 'A4', 'A1', 'A6'],
+    starters: ['A1', 'A5', 'A3', 'A4', 'A2', 'A6'],
     libero: 'AL', rotationStart: 3,
     trust: { A1: 20, A3: 30, A4: 20, A5: 20, A6: 20 },
   };
   store.saveLineup(edited);
   ensureStarterRoster(store); // 二次呼叫
   assert.deepEqual(store.loadLineup(), edited, '玩家編排不被補齊覆蓋');
+});
+
+// ---- 5-1 對位結構（拍板 07-23：強制對角，杜絕職責位衝突）----
+
+test('checkRoleStructure：預設陣容合法（S–OPP／OH–OH／MB–MB 對角）', () => {
+  const r = checkRoleStructure([...DEFAULT_STARTERS], MEMBERS, PLAYER_ID);
+  assert.equal(r.legal, true, r.reason);
+});
+
+test('checkRoleStructure：OH 對換／S–OPP 對換仍合法', () => {
+  // 你↔小飛（OH 對）
+  assert.equal(checkRoleStructure(['A1', 'A5', 'A3', 'A4', 'A2', 'A6'], MEMBERS, PLAYER_ID).legal, true);
+  // 舉球員↔對角砲
+  assert.equal(checkRoleStructure(['A4', 'A2', 'A3', 'A1', 'A5', 'A6'], MEMBERS, PLAYER_ID).legal, true);
+});
+
+test('checkRoleStructure：亂序（MB 佔 OH 對角）擋下並給職責衝突理由', () => {
+  // A6(MB) 換到 2 號位、A2(OH) 到 6 號位 → 2-5 對角＝MB–OH 衝突
+  const r = checkRoleStructure(['A1', 'A6', 'A3', 'A4', 'A5', 'A2'], MEMBERS, PLAYER_ID);
+  assert.equal(r.legal, false);
+  assert.match(r.reason, /對角|職責/);
+});
+
+test('ensureStarterRoster：對位衝突的已存陣容重置為預設、保留 trust（不 brick 存檔）', () => {
+  const { store } = storeW2Save();
+  ensureStarterRoster(store);
+  store.saveLineup({
+    starters: ['A1', 'A6', 'A3', 'A4', 'A5', 'A2'], // 2-5 對角 MB–OH 衝突（規則上線前的舊陣）
+    libero: 'AL', rotationStart: 2,
+    trust: { A1: 20, A3: 35, A4: 20, A5: 20, A6: 20 },
+  });
+  ensureStarterRoster(store); // 讀到衝突陣→重置
+  const healed = store.loadLineup();
+  assert.deepEqual(healed.starters, DEFAULT_STARTERS, '衝突陣重置為預設序');
+  assert.equal(healed.rotationStart, 0);
+  assert.equal(healed.trust.A3, 35, 'trust 映射保留不歸零');
 });
 
 test('lineup 遷移冪等：補齊後重載不再遷移', () => {

@@ -161,6 +161,14 @@ lineup = {
 - **trust 映射的 W4 演變**：新招球員的 trust 進 `lineup.trust`；`trustOf` 缺鍵回退 20
   為安全預設，W4 招募流程應顯式寫入其初始 trust（勿依賴回退，以免掩蓋漏寫）。
 
+## 結案後補強（同日 07-23，Sawmah 試玩回報＋拍板）
+
+| 項 | commit | 內容 |
+|----|--------|------|
+| 賽後對話無限重跳 | 59a625e | W1 schema v2 漏存 `career.events`（已播事件清單）→存檔來回蒸發→賽後對話重跳卡死。schema 三處補欄位＋2 回歸測試（217 綠）|
+| 新生涯繼承舊名冊成長 | 93f3f21 | 「開始生涯」只覆寫 career/player、舊 roster/lineup 被繼承。改開新檔前 `store.clear()` 全清＋1 回歸測試（218 綠）|
+| **5-1 對位強制**（Sawmah 拍板） | 見 git log | 原排陣器任意互換可排出「兩 MB 相鄰」→前排同角色搶同一職責位（dutyPosition 相撞）。新 `checkRoleStructure`（對角三組須 S–OPP/OH–OH/MB–MB 各一）；UI 僅同角色可互換（S↔OPP 例外）、擋下紅字說理由；`ensureLineup` 讀到衝突舊陣→重置預設（保留 trust，不 brick 存檔）；schema 匯入不擋（防壞檔連坐）。實際排陣自由度＝OH 誰前誰後×MB 誰前誰後×S/OPP 對換×起始輪轉——與真實排球 5-1 一致。＋4 測試（**222 綠**）|
+
 ## 遺留與下一步
 
 - **待 Sawmah**：試玩驗收排陣器（opt-in 入口是否合意、或改出戰即強制）；W1/W3 真機 FPS 回報。

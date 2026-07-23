@@ -8,7 +8,9 @@ import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/gro
 import {
   ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
 } from '../career/roster.js';
-import { validateLineup, checkRotationOrder, defaultLineup } from '../career/lineup.js';
+import {
+  validateLineup, checkRotationOrder, checkRoleStructure, defaultLineup,
+} from '../career/lineup.js';
 import { dueEvents, recordEvent } from '../career/events.js';
 import { updateTrust } from '../sim/trust.js';
 
@@ -160,13 +162,23 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const playerId = player.id;
     let working = structuredClone(saved);
     let selected = null;
+    let notice = null; // 互換被擋的紅字理由（下一次操作清除）
 
     const nameOf = (id) => (id === playerId
       ? career.playerName
       : (members.find((m) => m.id === id)?.name ?? id));
-    const roleOf = (id) => (id === playerId
-      ? (ROLE_ABBR[player.currentRole] ?? 'OH')
-      : (ROLE_ABBR[members.find((m) => m.id === id)?.role] ?? '?'));
+    const roleKeyOf = (id) => (id === playerId
+      ? player.currentRole
+      : members.find((m) => m.id === id)?.role);
+    const roleOf = (id) => ROLE_ABBR[roleKeyOf(id)] ?? '?';
+    // 5-1 對位（拍板 07-23）：僅同角色可互換（OH↔OH、MB↔MB），舉球員↔對角砲例外可換
+    // ——結構上排不出「同排兩人搶同一職責位」的衝突陣
+    const canSwap = (a, b) => {
+      const ra = roleKeyOf(a);
+      const rb = roleKeyOf(b);
+      return ra === rb
+        || (ra === 'setter' && rb === 'opposite') || (ra === 'opposite' && rb === 'setter');
+    };
 
     const card = el('div', [
       'width:min(400px, 94vw)', `background:${COLOR.card}`, 'border-radius:16px',
@@ -181,8 +193,13 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       ], '先發編排'));
       card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.5'],
         selected === null
-          ? '點兩格互換位置；標「發」＝該局首發球位。'
+          ? '點兩格互換位置（同角色）；標「發」＝該局首發球位。'
           : '再點一格與所選位置互換（點回原格取消選取）。'));
+      if (notice) {
+        card.appendChild(el('div', [
+          'font-size:12px', 'font-weight:700', `color:${COLOR.red}`, 'line-height:1.4',
+        ], notice));
+      }
 
       // 6 格輪轉序
       const grid = el('div', ['display:flex', 'flex-direction:column', 'gap:6px']);
@@ -206,9 +223,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         if (i === working.rotationStart) row.appendChild(badge('發', COLOR.cyan, '#062430'));
         row.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
+          notice = null;
           if (selected === null) selected = i;
           else if (selected === i) selected = null;
-          else {
+          else if (!canSwap(working.starters[selected], working.starters[i])) {
+            notice = '不同角色不能互換——維持 5-1 對位（舉球員與對角砲除外），職責才不相撞';
+          } else {
             const s = working.starters;
             [s[selected], s[i]] = [s[i], s[selected]];
             selected = null;
@@ -255,19 +275,20 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       rotWrap.appendChild(rotRow);
       card.appendChild(rotWrap);
 
-      // 即時合法性（validateLineup 結構＋checkRotationOrder 7.7）
+      // 即時合法性（validateLineup 結構＋checkRoleStructure 5-1 對位＋checkRotationOrder 7.7）
       const v = validateLineup(working, members, playerId);
+      const rs = checkRoleStructure(working.starters, members, playerId, player.currentRole);
       const rot = checkRotationOrder(working.starters, working.rotationStart);
-      const legal = v.valid && rot.legal;
-      const reason = !v.valid ? v.errors[0] : rot.reason;
+      const legal = v.valid && rs.legal && rot.legal;
+      const reason = !v.valid ? v.errors[0] : !rs.legal ? rs.reason : rot.reason;
       card.appendChild(el('div', [
         'font-size:13px', 'font-weight:700', 'min-height:18px',
         `color:${legal ? '#7ee787' : COLOR.red}`,
-      ], legal ? '✓ 陣容合法（FIVB 7.7）' : `✗ ${reason}`));
+      ], legal ? '✓ 陣容合法（FIVB 7.7・5-1 對位）' : `✗ ${reason}`));
 
       const tools = el('div', ['display:flex', 'gap:8px', 'flex-wrap:wrap']);
-      tools.appendChild(smallButton('重置為預設', () => { working = defaultLineup(members); selected = null; paint(); }));
-      tools.appendChild(smallButton('沿用上次', () => { working = structuredClone(saved); selected = null; paint(); }));
+      tools.appendChild(smallButton('重置為預設', () => { working = defaultLineup(members); selected = null; notice = null; paint(); }));
+      tools.appendChild(smallButton('沿用上次', () => { working = structuredClone(saved); selected = null; notice = null; paint(); }));
       card.appendChild(tools);
 
       const confirm = button('✓ 確認出戰', legal, () => {
