@@ -86,6 +86,14 @@ export function createCareerStore(storage) {
       const save = loadSave();
       return save?.player ? structuredClone(save.player) : null;
     },
+    // W2 名冊：整包 roster 讀寫（{capacity, members}）；members 補齊/成長都走 RMW
+    loadRoster() {
+      const save = loadSave();
+      return save ? structuredClone(save.roster) : null;
+    },
+    saveRoster(roster) {
+      return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), roster }));
+    },
     savePlayer(player) {
       // 走 serializePlayer 正規化（沿用既有格式；three/函式參照擋在存檔外）
       const plain = JSON.parse(serializePlayer(player));

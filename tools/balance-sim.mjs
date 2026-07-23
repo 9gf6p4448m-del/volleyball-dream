@@ -7,12 +7,17 @@ import {
   createCareer, createCareerPlayer, careerMatchSetup, recordResult, nextMatch,
   mergeScouting, careerStage,
 } from '../src/career/careerState.js';
+import { buildStarterMembers, applyRosterGrowth } from '../src/career/roster.js';
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 
 const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
 const MAX_TICKS = 400000;
+// 治具隔離開關（W2 平衡歸因用）：
+// VD_NO_ROSTER=1＝不帶名冊（＝W1 前基準隊伍）；VD_NO_GROWTH=1＝帶名冊但關隊友成長
+const USE_ROSTER = process.env.VD_NO_ROSTER !== '1';
+const USE_GROWTH = process.env.VD_NO_GROWTH !== '1';
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖
 const TEACH_AFTER = {
@@ -65,20 +70,25 @@ let reachedFinal = 0;
 for (let run = 0; run < RUNS; run += 1) {
   let career = createCareer({ seed: 100000 + run * 7919, playerName: '治具' });
   const player = createCareerPlayer('治具');
+  // W2 名冊管線（鏡像正式路徑）：具名個性化 starter＋逐場表現驅動成長
+  let roster = { capacity: 10, members: buildStarterMembers() };
   for (let mi = 0; mi < matchIds.length; mi += 1) {
     if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
     const entry = career.schedule[mi];
-    const setup = careerMatchSetup(career, player, entry);
+    const setup = careerMatchSetup(career, player, entry, USE_ROSTER ? roster : null);
     const g = playMatch(setup);
     const won = g.match.winner === 'A';
     const s = g.match.score;
     if (won) wins[entry.id] += 1;
     margins[entry.id].push(s.A - s.B);
     if (mi === 4 && careerStage(career) !== 'eliminated') reachedFinal += won ? 1 : 0;
-    // 成長：實算 gp → 平均灑點；技術照傳授時程
+    // 成長：實算 gp → 平均灑點；技術照傳授時程；隊友表現驅動成長（W2）
     const stats = matchStatsFor(g.events, 'A2', 'A');
     spendEvenly(player, growthPointsFor(stats, won));
     for (const k of TEACH_AFTER[mi] ?? []) player.techniques[k] = 1;
+    if (USE_GROWTH) {
+      roster = { ...roster, members: applyRosterGrowth(roster.members, g.events, 'A', entry.id) };
+    }
     // scouting 跨場累積（宿敵記憶）；戰績照實記（全國賽輸了也繼續模擬後段取數據）
     career = mergeScouting(career, entry.opponentId, g.scoutTally.A2);
     career = recordResult(career, {

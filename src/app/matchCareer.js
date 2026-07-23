@@ -5,6 +5,7 @@ import {
   recordResult, mergeScouting, markPending,
 } from '../career/careerState.js';
 import { matchStatsFor, growthPointsFor } from '../career/growth.js';
+import { applyRosterGrowth } from '../career/roster.js';
 
 // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
 export function markMatchStarted(careerCtx) {
@@ -38,6 +39,13 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
     gp: growthPointsFor(stats, won),
     stats,
   })) && saveOk;
+  // W2 隊友自動成長：與主角同節拍（賽末一次）、同管線（matchStatsFor 表現歸因）。
+  // 讀最新 roster 走 RMW（不用 careerCtx 快照）；applyRosterGrowth 依 matchId 冪等
+  const roster = careerCtx.store.loadRoster?.() ?? null;
+  if (roster && roster.members.length > 0) {
+    const grown = applyRosterGrowth(roster.members, game.events, myTeam, careerCtx.matchEntry.id);
+    saveOk = careerCtx.store.saveRoster({ ...roster, members: grown }) && saveOk;
+  }
   return { saveOk, won };
 }
 

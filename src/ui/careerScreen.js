@@ -5,8 +5,19 @@ import {
   careerStage, opponentById, normalizeCareerPlayer, resolveForfeit,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
+import {
+  ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
+} from '../career/roster.js';
 import { dueEvents, recordEvent } from '../career/events.js';
 import { updateTrust } from '../sim/trust.js';
+
+// 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
+const ATTR_LABELS = {
+  ...Object.fromEntries(GROWABLE_ATTRS.map((a) => [a.key, a.name])),
+  control: '控制', stamina: '體力',
+};
+const GROWABLE_KEYS = new Set(GROWABLE_ATTRS.map((a) => a.key));
+const GRADE_LABEL = { 1: '一年級', 2: '二年級', 3: '三年級' };
 
 const COLOR = {
   bg: 'linear-gradient(180deg, #070a12 0%, #0b1120 55%, #070a12 100%)',
@@ -103,6 +114,160 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     dlgState = null;
     done();
   });
+
+  // ---- W2 隊友卡（唯讀）：點名冊列開卡檢視；無任何寫入互動 ----
+  const cardOverlay = el('div', [
+    'position:fixed', 'inset:0', 'z-index:36', 'display:none',
+    'background:rgba(4,6,12,0.72)', 'align-items:flex-start', 'justify-content:center',
+    'overflow-y:auto',
+    'padding:calc(env(safe-area-inset-top, 0px) + 24px) 16px 40px',
+  ]);
+  cardOverlay.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (e.target === cardOverlay) hideCard();
+  });
+  document.body.appendChild(cardOverlay);
+  function hideCard() {
+    cardOverlay.style.display = 'none';
+    cardOverlay.replaceChildren();
+  }
+
+  function showMemberCard(member, career) {
+    const card = el('div', [
+      'width:min(400px, 94vw)', `background:${COLOR.card}`, 'border-radius:16px',
+      'border:1px solid #2c3a58', 'padding:16px 18px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+      'display:flex', 'flex-direction:column', 'gap:10px',
+    ]);
+    // 抬頭：名字＋隊長徽＋位置/年級/身高
+    const head = el('div', ['display:flex', 'align-items:baseline', 'gap:8px', 'flex-wrap:wrap']);
+    head.appendChild(el('div', ['font-size:24px', 'font-weight:900', `color:${COLOR.text}`], member.name));
+    if (member.captain) {
+      head.appendChild(el('div', [
+        'font-size:11px', 'font-weight:800', `color:#1a1405`, `background:${COLOR.gold}`,
+        'border-radius:8px', 'padding:2px 8px', 'letter-spacing:2px',
+      ], '隊長'));
+    }
+    head.appendChild(el('div', ['font-size:14px', `color:${COLOR.cyan}`, 'font-weight:700'],
+      `${ROLE_ABBR[member.role] ?? member.role}・${GRADE_LABEL[member.growth.grade] ?? ''}・${member.height.toFixed(2)}m`));
+    card.appendChild(head);
+    if (member.persona) {
+      card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.5', 'text-align:left'],
+        member.persona));
+    }
+    // DNA 標記（描述性——招募時代 W4 起會標示來源隊風格）
+    card.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`, 'text-align:left'],
+      `DNA｜${member.dna.tag}（${member.dna.style}）`));
+
+    // 屬性列：可成長六項附成長量與 85 上限刻度；控制/體力灰顯（不開放成長）
+    const gains = totalGains(member);
+    const attrBox = el('div', ['display:flex', 'flex-direction:column', 'gap:5px', 'margin-top:2px']);
+    for (const [key, label] of Object.entries(ATTR_LABELS)) {
+      const v = member.attributes[key];
+      const g = gains[key] ?? 0;
+      const growable = GROWABLE_KEYS.has(key);
+      const row = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+      row.appendChild(el('div', [
+        'width:34px', 'font-size:12px', 'text-align:left',
+        `color:${growable ? COLOR.text : COLOR.dim}`,
+      ], label));
+      const bar = el('div', [
+        'flex:1', 'height:7px', 'border-radius:4px', 'background:#141b2e',
+        'position:relative', 'overflow:hidden',
+      ]);
+      bar.appendChild(el('div', [
+        `width:${Math.max(0, v - g)}%`, 'height:100%', 'position:absolute', 'left:0',
+        `background:${growable ? '#3d5a80' : '#28344e'}`,
+      ]));
+      if (g > 0) {
+        bar.appendChild(el('div', [
+          `width:${g}%`, 'height:100%', 'position:absolute', `left:${v - g}%`,
+          `background:${COLOR.gold}`,
+        ]));
+      }
+      if (growable) { // 85 上限刻度（主角 90——隊友低一階的護欄可視化）
+        bar.appendChild(el('div', [
+          `left:${ROSTER_GROWTH.ATTR_CAP}%`, 'width:2px', 'height:100%', 'position:absolute',
+          'background:rgba(238,242,250,0.45)',
+        ]));
+      }
+      row.appendChild(bar);
+      row.appendChild(el('div', [
+        'width:56px', 'font-size:12px', 'font-weight:700', 'text-align:right',
+        `color:${g > 0 ? COLOR.gold : COLOR.text}`,
+      ], g > 0 ? `${v}（+${g}）` : `${v}`));
+      attrBox.appendChild(row);
+    }
+    card.appendChild(attrBox);
+    card.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:left'],
+      `可成長屬性上限 ${ROSTER_GROWTH.ATTR_CAP}・表現驅動自動成長（打得好才長）`));
+
+    // 成長歷程：逐場 gains（比賽由對手名標示）；沒長過如實顯示
+    card.appendChild(el('div', [
+      'font-size:13px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'text-align:left', 'margin-top:4px',
+    ], '成長歷程'));
+    const grownEntries = member.growth.log.filter((l) => Object.keys(l.gains).length > 0);
+    if (grownEntries.length === 0) {
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'text-align:left'],
+        '尚未成長——上場的表現會化為成長'));
+    } else {
+      for (const entry of grownEntries) {
+        const m = career.schedule.find((x) => x.id === entry.matchId);
+        const vs = m ? `對${opponentName(m.opponentId)}` : entry.matchId;
+        const parts = Object.entries(entry.gains)
+          .map(([k, n]) => `${ATTR_LABELS[k] ?? k}+${n}`).join('・');
+        card.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'text-align:left'],
+          `${vs}：${parts}`));
+      }
+    }
+
+    const closeBtn = smallButton('關閉', hideCard);
+    closeBtn.style.alignSelf = 'center';
+    card.appendChild(closeBtn);
+    cardOverlay.replaceChildren(card);
+    cardOverlay.style.display = 'flex';
+  }
+
+  // 名冊區（唯讀入口）：成員列點開隊友卡；capacity 語義＝含玩家與小守
+  function rosterSection(career) {
+    const roster = ensureStarterRoster(store);
+    const box = el('div', [
+      'display:flex', 'flex-direction:column', 'gap:8px', `background:${COLOR.card}`,
+      'border-radius:14px', 'padding:12px 16px', 'width:min(340px, 92vw)', 'margin-top:4px',
+    ]);
+    if (!roster) { box.style.display = 'none'; return box; }
+    const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
+    head.appendChild(el('div', [
+      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px',
+    ], '名冊'));
+    head.appendChild(el('div', ['font-size:13px', 'font-weight:700', `color:${COLOR.dim}`],
+      `${rosterCount(roster)}/${roster.capacity}・招募空位 ${openSlots(roster)}`));
+    box.appendChild(head);
+    for (const member of roster.members) {
+      const row = el('div', [
+        'display:flex', 'justify-content:space-between', 'align-items:center',
+        'height:40px', 'padding:0 10px', 'border-radius:10px', 'cursor:pointer',
+        'background:rgba(30,40,64,0.55)',
+      ]);
+      const left = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+      left.appendChild(el('div', ['font-size:15px', 'font-weight:700'], member.name));
+      if (member.captain) {
+        left.appendChild(el('div', [
+          'font-size:10px', 'font-weight:800', 'color:#1a1405', `background:${COLOR.gold}`,
+          'border-radius:6px', 'padding:1px 6px',
+        ], '隊長'));
+      }
+      left.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
+        `${ROLE_ABBR[member.role] ?? member.role}・${GRADE_LABEL[member.growth.grade] ?? ''}`));
+      row.appendChild(left);
+      row.appendChild(el('div', ['font-size:13px', `color:${COLOR.cyan}`], '▶'));
+      row.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        showMemberCard(member, career);
+      });
+      box.appendChild(row);
+    }
+    return box;
+  }
 
   // 事件入帳＋效果套用（先落檔再播對話——中斷不掉進度），對話播完接 after
   function fireEvents(evs, career, player, after) {
@@ -237,6 +402,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
       `戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
+    root.appendChild(rosterSection(career)); // W2 名冊（唯讀隊友卡入口）
     const stage = careerStage(career);
 
     // 賽程列（兩區共用）：勝負／下一場／鎖定／止步後不再進行

@@ -6,7 +6,7 @@
 // 欄位設計依據（Phase 3 kickoff 第 1–4 題拍板結論）：
 // 每隊 1 名招牌球員、招募條件跨賽季累積、隊友自動成長（玩家點數只管自己）、
 // 名冊上限 10、線性多賽季（對手升級、宿敵記憶延續）。
-import { deserializePlayer } from '../sim/player.js';
+import { deserializePlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { CAREER_VERSION, deserializeCareer } from './careerState.js';
 
 export const SCHEMA_VERSION = 2;
@@ -132,6 +132,23 @@ export function deserializeSave(json) {
   }
   if (typeof raw.roster.capacity !== 'number' || !Array.isArray(raw.roster.members)) {
     throw new Error('roster 結構不合法（需 capacity:number 與 members:array）');
+  }
+  // W2 名冊成員驗證（匯入壞資料在建隊當下才炸畫面——這裡先擋）
+  for (const m of raw.roster.members) {
+    for (const f of ['id', 'name', 'origin', 'role']) {
+      if (typeof m[f] !== 'string') throw new Error(`名冊成員缺字串欄位：${f}`);
+    }
+    for (const k of ATTRIBUTE_KEYS) {
+      if (typeof m.attributes?.[k] !== 'number') {
+        throw new Error(`名冊成員 ${m.id} attributes 缺數值欄位：${k}`);
+      }
+    }
+    if (typeof m.growth !== 'object' || m.growth === null || !Array.isArray(m.growth.log)) {
+      throw new Error(`名冊成員 ${m.id} growth 結構不合法（需含 log:array）`);
+    }
+    if (typeof m.dna !== 'object' || m.dna === null) {
+      throw new Error(`名冊成員 ${m.id} 缺 dna 標記`);
+    }
   }
   // season 內容沿用 careerState 的完整語意驗證（含賽程對手 id 存在性）
   const view = careerViewOf(raw);

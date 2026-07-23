@@ -11,6 +11,7 @@ import {
 import {
   createCareer, createCareerPlayer, markPending, mergeScouting,
 } from '../src/career/careerState.js';
+import { buildStarterMembers } from '../src/career/roster.js';
 
 function fakeStorage() {
   const m = new Map();
@@ -109,9 +110,9 @@ test('存取層 RMW：savePlayer/saveCareer 各動各的欄位，W2+ 填入的�
   const store = createCareerStore(storage);
   store.saveCareer(createCareer({ seed: 9, playerName: '共存' }));
   store.savePlayer(createCareerPlayer('共存'));
-  // 模擬 W2 之後 roster 已填內容
+  // 模擬 W2 之後 roster 已填內容（W2 起成員形狀已定實並受驗證——fixture 用合法成員）
   const raw = JSON.parse(storage.getItem(SAVE_KEY));
-  raw.roster.members.push({ id: 'R1', name: '招牌', origin: 'north-tech' });
+  raw.roster.members.push({ ...buildStarterMembers()[0], id: 'R1', name: '招牌', origin: 'north-tech' });
   raw.season.index = 3; // 模擬第 3 賽季
   storage.setItem(SAVE_KEY, JSON.stringify(raw));
   // 再各存一次：roster 與賽季序號都不得退回

@@ -39,9 +39,12 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
   const assistOn = params.get('assist') !== 'off';
 
   // 生涯模式：玩家 Player 餵進 A 隊主攻手槽＋對手參數檔建隊與 AI 風格
-  // （sim 不讀存檔——一律建隊參數注入）
+  // （sim 不讀存檔——一律建隊參數注入）。W2：careerCtx.roster（呼叫端先經
+  // ensureStarterRoster 補齊）餵進建隊——隊友具名/個性化/成長後屬性由此生效
   const careerSetup = careerCtx
-    ? careerMatchSetup(careerCtx.career, careerCtx.player, careerCtx.matchEntry)
+    ? careerMatchSetup(
+      careerCtx.career, careerCtx.player, careerCtx.matchEntry, careerCtx.roster ?? null,
+    )
     : null;
   // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才）
   const liberos = careerSetup?.liberos ?? {

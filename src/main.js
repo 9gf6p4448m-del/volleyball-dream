@@ -16,6 +16,7 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
+import { ensureStarterRoster } from './career/roster.js';
 import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
 import { buildMatchStage } from './app/matchStage.js';
 import { startMatchLoop } from './app/matchLoop.js';
@@ -62,7 +63,8 @@ function showCareerEntry(ctx) {
   const screen = createCareerScreen(store, {
     onQuick: () => { runMatch(ctx, null); },
     onPlay: ({ career, player, matchEntry }) => {
-      runMatch(ctx, { store, career, player, matchEntry });
+      // W2：出戰前補齊/讀取名冊（空名冊一次性升級），隊友屬性由名冊驅動
+      runMatch(ctx, { store, career, player, matchEntry, roster: ensureStarterRoster(store) });
     },
   });
   const resume = ctx.params.get('career') === 'resume' && store.hasSave();
