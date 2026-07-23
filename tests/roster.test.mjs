@@ -246,6 +246,34 @@ test('careerStore：loadRoster/saveRoster RMW roundtrip，不動其他鍵', () =
   assert.deepEqual(after.season, before.season);
 });
 
+// ---- 新生涯全清（防舊名冊成長/先發繼承進新檔）----
+
+test('新生涯 store.clear 後名冊回歸乾淨基準（不繼承舊生涯隊友成長）', () => {
+  const { store } = storeWithCareer();
+  ensureStarterRoster(store);
+  // 第一個生涯：小飛(A5)打一場長成長
+  let roster = store.loadRoster();
+  const events = [];
+  for (let i = 0; i < 20; i += 1) {
+    events.push({ type: 'TOUCH', playerId: 'A5', team: 'A', kind: 'spike', power: 1 });
+    events.push({ type: 'SCORE', team: 'A' });
+  }
+  roster = { ...roster, members: applyRosterGrowth(roster.members, events, 'A', 'group-1') };
+  store.saveRoster(roster);
+  const grown = store.loadRoster().members.find((x) => x.id === 'A5');
+  assert.ok(grown.growth.log.length > 0, '前置：A5 確有成長');
+
+  // 修復後的「開始生涯」：先 clear 再重建
+  store.clear();
+  store.saveCareer(createCareer({ seed: 2, playerName: '全新' }));
+  store.savePlayer(createCareerPlayer('全新'));
+  ensureStarterRoster(store);
+  const fresh = store.loadRoster().members.find((x) => x.id === 'A5');
+  const base = buildStarterMembers().find((x) => x.id === 'A5');
+  assert.deepEqual(fresh.attributes, base.attributes, '新生涯 A5 屬性＝乾淨基準');
+  assert.equal(fresh.growth.log.length, 0, '新生涯 A5 無成長歷程');
+});
+
 // ---- STARTER_DEFS 自身健全性（防手滑改壞名單）----
 
 test('STARTER_DEFS：id 唯一、玩家槽 A2 缺席（玩家不進 members）', () => {

@@ -501,6 +501,9 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         return;
       }
       const playerName = nameInput.value.trim() || '小夢';
+      // 新生涯＝全新存檔：先清舊檔，否則 saveCareer 只覆寫 season/player、
+      // 舊名冊（含隊友成長）/先發/招募會被繼承進「新」生涯
+      store.clear();
       const career = createCareer({ seed: Date.now() % 1000000007, playerName });
       const player = createCareerPlayer(playerName);
       if (!store.saveCareer(career) || !store.savePlayer(player)) {
