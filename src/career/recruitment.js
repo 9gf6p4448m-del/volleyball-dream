@@ -13,6 +13,10 @@ import { ATTRIBUTE_KEYS } from '../sim/player.js';
 // 舉球分配真的會少。入隊時**顯式寫入 lineup.trust**（W3 §6b：勿依賴 trustOf 缺鍵回退
 // 20——回退值會遮蔽漏寫）。
 export const RECRUIT_TRUST = 10;
+// W5 逐出機制（拍板）：逐出→全隊 lineup.trust −5（夾限≥0，主角另計不受影響）；
+// 每屆上限 1 次；僅可逐招募生（origin≠'starter'）。常數集中此處與 RECRUIT_TRUST 同域。
+export const EXPEL_TRUST_PENALTY = 5;
+export const EXPEL_PER_SEASON_LIMIT = 1;
 // 生成屬性夾限：上限與隊友成長天花板一致（roster.js ROSTER_GROWTH.ATTR_CAP＝85）
 const ATTR_MIN = 30;
 const ATTR_MAX = 85;
@@ -43,6 +47,7 @@ export const RECRUIT_CONDS = {
 };
 
 // 招牌球員預設稿（名字/人設＝佔位，命名工程 Phase 3 收尾統一做——與 STARTER_DEFS 同約定）
+// TODO(naming)：以下 name/persona 為佔位，命名工程統一潤稿
 const RECRUIT_DEFS = {
   'north-tech': { name: '阿澄', persona: '北原的節拍器——不起眼的一傳一舉，把整隊的亂流理成直線' },
   'white-wave': { name: '小浪', persona: '白浪最黏的那道浪——球不落地，是他唯一的信仰' },
@@ -199,10 +204,20 @@ export function buildRecruitMember(opponentId, careerSeed, id) {
   };
 }
 
-// 新成員 id：R 前綴避免與 A1..A6/AL 碰撞；序號＝現有 R 成員數＋1（同存檔重演
-// 入隊順序一致 → id 一致）
-export function nextRecruitId(members) {
-  return `R${(members ?? []).filter((m) => /^R\d+$/.test(m.id)).length + 1}`;
+// 新成員 id：R 前綴避免與 A1..A6/AL 碰撞；序號＝歷來 R 成員（現役 members ∪ 已逐出
+// expelled 快照）最大號＋1——逐出移除現役成員後 id 絕不回收（否則新招募與現役撞號，
+// 亦違「R id 不回收」）。expelled 屬存檔狀態一部分，同存檔重演一致。
+export function nextRecruitId(members, expelled = []) {
+  const ids = [
+    ...(members ?? []).map((m) => m.id),
+    ...(expelled ?? []).map((e) => e.member?.id),
+  ];
+  let max = 0;
+  for (const id of ids) {
+    const m = /^R(\d+)$/.exec(id ?? '');
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `R${max + 1}`;
 }
 
 // ---- 入隊流程（store 層）----
@@ -222,9 +237,35 @@ export function settleRecruitJoins(store, careerSeed) {
     if (!rec || !roster || roster.members.length === 0) return joined;
     if (rec.recruited.includes(opponentId) || !conditionMet(rec, opponentId)) continue;
     if (openSlots(roster) <= 0) continue;
-    const member = buildRecruitMember(opponentId, careerSeed, nextRecruitId(roster.members));
+    const id = nextRecruitId(roster.members, rec.expelled ?? []); // 含 expelled：id 不回收
+    const member = buildRecruitMember(opponentId, careerSeed, id);
     if (!store.applyRecruit({ member, opponentId, trust: RECRUIT_TRUST })) return joined;
     joined.push(member);
   }
   return joined;
+}
+
+// ---- W5 逐出資格判定（純函式：UI 閘門與 store 最後防線共用同一套規則）----
+
+// 本屆已逐出人數（每屆上限判定用）：以 expelled 條目的 seasonIndex 過濾當屆
+export function expelCountThisSeason(recruitment, seasonIndex) {
+  return (recruitment?.expelled ?? []).filter((e) => e.seasonIndex === seasonIndex).length;
+}
+
+// 可否逐出某成員（拍板邊界，回傳 { ok, reason }——reason 供 UI 對應提示）：
+//   僅招募生（創隊班底 origin='starter' 不可逐）、不在現役先發或自由人位（先發保護；
+//   libero 一併擋——避免逐掉現役自由人孤兒化 lineup.libero）、每屆上限 1。
+export function canExpel(save, memberId) {
+  const member = save?.roster?.members?.find((m) => m.id === memberId);
+  if (!member) return { ok: false, reason: 'not-found' };
+  if (member.origin === 'starter') return { ok: false, reason: 'starter-origin' };
+  const lineup = save.lineup ?? {};
+  if ((lineup.starters ?? []).includes(memberId) || lineup.libero === memberId) {
+    return { ok: false, reason: 'in-lineup' };
+  }
+  const seasonIndex = save.season?.index ?? 1;
+  if (expelCountThisSeason(save.recruitment, seasonIndex) >= EXPEL_PER_SEASON_LIMIT) {
+    return { ok: false, reason: 'season-limit' };
+  }
+  return { ok: true, reason: '' };
 }

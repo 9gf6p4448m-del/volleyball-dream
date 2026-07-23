@@ -271,10 +271,11 @@ test('雙自由人：libero 可選 R 自由人、預設仍為 AL', () => {
 
 test('schema：W3 空殼 recruitment 存檔升級冪等、壞形狀被擋', () => {
   const store = readyStore();
-  // W3 存檔實況＝空殼 {progress:{}, recruited:[]}——讀寫往返照常
-  assert.deepEqual(store.loadRecruitment(), EMPTY_REC);
+  // W5 起預設空殼＝{progress:{}, recruited:[], expelled:[]}（10→12 屆逐出騰位）——讀寫往返照常
+  const EMPTY_REC_V5 = { progress: {}, recruited: [], expelled: [] };
+  assert.deepEqual(store.loadRecruitment(), EMPTY_REC_V5);
   ensureStarterRoster(store); // 再跑一次升級＝冪等
-  assert.deepEqual(store.loadRecruitment(), EMPTY_REC);
+  assert.deepEqual(store.loadRecruitment(), EMPTY_REC_V5);
   // 壞形狀：recruited 非陣列
   const bad = createSaveV2({});
   bad.recruitment = { progress: {}, recruited: 'R1' };

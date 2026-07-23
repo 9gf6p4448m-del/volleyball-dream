@@ -5,6 +5,7 @@
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
 import { advanceSeason } from './careerState.js';
+import { canExpel, EXPEL_TRUST_PENALTY } from './recruitment.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
   SCHEMA_VERSION,
@@ -149,6 +150,44 @@ export function createCareerStore(storage) {
           recruitment: {
             ...next.recruitment,
             recruited: [...next.recruitment.recruited, opponentId],
+          },
+        };
+      });
+    },
+    // W5 逐出資格（UI 閘門用）：回傳 { ok, reason }——讀當前整包存檔判定
+    canExpel(memberId) {
+      return canExpel(loadSave(), memberId);
+    },
+    // W5 逐出：applyRecruit 的鏡像——單次 RMW 原子完成三處（名冊移除＋全隊 trust −5
+    // 夾限≥0＋expelled 記錄），不留「移出名冊卻沒記 expelled」的中間態。
+    // 邊界最後防線（UI 已先擋）：不符資格＝原樣返回不動。被逐者自身 trust key 一併移除。
+    // expelled 條目存完整成員快照＋當屆序號＋當時冠軍數（Phase 4 轉學回歸素材鏈用）。
+    applyExpel({ memberId }) {
+      return writeSave((prev) => {
+        if (!prev || !canExpel(prev, memberId).ok) return prev;
+        const member = prev.roster.members.find((m) => m.id === memberId);
+        const trust = Object.fromEntries(
+          Object.entries(prev.lineup.trust ?? {})
+            .filter(([id]) => id !== memberId)
+            .map(([id, v]) => [id, Math.max(0, v - EXPEL_TRUST_PENALTY)]),
+        );
+        return {
+          ...prev,
+          roster: {
+            ...prev.roster,
+            members: prev.roster.members.filter((m) => m.id !== memberId),
+          },
+          lineup: { ...prev.lineup, trust },
+          recruitment: {
+            ...prev.recruitment,
+            expelled: [
+              ...(prev.recruitment.expelled ?? []),
+              {
+                member,
+                seasonIndex: prev.season?.index ?? 1,
+                titlesAtExpel: prev.season?.titles ?? 0,
+              },
+            ],
           },
         };
       });

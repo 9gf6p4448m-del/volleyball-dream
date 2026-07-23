@@ -3,6 +3,8 @@
 // when 條件全宣告式；effect.trust 經 sim trust.js updateTrust 調整持久 baseline
 import { nextMatch } from './careerState.js';
 
+// TODO(naming)：EVENT_DEFS / EXPEL_LINES / SEASON_OPENERS 內所有 speaker 角色代號
+// （隊長（MB）、二傳（S）、各校角色…）與台詞均為佔位，命名工程統一潤稿定名
 export const EVENT_DEFS = [
   {
     id: 'debut',
@@ -139,6 +141,25 @@ export const EVENT_DEFS = [
     ],
   },
 ];
+
+// ---- W5 逐出台詞（B5 拍板：2 行極簡，被逐者一行＋隊長一行，平靜克制）----
+// 玩家主動點擊觸發（非賽程狀態驅動），故不進 EVENT_DEFS 條件比對；沿用 {speaker,text}
+// 形狀以復用 dialogPlay（呼叫端包一層 [{ lines: EXPEL_LINES }]）。
+export const EXPEL_LINES = [
+  { speaker: '（離隊者）', text: '……我明白。這段路，謝謝你們帶我走過。' }, // TODO(naming)
+  { speaker: '隊長（MB）', text: '是你自己選的路。走吧——別回頭。' }, // TODO(naming)
+];
+
+// ---- W5 賽季開場（A4 拍板：最小劇情，衛冕/捲土重來各一段隊長對話）----
+// advanceSeason 成功後由 careerScreen 播放（衛冕＝defend、止步捲土重來＝comeback）。
+export const SEASON_OPENERS = {
+  defend: [
+    { speaker: '隊長（MB）', text: '新的一屆了。冠軍的號碼掛在我們身上——全國都想把它摘下來。' }, // TODO(naming)
+  ],
+  comeback: [
+    { speaker: '隊長（MB）', text: '輸掉的那場記著就好。名冊還在、你也更強了——這一屆，我們重新來過。' }, // TODO(naming)
+  ],
+};
 
 // 取當下應觸發的事件（依表序；已觸發者不重複）。
 // moment 'pre'＝出戰前（條件看下一場）；'post'＝賽後回到生涯畫面（條件看最後一場）

@@ -4,6 +4,8 @@
 // level＝全屬性基準；attrBias＝全隊屬性偏移；roleBias＝角色屬性偏移；
 // trustBias＝舉球分配傾向（疊在基準 trust 上）；heights＝六槽身高
 // （槽序同 lineup：S/OH/MB/OPP/OH/MB）；ai＝風格機率（皆決定論 hash 消費）
+// TODO(naming)：各隊 name/trait 為佔位命名，命名工程統一潤稿（球員名由 buildOpponentTeam
+// 以「name＋N號」動態組出——見 careerState.js buildOpponentTeam）
 export const OPPONENTS = [
   {
     id: 'north-tech',

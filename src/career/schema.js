@@ -5,7 +5,7 @@
 //
 // 欄位設計依據（Phase 3 kickoff 第 1–4 題拍板結論）：
 // 每隊 1 名招牌球員、招募條件跨賽季累積、隊友自動成長（玩家點數只管自己）、
-// 名冊上限 10、線性多賽季（對手升級、宿敵記憶延續）。
+// 名冊上限 12（W5：10→12，容納全招募池＋逐出騰位）、線性多賽季（對手升級、宿敵記憶延續）。
 import { deserializePlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { CAREER_VERSION, deserializeCareer } from './careerState.js';
 import { validateLineup } from './lineup.js';
@@ -20,10 +20,12 @@ export function createSaveV2({ career = null, player = null, prev = null } = {})
     player,
     // 名冊（W2 填入）：members[] 元素形狀＝{ id, name, origin(來源隊 id|'starter'),
     //   role, attributes, growth(成長曲線參數), dna(原隊參數 DNA 標記) }
-    roster: prev?.roster ?? { capacity: 10, members: [] },
+    //   capacity 12（W5，10→12）：玩家 1＋自由人 1＋隊友 10（現員 7→招募空位 5＝全招募池）
+    roster: prev?.roster ?? { capacity: 12, members: [] },
     // 招募（W4 填入）：progress[opponentId]＝條件進度（跨賽季累積——拍板結論）；
-    //   recruited[]＝已達成入隊的球員 id
-    recruitment: prev?.recruitment ?? { progress: {}, recruited: [] },
+    //   recruited[]＝已達成入隊的球員 id；expelled[]（W5）＝已逐出者條目
+    //   { member(完整快照), seasonIndex, titlesAtExpel }（不可逆、防重招、id 不回收）
+    recruitment: prev?.recruitment ?? { progress: {}, recruited: [], expelled: [] },
     // 先發編排（W3 填入，啟用 FIVB 7.7 驗證器）：starters＝6 人輪轉序（null＝未排，
     //   沿用預設陣容）；libero＝自由人 id；rotationStart＝輪轉起點（0-5）
     lineup: prev?.lineup ?? { starters: null, libero: null, rotationStart: 0 },
@@ -163,8 +165,10 @@ export function deserializeSave(json) {
     typeof raw.recruitment !== 'object' || raw.recruitment === null
     || typeof raw.recruitment.progress !== 'object' || raw.recruitment.progress === null
     || !Array.isArray(raw.recruitment.recruited)
+    // W5 expelled：舊檔可無此鍵（讀取端 ?? [] 容錯，冪等升級不 brick）；若存在必為陣列
+    || (raw.recruitment.expelled !== undefined && !Array.isArray(raw.recruitment.expelled))
   ) {
-    throw new Error('recruitment 結構不合法（需 progress:object 與 recruited:array）');
+    throw new Error('recruitment 結構不合法（需 progress:object 與 recruited:array；expelled 若存在須為 array）');
   }
   // W3 先發編排驗證（starters 非 null＝已排；null＝建檔中間態，容許不驗內容）：
   // 長度 6/無重複/id 合法/自由人不入先發/rotationStart 0-5

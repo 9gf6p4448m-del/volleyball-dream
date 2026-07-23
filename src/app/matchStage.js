@@ -17,6 +17,7 @@ import { createFloatText } from '../ui/floatText.js';
 import { createPointBanner } from '../ui/pointBanner.js';
 import { showTutorialOnce } from '../ui/tutorial.js';
 import { createSetOverOverlay } from '../ui/setOverOverlay.js';
+import { careerReturnUrl } from './matchCareer.js';
 
 export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
@@ -49,6 +50,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const hints = createHintToggle(simpleMode, gates.readTier);
   const replayBtn = createReplayButton(handlers);
   const diveBtn = createDiveButton(handlers);
+  // A6（拍板）：生涯賽才給「離開」——中途離開＝棄賽敗 0:25，離開前自訂確認彈窗
+  const leaveBtn = careerSetup ? createLeaveButton(params) : null;
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -60,9 +63,75 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, hints, replayBtn, diveBtn,
+    panel, actionButtons, hints, replayBtn, diveBtn, leaveBtn,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay,
   };
+}
+
+// A6 離開鈕（生涯賽）：左上角常駐；點擊彈自訂確認框——「中途離開將記棄賽敗（0:25）——
+// 確定離開？」。確認＝走既有 careerReturnUrl 導航回生涯畫面（pending 未清＝resolveForfeit
+// 記 0:25 敗，棄賽機制不變）。注意：瀏覽器 reload／上一頁／關頁無法掛此彈窗，仍直接記敗。
+function createLeaveButton(params) {
+  const btn = document.createElement('button');
+  btn.textContent = '✕ 離開';
+  btn.style.cssText = [
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
+    'left:calc(env(safe-area-inset-left, 0px) + 12px)',
+    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
+    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
+    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
+    'touch-action:manipulation',
+  ].join(';');
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:40', 'display:none',
+    'align-items:center', 'justify-content:center',
+    'background:rgba(4,6,12,0.72)', 'font-family:system-ui,sans-serif',
+  ].join(';');
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'width:min(400px, 90vw)', 'background:rgba(18,24,40,0.96)', 'border-radius:16px',
+    'border:1px solid #2c3a58', 'padding:20px', 'text-align:center',
+    'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+  ].join(';');
+  const text = document.createElement('div');
+  text.textContent = '中途離開將記棄賽敗（0:25）——確定離開？';
+  text.style.cssText = ['color:#eef2fa', 'font-size:15px', 'line-height:1.6', 'margin-bottom:16px'].join(';');
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = ['display:flex', 'gap:12px', 'justify-content:center'].join(';');
+  const confirmBtn = document.createElement('button');
+  confirmBtn.textContent = '確定離開';
+  confirmBtn.style.cssText = [
+    'height:46px', 'padding:0 20px', 'border-radius:23px', 'border:none',
+    'background:#8a3a3a', 'color:#ffe', 'font-size:15px', 'font-weight:700',
+    'cursor:pointer', 'touch-action:manipulation',
+  ].join(';');
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = '繼續比賽';
+  cancelBtn.style.cssText = [
+    'height:46px', 'padding:0 20px', 'border-radius:23px', 'border:1px solid #2c3a58',
+    'background:transparent', 'color:#eef2fa', 'font-size:15px', 'cursor:pointer',
+    'touch-action:manipulation',
+  ].join(';');
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(confirmBtn);
+  card.appendChild(text);
+  card.appendChild(btnRow);
+  overlay.appendChild(card);
+
+  const openDialog = (e) => { e.stopPropagation(); overlay.style.display = 'flex'; };
+  const close = (e) => { e.stopPropagation(); overlay.style.display = 'none'; };
+  btn.addEventListener('pointerdown', openDialog);
+  cancelBtn.addEventListener('pointerdown', close);
+  overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) close(e); });
+  confirmBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    window.location.assign(careerReturnUrl(params, window.location.pathname));
+  });
+  document.body.appendChild(btn);
+  document.body.appendChild(overlay);
+  return { el: btn };
 }
 
 // 讀攔網提示開關：開＝綠/紅標示（新手輔助）、關＝自己看攔網判斷（技術版）

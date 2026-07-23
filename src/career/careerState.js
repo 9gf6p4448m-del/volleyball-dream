@@ -179,7 +179,7 @@ export function buildOpponentTeam(def) {
     }
     return createPlayer({
       id: `B${i + 1}`,
-      name: `${def.name}${i + 1}號`,
+      name: `${def.name}${i + 1}號`, // TODO(naming)：「隊名＋N號」為佔位命名，命名工程統一潤稿
       teamId: 'B',
       naturalRole: role,
       currentRole: role,

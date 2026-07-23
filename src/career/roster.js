@@ -2,7 +2,8 @@
 // save.roster.members[] 元素形狀（schema v2 註解定案）：
 //   { id, name, origin, role, attributes, growth, dna }
 //   ＋本週補充欄位：height（建隊用）、captain（隊長標記，D3：隊長必為 MB）
-// capacity 語義（D1 拍板）：10＝玩家 1＋自由人 1＋隊友 8；現有成員 7 → 招募空位 3（W4 招滿）
+// capacity 語義（D1 拍板；W5 10→12）：12＝玩家 1＋自由人 1＋隊友 10；現有成員 7 →
+//   招募空位 5（＝全招募池 5 隊，W5 剛好容納；逐出=為想要的人騰位的戰略選擇，非空位管理）
 // DNA（D2/任務2）：描述性標記——記錄「原隊參數傾向」，只影響屬性生成與 UI 展示，
 //   不得直接進 sim 決策（比賽行為一律走 member.attributes → createPlayer 既有參數路徑）
 import { buildLibero } from './careerState.js';
@@ -35,6 +36,7 @@ const XP_RULES = [
 // 其 speed/serve），首版 ±8~16 偏移實測把首場勝率推高 11pp（86→97），故偏移
 // 全面減半至 ±1~8。實際以 tools/balance-sim.mjs 前後對照驗收，勿只信總和守恆。
 // 身高沿用既有基準 [1.83,1.88,1.96,1.90,1.86,1.94]；trust 槽位初值不動（careerTeams 管）。
+// TODO(naming)：以下 name/persona 為佔位，命名工程統一潤稿
 export const STARTER_DEFS = [
   { id: 'A1', name: '阿哲', role: 'setter', grade: 2, height: 1.83,
     persona: '冷靜的組織者——手感細膩，把球送到你最好打的位置',
@@ -87,7 +89,7 @@ export function rosterCount(roster) {
 }
 
 export function openSlots(roster) {
-  return Math.max(0, (roster?.capacity ?? 10) - rosterCount(roster));
+  return Math.max(0, (roster?.capacity ?? 12) - rosterCount(roster));
 }
 
 // ---- 空名冊升級路徑（任務4：一次性補齊，不動 player/season）----

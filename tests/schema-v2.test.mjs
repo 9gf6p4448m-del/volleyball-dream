@@ -31,10 +31,10 @@ test('schema v2 骨架：頂層鍵一次補齊、四系統結構定實、Phase 4
   for (const k of ['player', 'roster', 'recruitment', 'lineup', 'season', 'career', 'story']) {
     assert.ok(k in save, `缺頂層鍵 ${k}`);
   }
-  // 名冊：上限 10（kickoff 第 2 題拍板）、成員留空待 W2
-  assert.deepEqual(save.roster, { capacity: 10, members: [] });
-  // 招募：條件進度跨賽季累積（第 1 題拍板）、留空待 W4
-  assert.deepEqual(save.recruitment, { progress: {}, recruited: [] });
+  // 名冊：上限 12（W5：10→12，容納全招募池＋逐出騰位）、成員留空待 W2
+  assert.deepEqual(save.roster, { capacity: 12, members: [] });
+  // 招募：條件進度跨賽季累積（第 1 題拍板）；expelled（W5）留空、留空待 W4
+  assert.deepEqual(save.recruitment, { progress: {}, recruited: [], expelled: [] });
   // 先發編排：6 人＋自由人＋輪轉起點、留空待 W3
   assert.deepEqual(save.lineup, { starters: null, libero: null, rotationStart: 0 });
   // 賽季：序號起始 1（線性多賽季，第 4 題拍板）；現行生涯資料歸戶

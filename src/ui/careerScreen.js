@@ -14,7 +14,9 @@ import {
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
 } from '../career/recruitment.js';
-import { dueEvents, recordEvent } from '../career/events.js';
+import {
+  dueEvents, recordEvent, EXPEL_LINES, SEASON_OPENERS,
+} from '../career/events.js';
 import { updateTrust } from '../sim/trust.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
@@ -560,6 +562,49 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       }
     }
 
+    // ---- W5 逐出（B3：二次點擊確認，同「開始生涯覆蓋」範式；僅招募生可逐）----
+    if (member.origin !== 'starter') {
+      const gate = store.canExpel?.(member.id) ?? { ok: false, reason: 'unsupported' };
+      const expelWrap = el('div', [
+        'display:flex', 'flex-direction:column', 'gap:6px', 'margin-top:8px',
+        'align-items:center', 'border-top:1px solid #2c3a58', 'padding-top:10px',
+      ]);
+      if (gate.ok) {
+        // 後果一行全揭露（第一按才顯示）：trust −5、本屆不可再逐、該隊不可再招
+        const consequence = el('div', [
+          'display:none', 'font-size:11px', `color:${COLOR.red}`, 'text-align:center',
+          'line-height:1.5', 'max-width:min(320px, 88vw)',
+        ], `逐出後果：全隊信任 −5・本屆不可再逐・${opponentName(member.origin)}不可再招`);
+        let armed = false;
+        const expelBtn = smallButton(`逐出 ${member.name}`, () => {
+          if (!armed) {
+            armed = true;
+            expelBtn.textContent = `將永久失去 ${member.name}——再點一次確認`;
+            expelBtn.style.color = COLOR.red;
+            expelBtn.style.borderColor = '#8a3a3a';
+            consequence.style.display = 'block';
+            return;
+          }
+          const ok = store.applyExpel?.({ memberId: member.id });
+          hideCard();
+          if (ok) dialogPlay([{ lines: EXPEL_LINES }], () => renderCareer());
+          else renderCareer(); // 競態/資格失效：直接重繪
+        });
+        expelWrap.appendChild(consequence);
+        expelWrap.appendChild(expelBtn);
+      } else {
+        const hint = gate.reason === 'in-lineup'
+          ? '在先發／自由人位——先把他移出先發才能逐出'
+          : gate.reason === 'season-limit'
+            ? '本屆逐出額度已用完（每屆限 1 人）'
+            : '此成員無法逐出';
+        expelWrap.appendChild(el('div', [
+          'font-size:12px', `color:${COLOR.dim}`, 'text-align:center', 'line-height:1.5',
+        ], hint));
+      }
+      card.appendChild(expelWrap);
+    }
+
     const closeBtn = smallButton('關閉', hideCard);
     closeBtn.style.alignSelf = 'center';
     card.appendChild(closeBtn);
@@ -645,8 +690,15 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       top.appendChild(badge(ROLE_ABBR[cond.role] ?? cond.role, '#22304e', COLOR.cyan));
       if (done) {
         const m = roster.members.find((x) => x.origin === oppId);
-        top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.gold}`],
-          `✓ ${m?.name ?? ''} 已入隊`));
+        if (m) {
+          top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.gold}`],
+            `✓ ${m.name} 已入隊`));
+        } else {
+          // 已招募但不在名冊＝已被逐出（凍結顯示、防重招；名字取 expelled 快照）
+          const gone = (rec.expelled ?? []).find((e) => e.member?.origin === oppId)?.member;
+          top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.dim}`],
+            `✗ ${gone?.name ?? ''} 已離隊`));
+        }
       } else if (met && slots <= 0) {
         top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.red}`],
           '⚠ 名冊已滿'));
@@ -862,8 +914,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
 
     // W5 賽季輪迴：季末（奪冠/止步）→ 進入下一屆——名冊/招募/技巧/宿敵全保留。
     // 難度綁成就：止步＝對手原強度（帶著成長捲土重來）；奪冠＝衛冕屆對手升級
-    const nextSeasonBtn = (label) => button(label, true, () => {
-      if (store.advanceSeason?.()) renderCareer();
+    // A4 最小劇情：進入下一屆後先播開場（衛冕 defend／捲土重來 comeback，隊長各一段）
+    const nextSeasonBtn = (label, openerKey) => button(label, true, () => {
+      if (!store.advanceSeason?.()) return;
+      const opener = SEASON_OPENERS[openerKey];
+      if (opener) dialogPlay([{ lines: opener }], () => renderCareer());
+      else renderCareer();
     });
     if (stage === 'champion') {
       root.appendChild(el('div', [
@@ -872,7 +928,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       ], '🏆 全國冠軍！'));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
         `奪冠達成（${rec.wins} 勝 ${rec.losses} 敗）`));
-      root.appendChild(nextSeasonBtn('▶ 進入下一屆——衛冕之路'));
+      root.appendChild(nextSeasonBtn('▶ 進入下一屆——衛冕之路', 'defend'));
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`,
         'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
       '全國都在研究衛冕軍——來年的對手，會更強'));
@@ -885,7 +941,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       ], `止步${lostLabel}`));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
         `本屆戰績 ${rec.wins} 勝 ${rec.losses} 敗`));
-      root.appendChild(nextSeasonBtn('▶ 捲土重來——進入下一屆'));
+      root.appendChild(nextSeasonBtn('▶ 捲土重來——進入下一屆', 'comeback'));
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`,
         'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
       '名冊成長、招募進度、學會的技巧全數保留——變強的是你們'));
