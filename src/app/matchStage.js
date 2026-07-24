@@ -17,13 +17,16 @@ import { createFloatText } from '../ui/floatText.js';
 import { createPointBanner } from '../ui/pointBanner.js';
 import { showTutorialOnce } from '../ui/tutorial.js';
 import { createSetOverOverlay } from '../ui/setOverOverlay.js';
+import { createSubPanel } from '../ui/subPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
 
 export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
   const { simpleMode, careerSetup } = config;
 
-  const handlers = { replay: null }; // matchLoop 開機時注入（dive 鈕 07-24 移除＝改自動）
+  // matchLoop 開機時注入（dive 鈕 07-24 移除＝改自動）；
+  // W6：requestSub（換人執行）/onSubPanelClose（面板關閉→補播換人敘事）
+  const handlers = { replay: null, requestSub: null, onSubPanelClose: null };
 
   let matchView;
   try {
@@ -54,6 +57,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const leaveBtn = careerSetup ? createLeaveButton(params, game) : null;
   // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
   const teachDialog = careerSetup ? createTeachDialog() : null;
+  // W6 B2 賽中換人面板：生涯且有板凳才建（⚙ 鈕右上堆疊第三格；requestSub 由 loop 注入）
+  const subPanel = careerSetup && (game.bench?.A?.length ?? 0) > 0
+    ? createSubPanel({ game, playerId, handlers })
+    : null;
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -65,7 +72,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog,
+    panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog, subPanel,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay,
   };
 }

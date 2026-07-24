@@ -68,6 +68,31 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
       myTeam,
     })) && saveOk;
   }
+  // W6 換人信任事件（新增採納 6）：被換下＝−1（輕微）、被換上且本場有建功
+  // （殺球/攔網得分/ACE）＝+2；主控不計；夾限 0–100；settledBefore 防重入（同招募閘）。
+  // 換下又換回者兩者相抵＝淨 +1（回歸建功的敘事獎勵）
+  if (!settledBefore) {
+    const lineup = careerCtx.store.loadLineup?.() ?? null;
+    const subEvents = game.events.filter((e) => e.type === 'SUBSTITUTION' && e.team === myTeam);
+    if (lineup?.trust && subEvents.length) {
+      const clamp = (v) => Math.max(0, Math.min(100, v));
+      const trust = { ...lineup.trust };
+      const outs = new Set();
+      const ins = new Set();
+      for (const e of subEvents) {
+        if (e.outId !== playerId) outs.add(e.outId);
+        if (e.inId !== playerId) ins.add(e.inId);
+      }
+      for (const id of outs) trust[id] = clamp((trust[id] ?? 20) - 1);
+      for (const id of ins) {
+        const st = matchStatsFor(game.events, id, myTeam);
+        if (st.kills + st.tipKills + st.blockPoints + st.aces > 0) {
+          trust[id] = clamp((trust[id] ?? 20) + 2);
+        }
+      }
+      saveOk = careerCtx.store.saveLineup({ ...lineup, trust }) && saveOk;
+    }
+  }
   return { saveOk, won };
 }
 

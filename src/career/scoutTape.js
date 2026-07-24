@@ -49,14 +49,18 @@ function biasProfiles(aiProfiles, feature) {
 }
 
 // 回傳 [{ snapshot, steps, featured }...]（至多 3 段）；素材不足回空陣列。
-// 排序：含教學招的球優先（學招預告對得上畫面），再按多拍精彩度遞減
-export function buildScoutTape(seed, teams, aiProfiles, liberos = null, feature = null) {
+// 排序：含教學招的球優先（學招預告對得上畫面），再按多拍精彩度遞減。
+// W6 benches：帶子必須與正賽同陣容鏡像——matchView 的 units 依正賽 players 建
+//（含板凳），帶子重播 state 缺板凳 actors 會逐幀炸 undefined（板凳零 sim 擾動已由
+// substitution 測試把關，帶內容不受影響）
+export function buildScoutTape(seed, teams, aiProfiles, liberos = null, feature = null, benches = null) {
   const g = createGame({
     seed: (seed + TAPE_SEED_OFFSET) % 1000000007,
     setTarget: TAPE_SET_TARGET,
     teams,
     ...(aiProfiles ? { aiProfiles: biasProfiles(aiProfiles, feature) } : {}),
     ...(liberos ? { liberos } : {}),
+    ...(benches ? { benches } : {}),
   });
   const ai = createAiState();
   const clips = [];

@@ -69,7 +69,10 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
       .find((k) => TAPE_FEATURE_KEYS.has(k)) ?? null)
     : null;
   const tapeClips = careerSetup
-    ? buildScoutTape(seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos, teachFeature)
+    ? buildScoutTape(
+      seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos,
+      teachFeature, careerSetup.benches, // W6：帶子與正賽同陣容鏡像（含板凳）
+    )
     : [];
 
   return {
