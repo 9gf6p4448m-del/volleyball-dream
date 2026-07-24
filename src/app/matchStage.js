@@ -79,6 +79,9 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // W7 C2③④：板凳期間才有意義（無板凳＝快速比賽自然零出現）——同 subPanel 生涯閘
   const benchAccelBtn = careerSetup ? createBenchAccelButton() : null;
   const comebackBtn = careerSetup ? createComebackButton({ handlers, floatText }) : null;
+  // W7.1 #3A：暫停教練選項（我方喊暫停才彈）＋倒數條（雙方暫停都顯示，讓玩家知道還要多久）
+  const coachOptionDialog = createCoachOptionDialog();
+  const timeoutCountdown = createTimeoutCountdown();
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -93,7 +96,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, heroStamina,
-    benchAccelBtn, comebackBtn,
+    benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
 }
 
@@ -144,6 +147,12 @@ function createTeachDialog() {
       queue = [...lines];
       paint();
       wrap.style.display = 'block';
+    },
+    // W7.1 #3A：暫停教練選項對話框與本框同一視覺卡位（bottom:26px）——互斥防疊，
+    // 開其中一個前先防呆收另一個
+    hide() {
+      queue = null;
+      wrap.style.display = 'none';
     },
   };
 }
@@ -335,6 +344,99 @@ function createTimeoutButton({ handlers, playerId }) {
       btn.style.opacity = usable ? '1' : '0.45';
       btn.textContent = `⏱ 暫停×${remaining}`;
       if (g.phase === 'set_over') btn.style.display = 'none';
+    },
+  };
+}
+
+// W7.1 #3A②：暫停教練選項——我方喊暫停成功時彈出（沿 teachDialog 視覺語言：底部卡片＋
+// 台詞），但這裡是「選一個」而非「點擊逐句」；不選也行，matchLoop 在死球窗結束時自動收。
+function createCoachOptionDialog() {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = [
+    'position:fixed', 'left:50%', 'transform:translateX(-50%)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 26px)',
+    'width:min(480px, 92vw)', 'z-index:31', 'display:none',
+    'background:rgba(18,24,40,0.94)', 'border-radius:16px', 'border:1px solid #2c3a58',
+    'padding:14px 18px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+    'font-family:system-ui,sans-serif', 'user-select:none',
+  ].join(';');
+  const speaker = document.createElement('div');
+  speaker.textContent = '教練';
+  speaker.style.cssText = 'font-size:13px;font-weight:800;color:#ffd166;letter-spacing:2px';
+  const text = document.createElement('div');
+  text.textContent = '暫停時間——想怎麼安排？'; // TODO(naming)
+  text.style.cssText = 'font-size:15px;color:#eef2fa;line-height:1.6;margin-top:6px;text-align:left';
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:10px;margin-top:12px';
+  const mkBtn = (label, bg, fg) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText = [
+      'flex:1', 'height:52px', 'border-radius:14px', 'border:none',
+      `background:${bg}`, `color:${fg}`, 'font-size:13px', 'font-weight:800',
+      'cursor:pointer', 'touch-action:manipulation', 'line-height:1.3',
+    ].join(';');
+    return b;
+  };
+  const calmBtn = mkBtn('🧘 穩住\n（全隊喘口氣）', '#6ee7ff', '#0b1a24'); // TODO(naming)
+  const fireBtn = mkBtn('🔥 燃起來\n（把氣勢拉起來）', '#ff9d7a', '#2a0f05'); // TODO(naming)
+  calmBtn.style.whiteSpace = 'pre-line';
+  fireBtn.style.whiteSpace = 'pre-line';
+  btnRow.appendChild(calmBtn);
+  btnRow.appendChild(fireBtn);
+  wrap.appendChild(speaker);
+  wrap.appendChild(text);
+  wrap.appendChild(btnRow);
+  wrap.addEventListener('pointerdown', (e) => e.stopPropagation()); // 面板吃掉點擊，不誤觸底下
+  document.body.appendChild(wrap);
+
+  let onPick = null;
+  calmBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); onPick?.('calm'); });
+  fireBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); onPick?.('fire'); });
+  return {
+    // pickHandler(boost)：'calm'|'fire'；matchLoop 傳入負責呼叫 sim applyTimeoutBoost
+    show(pickHandler) {
+      onPick = pickHandler;
+      wrap.style.display = 'block';
+    },
+    hide() {
+      wrap.style.display = 'none';
+      onPick = null;
+    },
+    isOpen: () => wrap.style.display !== 'none',
+  };
+}
+
+// W7.1 #3A③：暫停倒數條——雙方暫停都顯示（讓玩家知道還要多久恢復）；matchLoop 逐幀傳
+// ticksLeft/totalTicks（null＝隱藏）。位置刻意避開記分板/⚙⏱⏩直排/回場鈕/底部對話框。
+function createTimeoutCountdown() {
+  const el = document.createElement('div');
+  el.style.cssText = [
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 50px)',
+    'left:calc(env(safe-area-inset-left, 0px) + 10px)',
+    'z-index:15', 'display:none', 'align-items:center', 'gap:8px',
+    'background:rgba(12,16,26,0.68)', 'color:#eef2fa', 'padding:6px 12px',
+    'border-radius:12px', 'font-family:system-ui,sans-serif', 'font-size:12px',
+    'font-weight:700', 'pointer-events:none', 'user-select:none',
+  ].join(';');
+  const track = document.createElement('div');
+  track.style.cssText = 'width:56px;height:5px;border-radius:3px;background:rgba(255,255,255,0.2);overflow:hidden';
+  const fill = document.createElement('div');
+  fill.style.cssText = 'height:100%;width:100%;background:#ffd166;transition:width 100ms linear';
+  track.appendChild(fill);
+  const label = document.createElement('span');
+  el.appendChild(track);
+  el.appendChild(label);
+  document.body.appendChild(el);
+  return {
+    el,
+    // ticksLeft/totalTicks：ticksLeft===null＝隱藏；60Hz 固定步長換算秒數
+    update(ticksLeft, totalTicks) {
+      if (ticksLeft === null) { el.style.display = 'none'; return; }
+      el.style.display = 'flex';
+      const frac = totalTicks > 0 ? Math.max(0, Math.min(1, ticksLeft / totalTicks)) : 0;
+      fill.style.width = `${Math.round(frac * 100)}%`;
+      label.textContent = `⏱ ${Math.max(0, ticksLeft / 60).toFixed(1)}s`;
     },
   };
 }

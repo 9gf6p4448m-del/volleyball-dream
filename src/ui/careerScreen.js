@@ -19,6 +19,7 @@ import {
 } from '../career/events.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
+import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 const ATTR_LABELS = {
@@ -37,6 +38,52 @@ const COLOR = {
   cyan: '#6ee7ff',
   card: 'rgba(18,24,40,0.85)',
 };
+
+// prefers-reduced-motion 動態查詢（不快取——尊重使用者中途切換系統設定）
+function reduceMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+}
+
+// W7 開卡儀式：短促入隊 fanfare（WebAudio 三音上行，零音檔慣例同 sfx.js）；
+// 靜音失敗不得炸演出——AudioContext 可能未經手勢解鎖或瀏覽器不支援
+function playRecruitFanfare() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const notes = [523.25, 659.25, 783.99]; // C5→E5→G5 上行三音，開箱的「叮咚噹」
+    for (let i = 0; i < notes.length; i += 1) {
+      const t = ctx.currentTime + i * 0.09;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(notes[i], t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.34);
+    }
+    setTimeout(() => { try { ctx.close(); } catch { /* 已關閉或不支援，忽略 */ } }, 900);
+  } catch {
+    // 靜音失敗不得炸——開卡演出照常進行
+  }
+}
+
+// 屬性數值 count-up（0→target，短促；delayMs 對齊逐項 stagger）——純文字動畫，
+// WAAPI 無法插值 textContent，改手動 rAF；node 已存在才驅動（卡片可能已被 dispose 掉）
+function countUp(node, target, delayMs, durMs = 320) {
+  const startAt = performance.now() + delayMs;
+  function step(now) {
+    if (!node.isConnected) return; // 卡片已關閉/換下一張——停止
+    if (now < startAt) { requestAnimationFrame(step); return; }
+    const t = Math.min((now - startAt) / durMs, 1);
+    node.textContent = String(Math.round(target * t));
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
 
 export function createCareerScreen(store, { onPlay, onQuick }) {
   const root = el('div', [
@@ -200,20 +247,43 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
 
   function showRecruitCeremony(members, onDone) {
     const queue = [...members];
+    let portrait = null; // 當前立繪實例（換卡／關閉即 dispose，儀式期間才存在）
+    const closePortrait = () => { if (portrait) { portrait.dispose(); portrait = null; } };
     const paintOne = () => {
+      closePortrait();
       const m = queue.shift();
       const def = opponentById(m.origin);
+      const motionOff = reduceMotion();
       const card = el('div', [
         'width:min(400px, 94vw)', `background:${COLOR.card}`, 'border-radius:16px',
         `border:1px solid ${COLOR.gold}`, 'padding:18px 20px', 'display:flex',
         'flex-direction:column', 'gap:10px', 'box-shadow:0 12px 48px rgba(255,209,102,0.18)',
+        'position:relative',
       ]);
+      // 金色光暈脈動（開卡氛圍；reduced-motion 退化為靜態不脈動）——只動 opacity/transform
+      const glow = el('div', [
+        'position:absolute', 'inset:-16px', 'border-radius:22px', 'pointer-events:none', 'z-index:-1',
+        'background:radial-gradient(ellipse at 50% 30%, rgba(255,209,102,0.4), rgba(255,209,102,0) 72%)',
+        `opacity:${motionOff ? '0.45' : '0.35'}`,
+      ]);
+      card.appendChild(glow);
+      if (!motionOff) {
+        glow.animate(
+          [{ opacity: 0.32, transform: 'scale(0.94)' }, { opacity: 0.62, transform: 'scale(1.06)' }],
+          { duration: 1600, easing: 'ease-in-out', iterations: Infinity, direction: 'alternate' },
+        );
+      }
       card.appendChild(el('div', [
         'font-size:14px', 'font-weight:800', `color:${COLOR.gold}`, 'letter-spacing:4px',
         'text-align:center',
       ], '🎉 新隊員入隊'));
       card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'text-align:center'],
         `${def?.name ?? m.origin}的招牌球員，被你們打服了`));
+
+      // 幾何球員立繪（獨立 three.js 場景、緩慢自轉；paintOne 換下一張／關閉時 dispose）
+      portrait = createRecruitPortrait(m);
+      card.appendChild(portrait.el);
+
       card.appendChild(el('div', [
         'font-size:34px', 'font-weight:900', `color:${COLOR.text}`, 'text-align:center',
         'letter-spacing:6px',
@@ -221,6 +291,11 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       card.appendChild(el('div', [
         'font-size:14px', 'font-weight:700', `color:${COLOR.cyan}`, 'text-align:center',
       ], `${ROLE_ABBR[m.role] ?? m.role}・二年級轉學生・${m.height.toFixed(2)}m`));
+      // 入隊宣言（role 決定論挑選；persona 敘述保留於下一行）
+      card.appendChild(el('div', [
+        'font-size:13px', 'font-weight:700', `color:${COLOR.gold}`, 'text-align:center',
+        'font-style:italic', 'line-height:1.5',
+      ], pickJoinLine(m)));
       if (m.persona) {
         card.appendChild(el('div', [
           'font-size:13px', `color:${COLOR.dim}`, 'line-height:1.5', 'text-align:center',
@@ -228,27 +303,47 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       }
       card.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`, 'text-align:center'],
         `DNA｜${m.dna.tag}（${m.dna.style}）`));
-      // 屬性亮相（八項、金色數值；成長刻度同隊友卡語彙）
+      // 屬性亮相（八項、金色數值；成長刻度同隊友卡語彙）——逐項 stagger 亮起＋數值 count-up
       const attrBox = el('div', ['display:flex', 'flex-direction:column', 'gap:4px', 'margin-top:2px']);
+      let idx = 0;
       for (const [key, label] of Object.entries(ATTR_LABELS)) {
         const v = m.attributes[key];
-        const row = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+        const delay = idx * 80;
+        idx += 1;
+        const row = el('div', [
+          'display:flex', 'align-items:center', 'gap:8px',
+          ...(motionOff ? [] : ['opacity:0']),
+        ]);
         row.appendChild(el('div', ['width:34px', 'font-size:12px', 'text-align:left',
           `color:${COLOR.text}`], label));
         const bar = el('div', [
           'flex:1', 'height:7px', 'border-radius:4px', 'background:#141b2e',
           'position:relative', 'overflow:hidden',
         ]);
-        bar.appendChild(el('div', [
+        const barFill = el('div', [
           `width:${v}%`, 'height:100%', 'position:absolute', 'left:0',
-          `background:${COLOR.gold}`,
-        ]));
+          `background:${COLOR.gold}`, 'transform-origin:left',
+          ...(motionOff ? [] : ['transform:scaleX(0)']),
+        ]);
+        bar.appendChild(barFill);
         row.appendChild(bar);
-        row.appendChild(el('div', [
+        const valEl = el('div', [
           'width:34px', 'font-size:12px', 'font-weight:700', 'text-align:right',
           `color:${COLOR.text}`,
-        ], String(v)));
+        ], String(motionOff ? v : 0));
+        row.appendChild(valEl);
         attrBox.appendChild(row);
+        if (!motionOff) {
+          row.animate(
+            [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }],
+            { duration: 220, delay, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'both' },
+          );
+          barFill.animate(
+            [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
+            { duration: 320, delay, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'forwards' },
+          );
+          countUp(valEl, v, delay, 320);
+        }
       }
       card.appendChild(attrBox);
       card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'text-align:center',
@@ -258,6 +353,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         if (queue.length) {
           paintOne();
         } else {
+          closePortrait();
           recruitOverlay.style.display = 'none';
           recruitOverlay.replaceChildren();
           onDone();
@@ -267,6 +363,14 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       card.appendChild(btn);
       recruitOverlay.replaceChildren(card);
       recruitOverlay.style.display = 'flex';
+      if (!motionOff) {
+        card.animate(
+          [{ opacity: 0, transform: 'scale(0.85) translateY(12px)' },
+            { opacity: 1, transform: 'scale(1) translateY(0)' }],
+          { duration: 260, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'backwards' },
+        );
+      }
+      playRecruitFanfare();
     };
     paintOne();
   }

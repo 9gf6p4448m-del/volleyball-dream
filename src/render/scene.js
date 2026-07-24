@@ -66,6 +66,8 @@ export function createLights(scene, quality) {
 
   // 球場聚光光池 ×2（不投影的氛圍燈：兩個半場各一盞暖光錐）
   const SPOT_BASE = 260;
+  const SPOT_BASE_COLOR = new THREE.Color(0xffe6bf);
+  const SPOT_TEAM_TINT = new THREE.Color(0x6ee7ff); // W7.1 #4⑤：我方（A）氣勢滿檔微染隊色青
   const spots = [];
   for (const sz of [7, -7]) {
     const spot = new THREE.SpotLight(0xffe6bf, SPOT_BASE, 40, 0.62, 0.55, 1.6);
@@ -94,7 +96,12 @@ export function createLights(scene, quality) {
       const target = tensionActive ? 0 : value;
       momentumGlow += (target - momentumGlow) * (1 - Math.exp(-3 * dt));
       const mul = 1 + momentumGlow * 0.1; // 「微」增亮/微收，幅度封頂 ±10%——不可搶戲
-      for (const spot of spots) spot.intensity = SPOT_BASE * mul;
+      // W7.1 #4⑤：我方滿檔氛圍光微染——只在正值染色（往隊色青）、負值維持中性偏暗（不換色只調強度）
+      const tint = Math.max(0, Math.min(1, momentumGlow)) * 0.12; // 「微」封頂 12% 混色
+      for (const spot of spots) {
+        spot.intensity = SPOT_BASE * mul;
+        spot.color.copy(SPOT_BASE_COLOR).lerp(SPOT_TEAM_TINT, tint);
+      }
     },
   };
 }

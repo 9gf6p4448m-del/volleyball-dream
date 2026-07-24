@@ -34,11 +34,12 @@ export function createScoreboard(playerId) {
         letter-spacing:2px;line-height:1.15">0 : 0</div>
     </div>
     <div class="momentum" style="display:none;width:min(60vw,220px);height:7px;position:relative;
-      background:rgba(255,255,255,0.16);border-radius:4px;overflow:hidden;pointer-events:none">
+      background:rgba(255,255,255,0.16);border-radius:4px;overflow:visible;pointer-events:none">
       <div class="mCenter" style="position:absolute;left:50%;top:0;bottom:0;width:1.5px;
         background:rgba(255,255,255,0.5);transform:translateX(-50%)"></div>
-      <div class="mFill" style="position:absolute;top:0;bottom:0;
+      <div class="mFill" style="position:absolute;top:0;bottom:0;border-radius:4px;
         transition:left 200ms ease-out,width 200ms ease-out,background 200ms ease-out"></div>
+      <div class="mFlash" style="position:absolute;top:50%;font-size:13px;font-weight:900;opacity:0"></div>
     </div>
     <div class="bubble" style="display:none;background:#f7f9ff;transition:opacity 120ms ease">
       <div class="tail" style="background:#f7f9ff"></div>
@@ -66,13 +67,33 @@ export function createScoreboard(playerId) {
     padding:6px 12px;text-align:left}
   #scoreboard .tail{display:none}
   #scoreboard .btext{font-size:14px;letter-spacing:0.5px}
-}`;
+}
+/* W7.1 #4②：氣勢滿檔發光脈動 */
+@keyframes vd-momentum-glow{
+  0%,100%{filter:brightness(1) drop-shadow(0 0 0 currentColor)}
+  50%{filter:brightness(1.55) drop-shadow(0 0 5px currentColor)}
+}
+#scoreboard .mFill.glow{animation:vd-momentum-glow 1.1s ease-in-out infinite}
+/* W7.1 #4③：氣勢變動 delta 指示——條端小箭頭閃一下（›＝往我方/A 漲、‹＝往對方/B 漲） */
+@keyframes vd-mflash{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(0.6)}
+  30%{opacity:1;transform:translate(-50%,-50%) scale(1.35)}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(1)}
+}
+#scoreboard .mFlash{transform:translate(-50%,-50%)}
+#scoreboard .mFlash.flash{animation:vd-mflash 0.6s ease-out}
+@media (prefers-reduced-motion: reduce) {
+  #scoreboard .mFill.glow{animation:none;filter:brightness(1.3)}
+  #scoreboard .mFlash.flash{animation:vd-mflash-reduced 0.6s ease-out}
+}
+@keyframes vd-mflash-reduced{0%{opacity:0}30%{opacity:1}100%{opacity:0}}`;
     document.head.appendChild(st);
   }
   const lineEl = el.querySelector('.line');
   const setPtEl = el.querySelector('.setpt');
   const momentumEl = el.querySelector('.momentum');
   const mFillEl = el.querySelector('.mFill');
+  const mFlashEl = el.querySelector('.mFlash');
   const bubbleEl = el.querySelector('.bubble');
   const tailEl = el.querySelector('.tail');
   const btextEl = el.querySelector('.btext');
@@ -82,6 +103,7 @@ export function createScoreboard(playerId) {
   let lastBubbleText = '';
   let lastBubbleKind = '';
   let popAnim = null;
+  let lastMomentumValue = 0; // W7.1 #4③：flashMomentum 自算 delta 用（closure 自持狀態，呼叫端只給新值）
   const reducedMotion =
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -155,10 +177,14 @@ export function createScoreboard(playerId) {
         momentumEl.style.display = 'block';
         const v = game.momentum.value; // −MOMENTUM_MAX..+MOMENTUM_MAX（＋＝A、−＝B）
         const frac = Math.min(Math.abs(v) / TUNING.MOMENTUM_MAX, 1) * 50; // 半軌最大百分比
+        const color = v >= 0 ? MOMENTUM_COLOR.A : MOMENTUM_COLOR.B;
         // 方向對齊比分：A（我方）氣勢往左長（比分 A 在左）、B 往右長
-        mFillEl.style.background = v >= 0 ? MOMENTUM_COLOR.A : MOMENTUM_COLOR.B;
+        mFillEl.style.background = color;
+        mFillEl.style.color = color; // W7.1 #4②：glow 的 drop-shadow 吃 currentColor
         mFillEl.style.left = v >= 0 ? `${50 - frac}%` : '50%';
         mFillEl.style.width = `${frac}%`;
+        // W7.1 #4②：滿檔（±MOMENTUM_MAX）發光脈動
+        mFillEl.classList.toggle('glow', Math.abs(v) >= TUNING.MOMENTUM_MAX);
       }
 
       // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）
@@ -172,6 +198,25 @@ export function createScoreboard(playerId) {
         setPtEl.style.display = 'none';
       }
     },
+    // W7.1 #4③：氣勢變動 delta 指示——每次 MOMENTUM 事件呼叫一次（matchLoop 傳新值，
+    // delta 由本函式自算，closure 自持 lastMomentumValue）；delta===0 不閃（理論不會發生，
+    // sim 只在值變動時發 MOMENTUM，這裡多一層防呆）
+    flashMomentum(value) {
+      const delta = value - lastMomentumValue;
+      lastMomentumValue = value;
+      if (!delta) return;
+      const frac = Math.min(Math.abs(value) / TUNING.MOMENTUM_MAX, 1) * 50;
+      const leftPct = value >= 0 ? 50 - frac : 50 + frac;
+      mFlashEl.style.left = `${leftPct}%`;
+      mFlashEl.style.color = delta > 0 ? MOMENTUM_COLOR.A : MOMENTUM_COLOR.B;
+      mFlashEl.textContent = delta > 0 ? '‹' : '›'; // 往左漲（A）用‹、往右漲（B）用›——對齊比分方向
+      mFlashEl.classList.remove('flash');
+      void mFlashEl.offsetWidth; // 強制 reflow，讓同方向連續變動也能重播動畫
+      mFlashEl.classList.add('flash');
+    },
+    // 快速比賽換局重開（同一 scoreboard 實例沿用，見 matchLoop 換局處）：
+    // 新局氣勢從 0 起算，flashMomentum 的 delta 基準要跟著歸零，否則首次事件會誤閃
+    resetMomentum() { lastMomentumValue = 0; },
   };
 }
 

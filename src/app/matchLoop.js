@@ -5,7 +5,9 @@
 // 與賽前準備（matchConfig/matchStage）僅以 config/gates/stage 資料介面銜接，
 // 與賽末收束（matchCareer）僅在局終呼叫 settleCareerMatch 一次。
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
-import { createGame, stepGame, applySubstitution, applyTimeout, TUNING } from '../sim/game.js';
+import {
+  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, TUNING,
+} from '../sim/game.js';
 import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
@@ -39,6 +41,7 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     stage.handlers.requestSub = (outId, inId) => requestSubstitution(s, outId, inId);
     stage.handlers.onSubPanelClose = () => {
       if (s.pendingSubLines.length && stage.teachDialog) {
+        stage.coachOptionDialog?.hide(); // 卡位互斥防呆（同 bottom:26px）
         stage.teachDialog.show(s.pendingSubLines);
         s.pendingSubLines = [];
       }
@@ -104,6 +107,11 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     staminaAdviceShown: false,
     // W7 C2②：板凳狀態轉換偵測（false→true 那一幀自動開一次 ⚙ 儀表板）
     wasBenched: false,
+    // W7.1 #3A：目前正在集合帶位/倒數的暫停隊伍（'A'|'B'|null）——matchLoop 唯一事實源，
+    // matchView/countdown 都吃這個
+    timeoutHuddleTeam: null,
+    // W7.1 #4①：滿檔字卡「跨進才發」的比對基準（同 sim momentum 初值 0）
+    prevMomentumValue: 0,
     last: performance.now(),
     accumulator: 0,
     rafFn: null,
@@ -169,19 +177,58 @@ function requestComeback(s) {
   return r;
 }
 
-// W7 B3 我方暫停（stage.handlers.requestTimeout）：sim 執行＋浮字教練圈演出＋播報一句。
-// 走 sim 唯一路徑 applyTimeout；成功才有演出（額度用盡/rally 中會被 sim 擋下，UI 已先反灰）
+// 場上球員體力平均（純函式，供教練選項「回了多少%」量測與測試）：team 全隊平均、
+// stamina 未啟用回 null（呼叫端據此省略百分比顯示）
+export function avgStamina(game, team) {
+  if (!game.stamina) return null;
+  const ids = game.match.rotations[team];
+  if (!ids?.length) return null;
+  return ids.reduce((sum, id) => sum + (game.stamina[id] ?? 1), 0) / ids.length;
+}
+
+// W7.1 #4①：氣勢滿檔「跨進那一刻」判定（純函式，供測試）——同檔內不重發、離開再進可重發。
+// 回傳觸發方（'A'|'B'）或 null；prevValue 用呼叫端持久追蹤的上一次 MOMENTUM 值。
+export function enteringMomentumMax(prevValue, newValue, max) {
+  if (newValue === max && prevValue !== max) return 'A';
+  if (newValue === -max && prevValue !== -max) return 'B';
+  return null;
+}
+
+// W7 B3 我方暫停（stage.handlers.requestTimeout）：sim 執行＋集合帶位＋倒數條啟動＋
+// 教練選項對話框（W7.1 #3A，取代舊版被動浮字——Sawmah 原話「不知道按了獲得什麼」）
 function requestTimeout(s) {
   const team = s.game.players[s.playerId].teamId;
   const r = applyTimeout(s.game, { team });
   if (r.ok) {
-    // TODO(naming)：暫停教練圈台詞佔位，命名工程統一潤稿
-    s.stage.floatText.show('教練：穩住，一分一分拿回來', '#ffd166', 1800);
+    s.timeoutHuddleTeam = team; // 集合帶位＋倒數條共用同一個事實源
     s.stage.commentary?.onEvents(
       [{ type: 'TIMEOUT', tick: s.game.tick, team, remaining: s.game.timeouts[team].remaining }],
       s.game, s.aiState, performance.now(), s.controlledId,
     );
+    // 教練選項（不選也行——死球窗結束 matchLoop 會自動收，boost 在 sim 端也會過期作廢）；
+    // 與 teachDialog 同一卡位，開前防呆收一次避免疊字
+    s.stage.teachDialog?.hide?.();
+    s.stage.coachOptionDialog?.show((boost) => requestTimeoutBoost(s, team, boost));
   }
+  return r;
+}
+
+// W7.1 #3A②：教練選項執行——calm/fire 擇一呼叫 sim applyTimeoutBoost，顯示效果浮字後收對話框
+function requestTimeoutBoost(s, team, boost) {
+  const { game, stage } = s;
+  const before = boost === 'calm' ? avgStamina(game, team) : null;
+  const r = applyTimeoutBoost(game, { team, boost });
+  if (r.ok) {
+    if (boost === 'calm') {
+      const after = avgStamina(game, team);
+      const suffix = before !== null && after !== null
+        ? `（+${Math.max(0, Math.round((after - before) * 100))}%）` : '';
+      stage.floatText.show(`🧘 全隊體力小回${suffix}！`, '#6ee7ff', 1800); // TODO(naming)
+    } else if (boost === 'fire') {
+      stage.floatText.show('🔥 士氣拉起來了！', '#ff9d7a', 1800); // TODO(naming)
+    }
+  }
+  stage.coachOptionDialog?.hide();
   return r;
 }
 
@@ -249,11 +296,16 @@ function bindInputHandlers(s) {
     s.servedThisTurn = false;
     s.staminaAdviceShown = false;
     s.wasBenched = false;
+    s.timeoutHuddleTeam = null; // W7.1：換局清暫停集合/倒數狀態
+    s.prevMomentumValue = 0;
+    stage.coachOptionDialog?.hide();
+    stage.scoreboard.resetMomentum?.(); // 同一 scoreboard 實例沿用——flashMomentum 基準歸零
     stage.setOverOverlay.hide();
     if (stage.panel) stage.panel.hide();
     stage.controls.setPlayerId(s.playerId);
     stage.rig.setPlayerId(s.playerId);
     stage.matchView.setControlled(s.playerId);
+    stage.matchView.setTimeoutHuddle(null);
     window.__phase1.game = s.game;
     window.__phase1.aiState = s.aiState;
   });
@@ -579,18 +631,30 @@ function applyEvents(s, frameEvents, now) {
           onCourt(game, s.playerId) &&
           (game.stamina[s.playerId] ?? 1) < STAMINA.TIER2_BELOW) {
         s.staminaAdviceShown = true;
+        stage.coachOptionDialog?.hide(); // 卡位互斥防呆（同 bottom:26px）
         stage.teachDialog.show([ // TODO(naming)：教練建議台詞佔位，命名工程統一潤稿
           { speaker: '教練', text: `${game.players[s.playerId]?.name ?? ''}，要不要下來喘口氣？板凳準備好了。` },
         ]);
       }
-      // W7 B3：對手 AI 暫停判準（死球節拍檢查，成立才喊——被連 4 分＋死球＋有額度）
+      // W7 B3：對手 AI 暫停判準（死球節拍檢查，成立才喊——被連 4 分＋死球＋有額度）；
+      // W7.1：對面集合帶位＋倒數條（同我方一套事實源）＋提示「趁機換人」（換人窗口本來就開著）；
+      // AI 對手無教練選項（拍板：維持 sim 現況，B 已有 0.6 慢耗優勢）
       if (aiTimeoutWanted(game, 'B') && applyTimeout(game, { team: 'B' }).ok) {
-        cards.push({ pri: 25, text: '對方喊暫停', color: '#ff9d7a', dur: 1600 });
+        s.timeoutHuddleTeam = 'B';
+        cards.push({ pri: 25, text: '對方喊暫停——趁機換人 ⚙', color: '#ff9d7a', dur: 1800 });
         stage.commentary?.onEvents(
           [{ type: 'TIMEOUT', tick: game.tick, team: 'B', remaining: game.timeouts.B.remaining }],
           game, s.aiState, now, s.controlledId,
         );
       }
+    } else if (e.type === 'MOMENTUM') {
+      // W7.1 #4①：滿檔進入一次性字卡（跨進才發、離開再進可重發）
+      const spark = enteringMomentumMax(s.prevMomentumValue, e.value, TUNING.MOMENTUM_MAX);
+      if (spark === 'A') cards.push({ pri: 22, text: '🔥 氣勢如虹！', color: '#6ee7ff', dur: 1800 });
+      else if (spark === 'B') cards.push({ pri: 22, text: '❄ 被壓著打——穩住！', color: '#9fd8ff', dur: 1800 });
+      s.prevMomentumValue = e.value;
+      // W7.1 #4③：氣勢計變動 delta 指示（條端閃箭頭）
+      stage.scoreboard.flashMomentum(e.value);
     } else if (e.type === 'COMEBACK_SPARK') {
       // W7 C3①：⚡ 回歸字卡改吃 sim 單一事實源（subLog 換下→換回→首次建功已在 sim 判完）
       cards.push({
@@ -723,6 +787,18 @@ function frameStep(s, now) {
   if (benched && !wasBenchedPrev) stage.subPanel?.openPanel(); // C2②：被換下的當下自動開板一次
   if (!benched && wasBenchedPrev) stage.benchAccelBtn?.forceOff(); // 回場強制回 1× 並收鈕（sync 會隱藏）
 
+  // W7.1 #3A：暫停死球窗結束（發球一發生＝離開 'serve' 相位）——集合帶位/倒數條/教練
+  // 選項對話框全部收掉；不選也作廢（sim armed 旗標下個死球窗自動收，這裡只管表現層）
+  if (game.phase !== 'serve') {
+    if (s.timeoutHuddleTeam) s.timeoutHuddleTeam = null;
+    if (stage.coachOptionDialog?.isOpen()) stage.coachOptionDialog.hide();
+  }
+  stage.matchView.setTimeoutHuddle(game.phase === 'serve' ? s.timeoutHuddleTeam : null);
+  stage.timeoutCountdown?.update(
+    s.timeoutHuddleTeam && game.phase === 'serve' ? Math.max(0, game.serveReadyTick - game.tick) : null,
+    TUNING.TIMEOUT_DEAD_TICKS,
+  );
+
   // W6 換人面板開啟＝凍結模擬（畫面照跑；死球窗 tick 不流逝，慢慢讀數據慢慢換）；
   // W7 C2②：主角在板凳時面板＝教練儀表板，不凍結（在場時維持原凍結行為）
   if (stage.subPanel?.isOpen() && !benched) delta = 0;
@@ -762,8 +838,9 @@ function frameStep(s, now) {
   stage.sfx.setHeartbeat(tension);
   // W7 B4②：氣勢聲量聯動——我方（A）有利＝聲量爬升、對方有利＝場館變安靜（壓迫感，非噓聲）；
   // 優先序：局點發球前屏息＞氣勢聯動（tension 成立時氣勢聯動整個讓位，不疊算）
+  // W7.1 #4④（試玩回饋）：幅度 ±0.035→±0.05，客場安靜的壓迫感要更明顯
   const momentumCrowd = game.momentum
-    ? 0.05 + (game.momentum.value / TUNING.MOMENTUM_MAX) * 0.035
+    ? 0.05 + (game.momentum.value / TUNING.MOMENTUM_MAX) * 0.05
     : 0.05;
   stage.sfx.setCrowdLevel(tension && game.phase === 'serve' ? 0.016 : momentumCrowd);
   // W7 B4③：氣勢聚光微聯動（複用局點壓暗管線 lights.setTension 同一組燈具的姐妹方法）
