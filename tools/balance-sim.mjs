@@ -83,7 +83,7 @@ function settleJoinsMirror(roster, recruitment, careerSeed, season, joinLog) {
     if (rec.recruited.includes(key) || !conditionMet(rec, key)) continue;
     if (openSlots(r) <= 0) continue;
     const id = nextRecruitId(r.members, rec.expelled);
-    r = { ...r, members: [...r.members, buildRecruitMember(key, careerSeed, id)] };
+    r = { ...r, members: [...r.members, buildRecruitMember(key, careerSeed, id, r.members)] };
     rec = { ...rec, recruited: [...rec.recruited, key] };
     joinLog.push({ key, season });
   }

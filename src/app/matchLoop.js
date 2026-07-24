@@ -15,6 +15,8 @@ import { derivePointInfo } from '../ui/pointBanner.js';
 import { settleCareerMatch, careerReturnUrl } from './matchCareer.js';
 import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
+import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js';
+import { opponentById } from '../career/opponents.js';
 
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
@@ -71,10 +73,45 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     pendingDead: null,          // DEAD_BALL 先到、SCORE 緊隨（同批事件）：湊齊才顯示面板
     assistFlight: -1,
     assistLanding: null,
+    // W6 壯舉達成字卡（新增採納 3）：本場對手未達成的 feat 條件清單，死球增量檢查
+    recruitWatch: buildRecruitWatch(careerCtx, playerId),
     last: performance.now(),
     accumulator: 0,
     rafFn: null,
   };
+}
+
+// W6 壯舉字卡監看清單：只收本場對手、有 feat 軸、未招募且尚未達標的招募槽；
+// wins/stage 軸不在此列（完成點在賽末，入隊儀式已涵蓋該節拍）
+function buildRecruitWatch(careerCtx, playerId) {
+  const opponentId = careerCtx?.matchEntry?.opponentId;
+  const rec = careerCtx?.store?.loadRecruitment?.();
+  if (!opponentId || !rec || !playerId) return [];
+  const watch = [];
+  for (const [key, cond] of Object.entries(RECRUIT_CONDS)) {
+    if (cond.opponentId !== opponentId || !cond.feat) continue;
+    if (rec.recruited.includes(key)) continue;
+    const base = progressOf(rec, key).feat;
+    if (base >= cond.feat.count) continue;
+    watch.push({ key, cond, base, fired: false });
+  }
+  return watch;
+}
+
+// 死球時增量檢查：本場 feat 增量＋既有進度過門檻＝當場彈卡（一場一卡不重複；
+// 純 UI 演出——真正的進度累加仍在賽末 settleCareerMatch，不在此寫入）
+function checkRecruitFeats(s) {
+  if (!s.recruitWatch.length) return;
+  const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
+  for (const w of s.recruitWatch) {
+    if (w.fired) continue;
+    const gain = featGainFor(s.game.events, s.playerId, myTeam, w.cond);
+    if (w.base + gain >= w.cond.feat.count) {
+      w.fired = true;
+      const def = opponentById(w.cond.opponentId);
+      s.stage.floatText.show(`⭐ 招募條件達成：${def?.name ?? ''}・${w.cond.feat.label}`, '#ffd166', 1600);
+    }
+  }
 }
 
 // 輸入/導航事件绑定：局終點擊、回放（R/🎬）、魚躍（L/Space/鈕）、情蒐跳過
@@ -409,6 +446,7 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
+      checkRecruitFeats(s); // W6 壯舉達成字卡（死球節拍增量檢查）
     } else if (e.type === 'SCORE') {
       // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
       s.fovPunchUntil = now + 700;

@@ -10,7 +10,7 @@ import {
 import { opponentById, OPPONENTS } from '../src/career/opponents.js';
 import { groupPool } from '../src/career/schedule.js';
 import { createCareer, createCareerPlayer } from '../src/career/careerState.js';
-import { ensureStarterRoster } from '../src/career/roster.js';
+import { ensureStarterRoster, buildStarterMembers } from '../src/career/roster.js';
 import { createCareerStore } from '../src/career/careerStore.js';
 
 function fakeStorage() {
@@ -111,6 +111,28 @@ test('settleRecruitJoins：同隊招牌＋第二人可共存（兩成員、id �
   assert.deepEqual(
     fromObsidian.map((m) => m.recruitKey).sort(),
     ['obsidian', 'obsidian-2'],
+  );
+});
+
+test('入隊補正：隊伍成長水位墊高招募生（只補不砍、決定論、夾限 85）', () => {
+  const base = buildRecruitMember('north-tech', 42, 'R1'); // 無名冊＝無補正（治具基準臂）
+  const withAttrs = (v) => buildStarterMembers().map((m) => ({
+    ...m,
+    attributes: Object.fromEntries(Object.keys(m.attributes).map((k) => [k, v])),
+  }));
+  const boosted = buildRecruitMember('north-tech', 42, 'R1', withAttrs(85));
+  const sum = (m) => Object.values(m.attributes).reduce((s, v) => s + v, 0);
+  for (const k of Object.keys(boosted.attributes)) {
+    assert.ok(boosted.attributes[k] >= base.attributes[k], `${k} 被補正砍低`);
+    assert.ok(boosted.attributes[k] <= 85, `${k} 超過夾限`);
+  }
+  assert.ok(sum(boosted) > sum(base) + 40, '85 水位 vs 52 級生成應顯著上修');
+  // 決定論：同名冊同種子重演逐值一致
+  assert.deepEqual(buildRecruitMember('north-tech', 42, 'R1', withAttrs(85)), boosted);
+  // 只補不砍：弱名冊（全 30）不把強隊招牌拉低
+  assert.deepEqual(
+    buildRecruitMember('sky-hawk', 42, 'R1', withAttrs(30)),
+    buildRecruitMember('sky-hawk', 42, 'R1'),
   );
 });
 

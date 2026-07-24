@@ -215,6 +215,18 @@ function hash32(seed, str) {
 
 const clampAttr = (v) => Math.max(ATTR_MIN, Math.min(ATTR_MAX, Math.round(v)));
 
+// W6 入隊補正（新增採納 1）：招募生以「當前隊伍平均能力」為底線生成——解「後期招募
+// 貶值」（隊友成長到 80+ 時，新人還從來源隊出廠值起跳＝進來就是棄子）。
+// 只補不砍：來源隊公式值已高於隊伍水位＝照舊（早期招強隊招牌仍然是即戰力）；
+// 由入隊當下名冊決定論導出（成員屬性是存檔狀態，同存檔重演一致）
+function rosterUplift(members, baseAttrs) {
+  if (!members?.length) return 0;
+  const avgOf = (attrs) => ATTRIBUTE_KEYS
+    .reduce((s, k) => s + (attrs[k] ?? 0), 0) / ATTRIBUTE_KEYS.length;
+  const teamAvg = members.reduce((s, m) => s + avgOf(m.attributes), 0) / members.length;
+  return Math.max(0, Math.round(teamAvg - avgOf(baseAttrs)));
+}
+
 // 屬性槽位身高（opponents.js heights 槽序＝S/OH/MB/OPP/OH/MB）
 const ROLE_HEIGHT_SLOT = { setter: 0, outside: 1, middle: 2, opposite: 3 };
 
@@ -225,7 +237,9 @@ const ROLE_HEIGHT_SLOT = { setter: 0, outside: 1, middle: 2, opposite: 3 };
 // W6：第一參數改 recruitKey（既有 5 隊鍵值＝opponentId，抖動 hash 輸入不變＝
 // 舊存檔重演逐值一致）；origin 維持「來源隊 id」語義（cond.opponentId），
 // recruitKey 另立欄位（同隊第二人與招牌的 UI/防重招對映靠它；舊成員缺欄回退 origin）
-export function buildRecruitMember(recruitKey, careerSeed, id) {
+// 第 4 參數 rosterMembers（W6）：給了就做入隊補正（settleRecruitJoins 傳現役名冊）；
+// 省略＝無補正（治具基準臂/舊呼叫端行為不變）
+export function buildRecruitMember(recruitKey, careerSeed, id, rosterMembers = null) {
   const cond = RECRUIT_CONDS[recruitKey];
   const def = cond ? opponentById(cond.opponentId) : null;
   const meta = RECRUIT_DEFS[recruitKey];
@@ -236,11 +250,15 @@ export function buildRecruitMember(recruitKey, careerSeed, id) {
   const base = role === 'libero'
     ? buildLibero('A', meta.name, def.level).attributes
     : null;
+  const baseAttrs = {};
   for (const k of ATTRIBUTE_KEYS) {
-    const raw = base
+    baseAttrs[k] = base
       ? base[k]
       : def.level + (def.attrBias?.[k] ?? 0) + (def.roleBias?.[role]?.[k] ?? 0);
-    attributes[k] = clampAttr(raw + jitter(k));
+  }
+  const uplift = rosterUplift(rosterMembers, baseAttrs); // W6 入隊補正（只補不砍）
+  for (const k of ATTRIBUTE_KEYS) {
+    attributes[k] = clampAttr(baseAttrs[k] + uplift + jitter(k));
   }
   return {
     id,
@@ -293,7 +311,8 @@ export function settleRecruitJoins(store, careerSeed) {
     if (rec.recruited.includes(recruitKey) || !conditionMet(rec, recruitKey)) continue;
     if (openSlots(roster) <= 0) continue;
     const id = nextRecruitId(roster.members, rec.expelled ?? []); // 含 expelled：id 不回收
-    const member = buildRecruitMember(recruitKey, careerSeed, id);
+    // W6：傳現役名冊＝入隊補正生效（晚招的人跟上隊伍成長水位）
+    const member = buildRecruitMember(recruitKey, careerSeed, id, roster.members);
     if (!store.applyRecruit({ member, opponentId: recruitKey, trust: RECRUIT_TRUST })) return joined;
     joined.push(member);
   }
