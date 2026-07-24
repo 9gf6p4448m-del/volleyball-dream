@@ -690,7 +690,8 @@ function applyEvents(s, frameEvents, now) {
       }
     } else if (e.type === 'TOUCH' && e.kind === 'receive' &&
         e.playerId === s.controlledId && (e.power ?? 0) >= 0.95) {
-      cards.push({ pri: 10, text: 'PERFECT!', color: '#60ffa0', dur: 900 }); // 球到瞬間出手的完美一傳
+      // 球到瞬間出手的完美一傳（試玩回饋 07-24：900ms 高速 rally 中看不到→加長）
+      cards.push({ pri: 10, text: '✨ PERFECT!', color: '#60ffa0', dur: 1500 });
     }
   }
   // flush：低優先先出（被疊排上推）、最高優先最後出＝停在基準位；全部都出、零丟卡

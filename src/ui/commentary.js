@@ -87,7 +87,8 @@ export function createCommentary(opponentDef = null, revenge = []) {
         } else if (e.type === 'TOUCH' && e.kind === 'receive' && game.rally.touches === 1) {
           // 只播有戲的一傳：Perfect 或貼地撈球（逐球碎唸會蓋掉重要節奏點）
           if ((e.power ?? 0) >= PERFECT_POWER) {
-            setBeat(`${nameOf(game, e.playerId)} Perfect 一傳！`, now);
+            // 試玩回饋 07-24：單槽會被下一觸球播報秒蓋→升敘事級存活（同連得分待遇）
+            setBeat(`${nameOf(game, e.playerId)} Perfect 一傳！`, now, STREAK_TTL);
           } else if ((e.ballY ?? 1) < DIG_LOW_Y) {
             setBeat(`${nameOf(game, e.playerId)} 貼地撈起來了！`, now);
           }
