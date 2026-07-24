@@ -517,7 +517,7 @@ function updateDecisions(s, now) {
         if (!gates.canFeint) { controls.chooseAttack(toIt.zone); return; } // 未解鎖：滑到哪打哪（誠實）
         s.feintsUsedThisMatch += 1;
         controls.chooseAttackFake(fromIt.zone, toIt.zone);
-        floatText.show('假動作!');
+        floatText.show('🎭 假動作!', '#ffd166', 2000);
       },
     );
   } else if (serveDeciding) {
@@ -621,12 +621,12 @@ function applyEvents(s, frameEvents, now) {
       // 主角攔網個人回饋（07-24 Sawmah）：碰到球當下即字卡（比照 PERFECT 接球卡）——
       // 攔死金色/擦手青色分色；攔死直接得分另有 pointBanner「攔網得分 🧱」收尾
       if (e.playerId === s.controlledId) {
-        if (e.graze) cards.push({ pri: 20, text: '👆 擦到了——快補！', color: '#6ee7ff', dur: 1200 });
-        else cards.push({ pri: 20, text: '🧱 攔網拍回！', color: '#ffd166', dur: 1200 });
+        if (e.graze) cards.push({ pri: 20, text: '👆 擦到了——快補！', color: '#6ee7ff', dur: 2200 });
+        else cards.push({ pri: 20, text: '🧱 攔網拍回！', color: '#ffd166', dur: 2200 });
       }
     } else if (e.type === 'BLOCK_DECEIVED' && e.spikerId === s.controlledId) {
       // 主角假動作騙過攔網（07-24）：回饋閉環——按A滑B到底有沒有騙到，從此看得見
-      cards.push({ pri: 20, text: '🎭 晃過攔網！', color: '#ffd166', dur: 1100 });
+      cards.push({ pri: 20, text: '🎭 晃過攔網！', color: '#ffd166', dur: 2200 });
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
@@ -657,8 +657,8 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'MOMENTUM') {
       // W7.1 #4①：滿檔進入一次性字卡（跨進才發、離開再進可重發）
       const spark = enteringMomentumMax(s.prevMomentumValue, e.value, TUNING.MOMENTUM_MAX);
-      if (spark === 'A') cards.push({ pri: 22, text: '🔥 氣勢如虹！', color: '#6ee7ff', dur: 1800 });
-      else if (spark === 'B') cards.push({ pri: 22, text: '❄ 被壓著打——穩住！', color: '#9fd8ff', dur: 1800 });
+      if (spark === 'A') cards.push({ pri: 22, text: '🔥 氣勢如虹！', color: '#6ee7ff', dur: 2600 });
+      else if (spark === 'B') cards.push({ pri: 22, text: '❄ 被壓著打——穩住！', color: '#9fd8ff', dur: 2600 });
       s.prevMomentumValue = e.value;
       // W7.1 #4③：氣勢計變動 delta 指示（條端閃箭頭）
       stage.scoreboard.flashMomentum(e.value);
@@ -691,15 +691,17 @@ function applyEvents(s, frameEvents, now) {
           lastTouch: s.lastTouch, controlledId: s.controlledId, score: e.score,
         }));
         // 版面稽核 07-24：banner 佔 169-240px 帶與字卡帶基準位 178 重疊——
-        // banner 在場時死球字卡（⭐/⚡/🧱）整帶下移讓位；SERVE 時歸位
+        // banner 在場時死球字卡（⭐/⚡/🧱）整帶下移讓位；banner 自動收（1.6s）即歸位
+        //（SERVE 另有歸位是保險：玩家發球前的等待可能長於 banner 壽命）
         stage.floatText.setBaseOffset?.(96);
+        setTimeout(() => stage.floatText.setBaseOffset?.(0), 1700);
         s.pendingDead = null;
         s.lastTouch = null;
       }
     } else if (e.type === 'TOUCH' && e.kind === 'receive' &&
         e.playerId === s.controlledId && (e.power ?? 0) >= 0.95) {
       // 球到瞬間出手的完美一傳（試玩回饋 07-24：900ms 高速 rally 中看不到→加長）
-      cards.push({ pri: 10, text: '✨ PERFECT!', color: '#60ffa0', dur: 1500 });
+      cards.push({ pri: 10, text: '✨ PERFECT!', color: '#60ffa0', dur: 2400 });
     }
   }
   // flush：低優先先出（被疊排上推）、最高優先最後出＝停在基準位；全部都出、零丟卡

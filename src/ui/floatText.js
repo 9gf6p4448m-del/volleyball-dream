@@ -5,7 +5,10 @@
 // ②修可見時長根因：舊版一出場就啟動 0.8s 淡出＝dur 再長實際可見僅 ~0.8s
 // （「Perfect 都沒看到」元兇）——改為全亮停留 durMs−FADE_MS 才開始漂移淡出
 const STACK_STEP = 46; // 舊卡下推格距（px）
-const FADE_MS = 800;   // 尾段漂移淡出時長
+// 淡出 800→450（試玩回饋 07-24 四度回報「還是沒看到」）：字卡總時長多在 1100-1800ms，
+// 扣掉 800 淡出後全亮只剩 0.3-1s＝rally 中一閃即逝。淡出縮短＝同樣時長多賺 350ms 全亮
+const FADE_MS = 450;
+const POP_MS = 140;    // 進場彈跳（放大→歸位）：靜態出現在高速畫面裡不易被眼睛捕捉
 const MAX_LIVE = 4;    // 疊排上限（版面稽核 07-24：防深疊侵入球場中央視野）
 const BASE_TOP = 'calc(env(safe-area-inset-top, 0px) + 178px)'; // 記分板＋氣勢計＋泡泡之下
 export function createFloatText() {
@@ -28,17 +31,27 @@ export function createFloatText() {
       el.textContent = text;
       el.style.cssText = [
         'position:fixed', 'left:50%', `top:${BASE_TOP}`, 'z-index:20',
-        `transform:translateX(-50%) translateY(${baseOffset}px)`,
+        `transform:translateX(-50%) translateY(${baseOffset}px) scale(1.25)`,
         `color:${color}`, 'font-family:system-ui,sans-serif',
         'font-size:34px', 'font-weight:800', 'letter-spacing:2px',
-        'text-shadow:0 2px 8px rgba(0,0,0,0.6)',
+        // 描邊＋光暈：高速球場背景下純字容易被吃掉（試玩回饋：不確定有沒有出現過）
+        'text-shadow:0 2px 8px rgba(0,0,0,0.85), 0 0 18px currentColor',
+        '-webkit-text-stroke:1px rgba(0,0,0,0.55)',
         'pointer-events:none', 'user-select:none',
-        'transition:transform 0.8s ease-out, opacity 0.8s ease-out',
+        `transition:transform ${POP_MS}ms cubic-bezier(0.23,1,0.32,1), opacity 0.2s ease`,
         'opacity:1',
       ].join(';');
       document.body.appendChild(el);
       const card = { el, lift: 0, fading: false, base: baseOffset };
       live.push(card);
+      // 進場彈跳：1.25→1（140ms 強 ease-out）；接著把 transition 換回長淡出用的曲線
+      requestAnimationFrame(() => {
+        el.style.transform = `translateX(-50%) translateY(${card.base + card.lift}px) scale(1)`;
+        setTimeout(() => {
+          el.style.transition =
+            `transform ${FADE_MS}ms ease-out, opacity ${FADE_MS}ms ease-out`;
+        }, POP_MS);
+      });
       setTimeout(() => {
         card.fading = true;
         el.style.transform =
