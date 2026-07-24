@@ -16,7 +16,7 @@ import {
   buildRecruitMember, RECRUIT_TRUST, RECRUIT_CONDS,
   accrueRecruitProgress, conditionMet, nextRecruitId,
 } from '../src/career/recruitment.js';
-import { createGame, stepGame } from '../src/sim/game.js';
+import { createGame, stepGame, applySubstitution, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 
@@ -31,6 +31,11 @@ const USE_ROSTER = process.env.VD_NO_ROSTER !== '1';
 const USE_GROWTH = process.env.VD_NO_GROWTH !== '1';
 const USE_FULL_ROSTER = process.env.VD_FULL_ROSTER === '1';
 const SEASONS = Math.max(1, Number.parseInt(process.env.VD_SEASONS ?? '1', 10));
+// W7 E1 雙臂：VD_STAMINA=1＝「無管理」臂（體力開、AI 不換人＝下緣基準）；
+// VD_MANAGE=1＝「自動管理」臂（<25% 換人；被連 4 分喊暫停待 B3 sim 上線後補）。
+// 體力設定鏡像生涯（A4 拍板：對手 costMul 0.6 慢耗＋豁免重度門檻）
+const USE_MANAGE = process.env.VD_MANAGE === '1';
+const USE_STAMINA = process.env.VD_STAMINA === '1' || USE_MANAGE;
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖（跨屆冪等——已學不重覆）
 const TEACH_AFTER = {
@@ -48,12 +53,40 @@ function playMatch(setup) {
     aiProfiles: setup.aiProfiles,
     liberos: setup.liberos,
     ...(setup.scoutRead ? { scoutRead: setup.scoutRead } : {}),
+    ...(USE_STAMINA ? { stamina: { A: {}, B: { costMul: 0.6, heavyExempt: true } } } : {}),
+    // 板凳只在管理臂帶入（帶而不換＝零擾動已有測試背書；不帶＝基準臂逐位不變）
+    ...(USE_MANAGE && setup.benches?.A?.length ? { benches: { A: setup.benches.A } } : {}),
   });
   const ai = createAiState();
+  let maxDeficit = 0; // E1 雪球哨兵：本場最大落後分差（A 視角）
   while (g.phase !== 'set_over' && g.tick < MAX_TICKS) {
     stepGame(g, aiCollectIntents(g, ai));
+    if (g.phase === 'serve') {
+      const d = g.match.score.B - g.match.score.A;
+      if (d > maxDeficit) maxDeficit = d;
+      if (USE_MANAGE) autoManage(g);
+    }
   }
-  return g;
+  return { g, maxDeficit };
+}
+
+// E1 自動管理臂政策（簡單教練腦）：死球窗掃場上 <25% 者換下——同角色板凳
+// （S↔OPP 互通、換上者需 ≥50% 否則沒意義）；額度/合法性由 applySubstitution 把關
+const MANAGE_OUT_BELOW = 0.25;
+const MANAGE_IN_ABOVE = 0.5;
+const roleOk = (a, b) => a === b ||
+  (['setter', 'opposite'].includes(a) && ['setter', 'opposite'].includes(b));
+function autoManage(g) {
+  for (const outId of [...g.match.rotations.A]) {
+    if ((g.stamina?.[outId] ?? 1) >= MANAGE_OUT_BELOW) continue;
+    const pOut = g.players[outId];
+    if (pOut.currentRole === 'libero') continue;
+    for (const inId of [...g.bench.A]) {
+      if (!roleOk(pOut.currentRole, g.players[inId].currentRole)) continue;
+      if ((g.stamina?.[inId] ?? 1) < MANAGE_IN_ABOVE) continue;
+      if (applySubstitution(g, { team: 'A', outId, inId }).ok) break;
+    }
+  }
 }
 
 // 平均灑點：可成長屬性輪流 +1（上限 90）——玩家實際會集中灑，此為中性基準
@@ -95,6 +128,13 @@ const wins = Object.fromEntries(matchIds.map((id) => [id, 0]));
 const margins = Object.fromEntries(matchIds.map((id) => [id, []]));
 let champions = 0;
 let reachedFinal = 0;
+// E1 收集器：逆轉哨兵（全場次）＋體力臂診斷
+let deficit5 = 0;
+let comeback5 = 0;
+let stamSum = 0;
+let stamMin = 1;
+let stamGames = 0;
+let subsUsed = 0;
 
 // 跨屆收集器（SEASONS>1 才輸出；wins/margins/champions 維持「第 1 屆」語義不變）
 const perSeason = Array.from({ length: SEASONS }, () => ({
@@ -148,9 +188,21 @@ for (let run = 0; run < RUNS; run += 1) {
       if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
       const entry = career.schedule[mi];
       const setup = careerMatchSetup(career, player, entry, USE_ROSTER ? roster : null, lineup);
-      const g = playMatch(setup);
+      const { g, maxDeficit } = playMatch(setup);
       const won = g.match.winner === 'A';
       const s = g.match.score;
+      // E1 雪球哨兵：落後 ≥5 分後翻盤佔比（氣勢上線前後 n=300 對照用）
+      if (maxDeficit >= 5) {
+        deficit5 += 1;
+        if (won) comeback5 += 1;
+      }
+      if (USE_STAMINA) {
+        const onCourt = g.match.rotations.A.map((id) => g.stamina[id] ?? 1);
+        stamSum += onCourt.reduce((sum, v) => sum + v, 0) / onCourt.length;
+        stamMin = Math.min(stamMin, ...onCourt);
+        stamGames += 1;
+        subsUsed += TUNING.SUBS_PER_SET - g.subs.A.remaining;
+      }
       if (season === 1) {
         if (won) wins[entry.id] += 1;
         margins[entry.id].push(s.A - s.B);
@@ -204,11 +256,19 @@ for (let run = 0; run < RUNS; run += 1) {
 
 const pct = (n) => `${Math.round((n / RUNS) * 100)}%`;
 const avg = (a) => (a.reduce((s, v) => s + v, 0) / a.length).toFixed(1);
-console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；A2=AI 代打基準，真人應高於此）===`);
+const armName = USE_MANAGE ? '體力＋自動管理' : USE_STAMINA ? '體力＋無管理' : '基準（體力關）';
+console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A2=AI 代打基準）===`);
 for (const id of matchIds) {
   console.log(`${id.padEnd(16)} 勝率 ${pct(wins[id]).padStart(4)}  平均分差 ${avg(margins[id])}`);
 }
 console.log(`\n奪冠率（國賽三連勝）：${pct(champions)}`);
+const totalMatches = RUNS * SEASONS * matchIds.length;
+console.log(`逆轉哨兵（落後≥5 後翻盤，全 ${totalMatches} 場）：樣本 ${deficit5} 場、翻盤 ${comeback5}`
+  + `（${deficit5 > 0 ? Math.round((comeback5 / deficit5) * 100) : 0}%）`);
+if (USE_STAMINA) {
+  console.log(`體力診斷：A 隊終場場上均值 ${(stamSum / stamGames).toFixed(2)}、`
+    + `單場最低 ${stamMin.toFixed(2)}、場均換人 ${(subsUsed / stamGames).toFixed(2)} 人次`);
+}
 
 if (SEASONS > 1) {
   console.log(`\n=== 跨屆勝率（VD_SEASONS=${SEASONS}，每屆 ${RUNS} 條生涯）===`);

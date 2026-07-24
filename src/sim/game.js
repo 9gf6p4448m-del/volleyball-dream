@@ -14,11 +14,16 @@ import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rotationRules.js';
 import { applyAttackOutcome } from './trust.js';
+import {
+  STAMINA, drainStamina, recoverStamina, staminaPerfMul, staminaRecvMul,
+} from './stamina.js';
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
   SERVE_DEAD_TICKS: 110,  // 死球哨音到可發球的間隔（1.8s：慶祝/喘息的比賽節拍）
   SUBS_PER_SET: 6,        // W6 賽中換人：每局每隊人次上限（簡化版拍板；自由人不計次）
+  TIMEOUTS_PER_SET: 2,    // W7 B3 暫停：每場每隊 2 次（FIVB；單局制＝每場）
+  TIMEOUT_DEAD_TICKS: 180, // 喊暫停後追加的死球時間（3s：教練圈演出＋節奏斷點）
   REACH_RADIUS: 1.3,      // 觸球水平可及距離（m）
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）
@@ -92,7 +97,12 @@ export const TUNING = {
 // benches = { A?: [Player], B?: [Player] }（W6）：板凳球員——場邊待命，僅經
 // applySubstitution（死球換人）進場；不在輪轉＝不參與任何 sim 判定（tryBlock/AI
 // 皆以輪轉名單為準），無換人時對比賽零擾動
-export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches } = {}) {
+// stamina（W7）：true＝雙隊預設啟用；或 { A?: {costMul?, heavyExempt?}, B?: {...} }
+// （A4 對手對稱性：costMul 0.6 慢耗＋heavyExempt 豁免重度門檻）。未傳＝整套關閉、
+// 零副作用（state.stamina 為 null，所有掛點短路）
+export function createGame({
+  seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina,
+} = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
   const actors = {};
@@ -124,6 +134,14 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, 
     scoutTally: {},  // 情蒐統計（playerId→intent 分佈；場末由生涯層收走跨場累積）
     trustDyn: {},    // stage 4 場內動態信任（playerId→偏移；場末即散）
     trustStreak: {}, // 連續得分/失誤計數（正＝連得、負＝連失）
+    // W7 體力（A1-A5）：playerId→0..1；未啟用＝null（零副作用）。
+    // per-team 設定（A4 對稱性）存 staminaCfg；效果/消耗全走 stamina.js 純函式
+    staminaCfg: stamina
+      ? { A: { ...(stamina === true ? {} : stamina.A) }, B: { ...(stamina === true ? {} : stamina.B) } }
+      : null,
+    stamina: stamina
+      ? Object.fromEntries(Object.keys(players).map((id) => [id, 1]))
+      : null,
     rngState: seedRng(seed),
     // W6 賽中換人：板凳名單＋每局人次（自由人體系不經此路）
     bench: {
@@ -134,6 +152,12 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, 
       A: { remaining: TUNING.SUBS_PER_SET },
       B: { remaining: TUNING.SUBS_PER_SET },
     },
+    // W7 B3 暫停：每隊 2 次；pointStreak＝隊級連得分（暫停 AI 判準＋stage 3 氣勢輸入）
+    timeouts: {
+      A: { remaining: TUNING.TIMEOUTS_PER_SET },
+      B: { remaining: TUNING.TIMEOUTS_PER_SET },
+    },
+    pointStreak: { team: null, n: 0 },
     // W6 B4（7.7 接線）：登記發球序——換發輪 nextIdx 前進、換人走 applySubstitution
     // 槽位繼承；match.rotations 若被非法路徑改動＝performServe 抓違序（最後防線）
     serveSeq: {
@@ -208,7 +232,7 @@ function applyMove(state, actor, intent) {
   const len = Math.hypot(x, z);
   if (len > 1) { x /= len; z /= len; }
   const player = state.players[intent.playerId];
-  const speed = moveSpeed(player);
+  const speed = moveSpeed(player) * staminaPerfMul(state, player); // W7 A2：累了腿變沉
 
   // 走位邊界：限本方半場＋自由區，不可越中線（貼網保留 0.12m）
   // TODO Phase 2：越中線細則（腳可過線不干擾）——現簡化為硬牆
@@ -319,7 +343,10 @@ function tryAction(state, intent, ev) {
   if (intent.action === 'block') {
     // 攔網＝開啟時機窗；是否攔到在球過網瞬間結算（tryBlock）
     // 起跳時刻只在新窗開啟時記錄（連續 intent 延長窗但不重置起跳）——時機判定用
-    if (actor.blockUntil < state.tick) actor.blockStartTick = state.tick;
+    if (actor.blockUntil < state.tick) {
+      actor.blockStartTick = state.tick;
+      drainStamina(state, intent.playerId, STAMINA.COST_JUMP_BLOCK, ev); // W7 A1：一新窗＝一跳
+    }
     actor.blockUntil = state.tick + TUNING.BLOCK_WINDOW;
     return;
   }
@@ -342,11 +369,14 @@ function tryAction(state, intent, ev) {
   // 魚躍救球：技術資格（未學不會撲）；出手即倒地——撲空一樣躺（風險換範圍）
   const isDive = intent.action === 'dive';
   if (isDive && (player.techniques?.dive ?? 1) < 1) return;
-  if (isDive) actor.divedUntil = state.tick + TUNING.DIVE_RECOVER_TICKS;
+  if (isDive) {
+    actor.divedUntil = state.tick + TUNING.DIVE_RECOVER_TICKS;
+    drainStamina(state, player.id, STAMINA.COST_DIVE, ev); // W7 A1：撲空也扣（出手即倒地）
+  }
 
   const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
   if (dist > TUNING.REACH_RADIUS * (isDive ? TUNING.DIVE_REACH_MUL : 1)) return;
-  const maxY = intent.action === 'spike' ? spikeReach(player)
+  const maxY = intent.action === 'spike' ? spikeReach(player, staminaPerfMul(state, player))
     : isDive ? TUNING.DIVE_MAX_Y
       : standingReach(player) + 0.35;
   if (ball.y > maxY || ball.y < BALL.RADIUS) return;
@@ -400,7 +430,8 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   // 接球品質＝到位程度（dist：走到球正下方＝穩、勉強搆＝飄）×控制屬性×Perfect 時機×
   // 來球難度。魚躍一律用正常 reach 算到位比例＝r 恆偏大＝勉強救起（撲救本就飄）
   const qualityMul = isReceiveLike
-    ? receiveQualityMul(dist, TUNING.REACH_RADIUS, player) * receivePerfectMul(rawT) * serveRecvMul
+    ? receiveQualityMul(dist, TUNING.REACH_RADIUS, player) * receivePerfectMul(rawT)
+      * serveRecvMul * staminaRecvMul(state, player) // W7 A2：重度疲勞手軟（餵爆接湧現）
     : intent.action === 'spike'
       ? timingQualityMul(rawT)
       : 1;
@@ -425,7 +456,9 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   let v;
   if (intent.action === 'spike') {
     // 蓄力輕重：timing 短＝輕吊（慢、弧墜）、蓄滿＝重扣（全速）
-    const speed = spikeSpeed(player) * (TUNING.TIP_SPEED_MIN + (1 - TUNING.TIP_SPEED_MIN) * timing);
+    // W7 A2：疲勞折力量（AI 預判 spikeClearsNet 用全值＝不自知累了——W8 才考慮行為差異）
+    const speed = spikeSpeed(player) * staminaPerfMul(state, player)
+      * (TUNING.TIP_SPEED_MIN + (1 - TUNING.TIP_SPEED_MIN) * timing);
     v = spikeVelocity(
       from,
       { x: target.x, y: BALL.RADIUS, z: target.z },
@@ -471,6 +504,20 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
     ...(blown ? { blown: true } : {}), // 爆接標記（播報/探針用）
   });
+
+  // W7 A1 消耗（本次觸球的品質判定用的是觸球前體力——疲勞在動作之後才上身）：
+  // 觸球者按動作計費（魚躍已在 tryAction 出手瞬間扣）＋場上全員每拍小額（長 rally 張力）
+  if (state.stamina) {
+    const actionCost = intent.action === 'spike' ? STAMINA.COST_SPIKE
+      : intent.action === 'receive' ? STAMINA.COST_BUMP
+        : intent.action === 'set' ? STAMINA.COST_SET : 0;
+    if (actionCost > 0) drainStamina(state, player.id, actionCost, ev);
+    for (const t of ['A', 'B']) {
+      for (const pid of state.match.rotations[t]) {
+        drainStamina(state, pid, STAMINA.COST_RALLY_TOUCH, ev);
+      }
+    }
+  }
 }
 
 // 爆接噴射落點：沿來球水平動量方向偏轉（hash 角 ±75°）、距離 2.5-5.5m——
@@ -558,7 +605,7 @@ function performServe(state, intent, ev) {
     });
   }
 
-  const contactY = Math.max(spikeReach(player) * 0.92, 2.2); // 跳發擊球點
+  const contactY = Math.max(spikeReach(player, staminaPerfMul(state, player)) * 0.92, 2.2); // 跳發擊球點
   ball.x = actor.x; ball.y = contactY; ball.z = actor.z;
   // 發球三式：穩定（預設）／跳躍（timing>1.1：低平快＋散佈放大——力量換準度）
   // ／飄浮（style 'float'：弧較平、自身散佈略增，殺傷在對方接發品質懲罰）
@@ -597,6 +644,8 @@ function performServe(state, intent, ev) {
 
   state.phase = 'rally';
   ev.push({ type: 'SERVE', tick: state.tick, team, playerId: player.id });
+  // W7 A1：跳發大額、站發（含飄浮）極低
+  drainStamina(state, player.id, power ? STAMINA.COST_JUMP_SERVE : STAMINA.COST_SERVE_STAND, ev);
 }
 
 // 扣球速度：power 屬性推導；AI 過網預判（ai.js spikeClearsNet）用同一函式
@@ -739,7 +788,7 @@ function tryBlock(state, toTeam, ev) {
     if (actor.blockUntil < state.tick) continue;
     const dx = Math.abs(actor.x - b.x);
     if (dx > TUNING.BLOCK_REACH_X) continue;
-    if (b.y > blockReach(p) + BALL.RADIUS) continue; // 球高過手
+    if (b.y > blockReach(p, staminaPerfMul(state, p)) + BALL.RADIUS) continue; // 球高過手（W7：累了跳不高）
     if (!best || dx < best.dx || (dx === best.dx && p.id < best.p.id)) best = { p, actor, dx };
   }
   if (!best) return false;
@@ -817,6 +866,10 @@ function settlePoint(state, winner, reason, ev) {
       applyAttackOutcome(state, r.lastToucherId, false);
     }
   }
+  // W7 B3：隊級連得分（暫停 AI 判準＋氣勢輸入）——純記帳零 rng
+  state.pointStreak = state.pointStreak.team === winner
+    ? { team: winner, n: state.pointStreak.n + 1 }
+    : { team: winner, n: 1 };
   const at = { x: state.ball.x, z: state.ball.z };
   for (const e of pointTo(state.match, winner, reason)) {
     ev.push(e.type === 'DEAD_BALL' ? { tick: state.tick, ...e, at } : { tick: state.tick, ...e });
@@ -889,6 +942,29 @@ export function applySubstitution(state, { team, outId, inId }) {
   return { ok: true, reason: '' };
 }
 
+// ---- W7 B3 暫停（拍板 A：每場每隊 2 次、死球時可喊；對手 AI 也會喊——判準在
+// ai.js aiTimeoutWanted，呼叫端＝matchLoop/治具）。比照 applySubstitution：死球窗
+// 純 state 副作用、不經 Intent。效果＝我方全隊小回體力（stamina 未啟用＝純演出）
+// ＋斬對方連得分（pointStreak 歸零＝stage 3 氣勢歸中的資料底）＋死球時間延長（演出）----
+export function applyTimeout(state, { team }) {
+  const deny = (reason) => ({ ok: false, reason });
+  if (state.phase !== 'serve') return deny('not-dead-ball');
+  if ((state.timeouts[team]?.remaining ?? 0) <= 0) return deny('limit');
+  state.timeouts[team].remaining -= 1;
+  // 對方的連得分被斬斷（自家連得不歸零——沒人會喊暫停斬自己氣勢，防呆為主）
+  if (state.pointStreak.team && state.pointStreak.team !== team) {
+    state.pointStreak = { team: null, n: 0 };
+  }
+  for (const p of Object.values(state.players)) {
+    if (p.teamId === team) recoverStamina(state, p.id, STAMINA.RECOV_TIMEOUT);
+  }
+  state.serveReadyTick = Math.max(state.serveReadyTick, state.tick + TUNING.TIMEOUT_DEAD_TICKS);
+  state.events.push({
+    type: 'TIMEOUT', tick: state.tick, team, remaining: state.timeouts[team].remaining,
+  });
+  return { ok: true, reason: '' };
+}
+
 // 板凳停放（applyLiberoSwaps 與換人共用）：場邊席位、純視覺、無 intent 不參與
 function parkBenchActor(state, team, pid) {
   const a = state.actors[pid];
@@ -951,6 +1027,18 @@ function setupServePhase(state) {
   parkOffCourt(state); // 板凳（含被換下者）停場邊席位
   state.phase = 'serve';
   state.serveReadyTick = state.tick + TUNING.SERVE_DEAD_TICKS;
+
+  // W7 A3 恢復（rally 中不回、死球間隙小回、坐板凳快回）：死球窗一次性——
+  // 逐 tick 回會獎勵拖延發球（玩家發球無時限）。開局呼叫時全員滿格＝封頂 no-op
+  if (state.stamina) {
+    for (const team of ['A', 'B']) {
+      const rot = state.match.rotations[team];
+      for (const p of Object.values(state.players)) {
+        if (p.teamId !== team) continue;
+        recoverStamina(state, p.id, rot.includes(p.id) ? STAMINA.RECOV_DEAD : STAMINA.RECOV_BENCH);
+      }
+    }
+  }
 
   for (const team of ['A', 'B']) {
     const rot = state.match.rotations[team];

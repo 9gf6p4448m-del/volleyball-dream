@@ -76,18 +76,19 @@ export function standingReach(p) {
 }
 
 // 垂直起跳高度（公尺）：jump 0–100 → 0.30–0.95m
-export function jumpHeight(p) {
-  return 0.3 + (p.attributes.jump / 100) * 0.65;
+// jumpMul：W7 體力劣化乘數（只折彈跳、不折身高；預設 1＝行為不變）
+export function jumpHeight(p, jumpMul = 1) {
+  return (0.3 + (p.attributes.jump / 100) * 0.65) * jumpMul;
 }
 
 // 扣球點高度
-export function spikeReach(p) {
-  return standingReach(p) + jumpHeight(p);
+export function spikeReach(p, jumpMul = 1) {
+  return standingReach(p) + jumpHeight(p, jumpMul);
 }
 
 // 攔網高度（攔網跳略保守於扣球跳）
-export function blockReach(p) {
-  return standingReach(p) + jumpHeight(p) * 0.85;
+export function blockReach(p, jumpMul = 1) {
+  return standingReach(p) + jumpHeight(p, jumpMul) * 0.85;
 }
 
 // 防守可及半徑（公尺）：身高越高踏步範圍越大、speed 補正

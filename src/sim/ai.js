@@ -33,7 +33,17 @@ const AI = {
   DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
   DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
   //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
+  TIMEOUT_STREAK: 4,      // W7 B3：被對方連得幾分時 AI 喊暫停（拍板＝4）
 };
+
+// W7 B3 對手 AI 暫停判準（純讀取零副作用；呼叫端＝matchLoop/治具，
+// 成立時再呼叫 game.applyTimeout）：死球窗＋還有額度＋被對方連得 ≥4 分
+export function aiTimeoutWanted(game, team) {
+  if (game.phase !== 'serve') return false;
+  if ((game.timeouts?.[team]?.remaining ?? 0) <= 0) return false;
+  const ps = game.pointStreak;
+  return !!ps && ps.team === otherTeam(team) && ps.n >= AI.TIMEOUT_STREAK;
+}
 
 // 每隊 AI 風格參數：生涯對手參數檔經 createGame({ aiProfiles }) 注入；
 // 未注入（快速比賽/我方）一律回落 AI 預設值——行為與 stage 2 之前完全一致
