@@ -322,6 +322,22 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           action = 'receive';
           aim = localToWorld(me.teamId === 'A' ? 'B' : 'A', 0, 6.5);
           timing = 0.6;
+        } else if (simpleMode && canTouch &&
+            (aiState?.claimId === playerId || aiState?.backupId === playerId) &&
+            (me.techniques?.dive ?? 0) >= 1 &&
+            b.vy < 0 && b.y <= TUNING.DIVE_MAX_Y && tick >= a.divedUntil &&
+            Math.hypot(b.x - a.x, b.z - a.z) > TUNING.REACH_RADIUS &&
+            Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL) {
+          // 自動魚躍（拍板 07-24：常駐鈕太難用→撤除、改自動判斷）：與 AI 同一組
+          // 觸發條件（這球歸我/備援＋站立搆不到＋魚躍可及＋低球下墜），但玩家版
+          // 【必撲】不擲骰——機率會變「角色不聽話」；技術表達回到站位（站得好不用撲）。
+          // aim 鏡像 AI：第三觸撲過網（撲回自家＝白送四擊）、其餘墊回二傳點；
+          // L/Space 隱藏手動仍可提前撲
+          action = 'dive';
+          aim = r.touches === 2
+            ? localToWorld(me.teamId === 'A' ? 'B' : 'A', 0, 6.5)
+            : localToWorld(me.teamId, 1.2, 1.2);
+          timing = 0.5;
         } else if (simpleMode && contextAction(game) === 'block' &&
             r.profile === 'spike' && aiState?.landingTeam === me.teamId &&
             Math.abs(a.z) < 2.2) {

@@ -114,9 +114,9 @@ function bindInputHandlers(s) {
       stage.floatText.show('跳過情蒐——比賽開始！', '#9fb0cc', 1000);
     }
   });
-  // 魚躍：按鈕（stage 注入點）＋桌機 L 鍵；簡化模式 Space（蓄力已讓位）
+  // 魚躍：自動判斷（matchControls 自動輔助，拍板 07-24 常駐鈕移除）；
+  // 桌機 L 鍵/簡化模式 Space 保留為隱藏手動（提前撲的主動權）
   stage.handlers.replay = () => startReplay(s);
-  stage.handlers.dive = () => { if (s.diveReady) stage.controls.diveNow(s.game); };
   window.addEventListener('keydown', (e) => {
     const diveKey = e.code === 'KeyL' || (config.simpleMode && e.code === 'Space');
     if (diveKey && !e.repeat && s.diveReady) {
@@ -485,25 +485,12 @@ function settleIfOver(s) {
   s.prevPhase = game.phase;
 }
 
-// 魚躍鈕可用性（拍板 07-23 Sawmah：常駐可按、按下即撲——賭注交還玩家）：
-// diveReady＝可觸發＝rally 中、未倒地、非回放（不再要求球落在可及範圍——撲對了救球、
-// 撲空由 sim 結算倒地，天然懲罰即濫用防護）。原「球正往我方可及範圍落」判定降為純視覺
-// 提示 diveHint（脈動放大告訴玩家「機會來了」），不再閘住觸發。
-function updateDiveButton(s) {
+// 魚躍手動觸發可用性（07-24 拍板：常駐鈕移除、撲救交自動判斷 matchControls）：
+// diveReady 只服務桌機 L/Space 隱藏手動——rally 中、未倒地、非回放即可按（提前撲的主動權）
+function updateDiveReady(s) {
   if (!s.gates.canDive) return;
-  const { game, aiState, stage } = s;
-  const meActor = game.actors[s.controlledId];
-  const landing = aiState?.landing;
-  s.diveReady = game.phase === 'rally' && !s.replay && game.tick >= meActor.divedUntil;
-  // 純提示：來球落我方半場、下墜、落點在外撲救範圍——鈕強調脈動，但不是按下前提
-  let hint = false;
-  if (s.diveReady && landing && aiState.landingTeam === game.players[s.controlledId].teamId
-    && game.ball.vy < 0) {
-    const d = Math.hypot(landing.x - meActor.x, landing.z - meActor.z);
-    hint = d > 1.1 && d <= 3.4;
-  }
-  stage.diveBtn.setVisible(s.config.simpleMode && game.phase !== 'set_over' && !s.replay);
-  stage.diveBtn.setReady(s.diveReady, hint);
+  const meActor = s.game.actors[s.controlledId];
+  s.diveReady = s.game.phase === 'rally' && !s.replay && s.game.tick >= meActor.divedUntil;
 }
 
 // 每幀主流程：時間膨脹 → 固定步長模擬 → 事件應用 → 表現層同步 → 渲染
@@ -568,7 +555,7 @@ function frameStep(s, now) {
     ctx.camera.position.y += (Math.random() - 0.5) * s.shake * 0.6;
     s.shake *= 0.82;
   }
-  updateDiveButton(s);
+  updateDiveReady(s);
   stage.scoreboard.update(game, myBall, s.controlledId,
     stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());

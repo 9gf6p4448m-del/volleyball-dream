@@ -23,7 +23,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
   const { simpleMode, careerSetup } = config;
 
-  const handlers = { replay: null, dive: null }; // matchLoop 開機時注入
+  const handlers = { replay: null }; // matchLoop 開機時注入（dive 鈕 07-24 移除＝改自動）
 
   let matchView;
   try {
@@ -49,7 +49,6 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   const hints = createHintToggle(simpleMode, gates.readTier);
   const replayBtn = createReplayButton(handlers);
-  const diveBtn = createDiveButton(handlers);
   // A6（拍板）：生涯賽才給「離開」——中途離開＝棄賽敗 0:25，離開前自訂確認彈窗；
   // 另掛 beforeunload 雙保險（reload/關頁跳瀏覽器通用確認框，防誤觸吃敗場）
   const leaveBtn = careerSetup ? createLeaveButton(params, game) : null;
@@ -66,7 +65,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, hints, replayBtn, diveBtn, leaveBtn, teachDialog,
+    panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay,
   };
 }
@@ -249,38 +248,5 @@ function createReplayButton(handlers) {
   return { el: replayBtn };
 }
 
-// 魚躍鈕（主動技，故事線習得）：來球搆不到但撲得到時亮起；桌機 L 鍵
-// （Space/J 是主動作蓄力、K 是攔網——L 順位相鄰）
-// 試玩回饋 07-22：改右側（慣用手）＋常駐兩態（暗＝不可用、亮＝撲！）——
-// 閃現式按鈕在手機上根本來不及按
-function createDiveButton(handlers) {
-  const diveBtn = document.createElement('button');
-  diveBtn.textContent = '魚躍!';
-  diveBtn.style.cssText = [
-    'position:fixed', 'right:calc(env(safe-area-inset-right, 0px) + 16px)', 'bottom:38%',
-    'width:74px', 'height:74px', 'border-radius:50%', 'border:3px solid #101420',
-    'background:rgba(70,80,100,0.5)', 'color:rgba(255,255,255,0.4)',
-    'font-size:17px', 'font-weight:800',
-    'z-index:16', 'cursor:pointer', 'touch-action:manipulation', 'display:none',
-    'box-shadow:0 3px 0 rgba(8,10,18,0.55)',
-    'transition:background 120ms ease, color 120ms ease, transform 120ms ease',
-  ].join(';');
-  diveBtn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    handlers.dive?.();
-  });
-  document.body.appendChild(diveBtn);
-  return {
-    el: diveBtn,
-    setVisible(v) { diveBtn.style.display = v ? 'block' : 'none'; },
-    // 三態（07-23 常駐可按拍板）：不可按（倒地/非 rally）＝暗灰；可按待命（rally）＝
-    // 暖橘可按感；球來提示（hint）＝強橘＋放大脈動。canDive 決定能不能按，hint 只加強調
-    setReady(canDive, hint = false) {
-      diveBtn.style.background = !canDive
-        ? 'rgba(70,80,100,0.5)'
-        : hint ? 'rgba(255,120,96,0.98)' : 'rgba(255,150,120,0.7)';
-      diveBtn.style.color = canDive ? '#1a0e08' : 'rgba(255,255,255,0.4)';
-      diveBtn.style.transform = hint ? 'scale(1.16)' : 'scale(1)';
-    },
-  };
-}
+// 魚躍鈕已移除（07-24 拍板：撲救改自動判斷 matchControls 自動輔助——「太難用」；
+// 桌機 L/簡化模式 Space 保留為隱藏手動提前撲）。歷史：07-22 閃現式→07-23 常駐可按→本輪撤除

@@ -32,7 +32,7 @@ export const GROWABLE_ATTRS = [
 // （改版裁定 2026-07-22：每場賽後對手/隊長教一招；成長點數專注屬性層）
 export const TECH_DEFS = [
   { key: 'tip', name: '吊球', desc: '攻擊面板新增「吊球」——騙重心的輕放' },
-  { key: 'dive', name: '魚躍救球', desc: '救球鈕：撲向搆不到的球——撲空會倒地' },
+  { key: 'dive', name: '魚躍救球', desc: '來不及的球自動飛撲救起——撲空會倒地' },
   { key: 'pipe', name: '後排 pipe', desc: '輪到後排也能主導進攻（後排攻擊面板）' },
   { key: 'floatServe', name: '飄浮發球', desc: '不轉的球最難接——破壞對方一傳品質' },
   { key: 'feint', name: '假動作', desc: '按A滑B視線騙攔網；越用越純熟' },
