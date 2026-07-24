@@ -6,21 +6,29 @@
 // （「Perfect 都沒看到」元兇）——改為全亮停留 durMs−FADE_MS 才開始漂移淡出
 const STACK_STEP = 46; // 舊卡下推格距（px）
 const FADE_MS = 800;   // 尾段漂移淡出時長
+const MAX_LIVE = 4;    // 疊排上限（版面稽核 07-24：防深疊侵入球場中央視野）
 const BASE_TOP = 'calc(env(safe-area-inset-top, 0px) + 178px)'; // 記分板＋氣勢計＋泡泡之下
 export function createFloatText() {
   const live = []; // 在場字卡 [{ el, lift, fading }]
+  let baseOffset = 0; // pointBanner 在場時整帶下移（版面稽核：banner 佔 169-240px 帶）
   return {
+    // matchLoop 在 pointBanner show/serve 時呼叫——避免死球字卡與得分大字重疊
+    setBaseOffset(px) { baseOffset = px; },
     show(text, color = '#60ffa0', durMs = 900) {
+      while (live.length >= MAX_LIVE) {
+        const oldest = live.shift();
+        oldest.el.remove();
+      }
       for (const c of live) {
         c.lift += STACK_STEP;
         c.el.style.transform =
-          `translateX(-50%) translateY(${c.lift + (c.fading ? 24 : 0)}px)`;
+          `translateX(-50%) translateY(${c.base + c.lift + (c.fading ? 24 : 0)}px)`;
       }
       const el = document.createElement('div');
       el.textContent = text;
       el.style.cssText = [
         'position:fixed', 'left:50%', `top:${BASE_TOP}`, 'z-index:20',
-        'transform:translateX(-50%)',
+        `transform:translateX(-50%) translateY(${baseOffset}px)`,
         `color:${color}`, 'font-family:system-ui,sans-serif',
         'font-size:34px', 'font-weight:800', 'letter-spacing:2px',
         'text-shadow:0 2px 8px rgba(0,0,0,0.6)',
@@ -29,11 +37,12 @@ export function createFloatText() {
         'opacity:1',
       ].join(';');
       document.body.appendChild(el);
-      const card = { el, lift: 0, fading: false };
+      const card = { el, lift: 0, fading: false, base: baseOffset };
       live.push(card);
       setTimeout(() => {
         card.fading = true;
-        el.style.transform = `translateX(-50%) translateY(${card.lift + 24}px)`;
+        el.style.transform =
+          `translateX(-50%) translateY(${card.base + card.lift + 24}px)`;
         el.style.opacity = '0';
       }, Math.max(0, durMs - FADE_MS));
       setTimeout(() => {

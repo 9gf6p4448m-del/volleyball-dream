@@ -601,7 +601,10 @@ function applyEvents(s, frameEvents, now) {
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.controlledId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
   for (const e of frameEvents) {
-    if (e.type === 'SERVE') s.rallyStartFlight = game.rally.flightId;
+    if (e.type === 'SERVE') {
+      s.rallyStartFlight = game.rally.flightId;
+      stage.floatText.setBaseOffset?.(0); // banner 已自動收（1.6s）——字卡帶歸位泡泡下
+    }
     // 得分原因面板：追蹤最後觸球（含發球/攔網）；DEAD_BALL+SCORE 湊齊即顯示
     if (e.type === 'TOUCH' || e.type === 'SERVE') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: e.kind ?? 'serve', power: e.power };
@@ -687,6 +690,9 @@ function applyEvents(s, frameEvents, now) {
           myTeam: game.players[s.controlledId]?.teamId,
           lastTouch: s.lastTouch, controlledId: s.controlledId, score: e.score,
         }));
+        // 版面稽核 07-24：banner 佔 169-240px 帶與字卡帶基準位 178 重疊——
+        // banner 在場時死球字卡（⭐/⚡/🧱）整帶下移讓位；SERVE 時歸位
+        stage.floatText.setBaseOffset?.(96);
         s.pendingDead = null;
         s.lastTouch = null;
       }
