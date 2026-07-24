@@ -197,6 +197,21 @@ test('careerTeams 餵進 createGame 可正常推進（含對手參數隊）', ()
 
 // ---- stage 2：AI 風格注入 sim ----
 
+test('隊友技能同步（教練傳授全隊）：主角學會魚躍/跳發/飄浮＝隊友 profile 跟著開', () => {
+  const career = createCareer({ seed: 5, playerName: '同步' });
+  const rookie = createCareerPlayer('同步'); // 生涯新人全鎖起步
+  const before = careerMatchSetup(career, rookie, career.schedule[0]);
+  assert.deepEqual(before.aiProfiles.A,
+    { diveRate: 0, jumpServeRate: 0, floatServeRate: 0 }, '未學＝隊友全不會');
+  rookie.techniques.dive = 1;
+  rookie.techniques.jumpServe = 1;
+  rookie.techniques.floatServe = 1;
+  const after = careerMatchSetup(career, rookie, career.schedule[0]);
+  assert.deepEqual(after.aiProfiles.A,
+    { diveRate: 0.16, jumpServeRate: 0.12, floatServeRate: 0.15 },
+    '學會＝隊友跟著會（溫和值低於對手招牌隊）');
+});
+
 test('aiProfileOf：未注入回落預設、注入吃自己的值、舊鍵 powerServeRate 相容', () => {
   const plain = createGame({ seed: 1 });
   assert.deepEqual(aiProfileOf(plain, 'B'),
