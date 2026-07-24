@@ -2,6 +2,7 @@
 // 賽前/賽後對話框＋隊友 trust 事件（文字、無立繪）；Phase 3 完整劇情在此表上長
 // when 條件全宣告式；effect.trust 經 sim trust.js updateTrust 調整持久 baseline
 import { nextMatch } from './careerState.js';
+import { opponentById } from './opponents.js';
 
 // TODO(naming)：EVENT_DEFS / EXPEL_LINES / SEASON_OPENERS 內所有 speaker 角色代號
 // （隊長（MB）、二傳（S）、各校角色…）與台詞均為佔位，命名工程統一潤稿定名
@@ -187,6 +188,30 @@ export function dueEvents(career, moment) {
     (e) => e.moment === moment && !triggered.includes(e.id) &&
       matchesWhen(e.when, { career, last, next }),
   );
+}
+
+// ---- W7 D1 舊隊情結（拍板 A：動態賽前事件——EVENT_DEFS 開動態入口、不硬編 12 條）----
+// 名冊中來自下一場對手原隊的隊友（dna.teamId＝招募來源隊）→ 賽前插一段動態對話
+// （speaker＝隊友名、模板帶原隊名）。id 綁 member×原隊＝每人對原隊一生一次
+// （去重走 career.events 既有管道；場內效果 D2/D3 每次對戰都生效，不受此限）。
+// 與 dueEvents 靜態表分開：這裡需要 roster（dueEvents 只吃 career），呼叫端合流
+export function oldTeamPreEvents(career, roster) {
+  const next = nextMatch(career);
+  if (!next) return [];
+  const triggered = career.events ?? [];
+  const teamName = opponentById(next.opponentId)?.name ?? '老東家';
+  return (roster?.members ?? [])
+    .filter((m) => m.dna?.teamId === next.opponentId)
+    .map((m) => ({
+      id: `old-team-${m.id}-${next.opponentId}`,
+      moment: 'pre',
+      lines: [
+        // TODO(naming)：舊隊情結台詞佔位（模板帶原隊名），命名工程統一潤稿
+        { speaker: m.name, text: `${teamName}……我以前的隊。這場讓我上，我不會手軟。` },
+        { speaker: '隊長（MB）', text: '不用你說。把你練出來的人就在網子對面——打給他們看。' },
+      ],
+    }))
+    .filter((e) => !triggered.includes(e.id));
 }
 
 // 事件入帳（不可變）；career.events 為已觸發 id 清單（v3 相容：欄位缺席視同空）

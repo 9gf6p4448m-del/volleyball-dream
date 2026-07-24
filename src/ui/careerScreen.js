@@ -15,7 +15,7 @@ import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
 } from '../career/recruitment.js';
 import {
-  dueEvents, recordEvent, EXPEL_LINES, SEASON_OPENERS,
+  dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS,
 } from '../career/events.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
@@ -1023,7 +1023,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
           hide();
           onPlay({ career: store.loadCareer() ?? career, player, matchEntry: next });
         };
-        const preEvs = dueEvents(career, 'pre');
+        // W7 D1 舊隊情結：靜態表＋動態事件（對戰原隊的招募生賽前對話）合流；
+        // fireEvents 以 e.id 入帳＝動態 id 同管道去重（每人對原隊一生一次）
+        const preEvs = [
+          ...dueEvents(career, 'pre'),
+          ...oldTeamPreEvents(career, store.loadRoster?.() ?? null),
+        ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
       };

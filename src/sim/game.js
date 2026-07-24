@@ -107,8 +107,10 @@ export const TUNING = {
 // （A4 對手對稱性：costMul 0.6 慢耗＋heavyExempt 豁免重度門檻）。未傳＝整套關閉、
 // 零副作用（state.stamina 為 null，所有掛點短路）
 // momentum（W7 B1）：true＝啟用團隊氣勢（雙向檔位計）；未傳＝關閉零副作用
+// trustDynInit（W7 D2）：{ playerId: 偏移 } 場內動態信任開場值（舊隊情結 +8；場末即散）
 export function createGame({
   seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina, momentum,
+  trustDynInit,
 } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
@@ -139,7 +141,8 @@ export function createGame({
           .map(([t, p]) => [t, { liberoId: p.id, replacedId: null }]))
       : null,
     scoutTally: {},  // 情蒐統計（playerId→intent 分佈；場末由生涯層收走跨場累積）
-    trustDyn: {},    // stage 4 場內動態信任（playerId→偏移；場末即散）
+    trustDyn: { ...(trustDynInit ?? {}) }, // stage 4 場內動態信任（playerId→偏移；場末即散）
+    //   W7 D2：trustDynInit＝開場預載偏移（舊隊情結）；未傳＝空＝行為不變
     trustStreak: {}, // 連續得分/失誤計數（正＝連得、負＝連失）
     // W7 體力（A1-A5）：playerId→0..1；未啟用＝null（零副作用）。
     // per-team 設定（A4 對稱性）存 staminaCfg；效果/消耗全走 stamina.js 純函式

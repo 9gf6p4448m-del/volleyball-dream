@@ -66,6 +66,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
       aiProfiles: careerSetup.aiProfiles,
       benches: careerSetup.benches, // W6 賽中換人：生涯板凳（快速比賽無）
       ...(careerSetup.scoutRead ? { scoutRead: careerSetup.scoutRead } : {}),
+      // W7 D2 舊隊情結：對戰原隊的隊友開場 trustDyn +8（場末即散）
+      ...(careerSetup.trustDynInit ? { trustDynInit: careerSetup.trustDynInit } : {}),
     } : {}),
   };
   // stage 5 情蒐錄影帶：賽前播對手預演的 2-3 球關鍵回放（決定論預生成；點擊跳過）

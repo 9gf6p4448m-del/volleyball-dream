@@ -32,7 +32,9 @@ function pickStaminaWinner(candidates, game) {
   return scored[0];
 }
 
-export function createCommentary(opponentDef = null) {
+// revenge（W7 D3 舊隊情結）：[{ id, name }]＝本場對戰原隊的我方隊友——
+// 開賽環境句＋首次建功播報加一句；空陣列＝行為不變
+export function createCommentary(opponentDef = null, revenge = []) {
   let beat = null;            // { text, until }——單槽，新節奏點直接蓋舊的
   let rallyStartFlight = 0;   // 本球起始 flight（拍數＝差值）
   let streakTeam = null;      // 連得分追蹤
@@ -44,6 +46,11 @@ export function createCommentary(opponentDef = null) {
   const tier1Fired = new Set();
   const tier2AllyFired = new Set();
   let staminaWindow = [];
+  // W7 D3 舊隊情結：復仇名單＋首次建功追蹤（每人每場一次）；
+  // SCORE 時 rally 已被 setupServePhase 重置，最後觸球者由 TOUCH/BLOCK_TOUCH 自行追蹤
+  const revengeIds = new Set(revenge.map((r) => r.id));
+  const revengeFired = new Set();
+  let lastTouchInfo = null; // { playerId, team }
 
   const oppName = opponentDef?.name ?? '對方';
   const teamLabel = (game, team, controlledId) =>
@@ -65,6 +72,10 @@ export function createCommentary(opponentDef = null) {
     // 每 frame 把 sim 事件餵進來（與 pointBanner 同一條事件流）
     onEvents(events, game, aiState, now, controlledId) {
       for (const e of events) {
+        // W7 D3：最後觸球者追蹤（SCORE 歸因用；BLOCK_TOUCH＝攔網方成為最後觸球）
+        if (e.type === 'TOUCH' || e.type === 'BLOCK_TOUCH') {
+          lastTouchInfo = { playerId: e.playerId, team: e.team };
+        }
         if (e.type === 'SERVE') {
           rallyStartFlight = game.rally.flightId;
           if (e.playerId !== controlledId) setBeat(`${nameOf(game, e.playerId)} 發球`, now, 1400);
@@ -119,6 +130,15 @@ export function createCommentary(opponentDef = null) {
             setBeat(`${label}連下 ${streakN} 分！`, now, STREAK_TTL);
           }
           if (leader) prevLeader = leader;
+          // W7 D3 舊隊情結：復仇者首次建功（得分方最後觸球者在復仇名單）——蓋過連得分槽
+          if (
+            lastTouchInfo && lastTouchInfo.team === e.team &&
+            revengeIds.has(lastTouchInfo.playerId) && !revengeFired.has(lastTouchInfo.playerId)
+          ) {
+            revengeFired.add(lastTouchInfo.playerId);
+            // TODO(naming)：舊隊情結播報詞佔位，命名工程統一潤稿
+            setBeat(`${nameOf(game, lastTouchInfo.playerId)} 向老東家證明自己！`, now, STREAK_TTL);
+          }
         } else if (e.type === 'STAMINA_LOW') {
           // W7 A4 附：節流收集（不即時播）——主角豁免；敵方 tier2 豁免（heavyExempt 段無播報）；
           // tier1 每人每場一次；我方 tier2 再播一次。同一死球窗的候選 DEAD_BALL 時才結算取王牌
@@ -174,6 +194,14 @@ export function createCommentary(opponentDef = null) {
       // 3) 環境句
       if (game.phase === 'serve') {
         const { score } = game.match;
+        // W7 D3：舊隊情結開賽環境句（有復仇者時取代敵情句——敵情已在生涯畫面看過）
+        if (revenge.length && score.A === 0 && score.B === 0) {
+          // TODO(naming)：舊隊情結環境句佔位
+          return {
+            text: `${revenge[0].name} 對上老東家 ${oppName}——這一場他等很久了`,
+            kind: 'ambient',
+          };
+        }
         if (opponentDef && score.A === 0 && score.B === 0) {
           return { text: `對手 ${opponentDef.name}：${opponentDef.trait}`, kind: 'ambient' };
         }

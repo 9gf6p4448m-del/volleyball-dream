@@ -38,6 +38,7 @@ export const TRUST_DYN = {
   ERR: -6,        // 攻擊失誤（出界）−
   ERR_STREAK: -4, // 連續失誤加碼
   CLAMP: 25,      // 動態偏移上限 ±（baseline 另有 0–100 夾限）
+  OLD_TEAM_BOOST: 8, // W7 D2 舊隊情結：對戰原隊開場 trustDyn +8（憋著一股勁；場末即散）
 };
 
 // 攻擊定勝負的歸因（settlePoint 呼叫）：scored＝這記攻擊直接得分/失分

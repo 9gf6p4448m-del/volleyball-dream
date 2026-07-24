@@ -4,6 +4,7 @@
 // 地區賽小組循環（保底 3 場，輸球不中斷）→ 全國賽單淘汰（輸球＝止步、全勝＝冠軍）
 import { createPlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { createDefaultTeams } from '../sim/game.js';
+import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 import { buildSchedule } from './schedule.js';
@@ -359,10 +360,20 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
         techniques: { dive: player.techniques?.dive ?? 0 },
       }))
     : [];
+  // W7 D 舊隊情結：名冊中來自本場對手原隊的隊友（招募生 dna.teamId＝來源隊）——
+  // D2 trustDyn 開場 +8（含板凳/自由人：換上場也帶勁；場末即散不污染持久信任）、
+  // D3 播報名單（開賽環境句＋首次建功加一句，commentary 消費）
+  const oldTeamMates = (members ?? []).filter((m) => m.dna?.teamId === matchEntry.opponentId);
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, def, members, lineup),
     benches: { A: benchA, B: [] },
+    ...(oldTeamMates.length ? {
+      trustDynInit: Object.fromEntries(
+        oldTeamMates.map((m) => [m.id, TRUST_DYN.OLD_TEAM_BOOST]),
+      ),
+      revenge: oldTeamMates.map((m) => ({ id: m.id, name: m.name })),
+    } : {}),
     aiProfiles: {
       // 隊友技能綁玩家解鎖（主角傳承節點：對手教主角→隊長請主角教全隊——
       // scramble-plan 定案敘事，07-24 Sawmah 正名）：主角學會＝回去教隊友＝全隊跟著會；
