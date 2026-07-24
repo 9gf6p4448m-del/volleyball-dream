@@ -397,6 +397,12 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.hitStopUntil = now + 60;
       s.shake = Math.max(s.shake, 0.2);
+      // 主角攔網個人回饋（07-24 Sawmah）：碰到球當下即字卡（比照 PERFECT 接球卡）——
+      // 攔死金色/擦手青色分色；攔死直接得分另有 pointBanner「攔網得分 🧱」收尾
+      if (e.playerId === s.controlledId) {
+        if (e.graze) stage.floatText.show('👆 擦到了——快補！', '#6ee7ff', 1200);
+        else stage.floatText.show('🧱 攔網拍回！', '#ffd166', 1200);
+      }
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
