@@ -154,6 +154,8 @@ function createTeachDialog() {
       queue = null;
       wrap.style.display = 'none';
     },
+    // W7.1 三輪（試玩回饋：好好讀字）：對話開著＝matchLoop 凍結模擬
+    isOpen: () => wrap.style.display !== 'none',
   };
 }
 

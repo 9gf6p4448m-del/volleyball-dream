@@ -805,6 +805,9 @@ function frameStep(s, now) {
   // W6 換人面板開啟＝凍結模擬（畫面照跑；死球窗 tick 不流逝，慢慢讀數據慢慢換）；
   // W7 C2②：主角在板凳時面板＝教練儀表板，不凍結（在場時維持原凍結行為）
   if (stage.subPanel?.isOpen() && !benched) delta = 0;
+  // W7.1 三輪（試玩回饋：對話沒看完球就開了）：教學/敘事對話開著＝凍結模擬，
+  // 點完最後一句才恢復。教練選項對話框刻意不凍（倒數是 sim tick 驅動、有提早開賽鈕）
+  if (stage.teachDialog?.isOpen?.()) delta = 0;
 
   // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區
   const deciding = updateDecisions(s, now);
