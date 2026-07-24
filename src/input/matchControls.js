@@ -315,6 +315,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           action = 'receive';
           aim = localToWorld(me.teamId === 'A' ? 'B' : 'A', 0, 6.5);
           timing = 0.6;
+        } else if (simpleMode && contextAction(game) === 'block' &&
+            r.profile === 'spike' && aiState?.landingTeam === me.teamId &&
+            Math.abs(a.z) < 2.2) {
+          // 自動跳攔（07-24 Sawmah：原設計的攔網決策自動跳攔早成死碼被清、玩家不知
+          // 攔網變全手動）：前排網前＋對方扣球出手飛向我方＝自動開攔網窗——
+          // 時機取球出手瞬間（airTicks 落甜蜜帶）；點螢幕/K 仍可手動提前跳；
+          // 退開網前（|z|≥2.2）＝不攔走退防；classic 維持全手動
+          action = 'block';
         }
       }
 
