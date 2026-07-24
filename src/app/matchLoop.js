@@ -458,7 +458,7 @@ function runReplayFrame(s, now, delta) {
 function updateDecisions(s, now) {
   if (!s.config.simpleMode) return false;
   const { game, aiState, gates, stage } = s;
-  const { controls, panel, rig, sfx, floatText, hints } = stage;
+  const { controls, panel, rig, sfx, floatText } = stage;
   // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
   if (!onCourt(game, s.controlledId)) { panel.hide(); return false; }
   // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
@@ -498,8 +498,10 @@ function updateDecisions(s, now) {
   } else {
     s.attackDecidingSince = -1;
   }
-  const hintsLive = hints.isOn() && (gates.readTier === 'instant' ||
-    (gates.readTier === 'slow' && s.attackDecidingSince >= 0 && now - s.attackDecidingSince > 600));
+  // W7.1 四輪 #4（拍板）：👁 提示手動開關已移除——讀攔網提示純由 gates.readTier 決定
+  // （reaction 能力分檔；?hints=off 會讓 readTier 恆為 'none'，見 matchConfig.js）
+  const hintsLive = gates.readTier === 'instant' ||
+    (gates.readTier === 'slow' && s.attackDecidingSince >= 0 && now - s.attackDecidingSince > 600);
   if (attackDeciding) {
     const feintHint = gates.canFeint ? '（按A滑B＝假動作）' : '';
     panel.show(

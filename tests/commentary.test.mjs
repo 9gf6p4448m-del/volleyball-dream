@@ -189,6 +189,40 @@ test('暫停播報：我方請求暫停／對方喊暫停——口吻分流', ()
   assert.equal(c.line(g, null, ME, 5050).text, '對方喊了暫停，重新佈局');
 });
 
+// W7.1 四輪 #2：轉播保護期（beat 加 level/protectUntil）——大事 1500ms 保護期，
+// 期內只有同級或更高（另一件大事）蓋得掉；小事之間本來就無保護、隨時互蓋。
+test('轉播保護期：大事保護期內小事蓋不掉，過期後小事才蓋得掉', () => {
+  const c = createCommentary();
+  const g = makeGame({ phase: 'rally' });
+  c.onEvents([{ type: 'BLOCK_DECEIVED', blockerId: 'B1' }], g, null, 0, ME); // 大事 t=0
+  // 保護期內（<1500ms）丟一個小事（SERVE）：蓋不掉，大事文字原樣留著
+  c.onEvents([{ type: 'SERVE', playerId: 'B1' }], g, null, 500, ME);
+  assert.equal(c.line(g, null, ME, 600).text, '白浪高中1號 被晃過去了！');
+  // 保護期過了（>=1500ms）：同一個小事終於蓋得掉
+  c.onEvents([{ type: 'SERVE', playerId: 'B1' }], g, null, 1600, ME);
+  assert.equal(c.line(g, null, ME, 1700).text, '白浪高中1號 發球');
+});
+
+test('轉播保護期：大事蓋大事不受保護期限制（同級流動照常，不卡住）', () => {
+  const c = createCommentary();
+  const g = makeGame({ phase: 'rally' });
+  c.onEvents([{ type: 'BLOCK_TOUCH', playerId: 'B1', team: 'B', graze: true }], g, null, 0, ME); // 大事 t=0
+  // 保護期內（<1500ms）另一件大事：立即蓋過去，不受保護期擋
+  c.onEvents([{ type: 'BLOCK_DECEIVED', blockerId: 'B1' }], g, null, 300, ME);
+  assert.equal(c.line(g, null, ME, 350).text, '白浪高中1號 被晃過去了！');
+});
+
+test('轉播保護期：小事之間無保護期，連續小事立即互蓋（流動感主體不受影響）', () => {
+  const c = createCommentary();
+  const g = makeGame({ phase: 'rally', touches: 2, possession: 'B' });
+  c.onEvents([{ type: 'TOUCH', kind: 'set', playerId: 'B1' }], g,
+    { attackerId: 'B1', attackKind: 'quick' }, 0, ME);
+  assert.equal(c.line(g, null, ME, 50).text, '中路快攻——！');
+  c.onEvents([{ type: 'TOUCH', kind: 'set', playerId: 'B1' }], g,
+    { attackerId: 'B1', attackKind: 'pipe' }, 60, ME);
+  assert.equal(c.line(g, null, ME, 100).text, '後排 pipe 攻擊！');
+});
+
 test('commentary 純度：零 DOM、零內部時間源（時間全外部注入）', () => {
   const src = readFileSync(new URL('../src/ui/commentary.js', import.meta.url), 'utf8');
   for (const banned of ['document.', 'window.', 'performance.now', 'Date.now(', 'Math.random(']) {

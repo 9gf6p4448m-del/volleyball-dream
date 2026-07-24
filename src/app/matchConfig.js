@@ -93,7 +93,10 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
 // 技術閘門與讀攔網檔位（賽前準備②；game 建立後呼叫）：
 // 生涯未解鎖的決策選項不出現（快速比賽預設全開）；
 // 熟練度/能力只在開場讀一次——場中不變，決定論與 VCR 乾淨
-export function resolveTechGates(game, playerId, careerActive) {
+// hintsOff（W7.1 四輪 #4，拍板）：?hints=off 強制 readTier='none'——原本的 👁 提示手動
+// 開關已移除（讀攔網檔位純由 gates.readTier／reaction 能力分檔決定），這是唯一留給
+// 想裸讀的人的後門
+export function resolveTechGates(game, playerId, careerActive, hintsOff = false) {
   const tech = careerActive ? (game.players[playerId].techniques ?? {}) : null;
   return {
     canTip: !tech || (tech.tip ?? 0) >= 1,
@@ -103,6 +106,6 @@ export function resolveTechGates(game, playerId, careerActive) {
     canFeint: !tech || (tech.feint ?? 0) >= 1,
     canDive: !tech || (tech.dive ?? 0) >= 1,
     // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
-    readTier: careerActive ? blockReadTier(game.players[playerId]) : 'instant',
+    readTier: hintsOff ? 'none' : (careerActive ? blockReadTier(game.players[playerId]) : 'instant'),
   };
 }

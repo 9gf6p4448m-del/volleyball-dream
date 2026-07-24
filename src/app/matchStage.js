@@ -58,7 +58,6 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const panel = simpleMode ? createZonePanel() : null;
   const actionButtons = simpleMode ? null : createActionButtons(controls);
 
-  const hints = createHintToggle(simpleMode, gates.readTier);
   const replayBtn = createReplayButton(handlers);
   // A6（拍板）：生涯賽的「離開」＝棄賽敗 0:25，離開前自訂確認彈窗＋beforeunload 雙保險；
   // W6.1（試玩回饋 07-24）：快速比賽補同位置離開鈕——無存檔無代價，免彈窗直接回主選單
@@ -94,7 +93,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
+    panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, heroStamina,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
@@ -268,33 +267,10 @@ function createQuickLeaveButton(params) {
   return { el: btn };
 }
 
-// 讀攔網提示開關：開＝綠/紅標示（新手輔助）、關＝自己看攔網判斷（技術版）
-function createHintToggle(simpleMode, readTier) {
-  let showHints = true;
-  try { showHints = localStorage.getItem('vd-hints') !== 'off'; } catch { /* 私密模式 */ }
-  if (readTier === 'none') showHints = false; // 生涯 reaction 太低：讀攔網能力未開（練反應解鎖）
-  if (simpleMode && readTier !== 'none') {
-    const hintBtn = document.createElement('button');
-    const paint = () => { hintBtn.textContent = showHints ? '👁 提示:開' : '👁 提示:關'; };
-    hintBtn.style.cssText = [
-      'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
-      'right:calc(env(safe-area-inset-right, 0px) + 64px)',
-      'height:44px', 'padding:0 12px', 'border-radius:22px', 'border:none',
-      'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
-      'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
-      'touch-action:manipulation',
-    ].join(';');
-    paint();
-    hintBtn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      showHints = !showHints;
-      paint();
-      try { localStorage.setItem('vd-hints', showHints ? 'on' : 'off'); } catch { /* ignore */ }
-    });
-    document.body.appendChild(hintBtn);
-  }
-  return { isOn: () => showHints };
-}
+// W7.1 四輪 #4（拍板）：👁 提示手動開關已移除——讀攔網提示現在純由 gates.readTier
+// （reaction 能力分檔）決定，不再有額外手動遮罩。想裸讀的人改用 ?hints=off（見
+// matchConfig.js resolveTechGates／main.js 呼叫端）。歷史：localStorage 'vd-hints' 鍵
+// 從此棄用（舊值留著不讀不會造成問題，非孤兒狀態需要清理）。
 
 // 🎬 回放鈕：重看上一球的最後 3 秒（桌機 R 鍵在 matchLoop 綁定）
 function createReplayButton(handlers) {

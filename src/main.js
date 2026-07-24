@@ -86,8 +86,9 @@ async function runMatch(ctx, careerCtx = null) {
   if (careerCtx) markMatchStarted(careerCtx);
   const game = createGame(config.gameOptions);
   const aiState = createAiState();
-  // 賽前準備②：技術閘門與讀攔網檔位（開場讀一次，場中不變）
-  const gates = resolveTechGates(game, PLAYER_ID, !!careerCtx);
+  // 賽前準備②：技術閘門與讀攔網檔位（開場讀一次，場中不變）；
+  // ?hints=off：想裸讀攔網的人強制 readTier='none'（取代已移除的 👁 提示手動開關）
+  const gates = resolveTechGates(game, PLAYER_ID, !!careerCtx, ctx.params.get('hints') === 'off');
   // 賽前準備③：舞台建置（three.js 視圖＋DOM UI）
   const stage = await buildMatchStage({ ctx, config, gates, playerId: PLAYER_ID, game });
   // 回合迴圈開機（局終由 matchCareer.settleCareerMatch 收束）
