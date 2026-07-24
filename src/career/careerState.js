@@ -327,9 +327,32 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
     liberoA.name = al.name;
     liberoA.attributes = { ...liberoA.attributes, ...al.attributes };
   }
+  // W6 賽中換人：板凳＝名冊中非先發、非現任自由人、非 libero 角色的成員
+  // （libero 角色只走自由人體系進場；對手無板凳＝B3 拍板不做）
+  const lu = members
+    ? ((lineup?.starters == null) ? defaultLineup(members) : lineup)
+    : null;
+  const starterSet = new Set(lu ? effectiveOrder(lu.starters, lu.rotationStart) : []);
+  const benchA = members
+    ? members
+      .filter((m) => !starterSet.has(m.id)
+        && m.id !== (lineup?.libero ?? DEFAULT_LIBERO_ID)
+        && m.role !== 'libero')
+      .map((m) => createPlayer({
+        id: m.id,
+        name: m.name,
+        teamId: 'A',
+        naturalRole: m.role,
+        currentRole: m.role,
+        height: m.height ?? 1.85,
+        trust: trustOf(lu, m.id),
+        attributes: { ...m.attributes },
+      }))
+    : [];
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, def, members, lineup),
+    benches: { A: benchA, B: [] },
     aiProfiles: {
       // 隊友技能綁玩家解鎖（主角傳承節點：對手教主角→隊長請主角教全隊——
       // scramble-plan 定案敘事，07-24 Sawmah 正名）：主角學會＝回去教隊友＝全隊跟著會；

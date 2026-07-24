@@ -12,12 +12,13 @@ import {
 } from './player.js';
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
-import { isRotationLegal } from './rotationRules.js';
+import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rotationRules.js';
 import { applyAttackOutcome } from './trust.js';
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
   SERVE_DEAD_TICKS: 110,  // 死球哨音到可發球的間隔（1.8s：慶祝/喘息的比賽節拍）
+  SUBS_PER_SET: 6,        // W6 賽中換人：每局每隊人次上限（簡化版拍板；自由人不計次）
   REACH_RADIUS: 1.3,      // 觸球水平可及距離（m）
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）
@@ -88,12 +89,18 @@ export const TUNING = {
 // stage 5 情蒐——該隊對 targetId 的歷史攻擊分佈讀取（攔網向慣用線收攏）
 // liberos = { A?: Player, B?: Player }：stage 6 自由人（第 7 人）——死球時自動
 // 替換後排 MB、輪到前排/發球位自動換回（結構上不可能發球/攔網）
-export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos } = {}) {
+// benches = { A?: [Player], B?: [Player] }（W6）：板凳球員——場邊待命，僅經
+// applySubstitution（死球換人）進場；不在輪轉＝不參與任何 sim 判定（tryBlock/AI
+// 皆以輪轉名單為準），無換人時對比賽零擾動
+export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
   const actors = {};
   for (const team of ['A', 'B']) {
-    const extra = liberos?.[team] ? [liberos[team]] : [];
+    const extra = [
+      ...(liberos?.[team] ? [liberos[team]] : []),
+      ...(benches?.[team] ?? []),
+    ];
     for (const p of [...rosters[team], ...extra]) {
       players[p.id] = p;
       actors[p.id] = {
@@ -118,6 +125,22 @@ export function createGame({ seed = 1, teams, setTarget, aiProfiles, scoutRead, 
     trustDyn: {},    // stage 4 場內動態信任（playerId→偏移；場末即散）
     trustStreak: {}, // 連續得分/失誤計數（正＝連得、負＝連失）
     rngState: seedRng(seed),
+    // W6 賽中換人：板凳名單＋每局人次（自由人體系不經此路）
+    bench: {
+      A: (benches?.A ?? []).map((p) => p.id),
+      B: (benches?.B ?? []).map((p) => p.id),
+    },
+    subs: {
+      A: { remaining: TUNING.SUBS_PER_SET },
+      B: { remaining: TUNING.SUBS_PER_SET },
+    },
+    // W6 B4（7.7 接線）：登記發球序——換發輪 nextIdx 前進、換人走 applySubstitution
+    // 槽位繼承；match.rotations 若被非法路徑改動＝performServe 抓違序（最後防線）
+    serveSeq: {
+      A: { order: rosters.A.map((p) => p.id), nextIdx: 0 },
+      B: { order: rosters.B.map((p) => p.id), nextIdx: 0 },
+    },
+    rotationFault: { A: null, B: null }, // 首次違序 tick（賽末 7.7.2 追溯扣分）
     players,
     actors,
     match: createMatch({
@@ -518,14 +541,22 @@ function performServe(state, intent, ev) {
     return;
   }
 
-  // 7.7 輪轉錯誤追溯扣分（cancelFaultPoints）的呼叫點——本輪只接線不啟用。
-  // W3 發球者由 match.rotations 決定論導出＝發球序結構上不可能違反 7.7，故此處無觸發源。
-  // 啟用條件：當 lineup 的發球序來源不再全經排陣預檢（lineup.js checkRotationOrder）時
-  // ——即 W4 招募後的中途換人／輪轉替補產生「未經預檢的發球者」——在此偵測到違序即發
-  //   ROTATION_FAULT（帶 faultTick=首次違序 tick），賽末結算改呼叫：
-  //     cancelFaultPoints(state.events, faultTick, faultTeam)  // rotationRules.js
-  //   取消犯規隊自 faultTick 起全部得分、對隊得分保留。
-  // 現不接執行碼：為不存在的路徑改賽中結算＝拿決定論穩定性換用不到的功能（見 W3 任務書）。
+  // 7.7 輪轉錯誤（W6 B4 接線兌現，W3 預留）：發球者對照「登記發球序」（serveSeq——
+  // 開局輪轉＋合法換人槽位繼承）。合法路徑（ROTATE 前進/換人 applySubstitution/自由人
+  // 體系）下結構上不違序；違序＝rotations 被未經預檢的路徑改動＝sim 最後防線：
+  // 記首次違序 tick（每隊一次），比賽照打、賽末 SET_END 依 7.7.2 追溯扣分
+  // （cancelFaultPoints：犯規隊自 faultTick 起得分全取消、對隊保留——見 settlePoint）
+  const seq = state.serveSeq[team];
+  if (
+    state.rotationFault[team] === null &&
+    !isRotationOrderLegal(player.id, seq.order, seq.nextIdx)
+  ) {
+    state.rotationFault[team] = state.tick;
+    ev.push({
+      type: 'ROTATION_FAULT', tick: state.tick, team,
+      server: player.id, expected: seq.order[seq.nextIdx % seq.order.length],
+    });
+  }
 
   const contactY = Math.max(spikeReach(player) * 0.92, 2.2); // 跳發擊球點
   ball.x = actor.x; ball.y = contactY; ball.z = actor.z;
@@ -789,12 +820,82 @@ function settlePoint(state, winner, reason, ev) {
   const at = { x: state.ball.x, z: state.ball.z };
   for (const e of pointTo(state.match, winner, reason)) {
     ev.push(e.type === 'DEAD_BALL' ? { tick: state.tick, ...e, at } : { tick: state.tick, ...e });
+    // W6 B4：換發輪＝該隊登記發球序前進一格（7.7 驗證的期望值來源）
+    if (e.type === 'ROTATE') state.serveSeq[e.team].nextIdx += 1;
   }
   if (state.match.setOver) {
+    // W6 B4（7.7.2 追溯扣分）：曾記違序的隊伍，自 faultTick 起得分全數取消、
+    // 對隊保留；調整後重判勝方（最後防線——合法路徑下永不觸發）
+    const fault = state.rotationFault;
+    if (fault.A !== null || fault.B !== null) {
+      const score = { ...state.match.score };
+      let cancelled = 0;
+      for (const team of ['A', 'B']) {
+        if (fault[team] === null) continue;
+        const adj = cancelFaultPoints(state.events.concat(ev), fault[team], team);
+        score[team] = adj.score[team];
+        cancelled += adj.cancelled;
+      }
+      state.match.score = score;
+      state.match.winner = score.A === score.B
+        ? state.match.winner // 全取消後平手＝維持原判（極端防呆，不產生無勝方局）
+        : score.A > score.B ? 'A' : 'B';
+      ev.push({
+        type: 'ROTATION_ADJUST', tick: state.tick, cancelled,
+        score: { ...score }, winner: state.match.winner,
+      });
+    }
     state.phase = 'set_over';
   } else {
     setupServePhase(state);
   }
+}
+
+// ---- W6 賽中換人（B1 簡化版拍板：死球可換、每局 6 人次、不限原對；自由人體系
+// 照舊不計次）。UI 擋第一層（對位/主控/次數），此處為 sim 最後防線＋唯一寫入路徑。
+// 比照 applyLiberoSwaps：純 state 副作用、不經 Intent 管線（不影響 VCR 決定論——
+// 換人只發生在死球窗，發球前快照已含換人後陣容）----
+export function applySubstitution(state, { team, outId, inId }) {
+  const deny = (reason) => ({ ok: false, reason });
+  if (state.phase !== 'serve') return deny('not-dead-ball');
+  if ((state.subs[team]?.remaining ?? 0) <= 0) return deny('limit');
+  const pOut = state.players[outId];
+  const pIn = state.players[inId];
+  if (!pOut || !pIn || pOut.teamId !== team || pIn.teamId !== team) return deny('unknown');
+  if (!state.bench[team].includes(inId)) return deny('not-on-bench');
+  const rot = state.match.rotations[team];
+  const idx = rot.indexOf(outId);
+  if (idx < 0) return deny('not-on-court');
+  if (rot.includes(inId)) return deny('already-on-court');
+  if (pOut.currentRole === 'libero' || pIn.currentRole === 'libero') return deny('libero');
+  // 自由人配對中的被替換者（暫離場）不可經一般換人進出（FIVB：只能由自由人體系換回）
+  if (state.liberos?.[team]?.replacedId === inId) return deny('libero-paired');
+
+  rot[idx] = inId;
+  // 登記發球序：槽位繼承（進場者接手離場者的發球輪次）——7.7 期望值同步
+  const seq = state.serveSeq[team];
+  const oi = seq.order.indexOf(outId);
+  if (oi >= 0) seq.order[oi] = inId;
+  // 板凳名單互換（離場者可再進場——B1 不限原對、不限次別，只吃隊伍人次額度）
+  state.bench[team] = state.bench[team].filter((id) => id !== inId).concat(outId);
+  state.subs[team].remaining -= 1;
+  // 進場者站上該輪轉槽基準位、離場者停板凳（死球窗內，無插值拖影）
+  const pos = basePosition(team, idx + 1);
+  const ai = state.actors[inId];
+  ai.x = pos.x; ai.z = pos.z; ai.px = pos.x; ai.pz = pos.z;
+  ai.blockUntil = -1; ai.divedUntil = -1;
+  parkBenchActor(state, team, outId);
+  state.events.push({ type: 'SUBSTITUTION', tick: state.tick, team, inId, outId });
+  return { ok: true, reason: '' };
+}
+
+// 板凳停放（applyLiberoSwaps 與換人共用）：場邊席位、純視覺、無 intent 不參與
+function parkBenchActor(state, team, pid) {
+  const a = state.actors[pid];
+  a.x = -6.6;
+  a.z = TEAM_SIDE[team] * 10.6;
+  a.px = a.x;
+  a.pz = a.z;
 }
 
 // stage 6 自由人替換（死球時執行；FIVB 精神：替換不計次、不得發球/前排）：
@@ -829,14 +930,17 @@ function applyLiberoSwaps(state) {
         }
       }
     }
-    // 板凳停放：不在輪轉上的隊員到場邊席位（純視覺位置；無 intent 不參與）
+  }
+}
+
+// 板凳停放（全隊通用；W6 起與自由人解耦——無自由人的隊也有板凳要停）：
+// 不在輪轉上的隊員到場邊席位（純視覺位置；無 intent 不參與）
+function parkOffCourt(state) {
+  for (const team of ['A', 'B']) {
+    const rot = state.match.rotations[team];
     for (const p of Object.values(state.players)) {
       if (p.teamId !== team || rot.includes(p.id)) continue;
-      const a = state.actors[p.id];
-      a.x = -6.6;
-      a.z = TEAM_SIDE[team] * 10.6;
-      a.px = a.x;
-      a.pz = a.z;
+      parkBenchActor(state, team, p.id);
     }
   }
 }
@@ -844,6 +948,7 @@ function applyLiberoSwaps(state) {
 // 佈置發球局面：全員回輪轉基準位、發球員到發球點、球置於發球員手上
 function setupServePhase(state) {
   applyLiberoSwaps(state); // 死球即換（換完再歸位，自由人直接站進職責位）
+  parkOffCourt(state); // 板凳（含被換下者）停場邊席位
   state.phase = 'serve';
   state.serveReadyTick = state.tick + TUNING.SERVE_DEAD_TICKS;
 

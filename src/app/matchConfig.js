@@ -58,6 +58,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
     ...(careerSetup ? {
       teams: careerSetup.teams,
       aiProfiles: careerSetup.aiProfiles,
+      benches: careerSetup.benches, // W6 賽中換人：生涯板凳（快速比賽無）
       ...(careerSetup.scoutRead ? { scoutRead: careerSetup.scoutRead } : {}),
     } : {}),
   };
