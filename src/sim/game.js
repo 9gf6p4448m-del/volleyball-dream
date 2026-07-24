@@ -23,7 +23,8 @@ export const TUNING = {
   SERVE_DEAD_TICKS: 110,  // 死球哨音到可發球的間隔（1.8s：慶祝/喘息的比賽節拍）
   SUBS_PER_SET: 6,        // W6 賽中換人：每局每隊人次上限（簡化版拍板；自由人不計次）
   TIMEOUTS_PER_SET: 2,    // W7 B3 暫停：每場每隊 2 次（FIVB；單局制＝每場）
-  TIMEOUT_DEAD_TICKS: 300, // 喊暫停後追加的死球時間（5s：集合演出＋教練選項；試玩回饋 07-24 #3）
+  TIMEOUT_DEAD_TICKS: 1800, // 喊暫停後追加的死球時間（30s＝FIVB 真實時長；試玩回饋 07-24 二輪）
+  TIMEOUT_RESUME_BUFFER: 90, // 提早開賽的最短殘餘（1.5s：球員走回位的銜接時間）
   TIMEOUT_CALM_RECOV: 0.04, // 暫停選項「穩住」：全隊體力額外小回（基礎 0.03 之上）
   TIMEOUT_FIRE_STEP: 1,     // 暫停選項「燃起來」：我方氣勢推檔數
   // W7 B1 團隊氣勢（拍板：小幅、快衰、偏散佈——防雪球第一原則）：
@@ -1070,6 +1071,17 @@ export function applyTimeoutBoost(state, { team, boost }) {
   }
   state.timeoutBoostArmed = false; // 一發用畢
   state.events.push({ type: 'TIMEOUT_BOOST', tick: state.tick, team, boost });
+  return { ok: true, reason: '' };
+}
+
+// W7.1 二輪（試玩回饋：暫停改真實 30s＋可提早開賽）：把暫停剩餘時間縮到走回位
+// 緩衝。只在「延長窗」有效（剩餘 > 一般死球節拍＝確為暫停窗，普通發球間隔不受理）
+export function resumeFromTimeout(state) {
+  const deny = (reason) => ({ ok: false, reason });
+  if (state.phase !== 'serve') return deny('not-dead-ball');
+  if (state.serveReadyTick - state.tick <= TUNING.SERVE_DEAD_TICKS) return deny('not-timeout');
+  state.serveReadyTick = state.tick + TUNING.TIMEOUT_RESUME_BUFFER;
+  state.events.push({ type: 'TIMEOUT_RESUME', tick: state.tick });
   return { ok: true, reason: '' };
 }
 

@@ -6,7 +6,7 @@
 // 與賽末收束（matchCareer）僅在局終呼叫 settleCareerMatch 一次。
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
 import {
-  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, TUNING,
+  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout, TUNING,
 } from '../sim/game.js';
 import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
@@ -51,6 +51,8 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   stage.handlers.requestTimeout = () => requestTimeout(s);
   // W7 C2④：回場鈕的執行回呼（sim applySubstitution 唯一路徑，走與 ⚙ 面板相同函式）
   stage.handlers.requestComeback = () => requestComeback(s);
+  // W7.1 二輪：暫停「提早開賽」（真實 30s 窗，玩家可縮短到走回位緩衝）
+  stage.handlers.requestTimeoutResume = () => resumeFromTimeout(s.game);
   // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
   window.__phase1 = {
     game: s.game, aiState: s.aiState,

@@ -30,7 +30,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // W7 B3：requestTimeout（我方暫停鈕點擊執行）；W7 C2④：requestComeback（回場鈕點擊執行）
   const handlers = {
     replay: null, requestSub: null, onSubPanelClose: null,
-    requestTimeout: null, requestComeback: null,
+    requestTimeout: null, requestComeback: null, requestTimeoutResume: null,
   };
 
   let matchView;
@@ -81,7 +81,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const comebackBtn = careerSetup ? createComebackButton({ handlers, floatText }) : null;
   // W7.1 #3A：暫停教練選項（我方喊暫停才彈）＋倒數條（雙方暫停都顯示，讓玩家知道還要多久）
   const coachOptionDialog = createCoachOptionDialog();
-  const timeoutCountdown = createTimeoutCountdown();
+  const timeoutCountdown = createTimeoutCountdown(handlers);
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -409,7 +409,8 @@ function createCoachOptionDialog() {
 
 // W7.1 #3A③：暫停倒數條——雙方暫停都顯示（讓玩家知道還要多久恢復）；matchLoop 逐幀傳
 // ticksLeft/totalTicks（null＝隱藏）。位置刻意避開記分板/⚙⏱⏩直排/回場鈕/底部對話框。
-function createTimeoutCountdown() {
+// W7.1 二輪：真實 30s＋「提早開賽」鈕（同一顆膠囊內；handlers.requestTimeoutResume）
+function createTimeoutCountdown(handlers) {
   const el = document.createElement('div');
   el.style.cssText = [
     'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 50px)',
@@ -425,8 +426,20 @@ function createTimeoutCountdown() {
   fill.style.cssText = 'height:100%;width:100%;background:#ffd166;transition:width 100ms linear';
   track.appendChild(fill);
   const label = document.createElement('span');
+  const resumeBtn = document.createElement('button');
+  resumeBtn.textContent = '⏩ 提早開賽'; // TODO(naming)
+  resumeBtn.style.cssText = [
+    'pointer-events:auto', 'cursor:pointer', 'border:none', 'border-radius:10px',
+    'background:#ffd166', 'color:#1a1405', 'font-weight:800', 'font-size:12px',
+    'padding:4px 10px', 'font-family:system-ui,sans-serif', 'touch-action:manipulation',
+  ].join(';');
+  resumeBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    handlers.requestTimeoutResume?.();
+  });
   el.appendChild(track);
   el.appendChild(label);
+  el.appendChild(resumeBtn);
   document.body.appendChild(el);
   return {
     el,
@@ -437,6 +450,8 @@ function createTimeoutCountdown() {
       const frac = totalTicks > 0 ? Math.max(0, Math.min(1, ticksLeft / totalTicks)) : 0;
       fill.style.width = `${Math.round(frac * 100)}%`;
       label.textContent = `⏱ ${Math.max(0, ticksLeft / 60).toFixed(1)}s`;
+      // 已縮到走回位緩衝內＝提早開賽收尾中，鈕收起防重複點
+      resumeBtn.style.display = ticksLeft > 120 ? 'inline-block' : 'none';
     },
   };
 }
