@@ -95,6 +95,67 @@ test('BLOCK_DECEIVED 事件：假動作騙過攔網手＝發觀測事件（帶 b
   assert.ok(!g.events.some((e) => e.type === 'BLOCK_TOUCH'), '被騙＝整手撲空無攔網觸球');
 });
 
+// ---- 主角（A2）攔防雙路驗證（07-24 Sawmah：確認主角攔網真的碰得到球）----
+
+// B 隊扣球衝向 A2 防區；byPlayer 控制 A2 要攔網（開窗）還是退下防守（無攔網 intent）
+function playerRig(seed, { block }) {
+  const g = createGame({ seed });
+  g.phase = 'rally';
+  Object.assign(g.rally, {
+    profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
+  });
+  const b = g.ball;
+  b.x = 0; b.y = 2.75; b.z = -0.35; b.vx = 0; b.vy = -1.5; b.vz = 9;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  if (block) {
+    g.actors.A2.x = 0; g.actors.A2.z = 0.5; // 網前對位（第一視角攔網模式的站位）
+  } else {
+    g.actors.A2.x = 0; g.actors.A2.z = 5.5; // 退下防守
+  }
+  return g;
+}
+
+test('主角攔網生效：A2 開窗對位＝與 AI 同一條 tryBlock 路——攔死/擦手真的記在 A2 頭上', () => {
+  let touched = 0;
+  let clean = 0;
+  for (let seed = 1; seed <= 120; seed += 1) {
+    const g = playerRig(seed, { block: true });
+    stepGame(g, [createIntent({ playerId: 'A2', tick: g.tick, action: 'block' })]);
+    for (let i = 0; i < 20 && g.phase === 'rally' && g.ball.z < 1.5 && g.ball.vz > 0; i += 1) {
+      stepGame(g, [createIntent({ playerId: 'A2', tick: g.tick, action: 'block' })]);
+    }
+    const bt = g.events.find((e) => e.type === 'BLOCK_TOUCH');
+    if (bt) {
+      touched += 1;
+      assert.equal(bt.playerId, 'A2', '攔網觸球必須記在主角頭上（非幻影/非隊友代領）');
+    } else {
+      clean += 1;
+    }
+  }
+  // 攔死+擦手合計應在合理帶（chance~0.35+graze~0.2×時機檔）——「根本碰不到球」＝不成立
+  assert.ok(touched >= 25, `120 球主角應碰到相當比例（實得 ${touched}）`);
+  assert.ok(clean >= 25, `也有乾淨過網（機率制非必中，實得 ${clean}）`);
+});
+
+test('主角退下防守：不按攔網＝零幻影攔網觸球，球過網後 A2 正常接第一觸', () => {
+  const g = playerRig(9, { block: false });
+  // 球飛越網、無人攔（A2 沒開窗）
+  for (let i = 0; i < 200 && g.phase === 'rally'; i += 1) {
+    const b = g.ball;
+    const dist = Math.hypot(b.x - g.actors.A2.x, b.z - g.actors.A2.z);
+    const reachable = dist < 0.9 && b.vy < 0 && b.y < 2.2;
+    stepGame(g, reachable
+      ? [createIntent({ playerId: 'A2', tick: g.tick, action: 'receive', aim: { x: 1.2, z: 1.2 } })]
+      : []);
+    if (g.events.some((e) => e.type === 'TOUCH' && e.playerId === 'A2')) break;
+  }
+  assert.ok(!g.events.some((e) => e.type === 'BLOCK_TOUCH'), '未開攔網窗＝絕無攔網觸球');
+  const touch = g.events.find((e) => e.type === 'TOUCH' && e.playerId === 'A2');
+  assert.ok(touch, '退下防守應能正常接球');
+  assert.equal(touch.kind, 'receive');
+  assert.equal(touch.touches, 1, '過網後第一觸（規則正確）');
+});
+
 test('擦手決定論：同種子重跑逐值一致', () => {
   for (let seed = 1; seed <= 120; seed += 1) {
     const a = blockRig(seed);
