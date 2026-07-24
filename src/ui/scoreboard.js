@@ -37,8 +37,14 @@ export function createScoreboard(playerId) {
       background:rgba(255,255,255,0.16);border-radius:4px;overflow:visible;pointer-events:none">
       <div class="mCenter" style="position:absolute;left:50%;top:0;bottom:0;width:1.5px;
         background:rgba(255,255,255,0.5);transform:translateX(-50%)"></div>
+      <div class="mTick" style="left:16.67%"></div>
+      <div class="mTick" style="left:33.33%"></div>
+      <div class="mTick" style="left:66.67%"></div>
+      <div class="mTick" style="left:83.33%"></div>
       <div class="mFill" style="position:absolute;top:0;bottom:0;border-radius:4px;
-        transition:left 200ms ease-out,width 200ms ease-out,background 200ms ease-out"></div>
+        transition:background 200ms ease-out"></div>
+      <div class="mHeat" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;
+        transform:translate(-50%,-50%);opacity:0;transition:opacity 250ms ease"></div>
       <div class="mFlash" style="position:absolute;top:50%;font-size:13px;font-weight:900;opacity:0"></div>
     </div>
     <div class="bubble" style="display:none;background:#f7f9ff;transition:opacity 120ms ease">
@@ -82,6 +88,13 @@ export function createScoreboard(playerId) {
 }
 #scoreboard .mFlash{transform:translate(-50%,-50%)}
 #scoreboard .mFlash.flash{animation:vd-mflash 0.6s ease-out}
+/* W7.1 三輪 A 案：刻度格線（±3 檔各兩條內線；中線另有 mCenter）＋蓄勢微光 */
+#scoreboard .mTick{position:absolute;top:1px;bottom:1px;width:1px;
+  background:rgba(255,255,255,0.22);transform:translateX(-50%)}
+@keyframes vd-mheat{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.25)}}
+#scoreboard .mHeat{background:radial-gradient(circle,currentColor 0%,transparent 70%);
+  animation:vd-mheat 0.9s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){#scoreboard .mHeat{animation:none}}
 @media (prefers-reduced-motion: reduce) {
   #scoreboard .mFill.glow{animation:none;filter:brightness(1.3)}
   #scoreboard .mFlash.flash{animation:vd-mflash-reduced 0.6s ease-out}
@@ -94,6 +107,8 @@ export function createScoreboard(playerId) {
   const momentumEl = el.querySelector('.momentum');
   const mFillEl = el.querySelector('.mFill');
   const mFlashEl = el.querySelector('.mFlash');
+  const mHeatEl = el.querySelector('.mHeat');
+  let shownV = 0; // W7.1 三輪 A：顯示值向機制值平滑補間（update 每 rAF 一次，固定係數）
   const bubbleEl = el.querySelector('.bubble');
   const tailEl = el.querySelector('.tail');
   const btextEl = el.querySelector('.btext');
@@ -176,15 +191,32 @@ export function createScoreboard(playerId) {
       } else {
         momentumEl.style.display = 'block';
         const v = game.momentum.value; // −MOMENTUM_MAX..+MOMENTUM_MAX（＋＝A、−＝B）
-        const frac = Math.min(Math.abs(v) / TUNING.MOMENTUM_MAX, 1) * 50; // 半軌最大百分比
-        const color = v >= 0 ? MOMENTUM_COLOR.A : MOMENTUM_COLOR.B;
+        // W7.1 三輪 A①：顯示值平滑補間（機制仍是 ±3 粗檔；條看起來連續滑動）
+        shownV += (v - shownV) * 0.14;
+        if (Math.abs(v - shownV) < 0.005) shownV = v;
+        const frac = Math.min(Math.abs(shownV) / TUNING.MOMENTUM_MAX, 1) * 50; // 半軌最大百分比
+        const color = shownV >= 0 ? MOMENTUM_COLOR.A : MOMENTUM_COLOR.B;
         // 方向對齊比分：A（我方）氣勢往左長（比分 A 在左）、B 往右長
         mFillEl.style.background = color;
         mFillEl.style.color = color; // W7.1 #4②：glow 的 drop-shadow 吃 currentColor
-        mFillEl.style.left = v >= 0 ? `${50 - frac}%` : '50%';
+        mFillEl.style.left = shownV >= 0 ? `${50 - frac}%` : '50%';
         mFillEl.style.width = `${frac}%`;
-        // W7.1 #4②：滿檔（±MOMENTUM_MAX）發光脈動
+        // W7.1 #4②：滿檔（±MOMENTUM_MAX）發光脈動（吃機制真值，不吃補間值）
         mFillEl.classList.toggle('glow', Math.abs(v) >= TUNING.MOMENTUM_MAX);
+        // W7.1 三輪 A③：蓄勢微光——連得 1、2 分（未達推檔門檻）時，蓄勢方條端漸亮
+        // 預熱光；第 3 分推檔＝條真的動＋既有 delta 箭頭爆開。對面蓄勢也看得到＝壓迫感
+        const ps = game.pointStreak;
+        const heatN = ps?.team && ps.n >= 1 && ps.n < TUNING.MOMENTUM_STREAK_MIN ? ps.n : 0;
+        if (heatN > 0) {
+          const dir = ps.team === 'A' ? 1 : -1;
+          // 預熱點釘在蓄勢方向的「下一格」邊緣（從當前顯示邊緣往該方向探出去）
+          const edge = Math.max(0, Math.min(3, shownV * dir)) / TUNING.MOMENTUM_MAX * 50;
+          mHeatEl.style.left = dir > 0 ? `${50 - edge - 4}%` : `${50 + edge + 4}%`;
+          mHeatEl.style.color = MOMENTUM_COLOR[ps.team];
+          mHeatEl.style.opacity = `${0.3 + 0.3 * heatN}`;
+        } else {
+          mHeatEl.style.opacity = '0';
+        }
       }
 
       // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）
