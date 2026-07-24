@@ -52,9 +52,12 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   const hints = createHintToggle(simpleMode, gates.readTier);
   const replayBtn = createReplayButton(handlers);
-  // A6（拍板）：生涯賽才給「離開」——中途離開＝棄賽敗 0:25，離開前自訂確認彈窗；
-  // 另掛 beforeunload 雙保險（reload/關頁跳瀏覽器通用確認框，防誤觸吃敗場）
-  const leaveBtn = careerSetup ? createLeaveButton(params, game) : null;
+  // A6（拍板）：生涯賽的「離開」＝棄賽敗 0:25，離開前自訂確認彈窗＋beforeunload 雙保險；
+  // W6.1（試玩回饋 07-24）：快速比賽補同位置離開鈕——無存檔無代價，免彈窗直接回主選單
+  //（此前快速比賽無任何返回路徑，只能 reload）
+  const leaveBtn = careerSetup
+    ? createLeaveButton(params, game)
+    : createQuickLeaveButton(params);
   // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
   const teachDialog = careerSetup ? createTeachDialog() : null;
   // W6 B2 賽中換人面板：生涯且有板凳才建（⚙ 鈕右上堆疊第三格；requestSub 由 loop 注入）
@@ -205,6 +208,35 @@ function createLeaveButton(params, game) {
   });
   document.body.appendChild(btn);
   document.body.appendChild(overlay);
+  return { el: btn };
+}
+
+// W6.1 快速比賽離開鈕（試玩回饋 07-24：「快速比賽沒有離開的按鍵」）：
+// 與生涯版同位置同樣式；快速比賽不寫存檔＝離開零代價，免確認彈窗、免 beforeunload。
+// 回主選單＝清掉 quick/career 參數（否則 ?quick=1 直達連結會又彈回比賽）、
+// 保留 points/classic/assist（下一場快速比賽沿用同設定）
+function createQuickLeaveButton(params) {
+  const btn = document.createElement('button');
+  btn.textContent = '✕ 離開';
+  btn.style.cssText = [
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 60px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 12px)',
+    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
+    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
+    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
+    'touch-action:manipulation',
+  ].join(';');
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    const back = new URLSearchParams();
+    for (const k of ['points', 'classic', 'assist']) {
+      const v = params.get(k);
+      if (v !== null) back.set(k, v);
+    }
+    const qs = back.toString();
+    window.location.assign(qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  });
+  document.body.appendChild(btn);
   return { el: btn };
 }
 
