@@ -132,9 +132,13 @@ function ensureLineup(store, members) {
 
 // 表現歸因成長：復用主角的 matchStatsFor 管線，逐隊友統計本場事件→xp→屬性。
 // 決定論：同事件流＋同名冊→同輸出（無隨機、純算術）；同 matchId 重入＝原樣返回（冪等）。
-export function applyRosterGrowth(members, events, myTeam, matchId) {
+// W6 修：冪等鍵須含屆數——W5 賽季輪迴後 matchId 每屆重複（group-1…），只認 matchId
+// 會讓第二屆起全部隊友成長被誤判「已長過」而靜默跳過（跨屆治具抓到的 W5 潛伏 bug）。
+// 舊 log 條目無 season 欄＝第 1 屆（?? 1 回退），season===1 的新條目不寫欄位——
+// 第 1 屆行為與序列化逐位不變。
+export function applyRosterGrowth(members, events, myTeam, matchId, season = 1) {
   return members.map((m) => {
-    if (m.growth.log.some((l) => l.matchId === matchId)) return m; // 冪等：一場只長一次
+    if (m.growth.log.some((l) => l.matchId === matchId && (l.season ?? 1) === season)) return m; // 冪等：一屆內一場只長一次
     const s = matchStatsFor(events, m.id, myTeam);
     const rate = ROSTER_GROWTH.RATE_BY_GRADE[m.growth.grade] ?? ROSTER_GROWTH.RATE_BY_GRADE[2];
     const source = { ...s, atk: s.kills + s.tipKills };
@@ -162,7 +166,11 @@ export function applyRosterGrowth(members, events, myTeam, matchId) {
     return {
       ...m,
       attributes,
-      growth: { ...m.growth, xp, log: [...m.growth.log, { matchId, gains }] },
+      growth: {
+        ...m.growth,
+        xp,
+        log: [...m.growth.log, { matchId, ...(season > 1 ? { season } : {}), gains }],
+      },
     };
   });
 }

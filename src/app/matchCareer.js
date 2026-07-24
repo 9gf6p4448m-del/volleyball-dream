@@ -45,10 +45,14 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
     stats,
   })) && saveOk;
   // W2 隊友自動成長：與主角同節拍（賽末一次）、同管線（matchStatsFor 表現歸因）。
-  // 讀最新 roster 走 RMW（不用 careerCtx 快照）；applyRosterGrowth 依 matchId 冪等
+  // 讀最新 roster 走 RMW（不用 careerCtx 快照）；applyRosterGrowth 依 matchId＋屆數冪等
+  // （W6 修：W5 輪迴後 matchId 每屆重複，冪等鍵不帶屆數會讓第二屆起成長全滅）
   const roster = careerCtx.store.loadRoster?.() ?? null;
   if (roster && roster.members.length > 0) {
-    const grown = applyRosterGrowth(roster.members, game.events, myTeam, careerCtx.matchEntry.id);
+    const grown = applyRosterGrowth(
+      roster.members, game.events, myTeam, careerCtx.matchEntry.id,
+      careerCtx.store.seasonIndex?.() ?? 1,
+    );
     saveOk = careerCtx.store.saveRoster({ ...roster, members: grown }) && saveOk;
   }
   // W4 招募進度累加（跨賽季累積、永不重置）：勝場＋壯舉（事件流掃描）＋stage 軸。
