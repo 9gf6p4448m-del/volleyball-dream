@@ -732,27 +732,35 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     head.appendChild(el('div', ['font-size:13px', 'font-weight:700',
       `color:${slots > 0 ? COLOR.dim : COLOR.red}`], `名冊空位 ${slots}`));
     box.appendChild(head);
-    for (const [oppId, cond] of Object.entries(RECRUIT_CONDS)) {
-      const def = opponentById(oppId);
-      const p = progressOf(rec, oppId);
-      const done = rec.recruited.includes(oppId);
-      const met = conditionMet(rec, oppId);
+    // W6 擴池敘事（拍板待辦 3）：池 12 vs 位 5——從「圖鑑收集」轉「組建你的五人」
+    box.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.5',
+      'text-align:left'], '池子比位子深——收不下所有人，組出你要的那五個'));
+    // W6：招募槽鍵＝recruitKey（同隊可掛招牌＋第二人）；成員對映走 member.recruitKey
+    // （W6 前入隊的舊成員缺欄＝回退 origin，該世代 recruitKey 恆等 origin）
+    const memberOf = (key) => roster.members.find((x) => (x.recruitKey ?? x.origin) === key);
+    for (const [key, cond] of Object.entries(RECRUIT_CONDS)) {
+      const def = opponentById(cond.opponentId);
+      const p = progressOf(rec, key);
+      const done = rec.recruited.includes(key);
+      const met = conditionMet(rec, key);
       const row = el('div', [
         'display:flex', 'flex-direction:column', 'gap:2px', 'padding:7px 10px',
         'border-radius:10px', `background:${done ? 'rgba(255,209,102,0.1)' : 'rgba(30,40,64,0.55)'}`,
       ]);
       const top = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+      const second = key !== cond.opponentId; // 同隊第二人（-2 鍵）
       top.appendChild(el('div', ['font-size:14px', 'font-weight:700', 'flex:1'],
-        def?.name ?? oppId));
+        `${def?.name ?? cond.opponentId}${second ? '・第二人' : ''}`));
       top.appendChild(badge(ROLE_ABBR[cond.role] ?? cond.role, '#22304e', COLOR.cyan));
       if (done) {
-        const m = roster.members.find((x) => x.origin === oppId);
+        const m = memberOf(key);
         if (m) {
           top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.gold}`],
             `✓ ${m.name} 已入隊`));
         } else {
           // 已招募但不在名冊＝已被逐出（凍結顯示、防重招；名字取 expelled 快照）
-          const gone = (rec.expelled ?? []).find((e) => e.member?.origin === oppId)?.member;
+          const gone = (rec.expelled ?? [])
+            .find((e) => (e.member?.recruitKey ?? e.member?.origin) === key)?.member;
           top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.dim}`],
             `✗ ${gone?.name ?? ''} 已離隊`));
         }
@@ -765,7 +773,8 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       }
       row.appendChild(top);
       if (!done) {
-        const parts = [`勝場 ${Math.min(p.wins, cond.wins)}/${cond.wins}`];
+        const parts = [];
+        if (cond.wins != null) parts.push(`勝場 ${Math.min(p.wins, cond.wins)}/${cond.wins}`);
         if (cond.feat) {
           parts.push(`${cond.feat.label} ${Math.min(p.feat, cond.feat.count)}/${cond.feat.count}`);
         }

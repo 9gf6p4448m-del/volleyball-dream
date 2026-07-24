@@ -46,6 +46,21 @@ export const OPPONENTS = [
     scoutRead: 0.7,
     ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08 },
   },
+  // W6 A1 新隊①（level 55，北原↔白浪空檔）：變化球隊——身材矮、火力弱，
+  // 靠球路變化（吊球/二次球/飄浮球）打亂節奏；攔網差＝扣過去很痛快
+  {
+    id: 'gale-shore',
+    name: '青嵐水產', // TODO(naming)
+    style: 'trick',
+    trait: '球路花得要命——吊球、二次球、飄浮球輪番來，節奏全在他們手裡', // TODO(naming)
+    level: 55,
+    attrBias: { control: 8, power: -6, block: -4 },
+    roleBias: { setter: { control: 6 } },
+    trustBias: { setter: 6 },
+    heights: [1.79, 1.83, 1.89, 1.84, 1.82, 1.87],
+    scoutRead: 0.15,
+    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1 },
+  },
   {
     id: 'iron-mist',
     name: '鐵霧工業',
@@ -58,6 +73,21 @@ export const OPPONENTS = [
     heights: [1.84, 1.89, 1.95, 1.91, 1.87, 1.93],
     scoutRead: 0.5,
     ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2, diveRate: 0.08 }, // 發球輪就是得分輪
+  },
+  // W6 A1 新隊②（level 67，鐵霧↔天鷹空檔）：高牆型——攔網手一排比一排高，
+  // 正面硬扣會被一路蓋回來；腳步偏慢＝吊球與快節奏是解法
+  {
+    id: 'black-pine',
+    name: '黑松實業', // TODO(naming)
+    style: 'wall',
+    trait: '高牆型隊伍——攔網手一排比一排高，硬扣過去的球都會被蓋回來', // TODO(naming)
+    level: 67,
+    attrBias: { block: 10, jump: 6, speed: -3 },
+    roleBias: { middle: { block: 6 } },
+    trustBias: { middle: 10 },
+    heights: [1.86, 1.93, 2.01, 1.95, 1.91, 1.99],
+    scoutRead: 0.6,
+    ai: { tipRate: 0.06, dumpRate: 0.05, jumpServeRate: 0.15, floatServeRate: 0.1, diveRate: 0.07 },
   },
   {
     id: 'sky-hawk',

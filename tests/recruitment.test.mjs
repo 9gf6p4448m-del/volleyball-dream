@@ -155,16 +155,19 @@ test('buildRecruitMember：同種子重演逐值一致、換種子屬性有差',
 });
 
 test('buildRecruitMember：成員形狀合約（角色/年級/DNA/屬性夾限）', () => {
-  for (const oppId of Object.keys(RECRUIT_CONDS)) {
-    const m = buildRecruitMember(oppId, 42, 'R1');
-    assert.equal(m.role, RECRUIT_CONDS[oppId].role);
-    assert.equal(m.origin, oppId);
+  // W6 語義：origin/dna.teamId＝來源隊 id（cond.opponentId）；recruitKey＝招募槽鍵
+  // （既有 5 隊兩者相等；-2 第二人分流）
+  for (const key of Object.keys(RECRUIT_CONDS)) {
+    const m = buildRecruitMember(key, 42, 'R1');
+    assert.equal(m.role, RECRUIT_CONDS[key].role);
+    assert.equal(m.origin, RECRUIT_CONDS[key].opponentId);
+    assert.equal(m.recruitKey, key);
     assert.equal(m.growth.grade, 2); // 固定二年級轉學生
     assert.deepEqual(m.growth.log, []);
-    assert.equal(m.dna.teamId, oppId);
+    assert.equal(m.dna.teamId, RECRUIT_CONDS[key].opponentId);
     assert.equal(typeof m.height, 'number');
     for (const k of ATTRIBUTE_KEYS) {
-      assert.ok(m.attributes[k] >= 30 && m.attributes[k] <= 85, `${oppId} ${k}=${m.attributes[k]}`);
+      assert.ok(m.attributes[k] >= 30 && m.attributes[k] <= 85, `${key} ${k}=${m.attributes[k]}`);
     }
   }
   assert.equal(buildRecruitMember('white-wave', 42, 'R1').height, 1.72);
