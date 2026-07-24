@@ -1,4 +1,4 @@
-import{i as Dt,c as Ae,T as Gt,a as Kt,A as ye,u as Yt,d as Wt,s as Xt,b as Jt,e as Qt,f as Zt,g as en,h as tn,j as Fe,k as Rt,S as dt}from"./sim-DsbZL4aI.js";import{I as nn,D as on,C as sn,G as Ue,B as rn,a as fe,S as He,M as an,O as ln,W as cn,b as dn,c as pn,P as un,H as fn,d as pt}from"./three-CngGtC29.js";function vi(e,t,n,o=!1){const i=hn(n);let s=0,a=0,r=0,p=performance.now();o||e.classList.add("hud-min"),e.innerHTML=`
+import{i as Dt,c as Ae,T as Gt,a as Kt,A as ye,u as Yt,d as Wt,s as Xt,b as Jt,e as Qt,f as Zt,g as en,h as tn,j as Fe,k as Rt,S as dt}from"./sim-DC3cwSVy.js";import{I as nn,D as on,C as sn,G as Ue,B as rn,a as fe,S as He,M as an,O as ln,W as cn,b as dn,c as pn,P as un,H as fn,d as pt}from"./three-CngGtC29.js";function vi(e,t,n,o=!1){const i=hn(n);let s=0,a=0,r=0,p=performance.now();o||e.classList.add("hud-min"),e.innerHTML=`
     <div class="fps">— <span>FPS</span></div>
     <div class="stats">${o?"量測中…":""}</div>
     <div class="settings">${i}</div>
