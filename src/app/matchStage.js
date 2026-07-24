@@ -309,8 +309,9 @@ function createReplayButton(handlers) {
 function createTimeoutButton({ handlers, playerId }) {
   const btn = document.createElement('button');
   btn.style.cssText = [
-    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 112px)',
-    'right:calc(env(safe-area-inset-right, 0px) + 130px)',
+    // 試玩回饋 07-24（#1）：改直排——⏱ 放 ⚙ 換人鈕正下方（同欄第四格）
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 164px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 12px)',
     'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
     'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
     'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
@@ -343,8 +344,9 @@ function createTimeoutButton({ handlers, playerId }) {
 function createBenchAccelButton() {
   const btn = document.createElement('button');
   btn.style.cssText = [
-    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 112px)',
-    'right:calc(env(safe-area-inset-right, 0px) + 240px)',
+    // ⏱ 改直排後（試玩回饋 #1），⏩ 跟著補到 ⏱ 下方同欄（板凳期間才顯示）
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 216px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 12px)',
     'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
     'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
     'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
