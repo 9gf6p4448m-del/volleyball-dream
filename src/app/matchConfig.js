@@ -60,6 +60,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
     : { A: {}, B: {} };
   const gameOptions = {
     seed, setTarget, liberos, stamina,
+    momentum: true, // W7 B1 團隊氣勢（生涯/快速比賽一律啟用）
     ...(careerSetup ? {
       teams: careerSetup.teams,
       aiProfiles: careerSetup.aiProfiles,
@@ -77,7 +78,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
     ? buildScoutTape(
       seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos,
       teachFeature, careerSetup.benches, // W6：帶子與正賽同陣容鏡像（含板凳）
-      stamina, // W7：帶子鏡像鐵律——體力設定同正賽
+      stamina, true, // W7：帶子鏡像鐵律——體力/氣勢設定同正賽
     )
     : [];
 

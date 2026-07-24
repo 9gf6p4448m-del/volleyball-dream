@@ -54,7 +54,8 @@ function biasProfiles(aiProfiles, feature) {
 //（含板凳），帶子重播 state 缺板凳 actors 會逐幀炸 undefined（板凳零 sim 擾動已由
 // substitution 測試把關，帶內容不受影響）
 export function buildScoutTape(
-  seed, teams, aiProfiles, liberos = null, feature = null, benches = null, stamina = null,
+  seed, teams, aiProfiles, liberos = null, feature = null, benches = null,
+  stamina = null, momentum = false,
 ) {
   const g = createGame({
     seed: (seed + TAPE_SEED_OFFSET) % 1000000007,
@@ -63,8 +64,9 @@ export function buildScoutTape(
     ...(aiProfiles ? { aiProfiles: biasProfiles(aiProfiles, feature) } : {}),
     ...(liberos ? { liberos } : {}),
     ...(benches ? { benches } : {}),
-    // W7 帶子鏡像鐵律：正賽開體力＝帶子同開（快照含 state.stamina，重播重模擬一致）
+    // W7 帶子鏡像鐵律：正賽開體力/氣勢＝帶子同開（快照含其 state，重播重模擬一致）
     ...(stamina ? { stamina } : {}),
+    ...(momentum ? { momentum } : {}),
   });
   const ai = createAiState();
   const clips = [];

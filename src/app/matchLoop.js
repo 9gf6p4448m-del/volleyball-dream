@@ -185,7 +185,8 @@ function bindInputHandlers(s) {
     s.seed += 1;
     s.game = createGame({
       seed: s.seed, setTarget: config.setTarget,
-      stamina: config.gameOptions.stamina, // W7：快速比賽重開局保持體力設定
+      stamina: config.gameOptions.stamina, // W7：快速比賽重開局保持體力/氣勢設定
+      momentum: config.gameOptions.momentum,
     });
     s.aiState = createAiState();
     s.controlledId = s.playerId;

@@ -24,6 +24,12 @@ export const TUNING = {
   SUBS_PER_SET: 6,        // W6 賽中換人：每局每隊人次上限（簡化版拍板；自由人不計次）
   TIMEOUTS_PER_SET: 2,    // W7 B3 暫停：每場每隊 2 次（FIVB；單局制＝每場）
   TIMEOUT_DEAD_TICKS: 180, // 喊暫停後追加的死球時間（3s：教練圈演出＋節奏斷點）
+  // W7 B1 團隊氣勢（拍板：小幅、快衰、偏散佈——防雪球第一原則）：
+  // 雙向檔位計 −3..+3（＋＝A 氣勢、−＝B 氣勢）；連得 3+ 起算每分推一檔、
+  // 對向得分往中間收一檔（幾球未得分即歸中）；只動散佈/失誤率、不動力量/速度
+  MOMENTUM_STREAK_MIN: 3, // 連得幾分起算
+  MOMENTUM_MAX: 3,        // 檔位上限（±）
+  MOMENTUM_SCATTER_CAP: 0.08, // 滿檔散佈效果封頂（氣勢好 ×0.92／氣勢差 ×1.08）
   REACH_RADIUS: 1.3,      // 觸球水平可及距離（m）
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）
@@ -100,8 +106,9 @@ export const TUNING = {
 // stamina（W7）：true＝雙隊預設啟用；或 { A?: {costMul?, heavyExempt?}, B?: {...} }
 // （A4 對手對稱性：costMul 0.6 慢耗＋heavyExempt 豁免重度門檻）。未傳＝整套關閉、
 // 零副作用（state.stamina 為 null，所有掛點短路）
+// momentum（W7 B1）：true＝啟用團隊氣勢（雙向檔位計）；未傳＝關閉零副作用
 export function createGame({
-  seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina,
+  seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina, momentum,
 } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
@@ -158,6 +165,12 @@ export function createGame({
       B: { remaining: TUNING.TIMEOUTS_PER_SET },
     },
     pointStreak: { team: null, n: 0 },
+    // W7 B1 團隊氣勢：value ∈ [−MOMENTUM_MAX, +MOMENTUM_MAX]（＋＝A、−＝B）；
+    // 與 trustDyn 分工（B2 拍板）：trustDyn 管舉球分配、氣勢管全隊散佈，輸入同源不疊算
+    momentum: momentum ? { value: 0 } : null,
+    // W7 C3 回歸監看（sim 內建單一事實源；UI ⚡ 字卡與氣勢注入共用）：
+    // out＝曾被換下者；back＝回場後尚未建功者（建功即清、可再次下場重新累積）
+    subLog: { out: {}, back: {} },
     // W6 B4（7.7 接線）：登記發球序——換發輪 nextIdx 前進、換人走 applySubstitution
     // 槽位繼承；match.rotations 若被非法路徑改動＝performServe 抓違序（最後防線）
     serveSeq: {
@@ -429,12 +442,13 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     : 1;
   // 接球品質＝到位程度（dist：走到球正下方＝穩、勉強搆＝飄）×控制屬性×Perfect 時機×
   // 來球難度。魚躍一律用正常 reach 算到位比例＝r 恆偏大＝勉強救起（撲救本就飄）
-  const qualityMul = isReceiveLike
+  // W7 B1：氣勢進散佈（全動作一致；氣勢差＝手緊＝散佈/失誤率微升，±封頂 8%）
+  const qualityMul = (isReceiveLike
     ? receiveQualityMul(dist, TUNING.REACH_RADIUS, player) * receivePerfectMul(rawT)
       * serveRecvMul * staminaRecvMul(state, player) // W7 A2：重度疲勞手軟（餵爆接湧現）
     : intent.action === 'spike'
       ? timingQualityMul(rawT)
-      : 1;
+      : 1) * momentumScatterMul(state, team);
   // 爆接判定（僅第一觸的接球類；純 hash 不動 rng 流——非爆接時間線 rand 消費順序不變）：
   // 品質乘數（含發球/重扣壓迫）超過門檻→機率把出球換成低平噴射（真噴）
   const blownQ = isReceiveLike && newCount === 1
@@ -621,7 +635,8 @@ function performServe(state, intent, ev) {
   if (float) stal.floats += 1;
   const target = scatterTarget(
     state, intent.aim, player.attributes.serve, 'serve', 0,
-    power ? TUNING.POWER_SERVE_SCATTER : float ? TUNING.FLOAT_SCATTER : 1,
+    (power ? TUNING.POWER_SERVE_SCATTER : float ? TUNING.FLOAT_SCATTER : 1)
+      * momentumScatterMul(state, team), // W7 B1：氣勢進發球散佈
   );
   const apex = Math.max(
     power ? TUNING.POWER_SERVE_APEX
@@ -651,6 +666,15 @@ function performServe(state, intent, ev) {
 // 扣球速度：power 屬性推導；AI 過網預判（ai.js spikeClearsNet）用同一函式
 export function spikeSpeed(player) {
   return TUNING.SPIKE_SPEED_BASE + player.attributes.power * TUNING.SPIKE_SPEED_PER;
+}
+
+// W7 B1 氣勢散佈乘數（純讀取）：該隊氣勢滿檔 ×(1−CAP)＝出手穩、
+// 對向滿檔 ×(1+CAP)＝手緊失誤多；未啟用恆 1。只進散佈、不動力量/速度（防雪球）
+export function momentumScatterMul(state, team) {
+  if (!state.momentum) return 1;
+  const dir = team === 'A' ? 1 : -1;
+  const t = (state.momentum.value * dir) / TUNING.MOMENTUM_MAX;
+  return 1 - t * TUNING.MOMENTUM_SCATTER_CAP;
 }
 
 // H3 視線欺敵（純函式）：由擊球點、實際目標、視線目標算出
@@ -876,6 +900,42 @@ function settlePoint(state, winner, reason, ev) {
     // W6 B4：換發輪＝該隊登記發球序前進一格（7.7 驗證的期望值來源）
     if (e.type === 'ROTATE') state.serveSeq[e.team].nextIdx += 1;
   }
+  // W7 B1 團隊氣勢：連得 3+ 每分往贏方推一檔；對向得分往中間收一檔（快衰歸中）。
+  // 觀測事件 MOMENTUM 只在值變動時發、落在 SCORE 之後（B4 氣勢計/聲量/播報驅動源）
+  if (state.momentum) {
+    const dir = winner === 'A' ? 1 : -1;
+    const m = state.momentum;
+    const prev = m.value;
+    if (state.pointStreak.n >= TUNING.MOMENTUM_STREAK_MIN) {
+      m.value = clamp(m.value + dir, -TUNING.MOMENTUM_MAX, TUNING.MOMENTUM_MAX);
+    } else if (m.value * dir < 0) {
+      m.value += dir;
+    }
+    if (m.value !== prev) {
+      ev.push({ type: 'MOMENTUM', tick: state.tick, value: m.value });
+    }
+  }
+  // W7 C3 回歸即建功：曾被換下者回場後首次「最後觸球定勝負」（殺球或攔死——
+  // lastToucherId 歸因同 pointBanner）→ COMEBACK_SPARK＋團隊氣勢直接 +2 檔（觀眾爆聲
+  // 由表現層吃事件）。建功即清監看；再次下場再回可重新觸發（敘事弧可重演）
+  const backer = r.lastToucherId;
+  if (
+    backer && state.subLog.back[backer] &&
+    reason === 'BALL_IN' && r.lastTouchTeam === winner &&
+    state.players[backer].teamId === winner
+  ) {
+    delete state.subLog.back[backer];
+    ev.push({ type: 'COMEBACK_SPARK', tick: state.tick, team: winner, playerId: backer });
+    if (state.momentum) {
+      const dir = winner === 'A' ? 1 : -1;
+      const m = state.momentum;
+      const prev = m.value;
+      m.value = clamp(m.value + 2 * dir, -TUNING.MOMENTUM_MAX, TUNING.MOMENTUM_MAX);
+      if (m.value !== prev) {
+        ev.push({ type: 'MOMENTUM', tick: state.tick, value: m.value });
+      }
+    }
+  }
   if (state.match.setOver) {
     // W6 B4（7.7.2 追溯扣分）：曾記違序的隊伍，自 faultTick 起得分全數取消、
     // 對隊保留；調整後重判勝方（最後防線——合法路徑下永不觸發）
@@ -932,6 +992,9 @@ export function applySubstitution(state, { team, outId, inId }) {
   // 板凳名單互換（離場者可再進場——B1 不限原對、不限次別，只吃隊伍人次額度）
   state.bench[team] = state.bench[team].filter((id) => id !== inId).concat(outId);
   state.subs[team].remaining -= 1;
+  // W7 C3 回歸監看：曾被換下者再進場＝回歸（首次建功→COMEBACK_SPARK，見 settlePoint）
+  if (state.subLog.out[inId]) state.subLog.back[inId] = true;
+  state.subLog.out[outId] = true;
   // 進場者站上該輪轉槽基準位、離場者停板凳（死球窗內，無插值拖影）
   const pos = basePosition(team, idx + 1);
   const ai = state.actors[inId];
@@ -954,6 +1017,14 @@ export function applyTimeout(state, { team }) {
   // 對方的連得分被斬斷（自家連得不歸零——沒人會喊暫停斬自己氣勢，防呆為主）
   if (state.pointStreak.team && state.pointStreak.team !== team) {
     state.pointStreak = { team: null, n: 0 };
+  }
+  // W7 B1×B3：對方氣勢歸中（只斬對方——氣勢計偏向對隊時直接清零；自家氣勢不動）
+  if (state.momentum) {
+    const oppDir = team === 'A' ? -1 : 1;
+    if (state.momentum.value * oppDir > 0) {
+      state.momentum.value = 0;
+      state.events.push({ type: 'MOMENTUM', tick: state.tick, value: 0 });
+    }
   }
   for (const p of Object.values(state.players)) {
     if (p.teamId === team) recoverStamina(state, p.id, STAMINA.RECOV_TIMEOUT);

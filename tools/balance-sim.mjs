@@ -16,8 +16,8 @@ import {
   buildRecruitMember, RECRUIT_TRUST, RECRUIT_CONDS,
   accrueRecruitProgress, conditionMet, nextRecruitId,
 } from '../src/career/recruitment.js';
-import { createGame, stepGame, applySubstitution, TUNING } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import { createGame, stepGame, applySubstitution, applyTimeout, TUNING } from '../src/sim/game.js';
+import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 
 const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
@@ -36,6 +36,10 @@ const SEASONS = Math.max(1, Number.parseInt(process.env.VD_SEASONS ?? '1', 10));
 // 體力設定鏡像生涯（A4 拍板：對手 costMul 0.6 慢耗＋豁免重度門檻）
 const USE_MANAGE = process.env.VD_MANAGE === '1';
 const USE_STAMINA = process.env.VD_STAMINA === '1' || USE_MANAGE;
+// VD_MOMENTUM=1＝團隊氣勢臂（B1；可與體力臂疊加）。任一 W7 系統開＝對手 B 的
+// AI 暫停照生涯實況鏡像（被連 4 分喊）；基準臂不開＝與 pre-W7 逐位一致
+const USE_MOMENTUM = process.env.VD_MOMENTUM === '1';
+const W7_ON = USE_STAMINA || USE_MOMENTUM;
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖（跨屆冪等——已學不重覆）
 const TEACH_AFTER = {
@@ -54,6 +58,7 @@ function playMatch(setup) {
     liberos: setup.liberos,
     ...(setup.scoutRead ? { scoutRead: setup.scoutRead } : {}),
     ...(USE_STAMINA ? { stamina: { A: {}, B: { costMul: 0.6, heavyExempt: true } } } : {}),
+    ...(USE_MOMENTUM ? { momentum: true } : {}),
     // 板凳只在管理臂帶入（帶而不換＝零擾動已有測試背書；不帶＝基準臂逐位不變）
     ...(USE_MANAGE && setup.benches?.A?.length ? { benches: { A: setup.benches.A } } : {}),
   });
@@ -64,6 +69,8 @@ function playMatch(setup) {
     if (g.phase === 'serve') {
       const d = g.match.score.B - g.match.score.A;
       if (d > maxDeficit) maxDeficit = d;
+      // 對手 AI 暫停（生涯實況鏡像：matchLoop 為 B 隊喊）——W7 臂才開，基準臂零擾動
+      if (W7_ON && aiTimeoutWanted(g, 'B')) applyTimeout(g, { team: 'B' });
       if (USE_MANAGE) autoManage(g);
     }
   }
@@ -77,6 +84,8 @@ const MANAGE_IN_ABOVE = 0.5;
 const roleOk = (a, b) => a === b ||
   (['setter', 'opposite'].includes(a) && ['setter', 'opposite'].includes(b));
 function autoManage(g) {
+  // E1 政策②：被連 4 分喊暫停（判準與對手 AI 同一顆 aiTimeoutWanted）
+  if (aiTimeoutWanted(g, 'A')) applyTimeout(g, { team: 'A' });
   for (const outId of [...g.match.rotations.A]) {
     if ((g.stamina?.[outId] ?? 1) >= MANAGE_OUT_BELOW) continue;
     const pOut = g.players[outId];
