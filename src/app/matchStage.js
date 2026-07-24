@@ -27,8 +27,11 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   // matchLoop 開機時注入（dive 鈕 07-24 移除＝改自動）；
   // W6：requestSub（換人執行）/onSubPanelClose（面板關閉→補播換人敘事）
-  // W7 B3：requestTimeout（我方暫停鈕點擊執行）
-  const handlers = { replay: null, requestSub: null, onSubPanelClose: null, requestTimeout: null };
+  // W7 B3：requestTimeout（我方暫停鈕點擊執行）；W7 C2④：requestComeback（回場鈕點擊執行）
+  const handlers = {
+    replay: null, requestSub: null, onSubPanelClose: null,
+    requestTimeout: null, requestComeback: null,
+  };
 
   let matchView;
   try {
@@ -45,7 +48,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const controls = createMatchControls(renderer.domElement, camera, playerId, rig, simpleMode);
   const scoreboard = createScoreboard(playerId);
   // 即時播報（決策模式）：取代舊版操作提示行；classic 走 scoreboard 內建舊提示
-  const commentary = simpleMode ? createCommentary(careerSetup?.opponent ?? null) : null;
+  // W7 D3 舊隊情結：revenge 名單（對戰原隊的隊友）進播報——開賽環境句＋首次建功
+  const commentary = simpleMode
+    ? createCommentary(careerSetup?.opponent ?? null, careerSetup?.revenge ?? [])
+    : null;
   const sfx = createSfx();
   const touchUi = createTouchUi();
   // 簡化模式：決策面板（攻擊/發球/攔網共用）；經典模式：全手動按鈕
@@ -70,6 +76,9 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     : null;
   // W7 B3：我方暫停鈕（⚙ 換人鈕同排；生涯／快速比賽皆可喊——timeouts 與 subs 一樣不綁生涯）
   const timeoutBtn = createTimeoutButton({ handlers, playerId });
+  // W7 C2③④：板凳期間才有意義（無板凳＝快速比賽自然零出現）——同 subPanel 生涯閘
+  const benchAccelBtn = careerSetup ? createBenchAccelButton() : null;
+  const comebackBtn = careerSetup ? createComebackButton({ handlers, floatText }) : null;
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
@@ -84,6 +93,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, heroStamina,
+    benchAccelBtn, comebackBtn,
   };
 }
 
@@ -324,6 +334,75 @@ function createTimeoutButton({ handlers, playerId }) {
       btn.style.opacity = usable ? '1' : '0.45';
       btn.textContent = `⏱ 暫停×${remaining}`;
       if (g.phase === 'set_over') btn.style.display = 'none';
+    },
+  };
+}
+
+// W7 C2③：板凳期間 2× 加速鈕——⚙／⏱ 同排再往左一格；純視覺開關（isOn 給 matchLoop 讀，
+// forceOff 給「每個 DEAD_BALL 自動回 1×」與「主角回場強制回 1×」共用同一個收口）
+function createBenchAccelButton() {
+  const btn = document.createElement('button');
+  btn.style.cssText = [
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 112px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 240px)',
+    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
+    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
+    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
+    'touch-action:manipulation', 'display:none',
+  ].join(';');
+  let on = false;
+  const paint = () => {
+    btn.textContent = on ? '⏩×2（開）' : '⏩×2';
+    btn.style.background = on ? 'rgba(110,231,255,0.35)' : 'rgba(12,16,26,0.6)';
+  };
+  paint();
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    on = !on;
+    paint();
+  });
+  document.body.appendChild(btn);
+  return {
+    el: btn,
+    isOn: () => on,
+    forceOff() { if (on) { on = false; paint(); } },
+    // 每幀同步：只在主角板凳期間顯示（教練儀表板模式）
+    sync(benched) { btn.style.display = benched ? 'block' : 'none'; },
+  };
+}
+
+// W7 C2④：回場鈕——獨立主動按鈕（拍板重點：不是在 ⚙ 面板裡把自己換回去，儀式感要獨立）；
+// 死球窗顯示、額度不足/rally 中反灰＋點擊給理由。可用性判定與實際換人執行同一套邏輯，
+// 集中在 matchLoop（本檔只管畫＋轉發 handlers.requestComeback）
+function createComebackButton({ handlers, floatText }) {
+  const btn = document.createElement('button');
+  btn.style.cssText = [
+    'position:fixed', 'left:50%', 'transform:translateX(-50%)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 130px)',
+    'height:48px', 'padding:0 22px', 'border-radius:24px', 'border:none',
+    'background:#ffd166', 'color:#1a1405', 'font-size:15px', 'font-weight:800',
+    'font-family:system-ui,sans-serif', 'z-index:17', 'cursor:pointer',
+    'touch-action:manipulation', 'display:none',
+  ].join(';');
+  btn.textContent = '🔥 回到場上'; // TODO(naming)
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (btn.dataset.enabled !== '1') {
+      if (btn.dataset.reason) floatText?.show(btn.dataset.reason, '#ff8a8a', 1400);
+      return;
+    }
+    handlers.requestComeback?.();
+  });
+  document.body.appendChild(btn);
+  return {
+    el: btn,
+    // visible：主角在板凳才顯示；enabled/reason 由 matchLoop 算好傳入（單一事實源）
+    sync(visible, enabled, reason) {
+      btn.style.display = visible ? 'block' : 'none';
+      if (!visible) return;
+      btn.dataset.enabled = enabled ? '1' : '0';
+      btn.dataset.reason = reason ?? '';
+      btn.style.opacity = enabled ? '1' : '0.45';
     },
   };
 }

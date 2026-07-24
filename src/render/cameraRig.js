@@ -17,6 +17,10 @@ export const CAMERA_TUNING = {
   FP_YAW_RANGE: 1.05,     // 一人稱左右視角範圍（弧度）
   FP_PITCH_RANGE: 0.5,
   SPIKE_CAM_DIST: 3.0,    // 球距我小於此值且輪到第三擊 → 進入扣球一人稱
+  // W7 C2①：板凳視角（教練側位廣角，兩隊都在畫面內；不隨球員走位）
+  BENCH_X: -6.6,
+  BENCH_Z: 10.6,
+  BENCH_HEIGHT: 1.8,
 };
 
 // 幀率無關的平滑係數：每幀吃掉的比例＝1-e^(-k·dt)，任何 fps 下同樣的秒級收斂
@@ -36,10 +40,12 @@ export function createCameraRig(camera, initialPlayerId) {
   let attackView = false;    // 進攻決策：切攻擊手視角越過網看攔網
   let defendView = false; // 攔網第一視角旗標（main 每幀依防守時刻設定）
   let spikeMine = false;     // 這球第三擊是否分配給我（claim）——舉給隊友不搶鏡
+  let benchMode = false;     // W7 C2①：主角在板凳＝教練視角，優先於其餘所有模式
 
   function desiredMode(game) {
     const me = game.players[playerId];
     if (!me) return 'third';
+    if (benchMode) return 'bench'; // 板凳視角最高優先——沒有身體可跟，不吃攻防切換
     if (attackView) return 'attack'; // 讀攔網視角優先
     if (defendView) return 'defend'; // 攔網第一視角（隔網讀對面攻擊手）
     if (game.phase === 'serve' && serverId(game.match) === playerId) return 'first';
@@ -60,6 +66,7 @@ export function createCameraRig(camera, initialPlayerId) {
     setAttackView(v) { attackView = v; },
     setDefendView(v) { defendView = v; },
     setSpikeMine(v) { spikeMine = v; },
+    setBenchMode(v) { benchMode = v; },
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
     getMode() { return mode; },
@@ -95,7 +102,11 @@ export function createCameraRig(camera, initialPlayerId) {
 
       const pos = new THREE.Vector3();
       const target = new THREE.Vector3();
-      if (mode === 'defend') {
+      if (mode === 'bench') {
+        // W7 C2①：板凳側位廣角——固定機位看整個球場（兩隊都在畫面內），不跟任何球員
+        pos.set(CAMERA_TUNING.BENCH_X, CAMERA_TUNING.BENCH_HEIGHT, side * CAMERA_TUNING.BENCH_Z);
+        target.set(0, 1.1, 0);
+      } else if (mode === 'defend') {
         // 攔網手身後略高，隔網看對面攻擊手的助跑與起跳（守方讀攻擊——與攻擊視角對稱）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
         pos.set(ax * 0.92, eye + 1.15, az + side * 1.7);

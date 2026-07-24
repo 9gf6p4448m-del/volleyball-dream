@@ -10,13 +10,22 @@ import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
+import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
+import { roleSwapOk } from '../ui/subPanel.js';
 import { settleCareerMatch, careerReturnUrl } from './matchCareer.js';
 import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
 import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js';
 import { opponentById } from '../career/opponents.js';
+
+// W7 C2：受控者（此處固定用 s.playerId＝主角）是否在場上——板凳三件套與 C1 教練建議共用判準
+// export：供 tests/comeback-ui.test.mjs 純函式直測（回場鈕/儀表板模式無 DOM 依賴的判斷邏輯）
+export function onCourt(game, playerId) {
+  const team = game.players[playerId].teamId;
+  return game.match.rotations[team].includes(playerId);
+}
 
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
@@ -37,6 +46,8 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   }
   // W7 B3：我方暫停鈕的執行回呼（sim applyTimeout 唯一路徑）
   stage.handlers.requestTimeout = () => requestTimeout(s);
+  // W7 C2④：回場鈕的執行回呼（sim applySubstitution 唯一路徑，走與 ⚙ 面板相同函式）
+  stage.handlers.requestComeback = () => requestComeback(s);
   // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
   window.__phase1 = {
     game: s.game, aiState: s.aiState,
@@ -88,17 +99,20 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     assistLanding: null,
     // W6 壯舉達成字卡（新增採納 3）：本場對手未達成的 feat 條件清單，死球增量檢查
     recruitWatch: buildRecruitWatch(careerCtx, playerId),
-    // W6 換人敘事/回歸字卡：被換下者集合＋回歸監看（回歸後首次得分→⚡字卡）
-    subOuts: new Set(),
-    comebackWatch: new Set(),
     pendingSubLines: [], // 面板開著時累積的換人對話，關板一次播（teachDialog z 序在面板下）
+    // W7 C1②：主角低體力教練建議——每場最多一次
+    staminaAdviceShown: false,
+    // W7 C2②：板凳狀態轉換偵測（false→true 那一幀自動開一次 ⚙ 儀表板）
+    wasBenched: false,
     last: performance.now(),
     accumulator: 0,
     rafFn: null,
   };
 }
 
-// W6 換人執行（stage.handlers.requestSub）：sim 換人＋敘事對話＋回歸監看登記
+// W6 換人執行（stage.handlers.requestSub）：sim 換人＋敘事對話
+// W7 C3：回歸字卡改吃 sim COMEBACK_SPARK（subLog 單一事實源）——本函式不再自己記
+// subOuts/comebackWatch（W6 舊路徑已刪，見 applyEvents 的 COMEBACK_SPARK 分支）
 function requestSubstitution(s, outId, inId) {
   const team = s.game.players[s.playerId].teamId;
   const r = applySubstitution(s.game, { team, outId, inId });
@@ -110,10 +124,48 @@ function requestSubstitution(s, outId, inId) {
       { speaker: '教練', text: `${outName}，先下來喘口氣。${inName}——上，讓他們看看板凳的火力！` },
       { speaker: inName, text: '交給我！' },
     );
-    // 回歸監看（新增採納 7）：曾被換下的人再進場＝回歸；之後首次得分彈 ⚡ 字卡
-    if (s.subOuts.has(inId)) s.comebackWatch.add(inId);
-    s.subOuts.add(outId);
   }
+  return r;
+}
+
+// W7 C2④ 回場：找出可換下的場上球員——優先「當初接替主角的那人」（追蹤 SUBSTITUTION
+// 事件最近一筆 outId===主角 的 inId，仍在場上才算數）；否則任一場上同位置（含 S↔OPP
+// 例外，沿用 subPanel 換人面板同一套合法性）非自由人隊友。純函式，UI 反灰與實際執行共用。
+export function findComebackOut(game, playerId) {
+  const team = game.players[playerId].teamId;
+  const myRole = game.players[playerId].currentRole;
+  const rot = game.match.rotations[team];
+  let lastReplacer = null;
+  for (const e of game.events) {
+    if (e.type === 'SUBSTITUTION' && e.team === team && e.outId === playerId) lastReplacer = e.inId;
+  }
+  if (lastReplacer && rot.includes(lastReplacer)) return lastReplacer;
+  return rot.find((id) => {
+    const p = game.players[id];
+    return p.currentRole !== 'libero' && roleSwapOk(myRole, p.currentRole);
+  }) ?? null;
+}
+
+// 回場鈕可用性（UI 反灰＋理由）：死球窗＋額度＋場上有可換下的同位置隊友
+// export：測試只需傳 { game, playerId }（loop state 的其餘欄位本函式不讀）
+export function comebackAvailability(s) {
+  const { game, playerId } = s;
+  const team = game.players[playerId].teamId;
+  if (game.phase !== 'serve') return { enabled: false, reason: '只能在死球時回場' };
+  if ((game.subs[team]?.remaining ?? 0) <= 0) return { enabled: false, reason: '換人次數已用盡' };
+  if (!findComebackOut(game, playerId)) return { enabled: false, reason: '場上找不到可換下的同位置隊友' };
+  return { enabled: true, reason: '' };
+}
+
+// W7 C2④ 回場鈕執行（獨立按鈕，非走 ⚙ 面板——儀式感是拍板重點）：走與 ⚙ 面板相同的
+// sim 唯一路徑 applySubstitution（outId=找到的替補、inId=主角）
+function requestComeback(s) {
+  const { game, playerId } = s;
+  const team = game.players[playerId].teamId;
+  const outId = findComebackOut(game, playerId);
+  if (!outId) return { ok: false, reason: 'no-target' };
+  const r = applySubstitution(game, { team, outId, inId: playerId });
+  if (r.ok) s.stage.floatText.show('🔥 回到場上！', '#ffd166', 1500); // TODO(naming)
   return r;
 }
 
@@ -195,6 +247,8 @@ function bindInputHandlers(s) {
     s.vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
     s.vcrCurrent = { snapshot: null, steps: [] };
     s.servedThisTurn = false;
+    s.staminaAdviceShown = false;
+    s.wasBenched = false;
     stage.setOverOverlay.hide();
     if (stage.panel) stage.panel.hide();
     stage.controls.setPlayerId(s.playerId);
@@ -277,6 +331,9 @@ function startTapeClip(s) {
 
 function desiredControlled(s) {
   const { game, aiState } = s;
+  // W7 C2：主角在板凳＝鏡頭釘住主角（教練視角），不隨球權自動切人；
+  // 回場後（onCourt 再度成立）自動放行、恢復原本全隊輪控邏輯
+  if (!onCourt(game, s.playerId)) return s.playerId;
   if (game.phase === 'serve') {
     return game.match.servingTeam === 'A' ? serverId(game.match) : s.controlledId;
   }
@@ -348,6 +405,8 @@ function updateDecisions(s, now) {
   if (!s.config.simpleMode) return false;
   const { game, aiState, gates, stage } = s;
   const { controls, panel, rig, sfx, floatText, hints } = stage;
+  // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
+  if (!onCourt(game, s.controlledId)) { panel.hide(); return false; }
   // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
   rig.setAttackView(controls.isAttackMoment(game));
   // 技術閘門：吊球未解鎖＝面板無吊球；後排 pipe 未解鎖＝後排不彈面板（保底出手照舊）
@@ -513,6 +572,17 @@ function applyEvents(s, frameEvents, now) {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
+      stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
+      // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
+      // （已經下場就沒什麼好建議的；讓位給體力播報的主角豁免那句話）
+      if (!s.staminaAdviceShown && game.stamina && stage.teachDialog &&
+          onCourt(game, s.playerId) &&
+          (game.stamina[s.playerId] ?? 1) < STAMINA.TIER2_BELOW) {
+        s.staminaAdviceShown = true;
+        stage.teachDialog.show([ // TODO(naming)：教練建議台詞佔位，命名工程統一潤稿
+          { speaker: '教練', text: `${game.players[s.playerId]?.name ?? ''}，要不要下來喘口氣？板凳準備好了。` },
+        ]);
+      }
       // W7 B3：對手 AI 暫停判準（死球節拍檢查，成立才喊——被連 4 分＋死球＋有額度）
       if (aiTimeoutWanted(game, 'B') && applyTimeout(game, { team: 'B' }).ok) {
         cards.push({ pri: 25, text: '對方喊暫停', color: '#ff9d7a', dur: 1600 });
@@ -521,20 +591,17 @@ function applyEvents(s, frameEvents, now) {
           game, s.aiState, now, s.controlledId,
         );
       }
+    } else if (e.type === 'COMEBACK_SPARK') {
+      // W7 C3①：⚡ 回歸字卡改吃 sim 單一事實源（subLog 換下→換回→首次建功已在 sim 判完）
+      cards.push({
+        pri: 45,
+        text: `⚡ ${game.players[e.playerId]?.name ?? ''} 回歸即建功！`,
+        color: '#ffd166',
+        dur: 1500,
+      });
+      // W7 C3②：觀眾爆聲——沿用既有 cheer 管線再加碼一次（幅度明顯高於一般得分的 DEAD_BALL 自動歡呼）
+      stage.sfx.cheer(2.4);
     } else if (e.type === 'SCORE') {
-      // W6 回歸字卡（新增採納 7）：被換回場上的人首次建功——最後觸球歸因同 pointBanner
-      if (
-        s.lastTouch && s.lastTouch.team === e.team &&
-        s.comebackWatch.has(s.lastTouch.playerId)
-      ) {
-        s.comebackWatch.delete(s.lastTouch.playerId);
-        cards.push({
-          pri: 45,
-          text: `⚡ ${game.players[s.lastTouch.playerId]?.name ?? ''} 回歸即建功！`,
-          color: '#ffd166',
-          dur: 1500,
-        });
-      }
       // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
       s.fovPunchUntil = now + 700;
       // W7 B4④：氣勢滿檔（±MOMENTUM_MAX）且得分方正是氣勢有利方＝互擊掌加碼（cheer→highfive，時長拉長）
@@ -628,6 +695,8 @@ function settleIfOver(s) {
 // diveReady 只服務桌機 L/Space 隱藏手動——rally 中、未倒地、非回放即可按（提前撲的主動權）
 function updateDiveReady(s) {
   if (!s.gates.canDive) return;
+  // W7 C2：受控者不在場上（板凳教練視角）——沒有身體可撲
+  if (!onCourt(s.game, s.controlledId)) { s.diveReady = false; return; }
   const meActor = s.game.actors[s.controlledId];
   s.diveReady = s.game.phase === 'rally' && !s.replay && s.game.tick >= meActor.divedUntil;
 }
@@ -646,8 +715,17 @@ function frameStep(s, now) {
     return;
   }
 
-  // W6 換人面板開啟＝凍結模擬（畫面照跑；死球窗 tick 不流逝，慢慢讀數據慢慢換）
-  if (stage.subPanel?.isOpen()) delta = 0;
+  const game = s.game;
+  // W7 C2：主角在板凳（教練視角）——本幀一次判定，餵給凍結/加速/鏡頭/UI 同步共用
+  const benched = !onCourt(game, s.playerId);
+  const wasBenchedPrev = s.wasBenched;
+  s.wasBenched = benched;
+  if (benched && !wasBenchedPrev) stage.subPanel?.openPanel(); // C2②：被換下的當下自動開板一次
+  if (!benched && wasBenchedPrev) stage.benchAccelBtn?.forceOff(); // 回場強制回 1× 並收鈕（sync 會隱藏）
+
+  // W6 換人面板開啟＝凍結模擬（畫面照跑；死球窗 tick 不流逝，慢慢讀數據慢慢換）；
+  // W7 C2②：主角在板凳時面板＝教練儀表板，不凍結（在場時維持原凍結行為）
+  if (stage.subPanel?.isOpen() && !benched) delta = 0;
 
   // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區
   const deciding = updateDecisions(s, now);
@@ -660,13 +738,14 @@ function frameStep(s, now) {
   else if (now - s.slowEaseFrom < 350) delta *= 0.4 + 0.6 * ((now - s.slowEaseFrom) / 350);
   // 重扣慢動作：定格後 0.4 秒半速
   else if (now < s.slowUntil) delta *= 0.35;
+  // W7 C2③：板凳期間 2× 加速（開啟時才乘）——每個 DEAD_BALL 自動回 1×（見 applyEvents）
+  if (benched && stage.benchAccelBtn?.isOn()) delta *= 2;
 
   s.accumulator += delta;
   const { frameEvents, simSteps } = stepSim(s);
   if (frameEvents.length > 0) applyEvents(s, frameEvents, now);
 
   const myBall = updateAssistAndPoses(s);
-  const game = s.game;
 
   const alpha = s.accumulator / SIM_DT;
   ctx.ballView.sync(game.ball, alpha, delta,
@@ -675,6 +754,7 @@ function frameStep(s, now) {
   if (netHitPower > 0) stage.sfx.netHit(netHitPower);
   stage.matchView.sync(game, alpha, delta, frameEvents);
   stage.rig.setSpikeMine(s.aiState?.claimId === s.controlledId); // 扣球一人稱只認「舉給我」
+  stage.rig.setBenchMode(benched); // W7 C2①：板凳側位廣角，優先於其餘鏡頭模式
   stage.rig.update(game, alpha, delta);
   // 局點張力：燈光收攏＋心跳（deuce 內建於 setPointTeam 判定）
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
@@ -707,6 +787,12 @@ function frameStep(s, now) {
   updateDiveReady(s);
   stage.subPanel?.sync(game); // W6 ⚙ 換人鈕可用性（死球窗＋剩餘額度）
   stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
+  stage.benchAccelBtn?.sync(benched); // W7 C2③：只在板凳期間顯示
+  if (stage.comebackBtn) {
+    // W7 C2④：回場鈕可用性只在板凳期間才需要算（省事件流掃描）
+    const avail = benched ? comebackAvailability(s) : { enabled: false, reason: '' };
+    stage.comebackBtn.sync(benched, avail.enabled, avail.reason);
+  }
   // W7 A6：主角 HUD 體力條（受控者本人；stamina 未啟用傳 null 短路隱藏）
   stage.heroStamina?.update(game.stamina ? (game.stamina[s.controlledId] ?? 1) : null);
   stage.scoreboard.update(game, myBall, s.controlledId,

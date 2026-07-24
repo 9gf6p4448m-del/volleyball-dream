@@ -230,6 +230,7 @@ export function createSfx() {
     setHeartbeat,
     setCrowdLevel,
     netHit,
+    cheer, // W7 C3②：COMEBACK_SPARK 觀眾爆聲外呼——matchLoop 直接加碼一次（獨立於 DEAD_BALL 自動歡呼）
     onEvents(events, opts = {}) {
       for (const e of events) {
         if (e.type === 'SERVE') crack(0.7);

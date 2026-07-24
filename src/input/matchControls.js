@@ -13,6 +13,12 @@ import { predictLanding } from '../sim/flight.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
 import { dutyPosition } from '../sim/ai.js';
 
+// W7 C2：受控者是否在場上（板凳教練視角期間為 false）——輸入層零輸入零報錯的判準
+function onCourt(game, playerId) {
+  const me = game.players[playerId];
+  return !!me && game.match.rotations[me.teamId].includes(playerId);
+}
+
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
 const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
@@ -79,7 +85,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   });
 
   // 攔網：一點即出（獨立按鈕/K 鍵；不經蓄力）
+  // W7 C2：主角在板凳（教練視角）不可觸發攔網——lastGame 尚未就緒時放行（開賽前防呆，原行為）
   function blockTap() {
+    if (lastGame && !onCourt(lastGame, playerId)) return;
     queuedAction = {
       timing: 1, gaze: null, aimNdc: null, aimVec: null,
       forceAction: 'block', expiresTick: null, jumpAt: null,
@@ -91,8 +99,10 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let lastAiState = null; // 判「舉球是不是給我」（claim/attacker）用
 
   // 開始蓄力（指標路徑與按鈕路徑共用；扣球情境＝同時自動助跑，見 collect）
+  // W7 C2：板凳教練視角無身體可蓄力（lastGame 未就緒時放行＝開賽前防呆，原行為）
   function beginCharge(source) {
     if (charge) return;
+    if (lastGame && !onCourt(lastGame, playerId)) return;
     charge = {
       pointerId: source, startedAt: performance.now(),
       gaze: null,
@@ -191,6 +201,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
 
   // 依比賽狀態決定這一下是哪個動作（玩家不用記按鍵表，情境即語意）
   function contextAction(game) {
+    // W7 C2：板凳教練視角無身體可動作
+    if (!onCourt(game, playerId)) return null;
     const me = game.players[playerId];
     if (game.phase === 'serve') {
       return serverId(game.match) === playerId ? 'serve' : null;
@@ -214,6 +226,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     collect(game, aiState = null) {
       lastGame = game;
       lastAiState = aiState;
+      // W7 C2：主角在板凳（教練視角）——零輸入零動作；順手清掉任何殘留蓄力/緩衝，
+      // 避免板凳期間誤觸的動作在回場後延遲生效（stale queuedAction）
+      if (!onCourt(game, playerId)) {
+        queuedAction = null;
+        charge = null;
+        jumpSignal = false;
+        blockSignal = false;
+        return [createIntent({ playerId, tick: game.tick })];
+      }
       // 非扣球時刻＝重置進攻選擇旗標（下次進攻重新彈面板）
       if (attackChosen && !this.isAttackMoment(game)) attackChosen = false;
       const tick = game.tick;

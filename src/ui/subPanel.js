@@ -7,7 +7,8 @@ import { matchStatsFor } from '../career/growth.js';
 import { ROLE_ABBR } from '../career/roster.js';
 import { STAMINA } from '../sim/stamina.js';
 
-const roleSwapOk = (a, b) => a === b
+// W7 C2④ 回場鈕（matchLoop）與本檔換人面板共用同一套對位合法性判定
+export const roleSwapOk = (a, b) => a === b
   || (a === 'setter' && b === 'opposite') || (a === 'opposite' && b === 'setter');
 
 // W7 A6：換人面板體力條顏色（沿用 tier 門檻常數，不寫死數字）
@@ -75,7 +76,8 @@ export function createSubPanel({ game, playerId, handlers, floatText }) {
 
   function row(id, kind) {
     const p = game.players[id];
-    const locked = kind === 'field' && (id === playerId || p.currentRole === 'libero');
+    // W7 C1①（拍板）：主角解鎖可換下——場上僅自由人仍鎖定（不經一般換人）
+    const locked = kind === 'field' && p.currentRole === 'libero';
     const r = document.createElement('div');
     css(r, [
       'display:flex', 'flex-direction:column', 'gap:2px', 'padding:8px 10px',
