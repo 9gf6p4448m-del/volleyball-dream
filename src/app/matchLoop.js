@@ -5,8 +5,8 @@
 // 與賽前準備（matchConfig/matchStage）僅以 config/gates/stage 資料介面銜接，
 // 與賽末收束（matchCareer）僅在局終呼叫 settleCareerMatch 一次。
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
-import { createGame, stepGame, applySubstitution } from '../sim/game.js';
-import { createAiState, aiCollectIntents } from '../sim/ai.js';
+import { createGame, stepGame, applySubstitution, applyTimeout } from '../sim/game.js';
+import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
@@ -35,6 +35,8 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
       }
     };
   }
+  // W7 B3：我方暫停鈕的執行回呼（sim applyTimeout 唯一路徑）
+  stage.handlers.requestTimeout = () => requestTimeout(s);
   // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
   window.__phase1 = {
     game: s.game, aiState: s.aiState,
@@ -115,6 +117,22 @@ function requestSubstitution(s, outId, inId) {
   return r;
 }
 
+// W7 B3 我方暫停（stage.handlers.requestTimeout）：sim 執行＋浮字教練圈演出＋播報一句。
+// 走 sim 唯一路徑 applyTimeout；成功才有演出（額度用盡/rally 中會被 sim 擋下，UI 已先反灰）
+function requestTimeout(s) {
+  const team = s.game.players[s.playerId].teamId;
+  const r = applyTimeout(s.game, { team });
+  if (r.ok) {
+    // TODO(naming)：暫停教練圈台詞佔位，命名工程統一潤稿
+    s.stage.floatText.show('教練：穩住，一分一分拿回來', '#ffd166', 1800);
+    s.stage.commentary?.onEvents(
+      [{ type: 'TIMEOUT', tick: s.game.tick, team, remaining: s.game.timeouts[team].remaining }],
+      s.game, s.aiState, performance.now(), s.controlledId,
+    );
+  }
+  return r;
+}
+
 // W6 壯舉字卡監看清單：只收本場對手、有 feat 軸、未招募且尚未達標的招募槽；
 // wins/stage 軸不在此列（完成點在賽末，入隊儀式已涵蓋該節拍）
 function buildRecruitWatch(careerCtx, playerId) {
@@ -165,7 +183,10 @@ function bindInputHandlers(s) {
       return;
     }
     s.seed += 1;
-    s.game = createGame({ seed: s.seed, setTarget: config.setTarget });
+    s.game = createGame({
+      seed: s.seed, setTarget: config.setTarget,
+      stamina: config.gameOptions.stamina, // W7：快速比賽重開局保持體力設定
+    });
     s.aiState = createAiState();
     s.controlledId = s.playerId;
     s.switchKey = '';
@@ -491,6 +512,14 @@ function applyEvents(s, frameEvents, now) {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
+      // W7 B3：對手 AI 暫停判準（死球節拍檢查，成立才喊——被連 4 分＋死球＋有額度）
+      if (aiTimeoutWanted(game, 'B') && applyTimeout(game, { team: 'B' }).ok) {
+        cards.push({ pri: 25, text: '對方喊暫停', color: '#ff9d7a', dur: 1600 });
+        stage.commentary?.onEvents(
+          [{ type: 'TIMEOUT', tick: game.tick, team: 'B', remaining: game.timeouts.B.remaining }],
+          game, s.aiState, now, s.controlledId,
+        );
+      }
     } else if (e.type === 'SCORE') {
       // W6 回歸字卡（新增採納 7）：被換回場上的人首次建功——最後觸球歸因同 pointBanner
       if (
@@ -663,6 +692,9 @@ function frameStep(s, now) {
   }
   updateDiveReady(s);
   stage.subPanel?.sync(game); // W6 ⚙ 換人鈕可用性（死球窗＋剩餘額度）
+  stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
+  // W7 A6：主角 HUD 體力條（受控者本人；stamina 未啟用傳 null 短路隱藏）
+  stage.heroStamina?.update(game.stamina ? (game.stamina[s.controlledId] ?? 1) : null);
   stage.scoreboard.update(game, myBall, s.controlledId,
     stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());

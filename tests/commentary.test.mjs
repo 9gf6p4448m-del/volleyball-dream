@@ -97,6 +97,98 @@ test('長 rally 拍數：SERVE 起算、第 8 拍起播', () => {
   assert.equal(c.line(g, null, ME, 9000).text, '第 8 拍攻防！');
 });
 
+// W7 A4 附：體力播報節流——獨立 fixture（需要 trust.fromSetter＋完整 rotations 供王牌判定）
+function makeStaminaGame({ rotA = ['A1', 'A2'], rotB = ['B1', 'B2'], trust = {} } = {}) {
+  const players = {};
+  const names = { A1: '小夢', A2: 'A隊2號', B1: '白浪1號', B2: '白浪2號' };
+  for (const id of [...rotA, ...rotB]) {
+    players[id] = {
+      name: names[id] ?? id, teamId: id[0], currentRole: 'outside',
+      trust: { fromSetter: trust[id] ?? 50 },
+    };
+  }
+  return {
+    phase: 'rally',
+    players,
+    match: { score: { A: 0, B: 0 }, servingTeam: 'A', rotations: { A: rotA, B: rotB } },
+    rally: { touches: 0, possession: null, flightId: 0 },
+  };
+}
+
+test('體力播報：tier1 每人每場只播一次——重複跨檔（模擬回復後再掉）不再收單', () => {
+  const c = createCommentary();
+  const g = makeStaminaGame();
+  const ME = 'A1'; // 與候選 A2 同隊（隊友，非主角本人）＝我方提醒口吻
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 0, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 0, ME);
+  const first = c.line(g, null, ME, 50);
+  assert.equal(first.text, 'A隊2號 體力見底，考慮讓他休息');
+  assert.equal(first.kind, 'beat');
+  // TTL 過期後乾淨重來，再次跨同一 tier1 檔（同一人）——已標記過，不再收單、不再播
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 5000, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 5000, ME);
+  assert.equal(c.line(g, null, ME, 5050).text, '');
+});
+
+test('體力播報：同一死球窗撞車取王牌（trust.fromSetter 最高者），非先到先播', () => {
+  const c = createCommentary();
+  const g = makeStaminaGame({ trust: { A1: 80, A2: 50 } }); // A1 為王牌
+  const ME = 'B1'; // 旁觀 A 隊（敵方視角，口吻不影響本測試驗的是「選誰」）
+  // 角色球員 A2 先跨檔，王牌 A1 後跨檔——同一死球窗仍應取 A1
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 0, ME);
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A1', tier: 1 }], g, null, 10, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 10, ME);
+  assert.equal(c.line(g, null, ME, 60).text, '小夢 的移動變慢了——他累了');
+});
+
+test('體力播報：我方 tier2（<25%）在 tier1 播過後再播一次，且文案不同', () => {
+  const c = createCommentary();
+  const g = makeStaminaGame();
+  const ME = 'A1'; // controlledId 屬 A 隊，A2 是隊友（非主角）
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 0, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 0, ME);
+  assert.equal(c.line(g, null, ME, 50).text, 'A隊2號 體力見底，考慮讓他休息');
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 2 }], g, null, 5000, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 5000, ME);
+  assert.equal(c.line(g, null, ME, 5050).text, 'A隊2號 體力只剩不到 25%——真的該換人了');
+});
+
+test('體力播報：敵方 tier2 豁免無播報（tier1 仍正常播——只有重度段被擋）', () => {
+  const c = createCommentary();
+  const g = makeStaminaGame();
+  const ME = 'A1';
+  // 敵方（B2）直接跨 tier2：整段豁免、不收單、不播
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'B', playerId: 'B2', tier: 2 }], g, null, 0, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 0, ME);
+  assert.equal(c.line(g, null, ME, 50).text, '');
+  // 同一人之後（另一死球窗）跨 tier1＝正常收單播報（戰術情報口吻）
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'B', playerId: 'B2', tier: 1 }], g, null, 5000, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 5000, ME);
+  assert.equal(c.line(g, null, ME, 5050).text, '白浪2號 的移動變慢了——他累了');
+});
+
+test('體力播報：主角豁免——受控者本人跨檔零播報', () => {
+  const c = createCommentary();
+  const g = makeStaminaGame();
+  const ME = 'A1';
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: ME, tier: 1 }], g, null, 0, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 0, ME);
+  assert.equal(c.line(g, null, ME, 50).text, '');
+  c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: ME, tier: 2 }], g, null, 5000, ME);
+  c.onEvents([{ type: 'DEAD_BALL' }], g, null, 5000, ME);
+  assert.equal(c.line(g, null, ME, 5050).text, '');
+});
+
+test('暫停播報：我方請求暫停／對方喊暫停——口吻分流', () => {
+  const c = createCommentary();
+  const g = makeStaminaGame();
+  const ME = 'A1';
+  c.onEvents([{ type: 'TIMEOUT', team: 'A' }], g, null, 0, ME);
+  assert.equal(c.line(g, null, ME, 50).text, '我方請求暫停');
+  c.onEvents([{ type: 'TIMEOUT', team: 'B' }], g, null, 5000, ME);
+  assert.equal(c.line(g, null, ME, 5050).text, '對方喊了暫停，重新佈局');
+});
+
 test('commentary 純度：零 DOM、零內部時間源（時間全外部注入）', () => {
   const src = readFileSync(new URL('../src/ui/commentary.js', import.meta.url), 'utf8');
   for (const banned of ['document.', 'window.', 'performance.now', 'Date.now(', 'Math.random(']) {

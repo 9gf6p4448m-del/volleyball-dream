@@ -5,9 +5,17 @@
 // ——盲換變讀數據。面板開啟時 matchLoop 凍結模擬（死球窗不流逝）。
 import { matchStatsFor } from '../career/growth.js';
 import { ROLE_ABBR } from '../career/roster.js';
+import { STAMINA } from '../sim/stamina.js';
 
 const roleSwapOk = (a, b) => a === b
   || (a === 'setter' && b === 'opposite') || (a === 'opposite' && b === 'setter');
+
+// W7 A6：換人面板體力條顏色（沿用 tier 門檻常數，不寫死數字）
+function staminaColor(v) {
+  if (v < STAMINA.TIER2_BELOW) return '#ff5b5b';
+  if (v < STAMINA.TIER1_BELOW) return '#ffd166';
+  return '#60ffa0';
+}
 
 // 本場微指標：攻＝殺球/出手、接＝高品質接發占比（≥0.8 同 strongReceive 門檻）、信任＝基準＋場內動態
 function statLine(game, id) {
@@ -28,7 +36,8 @@ function statLine(game, id) {
 }
 
 // handlers.requestSub 由 matchLoop 開機注入（stage.handlers 後綁定慣例）
-export function createSubPanel({ game, playerId, handlers }) {
+// floatText（W7 E3）：板凳無人時反灰鈕點擊提示用；未啟用體力＝game.stamina 為 null
+export function createSubPanel({ game, playerId, handlers, floatText }) {
   const css = (elm, arr) => { elm.style.cssText = arr.join(';'); };
   const btn = document.createElement('button');
   css(btn, [
@@ -96,6 +105,24 @@ export function createSubPanel({ game, playerId, handlers }) {
     stat.textContent = statLine(game, id);
     r.appendChild(top);
     r.appendChild(stat);
+    // W7 A6：體力條（未啟用體力＝game.stamina 為 null，整條不顯示）
+    if (game.stamina) {
+      const v = game.stamina[id] ?? 1;
+      const pct = Math.round(v * 100);
+      const track = document.createElement('div');
+      css(track, ['display:flex', 'align-items:center', 'gap:6px', 'margin-top:2px']);
+      const barBg = document.createElement('div');
+      css(barBg, ['flex:1', 'height:5px', 'border-radius:3px', 'background:rgba(255,255,255,0.14)', 'overflow:hidden']);
+      const barFill = document.createElement('div');
+      css(barFill, [`width:${pct}%`, 'height:100%', `background:${staminaColor(v)}`]);
+      barBg.appendChild(barFill);
+      const pctLabel = document.createElement('span');
+      css(pctLabel, ['font-size:10px', 'color:#9fb0cc', 'min-width:28px', 'text-align:right']);
+      pctLabel.textContent = `${pct}%`;
+      track.appendChild(barBg);
+      track.appendChild(pctLabel);
+      r.appendChild(track);
+    }
     if (!locked) {
       r.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
@@ -173,7 +200,11 @@ export function createSubPanel({ game, playerId, handlers }) {
 
   btn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
-    if (btn.dataset.enabled !== '1') return;
+    if (btn.dataset.enabled !== '1') {
+      // W7 E3：板凳無人＝常駐反灰鈕，點擊給出解鎖提示（其餘反灰原因如非死球窗/額度用盡不特別提示）
+      if (btn.dataset.benchEmpty === '1') floatText?.show('板凳無人——招募隊員後解鎖', '#ff8a8a', 1400);
+      return;
+    }
     api.openPanel();
   });
   overlay.addEventListener('pointerdown', (e) => {
@@ -195,11 +226,14 @@ export function createSubPanel({ game, playerId, handlers }) {
       overlay.style.display = 'none';
       handlers.onSubPanelClose?.();
     },
-    // 每幀同步：死球窗且有額度且有板凳才可按（比賽結束隱藏）
+    // 每幀同步：死球窗且有額度且有板凳才可按（比賽結束隱藏）；
+    // W7 E3：鈕本身常駐（matchStage 不再以板凳是否有人決定要不要建鈕），板凳無人時反灰＋點擊給提示
     sync(g) {
       const team = teamOf();
-      const usable = g.phase === 'serve' && g.subs[team].remaining > 0 && g.bench[team].length > 0;
+      const benchEmpty = g.bench[team].length === 0;
+      const usable = g.phase === 'serve' && g.subs[team].remaining > 0 && !benchEmpty;
       btn.dataset.enabled = usable ? '1' : '0';
+      btn.dataset.benchEmpty = benchEmpty ? '1' : '0';
       btn.style.opacity = usable ? '1' : '0.45';
       btn.textContent = `⚙ 換人 ${g.subs[team].remaining}`;
       if (g.phase === 'set_over') {

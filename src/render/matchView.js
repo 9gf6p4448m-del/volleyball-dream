@@ -7,6 +7,7 @@ import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
 import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
+import { STAMINA, tierOf } from '../sim/stamina.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
@@ -98,7 +99,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // alpha＝步間插值；dt＝畫面幀時間；frameEvents＝本幀 sim 事件（驅動姿勢）
     sync(gameState, alpha, dt, frameEvents = []) {
       routeEvents(frameEvents, gameState);
+      const myTeam = gameState.players[highlightId]?.teamId; // A6/A4：標籤變色以受控者所屬隊為「我方」
       for (const [id, u] of Object.entries(units)) {
+        const pTeam = gameState.players[id].teamId;
         // 魚躍：偵測新倒地（divedUntil 剛跳到未來）→ 撲救動畫；撲到有 TOUCH、撲空無事件，
         // 都靠這裡演，修「按魚躍站著不動」bug（sim 端已倒地、缺的是視覺）
         const diveActor = gameState.actors[id];
@@ -108,6 +111,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         u.lastDived = diveActor.divedUntil;
         // 舉手備戰：①攔網窗開著②對方進攻組織中且我在網前——攻擊方讀攔網看得到手牆
         let blockDuty = false;
+        // W7 A4③：喘氣 idle——場上（雙方）跌破 50% 者，死球間隙以撐膝彎腰取代待命姿勢
+        // （原始檔位、不吃 heavyExempt——這是可讀訊號不是效果；發球員例外，見下方 else if 先攔）
+        const tired = gameState.stamina &&
+          gameState.match.rotations[pTeam].includes(id) &&
+          tierOf(gameState.stamina[id] ?? 1) >= 1;
         if (forcePose) {
           u.animator.setHold(forcePose);
         } else if (gameState.phase === 'serve' && serverId(gameState.match) === id
@@ -115,8 +123,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           // 發球前持球預備（07-24 連貫性）：等哨/等面板期間捧球站位——
           // 發球瞬間直接銜接分式揮擊，不再「罰站→憑空揮手」
           u.animator.setHold('serveReady');
+        } else if (gameState.phase === 'serve' && tired) {
+          u.animator.setHold('gasp');
         } else {
-          const teamB = gameState.players[id].teamId;
+          const teamB = pTeam;
           const r = gameState.rally;
           const ready =
             gameState.phase === 'rally' &&
@@ -130,13 +140,17 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const x = a.px + (a.x - a.px) * alpha;
         const z = a.pz + (a.z - a.pz) * alpha;
 
-        // 頭上標籤：角色縮寫（S/OH/MB/OPP；玩家標「你·」前綴）
-        const team0 = gameState.players[id].teamId;
+        // 頭上標籤：角色縮寫（S/OH/MB/OPP；玩家標「你·」前綴）＋
+        // W7 A4/A6 低體力變色：我方 <25% 轉紅、對手 <50% 轉黃（原始檔位，粗訊號不做精確條）
+        const team0 = pTeam;
         const text = (id === highlightId ? '你·' : '') +
           (ROLE_TAG[gameState.players[id].currentRole] ?? '?');
-        if (text !== u.tagText) {
+        const staminaColor = staminaTagColor(gameState, id, team0, myTeam);
+        const color = staminaColor ?? TAG_COLORS[team0];
+        if (text !== u.tagText || color !== u.tagColor) {
           u.tagText = text;
-          drawTag(u.tag, text, TAG_COLORS[team0]);
+          u.tagColor = color;
+          drawTag(u.tag, text, color);
         }
         u.tag.sprite.position.set(x, u.tagY, z);
 
@@ -261,6 +275,15 @@ function createDust(scene) {
       if (alive) geo.attributes.position.needsUpdate = true;
     },
   };
+}
+
+// W7 A4/A6：頭上標籤低體力變色——我方 <25%（tier2）轉紅、對手 <50%（tier1+）轉黃
+// （對手只給粗訊號，不做精確體力條）；體力未啟用或未跨檔＝回傳 null（沿用預設隊色）
+function staminaTagColor(gameState, id, team0, myTeam) {
+  if (!gameState.stamina) return null;
+  const v = gameState.stamina[id] ?? 1;
+  if (team0 === myTeam) return v < STAMINA.TIER2_BELOW ? '#ff5b5b' : null;
+  return v < STAMINA.TIER1_BELOW ? '#ffd166' : null;
 }
 
 function shortestArc(from, to) {

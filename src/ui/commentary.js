@@ -13,6 +13,25 @@ const HEAVY_POWER = 0.9;      // 高於此＝全力重扣
 const PERFECT_POWER = 0.95;   // Perfect 一傳
 const DIG_LOW_Y = 0.5;        // 貼地撈球高度
 
+// W7 A4 附：王牌判定——該隊場上 trust.fromSetter 最高者，同分取 id 序（決定論）
+function isAceOnCourt(game, team, playerId) {
+  const rot = game.match.rotations?.[team] ?? [];
+  let best = null;
+  for (const id of rot) {
+    const trust = game.players[id]?.trust?.fromSetter ?? 0;
+    if (!best || trust > best.trust || (trust === best.trust && id < best.id)) best = { id, trust };
+  }
+  return best?.id === playerId;
+}
+
+// 同一死球窗撞車取重要度高者：王牌＞角色球員；同級再比檔位、id 序（皆決定論）
+function pickStaminaWinner(candidates, game) {
+  if (!candidates.length) return null;
+  const scored = candidates.map((c) => ({ ...c, ace: isAceOnCourt(game, c.team, c.playerId) ? 1 : 0 }));
+  scored.sort((a, b) => (b.ace - a.ace) || (b.tier - a.tier) || (a.playerId < b.playerId ? -1 : 1));
+  return scored[0];
+}
+
 export function createCommentary(opponentDef = null) {
   let beat = null;            // { text, until }——單槽，新節奏點直接蓋舊的
   let rallyStartFlight = 0;   // 本球起始 flight（拍數＝差值）
@@ -20,6 +39,11 @@ export function createCommentary(opponentDef = null) {
   let streakN = 0;
   let prevLeader = null;      // 領先隊（逆轉判定）
   let lastTotal = 0;          // 總分倒退＝換局重開，內部狀態歸零
+  // W7 A4 附：體力播報節流——tier1 每人每場一次（雙方共用一個集合，playerId 天生跨隊唯一）、
+  // 我方 tier2 再播一次（獨立集合）；staminaWindow＝本死球窗候選，DEAD_BALL 時結算取王牌
+  const tier1Fired = new Set();
+  const tier2AllyFired = new Set();
+  let staminaWindow = [];
 
   const oppName = opponentDef?.name ?? '對方';
   const teamLabel = (game, team, controlledId) =>
@@ -27,6 +51,15 @@ export function createCommentary(opponentDef = null) {
   const nameOf = (game, playerId) => game.players[playerId]?.name ?? playerId;
 
   const setBeat = (text, now, ttl = BEAT_TTL) => { beat = { text, until: now + ttl }; };
+
+  // TODO(naming)：體力播報詞佔位，命名工程統一潤稿——敵方戰術情報口吻／我方提醒口吻
+  const staminaLine = (cand, game, myTeam) => {
+    const name = nameOf(game, cand.playerId);
+    if (cand.team === myTeam) {
+      return cand.tier === 2 ? `${name} 體力只剩不到 25%——真的該換人了` : `${name} 體力見底，考慮讓他休息`;
+    }
+    return `${name} 的移動變慢了——他累了`; // 敵方恆 tier1（tier2 已在收集階段濾掉）
+  };
 
   return {
     // 每 frame 把 sim 事件餵進來（與 pointBanner 同一條事件流）
@@ -86,6 +119,34 @@ export function createCommentary(opponentDef = null) {
             setBeat(`${label}連下 ${streakN} 分！`, now, STREAK_TTL);
           }
           if (leader) prevLeader = leader;
+        } else if (e.type === 'STAMINA_LOW') {
+          // W7 A4 附：節流收集（不即時播）——主角豁免；敵方 tier2 豁免（heavyExempt 段無播報）；
+          // tier1 每人每場一次；我方 tier2 再播一次。同一死球窗的候選 DEAD_BALL 時才結算取王牌
+          const myTeam = game.players[controlledId]?.teamId;
+          if (e.playerId === controlledId) {
+            // 主角豁免所有體力播報（讓位給 C1 教練對話，避免同事兩講）
+          } else if (e.team !== myTeam && e.tier === 2) {
+            // 敵方重度豁免段無播報
+          } else if (e.tier === 1 && !tier1Fired.has(e.playerId)) {
+            tier1Fired.add(e.playerId);
+            staminaWindow.push({ playerId: e.playerId, team: e.team, tier: 1 });
+          } else if (e.tier === 2 && e.team === myTeam && !tier2AllyFired.has(e.playerId)) {
+            tier2AllyFired.add(e.playerId);
+            staminaWindow.push({ playerId: e.playerId, team: e.team, tier: 2 });
+          }
+        } else if (e.type === 'DEAD_BALL') {
+          // 本死球窗（剛結束的那球）累積的體力候選在此結算：撞車取王牌，零丟訊息也零多播
+          if (staminaWindow.length) {
+            const winner = pickStaminaWinner(staminaWindow, game);
+            staminaWindow = [];
+            if (winner) setBeat(staminaLine(winner, game, game.players[controlledId]?.teamId), now, STREAK_TTL);
+          }
+        } else if (e.type === 'TIMEOUT') {
+          // W7 B3：暫停播報——我方（含玩家點擊與隊友視角一致）＝提醒口吻／對方 AI 喊＝戰術情報口吻
+          const label = teamLabel(game, e.team, controlledId);
+          const mine = e.team === game.players[controlledId]?.teamId;
+          // TODO(naming)：暫停播報詞佔位，命名工程統一潤稿
+          setBeat(mine ? `${label}請求暫停` : `${label}喊了暫停，重新佈局`, now, STREAK_TTL);
         }
       }
     },

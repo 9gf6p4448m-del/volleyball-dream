@@ -19,6 +19,7 @@ import { showTutorialOnce } from '../ui/tutorial.js';
 import { createSetOverOverlay } from '../ui/setOverOverlay.js';
 import { createSubPanel } from '../ui/subPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
+import { STAMINA } from '../sim/stamina.js';
 
 export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
@@ -26,7 +27,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   // matchLoop 開機時注入（dive 鈕 07-24 移除＝改自動）；
   // W6：requestSub（換人執行）/onSubPanelClose（面板關閉→補播換人敘事）
-  const handlers = { replay: null, requestSub: null, onSubPanelClose: null };
+  // W7 B3：requestTimeout（我方暫停鈕點擊執行）
+  const handlers = { replay: null, requestSub: null, onSubPanelClose: null, requestTimeout: null };
 
   let matchView;
   try {
@@ -60,23 +62,28 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     : createQuickLeaveButton(params);
   // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
   const teachDialog = careerSetup ? createTeachDialog() : null;
-  // W6 B2 賽中換人面板：生涯且有板凳才建（⚙ 鈕右上堆疊第三格；requestSub 由 loop 注入）
-  const subPanel = careerSetup && (game.bench?.A?.length ?? 0) > 0
-    ? createSubPanel({ game, playerId, handlers })
+  const floatText = createFloatText(); // subPanel/timeoutBtn 反灰提示要用，提前建
+  // W6 B2 賽中換人面板：生涯才建（⚙ 鈕右上堆疊第三格；requestSub 由 loop 注入）；
+  // W7 E3（拍板）：鈕常駐顯示，板凳無人改由 subPanel.sync() 反灰＋點擊提示，不再由此處擋建鈕
+  const subPanel = careerSetup
+    ? createSubPanel({ game, playerId, handlers, floatText })
     : null;
+  // W7 B3：我方暫停鈕（⚙ 換人鈕同排；生涯／快速比賽皆可喊——timeouts 與 subs 一樣不綁生涯）
+  const timeoutBtn = createTimeoutButton({ handlers, playerId });
 
   const aimMarker = createAimMarker(scene); // 琥珀色＝你的瞄準點（經典模式）
   const landingMarker = createAimMarker(scene, 0x6ee7ff, 0.6); // 青色圈＝來球預測落點
-  const floatText = createFloatText();
   // 得分原因面板：死球後顯示「誰得分＋為什麼」（殺球/ACE/出界/犯規…）
   const pointBanner = createPointBanner();
   const setOverOverlay = createSetOverOverlay();
+  // W7 A6：主角體力條（HUD 角落；stamina 未啟用時 update() 內部短路不顯示）
+  const heroStamina = createHeroStaminaBar();
   showTutorialOnce(simpleMode);
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog, subPanel,
-    aimMarker, landingMarker, floatText, pointBanner, setOverOverlay,
+    panel, actionButtons, hints, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
+    aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, heroStamina,
   };
 }
 
@@ -285,6 +292,78 @@ function createReplayButton(handlers) {
   });
   document.body.appendChild(replayBtn);
   return { el: replayBtn };
+}
+
+// W7 B3：我方暫停鈕——⚙ 換人鈕同排（左側）；死球窗＋有額度才可按，其餘反灰（同 subPanel 鈕範式）；
+// 點擊呼叫 handlers.requestTimeout（matchLoop 開機注入＝唯一執行路徑，走 sim applyTimeout）
+function createTimeoutButton({ handlers, playerId }) {
+  const btn = document.createElement('button');
+  btn.style.cssText = [
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 112px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 130px)',
+    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
+    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
+    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
+    'touch-action:manipulation',
+  ].join(';');
+  btn.textContent = '⏱ 暫停';
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (btn.dataset.enabled !== '1') return;
+    handlers.requestTimeout?.();
+  });
+  document.body.appendChild(btn);
+  return {
+    el: btn,
+    // 每幀同步：死球窗＋我方（playerId 所屬隊）還有額度才可按
+    sync(g) {
+      const team = g.players[playerId].teamId;
+      const remaining = g.timeouts?.[team]?.remaining ?? 0;
+      const usable = g.phase === 'serve' && remaining > 0;
+      btn.dataset.enabled = usable ? '1' : '0';
+      btn.style.opacity = usable ? '1' : '0.45';
+      btn.textContent = `⏱ 暫停×${remaining}`;
+      if (g.phase === 'set_over') btn.style.display = 'none';
+    },
+  };
+}
+
+// W7 A6：主角體力條——HUD 角落常駐（螢幕左下，避開記分板/播報泡泡/操作面板）；
+// stamina 未啟用（game.stamina 為 null）＝整條不建（呼叫端每幀傳 null 短路）
+function createHeroStaminaBar() {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = [
+    'position:fixed', 'left:calc(env(safe-area-inset-left, 0px) + 10px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 10px)',
+    'width:110px', 'z-index:14', 'display:none',
+    'font-family:system-ui,sans-serif', 'pointer-events:none', 'user-select:none',
+  ].join(';');
+  const label = document.createElement('div');
+  label.textContent = '體力';
+  label.style.cssText = 'font-size:10px;color:#9fb0cc;margin-bottom:2px;letter-spacing:1px';
+  const track = document.createElement('div');
+  track.style.cssText = 'height:8px;border-radius:4px;background:rgba(255,255,255,0.14);overflow:hidden';
+  const fill = document.createElement('div');
+  fill.style.cssText = 'height:100%;width:100%;background:#60ffa0;transition:width 150ms linear';
+  track.appendChild(fill);
+  wrap.appendChild(label);
+  wrap.appendChild(track);
+  document.body.appendChild(wrap);
+  return {
+    el: wrap,
+    // value：0..1 或 null（體力未啟用／查無資料）
+    update(value) {
+      if (value === null || value === undefined) {
+        wrap.style.display = 'none';
+        return;
+      }
+      wrap.style.display = 'block';
+      const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+      fill.style.width = `${pct}%`;
+      fill.style.background = value < STAMINA.TIER2_BELOW ? '#ff5b5b'
+        : value < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0';
+    },
+  };
 }
 
 // 魚躍鈕已移除（07-24 拍板：撲救改自動判斷 matchControls 自動輔助——「太難用」；

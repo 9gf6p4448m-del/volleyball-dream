@@ -53,8 +53,13 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
     A: buildLibero('A', 'A隊自由人'),
     B: buildLibero('B', 'B隊自由人'),
   };
+  // W7 A1-A5 體力（雙方啟用）：生涯對手吃 A4 拍板（costMul 0.6 慢耗＋豁免重度門檻
+  // ——「他們有輪換調度、鏡頭外處理」的敘事）；快速比賽雙方對稱（同無板凳＝公平）
+  const stamina = careerSetup
+    ? { A: {}, B: { costMul: 0.6, heavyExempt: true } }
+    : { A: {}, B: {} };
   const gameOptions = {
-    seed, setTarget, liberos,
+    seed, setTarget, liberos, stamina,
     ...(careerSetup ? {
       teams: careerSetup.teams,
       aiProfiles: careerSetup.aiProfiles,
@@ -72,6 +77,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
     ? buildScoutTape(
       seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos,
       teachFeature, careerSetup.benches, // W6：帶子與正賽同陣容鏡像（含板凳）
+      stamina, // W7：帶子鏡像鐵律——體力設定同正賽
     )
     : [];
 

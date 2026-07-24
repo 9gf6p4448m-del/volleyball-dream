@@ -56,6 +56,15 @@ test('發球分式動畫：serveJump 高跳、serveFloat 站立零跳、serveRea
   assert.ok(r3.joints.rShoulder.rotation.x < -0.5, '捧球預備＝雙臂前伸');
 });
 
+test('W7 A4③ 喘氣 idle：hold 姿勢＝深前傾＋撐膝（spine/crouch 明顯大於待命）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.setHold('gasp');
+  anim.update(0.05, 0);
+  assert.ok(rig.joints.spine.rotation.x > 0.5, `軀幹應深前傾（${rig.joints.spine.rotation.x}）`);
+  assert.ok(rig.joints.rElbow.rotation.x < -0.3, '手肘應大彎（撐膝）');
+});
+
 test('geoAnimator：未知動作不崩（trigger 防呆）', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);
