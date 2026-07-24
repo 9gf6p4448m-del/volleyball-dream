@@ -5,7 +5,7 @@
 // 與賽前準備（matchConfig/matchStage）僅以 config/gates/stage 資料介面銜接，
 // 與賽末收束（matchCareer）僅在局終呼叫 settleCareerMatch 一次。
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
-import { createGame, stepGame, applySubstitution, applyTimeout } from '../sim/game.js';
+import { createGame, stepGame, applySubstitution, applyTimeout, TUNING } from '../sim/game.js';
 import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
@@ -537,8 +537,14 @@ function applyEvents(s, frameEvents, now) {
       }
       // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
       s.fovPunchUntil = now + 700;
+      // W7 B4④：氣勢滿檔（±MOMENTUM_MAX）且得分方正是氣勢有利方＝互擊掌加碼（cheer→highfive，時長拉長）
+      const momentumFavored = game.momentum
+        ? (game.momentum.value === TUNING.MOMENTUM_MAX ? 'A'
+          : game.momentum.value === -TUNING.MOMENTUM_MAX ? 'B' : null)
+        : null;
+      const cheerPose = e.team === momentumFavored ? 'highfive' : 'cheer';
       for (const id of game.match.rotations[e.team]) {
-        stage.matchView.triggerPose(id, 'cheer');
+        stage.matchView.triggerPose(id, cheerPose);
       }
       if (s.pendingDead) {
         stage.pointBanner.show(derivePointInfo({
@@ -674,7 +680,14 @@ function frameStep(s, now) {
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
   ctx.lights.setTension(tension, delta);
   stage.sfx.setHeartbeat(tension);
-  stage.sfx.setCrowdLevel(tension && game.phase === 'serve' ? 0.016 : 0.05); // 局點發球前屏息
+  // W7 B4②：氣勢聲量聯動——我方（A）有利＝聲量爬升、對方有利＝場館變安靜（壓迫感，非噓聲）；
+  // 優先序：局點發球前屏息＞氣勢聯動（tension 成立時氣勢聯動整個讓位，不疊算）
+  const momentumCrowd = game.momentum
+    ? 0.05 + (game.momentum.value / TUNING.MOMENTUM_MAX) * 0.035
+    : 0.05;
+  stage.sfx.setCrowdLevel(tension && game.phase === 'serve' ? 0.016 : momentumCrowd);
+  // W7 B4③：氣勢聚光微聯動（複用局點壓暗管線 lights.setTension 同一組燈具的姐妹方法）
+  ctx.lights.setMomentum(game.momentum ? game.momentum.value / TUNING.MOMENTUM_MAX : 0, tension, delta);
   // 鏡頭語言：得分 FOV punch＋重扣慢動作收緊（望遠壓縮感）
   const punchFov = now < s.fovPunchUntil
     ? 6.5 * Math.sin(Math.PI * (1 - (s.fovPunchUntil - now) / 700)) : 0;

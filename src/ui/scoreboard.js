@@ -2,6 +2,7 @@
 // 泡泡三層語氣：action＝琥珀色（要你做事）、beat＝白底 pop 進場、ambient＝淡入不 pop
 // 動畫紀律：只動 transform/opacity、180ms 強 ease-out、WAAPI 可中斷；reduced-motion 只留淡入
 import { serverId } from '../sim/match.js';
+import { TUNING } from '../sim/game.js';
 
 const POP_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
 const BUBBLE = {
@@ -9,6 +10,8 @@ const BUBBLE = {
   beat: { bg: '#f7f9ff', border: '#101420', text: '#101420' },
   ambient: { bg: '#f7f9ff', border: '#101420', text: '#2a3247' },
 };
+// W7 B4①：雙向氣勢計顏色——我方（A）側沿用隊色青、對方（B）側沿用暖色（同 matchView TAG_COLORS 語言）
+const MOMENTUM_COLOR = { A: '#6ee7ff', B: '#ff9d7a' };
 
 export function createScoreboard(playerId) {
   const el = document.createElement('div');
@@ -29,6 +32,13 @@ export function createScoreboard(playerId) {
         margin-bottom:1px;animation:vd-pulse 0.9s ease-in-out infinite"></div>
       <div class="line" style="font-size:clamp(30px, 8vw, 38px);font-weight:800;
         letter-spacing:2px;line-height:1.15">0 : 0</div>
+    </div>
+    <div class="momentum" style="display:none;width:min(60vw,220px);height:7px;position:relative;
+      background:rgba(255,255,255,0.16);border-radius:4px;overflow:hidden;pointer-events:none">
+      <div class="mCenter" style="position:absolute;left:50%;top:0;bottom:0;width:1.5px;
+        background:rgba(255,255,255,0.5);transform:translateX(-50%)"></div>
+      <div class="mFill" style="position:absolute;top:0;bottom:0;
+        transition:left 200ms ease-out,width 200ms ease-out,background 200ms ease-out"></div>
     </div>
     <div class="bubble" style="display:none;background:#f7f9ff;transition:opacity 120ms ease">
       <div class="tail" style="background:#f7f9ff"></div>
@@ -61,6 +71,8 @@ export function createScoreboard(playerId) {
   }
   const lineEl = el.querySelector('.line');
   const setPtEl = el.querySelector('.setpt');
+  const momentumEl = el.querySelector('.momentum');
+  const mFillEl = el.querySelector('.mFill');
   const bubbleEl = el.querySelector('.bubble');
   const tailEl = el.querySelector('.tail');
   const btextEl = el.querySelector('.btext');
@@ -135,6 +147,19 @@ export function createScoreboard(playerId) {
         : isMyBall
           ? '🟠 這球歸你！跑向藍色落點圈'
           : hintFor(game, controlledId, serve));
+
+      // W7 B4①：雙向氣勢計——記分板正下方；未啟用（game.momentum 為 null）整條不建
+      if (!game.momentum) {
+        momentumEl.style.display = 'none';
+      } else {
+        momentumEl.style.display = 'block';
+        const v = game.momentum.value; // −MOMENTUM_MAX..+MOMENTUM_MAX（＋＝A、−＝B）
+        const frac = Math.min(Math.abs(v) / TUNING.MOMENTUM_MAX, 1) * 50; // 半軌最大百分比
+        // 方向對齊比分：A（我方）氣勢往左長（比分 A 在左）、B 往右長
+        mFillEl.style.background = v >= 0 ? MOMENTUM_COLOR.A : MOMENTUM_COLOR.B;
+        mFillEl.style.left = v >= 0 ? `${50 - frac}%` : '50%';
+        mFillEl.style.width = `${frac}%`;
+      }
 
       // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）
       const spTeam = setPointTeam(game);

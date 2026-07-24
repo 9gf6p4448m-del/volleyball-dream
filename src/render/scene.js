@@ -65,16 +65,21 @@ export function createLights(scene, quality) {
   scene.add(rim);
 
   // 球場聚光光池 ×2（不投影的氛圍燈：兩個半場各一盞暖光錐）
+  const SPOT_BASE = 260;
+  const spots = [];
   for (const sz of [7, -7]) {
-    const spot = new THREE.SpotLight(0xffe6bf, 260, 40, 0.62, 0.55, 1.6);
+    const spot = new THREE.SpotLight(0xffe6bf, SPOT_BASE, 40, 0.62, 0.55, 1.6);
     spot.position.set(0, 15, sz * 0.55);
     spot.target.position.set(0, 0, sz * 0.6);
     scene.add(spot);
     scene.add(spot.target);
+    spots.push(spot);
   }
 
   // 局點張力：底光再壓、輪廓光加強（戲劇性收攏）——幀率無關指數收斂
   let tension = 0;
+  // W7 B4③：氣勢聚光微聯動（+3 微增亮／−3 微收）——幀率無關指數收斂，獨立於 tension 狀態
+  let momentumGlow = 0;
   return {
     setTension(active, dt) {
       const t = active ? 1 : 0;
@@ -82,6 +87,14 @@ export function createLights(scene, quality) {
       hemi.intensity = 0.5 - 0.22 * tension;
       rim.intensity = 0.7 + 0.55 * tension;
       key.intensity = 2.6 - 0.25 * tension;
+    },
+    // value：momentum.value/MOMENTUM_MAX 正規化後的 −1..1（呼叫端已除好，這裡不吃 sim 常數）；
+    // 局點張力優先——tensionActive 時目標收斂回 0，避免與局點壓暗管線疊加打架
+    setMomentum(value, tensionActive, dt) {
+      const target = tensionActive ? 0 : value;
+      momentumGlow += (target - momentumGlow) * (1 - Math.exp(-3 * dt));
+      const mul = 1 + momentumGlow * 0.1; // 「微」增亮/微收，幅度封頂 ±10%——不可搶戲
+      for (const spot of spots) spot.intensity = SPOT_BASE * mul;
     },
   };
 }

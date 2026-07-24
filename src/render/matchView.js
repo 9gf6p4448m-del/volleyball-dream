@@ -8,6 +8,7 @@ import { serverId } from '../sim/match.js';
 import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 import { STAMINA, tierOf } from '../sim/stamina.js';
+import { TUNING } from '../sim/game.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
@@ -100,6 +101,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     sync(gameState, alpha, dt, frameEvents = []) {
       routeEvents(frameEvents, gameState);
       const myTeam = gameState.players[highlightId]?.teamId; // A6/A4：標籤變色以受控者所屬隊為「我方」
+      // W7 B4④：氣勢極端不利方（僅正負滿檔 ±MOMENTUM_MAX 才觸發，讀原始 value 不做粗訊號分級）
+      const dejectedTeam = gameState.momentum && Math.abs(gameState.momentum.value) === TUNING.MOMENTUM_MAX
+        ? (gameState.momentum.value > 0 ? 'B' : 'A')
+        : null;
       for (const [id, u] of Object.entries(units)) {
         const pTeam = gameState.players[id].teamId;
         // 魚躍：偵測新倒地（divedUntil 剛跳到未來）→ 撲救動畫；撲到有 TOUCH、撲空無事件，
@@ -111,11 +116,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         u.lastDived = diveActor.divedUntil;
         // 舉手備戰：①攔網窗開著②對方進攻組織中且我在網前——攻擊方讀攔網看得到手牆
         let blockDuty = false;
+        const onCourt = gameState.match.rotations[pTeam].includes(id);
         // W7 A4③：喘氣 idle——場上（雙方）跌破 50% 者，死球間隙以撐膝彎腰取代待命姿勢
         // （原始檔位、不吃 heavyExempt——這是可讀訊號不是效果；發球員例外，見下方 else if 先攔）
-        const tired = gameState.stamina &&
-          gameState.match.rotations[pTeam].includes(id) &&
-          tierOf(gameState.stamina[id] ?? 1) >= 1;
+        const tired = gameState.stamina && onCourt && tierOf(gameState.stamina[id] ?? 1) >= 1;
         if (forcePose) {
           u.animator.setHold(forcePose);
         } else if (gameState.phase === 'serve' && serverId(gameState.match) === id
@@ -124,7 +128,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           // 發球瞬間直接銜接分式揮擊，不再「罰站→憑空揮手」
           u.animator.setHold('serveReady');
         } else if (gameState.phase === 'serve' && tired) {
+          // 體力喘氣優先於氣勢低落（拍板：兩者相撞時喘氣贏）
           u.animator.setHold('gasp');
+        } else if (gameState.phase === 'serve' && onCourt && pTeam === dejectedTeam) {
+          u.animator.setHold('dejected');
         } else {
           const teamB = pTeam;
           const r = gameState.rally;

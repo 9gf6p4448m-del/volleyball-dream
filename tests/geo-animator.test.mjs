@@ -65,6 +65,33 @@ test('W7 A4③ 喘氣 idle：hold 姿勢＝深前傾＋撐膝（spine/crouch 明
   assert.ok(rig.joints.rElbow.rotation.x < -0.3, '手肘應大彎（撐膝）');
 });
 
+test('W7 B4④ 氣勢 dejected idle：垂肩低頭、無下蹲（區別於 gasp 撐膝）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.setHold('dejected');
+  anim.update(0.05, 0);
+  assert.ok(rig.joints.spine.rotation.x > 0.15 && rig.joints.spine.rotation.x < 0.5,
+    `軀幹應輕微前垂但不到喘氣深度（${rig.joints.spine.rotation.x}）`);
+  assert.ok(rig.joints.rElbow.rotation.x > -0.3, '手肘不應大彎（非撐膝，鬆垮下垂即可）');
+});
+
+test('W7 B4④ highfive：時長明顯長於一般 cheer', () => {
+  const rNorm = mkRig();
+  const aNorm = createGeoAnimator(rNorm);
+  aNorm.trigger('cheer');
+  aNorm.update(0.9, 0);
+  aNorm.update(0.01, 0);
+  assert.ok(aNorm.isIdle(), '一般 cheer 應在 0.9s 後結束');
+
+  const rBoost = mkRig();
+  const aBoost = createGeoAnimator(rBoost);
+  aBoost.trigger('highfive');
+  aBoost.update(0.9, 0);
+  assert.ok(!aBoost.isIdle(), 'highfive 在 0.9s 時應仍在播放（時長拉長）');
+  aBoost.update(0.5, 0);
+  assert.ok(aBoost.isIdle(), 'highfive 在 dur 1.3s 後應結束');
+});
+
 test('geoAnimator：未知動作不崩（trigger 防呆）', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);

@@ -265,7 +265,10 @@ for (let run = 0; run < RUNS; run += 1) {
 
 const pct = (n) => `${Math.round((n / RUNS) * 100)}%`;
 const avg = (a) => (a.reduce((s, v) => s + v, 0) / a.length).toFixed(1);
-const armName = USE_MANAGE ? '體力＋自動管理' : USE_STAMINA ? '體力＋無管理' : '基準（體力關）';
+const armName = [
+  USE_MANAGE ? '體力＋自動管理' : USE_STAMINA ? '體力＋無管理' : null,
+  USE_MOMENTUM ? '氣勢' : null,
+].filter(Boolean).join('＋') || '基準（W7 全關）';
 console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A2=AI 代打基準）===`);
 for (const id of matchIds) {
   console.log(`${id.padEnd(16)} 勝率 ${pct(wins[id]).padStart(4)}  平均分差 ${avg(margins[id])}`);
