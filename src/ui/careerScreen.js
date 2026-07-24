@@ -17,6 +17,7 @@ import {
 import {
   dueEvents, recordEvent, EXPEL_LINES, SEASON_OPENERS,
 } from '../career/events.js';
+import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
@@ -122,6 +123,35 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     dlgState = null;
     done();
   });
+
+  // ---- W6 A2 指定邀請：進入下一屆前選 1 隊必入小組（或交給輪抽）----
+  // 屆初公開＝選完即抽、賽程視圖直接亮結果（邀請場帶 ⭐ 徽章）
+  function showInvitePicker(onPick) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+      'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'padding:24px 16px',
+    ]);
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+      'flex-direction:column', 'gap:8px', 'align-items:stretch',
+    ]);
+    card.appendChild(el('div', [
+      'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+    ], '📮 指定邀請'));
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+      '每屆可指定 1 隊必入小組賽程，其餘場次由屆間輪抽決定——想刷誰的招募條件、想找誰復仇，自己請。'));
+    const pick = (id) => { overlay.remove(); onPick(id); };
+    for (const id of groupPool()) {
+      const def = opponentById(id);
+      card.appendChild(button(`${def.name}（強度 ${def.level}）`, false, () => pick(id)));
+    }
+    card.appendChild(button('不指定——全交給輪抽', true, () => pick(null)));
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
 
   // ---- W2 隊友卡（唯讀）：點名冊列開卡檢視；無任何寫入互動 ----
   const cardOverlay = el('div', [
@@ -906,7 +936,9 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         `border:1px solid ${isNext ? COLOR.cyan : 'transparent'}`,
       ]);
       const title = m.label ? `${m.label}・${opponentName(m.opponentId)}` : opponentName(m.opponentId);
-      row.appendChild(el('div', ['font-size:16px', 'font-weight:600'], title));
+      // W6 A2：指定邀請場帶徽章（輪抽結果屆初公開，邀請場一眼可辨）
+      row.appendChild(el('div', ['font-size:16px', 'font-weight:600'],
+        m.invited ? `⭐ ${title}` : title));
       let status;
       if (result) {
         status = el('div', [
@@ -942,11 +974,14 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     // W5 賽季輪迴：季末（奪冠/止步）→ 進入下一屆——名冊/招募/技巧/宿敵全保留。
     // 難度綁成就：止步＝對手原強度（帶著成長捲土重來）；奪冠＝衛冕屆對手升級
     // A4 最小劇情：進入下一屆後先播開場（衛冕 defend／捲土重來 comeback，隊長各一段）
+    // W6 A2：先選指定邀請（或不指定）再推進——選完即輪抽、賽程視圖直接公開結果
     const nextSeasonBtn = (label, openerKey) => button(label, true, () => {
-      if (!store.advanceSeason?.()) return;
-      const opener = SEASON_OPENERS[openerKey];
-      if (opener) dialogPlay([{ lines: opener }], () => renderCareer());
-      else renderCareer();
+      showInvitePicker((invitedId) => {
+        if (!store.advanceSeason?.({ invitedId })) return;
+        const opener = SEASON_OPENERS[openerKey];
+        if (opener) dialogPlay([{ lines: opener }], () => renderCareer());
+        else renderCareer();
+      });
     });
     if (stage === 'champion') {
       root.appendChild(el('div', [

@@ -107,12 +107,13 @@ export function createCareerStore(storage) {
     },
     // W5 賽季輪迴：季末（奪冠/止步）→ 下一屆。season 重置賽程戰績＋index+1；
     // 名冊/招募/lineup/player/宿敵/已播事件全數保留（RMW 只動 season）。
-    // 賽季未結束＝no-op 回 false（防 UI 誤觸）
-    advanceSeason() {
+    // 賽季未結束＝no-op 回 false（防 UI 誤觸）。
+    // W6 A2：opts.invitedId＝指定邀請隊（輪抽必入小組；null＝不指定）
+    advanceSeason(opts = {}) {
       const save = loadSave();
       const view = save ? careerViewOf(save) : null;
       if (!view) return false;
-      const next = advanceSeason(view);
+      const next = advanceSeason(view, opts);
       if (next === view) return false; // 賽季未結束
       return writeSave((prev) => ({
         ...prev,

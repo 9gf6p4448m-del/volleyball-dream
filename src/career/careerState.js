@@ -6,6 +6,7 @@ import { createPlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { createDefaultTeams } from '../sim/game.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
+import { buildSchedule } from './schedule.js';
 
 // v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
 export const CAREER_VERSION = 3;
@@ -82,16 +83,25 @@ export function matchSeed(career, matchId) {
 // 止步＝對手維持原強度（你帶著成長回來——失敗的回報是變強重來，不是更難）；
 // 奪冠＝titles+1 → 衛冕屆對手升級（TITLE_LEVEL_BONUS×titles——全國都在研究衛冕軍）。
 export const TITLE_LEVEL_BONUS = 3; // 每座冠軍讓對手全屬性 +3（平衡幅度 W6 複核）
-export function advanceSeason(career) {
+// W6 A2：第 2 屆起小組賽程輪抽（屆間輪換＋指定邀請 invitedId；國賽階梯固定）。
+// 第 1 屆恆為故事模板（createCareer）——教學鏈綁定北原/白浪/曜石場次（schedule.js 註）
+export function advanceSeason(career, { invitedId = null } = {}) {
   const stage = careerStage(career);
   if (stage !== 'champion' && stage !== 'eliminated') return career; // 賽季未結束＝不動
   let h = (career.seed ^ 0x9e3779b9) >>> 0;
   h = Math.imul(h ^ 0x85ebca6b, 16777619) >>> 0;
+  const seed = (h % 1000000007) || 1; // 決定論鏈：下一屆種子由本屆種子衍生
   const { pendingMatch, ...base } = career;
   return {
     ...base,
-    seed: (h % 1000000007) || 1, // 決定論鏈：下一屆種子由本屆種子衍生
-    schedule: SCHEDULE_TEMPLATE.map((m) => ({ ...m })),
+    seed,
+    schedule: buildSchedule({
+      seed,
+      invitedId,
+      prevGroupIds: career.schedule
+        .filter((m) => m.stage === 'group')
+        .map((m) => m.opponentId),
+    }),
     results: [],
     titles: (career.titles ?? 0) + (stage === 'champion' ? 1 : 0),
   };
