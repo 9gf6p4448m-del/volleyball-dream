@@ -9,6 +9,7 @@ import {
 } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
+import { predictLanding } from '../sim/flight.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
 import { dutyPosition } from '../sim/ai.js';
 
@@ -33,9 +34,24 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
   let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
   let manualOwned = false;          // 本球玩家已接管走位（碰過搖桿＝整球歸你；發球階段重置）
+  let diveLand = { flightId: -1, landing: null }; // 自動魚躍落點閘的逐 flight 快取
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  // W6.1 落點閘（拍板 07-24 Q3-A）：自動魚躍原判定式吃「瞬時球距」——朝我飛來的
+  // 低球會在 dist>1.3 時觸發、球其實落在腳邊（探針 456 樣本 16% 誤撲、9% 落點 ≤0.9m）。
+  // 加閘＝預測落點仍在站立可及（REACH_RADIUS）內就不撲，等球到腳邊普通接。
+  // 落點逐 flight 快取（彈道不變）；預測不到落地（理論罕見）＝放行維持原行為。
+  // 只動玩家自動魚躍（輸入層）；AI 有走位深度天然少誤撲，sim 不動＝balance 零擾動
+  const diveLandingOutOfReach = (game, actor) => {
+    if (diveLand.flightId !== game.rally.flightId) {
+      diveLand = { flightId: game.rally.flightId, landing: predictLanding(game.ball) };
+    }
+    const L = diveLand.landing;
+    if (!L) return true;
+    return Math.hypot(L.x - actor.x, L.z - actor.z) > TUNING.REACH_RADIUS;
+  };
 
   window.addEventListener('keydown', (e) => {
     if ((e.code === 'KeyJ' || (e.code === 'Space' && !simpleMode)) && !e.repeat) {
@@ -327,10 +343,12 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
             (me.techniques?.dive ?? 0) >= 1 &&
             b.vy < 0 && b.y <= TUNING.DIVE_MAX_Y && tick >= a.divedUntil &&
             Math.hypot(b.x - a.x, b.z - a.z) > TUNING.REACH_RADIUS &&
-            Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL) {
+            Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL &&
+            diveLandingOutOfReach(game, a)) {
           // 自動魚躍（拍板 07-24：常駐鈕太難用→撤除、改自動判斷）：與 AI 同一組
           // 觸發條件（這球歸我/備援＋站立搆不到＋魚躍可及＋低球下墜），但玩家版
           // 【必撲】不擲骰——機率會變「角色不聽話」；技術表達回到站位（站得好不用撲）。
+          // W6.1 追加落點閘：球會落到站立可及內＝不撲（見 diveLandingOutOfReach 註）。
           // aim 鏡像 AI：第三觸撲過網（撲回自家＝白送四擊）、其餘墊回二傳點；
           // L/Space 隱藏手動仍可提前撲
           action = 'dive';

@@ -43,6 +43,7 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     vcr: () => s.vcrLast,             // 上一球的回放資料
     controlled: () => s.controlledId, // 當前受控球員（輪控除錯）
     tapeCount: s.config.tapeClips.length, // 情蒐錄影帶卷數（測試用）
+    floatText: stage.floatText,       // 字卡把手（W6.1 疊排的自動化驗證用）
   };
   if (s.config.tapeClips.length) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
   showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
@@ -132,17 +133,23 @@ function buildRecruitWatch(careerCtx, playerId) {
 }
 
 // 死球時增量檢查：本場 feat 增量＋既有進度過門檻＝當場彈卡（一場一卡不重複；
-// 純 UI 演出——真正的進度累加仍在賽末 settleCareerMatch，不在此寫入）
-function checkRecruitFeats(s) {
+// 純 UI 演出——真正的進度累加仍在賽末 settleCareerMatch，不在此寫入）。
+// W6.1 T2：改走同框節流佇列——被更高優先字卡擠掉時不標 fired，下個死球重驗再出（不丟失）
+function checkRecruitFeats(s, cards) {
   if (!s.recruitWatch.length) return;
   const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
   for (const w of s.recruitWatch) {
     if (w.fired) continue;
     const gain = featGainFor(s.game.events, s.playerId, myTeam, w.cond);
     if (w.base + gain >= w.cond.feat.count) {
-      w.fired = true;
       const def = opponentById(w.cond.opponentId);
-      s.stage.floatText.show(`⭐ 招募條件達成：${def?.name ?? ''}・${w.cond.feat.label}`, '#ffd166', 1600);
+      cards.push({
+        pri: 40,
+        text: `⭐ 招募條件達成：${def?.name ?? ''}・${w.cond.feat.label}`,
+        color: '#ffd166',
+        dur: 1600,
+        onShown: () => { w.fired = true; },
+      });
     }
   }
 }
@@ -446,8 +453,12 @@ function stepSim(s) {
 }
 
 // 事件應用：音效/播報/juice（定格、震動、慢動作）/得分原因面板/慶祝
+// W6.1 字卡同框整流（拍板 07-24 Q1-T2 修訂版：不丟卡）：本批次字卡先集中收單，
+// 迴圈尾一次 flush——依優先序低→高送出（floatText 疊排＝後出的停在最顯眼的基準位、
+// 先出的被上推），資訊零損失、同框重合疊字歸零。優先序：⚡45＞⭐40＞🧱/👆/🎭20＞PERFECT 10
 function applyEvents(s, frameEvents, now) {
   const { game, stage } = s;
+  const cards = []; // [{ pri, text, color, dur, onShown? }]
   stage.sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - s.rallyStartFlight });
   stage.controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.controlledId);
@@ -470,16 +481,16 @@ function applyEvents(s, frameEvents, now) {
       // 主角攔網個人回饋（07-24 Sawmah）：碰到球當下即字卡（比照 PERFECT 接球卡）——
       // 攔死金色/擦手青色分色；攔死直接得分另有 pointBanner「攔網得分 🧱」收尾
       if (e.playerId === s.controlledId) {
-        if (e.graze) stage.floatText.show('👆 擦到了——快補！', '#6ee7ff', 1200);
-        else stage.floatText.show('🧱 攔網拍回！', '#ffd166', 1200);
+        if (e.graze) cards.push({ pri: 20, text: '👆 擦到了——快補！', color: '#6ee7ff', dur: 1200 });
+        else cards.push({ pri: 20, text: '🧱 攔網拍回！', color: '#ffd166', dur: 1200 });
       }
     } else if (e.type === 'BLOCK_DECEIVED' && e.spikerId === s.controlledId) {
       // 主角假動作騙過攔網（07-24）：回饋閉環——按A滑B到底有沒有騙到，從此看得見
-      stage.floatText.show('🎭 晃過攔網！', '#ffd166', 1100);
+      cards.push({ pri: 20, text: '🎭 晃過攔網！', color: '#ffd166', dur: 1100 });
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
-      checkRecruitFeats(s); // W6 壯舉達成字卡（死球節拍增量檢查）
+      checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
     } else if (e.type === 'SCORE') {
       // W6 回歸字卡（新增採納 7）：被換回場上的人首次建功——最後觸球歸因同 pointBanner
       if (
@@ -487,9 +498,12 @@ function applyEvents(s, frameEvents, now) {
         s.comebackWatch.has(s.lastTouch.playerId)
       ) {
         s.comebackWatch.delete(s.lastTouch.playerId);
-        stage.floatText.show(
-          `⚡ ${game.players[s.lastTouch.playerId]?.name ?? ''} 回歸即建功！`, '#ffd166', 1500,
-        );
+        cards.push({
+          pri: 45,
+          text: `⚡ ${game.players[s.lastTouch.playerId]?.name ?? ''} 回歸即建功！`,
+          color: '#ffd166',
+          dur: 1500,
+        });
       }
       // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
       s.fovPunchUntil = now + 700;
@@ -507,7 +521,15 @@ function applyEvents(s, frameEvents, now) {
       }
     } else if (e.type === 'TOUCH' && e.kind === 'receive' &&
         e.playerId === s.controlledId && (e.power ?? 0) >= 0.95) {
-      stage.floatText.show('PERFECT!'); // 球到瞬間出手的完美一傳
+      cards.push({ pri: 10, text: 'PERFECT!', color: '#60ffa0', dur: 900 }); // 球到瞬間出手的完美一傳
+    }
+  }
+  // flush：低優先先出（被疊排上推）、最高優先最後出＝停在基準位；全部都出、零丟卡
+  if (cards.length) {
+    cards.sort((a, b) => a.pri - b.pri);
+    for (const c of cards) {
+      stage.floatText.show(c.text, c.color, c.dur);
+      c.onShown?.();
     }
   }
 }

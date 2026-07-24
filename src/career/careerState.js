@@ -236,6 +236,10 @@ export function careerTeams(player, opponentDef = null, rosterMembers = null, li
     // 的呼叫端把 null 序餵進 effectiveOrder 崩比賽
     const lu = (lineup?.starters == null) ? defaultLineup(rosterMembers) : lineup;
     const order = effectiveOrder(lu.starters, lu.rotationStart);
+    // W6.1 隊友魚躍鏡像（拍板 07-24 Q2-A）：sim Player 預設 techniques 全開，
+    // 隊友的 dive 改鏡像主角解鎖——「對手教主角→主角教全隊」敘事機制化：主角沒學會前
+    // 隊友連救噴必撲路徑（ai.js rescue 繞過 diveRate）也不會撲。對手隊/快速比賽不經此路。
+    const teamDive = player.techniques?.dive ?? 0;
     teams.A = order.map((id) => {
       if (id === player.id) return player;
       const m = rosterMembers.find((x) => x.id === id);
@@ -249,6 +253,7 @@ export function careerTeams(player, opponentDef = null, rosterMembers = null, li
         height: m.height ?? 1.85,
         trust: trustOf(lu, m.id),
         attributes: { ...m.attributes },
+        techniques: { dive: teamDive },
       });
     });
     // 主控球員必在先發（排球鐵律：玩家恆在場上）——缺 A2 會建出無主控的隊，
@@ -327,6 +332,9 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
     liberoA.name = al.name;
     liberoA.attributes = { ...liberoA.attributes, ...al.attributes };
   }
+  // W6.1 隊友魚躍鏡像：自由人同全隊（防守核心也是「主角教全隊」的一員；
+  // 未解鎖前 standard 路徑本就被 diveRate=0 擋、此處補救噴必撲路徑的一致性）
+  if (members) liberoA.techniques.dive = player.techniques?.dive ?? 0;
   // W6 賽中換人：板凳＝名冊中非先發、非現任自由人、非 libero 角色的成員
   // （libero 角色只走自由人體系進場；對手無板凳＝B3 拍板不做）
   const lu = members
@@ -347,6 +355,8 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
         height: m.height ?? 1.85,
         trust: trustOf(lu, m.id),
         attributes: { ...m.attributes },
+        // W6.1 隊友魚躍鏡像（同 careerTeams）：板凳換上場也吃同一條解鎖
+        techniques: { dive: player.techniques?.dive ?? 0 },
       }))
     : [];
   return {

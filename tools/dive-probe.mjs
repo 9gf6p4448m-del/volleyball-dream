@@ -136,4 +136,6 @@ function playProbe(setup, onTick) {
   console.log(`  ≤0.9m（幾乎落在腳邊＝明確誤撲帶）：${stats.landLE09}（${pct(stats.landLE09)}）`);
   console.log(`  0.9–1.3m（站立可及內＝可普通接）：${stats.landLE13}（${pct(stats.landLE13)}）`);
   console.log(`  >1.3m（站著真的搆不到＝魚躍合理）：${stats.landGT13}（${pct(stats.landGT13)}）`);
+  // W6.1 落點閘（matchControls diveLandingOutOfReach＝落點距離>REACH_RADIUS 才撲）套用後：
+  console.log(`落點閘後仍觸發：${stats.landGT13}（${pct(stats.landGT13)}）；被閘下（改普通接）：${stats.landLE09 + stats.landLE13}（${pct(stats.landLE09 + stats.landLE13)}）`);
 }
