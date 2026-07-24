@@ -279,6 +279,11 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         } else if (!waitingServe && tick >= queuedAction.expiresTick) {
           queuedAction = null;
         }
+        // 攔網＝開窗型動作：一次投遞即生效（sim 開 48-tick 攔網窗），緩衝立即終結——
+        // 攔網不產生 TOUCH 事件、onEvents 永遠清不掉它；殘留緩衝會在球過網後被
+        // contextAction 重判成 receive、用攔網鍵的預設瞄準把第一觸打回對面
+        // （07-24 Sawmah 抓到「主角攔網變成接球」的病根）
+        if (action === 'block') queuedAction = null;
       } else if (charge && rig.getMode() === 'first' && !charge.gaze) {
         // 一人稱蓄力中：按下當下的視線＝gaze（看哪），之後拖到別處放開＝aim（打哪）
         charge.gaze = rig.gazePoint(game);
