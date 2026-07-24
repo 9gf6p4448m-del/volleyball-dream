@@ -496,8 +496,9 @@ function createBenchAccelButton() {
 function createComebackButton({ handlers, floatText }) {
   const btn = document.createElement('button');
   btn.style.cssText = [
+    // 試玩回饋 07-24 三輪：原 bottom+130 擋看球視線→貼底（板凳期間底部無其他 UI）
     'position:fixed', 'left:50%', 'transform:translateX(-50%)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 130px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 18px)',
     'height:48px', 'padding:0 22px', 'border-radius:24px', 'border:none',
     'background:#ffd166', 'color:#1a1405', 'font-size:15px', 'font-weight:800',
     'font-family:system-ui,sans-serif', 'z-index:17', 'cursor:pointer',
