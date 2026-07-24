@@ -69,6 +69,8 @@ export const EVENT_DEFS = [
     lines: [
       { speaker: '白浪高中・自由人', text: '看到我們救了幾顆你們以為落地的球嗎？防守不是站著等球來。' },
       { speaker: '白浪高中・自由人', text: '撲出去。會痛，但球不會落地。這叫魚躍——送你了。' },
+      // 主角傳承節點（拍板敘事：對手教主角→隊長請主角教全隊＝隊友 diveRate 解鎖的劇情面）
+      { speaker: '隊長（MB）', text: '學到好東西了？回去教教大家——球不落地不結束，全隊都得會。' }, // TODO(naming)
     ],
   },
   {
@@ -89,6 +91,8 @@ export const EVENT_DEFS = [
     lines: [
       { speaker: '鐵霧工業・王牌發球手', text: '光有力氣的發球，練十年也就那樣。最難接的球——是不轉的球。' },
       { speaker: '鐵霧工業・王牌發球手', text: '掌根擊球心、瞬間停腕。飄浮球會自己跳舞。' },
+      // 主角傳承節點（同 teach-dive：隊友 floatServeRate 解鎖的劇情面）
+      { speaker: '隊長（MB）', text: '那手飄浮球——回去也教教大家。發球輪多幾種武器。' }, // TODO(naming)
     ],
   },
   {

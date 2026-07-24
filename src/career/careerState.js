@@ -321,10 +321,11 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, def, members, lineup),
     aiProfiles: {
-      // 隊友技能綁玩家解鎖（教練傳授全隊，07-24 補完跳發/飄浮——與魚躍同敘事）：
-      // 主角學會＝隊友跟著會；溫和值低於對手招牌隊（鐵霧跳發 .45／北原飄浮 .25）
-      // ——隊友是跟著學的、不是專精。時程天然集中後段（飄浮＝八強後、跳發＝決賽前）。
-      // 其他 profile（tipRate 等）維持 aiProfileOf 預設。對手用 opponents 分級 def.ai
+      // 隊友技能綁玩家解鎖（主角傳承節點：對手教主角→隊長請主角教全隊——
+      // scramble-plan 定案敘事，07-24 Sawmah 正名）：主角學會＝回去教隊友＝全隊跟著會；
+      // 溫和值低於對手招牌隊（鐵霧跳發 .45／北原飄浮 .25）——隊友是二手學的、不是專精。
+      // 時程天然集中後段（飄浮＝八強後、跳發＝決賽前）。傳承的劇情呈現在 events.js
+      // teach-* 的隊長收尾行。其他 profile 維持 aiProfileOf 預設；對手用 opponents 分級
       A: {
         diveRate: (player.techniques?.dive ?? 0) >= 1 ? 0.16 : 0,
         jumpServeRate: (player.techniques?.jumpServe ?? 0) >= 1 ? 0.12 : 0,
