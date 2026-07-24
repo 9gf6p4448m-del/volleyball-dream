@@ -1,25 +1,25 @@
-// 浮動字卡（Perfect!、回放中…）：主角個人字卡帶，畫面下緣彈出、上浮淡出
-// W6.1 疊排（拍板 07-24 Q1-P1）：原版無佇列——連續字卡釘同座標完全重合疊字；
-// 改為新卡進場時把在場舊卡各上推一格（transition 順勢補間），越舊越高、各自倒數消失
-// W7.1 四輪 #1（上下分區拍板）：從螢幕中段移到下緣帶——上方泡泡（scoreboard）留給轉播層，
-// 下緣留給「你」的個人回饋。基準位 24%（其餘 UI 都用固定 px，唯獨這個跟 zonePanel 決策鈕
-// 一樣得在矮視窗守住淨空——用 max() 在矮螢幕上換算成固定 px 下限，蓋過 zonePanel 標題
-// （bottom+168，見 zonePanel.js）與底部對話框（teachDialog/coachOptionDialog bottom+26、
-// comebackBtn bottom+18），這幾個字卡活躍時 sim 多半已凍結、真正撞上的機率低，但淨空仍留好。
-const STACK_STEP = 48; // 舊卡上推格距（px）
-const BASE_BOTTOM = 'max(24%, calc(env(safe-area-inset-bottom, 0px) + 210px))';
+// 浮動字卡（Perfect!、回放中…）：主角個人字卡帶——緊貼播報泡泡下方
+// W6.1 疊排（拍板 07-24 Q1-P1）：新卡進場時把在場舊卡各推一格（transition 順勢補間）
+// W7.1 五輪（Sawmah 拍板改位＋修根因）：①字卡帶錨定「播報泡泡正下方」——新卡佔基準位、
+// 舊卡往下讓位、淡出漂移朝下（遠離泡泡）；矮視窗泡泡自停左上、本帶維持置中互不撞
+// ②修可見時長根因：舊版一出場就啟動 0.8s 淡出＝dur 再長實際可見僅 ~0.8s
+// （「Perfect 都沒看到」元兇）——改為全亮停留 durMs−FADE_MS 才開始漂移淡出
+const STACK_STEP = 46; // 舊卡下推格距（px）
+const FADE_MS = 800;   // 尾段漂移淡出時長
+const BASE_TOP = 'calc(env(safe-area-inset-top, 0px) + 178px)'; // 記分板＋氣勢計＋泡泡之下
 export function createFloatText() {
-  const live = []; // 在場字卡 [{ el, lift }]
+  const live = []; // 在場字卡 [{ el, lift, fading }]
   return {
     show(text, color = '#60ffa0', durMs = 900) {
       for (const c of live) {
         c.lift += STACK_STEP;
-        c.el.style.transform = `translateX(-50%) translateY(${-60 - c.lift}px)`;
+        c.el.style.transform =
+          `translateX(-50%) translateY(${c.lift + (c.fading ? 24 : 0)}px)`;
       }
       const el = document.createElement('div');
       el.textContent = text;
       el.style.cssText = [
-        'position:fixed', 'left:50%', `bottom:${BASE_BOTTOM}`, 'z-index:20',
+        'position:fixed', 'left:50%', `top:${BASE_TOP}`, 'z-index:20',
         'transform:translateX(-50%)',
         `color:${color}`, 'font-family:system-ui,sans-serif',
         'font-size:34px', 'font-weight:800', 'letter-spacing:2px',
@@ -29,17 +29,18 @@ export function createFloatText() {
         'opacity:1',
       ].join(';');
       document.body.appendChild(el);
-      const card = { el, lift: 0 };
+      const card = { el, lift: 0, fading: false };
       live.push(card);
-      requestAnimationFrame(() => {
-        el.style.transform = `translateX(-50%) translateY(${-60 - card.lift}px)`;
+      setTimeout(() => {
+        card.fading = true;
+        el.style.transform = `translateX(-50%) translateY(${card.lift + 24}px)`;
         el.style.opacity = '0';
-      });
+      }, Math.max(0, durMs - FADE_MS));
       setTimeout(() => {
         el.remove();
         const i = live.indexOf(card);
         if (i >= 0) live.splice(i, 1);
-      }, durMs);
+      }, Math.max(durMs, FADE_MS));
     },
   };
 }
