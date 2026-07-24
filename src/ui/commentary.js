@@ -60,6 +60,8 @@ export function createCommentary(opponentDef = null) {
           } else if ((e.power ?? 0) >= HEAVY_POWER) {
             setBeat(`${nameOf(game, e.playerId)} 全力重扣！`, now);
           }
+        } else if (e.type === 'BLOCK_DECEIVED') {
+          setBeat(`${nameOf(game, e.blockerId)} 被晃過去了！`, now); // 假動作騙贏攔網
         } else if (e.type === 'BLOCK_TOUCH') {
           // 擦手＝球擦進攔網方半場（隊友快救）；攔死回彈＝攻方那邊球還活著
           setBeat(e.graze

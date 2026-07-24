@@ -713,8 +713,16 @@ function tryBlock(state, toTeam, ev) {
   }
   if (!best) return false;
 
-  // H3：攔網手被扣球者的視線騙過 → 整手撲空（機率＝欺敵線性項）
-  if (state.rally.deceiveP > 0 && rand(state) < state.rally.deceiveP) return false;
+  // H3：攔網手被扣球者的視線騙過 → 整手撲空（機率＝欺敵線性項）。
+  // BLOCK_DECEIVED 事件（07-24 Sawmah）：假動作成效從此看得見——表現層彈
+  // 「晃過攔網」字卡/播報（純觀測事件，rand 消費與原版一致、零遊戲性影響）
+  if (state.rally.deceiveP > 0 && rand(state) < state.rally.deceiveP) {
+    ev.push({
+      type: 'BLOCK_DECEIVED', tick: state.tick, team: toTeam,
+      blockerId: best.p.id, spikerId: state.rally.lastToucherId,
+    });
+    return false;
+  }
 
   // 時機判定：起跳太晚（手沒到頂）或太早（下墜中）攔網率打折
   const airTicks = state.tick - best.actor.blockStartTick;

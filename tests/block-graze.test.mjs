@@ -73,6 +73,28 @@ test('letDrop 防呆：自家擦過的球飛向出界＝必須追（不得放球
   assert.equal(theirs.letDrop, true, '對方的球明顯出界＝放球得分（原行為不變）');
 });
 
+test('BLOCK_DECEIVED 事件：假動作騙過攔網手＝發觀測事件（帶 blocker/spiker id）', () => {
+  const g = createGame({ seed: 7 });
+  g.phase = 'rally';
+  Object.assign(g.rally, {
+    profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
+    deceiveP: 0.99, // 幾乎必騙（H3 欺敵線性項）
+  });
+  const b = g.ball;
+  b.x = 0; b.y = 2.75; b.z = -0.35; b.vx = 0; b.vy = -1.5; b.vz = 9;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  g.actors.A3.x = 0; g.actors.A3.z = 0.5;
+  stepGame(g, [createIntent({ playerId: 'A3', tick: g.tick, action: 'block' })]);
+  for (let i = 0; i < 20 && g.phase === 'rally' && g.ball.z < 1.5; i += 1) {
+    stepGame(g, [createIntent({ playerId: 'A3', tick: g.tick, action: 'block' })]);
+  }
+  const dec = g.events.find((e) => e.type === 'BLOCK_DECEIVED');
+  assert.ok(dec, '高欺敵應發 BLOCK_DECEIVED');
+  assert.equal(dec.blockerId, 'A3');
+  assert.equal(dec.spikerId, 'B2');
+  assert.ok(!g.events.some((e) => e.type === 'BLOCK_TOUCH'), '被騙＝整手撲空無攔網觸球');
+});
+
 test('擦手決定論：同種子重跑逐值一致', () => {
   for (let seed = 1; seed <= 120; seed += 1) {
     const a = blockRig(seed);

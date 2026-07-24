@@ -403,6 +403,9 @@ function applyEvents(s, frameEvents, now) {
         if (e.graze) stage.floatText.show('👆 擦到了——快補！', '#6ee7ff', 1200);
         else stage.floatText.show('🧱 攔網拍回！', '#ffd166', 1200);
       }
+    } else if (e.type === 'BLOCK_DECEIVED' && e.spikerId === s.controlledId) {
+      // 主角假動作騙過攔網（07-24）：回饋閉環——按A滑B到底有沒有騙到，從此看得見
+      stage.floatText.show('🎭 晃過攔網！', '#ffd166', 1100);
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
