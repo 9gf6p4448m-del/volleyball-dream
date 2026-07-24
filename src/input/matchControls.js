@@ -226,7 +226,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           Math.hypot(move.x, move.z) < 0.1) {
         // Cover 掩護不再自動帶位（拍板 07-22 推翻原第 8 題）：該站哪掩護
         // 是排球的隱性知識——玩家實戰中自己體會；AI 隊友的 cover 照舊（ai.js）
-        if (aiState?.claimId !== playerId) {
+        // 前排防守不自動帶位（拍板 07-24 Sawmah：攔網站位全交玩家）——對方持球
+        // 組織/進攻時（非發球飛行）你站哪由你決定：站到位＝自動跳攔、站錯＝攔不到；
+        // 接發階段與我方持球的站位交換照舊自動
+        const defendingFront = game.rally.possession &&
+          game.rally.possession !== me.teamId &&
+          game.rally.profile !== 'serve' &&
+          isFrontRow(game.match.rotations[me.teamId], playerId);
+        if (aiState?.claimId !== playerId && !defendingFront) {
           // 站位交換（真實排球）：待命時自動跑職責位——前排 OH 左翼/MB 中/OPP 右翼
           // （發球觸球後換位；後排回輪轉基準位）。搖桿有輸入時尊重手動
           const t = dutyPosition(game, me.teamId, playerId);
