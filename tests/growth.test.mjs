@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   GROWTH, TECH_DEFS, matchStatsFor, growthPointsFor, blockReadTier,
-  spendAttribute, unlockTechnique,
+  spendAttribute, unlockTechnique, applyOffseasonTraining,
 } from '../src/career/growth.js';
 import {
   createCareer, createCareerPlayer, recordResult, deserializeCareer, CAREER_VERSION,
@@ -150,4 +150,19 @@ test('growth.js 純度：零 DOM/存檔 IO/非種子隨機', () => {
   for (const banned of ['localStorage', 'document.', 'window.', 'Math.random(', 'Date.now(']) {
     assert.ok(!src.includes(banned), `growth.js 不得出現 ${banned}`);
   }
+});
+
+test('W7.1 屆間訓練營：主角耐力 +2、上限 80、不動其他屬性（不可變）', () => {
+  const p = createCareerPlayer('測');
+  const before = { ...p.attributes };
+  const t1 = applyOffseasonTraining(p);
+  assert.equal(t1.attributes.stamina, Math.min(80, before.stamina + 2));
+  assert.equal(p.attributes.stamina, before.stamina); // 不可變：原物件不動
+  for (const k of Object.keys(before)) {
+    if (k !== 'stamina') assert.equal(t1.attributes[k], before[k]);
+  }
+  // 疊加至上限封頂
+  let cur = t1;
+  for (let i = 0; i < 30; i += 1) cur = applyOffseasonTraining(cur);
+  assert.equal(cur.attributes.stamina, 80);
 });

@@ -2,7 +2,9 @@
 // AI 喊暫停判準/不喊＝零擾動（pointStreak 純記帳不進事件流）
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, stepGame, applyTimeout, TUNING } from '../src/sim/game.js';
+import {
+  createGame, stepGame, applyTimeout, applyTimeoutBoost, TUNING,
+} from '../src/sim/game.js';
 import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../src/sim/ai.js';
 import { STAMINA, attrRecovMul } from '../src/sim/stamina.js';
 
@@ -72,6 +74,29 @@ test('aiTimeoutWanted：被連 4 分＋死球＋有額度才成立', () => {
   g.timeouts.B.remaining = 1;
   g.phase = 'rally';
   assert.equal(aiTimeoutWanted(g, 'B'), false); // 非死球
+});
+
+test('W7.1 暫停選項：calm 全隊額外小回／fire 我方氣勢推檔／同窗防重入', () => {
+  const g = createGame({ seed: 5, stamina: { A: {}, B: {} }, momentum: true });
+  for (const id of Object.keys(g.stamina)) g.stamina[id] = 0.5;
+  assert.equal(applyTimeout(g, { team: 'A' }).ok, true);
+  const afterBase = g.stamina[g.match.rotations.A[0]];
+  // calm：基礎之上再回 TIMEOUT_CALM_RECOV×恢復率
+  assert.equal(applyTimeoutBoost(g, { team: 'A', boost: 'calm' }).ok, true);
+  const p0 = g.players[g.match.rotations.A[0]];
+  const expect = Math.min(1, afterBase + TUNING.TIMEOUT_CALM_RECOV * attrRecovMul(p0));
+  assert.ok(Math.abs(g.stamina[p0.id] - expect) < 1e-12);
+  assert.ok(g.events.some((e) => e.type === 'TIMEOUT_BOOST' && e.boost === 'calm'));
+  // 同一個暫停窗第二次 boost 擋下
+  assert.equal(applyTimeoutBoost(g, { team: 'A', boost: 'fire' }).reason, 'already-boosted');
+  // 第二次暫停（新窗）→ fire：氣勢推一檔
+  assert.equal(applyTimeout(g, { team: 'A' }).ok, true);
+  const prevM = g.momentum.value;
+  assert.equal(applyTimeoutBoost(g, { team: 'A', boost: 'fire' }).ok, true);
+  assert.equal(g.momentum.value, Math.min(TUNING.MOMENTUM_MAX, prevM + TUNING.TIMEOUT_FIRE_STEP));
+  // 未知選項擋下（用 B 隊暫停開新窗驗——A 的窗已用掉）
+  assert.equal(applyTimeout(g, { team: 'B' }).ok, true);
+  assert.equal(applyTimeoutBoost(g, { team: 'B', boost: 'x' }).reason, 'unknown-boost');
 });
 
 test('pointStreak 記帳：隨得分演進、換隊重計；不喊暫停＝零 TIMEOUT 事件', () => {

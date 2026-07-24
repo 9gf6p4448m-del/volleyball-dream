@@ -155,6 +155,12 @@ export const EXPEL_LINES = [
   { speaker: '隊長（MB）', text: '是你自己選的路。走吧——別回頭。' }, // TODO(naming)
 ];
 
+// ---- W7.1 屆間訓練營台詞（#6 拍板 C 案：主角 stamina +2/屆走事件不走灑點）----
+export const OFFSEASON_TRAINING_LINES = [
+  // TODO(naming)：訓練營台詞佔位，命名工程統一潤稿
+  { speaker: '教練', text: '這個冬天沒白練——你的底氣厚了。（耐力 +2）' },
+];
+
 // ---- W5 賽季開場（A4 拍板：最小劇情，衛冕/捲土重來各一段隊長對話）----
 // advanceSeason 成功後由 careerScreen 播放（衛冕＝defend、止步捲土重來＝comeback）。
 export const SEASON_OPENERS = {

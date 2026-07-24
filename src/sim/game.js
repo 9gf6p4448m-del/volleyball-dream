@@ -23,7 +23,9 @@ export const TUNING = {
   SERVE_DEAD_TICKS: 110,  // 死球哨音到可發球的間隔（1.8s：慶祝/喘息的比賽節拍）
   SUBS_PER_SET: 6,        // W6 賽中換人：每局每隊人次上限（簡化版拍板；自由人不計次）
   TIMEOUTS_PER_SET: 2,    // W7 B3 暫停：每場每隊 2 次（FIVB；單局制＝每場）
-  TIMEOUT_DEAD_TICKS: 180, // 喊暫停後追加的死球時間（3s：教練圈演出＋節奏斷點）
+  TIMEOUT_DEAD_TICKS: 300, // 喊暫停後追加的死球時間（5s：集合演出＋教練選項；試玩回饋 07-24 #3）
+  TIMEOUT_CALM_RECOV: 0.04, // 暫停選項「穩住」：全隊體力額外小回（基礎 0.03 之上）
+  TIMEOUT_FIRE_STEP: 1,     // 暫停選項「燃起來」：我方氣勢推檔數
   // W7 B1 團隊氣勢（拍板：小幅、快衰、偏散佈——防雪球第一原則）：
   // 雙向檔位計 −3..+3（＋＝A 氣勢、−＝B 氣勢）；連得 3+ 起算每分推一檔、
   // 對向得分往中間收一檔（幾球未得分即歸中）；只動散佈/失誤率、不動力量/速度
@@ -167,6 +169,7 @@ export function createGame({
       A: { remaining: TUNING.TIMEOUTS_PER_SET },
       B: { remaining: TUNING.TIMEOUTS_PER_SET },
     },
+    timeoutBoostArmed: false, // W7.1 暫停教練選項：applyTimeout 上膛、用掉或下個死球窗自動收
     pointStreak: { team: null, n: 0 },
     // W7 B1 團隊氣勢：value ∈ [−MOMENTUM_MAX, +MOMENTUM_MAX]（＋＝A、−＝B）；
     // 與 trustDyn 分工（B2 拍板）：trustDyn 管舉球分配、氣勢管全隊散佈，輸入同源不疊算
@@ -1032,10 +1035,41 @@ export function applyTimeout(state, { team }) {
   for (const p of Object.values(state.players)) {
     if (p.teamId === team) recoverStamina(state, p.id, STAMINA.RECOV_TIMEOUT);
   }
-  state.serveReadyTick = Math.max(state.serveReadyTick, state.tick + TUNING.TIMEOUT_DEAD_TICKS);
+  state.serveReadyTick = Math.max(state.serveReadyTick, TUNING.TIMEOUT_DEAD_TICKS + state.tick);
+  state.timeoutBoostArmed = true; // 教練選項上膛（每次暫停一發；下個死球窗自動收）
   state.events.push({
     type: 'TIMEOUT', tick: state.tick, team, remaining: state.timeouts[team].remaining,
   });
+  return { ok: true, reason: '' };
+}
+
+// W7.1 暫停教練選項（試玩回饋 07-24 #3 拍板「有選項可按」）：applyTimeout 之後、
+// 同一個死球窗內由 UI 呼叫一次。'calm'＝穩住（全隊體力額外小回）／'fire'＝燃起來
+// （我方氣勢推一檔）。純算術零 rng；每次暫停一發（armed 旗標，setupServePhase 收窗）
+export function applyTimeoutBoost(state, { team, boost }) {
+  const deny = (reason) => ({ ok: false, reason });
+  if (state.phase !== 'serve') return deny('not-dead-ball');
+  if (!state.timeoutBoostArmed) return deny('already-boosted');
+  if (boost === 'calm') {
+    for (const p of Object.values(state.players)) {
+      if (p.teamId === team) recoverStamina(state, p.id, TUNING.TIMEOUT_CALM_RECOV);
+    }
+  } else if (boost === 'fire') {
+    if (state.momentum) {
+      const dir = team === 'A' ? 1 : -1;
+      const prev = state.momentum.value;
+      state.momentum.value = clamp(
+        prev + TUNING.TIMEOUT_FIRE_STEP * dir, -TUNING.MOMENTUM_MAX, TUNING.MOMENTUM_MAX,
+      );
+      if (state.momentum.value !== prev) {
+        state.events.push({ type: 'MOMENTUM', tick: state.tick, value: state.momentum.value });
+      }
+    }
+  } else {
+    return deny('unknown-boost');
+  }
+  state.timeoutBoostArmed = false; // 一發用畢
+  state.events.push({ type: 'TIMEOUT_BOOST', tick: state.tick, team, boost });
   return { ok: true, reason: '' };
 }
 
@@ -1101,6 +1135,7 @@ function setupServePhase(state) {
   parkOffCourt(state); // 板凳（含被換下者）停場邊席位
   state.phase = 'serve';
   state.serveReadyTick = state.tick + TUNING.SERVE_DEAD_TICKS;
+  state.timeoutBoostArmed = false; // W7.1：教練選項一發限本死球窗——新窗自動收
 
   // W7 A3 恢復（rally 中不回、死球間隙小回、坐板凳快回）：死球窗一次性——
   // 逐 tick 回會獎勵拖延發球（玩家發球無時限）。開局呼叫時全員滿格＝封頂 no-op

@@ -4,7 +4,7 @@ import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
   careerStage, opponentById, normalizeCareerPlayer, resolveForfeit,
 } from '../career/careerState.js';
-import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
+import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, applyOffseasonTraining } from '../career/growth.js';
 import {
   ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
 } from '../career/roster.js';
@@ -15,7 +15,7 @@ import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
 } from '../career/recruitment.js';
 import {
-  dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS,
+  dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
 } from '../career/events.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
@@ -987,8 +987,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const nextSeasonBtn = (label, openerKey) => button(label, true, () => {
       showInvitePicker((invitedId) => {
         if (!store.advanceSeason?.({ invitedId })) return;
-        const opener = SEASON_OPENERS[openerKey];
-        if (opener) dialogPlay([{ lines: opener }], () => renderCareer());
+        // W7.1 屆間訓練營（#6 拍板 C）：主角耐力 +2（上限 80）——寫檔後接開場對話尾播
+        const trained = applyOffseasonTraining(player);
+        player.attributes = trained.attributes;
+        store.savePlayer(player);
+        const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
+        if (opener.length) dialogPlay([{ lines: opener }], () => renderCareer());
         else renderCareer();
       });
     });

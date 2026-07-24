@@ -86,6 +86,21 @@ export function blockReadTier(player) {
   return r < 55 ? 'none' : r < 70 ? 'slow' : 'instant';
 }
 
+// W7.1 屆間訓練營（試玩回饋 07-24 #6 拍板 C 案）：stamina 不進逐場灑點（A5 拍板
+// 六項成長槽不動），改走屆間事件——每屆 +2、上限 80（低於 ATTR_CAP＝耐力天花板
+// 略保守，保留建隊個性差異：自由人 70 天生鐵肺的相對優勢不被磨平）。只加主角
+export const OFFSEASON = { STAMINA_GAIN: 2, STAMINA_CAP: 80 };
+export function applyOffseasonTraining(player) {
+  const cur = player.attributes.stamina ?? 50;
+  return {
+    ...player,
+    attributes: {
+      ...player.attributes,
+      stamina: Math.min(OFFSEASON.STAMINA_CAP, cur + OFFSEASON.STAMINA_GAIN),
+    },
+  };
+}
+
 // 屬性層加點（不可變；1 點＝+1，天花板 GROWTH.ATTR_CAP）
 export function spendAttribute(player, key) {
   if (!GROWABLE_ATTRS.some((a) => a.key === key)) {
