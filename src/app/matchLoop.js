@@ -16,6 +16,7 @@ import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
+import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl } from './matchCareer.js';
 import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
@@ -68,7 +69,6 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   // Perfect、不主動攔網），密度/遮擋無法自動驗證。本旗標以「真人激戰上限」節奏
   // 週期性注入代表性字卡，供 Playwright 量疊排深度/FPS；純表現層、sim 完全不碰
   if (ctx.params.get('probe') === 'cards') startCardProbe(s);
-  if (ctx.params.get('cardstats') === '1') s.cardStatsEl = createCardStatsBadge();
   if (s.config.tapeClips.length) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
   showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
   document.addEventListener('visibilitychange', () => {
@@ -86,20 +86,6 @@ const PROBE_BURST = [
   ['🎭 晃過攔網！', '#ffd166', 2200],
   ['✨ PERFECT!', '#60ffa0', 2400],
 ];
-// ?cardstats=1 遙測角標（左下、體力條上方；純除錯不進正常遊玩）
-function createCardStatsBadge() {
-  const el = document.createElement('div');
-  el.style.cssText = [
-    'position:fixed', 'left:calc(env(safe-area-inset-left, 0px) + 10px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 48px)', 'z-index:15',
-    'background:rgba(12,16,26,0.68)', 'color:#9fb0cc', 'padding:4px 10px',
-    'border-radius:10px', 'font:600 11px system-ui,sans-serif',
-    'pointer-events:none', 'user-select:none',
-  ].join(';');
-  document.body.appendChild(el);
-  return el;
-}
-
 function startCardProbe(s) {
   let round = 0;
   setInterval(() => {
@@ -227,14 +213,6 @@ export function avgStamina(game, team) {
   const ids = game.match.rotations[team];
   if (!ids?.length) return null;
   return ids.reduce((sum, id) => sum + (game.stamina[id] ?? 1), 0) / ids.length;
-}
-
-// W7.1 #4①：氣勢滿檔「跨進那一刻」判定（純函式，供測試）——同檔內不重發、離開再進可重發。
-// 回傳觸發方（'A'|'B'）或 null；prevValue 用呼叫端持久追蹤的上一次 MOMENTUM 值。
-export function enteringMomentumMax(prevValue, newValue, max) {
-  if (newValue === max && prevValue !== max) return 'A';
-  if (newValue === -max && prevValue !== -max) return 'B';
-  return null;
 }
 
 // W7 B3 我方暫停（stage.handlers.requestTimeout）：sim 執行＋集合帶位＋倒數條啟動＋
@@ -659,15 +637,6 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.hitStopUntil = now + 60;
       s.shake = Math.max(s.shake, 0.2);
-      // 主角攔網個人回饋（07-24 Sawmah）：碰到球當下即字卡（比照 PERFECT 接球卡）——
-      // 攔死金色/擦手青色分色；攔死直接得分另有 pointBanner「攔網得分 🧱」收尾
-      if (e.playerId === s.controlledId) {
-        if (e.graze) cards.push({ pri: 20, text: '👆 擦到了——快補！', color: '#6ee7ff', dur: 2200 });
-        else cards.push({ pri: 20, text: '🧱 攔網拍回！', color: '#ffd166', dur: 2200 });
-      }
-    } else if (e.type === 'BLOCK_DECEIVED' && e.spikerId === s.controlledId) {
-      // 主角假動作騙過攔網（07-24）：回饋閉環——按A滑B到底有沒有騙到，從此看得見
-      cards.push({ pri: 20, text: '🎭 晃過攔網！', color: '#ffd166', dur: 2200 });
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
@@ -696,22 +665,15 @@ function applyEvents(s, frameEvents, now) {
         );
       }
     } else if (e.type === 'MOMENTUM') {
-      // W7.1 #4①：滿檔進入一次性字卡（跨進才發、離開再進可重發）
-      const spark = enteringMomentumMax(s.prevMomentumValue, e.value, TUNING.MOMENTUM_MAX);
-      if (spark === 'A') cards.push({ pri: 22, text: '🔥 氣勢如虹！', color: '#6ee7ff', dur: 2600 });
-      else if (spark === 'B') cards.push({ pri: 22, text: '❄ 被壓著打——穩住！', color: '#9fd8ff', dur: 2600 });
+      // W7.1 #4①：滿檔進入一次性字卡（判定在 heroCards.js 純函式，node 可直測）
+      const card = momentumCardFor(s.prevMomentumValue, e.value, TUNING.MOMENTUM_MAX);
+      if (card) cards.push(card);
       s.prevMomentumValue = e.value;
       // W7.1 #4③：氣勢計變動 delta 指示（條端閃箭頭）
       stage.scoreboard.flashMomentum(e.value);
     } else if (e.type === 'COMEBACK_SPARK') {
-      // W7 C3①：⚡ 回歸字卡改吃 sim 單一事實源（subLog 換下→換回→首次建功已在 sim 判完）
-      cards.push({
-        pri: 45,
-        text: `⚡ ${game.players[e.playerId]?.name ?? ''} 回歸即建功！`,
-        color: '#ffd166',
-        dur: 1500,
-      });
       // W7 C3②：觀眾爆聲——沿用既有 cheer 管線再加碼一次（幅度明顯高於一般得分的 DEAD_BALL 自動歡呼）
+      // （⚡ 字卡本身由下方 heroCardFor 統一產出）
       stage.sfx.cheer(2.4);
     } else if (e.type === 'SCORE') {
       // 得分慶祝：全員高舉小跳＋鏡頭 FOV punch（推近再彈回）
@@ -739,11 +701,14 @@ function applyEvents(s, frameEvents, now) {
         s.pendingDead = null;
         s.lastTouch = null;
       }
-    } else if (e.type === 'TOUCH' && e.kind === 'receive' &&
-        e.playerId === s.controlledId && (e.power ?? 0) >= 0.95) {
-      // 球到瞬間出手的完美一傳（試玩回饋 07-24：900ms 高速 rally 中看不到→加長）
-      cards.push({ pri: 10, text: '✨ PERFECT!', color: '#60ffa0', dur: 2400 });
     }
+    // 主角字卡統一出口（判定在 heroCards.js 純函式：Perfect 一傳／攔網碰球／
+    // 假動作騙贏／回歸建功——測試用真 sim 事件流直測，不必開瀏覽器目視）
+    const heroCard = heroCardFor(e, {
+      controlledId: s.controlledId,
+      playerName: e.playerId ? game.players[e.playerId]?.name : '',
+    });
+    if (heroCard) cards.push(heroCard);
   }
   // flush：低優先先出（被疊排上推）、最高優先最後出＝停在基準位；全部都出、零丟卡
   if (cards.length) {
@@ -929,12 +894,6 @@ function frameStep(s, now) {
   }
   // W7 A6：主角 HUD 體力條（受控者本人；stamina 未啟用傳 null 短路隱藏）
   stage.heroStamina?.update(game.stamina ? (game.stamina[s.controlledId] ?? 1) : null);
-  // W7.1 六輪：?cardstats=1 字卡遙測角標（實玩後自己看「出現幾次/最多同框幾張」）
-  if (s.cardStatsEl) {
-    const st = stage.floatText.stats();
-    s.cardStatsEl.textContent =
-      `字卡 ${st.total} 次・同框最多 ${st.maxConcurrent} 張・當下 ${stage.floatText.liveCount()}`;
-  }
   stage.scoreboard.update(game, myBall, s.controlledId,
     stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());
