@@ -73,6 +73,11 @@ export function createCommentary(opponentDef = null, revenge = []) {
   const revengeIds = new Set(revenge.map((r) => r.id));
   const revengeFired = new Set();
   let lastTouchInfo = null; // { playerId, team }
+  // 命名工程 07-25：對方王牌稱號播報（首度得分、每場一次）——
+  // opponents.js ace.slot 0-5 對 B1..B6、'L'＝自由人 BL（自由人得分罕見＝天然更稀）
+  const ace = opponentDef?.ace ?? null;
+  const aceId = ace ? (ace.slot === 'L' ? 'BL' : `B${ace.slot + 1}`) : null;
+  let aceFired = false;
 
   const oppName = opponentDef?.name ?? '對方';
   const teamLabel = (game, team, controlledId) =>
@@ -90,13 +95,13 @@ export function createCommentary(opponentDef = null, revenge = []) {
     };
   };
 
-  // TODO(naming)：體力播報詞佔位，命名工程統一潤稿——敵方戰術情報口吻／我方提醒口吻
+  // 體力播報（命名工程定稿）：我方＝教練席提醒口吻／敵方＝戰術情報口吻
   const staminaLine = (cand, game, myTeam) => {
     const name = nameOf(game, cand.playerId);
     if (cand.team === myTeam) {
-      return cand.tier === 2 ? `${name} 體力只剩不到 25%——真的該換人了` : `${name} 體力見底，考慮讓他休息`;
+      return cand.tier === 2 ? `${name} 已經在硬撐了——該讓他下來喘口氣` : `${name} 腳步變重了，留意他的體力`;
     }
-    return `${name} 的移動變慢了——他累了`; // 敵方恆 tier1（tier2 已在收集階段濾掉）
+    return `對面的 ${name} 動得慢了——朝他那邊打`; // 敵方恆 tier1（tier2 已在收集階段濾掉）
   };
 
   return {
@@ -166,6 +171,14 @@ export function createCommentary(opponentDef = null, revenge = []) {
             setBeat(`${label}連下 ${streakN} 分！`, now, STREAK_TTL, LEVEL_MAJOR);
           }
           if (leader) prevLeader = leader;
+          // 命名工程：對方王牌首度得分——稱號亮相（每場一次；先於復仇播報＝復仇可蓋過）
+          if (
+            ace && !aceFired && lastTouchInfo &&
+            lastTouchInfo.team === e.team && lastTouchInfo.playerId === aceId
+          ) {
+            aceFired = true;
+            setBeat(`王牌 ${ace.name}——「${ace.title}」名不虛傳！`, now, STREAK_TTL, LEVEL_MAJOR);
+          }
           // W7 D3 舊隊情結：復仇者首次建功（得分方最後觸球者在復仇名單）——蓋過連得分槽；
           // 同屬敘事大事（同一批 STREAK_TTL 待遇）
           if (
@@ -173,8 +186,7 @@ export function createCommentary(opponentDef = null, revenge = []) {
             revengeIds.has(lastTouchInfo.playerId) && !revengeFired.has(lastTouchInfo.playerId)
           ) {
             revengeFired.add(lastTouchInfo.playerId);
-            // TODO(naming)：舊隊情結播報詞佔位，命名工程統一潤稿
-            setBeat(`${nameOf(game, lastTouchInfo.playerId)} 向老東家證明自己！`, now, STREAK_TTL, LEVEL_MAJOR);
+            setBeat(`${nameOf(game, lastTouchInfo.playerId)} 把這一分打給老東家看！`, now, STREAK_TTL, LEVEL_MAJOR);
           }
         } else if (e.type === 'STAMINA_LOW') {
           // W7 A4 附：節流收集（不即時播）——主角豁免；敵方 tier2 豁免（heavyExempt 段無播報）；
@@ -205,8 +217,8 @@ export function createCommentary(opponentDef = null, revenge = []) {
           // W7 B3：暫停播報——我方（含玩家點擊與隊友視角一致）＝提醒口吻／對方 AI 喊＝戰術情報口吻；大事
           const label = teamLabel(game, e.team, controlledId);
           const mine = e.team === game.players[controlledId]?.teamId;
-          // TODO(naming)：暫停播報詞佔位，命名工程統一潤稿
-          setBeat(mine ? `${label}請求暫停` : `${label}喊了暫停，重新佈局`, now, STREAK_TTL, LEVEL_MAJOR);
+          setBeat(mine ? `${label}請求暫停——穩住呼吸，重新來` : `${label}喊了暫停——他們被打疼了`,
+            now, STREAK_TTL, LEVEL_MAJOR);
         }
       }
     },
@@ -232,7 +244,7 @@ export function createCommentary(opponentDef = null, revenge = []) {
         // 實測（tools/block-defend-probe.mjs）：前排基準站位 z=3.0 在自動跳攔帶（2.2）外
         // ——站著不動整場開窗 0 次＝玩家以為攔網壞了；走到位命中率 45%。
         // 走位＝攔網技術表達（拍板不自動帶位），缺的只是「該往前」這句話
-        return { text: '對方要進攻——往前一步就能攔網！', kind: 'action' }; // TODO(naming)
+        return { text: '對方要打過來了——往前一步，把牆補上！', kind: 'action' };
       }
       // 2) 事件節奏點（未過期）
       if (beat && now < beat.until) return { text: beat.text, kind: 'beat' };
@@ -241,7 +253,6 @@ export function createCommentary(opponentDef = null, revenge = []) {
         const { score } = game.match;
         // W7 D3：舊隊情結開賽環境句（有復仇者時取代敵情句——敵情已在生涯畫面看過）
         if (revenge.length && score.A === 0 && score.B === 0) {
-          // TODO(naming)：舊隊情結環境句佔位
           return {
             text: `${revenge[0].name} 對上老東家 ${oppName}——這一場他等很久了`,
             kind: 'ambient',

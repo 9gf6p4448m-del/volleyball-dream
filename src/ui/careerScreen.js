@@ -7,6 +7,7 @@ import {
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, applyOffseasonTraining } from '../career/growth.js';
 import {
   ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
+  OUR_TEAM_NAME,
 } from '../career/roster.js';
 import {
   validateLineup, checkRotationOrder, checkRoleStructure, defaultLineup, trustOf,
@@ -617,11 +618,20 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     // 抬頭：名字＋隊長徽＋位置/年級/身高
     const head = el('div', ['display:flex', 'align-items:baseline', 'gap:8px', 'flex-wrap:wrap']);
     head.appendChild(el('div', ['font-size:24px', 'font-weight:900', `color:${COLOR.text}`], member.name));
+    // 命名工程：全名（暱稱之外的正式名；同名者不重複顯示）
+    if (member.fullName && member.fullName !== member.name) {
+      head.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'font-weight:700'],
+        member.fullName));
+    }
     if (member.captain) {
       head.appendChild(el('div', [
         'font-size:11px', 'font-weight:800', `color:#1a1405`, `background:${COLOR.gold}`,
         'border-radius:8px', 'padding:2px 8px', 'letter-spacing:2px',
       ], '隊長'));
+    }
+    if (member.title) { // 輕稱號（現僅隊長大山「沉默高牆」）
+      head.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`, 'font-weight:700'],
+        `「${member.title}」`));
     }
     head.appendChild(el('div', ['font-size:14px', `color:${COLOR.cyan}`, 'font-weight:700'],
       `${ROLE_ABBR[member.role] ?? member.role}・${GRADE_LABEL[member.growth.grade] ?? ''}・${member.height.toFixed(2)}m`));
@@ -1033,7 +1043,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
     ], `${career.playerName}・你·OH${seasonN > 1 ? `・第 ${seasonN} 屆` : ''}`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
-      `戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
+      `${OUR_TEAM_NAME}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
     root.appendChild(rosterSection(career)); // W2 名冊（唯讀隊友卡入口）
     root.appendChild(recruitSection()); // W4 招募進度（五條進度×空位並列）

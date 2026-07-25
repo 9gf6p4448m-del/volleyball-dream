@@ -55,5 +55,5 @@ test('pickJoinLine：不同角色從各自台詞池挑選，未知角色回退�
   const middleLine = pickJoinLine({ id: 'R1', role: 'middle' });
   assert.notEqual(setterLine, middleLine); // 不同角色台詞池不重疊
   const fallback = pickJoinLine({ id: 'RX', role: 'unknown-role' });
-  assert.equal(fallback, '——以後，我們是一隊了。');
+  assert.equal(fallback, '——從今天起，我們是一隊的。');
 });

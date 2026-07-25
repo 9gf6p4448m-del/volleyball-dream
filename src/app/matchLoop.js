@@ -156,7 +156,7 @@ function requestSubstitution(s, outId, inId) {
   if (r.ok) {
     const outName = s.game.players[outId].name;
     const inName = s.game.players[inId].name;
-    // 換人敘事（新增採納 6；台詞 TODO(naming) 命名工程統一潤稿）
+    // 換人敘事（新增採納 6；命名工程 07-25 定稿）
     s.pendingSubLines.push(
       { speaker: '教練', text: `${outName}，先下來喘口氣。${inName}——上，讓他們看看板凳的火力！` },
       { speaker: inName, text: '交給我！' },
@@ -202,7 +202,7 @@ function requestComeback(s) {
   const outId = findComebackOut(game, playerId);
   if (!outId) return { ok: false, reason: 'no-target' };
   const r = applySubstitution(game, { team, outId, inId: playerId });
-  if (r.ok) s.stage.floatText.show('🔥 回到場上！', '#ffd166', 1500); // TODO(naming)
+  if (r.ok) s.stage.floatText.show('🔥 回到場上！', '#ffd166', 1500);
   return r;
 }
 
@@ -244,9 +244,9 @@ function requestTimeoutBoost(s, team, boost) {
       const after = avgStamina(game, team);
       const suffix = before !== null && after !== null
         ? `（+${Math.max(0, Math.round((after - before) * 100))}%）` : '';
-      stage.floatText.show(`🧘 全隊體力小回${suffix}！`, '#6ee7ff', 1800); // TODO(naming)
+      stage.floatText.show(`🧘 呼吸回來了${suffix}！`, '#6ee7ff', 1800);
     } else if (boost === 'fire') {
-      stage.floatText.show('🔥 士氣拉起來了！', '#ff9d7a', 1800); // TODO(naming)
+      stage.floatText.show('🔥 場子熱起來了！', '#ff9d7a', 1800);
     }
   }
   stage.coachOptionDialog?.hide();
@@ -378,7 +378,7 @@ function showTeachPreview(s) {
   // ②雙招用「它們」 ③開場不再問「看了嗎」（對話當下帶子才要播，時序怪）
   const hasFeatured = s.config.tapeClips.some((c) => c.featured);
   const them = keys.length > 1 ? '它們' : '它';
-  s.stage.teachDialog.show([ // TODO(naming)：教練台詞佔位，命名工程統一潤稿
+  s.stage.teachDialog.show([ // 命名工程 07-25 定稿
     { speaker: '教練', text: `看好${opp}——「${names}」是他們的招牌。` },
     {
       speaker: '教練',
@@ -649,8 +649,8 @@ function applyEvents(s, frameEvents, now) {
           (game.stamina[s.playerId] ?? 1) < STAMINA.TIER2_BELOW) {
         s.staminaAdviceShown = true;
         stage.coachOptionDialog?.hide(); // 卡位互斥防呆（同 bottom:26px）
-        stage.teachDialog.show([ // TODO(naming)：教練建議台詞佔位，命名工程統一潤稿
-          { speaker: '教練', text: `${game.players[s.playerId]?.name ?? ''}，要不要下來喘口氣？板凳準備好了。` },
+        stage.teachDialog.show([ // 命名工程 07-25 定稿
+          { speaker: '教練', text: `${game.players[s.playerId]?.name ?? ''}，你的腳在飄了。下來喘口氣——場上交給大家。` },
         ]);
       }
       // W7 B3：對手 AI 暫停判準（死球節拍檢查，成立才喊——被連 4 分＋死球＋有額度）；

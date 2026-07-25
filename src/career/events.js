@@ -4,16 +4,16 @@
 import { nextMatch } from './careerState.js';
 import { opponentById } from './opponents.js';
 
-// TODO(naming)：EVENT_DEFS / EXPEL_LINES / SEASON_OPENERS 內所有 speaker 角色代號
-// （隊長（MB）、二傳（S）、各校角色…）與台詞均為佔位，命名工程統一潤稿定名
+// 命名工程定案（07-25）：speaker 具名——我方隊長＝大山（MB）、二傳＝阿哲；
+// 各校角色對應 opponents.js squad 具名（王牌稱號偶爾入台詞，不逐句喊）
 export const EVENT_DEFS = [
   {
     id: 'debut',
     moment: 'pre',
     when: { matchId: 'group-1' },
     lines: [
-      { speaker: '隊長（MB）', text: '新人，第一場別想太多——球來了就打，其他交給我們。' },
-      { speaker: '二傳（S）', text: '舉給你的球，放心打。打丟了算我的。' },
+      { speaker: '大山', text: '新人，第一場別想太多——球來了就打，其他交給我們。' },
+      { speaker: '阿哲', text: '舉給你的球，放心打。打丟了算我的。' },
     ],
   },
   {
@@ -21,7 +21,7 @@ export const EVENT_DEFS = [
     moment: 'pre',
     when: { opponentId: 'obsidian', stage: 'group' },
     lines: [
-      { speaker: '隊長（MB）', text: '曜石的中間手又快又急——中路封起來之前，別跟他硬碰。' },
+      { speaker: '大山', text: '曜石的霍君曜——人稱「黑曜箭」，又快又急。中路封起來之前，別跟他硬碰。' },
     ],
   },
   {
@@ -30,7 +30,7 @@ export const EVENT_DEFS = [
     when: { wonLast: true, playedCount: 1 },
     effect: { trust: 3 },
     lines: [
-      { speaker: '二傳（S）', text: '打得不錯嘛，新人。下一場，關鍵分也敢給你了。' },
+      { speaker: '阿哲', text: '打得不錯嘛，新人。下一場，關鍵分也敢給你了。' },
     ],
   },
   {
@@ -39,7 +39,7 @@ export const EVENT_DEFS = [
     when: { wonLast: false, lossCount: 1 },
     effect: { trust: 2 },
     lines: [
-      { speaker: '二傳（S）', text: '別背著。輸球是全隊的事——下一顆，我照樣給你。' },
+      { speaker: '阿哲', text: '別背著。輸球是全隊的事——下一顆，我照樣給你。' },
     ],
   },
   {
@@ -48,7 +48,7 @@ export const EVENT_DEFS = [
     when: { minKills: 5 },
     effect: { trust: 4 },
     lines: [
-      { speaker: '二傳（S）', text: '你手感燙起來了。之後的球，會更常到你手上。' },
+      { speaker: '阿哲', text: '你手感燙起來了。之後的球，會更常到你手上。' },
     ],
   },
   // ---- 技術傳授線（改版裁定：技術經故事習得，每場一招；輸贏都教——敗者也有收穫）----
@@ -58,8 +58,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-1' },
     effect: { unlock: 'tip' },
     lines: [
-      { speaker: '北原工商・隊長', text: '你只會全力打直球啊，新人。力量不夠的時候——用腦子打。' },
-      { speaker: '北原工商・隊長', text: '看好，手腕放軟、指尖推球。這叫吊球。拿去用吧。' },
+      { speaker: '北原工商・杜恆澄', text: '你只會全力打直球啊，新人。力量不夠的時候——用腦子打。' },
+      { speaker: '北原工商・杜恆澄', text: '看好，手腕放軟、指尖推球。這叫吊球。拿去用吧。' },
     ],
   },
   {
@@ -68,10 +68,10 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-2' },
     effect: { unlock: 'dive' },
     lines: [
-      { speaker: '白浪高中・自由人', text: '看到我們救了幾顆你們以為落地的球嗎？防守不是站著等球來。' },
-      { speaker: '白浪高中・自由人', text: '撲出去。會痛，但球不會落地。這叫魚躍——送你了。' },
+      { speaker: '白浪高中・凌逐浪', text: '看到我們救了幾顆你們以為落地的球嗎？防守不是站著等球來。' },
+      { speaker: '白浪高中・凌逐浪', text: '撲出去。會痛，但球不會落地。這叫魚躍——送你了。' },
       // 主角傳承節點（拍板敘事：對手教主角→隊長請主角教全隊＝隊友 diveRate 解鎖的劇情面）
-      { speaker: '隊長（MB）', text: '學到好東西了？回去教教大家——球不落地不結束，全隊都得會。' }, // TODO(naming)
+      { speaker: '大山', text: '學到好東西了？回去教教大家——球不落地不結束，全隊都得會。' },
     ],
   },
   {
@@ -80,8 +80,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-3' },
     effect: { unlock: 'pipe' },
     lines: [
-      { speaker: '曜石體中・MB', text: '你的進攻只有前排三公尺。我們的進攻，是整片場地。' },
-      { speaker: '曜石體中・MB', text: '後排起跳、攻擊線後起飛——pipe。學會它，你才算立體。' },
+      { speaker: '曜石體中・霍君曜', text: '你的進攻只有前排三公尺。我們的進攻，是整片場地。' },
+      { speaker: '曜石體中・霍君曜', text: '後排起跳、攻擊線後起飛——pipe。學會它，你才算立體。' },
     ],
   },
   {
@@ -90,10 +90,10 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'national-qf' },
     effect: { unlock: 'floatServe' },
     lines: [
-      { speaker: '鐵霧工業・王牌發球手', text: '光有力氣的發球，練十年也就那樣。最難接的球——是不轉的球。' },
-      { speaker: '鐵霧工業・王牌發球手', text: '掌根擊球心、瞬間停腕。飄浮球會自己跳舞。' },
+      { speaker: '鐵霧工業・歐冶鐵', text: '光有力氣的發球，練十年也就那樣。最難接的球——是不轉的球。' },
+      { speaker: '鐵霧工業・歐冶鐵', text: '掌根擊球心、瞬間停腕。飄浮球會自己跳舞。' },
       // 主角傳承節點（同 teach-dive：隊友 floatServeRate 解鎖的劇情面）
-      { speaker: '隊長（MB）', text: '那手飄浮球——回去也教教大家。發球輪多幾種武器。' }, // TODO(naming)
+      { speaker: '大山', text: '那手飄浮球——回去也教教大家。發球輪多幾種武器。' },
     ],
   },
   {
@@ -104,8 +104,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-3' },
     effect: { unlock: 'feint' },
     lines: [
-      { speaker: '曜石體中・隊長', text: '你的每一球，我們都記下來了。再遇到的時候——你那些慣用線，一條都過不了。' },
-      { speaker: '曜石體中・隊長', text: '會被讀的人，才需要學騙。眼睛看左、手打右——當作見面禮，拿去。' },
+      { speaker: '曜石體中・岳仲磯', text: '你的每一球，我們都記下來了。再遇到的時候——你那些慣用線，一條都過不了。' },
+      { speaker: '曜石體中・岳仲磯', text: '會被讀的人，才需要學騙。眼睛看左、手打右——當作見面禮，拿去。' },
     ],
   },
   {
@@ -114,8 +114,8 @@ export const EVENT_DEFS = [
     when: { matchId: 'national-final' },
     effect: { unlock: 'jumpServe' },
     lines: [
-      { speaker: '隊長（MB）', text: '決賽了。把我壓箱的東西給你——跳躍發球，我們隊史上只有兩個人發得動。' },
-      { speaker: '隊長（MB）', text: '助跑、拋球、當它是扣球打下去。去吧，把天鷹轟下來。' },
+      { speaker: '大山', text: '決賽了。把我壓箱的東西給你——跳躍發球，我們隊史上只有兩個人發得動。' },
+      { speaker: '大山', text: '助跑、拋球、當它是扣球打下去。天鷹統治天空的高度——去讓他們見識，遊隼統治天空的速度。' },
     ],
   },
   {
@@ -132,8 +132,8 @@ export const EVENT_DEFS = [
     moment: 'pre',
     when: { matchId: 'national-sf', wonVs: 'obsidian' },
     lines: [
-      { speaker: '隊長（MB）', text: '曜石。小組賽輸給我們之後，他們把你的每一球都看了三遍。' },
-      { speaker: '二傳（S）', text: '他們衝著你來的。慣用的線路會被讀死——換節奏，或者用騙的。' },
+      { speaker: '大山', text: '曜石。小組賽輸給我們之後，他們把你的每一球都看了三遍。' },
+      { speaker: '阿哲', text: '他們衝著你來的。慣用的線路會被讀死——換節奏，或者用騙的。' },
     ],
   },
   {
@@ -141,8 +141,8 @@ export const EVENT_DEFS = [
     moment: 'pre',
     when: { matchId: 'national-sf', lostVs: 'obsidian' },
     lines: [
-      { speaker: '隊長（MB）', text: '又是曜石。小組賽欠他們一場——今天當面討回來。' },
-      { speaker: '二傳（S）', text: '他們記得你怎麼打的。上次的套路不會再通——拿出新的東西。' },
+      { speaker: '大山', text: '又是曜石。小組賽欠他們一場——今天當面討回來。' },
+      { speaker: '阿哲', text: '他們記得你怎麼打的。上次的套路不會再通——拿出新的東西。' },
     ],
   },
 ];
@@ -151,13 +151,12 @@ export const EVENT_DEFS = [
 // 玩家主動點擊觸發（非賽程狀態驅動），故不進 EVENT_DEFS 條件比對；沿用 {speaker,text}
 // 形狀以復用 dialogPlay（呼叫端包一層 [{ lines: EXPEL_LINES }]）。
 export const EXPEL_LINES = [
-  { speaker: '（離隊者）', text: '……我明白。這段路，謝謝你們帶我走過。' }, // TODO(naming)
-  { speaker: '隊長（MB）', text: '是你自己選的路。走吧——別回頭。' }, // TODO(naming)
+  { speaker: '（離隊者）', text: '……我明白。這段路，謝謝你們帶我走過。' },
+  { speaker: '大山', text: '是你自己選的路。走吧——別回頭。' },
 ];
 
 // ---- W7.1 屆間訓練營台詞（#6 拍板 C 案：主角 stamina +2/屆走事件不走灑點）----
 export const OFFSEASON_TRAINING_LINES = [
-  // TODO(naming)：訓練營台詞佔位，命名工程統一潤稿
   { speaker: '教練', text: '這個冬天沒白練——你的底氣厚了。（耐力 +2）' },
 ];
 
@@ -165,10 +164,10 @@ export const OFFSEASON_TRAINING_LINES = [
 // advanceSeason 成功後由 careerScreen 播放（衛冕＝defend、止步捲土重來＝comeback）。
 export const SEASON_OPENERS = {
   defend: [
-    { speaker: '隊長（MB）', text: '新的一屆了。冠軍的號碼掛在我們身上——全國都想把它摘下來。' }, // TODO(naming)
+    { speaker: '大山', text: '新的一屆了。現在全國都認得遊隼——冠軍掛在我們身上，每一隊都衝著我們來。' },
   ],
   comeback: [
-    { speaker: '隊長（MB）', text: '輸掉的那場記著就好。名冊還在、你也更強了——這一屆，我們重新來過。' }, // TODO(naming)
+    { speaker: '大山', text: '輸掉的那場記著就好。名冊還在、你也更強了——這一屆，遊隼重新起飛。' },
   ],
 };
 
@@ -212,9 +211,8 @@ export function oldTeamPreEvents(career, roster) {
       id: `old-team-${m.id}-${next.opponentId}`,
       moment: 'pre',
       lines: [
-        // TODO(naming)：舊隊情結台詞佔位（模板帶原隊名），命名工程統一潤稿
         { speaker: m.name, text: `${teamName}……我以前的隊。這場讓我上，我不會手軟。` },
-        { speaker: '隊長（MB）', text: '不用你說。把你練出來的人就在網子對面——打給他們看。' },
+        { speaker: '大山', text: '不用你說。把你練出來的人就在網子對面——打給他們看。' },
       ],
     }))
     .filter((e) => !triggered.includes(e.id));

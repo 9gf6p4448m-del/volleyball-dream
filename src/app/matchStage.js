@@ -342,7 +342,7 @@ function createCoachOptionDialog() {
   speaker.textContent = '教練';
   speaker.style.cssText = 'font-size:13px;font-weight:800;color:#ffd166;letter-spacing:2px';
   const text = document.createElement('div');
-  text.textContent = '暫停時間——想怎麼安排？'; // TODO(naming)
+  text.textContent = '暫停。這口氣要怎麼用——你說。';
   text.style.cssText = 'font-size:15px;color:#eef2fa;line-height:1.6;margin-top:6px;text-align:left';
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:10px;margin-top:12px';
@@ -356,8 +356,8 @@ function createCoachOptionDialog() {
     ].join(';');
     return b;
   };
-  const calmBtn = mkBtn('🧘 穩住\n（全隊喘口氣）', '#6ee7ff', '#0b1a24'); // TODO(naming)
-  const fireBtn = mkBtn('🔥 燃起來\n（把氣勢拉起來）', '#ff9d7a', '#2a0f05'); // TODO(naming)
+  const calmBtn = mkBtn('🧘 穩住\n（把呼吸找回來）', '#6ee7ff', '#0b1a24');
+  const fireBtn = mkBtn('🔥 燃起來\n（把場子吼回來）', '#ff9d7a', '#2a0f05');
   calmBtn.style.whiteSpace = 'pre-line';
   fireBtn.style.whiteSpace = 'pre-line';
   btnRow.appendChild(calmBtn);
@@ -405,7 +405,7 @@ function createTimeoutCountdown(handlers) {
   track.appendChild(fill);
   const label = document.createElement('span');
   const resumeBtn = document.createElement('button');
-  resumeBtn.textContent = '⏩ 提早開賽'; // TODO(naming)
+  resumeBtn.textContent = '⏩ 夠了，開打';
   resumeBtn.style.cssText = [
     'pointer-events:auto', 'cursor:pointer', 'border:none', 'border-radius:10px',
     'background:#ffd166', 'color:#1a1405', 'font-weight:800', 'font-size:12px',
@@ -482,7 +482,7 @@ function createComebackButton({ handlers, floatText }) {
     'font-family:system-ui,sans-serif', 'z-index:17', 'cursor:pointer',
     'touch-action:manipulation', 'display:none',
   ].join(';');
-  btn.textContent = '🔥 回到場上'; // TODO(naming)
+  btn.textContent = '🔥 該我上了';
   btn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     if (btn.dataset.enabled !== '1') {

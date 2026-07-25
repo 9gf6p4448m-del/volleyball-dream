@@ -123,7 +123,7 @@ test('體力播報：tier1 每人每場只播一次——重複跨檔（模擬�
   c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 0, ME);
   c.onEvents([{ type: 'DEAD_BALL' }], g, null, 0, ME);
   const first = c.line(g, null, ME, 50);
-  assert.equal(first.text, 'A隊2號 體力見底，考慮讓他休息');
+  assert.equal(first.text, 'A隊2號 腳步變重了，留意他的體力');
   assert.equal(first.kind, 'beat');
   // TTL 過期後乾淨重來，再次跨同一 tier1 檔（同一人）——已標記過，不再收單、不再播
   c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 5000, ME);
@@ -139,7 +139,7 @@ test('體力播報：同一死球窗撞車取王牌（trust.fromSetter 最高者
   c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 0, ME);
   c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A1', tier: 1 }], g, null, 10, ME);
   c.onEvents([{ type: 'DEAD_BALL' }], g, null, 10, ME);
-  assert.equal(c.line(g, null, ME, 60).text, '小夢 的移動變慢了——他累了');
+  assert.equal(c.line(g, null, ME, 60).text, '對面的 小夢 動得慢了——朝他那邊打');
 });
 
 test('體力播報：我方 tier2（<25%）在 tier1 播過後再播一次，且文案不同', () => {
@@ -148,10 +148,10 @@ test('體力播報：我方 tier2（<25%）在 tier1 播過後再播一次，且
   const ME = 'A1'; // controlledId 屬 A 隊，A2 是隊友（非主角）
   c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 1 }], g, null, 0, ME);
   c.onEvents([{ type: 'DEAD_BALL' }], g, null, 0, ME);
-  assert.equal(c.line(g, null, ME, 50).text, 'A隊2號 體力見底，考慮讓他休息');
+  assert.equal(c.line(g, null, ME, 50).text, 'A隊2號 腳步變重了，留意他的體力');
   c.onEvents([{ type: 'STAMINA_LOW', team: 'A', playerId: 'A2', tier: 2 }], g, null, 5000, ME);
   c.onEvents([{ type: 'DEAD_BALL' }], g, null, 5000, ME);
-  assert.equal(c.line(g, null, ME, 5050).text, 'A隊2號 體力只剩不到 25%——真的該換人了');
+  assert.equal(c.line(g, null, ME, 5050).text, 'A隊2號 已經在硬撐了——該讓他下來喘口氣');
 });
 
 test('體力播報：敵方 tier2 豁免無播報（tier1 仍正常播——只有重度段被擋）', () => {
@@ -165,7 +165,7 @@ test('體力播報：敵方 tier2 豁免無播報（tier1 仍正常播——只�
   // 同一人之後（另一死球窗）跨 tier1＝正常收單播報（戰術情報口吻）
   c.onEvents([{ type: 'STAMINA_LOW', team: 'B', playerId: 'B2', tier: 1 }], g, null, 5000, ME);
   c.onEvents([{ type: 'DEAD_BALL' }], g, null, 5000, ME);
-  assert.equal(c.line(g, null, ME, 5050).text, '白浪2號 的移動變慢了——他累了');
+  assert.equal(c.line(g, null, ME, 5050).text, '對面的 白浪2號 動得慢了——朝他那邊打');
 });
 
 test('體力播報：主角豁免——受控者本人跨檔零播報', () => {
@@ -185,9 +185,9 @@ test('暫停播報：我方請求暫停／對方喊暫停——口吻分流', ()
   const g = makeStaminaGame();
   const ME = 'A1';
   c.onEvents([{ type: 'TIMEOUT', team: 'A' }], g, null, 0, ME);
-  assert.equal(c.line(g, null, ME, 50).text, '我方請求暫停');
+  assert.equal(c.line(g, null, ME, 50).text, '我方請求暫停——穩住呼吸，重新來');
   c.onEvents([{ type: 'TIMEOUT', team: 'B' }], g, null, 5000, ME);
-  assert.equal(c.line(g, null, ME, 5050).text, '對方喊了暫停，重新佈局');
+  assert.equal(c.line(g, null, ME, 5050).text, '對方喊了暫停——他們被打疼了');
 });
 
 // W7.1 四輪 #2：轉播保護期（beat 加 level/protectUntil）——大事 1500ms 保護期，

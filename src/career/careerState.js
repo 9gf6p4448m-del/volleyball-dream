@@ -190,7 +190,9 @@ export function buildOpponentTeam(def) {
     }
     return createPlayer({
       id: `B${i + 1}`,
-      name: `${def.name}${i + 1}號`, // TODO(naming)：「隊名＋N號」為佔位命名，命名工程統一潤稿
+      // 命名工程 07-25：具名先發（opponents.js squad 槽序同 ROLE_ORDER）；
+      // 無 squad 的自訂/測試 def 回退「隊名＋N號」
+      name: def.squad?.[i] ?? `${def.name}${i + 1}號`,
       teamId: 'B',
       naturalRole: role,
       currentRole: role,
@@ -391,7 +393,7 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
     // stage 6 自由人：雙方都有（我方固定隊友、對方吃參數檔強度）
     liberos: {
       A: liberoA,
-      B: buildLibero('B', `${def.name}·自由人`, def.level),
+      B: buildLibero('B', def.libero ?? `${def.name}·自由人`, def.level),
     },
     opponent: def,
   };

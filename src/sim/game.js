@@ -521,7 +521,7 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     type: 'TOUCH', tick: state.tick, team, playerId: player.id,
     kind: intent.action, touches: newCount,
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
-    power: Math.round(timing * 100) / 100, // 蓄力質量：表現層分輕吊/重扣音效用
+    power: Math.round(timing * 100) / 100, // 蓄力品質：表現層分輕吊/重扣音效用
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
     ...(blown ? { blown: true } : {}), // 爆接標記（播報/探針用）
   });

@@ -9,6 +9,7 @@
 import { buildLibero } from './careerState.js';
 import { GROWABLE_ATTRS, matchStatsFor } from './growth.js';
 import { defaultLineup, validateLineup, checkRoleStructure } from './lineup.js';
+import { recruitDefOf } from './recruitment.js';
 
 // ---- 成長模型參數（D2 拍板：表現歸因驅動、新人快老將慢、上限 85）----
 export const ROSTER_GROWTH = {
@@ -36,25 +37,29 @@ const XP_RULES = [
 // 其 speed/serve），首版 ±8~16 偏移實測把首場勝率推高 11pp（86→97），故偏移
 // 全面減半至 ±1~8。實際以 tools/balance-sim.mjs 前後對照驗收，勿只信總和守恆。
 // 身高沿用既有基準 [1.83,1.88,1.96,1.90,1.86,1.94]；trust 槽位初值不動（careerTeams 管）。
-// TODO(naming)：以下 name/persona 為佔位，命名工程統一潤稿
+// 命名工程定案（2026-07-25 kickoff 拍板）：我方＝遊隼高中（創隊雜牌軍，名字各有來歷、
+// 不走字族）；name＝隊內暱稱（存檔鍵值＋玩家已熟，不改），fullName＝全名（隊友卡顯示）；
+// title＝輕稱號（僅隊長；播報偶爾喊）。名字是預設稿——ensureStarterRoster 不覆蓋已改名
+export const OUR_TEAM_NAME = '遊隼高中';
 export const STARTER_DEFS = [
-  { id: 'A1', name: '阿哲', role: 'setter', grade: 2, height: 1.83,
+  { id: 'A1', name: '阿哲', fullName: '林承哲', role: 'setter', grade: 2, height: 1.83,
     persona: '冷靜的組織者——手感細膩，把球送到你最好打的位置',
     attributes: { jump: 58, power: 58, reaction: 63, stamina: 61, speed: 63, control: 72, serve: 61, block: 54 } },
   // A2＝玩家（主攻手槽）——不在 members 裡，計數時佔 1 席（見 rosterCount）
-  { id: 'A3', name: '大山', role: 'middle', grade: 3, height: 1.96, captain: true,
-    persona: '隊長。沉默的高牆——三年級最後一個夏天，全押在這支隊伍上',
+  { id: 'A3', name: '大山', fullName: '高崇山', role: 'middle', grade: 3, height: 1.96, captain: true,
+    title: '沉默高牆',
+    persona: '隊長。沉默的高牆——三年級最後一個夏天，全押在遊隼身上',
     attributes: { jump: 64, power: 63, reaction: 59, stamina: 60, speed: 58, control: 64, serve: 56, block: 66 } },
-  { id: 'A4', name: '阿烈', role: 'opposite', grade: 2, height: 1.90,
+  { id: 'A4', name: '阿烈', fullName: '洪振烈', role: 'opposite', grade: 2, height: 1.90,
     persona: '右翼重砲——脾氣跟扣球一樣衝，準度差點但誰都不想正面擋他',
     attributes: { jump: 62, power: 67, reaction: 58, stamina: 61, speed: 60, control: 63, serve: 64, block: 55 } },
-  { id: 'A5', name: '小飛', role: 'outside', grade: 1, height: 1.86,
+  { id: 'A5', name: '小飛', fullName: '葉翊飛', role: 'outside', grade: 1, height: 1.86,
     persona: '一年級的速度型主攻——還很生，但成長空間是全隊最大的',
     attributes: { jump: 62, power: 60, reaction: 63, stamina: 62, speed: 66, control: 65, serve: 59, block: 53 } },
-  { id: 'A6', name: '阿岩', role: 'middle', grade: 2, height: 1.94,
+  { id: 'A6', name: '阿岩', fullName: '陳定岩', role: 'middle', grade: 2, height: 1.94,
     persona: '第二中間手——不搶戲的耐力型攔網工兵，教練最信任的輪替',
     attributes: { jump: 62, power: 61, reaction: 60, stamina: 63, speed: 57, control: 65, serve: 57, block: 65 } },
-  { id: 'AL', name: '小守', role: 'libero', grade: 1, height: 1.72, libero: true,
+  { id: 'AL', name: '小守', fullName: '魏守恆', role: 'libero', grade: 1, height: 1.72, libero: true,
     persona: '自由人——個子最小、嗓門最大，球落地前絕不放棄' },
 ];
 
@@ -66,10 +71,12 @@ export function buildStarterMembers() {
   return STARTER_DEFS.map((d) => ({
     id: d.id,
     name: d.name,
+    fullName: d.fullName,
     origin: 'starter',
     role: d.role,
     height: d.height,
     ...(d.captain ? { captain: true } : {}),
+    ...(d.title ? { title: d.title } : {}),
     // 小守維持 buildLibero 防守專才公式（D3）：初始屬性直接取公式輸出，
     // 之後成長寫回 member.attributes（結構欄位仍由 buildLibero 供給，見 careerState）
     attributes: d.libero
@@ -102,10 +109,31 @@ export function openSlots(roster) {
 export function ensureStarterRoster(store) {
   const roster = store.loadRoster();
   if (!roster) return null;
-  const members = roster.members.length > 0 ? roster.members : buildStarterMembers();
+  const base = roster.members.length > 0 ? roster.members : buildStarterMembers();
+  const members = backfillNames(base); // 命名工程 07-25：舊存檔補 fullName/title
   if (members !== roster.members) store.saveRoster({ ...roster, members });
   ensureLineup(store, members);
   return store.loadRoster();
+}
+
+// 命名工程 07-25：既有存檔成員回填 fullName（＋隊長稱號）——顯示層欄位、可安全補。
+// 僅在暱稱仍是預設稿時補（玩家改過名＝尊重不動）；已有 fullName 不再動（冪等）
+function backfillNames(members) {
+  let changed = false;
+  const out = members.map((m) => {
+    if (m.fullName) return m;
+    const def = m.origin === 'starter'
+      ? STARTER_DEFS.find((d) => d.id === m.id)
+      : recruitDefOf(m.recruitKey ?? m.origin);
+    if (!def?.fullName || def.name !== m.name) return m;
+    changed = true;
+    return {
+      ...m,
+      fullName: def.fullName,
+      ...(def.title && !m.title ? { title: def.title } : {}),
+    };
+  });
+  return changed ? out : members;
 }
 
 // lineup 補齊/遷移（冪等）：starters 為 null（W1/W2 存檔或建檔中間態）→ 落預設陣容

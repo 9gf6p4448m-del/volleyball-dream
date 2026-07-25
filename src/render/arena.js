@@ -94,7 +94,7 @@ function buildCrowd(group) {
 }
 
 // 場邊 LED 廣告板：自由區外緣、面向球場；MeshBasic（不受光）＝自發光 LED 感
-const AD_TEXTS = ['排球夢 VOLLEYBALL DREAM', 'SAWMAH SPORTS', 'NIGHT MATCH ★ 夜賽'];
+const AD_TEXTS = ['排球夢 VOLLEYBALL DREAM', 'SAWMAH SPORTS', '遊隼高中 ★ 主場之夜'];
 const AD_COLORS = [['#0b1430', '#6ee7ff'], ['#301010', '#ff9d7a'], ['#101f14', '#8dffb0']];
 
 function buildAdBoards(group) {

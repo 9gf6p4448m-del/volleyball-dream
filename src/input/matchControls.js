@@ -19,7 +19,7 @@ function onCourt(game, playerId) {
   return !!me && game.match.rotations[me.teamId].includes(playerId);
 }
 
-const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 質量曲線，H1 可調）
+const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 品質曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
 const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）

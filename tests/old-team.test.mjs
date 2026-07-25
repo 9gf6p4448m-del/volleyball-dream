@@ -79,8 +79,8 @@ test('D3：復仇者首次建功播報一次；開賽環境句帶老東家', () 
   g.match.score.A = 1;
   feed(1000);
   const gameName = g.players.A3.name; // 播報名取自 game 內建名（與其他播報一致）
-  assert.ok(c.line(g, null, 'A2', 1001).text.includes(`${gameName} 向老東家證明自己`));
+  assert.ok(c.line(g, null, 'A2', 1001).text.includes(`${gameName} 把這一分打給老東家看`));
   g.match.score.A = 2;
   feed(20000); // 第二次建功（前一 beat 已過期）
-  assert.ok(!c.line(g, null, 'A2', 20001).text.includes('向老東家'));
+  assert.ok(!c.line(g, null, 'A2', 20001).text.includes('打給老東家看'));
 });

@@ -52,15 +52,15 @@ export function applyPortraitPose(joints, pose) {
 }
 
 // ---- 入隊宣言一行（依 role 2-3 種變化，member.id 決定論挑選——同存檔重演一致） ----
-// TODO(naming)：佔位台詞，待專職文案/命名工程回頭潤飾（同 W7 kickoff 懸而未決的命名工程項）
+// 命名工程 07-25 定稿：口吻＝剛脫下舊隊服的轉學生，對新隊亮底牌（熱血不中二）
 const JOIN_LINES = {
   outside: ['——邊線是我的，誰都別想擋。', '——以後，右上角先問過我。'],
   opposite: ['——對角砲，認得我就夠了。', '——關鍵分，把球交給我。'],
-  setter: ['——舉球權，我要親手贏回來。', '——你們的攻擊手，以後由我來餵球。'],
-  middle: ['——以後，我的攔網就是你們的牆。', '——快攻這條線，我來守。'],
+  setter: ['——舉球權，我要親手贏回來。', '——你們的攻擊手，以後我來餵。'],
+  middle: ['——從今天起，我的攔網就是你們的牆。', '——快攻這條線，我來守。'],
   libero: ['——沒有我接不住的球。', '——你們儘管衝，後面有我。'],
 };
-const DEFAULT_JOIN_LINES = ['——以後，我們是一隊了。'];
+const DEFAULT_JOIN_LINES = ['——從今天起，我們是一隊的。'];
 
 export function pickJoinLine(member) {
   const lines = JOIN_LINES[member?.role] ?? DEFAULT_JOIN_LINES;
