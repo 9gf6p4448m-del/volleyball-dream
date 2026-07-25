@@ -22,6 +22,11 @@ import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
 import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js';
 import { opponentById } from '../career/opponents.js';
+import { HUDDLE } from '../render/huddleLayout.js';
+
+// W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
+// 先用三人稱看全隊聚攏一小段，再切進圈裡，避免自己的身體從鏡頭裡穿過
+const HUDDLE_VIEW_IN_TICKS = 55;
 
 // W7 C2：受控者（此處固定用 s.playerId＝主角）是否在場上——板凳三件套與 C1 教練建議共用判準
 // export：供 tests/comeback-ui.test.mjs 純函式直測（回場鈕/儀表板模式無 DOM 依賴的判斷邏輯）
@@ -240,6 +245,7 @@ function requestTimeoutBoost(s, team, boost) {
   const before = boost === 'calm' ? avgStamina(game, team) : null;
   const r = applyTimeoutBoost(game, { team, boost });
   if (r.ok) {
+    stage.matchView.setHuddlePlay(team, boost); // W8：教練在戰術板上畫本次選擇
     if (boost === 'calm') {
       const after = avgStamina(game, team);
       const suffix = before !== null && after !== null
@@ -853,6 +859,14 @@ function frameStep(s, now) {
   stage.matchView.sync(game, alpha, delta, frameEvents);
   stage.rig.setSpikeMine(s.aiState?.claimId === s.controlledId); // 扣球一人稱只認「舉給我」
   stage.rig.setBenchMode(benched); // W7 C2①：板凳側位廣角，優先於其餘鏡頭模式
+  // W8 暫停演出：圈內第一人稱窗——聚攏 0.9s 後進、散圈走回前 0.5s 退（板凳視角優先）；
+  // 同一顆布林餵 rig（鏡頭）與 matchView（隱藏受控者本體防擋鏡）
+  const huddleRemain = game.serveReadyTick - game.tick;
+  const huddleFPV = !benched && s.timeoutHuddleTeam != null && game.phase === 'serve' &&
+    (TUNING.TIMEOUT_DEAD_TICKS - huddleRemain) > HUDDLE_VIEW_IN_TICKS &&
+    huddleRemain > HUDDLE.WALK_BACK_TICKS + 30;
+  stage.rig.setHuddleView(huddleFPV);
+  stage.matchView.setHuddleView(huddleFPV);
   stage.rig.update(game, alpha, delta);
   // 局點張力：燈光收攏＋心跳（deuce 內建於 setPointTeam 判定）
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;

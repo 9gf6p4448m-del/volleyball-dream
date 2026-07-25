@@ -9,6 +9,8 @@ import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 import { STAMINA, tierOf } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
+import { HUDDLE, huddleSlot } from './huddleLayout.js';
+import { createHuddleProps } from './huddleProps.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
@@ -22,14 +24,14 @@ const DIVE_LUNGE = 1.35;   // 撲出水平距離（m）
 const DIVE_TILT = 1.2;     // 撲出時身體前傾（rad，接近水平 1.57）
 const DIVE_HOP = 0.22;     // 撲出微騰空（m，飛撲離地的弧）
 // W7.1 #3A：暫停集合帶位（純視覺，不動 sim actors——比照魚躍純視覺位移前例）
-const HUDDLE_X = -4.5;         // 教練點（場邊）：兩隊共用同一 x，z 依隊側鏡射
-const HUDDLE_Z = 8;
-const HUDDLE_WALK_BACK_TICKS = 90; // 發球倒數剩 1.5s（90 tick/60Hz）走回真實位置
+// W8 暫停演出（07-26 拍板 B 案）：幾何改圍圈弧（huddleLayout 單一事實源）、
+// 兩隊各自圍自家教練（真實排球任一方暫停雙方都回板凳圈）、教練＋戰術板道具
 const HUDDLE_K = 3.2;              // 走位插值收斂率（指數平滑，同 TURN_K 家族手感）
 
 export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null) {
   let highlightId = initialControlledId;
   let huddleTeam = null; // W7.1 #3A：目前正在集合帶位的隊伍（'A'|'B'|null）——matchLoop 逐幀灌入
+  let huddleViewOn = false; // W8：圈內第一人稱進行中——隱藏受控者本體（鏡頭＝他的眼睛）
   const castShadow = quality.shadowSize > 0;
 
   // InstancedMesh 池（每種幾何一池＝10 draw calls，取代每人 16 個獨立 Mesh）；
@@ -56,6 +58,12 @@ export async function createMatchView(scene, quality, game, initialControlledId,
 
   // 灰塵粒子池（跳躍落地/死球落點的塵土——夜賽聚光燈下的空氣感）
   const dust = createDust(scene);
+
+  // W8 暫停演出：兩隊教練＋戰術板（暫停圍圈時現身；我方板的戰術由 matchLoop 灌入）
+  const huddleProps = {
+    A: createHuddleProps(scene, TEAM_SIDE.A),
+    B: createHuddleProps(scene, TEAM_SIDE.B),
+  };
 
   // 玩家操控者足下光圈（一眼找到自己；「這球歸你」時轉橘紅示警）
   const ring = new THREE.Mesh(
@@ -98,6 +106,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     },
     setControlled(id) { highlightId = id; },
     setTimeoutHuddle(team) { huddleTeam = team; }, // W7.1 #3A：null＝無人集合
+    // W8 暫停演出：教練在戰術板上畫本次選項（'calm'/'fire'；散場自動重置）
+    setHuddlePlay(team, play) { huddleProps[team]?.drawPlay(play); },
+    setHuddleView(v) { huddleViewOn = v; }, // 與 cameraRig 同一顆布林（matchLoop 灌入）
     setHot(hot) {
       if (hot === ringHot) return;
       ringHot = hot;
@@ -107,6 +118,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // alpha＝步間插值；dt＝畫面幀時間；frameEvents＝本幀 sim 事件（驅動姿勢）
     sync(gameState, alpha, dt, frameEvents = []) {
       routeEvents(frameEvents, gameState);
+      // W8 暫停演出：教練與戰術板只在圍圈窗內現身（與隊員聚攏同一組判準）
+      const huddleActive = huddleTeam != null && gameState.phase === 'serve' &&
+        (gameState.serveReadyTick - gameState.tick) > HUDDLE.WALK_BACK_TICKS;
+      huddleProps.A.setVisible(huddleActive);
+      huddleProps.B.setVisible(huddleActive);
       const myTeam = gameState.players[highlightId]?.teamId; // A6/A4：標籤變色以受控者所屬隊為「我方」
       // W7 B4④：氣勢極端不利方（僅正負滿檔 ±MOMENTUM_MAX 才觸發，讀原始 value 不做粗訊號分級）
       const dejectedTeam = gameState.momentum && Math.abs(gameState.momentum.value) === TUNING.MOMENTUM_MAX
@@ -150,20 +166,26 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           blockDuty = gameState.actors[id].blockUntil >= gameState.tick || ready;
           u.animator.setHold(blockDuty ? 'block' : null);
         }
+        // W8 圈內第一人稱：鏡頭就是受控者的眼睛——隱藏他的本體與標籤（防身體擋鏡）
+        const hideMe = huddleViewOn && id === highlightId;
+        u.rig.root.scale.setScalar(hideMe ? 0.0001 : 1);
+        u.tag.sprite.visible = !hideMe;
+
         const a = gameState.actors[id];
         let x = a.px + (a.x - a.px) * alpha;
         let z = a.pz + (a.z - a.pz) * alpha;
 
-        // W7.1 #3A：暫停集合帶位——喊暫停那隊的場上球員短暫聚向教練點，倒數剩 1.5s 走回；
-        // 純顯示位移（比照魚躍前例）：u.huddleW 是每單位持久化的平滑值，指數趨近目標
-        const inHuddleWindow = huddleTeam === pTeam && onCourt && gameState.phase === 'serve' &&
-          (gameState.serveReadyTick - gameState.tick) > HUDDLE_WALK_BACK_TICKS;
+        // W7.1 #3A→W8 暫停圍圈：任一方喊暫停＝兩隊各自圍自家教練（弧形槽位依輪轉序，
+        // 不再全員擠同一點）；倒數剩 1.5s 散開走回。純顯示位移（比照魚躍前例）
+        const inHuddleWindow = huddleTeam != null && onCourt && gameState.phase === 'serve' &&
+          (gameState.serveReadyTick - gameState.tick) > HUDDLE.WALK_BACK_TICKS;
         u.huddleW = (u.huddleW ?? 0) +
           ((inHuddleWindow ? 1 : 0) - (u.huddleW ?? 0)) * (1 - Math.exp(-HUDDLE_K * dt));
         if (u.huddleW > 0.001) {
-          const hz = TEAM_SIDE[pTeam] * HUDDLE_Z;
-          x += (HUDDLE_X - x) * u.huddleW;
-          z += (hz - z) * u.huddleW;
+          const slotIdx = gameState.match.rotations[pTeam]?.indexOf(id) ?? 0;
+          const hp = huddleSlot(TEAM_SIDE[pTeam], slotIdx < 0 ? 0 : slotIdx);
+          x += (hp.x - x) * u.huddleW;
+          z += (hp.z - z) * u.huddleW;
         }
 
         // 頭上標籤：角色縮寫（S/OH/MB/OPP；玩家標「你·」前綴）＋
@@ -244,6 +266,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         if (id === highlightId) {
           ring.position.x = x;
           ring.position.z = z;
+          ring.visible = !huddleViewOn; // W8：圈內第一人稱時光圈一併藏（本體已隱藏）
         }
       }
       pool.markDirty();

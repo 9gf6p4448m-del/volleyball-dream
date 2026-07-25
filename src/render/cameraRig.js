@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { COURT } from '../sim/constants.js';
 import { serverId } from '../sim/match.js';
 import { TEAM_SIDE } from '../sim/rotation.js';
+import { coachPos, huddleSlot } from './huddleLayout.js';
 
 // 【試玩必調】H2 可調參數：銜接時間、鏡位、俯角
 export const CAMERA_TUNING = {
@@ -41,11 +42,13 @@ export function createCameraRig(camera, initialPlayerId) {
   let defendView = false; // 攔網第一視角旗標（main 每幀依防守時刻設定）
   let spikeMine = false;     // 這球第三擊是否分配給我（claim）——舉給隊友不搶鏡
   let benchMode = false;     // W7 C2①：主角在板凳＝教練視角，優先於其餘所有模式
+  let huddleView = false;    // W8 暫停演出：第一人稱圍圈看教練戰術板
 
   function desiredMode(game) {
     const me = game.players[playerId];
     if (!me) return 'third';
     if (benchMode) return 'bench'; // 板凳視角最高優先——沒有身體可跟，不吃攻防切換
+    if (huddleView) return 'huddle'; // 暫停圍圈：主角在場上時的第一人稱
     if (attackView) return 'attack'; // 讀攔網視角優先
     if (defendView) return 'defend'; // 攔網第一視角（隔網讀對面攻擊手）
     if (game.phase === 'serve' && serverId(game.match) === playerId) return 'first';
@@ -67,6 +70,7 @@ export function createCameraRig(camera, initialPlayerId) {
     setDefendView(v) { defendView = v; },
     setSpikeMine(v) { spikeMine = v; },
     setBenchMode(v) { benchMode = v; },
+    setHuddleView(v) { huddleView = v; },
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
     getMode() { return mode; },
@@ -106,6 +110,21 @@ export function createCameraRig(camera, initialPlayerId) {
         // W7 C2①：板凳側位廣角——固定機位看整個球場（兩隊都在畫面內），不跟任何球員
         pos.set(CAMERA_TUNING.BENCH_X, CAMERA_TUNING.BENCH_HEIGHT, side * CAMERA_TUNING.BENCH_Z);
         target.set(0, 1.1, 0);
+      } else if (mode === 'huddle') {
+        // W8 暫停演出：主角圈位的第一人稱——沿「教練→我的槽位」方向再退半步取景
+        // （純鏡頭後拉，隊員站位不動），對準教練胸前的戰術板：板置中、教練頭在上緣、
+        // 兩側隊友入鏡。槽位幾何與 matchView 聚攏帶位同一套（huddleLayout）
+        const slotIdx = game.match.rotations[me.teamId]?.indexOf(playerId) ?? 0;
+        const slot = huddleSlot(side, slotIdx < 0 ? 0 : slotIdx);
+        const coach = coachPos(side);
+        const dx = slot.x - coach.x;
+        const dz = slot.z - coach.z;
+        const d = Math.hypot(dx, dz) || 1;
+        const back = 0.6; // 取景後拉距離（m）
+        const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
+        pos.set(slot.x + (dx / d) * back, eye + 0.08, slot.z + (dz / d) * back);
+        // 注視點＝戰術板本體（教練胸前 0.42m、板高 1.26）
+        target.set(coach.x + (dx / d) * 0.42, 1.26, coach.z + (dz / d) * 0.42);
       } else if (mode === 'defend') {
         // 攔網手身後略高，隔網看對面攻擊手的助跑與起跳（守方讀攻擊——與攻擊視角對稱）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
