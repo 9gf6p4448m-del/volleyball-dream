@@ -123,7 +123,6 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         (gameState.serveReadyTick - gameState.tick) > HUDDLE.WALK_BACK_TICKS;
       huddleProps.A.setVisible(huddleActive);
       huddleProps.B.setVisible(huddleActive);
-      const myTeam = gameState.players[highlightId]?.teamId; // A6/A4：標籤變色以受控者所屬隊為「我方」
       // W7 B4④：氣勢極端不利方（僅正負滿檔 ±MOMENTUM_MAX 才觸發，讀原始 value 不做粗訊號分級）
       const dejectedTeam = gameState.momentum && Math.abs(gameState.momentum.value) === TUNING.MOMENTUM_MAX
         ? (gameState.momentum.value > 0 ? 'B' : 'A')
@@ -193,27 +192,19 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const team0 = pTeam;
         const text = (id === highlightId ? '你·' : '') +
           (ROLE_TAG[gameState.players[id].currentRole] ?? '?');
-        const staminaColor = staminaTagColor(gameState, id, team0, myTeam);
+        const staminaColor = staminaTagColor(gameState, id);
         const color = staminaColor ?? TAG_COLORS[team0];
-        // 07-26 拍板：迷你體力條——只在死球間隙浮現，開球即收。我方恆顯示；
-        // 對手跌破 50% 才亮（試玩回饋「看不出對手累了沒」——累的人給讀數、
-        // 健康的人保留情報霧，接播報「朝他那邊打」）。量化 5% 檔＝redraw 受控
-        const barQ = (() => {
-          if (!gameState.stamina || gameState.phase !== 'serve' || !onCourt) return null;
-          const v = gameState.stamina[id] ?? 1;
-          if (team0 !== myTeam && v >= STAMINA.TIER1_BELOW) return null;
-          return Math.max(0, Math.min(1, Math.round(v * 20) / 20));
-        })();
-        // 條色：我方三段（綠/黃/紅）；對手封頂黃——heavyExempt＝效果停在一段，
-        // 顯示語意跟效果一致（紅＝重度懲罰，對手永遠不吃）
-        const barColor = barQ === null ? null
-          : (team0 === myTeam && barQ < STAMINA.TIER2_BELOW) ? '#ff5b5b'
-            : barQ < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0';
+        // 07-26 拍板（Sawmah 定稿）：迷你體力條——死球間隙雙方全員浮現、開球即收；
+        // 顏色三段雙方一致（綠/<50% 黃/<25% 紅）＝顯示「真實疲勞」。對手的
+        // heavyExempt 效果豁免是幕後平衡手段，玩家不需從顯示得知。量化 5% 檔控 redraw
+        const barQ = gameState.stamina && gameState.phase === 'serve' && onCourt
+          ? Math.max(0, Math.min(1, Math.round((gameState.stamina[id] ?? 1) * 20) / 20))
+          : null;
         if (text !== u.tagText || color !== u.tagColor || barQ !== u.tagBar) {
           u.tagText = text;
           u.tagColor = color;
           u.tagBar = barQ;
-          drawTag(u.tag, text, color, barQ, barColor);
+          drawTag(u.tag, text, color, barQ);
         }
         u.tag.sprite.position.set(x, u.tagY, z);
 
@@ -341,14 +332,13 @@ function createDust(scene) {
   };
 }
 
-// W7 A4/A6：頭上標籤低體力變色——我方 <50% 黃、<25% 紅（兩段）；對手 <50% 黃
-// （heavyExempt＝對手不會進重度段，黃即其最深訊號）。07-26 試玩回饋補我方中段黃：
-// 原本我方只有 <25% 紅、中間零訊號——全隊均值 ~0.7 下紅標整場不出現＝隊友體力不可讀。
-// 仍是粗訊號檔位變色（拍板：不做精確條；精確值在 ⚙ 換人面板）；未啟用/未跨檔＝隊色
-function staminaTagColor(gameState, id, team0, myTeam) {
+// W7 A4/A6→07-26 定稿：頭上標籤低體力變色——雙方同語意 <50% 黃、<25% 紅
+// （顯示「真實疲勞」；對手 heavyExempt 效果豁免是幕後平衡手段，不反映在顯示）。
+// 仍是粗訊號檔位變色（精確值在死球迷你條與 ⚙ 面板）；未啟用/未跨檔＝隊色
+function staminaTagColor(gameState, id) {
   if (!gameState.stamina) return null;
   const v = gameState.stamina[id] ?? 1;
-  if (team0 === myTeam && v < STAMINA.TIER2_BELOW) return '#ff5b5b';
+  if (v < STAMINA.TIER2_BELOW) return '#ff5b5b';
   return v < STAMINA.TIER1_BELOW ? '#ffd166' : null;
 }
 
@@ -375,10 +365,9 @@ function makeTag(scene) {
   return { sprite, canvas, texture };
 }
 
-// bar（07-26 拍板：死球間隙浮現的迷你體力條）：null＝不畫；0..1＝條長。
-// barColor 由呼叫端決定（我方三段綠/黃/紅；對手封頂黃＝效果語意一致）。
-// rally 中一律 null＝畫面乾淨
-function drawTag(tag, text, color, bar = null, barColor = '#60ffa0') {
+// bar（07-26 拍板：死球間隙浮現的迷你體力條，雙方全員）：null＝不畫；0..1＝條長，
+// 三段色雙方一致（同主角條/⚙面板）。rally 中一律 null＝畫面乾淨
+function drawTag(tag, text, color, bar = null) {
   const ctx = tag.canvas.getContext('2d');
   ctx.clearRect(0, 0, 128, 56);
   ctx.font = 'bold 34px system-ui, sans-serif';
@@ -392,7 +381,8 @@ function drawTag(tag, text, color, bar = null, barColor = '#60ffa0') {
   if (bar !== null) {
     ctx.fillStyle = 'rgba(12,16,26,0.82)';
     ctx.fillRect(22, 43, 84, 11);
-    ctx.fillStyle = barColor; // 三色同主角條/⚙面板（單一配色語言）；對手封頂黃
+    ctx.fillStyle = bar < STAMINA.TIER2_BELOW ? '#ff5b5b'
+      : bar < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0'; // 三色同主角條/⚙面板
     ctx.fillRect(24, 45, 80 * bar, 7);
   }
   tag.texture.needsUpdate = true;
