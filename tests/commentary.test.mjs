@@ -63,6 +63,22 @@ test('節奏點（kind=beat）TTL：快攻舉球顯示、過期後消失', () =>
   assert.equal(c.line(g, null, ME, 5000).text, ''); // TTL 過期、拍數不足→安靜
 });
 
+test('節奏點隊伍標記：我方=ally、敵方=enemy、中性事件不帶 team（泡泡染色用）', () => {
+  const c = createCommentary();
+  const g = makeGame({ phase: 'rally', touches: 1, possession: 'A' });
+  // 我方魚躍（TOUCH 帶 team A）→ ally
+  c.onEvents([{ type: 'TOUCH', kind: 'dive', playerId: 'A1', team: 'A' }], g, null, 0, ME);
+  assert.equal(c.line(g, null, ME, 100).team, 'ally');
+  // 敵方發球（事件無 team 欄→由 players 反查）→ enemy
+  const c2 = createCommentary();
+  c2.onEvents([{ type: 'SERVE', playerId: 'B1' }], g, null, 0, ME);
+  assert.equal(c2.line(g, null, ME, 100).team, 'enemy');
+  // 追平＝中性敘事 → 不帶 team
+  const c3 = createCommentary();
+  c3.onEvents([{ type: 'SCORE', team: 'B' }], makeGame({ score: { A: 1, B: 1 }, phase: 'rally' }), null, 0, ME);
+  assert.equal(c3.line(makeGame({ score: { A: 1, B: 1 }, phase: 'rally' }), null, ME, 100).team, undefined);
+});
+
 test('輕吊與全力重扣依 power 分辨', () => {
   const c = createCommentary();
   const g = makeGame({ phase: 'rally', touches: 3, possession: 'B' });

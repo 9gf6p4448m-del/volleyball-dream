@@ -10,6 +10,12 @@ const BUBBLE = {
   beat: { bg: '#f7f9ff', border: '#101420', text: '#101420' },
   ambient: { bg: '#f7f9ff', border: '#101420', text: '#2a3247' },
 };
+// 試玩回饋 07-25：我方/敵方播報同槽分不清——事件節奏點（beat）依所屬隊染色，
+// 顏色語言同氣勢計/頭上標籤（我方青、敵方暖）；action 恆琥珀、ambient 恆中性
+const BUBBLE_TEAM = {
+  ally: { bg: '#e2f7fd', border: '#0f6c8c', text: '#083c50' },
+  enemy: { bg: '#ffece3', border: '#a4431f', text: '#5e230c' },
+};
 // W7 B4①：雙向氣勢計顏色——我方（A）側沿用隊色青、對方（B）側沿用暖色（同 matchView TAG_COLORS 語言）
 const MOMENTUM_COLOR = { A: '#6ee7ff', B: '#ff9d7a' };
 
@@ -124,7 +130,7 @@ export function createScoreboard(playerId) {
 
   function renderBubble(hint) {
     // 正規化：undefined 不會進來；string（classic 舊提示）視為操作提示
-    const { text, kind } = typeof hint === 'string' ? { text: hint, kind: 'action' } : hint;
+    const { text, kind, team } = typeof hint === 'string' ? { text: hint, kind: 'action' } : hint;
     if (!text) {
       if (lastBubbleText) {
         lastBubbleText = '';
@@ -137,7 +143,7 @@ export function createScoreboard(playerId) {
     const isNew = text !== lastBubbleText;
     lastBubbleText = text;
     lastBubbleKind = kind;
-    const c = BUBBLE[kind] ?? BUBBLE.beat;
+    const c = (kind === 'beat' && BUBBLE_TEAM[team]) || BUBBLE[kind] || BUBBLE.beat;
     bubbleEl.style.display = 'block';
     bubbleEl.style.opacity = '1';
     bubbleEl.style.background = c.bg;

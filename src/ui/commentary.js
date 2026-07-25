@@ -87,10 +87,12 @@ export function createCommentary(opponentDef = null, revenge = []) {
   // level：LEVEL_MINOR（預設、隨時可蓋）｜LEVEL_MAJOR（設下 2000ms 保護期，期內只有
   // 同級或更高才蓋得掉）。protectUntil 與 until（顯示 TTL）是兩回事——大事可能顯示更久
   // （STREAK_TTL 3000ms）但保護期只有 2000ms，過了保護期、還沒過顯示期，小事一樣能蓋
-  const setBeat = (text, now, ttl = BEAT_TTL, level = LEVEL_MINOR) => {
+  // team（試玩回饋 07-25：我方/敵方播報同一位置分不清）：'A'|'B'＝事件所屬隊、null＝中性
+  // ——line() 轉成相對視角 ally/enemy，泡泡據此染隊色（青/暖，同氣勢計顏色語言）
+  const setBeat = (text, now, ttl = BEAT_TTL, level = LEVEL_MINOR, team = null) => {
     if (beat && now < beat.protectUntil && level < beat.level) return; // 保護期內、蓋不掉
     beat = {
-      text, until: now + ttl, level,
+      text, until: now + ttl, level, team,
       protectUntil: level === LEVEL_MAJOR ? now + PROTECT_MS : now,
     };
   };
@@ -112,46 +114,51 @@ export function createCommentary(opponentDef = null, revenge = []) {
         if (e.type === 'TOUCH' || e.type === 'BLOCK_TOUCH') {
           lastTouchInfo = { playerId: e.playerId, team: e.team };
         }
+        const evTeam = e.team ?? game.players[e.playerId]?.teamId ?? null;
         if (e.type === 'SERVE') {
           rallyStartFlight = game.rally.flightId;
           // 小事：隨時可蓋寫
-          if (e.playerId !== controlledId) setBeat(`${nameOf(game, e.playerId)} 發球`, now, 1400);
+          if (e.playerId !== controlledId) {
+            setBeat(`${nameOf(game, e.playerId)} 發球`, now, 1400, LEVEL_MINOR, evTeam);
+          }
         } else if (e.type === 'TOUCH' && e.blown) {
           // 爆接（真噴）：接噴救球鏈的開場哨——優先於魚躍播報（撲到但接爆＝報爆）；大事：保護期
-          setBeat(`${nameOf(game, e.playerId)} 接爆了——球飛了！`, now, BEAT_TTL, LEVEL_MAJOR);
+          setBeat(`${nameOf(game, e.playerId)} 接爆了——球飛了！`, now, BEAT_TTL, LEVEL_MAJOR, evTeam);
         } else if (e.type === 'TOUCH' && e.kind === 'dive') {
-          setBeat(`${nameOf(game, e.playerId)} 魚躍救球！！`, now, BEAT_TTL, LEVEL_MAJOR); // 大事
+          setBeat(`${nameOf(game, e.playerId)} 魚躍救球！！`, now, BEAT_TTL, LEVEL_MAJOR, evTeam); // 大事
         } else if (e.type === 'TOUCH' && e.kind === 'receive' && game.rally.touches === 1) {
           // 只播有戲的一傳：Perfect 或貼地撈球（逐球碎唸會蓋掉重要節奏點）；兩者皆大事
           if ((e.power ?? 0) >= PERFECT_POWER) {
             // 試玩回饋 07-24：單槽會被下一觸球播報秒蓋→升敘事級存活（同連得分待遇）
-            setBeat(`${nameOf(game, e.playerId)} Perfect 一傳！`, now, STREAK_TTL, LEVEL_MAJOR);
+            setBeat(`${nameOf(game, e.playerId)} Perfect 一傳！`, now, STREAK_TTL, LEVEL_MAJOR, evTeam);
           } else if ((e.ballY ?? 1) < DIG_LOW_Y) {
-            setBeat(`${nameOf(game, e.playerId)} 貼地撈起來了！`, now, BEAT_TTL, LEVEL_MAJOR);
+            setBeat(`${nameOf(game, e.playerId)} 貼地撈起來了！`, now, BEAT_TTL, LEVEL_MAJOR, evTeam);
           }
         } else if (e.type === 'TOUCH' && e.kind === 'set') {
           // 小事（舉球攻擊種類）：隨時可蓋寫
           const kind = aiState?.attackerId ? aiState.attackKind : null;
-          if (kind === 'quick') setBeat('中路快攻——！', now);
-          else if (kind === 'pipe') setBeat('後排 pipe 攻擊！', now);
-          else if (kind === 'dball') setBeat('右後 D 球！', now);
+          if (kind === 'quick') setBeat('中路快攻——！', now, BEAT_TTL, LEVEL_MINOR, evTeam);
+          else if (kind === 'pipe') setBeat('後排 pipe 攻擊！', now, BEAT_TTL, LEVEL_MINOR, evTeam);
+          else if (kind === 'dball') setBeat('右後 D 球！', now, BEAT_TTL, LEVEL_MINOR, evTeam);
         } else if (e.type === 'TOUCH' && e.kind === 'spike') {
           // 小事（未列入保護期清單，維持隨時可蓋寫）
           if (e.touches === 2 && game.players[e.playerId]?.currentRole === 'setter') {
-            setBeat('二次球偷襲！', now);
+            setBeat('二次球偷襲！', now, BEAT_TTL, LEVEL_MINOR, evTeam);
           } else if ((e.power ?? 1) <= TIP_POWER) {
-            setBeat('輕吊——！', now);
+            setBeat('輕吊——！', now, BEAT_TTL, LEVEL_MINOR, evTeam);
           } else if ((e.power ?? 0) >= HEAVY_POWER) {
-            setBeat(`${nameOf(game, e.playerId)} 全力重扣！`, now);
+            setBeat(`${nameOf(game, e.playerId)} 全力重扣！`, now, BEAT_TTL, LEVEL_MINOR, evTeam);
           }
         } else if (e.type === 'BLOCK_DECEIVED') {
-          // 大事：晃過攔網
-          setBeat(`${nameOf(game, e.blockerId)} 被晃過去了！`, now, BEAT_TTL, LEVEL_MAJOR);
+          // 大事：晃過攔網（主詞＝被晃的攔網者，隊色跟他）
+          const blkTeam = game.players[e.blockerId]?.teamId ?? null;
+          setBeat(`${nameOf(game, e.blockerId)} 被晃過去了！`, now, BEAT_TTL, LEVEL_MAJOR, blkTeam);
         } else if (e.type === 'BLOCK_TOUCH') {
           // 擦手＝球擦進攔網方半場（隊友快救）；攔死回彈＝攻方那邊球還活著；兩者皆大事
           setBeat(e.graze
             ? `${nameOf(game, e.playerId)} 指尖擦到！球還活著——快救！`
-            : `${nameOf(game, e.playerId)} 攔網拍到！球被打回去了！`, now, BEAT_TTL, LEVEL_MAJOR);
+            : `${nameOf(game, e.playerId)} 攔網拍到！球被打回去了！`,
+          now, BEAT_TTL, LEVEL_MAJOR, evTeam);
         } else if (e.type === 'SCORE') {
           const { score } = game.match;
           const total = score.A + score.B;
@@ -164,11 +171,11 @@ export function createCommentary(opponentDef = null, revenge = []) {
           const leader = score.A === score.B ? null : (score.A > score.B ? 'A' : 'B');
           const label = teamLabel(game, e.team, controlledId);
           if (leader && prevLeader && leader !== prevLeader) {
-            setBeat(`${teamLabel(game, leader, controlledId)}逆轉超前！`, now, STREAK_TTL, LEVEL_MAJOR);
+            setBeat(`${teamLabel(game, leader, controlledId)}逆轉超前！`, now, STREAK_TTL, LEVEL_MAJOR, leader);
           } else if (!leader && total > 0) {
             setBeat(`追平了 ${score.A}:${score.B}！`, now, STREAK_TTL, LEVEL_MAJOR);
           } else if (streakN >= 3) {
-            setBeat(`${label}連下 ${streakN} 分！`, now, STREAK_TTL, LEVEL_MAJOR);
+            setBeat(`${label}連下 ${streakN} 分！`, now, STREAK_TTL, LEVEL_MAJOR, e.team);
           }
           if (leader) prevLeader = leader;
           // 命名工程：對方王牌首度得分——稱號亮相（每場一次；先於復仇播報＝復仇可蓋過）
@@ -177,7 +184,8 @@ export function createCommentary(opponentDef = null, revenge = []) {
             lastTouchInfo.team === e.team && lastTouchInfo.playerId === aceId
           ) {
             aceFired = true;
-            setBeat(`王牌 ${ace.name}——「${ace.title}」名不虛傳！`, now, STREAK_TTL, LEVEL_MAJOR);
+            setBeat(`王牌 ${ace.name}——「${ace.title}」名不虛傳！`, now, STREAK_TTL, LEVEL_MAJOR,
+              lastTouchInfo.team);
           }
           // W7 D3 舊隊情結：復仇者首次建功（得分方最後觸球者在復仇名單）——蓋過連得分槽；
           // 同屬敘事大事（同一批 STREAK_TTL 待遇）
@@ -186,7 +194,8 @@ export function createCommentary(opponentDef = null, revenge = []) {
             revengeIds.has(lastTouchInfo.playerId) && !revengeFired.has(lastTouchInfo.playerId)
           ) {
             revengeFired.add(lastTouchInfo.playerId);
-            setBeat(`${nameOf(game, lastTouchInfo.playerId)} 把這一分打給老東家看！`, now, STREAK_TTL, LEVEL_MAJOR);
+            setBeat(`${nameOf(game, lastTouchInfo.playerId)} 把這一分打給老東家看！`,
+              now, STREAK_TTL, LEVEL_MAJOR, lastTouchInfo.team);
           }
         } else if (e.type === 'STAMINA_LOW') {
           // W7 A4 附：節流收集（不即時播）——主角豁免；敵方 tier2 豁免（heavyExempt 段無播報）；
@@ -210,7 +219,7 @@ export function createCommentary(opponentDef = null, revenge = []) {
             staminaWindow = [];
             if (winner) {
               setBeat(staminaLine(winner, game, game.players[controlledId]?.teamId),
-                now, STREAK_TTL, LEVEL_MAJOR);
+                now, STREAK_TTL, LEVEL_MAJOR, winner.team);
             }
           }
         } else if (e.type === 'TIMEOUT') {
@@ -218,7 +227,7 @@ export function createCommentary(opponentDef = null, revenge = []) {
           const label = teamLabel(game, e.team, controlledId);
           const mine = e.team === game.players[controlledId]?.teamId;
           setBeat(mine ? `${label}請求暫停——穩住呼吸，重新來` : `${label}喊了暫停——他們被打疼了`,
-            now, STREAK_TTL, LEVEL_MAJOR);
+            now, STREAK_TTL, LEVEL_MAJOR, e.team);
         }
       }
     },
@@ -246,8 +255,12 @@ export function createCommentary(opponentDef = null, revenge = []) {
         // 走位＝攔網技術表達（拍板不自動帶位），缺的只是「該往前」這句話
         return { text: '對方要打過來了——往前一步，把牆補上！', kind: 'action' };
       }
-      // 2) 事件節奏點（未過期）
-      if (beat && now < beat.until) return { text: beat.text, kind: 'beat' };
+      // 2) 事件節奏點（未過期）——team 轉相對視角：ally=我方（青）/enemy=敵方（暖）/無=中性
+      if (beat && now < beat.until) {
+        const myTeam = me?.teamId;
+        const side = beat.team && myTeam ? (beat.team === myTeam ? 'ally' : 'enemy') : null;
+        return { text: beat.text, kind: 'beat', ...(side ? { team: side } : {}) };
+      }
       // 3) 環境句
       if (game.phase === 'serve') {
         const { score } = game.match;
