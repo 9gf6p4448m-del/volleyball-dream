@@ -439,10 +439,13 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       paint();
     };
 
+    // 矮視窗（橫持手機，max-height≤600）＝左右雙欄：左球場、右操作——一屏放得下；
+    // 直式＝單欄。寬/排向在 paint() 依 short 設定
+    const short = typeof matchMedia === 'function' && matchMedia('(max-height: 600px)').matches;
     const card = el('div', [
-      'width:min(470px, 96vw)', `background:${COLOR.card}`, 'border-radius:18px',
+      `background:${COLOR.card}`, 'border-radius:18px',
       'border:1px solid #2c3a58', 'padding:14px 14px 16px', 'display:flex',
-      'flex-direction:column', 'gap:9px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+      'gap:10px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
       'max-height:94vh', 'overflow-y:auto',
     ]);
 
@@ -451,7 +454,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       selectedNow = false, onTap = null, badges = [] }) {
       const c = el('div', [
         'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
-        'gap:1px', 'min-height:46px', 'padding:5px 2px', 'border-radius:10px',
+        `gap:1px`, `min-height:${short ? 38 : 46}px`, 'padding:4px 2px', 'border-radius:10px',
         'text-align:center', 'min-width:0',
         tone === 'enemy' ? 'background:rgba(88,44,26,0.5)' : 'background:rgba(17,42,62,0.75)',
         `border:2px solid ${selectedNow ? COLOR.cyan : isAce ? COLOR.gold : 'rgba(255,255,255,0.06)'}`,
@@ -547,9 +550,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       }
 
       // ---- 俯視球場：對面半場（暖木）＋網帶＋我方半場（冷藍） ----
+      // flex-shrink:0＝手機實測修復（07-26）：卡片 max-height+overflow-y:auto 下，
+      // 唯一帶 overflow:hidden 的球場 min-content 為 0，會吸收全部壓縮被夾成一條——
+      // 禁止收縮、超高改走卡片捲動
       const court = el('div', [
         'display:flex', 'flex-direction:column', 'border-radius:14px', 'overflow:hidden',
-        'border:1px solid #2c3a58',
+        'border:1px solid #2c3a58', 'flex-shrink:0',
       ]);
       const enemyHalf = el('div', [
         'display:flex', 'flex-direction:column', 'gap:6px', 'padding:8px 8px 10px',
@@ -715,6 +721,25 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       });
       if (!legal) { confirm.style.opacity = '0.5'; confirm.style.cursor = 'not-allowed'; }
       card.appendChild(confirm);
+
+      // 矮視窗（橫持手機）雙欄重排：球場（含抬頭）進左欄、操作區進右欄——
+      // 單欄先建好再搬＝所有互動/重繪邏輯零改動。直式維持單欄
+      if (short) {
+        const kids = [...card.children];
+        const splitAt = kids.indexOf(court) + 1;
+        const col = () => el('div', [
+          'display:flex', 'flex-direction:column', 'gap:8px', 'flex:1 1 0', 'min-width:0',
+        ]);
+        const colL = col();
+        const colR = col();
+        kids.forEach((k, i) => (i < splitAt ? colL : colR).appendChild(k));
+        card.replaceChildren(colL, colR);
+        card.style.flexDirection = 'row';
+        card.style.width = 'min(860px, 96vw)';
+      } else {
+        card.style.flexDirection = 'column';
+        card.style.width = 'min(470px, 96vw)';
+      }
     }
 
     paint();
