@@ -79,6 +79,6 @@ test('naming：我方 STARTER_DEFS 全員 fullName 非空唯一、隊長帶稱�
   assert.ok(captain?.title, '隊長缺稱號');
   // 招募生入隊帶 fullName（隊友卡顯示）
   const m = buildRecruitMember('obsidian', 7, 'R1');
-  assert.equal(m.fullName, '霍君曜');
+  assert.equal(m.fullName, '詹子曜');
   assert.equal(m.name, '阿曜');
 });

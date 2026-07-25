@@ -155,7 +155,7 @@ test('buildOpponentTeam：level＋風格偏移落到屬性與 trust', () => {
   const obsidian = buildOpponentTeam(opponentById('obsidian'));
   assert.equal(obsidian.length, 6);
   assert.deepEqual(obsidian.map((p) => p.id), ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']);
-  assert.equal(obsidian[0].name, '岳仲磯'); // 命名工程：squad 具名（槽 0＝S）
+  assert.equal(obsidian[0].name, '石宇廷'); // 命名工程：squad 具名（槽 0＝S）
   assert.equal(obsidian[2].currentRole, 'middle');
   assert.equal(obsidian[2].attributes.block, 70); // 60 + roleBias.middle.block 10
   assert.equal(obsidian[2].attributes.jump, 68);
@@ -175,7 +175,7 @@ test('careerMatchSetup：一次拿齊種子/兩隊/AI 風格', () => {
   const setup = careerMatchSetup(career, player, entry);
   assert.equal(setup.seed, matchSeed(career, 'group-1'));
   assert.equal(setup.teams.A[1], player);
-  assert.equal(setup.teams.B[0].name, '杜恆澄'); // 命名工程：北原 S＝具名王牌
+  assert.equal(setup.teams.B[0].name, '杜品澄'); // 命名工程：北原 S＝具名王牌
   assert.equal(setup.aiProfiles.B.tipRate, 0.06);
   assert.equal(setup.opponent.id, 'north-tech');
   assert.throws(() => careerMatchSetup(career, player, { id: 'x', opponentId: 'nope' }), /未知對手/);
@@ -189,7 +189,7 @@ test('careerTeams 餵進 createGame 可正常推進（含對手參數隊）', ()
     setTarget: 5,
   });
   assert.equal(game.players.A2.name, '主角名');
-  assert.equal(game.players.B1.name, '齊凜川'); // 命名工程：鐵霧 S 具名
+  assert.equal(game.players.B1.name, '鍾子錚'); // 命名工程：鐵霧 S 具名
   for (let i = 0; i < 120; i += 1) stepGame(game, []);
   assert.equal(typeof game.match.score.A, 'number');
   assert.throws(() => careerTeams({ id: 'B1', teamId: 'B' }), /A2/);

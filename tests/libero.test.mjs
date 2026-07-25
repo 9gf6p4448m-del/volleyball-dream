@@ -93,7 +93,7 @@ test('生涯接線：雙方自由人入場、對方吃參數檔強度', () => {
   const setup = careerMatchSetup(c, createCareerPlayer('小夢'), nextMatch(c));
   assert.equal(setup.liberos.A.currentRole, 'libero');
   assert.equal(setup.liberos.A.name, '小守');
-  assert.equal(setup.liberos.B.name, '顏守常'); // 命名工程：對方自由人具名
+  assert.equal(setup.liberos.B.name, '顏廷安'); // 命名工程：對方自由人具名
   assert.ok(setup.liberos.B.attributes.reaction >= 60, '對方自由人吃 level 加成');
   assert.equal(buildLibero('A', 'x').attributes.jump, 40); // 防守專才：攻擊系低
 });

@@ -21,7 +21,7 @@ export const EVENT_DEFS = [
     moment: 'pre',
     when: { opponentId: 'obsidian', stage: 'group' },
     lines: [
-      { speaker: '大山', text: '曜石的霍君曜——人稱「黑曜箭」，又快又急。中路封起來之前，別跟他硬碰。' },
+      { speaker: '大山', text: '曜石的詹子曜——人稱「黑曜箭」，又快又急。中路封起來之前，別跟他硬碰。' },
     ],
   },
   {
@@ -58,8 +58,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-1' },
     effect: { unlock: 'tip' },
     lines: [
-      { speaker: '北原工商・杜恆澄', text: '你只會全力打直球啊，新人。力量不夠的時候——用腦子打。' },
-      { speaker: '北原工商・杜恆澄', text: '看好，手腕放軟、指尖推球。這叫吊球。拿去用吧。' },
+      { speaker: '北原工商・杜品澄', text: '你只會全力打直球啊，新人。力量不夠的時候——用腦子打。' },
+      { speaker: '北原工商・杜品澄', text: '看好，手腕放軟、指尖推球。這叫吊球。拿去用吧。' },
     ],
   },
   {
@@ -68,8 +68,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-2' },
     effect: { unlock: 'dive' },
     lines: [
-      { speaker: '白浪高中・凌逐浪', text: '看到我們救了幾顆你們以為落地的球嗎？防守不是站著等球來。' },
-      { speaker: '白浪高中・凌逐浪', text: '撲出去。會痛，但球不會落地。這叫魚躍——送你了。' },
+      { speaker: '白浪高中・蔡沐恩', text: '看到我們救了幾顆你們以為落地的球嗎？防守不是站著等球來。' },
+      { speaker: '白浪高中・蔡沐恩', text: '撲出去。會痛，但球不會落地。這叫魚躍——送你了。' },
       // 主角傳承節點（拍板敘事：對手教主角→隊長請主角教全隊＝隊友 diveRate 解鎖的劇情面）
       { speaker: '大山', text: '學到好東西了？回去教教大家——球不落地不結束，全隊都得會。' },
     ],
@@ -80,8 +80,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-3' },
     effect: { unlock: 'pipe' },
     lines: [
-      { speaker: '曜石體中・霍君曜', text: '你的進攻只有前排三公尺。我們的進攻，是整片場地。' },
-      { speaker: '曜石體中・霍君曜', text: '後排起跳、攻擊線後起飛——pipe。學會它，你才算立體。' },
+      { speaker: '曜石體中・詹子曜', text: '你的進攻只有前排三公尺。我們的進攻，是整片場地。' },
+      { speaker: '曜石體中・詹子曜', text: '後排起跳、攻擊線後起飛——pipe。學會它，你才算立體。' },
     ],
   },
   {
@@ -90,8 +90,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'national-qf' },
     effect: { unlock: 'floatServe' },
     lines: [
-      { speaker: '鐵霧工業・歐冶鐵', text: '光有力氣的發球，練十年也就那樣。最難接的球——是不轉的球。' },
-      { speaker: '鐵霧工業・歐冶鐵', text: '掌根擊球心、瞬間停腕。飄浮球會自己跳舞。' },
+      { speaker: '鐵霧工業・劉振鎧', text: '光有力氣的發球，練十年也就那樣。最難接的球——是不轉的球。' },
+      { speaker: '鐵霧工業・劉振鎧', text: '掌根擊球心、瞬間停腕。飄浮球會自己跳舞。' },
       // 主角傳承節點（同 teach-dive：隊友 floatServeRate 解鎖的劇情面）
       { speaker: '大山', text: '那手飄浮球——回去也教教大家。發球輪多幾種武器。' },
     ],
@@ -104,8 +104,8 @@ export const EVENT_DEFS = [
     when: { lastMatchId: 'group-3' },
     effect: { unlock: 'feint' },
     lines: [
-      { speaker: '曜石體中・岳仲磯', text: '你的每一球，我們都記下來了。再遇到的時候——你那些慣用線，一條都過不了。' },
-      { speaker: '曜石體中・岳仲磯', text: '會被讀的人，才需要學騙。眼睛看左、手打右——當作見面禮，拿去。' },
+      { speaker: '曜石體中・石宇廷', text: '你的每一球，我們都記下來了。再遇到的時候——你那些慣用線，一條都過不了。' },
+      { speaker: '曜石體中・石宇廷', text: '會被讀的人，才需要學騙。眼睛看左、手打右——當作見面禮，拿去。' },
     ],
   },
   {

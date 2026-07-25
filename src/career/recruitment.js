@@ -83,18 +83,18 @@ export const RECRUIT_CONDS = {
 // fullName＝全名——與 opponents.js squad/libero 裡同一人逐字一致（挖角敘事的
 // 一致性錨點，naming.test 靜態把關）；persona 沿用
 const RECRUIT_DEFS = {
-  'north-tech': { name: '阿澄', fullName: '杜恆澄', persona: '北原的節拍器——不起眼的一傳一舉，把整隊的亂流理成直線' },
-  'white-wave': { name: '小浪', fullName: '凌逐浪', persona: '白浪最黏的那道浪——球不落地，是他唯一的信仰' },
-  obsidian: { name: '阿曜', fullName: '霍君曜', persona: '曜石的快攻箭頭——起跳永遠比你的判斷快半拍' },
-  'iron-mist': { name: '阿鐵', fullName: '歐冶鐵', persona: '鐵霧的重砲右翼——發球跟扣球一樣，都往死裡打' },
-  'sky-hawk': { name: '阿鷹', fullName: '殷鷹揚', persona: '天鷹的王牌翼手——全國決賽的舞台，是他的日常' },
-  'obsidian-2': { name: '小磐', fullName: '嚴如磐', persona: '曜石的第二座山——不如阿曜快，但攔下來的球一顆都不還' },
-  'iron-mist-2': { name: '阿霜', fullName: '莫凝霜', persona: '鐵霧的左翼冷刃——安靜，準，出手不帶感情' },
-  'sky-hawk-2': { name: '大隼', fullName: '賀天隼', persona: '天鷹的右翼重錘——王牌的影子，也想當一次主角' },
-  'gale-shore': { name: '小嵐', fullName: '簡聿嵐', persona: '青嵐的球路設計師——每一顆二次球都是預謀' },
-  'gale-shore-2': { name: '阿汐', fullName: '余望汐', persona: '青嵐的斜線快手——潮水退了才知道他打的是哪條線' },
-  'black-pine': { name: '老松', fullName: '喬勁松', persona: '黑松高牆的基石——三年級最後一屆，牆不想再輸' },
-  'black-pine-2': { name: '大柏', fullName: '楚擎柏', persona: '黑松的右翼砲台——牆後面，藏著一門重砲' },
+  'north-tech': { name: '阿澄', fullName: '杜品澄', persona: '北原的節拍器——不起眼的一傳一舉，把整隊的亂流理成直線' },
+  'white-wave': { name: '小浪', fullName: '蔡沐恩', persona: '白浪最黏的那道浪——球不落地，是他唯一的信仰' },
+  obsidian: { name: '阿曜', fullName: '詹子曜', persona: '曜石的快攻箭頭——起跳永遠比你的判斷快半拍' },
+  'iron-mist': { name: '阿鐵', fullName: '劉振鎧', persona: '鐵霧的重砲右翼——發球跟扣球一樣，都往死裡打' },
+  'sky-hawk': { name: '阿鷹', fullName: '王勝翔', persona: '天鷹的王牌翼手——全國決賽的舞台，是他的日常' },
+  'obsidian-2': { name: '小磐', fullName: '許嘉碩', persona: '曜石的第二座山——不如阿曜快，但攔下來的球一顆都不還' },
+  'iron-mist-2': { name: '阿霜', fullName: '徐世銘', persona: '鐵霧的左翼冷刃——安靜，準，出手不帶感情' },
+  'sky-hawk-2': { name: '大隼', fullName: '李振騰', persona: '天鷹的右翼重錘——王牌的影子，也想當一次主角' },
+  'gale-shore': { name: '小嵐', fullName: '簡子嵐', persona: '青嵐的球路設計師——每一顆二次球都是預謀' },
+  'gale-shore-2': { name: '阿汐', fullName: '余承汐', persona: '青嵐的斜線快手——潮水退了才知道他打的是哪條線' },
+  'black-pine': { name: '老松', fullName: '曾家松', persona: '黑松高牆的基石——三年級最後一屆，牆不想再輸' },
+  'black-pine-2': { name: '大柏', fullName: '戴柏毅', persona: '黑松的右翼砲台——牆後面，藏著一門重砲' },
 };
 
 // 名單一致性測試用（naming.test.mjs）：不進 UI、不進 sim
