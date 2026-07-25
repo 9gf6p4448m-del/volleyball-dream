@@ -203,6 +203,23 @@ export function buildOpponentTeam(def) {
   });
 }
 
+// 命名工程 07-25 挖角除名：名冊裡來自該隊的招募生（同一人，以 fullName 對應）不得
+// 再出現在原隊名單——對應槽位由 def.reserves 依序遞補；王牌被挖＝ace 拔除（賽前敵情/
+// 播報不再喊他）。fullName 對不上（玩家改過名/極舊存檔）＝維持原名單的可接受退化。
+// 純函式：回傳新 def，原參數檔不動（快速比賽/未招募路徑零影響）
+export function applyPoaching(def, poachedNames = []) {
+  const hit = (n) => poachedNames.includes(n);
+  if (!poachedNames.length || (!def.squad?.some(hit) && !hit(def.libero))) return def;
+  const reserves = [...(def.reserves ?? [])];
+  const sub = (n) => (hit(n) ? (reserves.shift() ?? `${def.name}替補`) : n);
+  return {
+    ...def,
+    squad: def.squad?.map(sub),
+    libero: def.libero ? sub(def.libero) : def.libero,
+    ...(def.ace && hit(def.ace.name) ? { ace: null } : {}),
+  };
+}
+
 // 跨版本存檔補正（就地修正；開賽與生涯畫面渲染都會跑，下次存檔即固定）：
 // ①主角保底球權地板 ②powerServe→jumpServe 正名（發球體系改版）
 // ③stage 3 前存檔的 jumpServe:1 是舊熟練度語意→歸零 ④新技術缺欄＝未解鎖
@@ -366,9 +383,11 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
   // D2 trustDyn 開場 +8（含板凳/自由人：換上場也帶勁；場末即散不污染持久信任）、
   // D3 播報名單（開賽環境句＋首次建功加一句，commentary 消費）
   const oldTeamMates = (members ?? []).filter((m) => m.dna?.teamId === matchEntry.opponentId);
+  // 命名工程 07-25：挖角除名——已入我隊的招募生不得再出現在原隊名單（同一人分身兩隊）
+  const oppDef = applyPoaching(def, oldTeamMates.map((m) => m.fullName).filter(Boolean));
   return {
     seed: matchSeed(career, matchEntry.id),
-    teams: careerTeams(player, def, members, lineup),
+    teams: careerTeams(player, oppDef, members, lineup),
     benches: { A: benchA, B: [] },
     ...(oldTeamMates.length ? {
       trustDynInit: Object.fromEntries(
@@ -393,9 +412,9 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
     // stage 6 自由人：雙方都有（我方固定隊友、對方吃參數檔強度）
     liberos: {
       A: liberoA,
-      B: buildLibero('B', def.libero ?? `${def.name}·自由人`, def.level),
+      B: buildLibero('B', oppDef.libero ?? `${oppDef.name}·自由人`, oppDef.level),
     },
-    opponent: def,
+    opponent: oppDef,
   };
 }
 

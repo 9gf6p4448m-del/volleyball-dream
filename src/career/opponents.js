@@ -25,6 +25,7 @@ export const OPPONENTS = [
     heights: [1.80, 1.85, 1.92, 1.86, 1.83, 1.90],
     squad: ['杜品澄', '黃俊正', '張定豪', '羅律安', '紀子衡', '傅恆宇'],
     libero: '顏廷安',
+    reserves: ['董律辰', '馮定緯'], // 挖角除名後的遞補（careerState applyPoaching 消費）
     ace: { slot: 0, name: '杜品澄', title: '節拍器' }, // S・隊長——一傳一舉把亂流理成直線
     scoutRead: 0,
     ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03 }, // 控制系：飄浮發球、防守韌性低（少魚躍）
@@ -41,6 +42,7 @@ export const OPPONENTS = [
     heights: [1.81, 1.84, 1.90, 1.85, 1.83, 1.89],
     squad: ['游承泓', '江昱濤', '溫子灝', '潘志洋', '涂政澤', '汪育瀚'],
     libero: '蔡沐恩',
+    reserves: ['白泓睿', '唐世澤'],
     ace: { slot: 'L', name: '蔡沐恩', title: '不沉之浪' }, // 自由人＝隊魂——球不落地是他唯一的信仰
     scoutRead: 0.25,
     ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15 }, // 防守隊招牌：拚命魚躍、球不落地不放棄
@@ -57,6 +59,7 @@ export const OPPONENTS = [
     heights: [1.83, 1.87, 1.98, 1.89, 1.85, 1.96],
     squad: ['石宇廷', '吳彥磊', '詹子曜', '鄭峻豪', '賴岳霖', '許嘉碩'],
     libero: '沈威宏',
+    reserves: ['古承岳', '薛宇碩'],
     ace: { slot: 2, name: '詹子曜', title: '黑曜箭' }, // MB・阿曜——起跳永遠快你半拍
     scoutRead: 0.7,
     ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08 },
@@ -75,6 +78,7 @@ export const OPPONENTS = [
     heights: [1.79, 1.83, 1.89, 1.84, 1.82, 1.87],
     squad: ['簡子嵐', '藍浚廷', '翁品澔', '柯宇昊', '余承汐', '郭家澎'],
     libero: '阮信帆',
+    reserves: ['侯俊帆', '邵子昊'],
     ace: { slot: 0, name: '簡子嵐', title: '颱風眼' }, // S・小嵐——亂流的正中央永遠是靜的
     scoutRead: 0.15,
     ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1 },
@@ -91,6 +95,7 @@ export const OPPONENTS = [
     heights: [1.84, 1.89, 1.95, 1.91, 1.87, 1.93],
     squad: ['鍾子錚', '徐世銘', '盧鎮宇', '劉振鎧', '楊士鋒', '邱育鑫'],
     libero: '孫啟銓',
+    reserves: ['彭冠銘', '袁世鈞'],
     ace: { slot: 3, name: '劉振鎧', title: '鐵彈道' }, // OPP・阿鐵——王牌發球手，發球跟扣球一樣往死裡打
     scoutRead: 0.5,
     ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2, diveRate: 0.08 }, // 發球輪就是得分輪
@@ -109,6 +114,7 @@ export const OPPONENTS = [
     heights: [1.86, 1.93, 2.01, 1.95, 1.91, 1.99],
     squad: ['呂宗楠', '蕭宇樺', '曾家松', '戴柏毅', '范育楷', '廖振森'],
     libero: '朱以杉',
+    reserves: ['姚松霖', '鄧柏宇'],
     ace: { slot: 2, name: '曾家松', title: '最後的牆' }, // MB・老松——三年級最後一屆，牆不想再輸
     scoutRead: 0.6,
     ai: { tipRate: 0.06, dumpRate: 0.05, jumpServeRate: 0.15, floatServeRate: 0.1, diveRate: 0.07 },
@@ -125,6 +131,7 @@ export const OPPONENTS = [
     heights: [1.86, 1.92, 1.99, 1.94, 1.90, 1.97],
     squad: ['梁鴻宇', '王勝翔', '謝鵬翰', '李振騰', '周羽辰', '丁昱昇'],
     libero: '蘇冠羽',
+    reserves: ['馬振羽', '康宇鵬'],
     ace: { slot: 1, name: '王勝翔', title: '制空者' }, // OH・阿鷹——天鷹統治天空的高度
     scoutRead: 0.9,
     ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1, diveRate: 0.13 }, // 強隊全能：積極魚躍

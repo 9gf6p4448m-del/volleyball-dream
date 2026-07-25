@@ -5,9 +5,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OPPONENTS, opponentById } from '../src/career/opponents.js';
-import { STARTER_DEFS } from '../src/career/roster.js';
+import { STARTER_DEFS, buildStarterMembers } from '../src/career/roster.js';
 import { RECRUIT_CONDS, recruitDefOf, buildRecruitMember } from '../src/career/recruitment.js';
-import { buildOpponentTeam } from '../src/career/careerState.js';
+import {
+  buildOpponentTeam, applyPoaching, careerMatchSetup, createCareer, createCareerPlayer, nextMatch,
+} from '../src/career/careerState.js';
 
 // 槽序鏡射 careerState ROLE_ORDER（該常數未 export；序變會被本測試抓到）
 const ROLE_ORDER = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
@@ -35,11 +37,42 @@ test('naming：ace slot 有效且 name 指向該槽位本人、title 非空', ()
   }
 });
 
-test('naming：全專案全名不撞名（七隊 49 人＋我方 6 人）', () => {
+test('naming：全專案全名不撞名（七隊 49 人＋替補 14 人＋我方 6 人）', () => {
   const names = [];
-  for (const o of OPPONENTS) names.push(...o.squad, o.libero);
+  for (const o of OPPONENTS) {
+    assert.equal(o.reserves?.length, 2, `${o.id} 須有 2 名遞補`);
+    names.push(...o.squad, o.libero, ...o.reserves);
+  }
   for (const d of STARTER_DEFS) names.push(d.fullName);
   assert.equal(new Set(names).size, names.length, '跨隊全名重複');
+});
+
+test('naming：挖角除名——招募生不再現身原隊、槽位遞補、王牌被挖=ace 拔除', () => {
+  const obsidian = opponentById('obsidian');
+  const p = applyPoaching(obsidian, ['詹子曜']);
+  assert.ok(!p.squad.includes('詹子曜'));
+  assert.equal(p.squad[2], obsidian.reserves[0]); // MB 槽由遞補頂上
+  assert.equal(p.ace, null); // 王牌被挖＝稱號播報消失
+  assert.equal(obsidian.ace?.name, '詹子曜'); // 原參數檔不可變
+  const wave = applyPoaching(opponentById('white-wave'), ['蔡沐恩']); // 自由人被挖
+  assert.equal(wave.libero, opponentById('white-wave').reserves[0]);
+  assert.equal(wave.ace, null);
+  const same = applyPoaching(obsidian, ['沒這個人']);
+  assert.equal(same, obsidian); // 無命中＝原物件（零擾動）
+});
+
+test('naming：careerMatchSetup 整場接線——已招募者從對手隊消失', () => {
+  const career = createCareer({ seed: 7, playerName: '小夢' });
+  const player = createCareerPlayer('小夢');
+  const recruit = buildRecruitMember('north-tech', 7, 'R1'); // 杜品澄（北原王牌 S）
+  const roster = { capacity: 12, members: [...buildStarterMembers(), recruit] };
+  const entry = nextMatch(career); // group-1＝北原工商
+  assert.equal(entry.opponentId, 'north-tech');
+  const setup = careerMatchSetup(career, player, entry, roster, null);
+  const bNames = setup.teams.B.map((x) => x.name);
+  assert.ok(!bNames.includes('杜品澄'), '被挖角者仍在原隊名單');
+  assert.equal(setup.teams.B[0].name, opponentById('north-tech').reserves[0]);
+  assert.equal(setup.opponent.ace, null);
 });
 
 test('naming：招募生 fullName＝對手名單同一人、role 對應槽位', () => {

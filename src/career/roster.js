@@ -117,15 +117,16 @@ export function ensureStarterRoster(store) {
 }
 
 // 命名工程 07-25：既有存檔成員回填 fullName（＋隊長稱號）——顯示層欄位、可安全補。
-// 僅在暱稱仍是預設稿時補（玩家改過名＝尊重不動）；已有 fullName 不再動（冪等）
+// 僅在暱稱仍是預設稿時補/刷新（玩家改過名＝尊重不動）；暱稱未動但 fullName 與定稿
+// 不符＝v1 命名殘留（同日 v2 台灣自然化改過全名），一併刷新到現行定稿。冪等。
 function backfillNames(members) {
   let changed = false;
   const out = members.map((m) => {
-    if (m.fullName) return m;
     const def = m.origin === 'starter'
       ? STARTER_DEFS.find((d) => d.id === m.id)
       : recruitDefOf(m.recruitKey ?? m.origin);
     if (!def?.fullName || def.name !== m.name) return m;
+    if (m.fullName === def.fullName && (!def.title || m.title)) return m;
     changed = true;
     return {
       ...m,
