@@ -2,7 +2,7 @@
 // 夜賽同色系；動態文字一律 textContent（匯入的存檔名字不可信，不走 innerHTML）
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
-  careerStage, opponentById, normalizeCareerPlayer, resolveForfeit,
+  careerStage, opponentById, normalizeCareerPlayer, resolveForfeit, applyPoaching,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, applyOffseasonTraining } from '../career/growth.js';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../career/roster.js';
 import {
   validateLineup, checkRotationOrder, checkRoleStructure, defaultLineup, trustOf,
+  effectiveOrder,
 } from '../career/lineup.js';
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
@@ -218,7 +219,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     cardOverlay.replaceChildren();
   }
 
-  // ---- W3 先發編排器（tap-to-swap；opt-in——不強制打斷出戰流程）----
+  // ---- W3 先發編排器 → W8 對陣畫面共用 overlay（出戰必經；點外側＝返回不出戰）----
   const lineupOverlay = el('div', [
     'position:fixed', 'inset:0', 'z-index:37', 'display:none',
     'background:rgba(4,6,12,0.72)', 'align-items:flex-start', 'justify-content:center',
@@ -376,17 +377,22 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     paintOne();
   }
 
-  // 開啟排陣器：讀當前 lineup（ensureStarterRoster 已保證補齊）為工作副本，tap 兩格互換。
-  // 確認＝saveLineup（持久）＋onConfirm（接既有 pre-event→onPlay 流程）；點外側／無名冊＝取消。
-  function showLineupEditor(career, player, onConfirm) {
+  // W8 賽前對陣畫面（07-26 Sawmah 拍板 B 案：球場對位圖）——出戰必經的排位儀式：
+  // 俯視球場、對面六人具名釘在站位上（王牌帶稱號發光）、我方半場 tap 互換/板凳替換/
+  // 自由人輪替/首發球位（改球位＝我方名牌在場上實際轉動）；合法性即時驗（沿用
+  // lineup.js 全套規則）。挖角語意與開賽一致（applyPoaching：被挖走的人原隊換遞補、
+  // 王牌被挖不亮相）。確認＝saveLineup＋onConfirm；點外側＝返回（不出戰）
+  function showMatchupScreen(career, player, next, onConfirm) {
+    const baseDef = opponentById(next.opponentId);
     const roster = ensureStarterRoster(store);
-    if (!roster) { onConfirm(); return; }
+    if (!baseDef || !roster) { onConfirm(); return; } // 無資料（防呆）＝直接出戰
     const saved = store.loadLineup();
     const members = roster.members;
     const playerId = player.id;
+    const oldMates = members.filter((m) => m.dna?.teamId === next.opponentId);
+    const def = applyPoaching(baseDef, oldMates.map((m) => m.fullName).filter(Boolean));
     let working = structuredClone(saved);
-    // W4 選取模型：{kind:'field',i}｜{kind:'bench',id}｜null——場上互換與板凳替換
-    // 共用同一套 tap 語彙（不引入新互動範式）
+    // W4 選取模型：{kind:'field',si}｜{kind:'bench',id}｜null（si＝starters 索引）
     let selected = null;
     let notice = null; // 互換被擋的紅字理由（下一次操作清除）
 
@@ -396,130 +402,237 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const roleKeyOf = (id) => (id === playerId
       ? player.currentRole
       : members.find((m) => m.id === id)?.role);
-    const roleOf = (id) => ROLE_ABBR[roleKeyOf(id)] ?? '?';
     // 5-1 對位（拍板 07-23）：僅同角色可互換（OH↔OH、MB↔MB），舉球員↔對角砲例外可換
-    // ——結構上排不出「同排兩人搶同一職責位」的衝突陣
     const canSwap = (a, b) => {
       const ra = roleKeyOf(a);
       const rb = roleKeyOf(b);
       return ra === rb
         || (ra === 'setter' && rb === 'opposite') || (ra === 'opposite' && rb === 'setter');
     };
-    // 板凳替換上場（W4）：板凳球員頂掉第 i 格先發——主控不可下場、同角色限制同互換
-    const benchToField = (benchId, i) => {
-      const fieldId = working.starters[i];
+    // 板凳替換上場（W4）：板凳球員頂掉第 si 格先發——主控不可下場、同角色限制同互換
+    const benchToField = (benchId, si) => {
+      const fieldId = working.starters[si];
       if (fieldId === playerId) {
         notice = '主控球員不可下場——你恆在先發';
       } else if (!canSwap(fieldId, benchId)) {
         notice = '不同角色不能替換上場——維持 5-1 對位（舉球員與對角砲除外）';
       } else {
-        working.starters[i] = benchId;
+        working.starters[si] = benchId;
         selected = null;
       }
     };
+    const tapField = (si) => {
+      notice = null;
+      if (selected === null) {
+        selected = { kind: 'field', si };
+      } else if (selected.kind === 'field' && selected.si === si) {
+        selected = null;
+      } else if (selected.kind === 'bench') {
+        benchToField(selected.id, si);
+      } else if (!canSwap(working.starters[selected.si], working.starters[si])) {
+        notice = '不同角色不能互換——維持 5-1 對位（舉球員與對角砲除外），職責才不相撞';
+      } else {
+        const s = working.starters;
+        [s[selected.si], s[si]] = [s[si], s[selected.si]];
+        selected = null;
+      }
+      paint();
+    };
 
     const card = el('div', [
-      'width:min(400px, 94vw)', `background:${COLOR.card}`, 'border-radius:16px',
-      'border:1px solid #2c3a58', 'padding:16px 18px', 'display:flex', 'flex-direction:column',
-      'gap:10px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+      'width:min(470px, 96vw)', `background:${COLOR.card}`, 'border-radius:18px',
+      'border:1px solid #2c3a58', 'padding:14px 14px 16px', 'display:flex',
+      'flex-direction:column', 'gap:9px', 'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
+      'max-height:94vh', 'overflow-y:auto',
     ]);
+
+    // 名牌：enemy＝暖色唯讀；ally＝隊色青、可互動。isAce＝金框＋稱號行
+    function chipEl({ name, sub, tone, isAce = false, aceTitle = null,
+      selectedNow = false, onTap = null, badges = [] }) {
+      const c = el('div', [
+        'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
+        'gap:1px', 'min-height:46px', 'padding:5px 2px', 'border-radius:10px',
+        'text-align:center', 'min-width:0',
+        tone === 'enemy' ? 'background:rgba(88,44,26,0.5)' : 'background:rgba(17,42,62,0.75)',
+        `border:2px solid ${selectedNow ? COLOR.cyan : isAce ? COLOR.gold : 'rgba(255,255,255,0.06)'}`,
+        ...(isAce ? ['box-shadow:0 0 10px rgba(255,209,102,0.35)'] : []),
+        ...(onTap ? ['cursor:pointer', 'touch-action:manipulation'] : []),
+      ]);
+      const top = el('div', ['display:flex', 'align-items:center', 'gap:4px', 'max-width:100%']);
+      top.appendChild(el('div', [
+        'font-size:13px', 'font-weight:800', 'white-space:nowrap', 'overflow:hidden',
+        'text-overflow:ellipsis', `color:${tone === 'enemy' ? '#ffcdb4' : COLOR.text}`,
+      ], name));
+      for (const b of badges) top.appendChild(b);
+      c.appendChild(top);
+      if (isAce && aceTitle) {
+        c.appendChild(el('div', [
+          'font-size:10px', 'font-weight:800', `color:${COLOR.gold}`, 'white-space:nowrap',
+        ], `★ ${aceTitle}`));
+      } else if (sub) {
+        c.appendChild(el('div', [
+          'font-size:10px', `color:${tone === 'enemy' ? '#c9917a' : COLOR.dim}`, 'white-space:nowrap',
+        ], sub));
+      }
+      if (onTap) c.addEventListener('pointerdown', (e) => { e.stopPropagation(); onTap(); });
+      return c;
+    }
+    const row3 = (chips) => {
+      const r = el('div', ['display:grid', 'grid-template-columns:1fr 1fr 1fr', 'gap:6px']);
+      for (const c of chips) r.appendChild(c);
+      return r;
+    };
+
+    // 對面槽序＝S/OH/MB/OPP/OH/MB（同 heights/建隊 ROLE_ORDER）；站位鏡射：
+    // 他們的前排 P2/P3/P4 貼網、後排 P1/P6/P5 靠底線——from 我方視角左右已鏡射，
+    // 直欄即真實對位（我方 P4 直面他們 P2）
+    const OPP_ROLE = ['S', 'OH', 'MB', 'OPP', 'OH', 'MB'];
+    const oppChip = (i) => chipEl({
+      name: def.squad?.[i] ?? `${def.name}${i + 1}號`,
+      sub: `${OPP_ROLE[i]}・${(def.heights?.[i] ?? 1.85).toFixed(2)}m`,
+      tone: 'enemy',
+      isAce: def.ace?.slot === i,
+      aceTitle: def.ace?.title,
+    });
 
     function paint() {
       card.replaceChildren();
+      // ---- VS 抬頭：場次＋兩隊名＋敵情一行 ----
+      if (next.label) {
+        card.appendChild(el('div', [
+          'font-size:11px', 'font-weight:800', `color:${COLOR.dim}`, 'letter-spacing:4px',
+          'text-align:center',
+        ], next.label));
+      }
+      const head = el('div', [
+        'display:flex', 'align-items:baseline', 'justify-content:center', 'gap:12px',
+      ]);
+      head.appendChild(el('div', [
+        'font-size:18px', 'font-weight:900', `color:${COLOR.cyan}`, 'letter-spacing:1px',
+      ], OUR_TEAM_NAME));
+      head.appendChild(el('div', ['font-size:12px', 'font-weight:900', `color:${COLOR.dim}`], 'VS'));
+      head.appendChild(el('div', [
+        'font-size:18px', 'font-weight:900', 'color:#ff9d7a', 'letter-spacing:1px',
+      ], def.name));
+      card.appendChild(head);
       card.appendChild(el('div', [
-        'font-size:16px', 'font-weight:800', `color:${COLOR.gold}`, 'letter-spacing:2px',
-      ], '先發編排'));
-      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.5'],
-        selected === null
-          ? '點兩格互換位置（同角色）；點板凳＋先發格＝替換上場；標「發」＝首發球位。'
-          : selected.kind === 'bench'
-            ? '再點一個先發格，讓所選板凳球員替換上場（點回原格取消）。'
-            : '再點一格互換位置、或點板凳球員替換（點回原格取消選取）。'));
+        'font-size:12px', `color:${COLOR.dim}`, 'text-align:center', 'line-height:1.5',
+      ], def.trait));
+      // 情報行：王牌亮相／被挖走無王牌／情蒐警告／舊隊情結
+      const intel = el('div', [
+        'display:flex', 'flex-direction:column', 'gap:2px', 'align-items:center',
+      ]);
+      if (def.ace) {
+        const aceRole = def.ace.slot === 'L' ? '自由人' : OPP_ROLE[def.ace.slot];
+        intel.appendChild(el('div', ['font-size:12.5px', 'font-weight:800', `color:${COLOR.gold}`],
+          `王牌 ${def.ace.name}（${aceRole}）——「${def.ace.title}」`));
+      } else if (baseDef.ace) {
+        intel.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.cyan}`],
+          `他們的王牌？現在穿著遊隼的球衣。`));
+      }
+      if (def.scoutRead > 0 && career.scouting?.[next.opponentId]) {
+        intel.appendChild(el('div', ['font-size:11.5px', 'color:#ffb454'],
+          '⚠ 這隊研究過你——慣用線路會被讀'));
+      }
+      if (oldMates.length) {
+        intel.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.cyan}`],
+          `🔗 ${oldMates.map((m) => m.name).join('、')} 要打老東家`));
+      }
+      if (intel.children.length) card.appendChild(intel);
       if (notice) {
         card.appendChild(el('div', [
           'font-size:12px', 'font-weight:700', `color:${COLOR.red}`, 'line-height:1.4',
+          'text-align:center',
         ], notice));
       }
 
-      // 6 格輪轉序
-      const grid = el('div', ['display:flex', 'flex-direction:column', 'gap:6px']);
-      working.starters.forEach((id, i) => {
+      // ---- 俯視球場：對面半場（暖木）＋網帶＋我方半場（冷藍） ----
+      const court = el('div', [
+        'display:flex', 'flex-direction:column', 'border-radius:14px', 'overflow:hidden',
+        'border:1px solid #2c3a58',
+      ]);
+      const enemyHalf = el('div', [
+        'display:flex', 'flex-direction:column', 'gap:6px', 'padding:8px 8px 10px',
+        'background:linear-gradient(180deg, #3c2a1d 0%, #4a3524 100%)',
+      ]);
+      const libRowE = el('div', ['display:flex', 'justify-content:flex-end']);
+      libRowE.appendChild(el('div', ['font-size:10.5px', 'color:#c9917a'],
+        def.ace?.slot === 'L'
+          ? `自由人 ${def.libero}★「${def.ace.title}」`
+          : `自由人 ${def.libero ?? '—'}`));
+      enemyHalf.appendChild(libRowE);
+      enemyHalf.appendChild(row3([oppChip(0), oppChip(5), oppChip(4)])); // 後排 P1/P6/P5
+      enemyHalf.appendChild(row3([oppChip(1), oppChip(2), oppChip(3)])); // 前排 P2/P3/P4 貼網
+      court.appendChild(enemyHalf);
+      court.appendChild(el('div', [
+        'height:7px',
+        'background:repeating-linear-gradient(90deg, #e8e4d8 0 14px, rgba(232,228,216,0.25) 14px 22px)',
+      ])); // 球網帶
+      const ourHalf = el('div', [
+        'display:flex', 'flex-direction:column', 'gap:6px', 'padding:10px 8px 8px',
+        'background:linear-gradient(180deg, #10203a 0%, #0c1628 100%)',
+      ]);
+      // 我方站位＝effectiveOrder（首發球位改變＝名牌真的在場上轉動）；
+      // 顯示位 i ↔ starters 索引 (rotationStart + i) % 6
+      const eff = effectiveOrder(working.starters, working.rotationStart);
+      const myChip = (effIdx) => {
+        const id = eff[effIdx];
+        const si = (working.rotationStart + effIdx) % 6;
         const isPlayer = id === playerId;
-        const isSel = selected?.kind === 'field' && selected.i === i;
-        const row = el('div', [
-          'display:flex', 'align-items:center', 'gap:10px', 'height:46px', 'padding:0 12px',
-          'border-radius:10px', 'cursor:pointer', 'touch-action:manipulation',
-          `background:${isPlayer ? 'rgba(255,209,102,0.14)' : 'rgba(30,40,64,0.55)'}`,
-          `border:2px solid ${isSel ? COLOR.cyan : 'transparent'}`,
-        ]);
-        row.appendChild(el('div', [
-          'font-size:12px', 'font-weight:800', `color:${COLOR.dim}`, 'width:16px',
-        ], String(i + 1)));
-        const nm = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'flex:1', 'min-width:0']);
-        nm.appendChild(el('div', ['font-size:15px', 'font-weight:700'], nameOf(id)));
-        if (isPlayer) nm.appendChild(badge('你', COLOR.gold, '#1a1405'));
-        row.appendChild(nm);
-        row.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], roleOf(id)));
-        if (i === working.rotationStart) row.appendChild(badge('發', COLOR.cyan, '#062430'));
-        row.addEventListener('pointerdown', (e) => {
-          e.stopPropagation();
-          notice = null;
-          if (selected === null) {
-            selected = { kind: 'field', i };
-          } else if (selected.kind === 'field' && selected.i === i) {
-            selected = null;
-          } else if (selected.kind === 'bench') {
-            benchToField(selected.id, i);
-          } else if (!canSwap(working.starters[selected.i], working.starters[i])) {
-            notice = '不同角色不能互換——維持 5-1 對位（舉球員與對角砲除外），職責才不相撞';
-          } else {
-            const s = working.starters;
-            [s[selected.i], s[i]] = [s[i], s[selected.i]];
-            selected = null;
-          }
-          paint();
+        const badges = [];
+        if (isPlayer) badges.push(badge('你', COLOR.gold, '#1a1405'));
+        if (effIdx === 0) badges.push(badge('發', COLOR.cyan, '#062430'));
+        return chipEl({
+          name: nameOf(id),
+          sub: ROLE_ABBR[roleKeyOf(id)] ?? '?',
+          tone: 'ally',
+          selectedNow: selected?.kind === 'field' && selected.si === si,
+          onTap: () => tapField(si),
+          badges,
         });
-        grid.appendChild(row);
-      });
-      card.appendChild(grid);
+      };
+      ourHalf.appendChild(row3([myChip(3), myChip(2), myChip(1)])); // 前排 P4/P3/P2 貼網
+      ourHalf.appendChild(row3([myChip(4), myChip(5), myChip(0)])); // 後排 P5/P6/P1
+      court.appendChild(ourHalf);
+      card.appendChild(court);
+      card.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.5'],
+        selected?.kind === 'bench'
+          ? '再點一個我方名牌——讓所選板凳球員替換上場（點回原名牌取消）'
+          : selected?.kind === 'field'
+            ? '再點一個我方名牌互換位置、或點板凳球員替換（點回原名牌取消）'
+            : '點兩個我方名牌互換（同角色）；「發」＝首發球員；直欄＝隔網對位'));
 
-      // W4 板凳區：未排入先發的場上球員（非自由人）；tap 板凳＋tap 先發格＝替換上場
+      // ---- 板凳橫排（tap 板凳＋tap 場上名牌＝替換上場） ----
       const benchMembers = members.filter(
         (m) => m.role !== 'libero' && !working.starters.includes(m.id),
       );
       if (benchMembers.length > 0) {
-        card.appendChild(el('div', [
-          'font-size:12px', `color:${COLOR.cyan}`, 'letter-spacing:2px', 'margin-top:2px',
+        const benchWrap = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'flex-wrap:wrap']);
+        benchWrap.appendChild(el('div', [
+          'font-size:11px', `color:${COLOR.cyan}`, 'letter-spacing:2px',
         ], '板凳'));
-        const benchBox = el('div', ['display:flex', 'flex-direction:column', 'gap:6px']);
         for (const m of benchMembers) {
           const isSel = selected?.kind === 'bench' && selected.id === m.id;
-          const row = el('div', [
-            'display:flex', 'align-items:center', 'gap:10px', 'height:40px', 'padding:0 12px',
-            'border-radius:10px', 'cursor:pointer', 'touch-action:manipulation',
-            'background:rgba(20,28,46,0.6)',
-            `border:2px solid ${isSel ? COLOR.cyan : 'transparent'}`,
+          const c = el('div', [
+            'display:flex', 'align-items:center', 'gap:4px', 'padding:5px 10px',
+            'border-radius:9px', 'cursor:pointer', 'touch-action:manipulation',
+            'background:rgba(20,28,46,0.8)',
+            `border:2px solid ${isSel ? COLOR.cyan : 'rgba(255,255,255,0.06)'}`,
           ]);
-          row.appendChild(el('div', [
-            'font-size:12px', 'font-weight:800', `color:${COLOR.dim}`, 'width:16px',
-          ], '—'));
-          const nm = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'flex:1', 'min-width:0']);
-          nm.appendChild(el('div', ['font-size:14px', 'font-weight:700'], m.name));
-          if (m.origin !== 'starter') nm.appendChild(badge('轉', '#22304e', COLOR.cyan));
-          row.appendChild(nm);
-          row.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
+          c.appendChild(el('div', ['font-size:12.5px', 'font-weight:700'], m.name));
+          c.appendChild(el('div', ['font-size:10px', `color:${COLOR.dim}`],
             ROLE_ABBR[m.role] ?? m.role));
-          row.addEventListener('pointerdown', (e) => {
+          c.addEventListener('pointerdown', (e) => {
             e.stopPropagation();
             notice = null;
             if (isSel) selected = null;
-            else if (selected?.kind === 'field') benchToField(m.id, selected.i);
+            else if (selected?.kind === 'field') benchToField(m.id, selected.si);
             else selected = { kind: 'bench', id: m.id };
             paint();
           });
-          benchBox.appendChild(row);
+          benchWrap.appendChild(c);
         }
-        card.appendChild(benchBox);
+        card.appendChild(benchWrap);
       }
 
       // 自由人：名冊僅一名＝唯讀（W3 現狀）；兩名以上（招募白浪後）＝tap 輪替選擇
@@ -1150,16 +1263,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
       };
-      // 出戰＝直接開賽（走已存/預設 lineup，不強制打斷）；先發編排＝opt-in 排陣後開賽
-      root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, startMatch));
-      root.appendChild(smallButton('⚙ 先發編排', () => showLineupEditor(career, player, startMatch)));
-      const trait = opponentById(next.opponentId)?.trait;
-      if (trait) {
-        root.appendChild(el('div', [
-          'font-size:13px', `color:${COLOR.dim}`, 'max-width:min(340px, 92vw)',
-          'text-align:center', 'line-height:1.5',
-        ], `敵情：${trait}`));
-      }
+      // W8 對陣畫面（07-26 拍板）：出戰必經——對面具名亮相＋球場對位排陣；
+      // 點外側＝返回不出戰（取代舊 ⚙ 先發編排 opt-in 面板與敵情一行字）
+      root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true,
+        () => showMatchupScreen(career, player, next, startMatch)));
     }
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
     ioRow.appendChild(smallButton('返回主選單', renderHome));
