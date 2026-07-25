@@ -326,12 +326,14 @@ function createDust(scene) {
   };
 }
 
-// W7 A4/A6：頭上標籤低體力變色——我方 <25%（tier2）轉紅、對手 <50%（tier1+）轉黃
-// （對手只給粗訊號，不做精確體力條）；體力未啟用或未跨檔＝回傳 null（沿用預設隊色）
+// W7 A4/A6：頭上標籤低體力變色——我方 <50% 黃、<25% 紅（兩段）；對手 <50% 黃
+// （heavyExempt＝對手不會進重度段，黃即其最深訊號）。07-26 試玩回饋補我方中段黃：
+// 原本我方只有 <25% 紅、中間零訊號——全隊均值 ~0.7 下紅標整場不出現＝隊友體力不可讀。
+// 仍是粗訊號檔位變色（拍板：不做精確條；精確值在 ⚙ 換人面板）；未啟用/未跨檔＝隊色
 function staminaTagColor(gameState, id, team0, myTeam) {
   if (!gameState.stamina) return null;
   const v = gameState.stamina[id] ?? 1;
-  if (team0 === myTeam) return v < STAMINA.TIER2_BELOW ? '#ff5b5b' : null;
+  if (team0 === myTeam && v < STAMINA.TIER2_BELOW) return '#ff5b5b';
   return v < STAMINA.TIER1_BELOW ? '#ffd166' : null;
 }
 
