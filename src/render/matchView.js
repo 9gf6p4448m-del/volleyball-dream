@@ -204,11 +204,16 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           if (team0 !== myTeam && v >= STAMINA.TIER1_BELOW) return null;
           return Math.max(0, Math.min(1, Math.round(v * 20) / 20));
         })();
+        // 條色：我方三段（綠/黃/紅）；對手封頂黃——heavyExempt＝效果停在一段，
+        // 顯示語意跟效果一致（紅＝重度懲罰，對手永遠不吃）
+        const barColor = barQ === null ? null
+          : (team0 === myTeam && barQ < STAMINA.TIER2_BELOW) ? '#ff5b5b'
+            : barQ < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0';
         if (text !== u.tagText || color !== u.tagColor || barQ !== u.tagBar) {
           u.tagText = text;
           u.tagColor = color;
           u.tagBar = barQ;
-          drawTag(u.tag, text, color, barQ);
+          drawTag(u.tag, text, color, barQ, barColor);
         }
         u.tag.sprite.position.set(x, u.tagY, z);
 
@@ -370,9 +375,10 @@ function makeTag(scene) {
   return { sprite, canvas, texture };
 }
 
-// bar（07-26 拍板：死球間隙浮現的我方迷你體力條）：null＝不畫；0..1＝條長，
-// 顏色依檔位（綠→<50% 黃→<25% 紅，同標籤變色語言）。rally 中一律 null＝畫面乾淨
-function drawTag(tag, text, color, bar = null) {
+// bar（07-26 拍板：死球間隙浮現的迷你體力條）：null＝不畫；0..1＝條長。
+// barColor 由呼叫端決定（我方三段綠/黃/紅；對手封頂黃＝效果語意一致）。
+// rally 中一律 null＝畫面乾淨
+function drawTag(tag, text, color, bar = null, barColor = '#60ffa0') {
   const ctx = tag.canvas.getContext('2d');
   ctx.clearRect(0, 0, 128, 56);
   ctx.font = 'bold 34px system-ui, sans-serif';
@@ -386,8 +392,7 @@ function drawTag(tag, text, color, bar = null) {
   if (bar !== null) {
     ctx.fillStyle = 'rgba(12,16,26,0.82)';
     ctx.fillRect(22, 43, 84, 11);
-    ctx.fillStyle = bar < STAMINA.TIER2_BELOW ? '#ff5b5b'
-      : bar < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0'; // 三色同主角條/⚙面板（單一配色語言）
+    ctx.fillStyle = barColor; // 三色同主角條/⚙面板（單一配色語言）；對手封頂黃
     ctx.fillRect(24, 45, 80 * bar, 7);
   }
   tag.texture.needsUpdate = true;
