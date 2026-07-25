@@ -18,10 +18,18 @@ const BASE_TOP = 'calc(env(safe-area-inset-top, 0px) + 178px)'; // 記分板＋�
 export function createFloatText() {
   const live = []; // 在場字卡 [{ el, lift, fading }]
   let baseOffset = 0; // pointBanner 在場時整帶下移（版面稽核：banner 佔 169-240px 帶）
+  // 字卡遙測（07-24：自動比賽測不到主角字卡＝密度無法驗證的缺口）：真人實玩也留紀錄，
+  // 事後 __phase1.cardStats() 或 ?cardstats=1 角標即可看「出現幾次/最多同框幾張」
+  const stats = { total: 0, maxConcurrent: 0, byText: {} };
   return {
     // matchLoop 在 pointBanner show/serve 時呼叫——避免死球字卡與得分大字重疊
     setBaseOffset(px) { baseOffset = px; },
+    stats: () => ({ ...stats, byText: { ...stats.byText } }),
+    liveCount: () => live.length,
     show(text, color = '#60ffa0', durMs = 900) {
+      stats.total += 1;
+      stats.byText[text] = (stats.byText[text] ?? 0) + 1;
+      stats.maxConcurrent = Math.max(stats.maxConcurrent, Math.min(live.length + 1, MAX_LIVE));
       while (live.length >= MAX_LIVE) {
         const oldest = live.shift();
         oldest.el.remove();

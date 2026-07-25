@@ -62,7 +62,13 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     controlled: () => s.controlledId, // 當前受控球員（輪控除錯）
     tapeCount: s.config.tapeClips.length, // 情蒐錄影帶卷數（測試用）
     floatText: stage.floatText,       // 字卡把手（W6.1 疊排的自動化驗證用）
+    cardStats: () => stage.floatText.stats(), // W7.1：字卡遙測（真人實玩後查密度）
   };
+  // W7.1 六輪：?probe=cards 字卡壓力探針——自動比賽觸發不到主角字卡（自動接球拿不到
+  // Perfect、不主動攔網），密度/遮擋無法自動驗證。本旗標以「真人激戰上限」節奏
+  // 週期性注入代表性字卡，供 Playwright 量疊排深度/FPS；純表現層、sim 完全不碰
+  if (ctx.params.get('probe') === 'cards') startCardProbe(s);
+  if (ctx.params.get('cardstats') === '1') s.cardStatsEl = createCardStatsBadge();
   if (s.config.tapeClips.length) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
   showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
   document.addEventListener('visibilitychange', () => {
@@ -70,6 +76,41 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   });
   s.rafFn = (now) => frameStep(s, now);
   requestAnimationFrame(s.rafFn);
+}
+
+// W7.1 六輪：字卡壓力探針（?probe=cards）——每 5 秒打一輪「一球內連續建功」的極端組合
+// （擦手→晃過→Perfect 700ms 內三連），另每 15 秒補氣勢滿檔卡；量疊排深度與 FPS 用。
+// 只在旗標下啟動，正常遊玩零影響
+const PROBE_BURST = [
+  ['👆 擦到了——快補！', '#6ee7ff', 2200],
+  ['🎭 晃過攔網！', '#ffd166', 2200],
+  ['✨ PERFECT!', '#60ffa0', 2400],
+];
+// ?cardstats=1 遙測角標（左下、體力條上方；純除錯不進正常遊玩）
+function createCardStatsBadge() {
+  const el = document.createElement('div');
+  el.style.cssText = [
+    'position:fixed', 'left:calc(env(safe-area-inset-left, 0px) + 10px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 48px)', 'z-index:15',
+    'background:rgba(12,16,26,0.68)', 'color:#9fb0cc', 'padding:4px 10px',
+    'border-radius:10px', 'font:600 11px system-ui,sans-serif',
+    'pointer-events:none', 'user-select:none',
+  ].join(';');
+  document.body.appendChild(el);
+  return el;
+}
+
+function startCardProbe(s) {
+  let round = 0;
+  setInterval(() => {
+    round += 1;
+    PROBE_BURST.forEach(([text, color, dur], i) => {
+      setTimeout(() => s.stage.floatText.show(text, color, dur), i * 300);
+    });
+    if (round % 3 === 0) {
+      setTimeout(() => s.stage.floatText.show('🔥 氣勢如虹！', '#6ee7ff', 2600), 900);
+    }
+  }, 5000);
 }
 
 // 迴圈狀態（顯式集中；欄位即文件）
@@ -888,6 +929,12 @@ function frameStep(s, now) {
   }
   // W7 A6：主角 HUD 體力條（受控者本人；stamina 未啟用傳 null 短路隱藏）
   stage.heroStamina?.update(game.stamina ? (game.stamina[s.controlledId] ?? 1) : null);
+  // W7.1 六輪：?cardstats=1 字卡遙測角標（實玩後自己看「出現幾次/最多同框幾張」）
+  if (s.cardStatsEl) {
+    const st = stage.floatText.stats();
+    s.cardStatsEl.textContent =
+      `字卡 ${st.total} 次・同框最多 ${st.maxConcurrent} 張・當下 ${stage.floatText.liveCount()}`;
+  }
   stage.scoreboard.update(game, myBall, s.controlledId,
     stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());
