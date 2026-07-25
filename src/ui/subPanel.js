@@ -171,7 +171,9 @@ export function createSubPanel({ game, playerId, handlers, floatText }) {
     card.appendChild(head);
     const hint = document.createElement('div');
     css(hint, ['font-size:11px', 'color:#9fb0cc', 'line-height:1.5']);
-    hint.textContent = '點場上球員→點板凳替補＝立即換上（下一球生效）・自由人照舊不計次';
+    hint.textContent = game.bench[team].length === 0
+      ? '板凳無人——目前僅供檢視全隊狀態；招募隊員後可換人'
+      : '點場上球員→點板凳替補＝立即換上（下一球生效）・自由人照舊不計次';
     card.appendChild(hint);
     if (msg) {
       const warn = document.createElement('div');
@@ -228,12 +230,13 @@ export function createSubPanel({ game, playerId, handlers, floatText }) {
       overlay.style.display = 'none';
       handlers.onSubPanelClose?.();
     },
-    // 每幀同步：死球窗且有額度且有板凳才可按（比賽結束隱藏）；
-    // W7 E3：鈕本身常駐（matchStage 不再以板凳是否有人決定要不要建鈕），板凳無人時反灰＋點擊給提示
+    // 每幀同步：死球窗即可開（07-26 試玩回饋：第 1 屆板凳無人被反灰＝連精確體力值
+    // 都看不到——面板兼儀表板，無板凳/無額度也開放唯讀檢視，換人動作仍由執行層把關）；
+    // 比賽結束隱藏。W7 E3 常駐鈕範式照舊
     sync(g) {
       const team = teamOf();
       const benchEmpty = g.bench[team].length === 0;
-      const usable = g.phase === 'serve' && g.subs[team].remaining > 0 && !benchEmpty;
+      const usable = g.phase === 'serve';
       btn.dataset.enabled = usable ? '1' : '0';
       btn.dataset.benchEmpty = benchEmpty ? '1' : '0';
       btn.style.opacity = usable ? '1' : '0.45';

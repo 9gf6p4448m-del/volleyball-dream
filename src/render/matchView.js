@@ -383,7 +383,7 @@ function drawTag(tag, text, color, bar = null) {
     ctx.fillStyle = 'rgba(12,16,26,0.82)';
     ctx.fillRect(22, 43, 84, 11);
     ctx.fillStyle = bar < STAMINA.TIER2_BELOW ? '#ff5b5b'
-      : bar < STAMINA.TIER1_BELOW ? '#ffd166' : '#7ee787';
+      : bar < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0'; // 三色同主角條/⚙面板（單一配色語言）
     ctx.fillRect(24, 45, 80 * bar, 7);
   }
   tag.texture.needsUpdate = true;
