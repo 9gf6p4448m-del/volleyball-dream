@@ -212,7 +212,11 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     if (r.possession === me.teamId && r.touches === 2) return 'spike';
     if (r.possession === me.teamId && r.touches === 1) return 'set';
     const a = game.actors[playerId];
-    const nearNet = Math.abs(a.z) < 4.2; // 前區＋一步內都可起攔（手機容錯）
+    // 攔網帶與「自動跳攔」同寬（2.2）：原本 4.2 會讓退到 2.2-4.2 的防守站位仍判 block
+    // ——手動點按開出一個必定攔不到的窗（球在別處過網），還把該有的接球意圖吃掉。
+    // 實測（tools/block-defend-probe.mjs）：退到 z=3 時第一觸 54 次全是接球，
+    // 攔網窗 0 次＝那個帶本來就不該算攔網區
+    const nearNet = Math.abs(a.z) < 2.2;
     if (r.possession && r.possession !== me.teamId &&
         isFrontRow(game.match.rotations[me.teamId], playerId) && nearNet) {
       return 'block';

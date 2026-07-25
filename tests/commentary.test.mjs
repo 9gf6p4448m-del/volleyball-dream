@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createCommentary } from '../src/ui/commentary.js';
+import { createCommentary, blockStepHint } from '../src/ui/commentary.js';
+import { createGame } from '../src/sim/game.js';
 
 const ME = 'A1';
 
@@ -228,4 +229,27 @@ test('commentary 純度：零 DOM、零內部時間源（時間全外部注入�
   for (const banned of ['document.', 'window.', 'performance.now', 'Date.now(', 'Math.random(']) {
     assert.ok(!src.includes(banned), `commentary.js 不得出現 ${banned}`);
   }
+});
+
+test('攔網站位提示：前排＋對方組織中＋站在攔網帶外＝提醒往前；帶內/後排/我方持球不提醒', () => {
+  const g = createGame({ seed: 7 });
+  const me = 'A2';
+  const rot = g.match.rotations.A;
+  const idx = rot.indexOf(me);
+  if (idx < 1 || idx > 3) { const f = rot[2]; rot[2] = me; rot[idx] = f; } // 確保前排
+  g.phase = 'rally';
+  Object.assign(g.rally, { possession: 'B', touches: 1 });
+  g.actors[me].z = 3.0; // 前排基準站位＝攔網帶外
+  assert.equal(blockStepHint(g, me), true);
+  g.actors[me].z = 1.5; // 已在帶內＝不提醒
+  assert.equal(blockStepHint(g, me), false);
+  g.actors[me].z = 3.0;
+  g.rally.possession = 'A'; // 我方持球＝不提醒
+  assert.equal(blockStepHint(g, me), false);
+  g.rally.possession = 'B';
+  g.rally.touches = 0; // 對方剛接發、還沒組織＝不催
+  assert.equal(blockStepHint(g, me), false);
+  g.rally.touches = 1;
+  const back = rot[4];
+  assert.equal(blockStepHint(g, back), false); // 後排＝不提醒
 });

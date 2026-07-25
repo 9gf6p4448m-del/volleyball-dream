@@ -20,6 +20,21 @@ const LEVEL_MINOR = 0;
 const LEVEL_MAJOR = 1;
 const PROTECT_MS = 1500; // Sawmah 補充拍板：2000 太黏、流動感要保留，降到 1500ms
 
+// 攔網站位提示（純函式）：前排＋對方組織進攻中＋自己還在攔網帶外（|z|≥2.2）＝
+// 提醒往前。條件刻意嚴（要對方持球且已一傳）——不在對方接發階段就催人上網
+export const BLOCK_BAND_Z = 2.2;
+export function blockStepHint(game, controlledId) {
+  const me = game.players?.[controlledId];
+  const a = game.actors?.[controlledId];
+  if (!me || !a || game.phase !== 'rally') return false;
+  const rot = game.match?.rotations?.[me.teamId] ?? [];
+  const idx = rot.indexOf(controlledId);
+  const frontRow = idx === 1 || idx === 2 || idx === 3;
+  const r = game.rally;
+  return frontRow && r.possession && r.possession !== me.teamId && r.touches >= 1 &&
+    Math.abs(a.z) >= BLOCK_BAND_Z;
+}
+
 // W7 A4 附：王牌判定——該隊場上 trust.fromSetter 最高者，同分取 id 序（決定論）
 function isAceOnCourt(game, team, playerId) {
   const rot = game.match.rotations?.[team] ?? [];
@@ -213,6 +228,11 @@ export function createCommentary(opponentDef = null, revenge = []) {
         (game.rally.touches === 1 || game.rally.touches === 2)
       ) {
         return { text: '舉球給你——讀攔網、點攻擊區！', kind: 'action' };
+      } else if (blockStepHint(game, controlledId)) {
+        // 實測（tools/block-defend-probe.mjs）：前排基準站位 z=3.0 在自動跳攔帶（2.2）外
+        // ——站著不動整場開窗 0 次＝玩家以為攔網壞了；走到位命中率 45%。
+        // 走位＝攔網技術表達（拍板不自動帶位），缺的只是「該往前」這句話
+        return { text: '對方要進攻——往前一步就能攔網！', kind: 'action' }; // TODO(naming)
       }
       // 2) 事件節奏點（未過期）
       if (beat && now < beat.until) return { text: beat.text, kind: 'beat' };
