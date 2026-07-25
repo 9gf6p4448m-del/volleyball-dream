@@ -195,10 +195,16 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           (ROLE_TAG[gameState.players[id].currentRole] ?? '?');
         const staminaColor = staminaTagColor(gameState, id, team0, myTeam);
         const color = staminaColor ?? TAG_COLORS[team0];
-        if (text !== u.tagText || color !== u.tagColor) {
+        // 07-26 拍板：我方迷你體力條——只在死球間隙浮現（換人決策時刻），開球即收；
+        // 對手不給（情報不對稱粗訊號照舊）。量化 5% 檔＝redraw 次數受控
+        const barQ = gameState.stamina && gameState.phase === 'serve' && team0 === myTeam && onCourt
+          ? Math.max(0, Math.min(1, Math.round((gameState.stamina[id] ?? 1) * 20) / 20))
+          : null;
+        if (text !== u.tagText || color !== u.tagColor || barQ !== u.tagBar) {
           u.tagText = text;
           u.tagColor = color;
-          drawTag(u.tag, text, color);
+          u.tagBar = barQ;
+          drawTag(u.tag, text, color, barQ);
         }
         u.tag.sprite.position.set(x, u.tagY, z);
 
@@ -360,7 +366,9 @@ function makeTag(scene) {
   return { sprite, canvas, texture };
 }
 
-function drawTag(tag, text, color) {
+// bar（07-26 拍板：死球間隙浮現的我方迷你體力條）：null＝不畫；0..1＝條長，
+// 顏色依檔位（綠→<50% 黃→<25% 紅，同標籤變色語言）。rally 中一律 null＝畫面乾淨
+function drawTag(tag, text, color, bar = null) {
   const ctx = tag.canvas.getContext('2d');
   ctx.clearRect(0, 0, 128, 56);
   ctx.font = 'bold 34px system-ui, sans-serif';
@@ -368,8 +376,15 @@ function drawTag(tag, text, color) {
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 6;
   ctx.strokeStyle = 'rgba(12,16,26,0.85)';
-  ctx.strokeText(text, 64, 28);
+  ctx.strokeText(text, 64, bar === null ? 28 : 22);
   ctx.fillStyle = color;
-  ctx.fillText(text, 64, 28);
+  ctx.fillText(text, 64, bar === null ? 28 : 22);
+  if (bar !== null) {
+    ctx.fillStyle = 'rgba(12,16,26,0.82)';
+    ctx.fillRect(22, 43, 84, 11);
+    ctx.fillStyle = bar < STAMINA.TIER2_BELOW ? '#ff5b5b'
+      : bar < STAMINA.TIER1_BELOW ? '#ffd166' : '#7ee787';
+    ctx.fillRect(24, 45, 80 * bar, 7);
+  }
   tag.texture.needsUpdate = true;
 }
