@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, stepGame, applyTimeout, momentumScatterMul, TUNING,
+  createGame, stepGame, applyTimeout, momentumScatterMul, momentumRecovBonus, TUNING,
 } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 
@@ -14,6 +14,21 @@ function playFullSet(g, ai) {
   }
   return all;
 }
+
+test('W8 氣勢逐檔恢復加成：每檔 +PER_STEP、只利氣勢方、未啟用/歸中＝0', () => {
+  const g = createGame({ seed: 11, setTarget: 15, momentum: true, stamina: { A: {}, B: {} } });
+  const S = TUNING.MOMENTUM_RECOV_PER_STEP;
+  assert.equal(momentumRecovBonus(g, 'A'), 0); // 歸中＝0
+  assert.equal(momentumRecovBonus(g, 'B'), 0);
+  g.momentum.value = 2; // ＋＝A 方氣勢
+  assert.equal(momentumRecovBonus(g, 'A'), 2 * S);
+  assert.equal(momentumRecovBonus(g, 'B'), 0); // 對向不吃
+  g.momentum.value = -3; // −＝B 方滿檔
+  assert.equal(momentumRecovBonus(g, 'B'), 3 * S);
+  assert.equal(momentumRecovBonus(g, 'A'), 0);
+  const off = createGame({ seed: 11, setTarget: 15, stamina: { A: {}, B: {} } });
+  assert.equal(momentumRecovBonus(off, 'A'), 0); // 氣勢未啟用恆 0
+});
 
 test('未啟用＝零副作用：momentum 為 null、全場零 MOMENTUM 事件', () => {
   const g = createGame({ seed: 4242, setTarget: 15 });

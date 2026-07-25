@@ -195,11 +195,15 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           (ROLE_TAG[gameState.players[id].currentRole] ?? '?');
         const staminaColor = staminaTagColor(gameState, id, team0, myTeam);
         const color = staminaColor ?? TAG_COLORS[team0];
-        // 07-26 拍板：我方迷你體力條——只在死球間隙浮現（換人決策時刻），開球即收；
-        // 對手不給（情報不對稱粗訊號照舊）。量化 5% 檔＝redraw 次數受控
-        const barQ = gameState.stamina && gameState.phase === 'serve' && team0 === myTeam && onCourt
-          ? Math.max(0, Math.min(1, Math.round((gameState.stamina[id] ?? 1) * 20) / 20))
-          : null;
+        // 07-26 拍板：迷你體力條——只在死球間隙浮現，開球即收。我方恆顯示；
+        // 對手跌破 50% 才亮（試玩回饋「看不出對手累了沒」——累的人給讀數、
+        // 健康的人保留情報霧，接播報「朝他那邊打」）。量化 5% 檔＝redraw 受控
+        const barQ = (() => {
+          if (!gameState.stamina || gameState.phase !== 'serve' || !onCourt) return null;
+          const v = gameState.stamina[id] ?? 1;
+          if (team0 !== myTeam && v >= STAMINA.TIER1_BELOW) return null;
+          return Math.max(0, Math.min(1, Math.round(v * 20) / 20));
+        })();
         if (text !== u.tagText || color !== u.tagColor || barQ !== u.tagBar) {
           u.tagText = text;
           u.tagColor = color;

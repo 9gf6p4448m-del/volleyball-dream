@@ -33,6 +33,10 @@ export const TUNING = {
   MOMENTUM_STREAK_MIN: 3, // 連得幾分起算
   MOMENTUM_MAX: 3,        // 檔位上限（±）
   MOMENTUM_SCATTER_CAP: 0.08, // 滿檔散佈效果封頂（氣勢好 ×0.92／氣勢差 ×1.08）
+  // W8（07-26 Sawmah 拍板：逐檔非僅滿檔）：氣勢方每檔＝死球間隙全隊額外恢復量
+  // （腎上腺素敘事——打出氣勢就不覺得累；雙向對稱、快衰歸中＝量體自限）。
+  // 滿檔 +0.006/死球＝場上基礎回 0.005 的雙倍出頭；C3 難度裁定時把此因素算入
+  MOMENTUM_RECOV_PER_STEP: 0.002,
   REACH_RADIUS: 1.3,      // 觸球水平可及距離（m）
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）
@@ -684,6 +688,16 @@ export function momentumScatterMul(state, team) {
   return 1 - t * TUNING.MOMENTUM_SCATTER_CAP;
 }
 
+// W8 氣勢逐檔恢復加成（純讀取；07-26 Sawmah 拍板）：氣勢偏向該隊時，每檔＝
+// 死球間隙全隊額外回 MOMENTUM_RECOV_PER_STEP（+2 檔＝雙倍加成，滿檔最多）；
+// 氣勢未啟用、歸中、或偏向對方＝0。setupServePhase 消費；純算術零 rng
+export function momentumRecovBonus(state, team) {
+  if (!state.momentum) return 0;
+  const dir = team === 'A' ? 1 : -1;
+  const steps = state.momentum.value * dir;
+  return steps > 0 ? steps * TUNING.MOMENTUM_RECOV_PER_STEP : 0;
+}
+
 // H3 視線欺敵（純函式）：由擊球點、實際目標、視線目標算出
 // θ（水平夾角）、騙過攔網機率（線性）、自身失誤增量（平方）
 export function computeDeception(from, aim, gaze) {
@@ -1150,13 +1164,16 @@ function setupServePhase(state) {
   state.timeoutBoostArmed = false; // W7.1：教練選項一發限本死球窗——新窗自動收
 
   // W7 A3 恢復（rally 中不回、死球間隙小回、坐板凳快回）：死球窗一次性——
-  // 逐 tick 回會獎勵拖延發球（玩家發球無時限）。開局呼叫時全員滿格＝封頂 no-op
+  // 逐 tick 回會獎勵拖延發球（玩家發球無時限）。開局呼叫時全員滿格＝封頂 no-op。
+  // W8：氣勢方逐檔額外回（momentumRecovBonus；氣勢未啟用/歸中＝0 零副作用）
   if (state.stamina) {
     for (const team of ['A', 'B']) {
       const rot = state.match.rotations[team];
+      const bonus = momentumRecovBonus(state, team);
       for (const p of Object.values(state.players)) {
         if (p.teamId !== team) continue;
-        recoverStamina(state, p.id, rot.includes(p.id) ? STAMINA.RECOV_DEAD : STAMINA.RECOV_BENCH);
+        recoverStamina(state, p.id,
+          (rot.includes(p.id) ? STAMINA.RECOV_DEAD : STAMINA.RECOV_BENCH) + bonus);
       }
     }
   }
