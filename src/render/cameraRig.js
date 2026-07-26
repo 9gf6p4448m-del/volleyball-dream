@@ -119,7 +119,7 @@ export function createCameraRig(camera, initialPlayerId) {
         const dx = slot.x - coach.x;
         const dz = slot.z - coach.z;
         const d = Math.hypot(dx, dz) || 1;
-        const back = 0.6; // 取景後拉距離（m）
+        const back = 0.42; // 取景後拉距離（四輪回饋：0.6 太遠——貼近才有圈內感）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
         pos.set(slot.x + (dx / d) * back, eye + 0.08, slot.z + (dz / d) * back);
         // 注視點＝戰術板本體（教練胸前 0.42m、板高 1.26）

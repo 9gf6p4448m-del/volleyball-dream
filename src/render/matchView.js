@@ -9,7 +9,7 @@ import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 import { STAMINA, tierOf } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
-import { HUDDLE, huddleSlot } from './huddleLayout.js';
+import { HUDDLE, huddleSlot, coachPos } from './huddleLayout.js';
 import { createHuddleProps } from './huddleProps.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
@@ -238,6 +238,12 @@ export async function createMatchView(scene, quality, game, initialControlledId,
               ? Math.atan2(-bvx, -bvz)
               : u.yaw;
           }
+        }
+        // W8 圍圈朝向（四輪回饋：站定後背對教練不合理）：聚攏中/站定＝轉向教練看板；
+        // 死球 targetYaw 原預設面向球網，圍圈權重高時覆蓋
+        if ((u.huddleW ?? 0) > 0.35) {
+          const cp = coachPos(TEAM_SIDE[team]);
+          targetYaw = Math.atan2(cp.x - x, cp.z - z);
         }
         u.yaw += shortestArc(u.yaw, targetYaw) * (1 - Math.exp(-TURN_K * dt));
 

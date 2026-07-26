@@ -5,7 +5,7 @@
 export const HUDDLE = {
   X: -4.5,          // 圈心 x（場邊；沿用 W7.1 集合帶位既有值）
   Z: 8.4,           // 圈心 z＝教練站位（依隊側鏡射）
-  RADIUS: 1.25,     // 圍圈半徑（以教練為圓心）
+  RADIUS: 0.95,     // 圍圈半徑（四輪回饋：1.25「大家很遠」→收緊貼身才有圍住感）
   WALK_BACK_TICKS: 90, // 倒數剩 1.5s 散開走回真實位置（沿用 W7.1 值）
 };
 
@@ -13,7 +13,7 @@ export const HUDDLE = {
 // 07-26 三輪拍板（Sawmah）：教練前方半圓扇形——全隊站板的同一側、一起看戰術板
 // （二輪全圓的教練背後圈位被否決：看不到板的人站位不合理）。±35/±65 交錯展開、
 // ±95 收邊——外側兩位在鏡頭側翼、不遮板；全員面向教練＝「圍著看板」的畫面
-const ANGLES = [0, -35, 35, -65, 65, -95].map((d) => (d * Math.PI) / 180);
+const ANGLES = [0, -40, 40, -75, 75, -108].map((d) => (d * Math.PI) / 180);
 
 export function coachPos(side) {
   return { x: HUDDLE.X, z: side * HUDDLE.Z };
