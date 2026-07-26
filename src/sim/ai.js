@@ -183,6 +183,7 @@ function ensureFlightPlan(game, aiState) {
     // 攻擊分配：一傳品質決定戰術分支（到位＝全池/可用＝無快攻/勉強＝只剩兩翼高球）
     // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
     const tier = passTierOf(team, landing);
+    aiState.passTier = tier; // W3 S 玩法：分配面板讀同一份品質分檔（setOptions 消費）
     const pick = pickAttackPoint(game, team, aiState.claimId, tier);
     aiState.attackerId = pick?.pid ?? null;
     aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
@@ -343,6 +344,10 @@ export function attackPointsOf(game, team, setterId, passTier = 'perfect') {
       const canBackAttack = (p.techniques?.pipe ?? 1) >= 1;
       if (!canBackAttack) continue;
       if (role === 'outside') pts.push({ pid, kind: 'pipe', rowFactor: 0.5 });
+      // W3 OPP 微調（工單 §5）「後排 D 球權重提高」：全局 0.65 實測把 175 主錨拖出帶
+      // （23%/7%→27%/4%，n=150 對照歸因確鑿）——W2 §5 同款裁定：動分佈＝整組重校準，
+      // 不免費。故維持 0.5 保錨點；玩家=OPP 的後排球權已由 trustFloor 0.27＋高 trust
+      // 實質保障（相對隊友「權重提高」成立）。全局寫實化＝試玩清單待 Sawmah 裁定
       else if (role === 'opposite') pts.push({ pid, kind: 'dball', rowFactor: 0.5 });
       // MB/S 後排不進池；libero（Phase 2+）後排替換於此掛鉤
     }
@@ -371,6 +376,36 @@ export function dutyPosition(game, team, playerId) {
   // 自由人接手 MB 的左後職責位（stage 6 掛鉤兌現）
   const lx = role === 'outside' ? 0 : (role === 'middle' || role === 'libero') ? -3 : 3;
   return localToWorld(team, lx, 7);
+}
+
+// W3 L（附錄 A1）：收縮指令是否讀對——與 input/liberoRead.digReadCorrect 同語意
+// （sim 層內建版：AI 代打與治具上下限臂共用；嚴格相等、middle＝不中）
+function digBiasCorrectFor(game, aiState, team) {
+  const bias = aiState.digBias;
+  if (!bias || bias.team !== team) return false;
+  const r = game.rally;
+  return r.profile === 'spike' && r.lastSpikeZone != null && r.lastSpikeZone === bias.choice;
+}
+
+// W3 L 玩法（附錄 A1）：後排收縮目標——bias＝L 玩家的收縮指令
+// （'line'＝加深球側走廊／'cross'＝收斜對角／'tip'＝前壓短區／null＝現行 AI 判斷）。
+// 純函式：AI 後排與玩家自身（輸入層）共用同一來源，陣型一體移動
+export function digTargetFor(game, team, playerId, bias = null) {
+  const d = dutyPosition(game, team, playerId);
+  const ballLx = TEAM_SIDE[team] * game.ball.x;
+  let shift = Math.max(-1.2, Math.min(1.2, ballLx * AI.DIG_SHIFT));
+  let forward = 0.8; // 收前 0.8m（lz 7→6.2）：防守預備深度
+  if (bias === 'line') {
+    shift = Math.max(-2.0, Math.min(2.0, shift + Math.sign(ballLx) * 0.9));
+  } else if (bias === 'cross') {
+    shift = Math.max(-2.0, Math.min(2.0, shift - Math.sign(ballLx) * 0.9));
+  } else if (bias === 'tip') {
+    forward = 2.2; // 前壓短區（吊球斷點）
+  }
+  return {
+    x: d.x + TEAM_SIDE[team] * shift,
+    z: d.z - TEAM_SIDE[team] * forward,
+  };
 }
 
 // Cover（攻擊掩護）站位——彈回區在「攻擊者與網之間」：
@@ -486,7 +521,13 @@ function decideOne(game, aiState, playerId) {
       const [action, aim, tOverride] = chooseTouch(game, aiState, player, actor);
       if (action && ball.y <= touchCeiling(player, action)) {
         // AI 觸球品質基準 0.75（玩家 Perfect＝1.0 才有超越空間）；快攻舉球帶 t<0.5（低弧）
-        const timing = tOverride ?? (action === 'spike' ? 1 : 0.75);
+        let timing = tOverride ?? (action === 'spike' ? 1 : 0.75);
+        // W3 L（附錄 A1）：收縮指令讀對且球到 L 手上＝Perfect 窗——機制屬於指令本身，
+        // AI 代打（治具上下限臂）與真人走同一條規則（真人路徑在 matchControls 鏡像）
+        if (action === 'receive' && r.touches === 0 && player.currentRole === 'libero'
+          && digBiasCorrectFor(game, aiState, team)) {
+          timing = 1.0;
+        }
         return createIntent({ playerId, tick, action, aim, timing });
       }
     }
@@ -576,16 +617,13 @@ function decideOne(game, aiState, playerId) {
     return it;
   }
 
-  // Dig 收縮（防守陣型 v0）：對方組織/起扣時，後排向球側收縮就防守位
+  // Dig 收縮（防守陣型 v0）：對方組織/起扣時，後排向球側收縮就防守位。
+  // W3 L 玩法（附錄 A1）：aiState.digBias＝玩家（L）下的收縮指令——整個後排陣型
+  // 吃同一指令（玩家自身站位由輸入層用同一 digTargetFor 帶動）
   if (opponentHasBall && !receivingArc &&
       !isFrontRow(game.match.rotations[team], playerId)) {
-    const d = dutyPosition(game, team, playerId);
-    const ballLx = TEAM_SIDE[team] * game.ball.x;
-    const shift = Math.max(-1.2, Math.min(1.2, ballLx * AI.DIG_SHIFT));
-    return moveIntent(playerId, tick, actor, {
-      x: d.x + TEAM_SIDE[team] * shift,
-      z: d.z - TEAM_SIDE[team] * 0.8, // 收前 0.8m（lz 7→6.2）：防守預備深度
-    });
+    const bias = aiState.digBias?.team === team ? aiState.digBias.choice : null;
+    return moveIntent(playerId, tick, actor, digTargetFor(game, team, playerId, bias));
   }
 
   // 舉球員插上：我方接球階段（來球未觸），S 先跑到網前右側舉球點就位（前後排皆然）

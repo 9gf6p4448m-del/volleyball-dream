@@ -4,11 +4,12 @@
 // W2–W5 把 runtime 邏輯搬上 v2 鍵後再收斂。
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
-import { advanceSeason } from './careerState.js';
-import { applySeasonTurnover } from './graduation.js';
+import { advanceSeason, PLAYER_TRUST_FLOOR } from './careerState.js';
+import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
 import { canExpel, EXPEL_TRUST_PENALTY } from './recruitment.js';
+import { positionFlagsOf, markPositionReady, approvePositionOpen } from './positionFlags.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
   SCHEMA_VERSION,
@@ -127,15 +128,19 @@ export function createCareerStore(storage) {
       let turnover = null;
       let heightReveal = null;
       const ok = writeSave((prev) => {
+        // W3(P4) 建隊鏈參數化：換血缺額與預設陣一律吃玩家現任位置（轉位後 OH 洞由
+        // 補位員補、預設陣把玩家排進新槽——見 tests/position-change）
+        const playerRole = prev.player?.currentRole ?? 'outside';
         turnover = applySeasonTurnover({
           roster: prev.roster,
           seasonIndex: prev.season.index ?? 1,
           seed: next.seed,
+          playerRole,
         });
         // 預設陣重排：畢業者不可留在 starters；trust 跟人——倖存者沿用舊值、
         // 畢業者鍵自然消失、新生顯式寫入（勿依賴缺鍵回退——W3 §6b）。
         // W2(P4) 拍板：新生 trust 初值 10（對齊招募生；創隊班底維持預設 20）
-        const lineup = defaultLineup(turnover.roster.members);
+        const lineup = defaultLineup(turnover.roster.members, prev.player?.id ?? 'A2', playerRole);
         const prevTrust = prev.lineup?.trust ?? {};
         for (const id of Object.keys(lineup.trust)) {
           if (prevTrust[id] !== undefined) lineup.trust[id] = prevTrust[id];
@@ -231,6 +236,76 @@ export function createCareerStore(storage) {
           },
         };
       });
+    },
+    // W3(P4) 轉位（教練談話接受後的存檔面）：單次 RMW 原子完成三處——
+    // ①player.currentRole 改寫（naturalRole/身高/志願不動）②新角色造成的名冊缺額
+    // 補位員入隊（縫隙 1「被取代者=補位員或招募生」；season.seed 決定論，同存檔同輸出）
+    // ③lineup 依新角色重排預設陣（trust 跟人沿用、補位員顯式 FRESHMAN_TRUST）。
+    // 讓位者（如阿哲讓出主舉）自然落板凳（defaultStarters 玩家佇列優先）；劇情層在 events。
+    // libero（工單 §8）：玩家不入先發、lineup.libero＝玩家（defaultLineup L 特例）、
+    // 比賽面走 careerMatchSetup 的 liberos 通道＋applyLiberoSwaps。
+    applyPositionChange(role) {
+      if (!['setter', 'middle', 'opposite', 'outside', 'libero'].includes(role)) return false;
+      return writeSave((prev) => {
+        if (!prev?.player) return prev;
+        // 甲2 拍板：轉 S＝trustFloor 停用（分配者沒有保底對象）；轉回攻擊位＝恢復
+        const player = {
+          ...prev.player,
+          currentRole: role,
+          trust: {
+            ...prev.player.trust,
+            floorShare: role === 'setter' ? 0 : PLAYER_TRUST_FLOOR,
+          },
+        };
+        const alumni = prev.roster.alumni ?? [];
+        const usedNames = [
+          ...prev.roster.members.map((m) => m.fullName),
+          ...alumni.map((a) => a.member?.fullName),
+        ].filter(Boolean);
+        const fillIns = buildDeficitFillIns({
+          seed: prev.season.seed ?? 1,
+          members: prev.roster.members,
+          usedNames,
+          alumni,
+          playerRole: role,
+        });
+        const members = [...prev.roster.members, ...fillIns];
+        const lineup = defaultLineup(members, player.id, role);
+        const prevTrust = prev.lineup?.trust ?? {};
+        for (const id of Object.keys(lineup.trust)) {
+          if (prevTrust[id] !== undefined) lineup.trust[id] = prevTrust[id];
+        }
+        for (const f of fillIns) {
+          if (lineup.trust[f.id] !== undefined) lineup.trust[f.id] = FRESHMAN_TRUST;
+        }
+        return { ...prev, player, roster: { ...prev.roster, members }, lineup };
+      });
+    },
+    // W3(P4) 位置開放旗標：讀取（缺鍵容錯全 locked）＋兩條寫入路徑。
+    // 寫入只暴露 markPositionReady（工程結案 locked→ready）與 approveOpenPosition
+    // （?openPosition= 手批 ready→open）——自動化路徑寫不出 open（甲4 鐵律，測試背書）
+    loadPositionFlags() {
+      return positionFlagsOf(loadSave());
+    },
+    markPositionReady(pos) {
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        const flags = markPositionReady(positionFlagsOf(next), pos);
+        return { ...next, career: { ...next.career, positionFlags: flags } };
+      });
+    },
+    // 手批入口（main.js ?openPosition= 專用）：未 ready＝回 false 不動存檔（誤觸不炸開機）；
+    // ready→open 寫入後回 true。合法性判定交給純函式（throw 由此處轉安全值）
+    approveOpenPosition(pos) {
+      try {
+        return writeSave((prev) => {
+          const next = prev ?? createSaveV2({});
+          const flags = approvePositionOpen(positionFlagsOf(next), pos);
+          return { ...next, career: { ...next.career, positionFlags: flags } };
+        });
+      } catch {
+        return false;
+      }
     },
     savePlayer(player) {
       // 走 serializePlayer 正規化（沿用既有格式；three/函式參照擋在存檔外）

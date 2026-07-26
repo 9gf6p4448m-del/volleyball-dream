@@ -270,7 +270,21 @@ const FAREWELL_BY_ID = {
   A4: [
     { speaker: '阿烈', text: '哼——不習慣講這種話。球給你們了，別打得比我斯文。' },
   ],
+  // W3(P4) 甲3③ 阿岩專屬離別（阿烈級份量＋一段專屬對話）：安靜離場的留白處理——
+  // 台詞不堆量，重量靠演出；「牆」交給無名接班者（不指名，對照小雷/大山戲的留白）。
+  // 與小雷的專屬對話由 graduationCeremonySegments 依名冊追加（N1 在隊才有）
+  A6: [
+    { speaker: '阿岩', text: '……嗯。輪到我了。' },
+    { speaker: '阿岩', text: '三年，我都站在網子中間。話不多——牆本來就不用說話。' },
+    { speaker: '阿岩', text: '以後誰站中間，誰就是牆。不用是誰。站上去，就是了。' },
+  ],
 };
+
+// 阿岩×小雷的離別對話（甲3③ 專屬對話；留白＝阿岩不挽留、小雷不承諾）
+const IWAN_RAI_EXCHANGE = [
+  { speaker: '小雷', text: '……我才不會替你守什麼牆。' },
+  { speaker: '阿岩', text: '嗯。你會拆掉它，蓋一面新的。……也好。' },
+];
 
 // 三年級招牌球員的專屬告別（recruitKey 對句）
 const FAREWELL_BY_RECRUIT = {
@@ -289,31 +303,50 @@ const ACE_FAREWELL_BY_NAME = {
   劉振鎧: '鐵霧工業「鐵彈道」劉振鎧畢業——下一站，據說是國家隊青年隊的靶場。',
 };
 
-// graduates＝我方畢業成員快照（graduation.splitGraduates）；aceGrads＝
-// careerState.graduatingAces 輸出。回傳 dialogPlay 可直接吃的台詞列
-export function graduationCeremonyLines({ graduates = [], aceGrads = [] } = {}) {
-  const lines = [
+// W3(P4) 結構化儀式段落（演出版消費）：opening／perGraduate（逐畢業者＝聚光段）／
+// aceLines／closing。members＝當屆名冊（阿岩×小雷對話的在隊判定；省略＝無追加）。
+// graduationCeremonyLines＝本函式的攤平（退化對話卡與既有呼叫端同一事實源）
+export function graduationCeremonySegments({ graduates = [], aceGrads = [], members = [] } = {}) {
+  const opening = [
     { speaker: '教練', text: '賽季結束了。三年級的最後一天——全隊到齊，送他們一程。' },
   ];
-  for (const m of graduates) {
+  const perGraduate = graduates.map((m) => {
     const own = FAREWELL_BY_ID[m.id] ?? FAREWELL_BY_RECRUIT[m.recruitKey ?? m.origin];
-    if (own) lines.push(...own);
-    else lines.push({ speaker: m.name, text: '謝謝大家。這段路，我不會忘。' });
+    const lines = own
+      ? [...own]
+      : [{ speaker: m.name, text: '謝謝大家。這段路，我不會忘。' }];
     // W2(P4) 隊長交接（拍板：阿哲正式接任）：大山離別後、儀式鏈內完成交接
     if (m.id === 'A3') {
       lines.push({ speaker: '大山', text: '阿哲。隊長臂章，從今天起是你的——遊隼的節奏，交給你握。' });
       lines.push({ speaker: '阿哲', text: '……收下了，學長。牆不在了不算完——牆教過的東西，換我來傳。' });
     }
-  }
-  for (const a of aceGrads) {
-    lines.push({
-      speaker: '播報',
-      text: ACE_FAREWELL_BY_NAME[a.name]
-        ?? `${a.teamName}「${a.title}」${a.name} 畢業——他的去向，是下一個舞台的故事。`,
-    });
-  }
-  lines.push({ speaker: '教練', text: '明天起，新的一屆。體育館的鑰匙——交給留下來的人。' });
-  return lines;
+    // 甲3③ 阿岩×小雷專屬對話（小雷在隊才有；他不在＝阿岩獨白收尾的留白）
+    if (m.id === 'A6' && members.some((x) => x.id === 'N1')) {
+      lines.push(...IWAN_RAI_EXCHANGE);
+    }
+    return { member: m, lines };
+  });
+  const aceLines = aceGrads.map((a) => ({
+    speaker: '播報',
+    text: ACE_FAREWELL_BY_NAME[a.name]
+      ?? `${a.teamName}「${a.title}」${a.name} 畢業——他的去向，是下一個舞台的故事。`,
+  }));
+  const closing = [
+    { speaker: '教練', text: '明天起，新的一屆。體育館的鑰匙——交給留下來的人。' },
+  ];
+  return { opening, perGraduate, aceLines, closing };
+}
+
+// graduates＝我方畢業成員快照（graduation.splitGraduates）；aceGrads＝
+// careerState.graduatingAces 輸出。回傳 dialogPlay 可直接吃的台詞列
+export function graduationCeremonyLines({ graduates = [], aceGrads = [], members = [] } = {}) {
+  const s = graduationCeremonySegments({ graduates, aceGrads, members });
+  return [
+    ...s.opening,
+    ...s.perGraduate.flatMap((g) => g.lines),
+    ...s.aceLines,
+    ...s.closing,
+  ];
 }
 
 // W1(P4) 新生入學（輕量見面演出；手寫新生的支線重場＝之後的週次，本週不做內容）

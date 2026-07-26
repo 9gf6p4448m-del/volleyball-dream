@@ -6,6 +6,7 @@ const COLORS = {
   orange: 'rgba(255,176,76,0.94)', // 跳躍發球
   cyan: 'rgba(110,231,255,0.92)',  // 飄浮發球
   neutral: 'rgba(200,214,235,0.92)',
+  dim: 'rgba(122,130,146,0.72)',   // W3 S 分配：低 trust 快攻「猶豫」（可選但變暗）
 };
 
 export function createZonePanel() {

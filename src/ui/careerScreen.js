@@ -20,13 +20,15 @@ import {
 } from '../career/recruitment.js';
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
-  graduationCeremonyLines, freshmenIntroLines, resolveEventsForRoster,
+  graduationCeremonySegments, freshmenIntroLines, resolveEventsForRoster,
 } from '../career/events.js';
 import { clampHeightCm } from '../career/heightGrowth.js';
 import {
   adviceFor, coachAdviceLines, aspirationReplyLines, bandShiftLines, roleLabel,
 } from '../career/heightAdvice.js';
 import { showHeightRitual } from './heightRitual.js';
+import { showGraduationRitual } from './graduationRitual.js';
+import { positionTalkFor } from '../career/positionEvents.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
@@ -208,6 +210,53 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     card.appendChild(button('不指定——全交給輪抽', true, () => pick(null)));
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+  }
+
+  // ---- W3(P4) 轉位事件（教練談話）：屆間鏈尾端觸發——旗標 open（Sawmah 手批）
+  // 才會有談話；縫隙 3 志願優先；接受＝careerStore.applyPositionChange（單次 RMW：
+  // currentRole＋缺額補位員＋預設陣重排）→ 被取代者劇情（縫隙 1，名冊解版本）。
+  // 婉拒＝本屆不轉，下屆間教練再問（門一直開著）----
+  function maybePositionTalk(onDone) {
+    const talkPlayer = store.loadPlayer?.();
+    const members = store.loadRoster?.()?.members ?? [];
+    const talk = positionTalkFor({
+      flags: store.loadPositionFlags?.() ?? {},
+      player: talkPlayer,
+      members,
+    });
+    if (!talk) { onDone(); return; }
+    dialogPlay([{ lines: talk.offerLines }], () => {
+      const overlay = el('div', [
+        'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+        'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+        'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+        'padding:24px 16px',
+      ]);
+      const card = el('div', [
+        `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+        'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+        'flex-direction:column', 'gap:8px', 'align-items:stretch',
+      ]);
+      card.appendChild(el('div', [
+        'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+      ], '🔁 教練談話——轉位'));
+      card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+        `轉任${roleLabel(talk.role)}：位置玩法即刻生效，讓出的主攻位由隊上補位。婉拒不扣任何東西——下一個屆間教練會再問。`));
+      card.appendChild(button(`✓ 接受——轉任${roleLabel(talk.role)}`, true, () => {
+        overlay.remove();
+        if (store.applyPositionChange?.(talk.role)) {
+          dialogPlay([{ lines: talk.acceptLines }], onDone);
+        } else {
+          onDone();
+        }
+      }));
+      card.appendChild(button('留在現在的位置', false, () => {
+        overlay.remove();
+        dialogPlay([{ lines: talk.declineLines }], onDone);
+      }));
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+    });
   }
 
   // ---- W2(P4) 志願登記（憲法 Q7）：教練面談後全位置自由選（可無視建議）；
@@ -748,7 +797,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       card.appendChild(rotWrap);
 
       // 即時合法性（validateLineup 結構＋checkRoleStructure 5-1 對位＋checkRotationOrder 7.7）
-      const v = validateLineup(working, members, playerId);
+      const v = validateLineup(working, members, playerId, player.currentRole ?? 'outside');
       const rs = checkRoleStructure(working.starters, members, playerId, player.currentRole);
       const rot = checkRotationOrder(working.starters, working.rotationStart);
       const legal = v.valid && rs.legal && rot.legal;
@@ -762,7 +811,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       // 重置只還原排序/自由人/輪轉，trust 映射保留——W4 起 trust 有真實差異
       // （招募成員 10、既有隊友 20），重置排陣不得洗掉信任
       tools.appendChild(smallButton('重置為預設', () => {
-        working = { ...defaultLineup(members), trust: structuredClone(working.trust) };
+        working = {
+          ...defaultLineup(members, playerId, player.currentRole ?? 'outside'),
+          trust: structuredClone(working.trust),
+        };
         selected = null;
         notice = null;
         paint();
@@ -1279,7 +1331,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const seasonN = store.seasonIndex?.() ?? 1;
     root.appendChild(el('div', [
       'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
-    ], `${career.playerName}・你·OH${seasonN > 1 ? `・第 ${seasonN} 屆` : ''}`));
+    ], `${career.playerName}・你·${ROLE_ABBR[player.currentRole] ?? 'OH'}${seasonN > 1 ? `・第 ${seasonN} 屆` : ''}`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
       `${OUR_TEAM_NAME}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
@@ -1342,9 +1394,15 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       const roster = ensureStarterRoster(store);
       const graduates = (roster?.members ?? []).filter((m) => (m.growth?.grade ?? 2) >= 3);
       const aceGrads = graduatingAces(store.seasonIndex?.() ?? 1);
-      const ceremony = graduationCeremonyLines({ graduates, aceGrads });
-      dialogPlay([{ lines: ceremony }], () => {
-        showInvitePicker((invitedId) => {
+      // W3(P4) 乙5：畢業儀式接演出框架——opening 對話 → 逐位聚光演出（WebGL 失敗
+      // 在 ritual 內退化台詞卡）→ ace 播報＋收尾對話；三段同一事實源（segments）
+      const segs = graduationCeremonySegments({
+        graduates, aceGrads, members: roster?.members ?? [],
+      });
+      dialogPlay([{ lines: segs.opening }], () => showGraduationRitual({
+        perGraduate: segs.perGraduate,
+        onDone: () => dialogPlay([{ lines: [...segs.aceLines, ...segs.closing] }], () => {
+          showInvitePicker((invitedId) => {
           const adv = store.advanceSeason?.({ invitedId });
           if (!adv) return;
           // W2(P4)：advanceSeason 已在存檔內揭曉身高——必須重載 player，
@@ -1365,8 +1423,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
             if (intro.length) seqs.push({ lines: intro });
             const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
             if (opener.length) seqs.push({ lines: opener });
-            if (seqs.length) dialogPlay(seqs, () => renderCareer());
-            else renderCareer();
+            // W3(P4)：屆間鏈尾端接轉位教練談話（旗標 open 才觸發，無談話＝直接回賽程）
+            const finish = () => maybePositionTalk(() => renderCareer());
+            if (seqs.length) dialogPlay(seqs, finish);
+            else finish();
           };
           // W2(P4) 「你長高了」儀式演出（暗場聚光/身高尺/模型即時長高/參數刻度）
           if (adv.heightReveal) {
@@ -1374,8 +1434,9 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
           } else {
             continueChain();
           }
-        });
-      });
+          });
+        }),
+      }));
     });
     // W1(P4)：高中章固定三屆——第 3 屆收束不再推進，掛生涯結算佔位（W4 實作）
     const careerOver = (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;

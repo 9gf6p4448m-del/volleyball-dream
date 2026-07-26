@@ -31,7 +31,9 @@ export function promoteMembers(members) {
 // 「拆牆的人」雷紹齊（三案見 phase4-w1-status §4；id N1 不變＝存檔穩定）。
 // 支線鉤子（W2+ 展開）：用整個賽季對抗前輩的影子，最後發現「反著學」也是被影子
 // 定義的一種——真正的自由是承認自己學過他。
-// 第 3 屆手寫新生不在 W1 範圍（該屆缺口由程序補位員補；W2+ 再議）。
+// ★ 第 3 屆佔位（W3 甲3①②）：L（自由人）手寫新生——核心題「不能得分的人怎麼證明
+// 自己」。三案人設已產出存 phase4-w3-status.md §7 待 Sawmah 挑，**選定前不寫入本表、
+// 不接線劇情**（該屆缺口暫由程序補位員補；選定後於此新增鍵 3、id 用 N2）。
 export const FRESHMAN_HANDWRITTEN = {
   2: {
     id: 'N1', name: '小雷', fullName: '雷紹齊', role: 'middle', height: 1.93,
@@ -126,6 +128,21 @@ function buildGeneratedFreshman({ seed, role, id, fullName }) {
   };
 }
 
+// 依 wanted 角色清單逐名生成補位員（buildFreshmen／buildDeficitFillIns 共用核心；
+// gn 序與抽名節奏維持 W1 原樣＝既有存檔決定論不動）
+function generateFillIns({ seed, wanted, members, alumni, used }) {
+  let gn = nextFreshmanId(members, alumni);
+  const out = [];
+  for (const role of wanted) {
+    const id = `G${gn}`;
+    gn += 1;
+    const fullName = drawName(seed + gn, used, gn);
+    used.add(fullName);
+    out.push(buildGeneratedFreshman({ seed, role, id, fullName }));
+  }
+  return out;
+}
+
 // 該屆新生名單（手寫＋程序補位員）。seasonIndex＝新的一屆；members＝畢業移除＋
 // 年級推進後的現役名冊；usedNames＝現役＋校友全名（避免撞名；跨隊唯一由名池策劃保證）；
 // alumni＝校友清單（G id 不回收掃描＋手寫新生防重入——畢業過的具名新生不再入隊）
@@ -152,15 +169,21 @@ export function buildFreshmen({ seasonIndex, seed, members, usedNames, alumni = 
     for (let i = 0; i < n; i += 1) wanted.push(role);
   }
   if (wanted.length === 0 && freshmen.length === 0) wanted.push('outside');
-  let gn = nextFreshmanId(members, alumni);
-  for (const role of wanted) {
-    const id = `G${gn}`;
-    gn += 1;
-    const fullName = drawName(seed + gn, used, gn);
-    used.add(fullName);
-    freshmen.push(buildGeneratedFreshman({ seed, role, id, fullName }));
-  }
+  freshmen.push(...generateFillIns({ seed, wanted, members, alumni, used }));
   return freshmen;
+}
+
+// W3(P4) 轉位補位員：玩家屆間轉位後名冊出現角色缺額（如轉 S 後 OH 只剩一人）——
+// 按缺額程序生成補位入隊（憲法縫隙 1「被取代者=補位員或招募生」／甲3① MB 洞先例）。
+// 與 buildFreshmen 同素材同決定論；差異＝無手寫新生、無「至少 1 名」下限（無缺額＝空陣列）。
+export function buildDeficitFillIns({ seed, members, usedNames, alumni = [], playerRole = 'outside' }) {
+  const used = new Set(usedNames ?? []);
+  const deficits = roleDeficits(members, playerRole);
+  const wanted = [];
+  for (const [role, n] of Object.entries(deficits)) {
+    for (let i = 0; i < n; i += 1) wanted.push(role);
+  }
+  return generateFillIns({ seed, wanted, members, alumni, used });
 }
 
 // ---- 賽季換血（畢業 → 年級推進 → 新生入學；單一純函式供 store RMW 消費）----

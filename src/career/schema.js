@@ -163,6 +163,17 @@ export function deserializeSave(json) {
       throw new Error(`名冊成員 ${m.id} 缺 dna 標記`);
     }
   }
+  // W3(P4) 位置開放旗標：舊檔可無此鍵（讀取端 positionFlagsOf 補全 locked）；
+  // 若存在必為物件且四位置值皆合法三態（open 是 Sawmah 手批的真話，壞值不容混入）
+  if (raw.career?.positionFlags !== undefined) {
+    const pf = raw.career.positionFlags;
+    if (typeof pf !== 'object' || pf === null) throw new Error('career.positionFlags 若存在須為物件');
+    for (const p of ['setter', 'middle', 'opposite', 'libero']) {
+      if (pf[p] !== undefined && !['locked', 'ready', 'open'].includes(pf[p])) {
+        throw new Error(`career.positionFlags.${p} 值不合法：${pf[p]}`);
+      }
+    }
+  }
   // W4 招募驗證（輕量形狀檢查——progress 內容由 recruitment.js 讀取時以預設值容錯，
   // 這裡只擋結構性壞資料；recruited 成員的存在性由名冊成員驗證涵蓋——origin 對映）
   if (
@@ -180,7 +191,9 @@ export function deserializeSave(json) {
     throw new Error('lineup 結構不合法（需物件）');
   }
   if (raw.lineup.starters != null) {
-    const { valid, errors } = validateLineup(raw.lineup, raw.roster.members, raw.player?.id);
+    const { valid, errors } = validateLineup(
+      raw.lineup, raw.roster.members, raw.player?.id, raw.player?.currentRole ?? 'outside',
+    );
     if (!valid) throw new Error(`先發陣容不合法：${errors.join('；')}`);
   }
   // season 內容沿用 careerState 的完整語意驗證（含賽程對手 id 存在性）

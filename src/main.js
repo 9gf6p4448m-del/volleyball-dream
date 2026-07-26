@@ -16,6 +16,7 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
+import { ENGINEERED_READY } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
 import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
 import { buildMatchStage } from './app/matchStage.js';
@@ -60,6 +61,12 @@ async function init() {
 function showCareerEntry(ctx) {
   ctx.loadingEl.remove();
   const store = createCareerStore();
+  // W3(P4) 甲4 旗標：①工程 ready 回填（build 級事實，開機冪等；不動 open）
+  // ②手批入口 ?openPosition=setter|middle|opposite|libero——ready→open 的唯一路徑
+  // （Sawmah 試玩通過後手動帶參數進入）。未 ready/未知位置＝store 內安全回 false
+  for (const p of ENGINEERED_READY) store.markPositionReady(p);
+  const openPos = ctx.params.get('openPosition');
+  if (openPos) store.approveOpenPosition(openPos);
   const screen = createCareerScreen(store, {
     onQuick: () => { runMatch(ctx, null); },
     onPlay: ({ career, player, matchEntry }) => {

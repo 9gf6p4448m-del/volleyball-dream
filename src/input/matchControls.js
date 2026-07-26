@@ -11,7 +11,10 @@ import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
 import { predictLanding } from '../sim/flight.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
-import { dutyPosition } from '../sim/ai.js';
+import { setOptionsFor } from './setOptions.js';
+import { mbReadFor } from './blockRead.js';
+import { digReadFor, digReadCorrect } from './liberoRead.js';
+import { dutyPosition, digTargetFor } from '../sim/ai.js';
 
 // W7 C2：受控者是否在場上（板凳教練視角期間為 false）——輸入層零輸入零報錯的判準
 function onCourt(game, playerId) {
@@ -39,6 +42,12 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let jumpStartedAt = 0;
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
   let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
+  let setChosen = false;            // W3 S 玩法：本次舉球已分配（面板不再彈）
+  let mbChosen = false;             // W3 MB 玩法：本次讀舉球已選（面板不再彈）
+  let mbTarget = null;              // 選定攔網位移的世界座標（自動走位目標）
+  let mbEarly = false;              // 搶快攻＝到位即提前跳（一次性）
+  let digChosen = false;            // W3 L 玩法：本次防守指揮已選/已自動（面板不再彈）
+  let digHeroSignal = false;        // W3 L 演出武裝：Perfect/魚躍起球——TOUCH 確認後消費
   let manualOwned = false;          // 本球玩家已接管走位（碰過搖桿＝整球歸你；發球階段重置）
   let diveLand = { flightId: -1, landing: null }; // 自動魚躍落點閘的逐 flight 快取
 
@@ -241,6 +250,16 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       }
       // 非扣球時刻＝重置進攻選擇旗標（下次進攻重新彈面板）
       if (attackChosen && !this.isAttackMoment(game)) attackChosen = false;
+      // 非舉球時刻＝重置分配旗標（下次一傳起球重新彈面板）
+      if (setChosen && !this.isSetMoment(game)) setChosen = false;
+      // 非讀舉球時刻＝重置 MB 讀心狀態（位移承諾/搶快只活在該次對手攻擊）
+      if (mbChosen && !this.isMbMoment(game)) {
+        mbChosen = false;
+        mbTarget = null;
+        mbEarly = false;
+      }
+      // 非防守指揮時刻＝重置 L 選擇旗標（digBias 本體由 matchLoop 管理生命週期）
+      if (digChosen && !this.isLMoment(game)) digChosen = false;
       const tick = game.tick;
       const me = game.players[playerId];
       const a = game.actors[playerId];
@@ -274,7 +293,24 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           game.rally.possession !== me.teamId &&
           game.rally.profile !== 'serve' &&
           isFrontRow(game.match.rotations[me.teamId], playerId);
-        if (aiState?.claimId !== playerId && !defendingFront) {
+        if (mbTarget) {
+          // W3 MB 讀心位移承諾：面板選定＝玩家親下的站位命令，走向封線點
+          // （不違反 07-24「攔網站位全交玩家」——這正是玩家的選擇；搖桿隨時接管）
+          const dx = mbTarget.x - a.x;
+          const dz = mbTarget.z - a.z;
+          const len = Math.hypot(dx, dz);
+          if (len > 0.25) move = { x: dx / len, z: dz / len };
+        } else if (me.currentRole === 'libero' && aiState?.digBias?.team === me.teamId &&
+            game.rally.possession && game.rally.possession !== me.teamId &&
+            aiState?.claimId !== playerId) {
+          // W3 L（附錄 A1）：玩家自己的站位是收縮陣型的一部分——同一指令（digBias）
+          // 由 digTargetFor 自動帶動（與 AI 後排同函式；搖桿隨時接管）
+          const t = digTargetFor(game, me.teamId, playerId, aiState.digBias.choice);
+          const dx = t.x - a.x;
+          const dz = t.z - a.z;
+          const len = Math.hypot(dx, dz);
+          if (len > 0.3) move = { x: dx / len, z: dz / len };
+        } else if (aiState?.claimId !== playerId && !defendingFront) {
           // 站位交換（真實排球）：待命時自動跑職責位——前排 OH 左翼/MB 中/OPP 右翼
           // （發球觸球後換位；後排回輪轉基準位）。搖桿有輸入時尊重手動
           const t = dutyPosition(game, me.teamId, playerId);
@@ -324,6 +360,10 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         const waitingServe = game.phase === 'serve' && action === 'serve';
         if (queuedAction.attack) {
           if (game.ball.y < 1.3) queuedAction = null;
+        } else if (queuedAction.set) {
+          // 分配決策的舉球：保持有效到球進舉球帶（不用 36-tick 緩衝）；
+          // 球墜破舉球帶＝放棄，讓二傳保底/魚躍體系接手
+          if (game.ball.y < 1.2) queuedAction = null;
         } else if (!waitingServe && tick >= queuedAction.expiresTick) {
           queuedAction = null;
         }
@@ -350,6 +390,12 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           action = 'receive';
           aim = localToWorld(me.teamId, 1.2, 1.2);
           timing = 0.6;
+          // W3 L（附錄 A1）：讀對且球飛向玩家＝Perfect 接球時機窗主動觸發
+          // （Phase 1 既有 Perfect 機制首次由玩家決策主動開啟）；A4① 演出武裝
+          if (me.currentRole === 'libero' && digReadCorrect(game, aiState)) {
+            timing = 1.0;
+            digHeroSignal = true;
+          }
         } else if (canTouch && reachable && claimedToMe && r.touches === 1) {
           // 這球歸你的二傳保底：自動舉給攻擊手
           action = 'set';
@@ -381,6 +427,18 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
             ? localToWorld(me.teamId === 'A' ? 'B' : 'A', 0, 6.5)
             : localToWorld(me.teamId, 1.2, 1.2);
           timing = 0.5;
+          // W3 L（附錄 A4①）：撲對方攻擊的必死球＝演出武裝（TOUCH 確認才播）
+          if (me.currentRole === 'libero' && r.profile === 'spike' && r.touches === 0) {
+            digHeroSignal = true;
+          }
+        } else if (simpleMode && mbEarly && mbTarget &&
+            (Math.abs(a.x - mbTarget.x) < 0.45 || (b.vy < 0 && b.y < 3.4))) {
+          // W3 MB 搶快攻＝提前開攔網窗（一次性）：到達封線點（或球已下墜＝最後時機）
+          // 立即起跳。賭錯高球＝48-tick 攔網窗過期、落地時球才來——真實懲罰
+          // （blockTiming 既有機制，sim 零特例）
+          action = 'block';
+          blockSignal = true;
+          mbEarly = false;
         } else if (simpleMode && contextAction(game) === 'block' &&
             r.profile === 'spike' && aiState?.landingTeam === me.teamId &&
             Math.abs(a.z) < 2.2) {
@@ -467,6 +525,82 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     },
     // 本次扣球是否已選區（main 用來停止彈面板）
     attackPending() { return attackChosen; },
+
+    // ---- 二傳分配決策（W3 S 玩法：玩家＝現任舉球員）----
+    // 是否輪到玩家舉球：我方第二擊、這球 claim 給我、我是現任舉球員。
+    // 範式同 isAttackMoment——決策時刻由 AI 協調層的呼叫鎖定判定，不另闢真相
+    isSetMoment(game) {
+      const me = game.players[playerId];
+      const r = game.rally;
+      if (game.phase !== 'rally' || r.possession !== me.teamId || r.touches !== 1) return false;
+      if (me.currentRole !== 'setter') return false;
+      if (lastAiState?.claimId !== playerId) return false;
+      return true;
+    },
+    // 目前可分配的選項池（一傳品質分支）；非舉球時刻回傳 null
+    setOptions(game) {
+      return this.isSetMoment(game) ? setOptionsFor(game, lastAiState, playerId) : null;
+    },
+    // 選定分配 → 排入強制舉球：瞄該攻擊點、timing＝舉球弧線（快攻 t<0.5 低弧）——
+    // 與 AI 舉球走同一條 sim 路徑（chooseTouch 的 set 分支），只是選的人換成玩家
+    chooseSet(opt) {
+      setChosen = true;
+      queuedAction = {
+        timing: opt.t, gaze: null, aimWorld: opt.aim,
+        aimNdc: null, aimVec: null, forceAction: 'set',
+        expiresTick: null, jumpAt: null, attack: false, set: true,
+      };
+    },
+    // 本次舉球是否已分配（main 用來停止彈面板）
+    setPending() { return setChosen; },
+
+    // ---- MB 攔網讀心（W3 MB 玩法：玩家＝前排 MB、對手舉球出手瞬間）----
+    isMbMoment(game) {
+      const me = game.players[playerId];
+      const r = game.rally;
+      if (game.phase !== 'rally' || !r.possession || r.possession === me.teamId) return false;
+      if (r.touches !== 2) return false;
+      if (me.currentRole !== 'middle') return false;
+      return isFrontRow(game.match.rotations[me.teamId], playerId);
+    },
+    // 讀取面板資料（誠實線索：一傳品質＋助跑動向）；非讀舉球時刻回傳 null
+    mbOptions(game, aiState) {
+      return this.isMbMoment(game) ? mbReadFor(game, aiState, playerId) : null;
+    },
+    // 選定封線＋時機：位移＝玩家親下的站位命令（自動走位到封線點）；
+    // early＝搶快攻（到位即提前開攔網窗）；等高球＝就位後交自動跳攔（07-24 路徑）
+    chooseMbBlock(lane, early = false) {
+      mbChosen = true;
+      const me = lastGame?.players[playerId];
+      const side = me ? TEAM_SIDE[me.teamId] : 1;
+      mbTarget = { x: lane.x, z: side * 1.0 };
+      mbEarly = !!early;
+    },
+    mbPending() { return mbChosen; },
+
+    // ---- L 防守指揮（W3 附錄 A1/A2：玩家＝場上自由人、對手舉球出手瞬間）----
+    isLMoment(game) {
+      const me = game.players[playerId];
+      const r = game.rally;
+      if (game.phase !== 'rally' || !r.possession || r.possession === me.teamId) return false;
+      if (r.touches !== 2) return false;
+      if (me.currentRole !== 'libero') return false;
+      return onCourt(game, playerId); // 前排輪次被換下＝場外縮時偵察，無面板
+    },
+    // 面板資料（選項＋AI 建議＋習慣標記線索）；非指揮時刻回傳 null
+    digOptions(game, aiState) {
+      return this.isLMoment(game) ? digReadFor(game, aiState) : null;
+    },
+    // 選定收縮方向（點選＝改判；1 秒自動由 matchLoop 呼叫同一入口）——
+    // digBias 注入 aiState 由 matchLoop 做（AI 協調層歸它管）
+    chooseDig() { digChosen = true; },
+    digPending() { return digChosen; },
+    // L 演出訊號（一次性）：matchLoop 於玩家起球 TOUCH 當拍消費；死球丟棄殘留
+    consumeDigHeroSignal() {
+      const v = digHeroSignal;
+      digHeroSignal = false;
+      return v;
+    },
     // 發球（決策選區；power=強力發球：低平快＋散佈大；未指定 aim 則發預設深區）
     // style：null＝穩定、'float'＝飄浮、'jump'＝跳發（timing>1.1 走既有跳發路徑）
     serveNow(game, aim = null, style = null) {

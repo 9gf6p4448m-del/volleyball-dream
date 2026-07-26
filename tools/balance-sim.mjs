@@ -23,6 +23,10 @@ import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
 } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
+import { buildDeficitFillIns } from '../src/career/graduation.js';
+import { defaultLineup } from '../src/career/lineup.js';
+import { digSuggestionFor } from '../src/input/liberoRead.js';
+import { boxScoreLFor } from '../src/career/boxScoreL.js';
 
 const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
 const MAX_TICKS = 400000;
@@ -47,6 +51,15 @@ const W7_ON = USE_STAMINA || USE_MOMENTUM;
 // W2(P4) 身高錨點臂：VD_HEIGHT=公分（150/175/195 三錨點；工單 B3）。
 // 未給＝188 基準（Phase 1 遺留值；本週校準後 175 為主錨、188＝「明顯優勢」）
 const HEIGHT_CM = process.env.VD_HEIGHT ? Number.parseInt(process.env.VD_HEIGHT, 10) : null;
+// W3(P4) 位置臂（工單 §9：分位置獨立跑）：VD_ROLE=setter|middle|opposite|libero
+// （未給＝outside 基準）。建隊走正式轉位鏈同款：currentRole＋缺額補位員＋
+// defaultLineup 新對位（S 臂 AI 代打＝trust 權重鏡像＝現行 AI 舉球；MB/OPP＝現行
+// AI；L＝careerMatchSetup liberos 通道＋applyLiberoSwaps）。
+// VD_L_MODE（僅 L 臂）：suggest＝「全程不改判」下限（每次對手舉球照 AI 建議下指令）；
+// omni＝「全知改判」上限（作弊讀真實落點 lastSpikeZone）；未給＝無指令純 AI dig。
+// 上下限勝率差＝改判價值空間（附錄 A5：初擬 8-15%，輸出實測供 Sawmah 裁定不強湊）
+const PLAYER_ROLE = process.env.VD_ROLE ?? 'outside';
+const L_MODE = process.env.VD_L_MODE ?? null;
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖（跨屆冪等——已學不重覆）
 const TEACH_AFTER = {
@@ -56,6 +69,24 @@ const TEACH_AFTER = {
   3: ['floatServe'],
 };
 const TEACH_BEFORE_FINAL = ['jumpServe'];
+
+// W3 L 臂指令注入（playMatch 內逐 tick）：對手舉球＝下指令；omni＝對手扣球瞬間
+// 改判成真值（球飛行中收縮與 Perfect 窗都吃得到——「作弊讀真實落點」的語意）；
+// 我方第一觸後清指令（生命週期同 matchLoop）
+function driveLiberoBias(g, ai) {
+  if (!L_MODE) return;
+  const r = g.rally;
+  if (g.phase !== 'rally' || (r.possession === 'A' && r.touches >= 1)) {
+    ai.digBias = null;
+    return;
+  }
+  if (r.possession === 'B' && r.touches === 2 && !ai.digBias) {
+    ai.digBias = { team: 'A', choice: digSuggestionFor(g, ai), override: false };
+  } else if (L_MODE === 'omni' && r.profile === 'spike' && r.lastSpikeZone
+    && ai.digBias && ai.digBias.choice !== r.lastSpikeZone) {
+    ai.digBias = { team: 'A', choice: r.lastSpikeZone, override: true };
+  }
+}
 
 function playMatch(setup) {
   const g = createGame({
@@ -78,6 +109,7 @@ function playMatch(setup) {
   const ai = createAiState();
   let maxDeficit = 0; // E1 雪球哨兵：本場最大落後分差（A 視角）
   while (g.phase !== 'set_over' && g.tick < MAX_TICKS) {
+    driveLiberoBias(g, ai);
     stepGame(g, aiCollectIntents(g, ai));
     if (g.phase === 'serve') {
       const d = g.match.score.B - g.match.score.A;
@@ -170,6 +202,8 @@ let oppSubGames = 0; // 至少換過一人的場數
 // W2(P4) 身高體感代理（第 1 屆六場的 A2 個人數據；跨身高臂對照＝
 // 「190 攔網體感明顯較強」的無頭驗法）
 const a2 = { kills: 0, tips: 0, aces: 0, blocks: 0, games: 0 };
+// W3(P4) L 三欄場均（VD_ROLE=libero 才累積；契約＝career/boxScoreL）
+const lBox = { digs: 0, assistDigs: 0, rallySaves: 0 };
 
 // 跨屆收集器（SEASONS>1 才輸出；wins/margins/champions 維持「第 1 屆」語義不變）
 const perSeason = Array.from({ length: SEASONS }, () => ({
@@ -191,6 +225,17 @@ for (let run = 0; run < RUNS; run += 1) {
   let recruitment = { progress: {}, recruited: [], expelled: [] };
   let lineup = null;
   const joinLog = [];
+  // W3(P4) 位置臂：正式轉位鏈同款（currentRole＋trustFloor 語意＋缺額補位員＋新對位
+  // 預設陣）；玩家=L 時 defaultLineup 產 libero='A2'、careerMatchSetup 走 liberos 通道
+  if (PLAYER_ROLE !== 'outside') {
+    player.currentRole = PLAYER_ROLE;
+    if (PLAYER_ROLE === 'setter') player.trust.floorShare = 0; // 甲2：分配者無保底對象
+    const usedNames = roster.members.map((m) => m.fullName).filter(Boolean);
+    roster.members.push(...buildDeficitFillIns({
+      seed: career.seed, members: roster.members, usedNames, alumni: [], playerRole: PLAYER_ROLE,
+    }));
+    lineup = defaultLineup(roster.members, 'A2', PLAYER_ROLE);
+  }
   if (USE_FULL_ROSTER) {
     // 招募臂：R1 曜石 MB／R2 鐵霧 OPP／R3 天鷹 OH（決定論生成，同正式入隊路徑）；
     // 陣容＝[S, 玩家OH, R-MB, R-OPP, R-OH, MB]——對角 5-1 合法、轉學生頂上三攻擊位
@@ -261,6 +306,12 @@ for (let run = 0; run < RUNS; run += 1) {
         a2.aces += stats.aces;
         a2.blocks += stats.blockPoints;
         a2.games += 1;
+        if (PLAYER_ROLE === 'libero') {
+          const lb = boxScoreLFor(g.events, 'A2');
+          lBox.digs += lb.digs;
+          lBox.assistDigs += lb.assistDigs;
+          lBox.rallySaves += lb.rallySaves;
+        }
       }
       spendEvenly(player, growthPointsFor(stats, won));
       for (const k of TEACH_AFTER[mi] ?? []) player.techniques[k] = 1;
@@ -308,6 +359,7 @@ const armName = [
   USE_MANAGE ? '體力＋自動管理' : USE_STAMINA ? '體力＋無管理' : null,
   USE_MOMENTUM ? '氣勢' : null,
   HEIGHT_CM ? `身高${HEIGHT_CM}` : null,
+  PLAYER_ROLE !== 'outside' ? `位置${PLAYER_ROLE}${L_MODE ? `·${L_MODE}` : ''}` : null,
 ].filter(Boolean).join('＋') || '基準（W7 全關）';
 console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A2=AI 代打基準）===`);
 for (const id of matchIds) {
@@ -315,6 +367,11 @@ for (const id of matchIds) {
 }
 console.log(`A2 場均（身高體感代理）：殺球 ${(a2.kills / a2.games).toFixed(2)}｜吊球 ${(a2.tips / a2.games).toFixed(2)}`
   + `｜ACE ${(a2.aces / a2.games).toFixed(2)}｜攔網得分 ${(a2.blocks / a2.games).toFixed(2)}`);
+if (PLAYER_ROLE === 'libero') {
+  console.log(`A2 L 三欄場均（契約=boxScoreL）：起球 ${(lBox.digs / a2.games).toFixed(2)}`
+    + `｜助攻一傳 ${(lBox.assistDigs / a2.games).toFixed(2)}`
+    + `｜rally 續命 ${(lBox.rallySaves / a2.games).toFixed(2)}`);
+}
 console.log(`\n決賽帶（真實連勝踏進決賽）：${pct(reachedFinal)}`);
 console.log(`奪冠率（國賽三連勝）：${pct(champions)}`);
 const totalMatches = RUNS * SEASONS * matchIds.length;

@@ -151,12 +151,17 @@ export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp 
   };
 }
 
-// 生涯主角：固定佔 A 隊主攻手槽（main.js PLAYER_ID＝'A2'，index 1＝2 號位）。
+// 生涯主角：A 隊 A2（main.js PLAYER_ID）。出道佔主攻手槽（一律 OH 出道——憲法 Q7）；
+// W3 轉位後由 currentRole 決定實佔槽位（建隊鏈全線吃 currentRole，見 applyPositionChange）。
 // 初值與預設隊友同基準——成長差異由 stage 3 的雙層成長系統拉開。
 // W2(P4) 身高創角（憲法 Q6/Q7）：heightCm＝創角輸入（140–220 已 clamp）；
 // aspiration＝志願位置（志願登記，一律 OH 出道——currentRole 恆 outside）；
 // seed＝career.seed（成長曲線子種子來源）。三年曲線於此刻預生成（heightGrowth）。
 // 不帶 opts＝舊路徑（測試/治具）：188 基準、志願主攻，行為與 Phase 1 相容。
+// 保底球權地板（決策第 3 題：玩家不得淪為觀眾）。W3 甲2 拍板：玩家轉 S＝停用
+// （分配者沒有保底對象語意）；轉回攻擊位＝恢復——applyPositionChange 消費本常數
+export const PLAYER_TRUST_FLOOR = 0.27;
+
 export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside', seed = 1 } = {}) {
   const height = initialHeightState({ seed, heightCm });
   const player = createPlayer({
@@ -171,7 +176,7 @@ export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside
       jump: 60, power: 62, reaction: 60, stamina: 60,
       speed: 62, control: 68, serve: 60, block: 58,
     },
-    trustFloor: 0.27, // 保底 25–30% 球權（決策第 3 題：玩家不得淪為觀眾）
+    trustFloor: PLAYER_TRUST_FLOOR, // 保底 25–30% 球權（玩家不得淪為觀眾）
     // 生涯新人技術層全鎖起步，經故事線傳授習得（每場賽後對手/隊長教一招）
     // v:2＝技術欄位語意版本（normalizeCareerPlayer 的一次性遷移標記）
     techniques: {
@@ -335,15 +340,19 @@ export function normalizeCareerPlayer(player) {
 // ＝W2 固定槽位同序，逐位等價——見 tests/lineup 等價閘）。未給名冊＝快速比賽相容
 // （主角塞主攻手槽、其餘預設隊員）。
 export function careerTeams(player, opponentDef = null, rosterMembers = null, lineup = null) {
+  // W3(P4) 轉位後守衛只鎖身分（A 隊 A2），不鎖位置——玩家佔哪個槽由 lineup／
+  // currentRole 決定（出道＝OH 槽；轉位＝新槽，見 applyPositionChange）
   if (player?.id !== 'A2' || player?.teamId !== 'A') {
-    throw new Error('careerTeams：生涯主角必須是 A 隊 A2（主攻手槽）');
+    throw new Error('careerTeams：生涯主角必須是 A 隊 A2');
   }
   normalizeCareerPlayer(player);
   const teams = createDefaultTeams();
   if (rosterMembers) {
     // starters 為 null（建檔中間態，schema 放行）亦回退預設——防未經 ensureStarterRoster
     // 的呼叫端把 null 序餵進 effectiveOrder 崩比賽
-    const lu = (lineup?.starters == null) ? defaultLineup(rosterMembers) : lineup;
+    const lu = (lineup?.starters == null)
+      ? defaultLineup(rosterMembers, player.id, player.currentRole ?? 'outside')
+      : lineup;
     const order = effectiveOrder(lu.starters, lu.rotationStart);
     // W6.1 隊友魚躍鏡像（拍板 07-24 Q2-A）：sim Player 預設 techniques 全開，
     // 隊友的 dive 改鏡像主角解鎖——「對手教主角→主角教全隊」敘事機制化：主角沒學會前
@@ -366,8 +375,10 @@ export function careerTeams(player, opponentDef = null, rosterMembers = null, li
       });
     });
     // 主控球員必在先發（排球鐵律：玩家恆在場上）——缺 A2 會建出無主控的隊，
-    // sim 以 PLAYER_ID='A2' 找不到人（操控/trustFloor/鏡頭全失據）。W4 fieldIds>6 才可能觸發
-    if (!teams.A.some((p) => p.id === player.id)) {
+    // sim 以 PLAYER_ID='A2' 找不到人（操控/trustFloor/鏡頭全失據）。
+    // W3(P4) 玩家=L 例外：不入先發、由 careerMatchSetup 以 liberos 通道入場
+    // （applyLiberoSwaps 後排替換；前排輪次在場外＝縮時偵察視角）
+    if (player.currentRole !== 'libero' && !teams.A.some((p) => p.id === player.id)) {
       throw new Error('careerTeams：先發未含主控球員 A2');
     }
   } else {
@@ -439,12 +450,19 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
     : undefined;
   const members = roster?.members ?? null;
   // 我方自由人：結構欄位（id/身高/trust/role）恆由 buildLibero 公式供給（D3 不動），
-  // lineup.libero 指定的名冊成員存在時只覆寫 name＋attributes（承接自動成長後的數值）
-  const liberoA = buildLibero('A', '小守');
-  const al = members?.find((m) => m.id === (lineup?.libero ?? DEFAULT_LIBERO_ID));
-  if (al) {
-    liberoA.name = al.name;
-    liberoA.attributes = { ...liberoA.attributes, ...al.attributes };
+  // lineup.libero 指定的名冊成員存在時只覆寫 name＋attributes（承接自動成長後的數值）。
+  // W3(P4) 玩家=L：lineup.libero===玩家 id＝玩家本人穿異色球衣——直接用玩家物件
+  // （真實身高/屬性/技術；小守讓位，見轉位事件）
+  let liberoA;
+  if (lineup?.libero === player.id && player.currentRole === 'libero') {
+    liberoA = player;
+  } else {
+    liberoA = buildLibero('A', '小守');
+    const al = members?.find((m) => m.id === (lineup?.libero ?? DEFAULT_LIBERO_ID));
+    if (al) {
+      liberoA.name = al.name;
+      liberoA.attributes = { ...liberoA.attributes, ...al.attributes };
+    }
   }
   // W6.1 隊友魚躍鏡像：自由人同全隊（防守核心也是「主角教全隊」的一員；
   // 未解鎖前 standard 路徑本就被 diveRate=0 擋、此處補救噴必撲路徑的一致性）
@@ -452,7 +470,9 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
   // W6 賽中換人：板凳＝名冊中非先發、非現任自由人、非 libero 角色的成員
   // （libero 角色只走自由人體系進場；對手無板凳＝B3 拍板不做）
   const lu = members
-    ? ((lineup?.starters == null) ? defaultLineup(members) : lineup)
+    ? ((lineup?.starters == null)
+      ? defaultLineup(members, player.id, player.currentRole ?? 'outside')
+      : lineup)
     : null;
   const starterSet = new Set(lu ? effectiveOrder(lu.starters, lu.rotationStart) : []);
   const benchA = members

@@ -5,6 +5,7 @@ import {
   recordResult, mergeScouting, markPending,
 } from '../career/careerState.js';
 import { matchStatsFor, growthPointsFor } from '../career/growth.js';
+import { boxScoreLFor } from '../career/boxScoreL.js';
 import { applyRosterGrowth } from '../career/roster.js';
 import { accrueRecruitProgress } from '../career/recruitment.js';
 
@@ -23,6 +24,11 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
   const s = game.match.score;
   const won = game.match.winner === myTeam;
   const stats = matchStatsFor(game.events, playerId, myTeam);
+  // W3(P4) L 三欄契約（附錄 A4④）：玩家=自由人＝逐場記帳（起球/助攻一傳/續命）；
+  // 數值頁 W4 消費——契約先立、帳先記（Q9 事件流攔截原則）
+  if (game.players[playerId].currentRole === 'libero') {
+    stats.liberoBox = boxScoreLFor(game.events, playerId);
+  }
   // W4 招募進度的重入防線：讀存檔現況判斷本場是否已結算過（recordResult 靠 results
   // 冪等，但招募 progress 是累加器——重入會重複累加，要在寫入前擋）
   const settledBefore = (careerCtx.store.loadCareer?.() ?? careerCtx.career)

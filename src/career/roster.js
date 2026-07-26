@@ -149,14 +149,16 @@ function backfillNames(members) {
 function ensureLineup(store, members) {
   const lineup = store.loadLineup();
   if (!lineup) return;
+  // W3(P4) 轉位：預設陣與對位檢查一律吃玩家現任位置（轉位後舊陣被判非法→重置新對位）
+  const playerRole = store.loadPlayer()?.currentRole ?? 'outside';
   if (lineup.starters == null) {
-    store.saveLineup(defaultLineup(members));
+    store.saveLineup(defaultLineup(members, 'A2', playerRole));
     return;
   }
-  const ok = validateLineup(lineup, members, 'A2').valid // 主角恆 A2（main.js PLAYER_ID）
-    && checkRoleStructure(lineup.starters, members, 'A2').legal;
+  const ok = validateLineup(lineup, members, 'A2', playerRole).valid // 主角恆 A2（main.js PLAYER_ID）
+    && checkRoleStructure(lineup.starters, members, 'A2', playerRole).legal;
   if (!ok) {
-    const fresh = defaultLineup(members);
+    const fresh = defaultLineup(members, 'A2', playerRole);
     const keepTrust = lineup.trust && typeof lineup.trust === 'object' ? lineup.trust : fresh.trust;
     store.saveLineup({ ...fresh, trust: keepTrust });
   }

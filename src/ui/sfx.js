@@ -95,6 +95,33 @@ export function createSfx() {
     src.start(t);
   }
 
+  // W3(P4) L 魚躍演出（附錄 A4①）：觀眾倒抽氣→爆歡呼——群眾底噪瞬間收斂（屏息）、
+  // 0.45 秒後大聲量 cheer、底噪回常態。合成範式同 cheer（零音檔架構）
+  function gaspCheer() {
+    if (!ensure()) return;
+    const t = ctx.currentTime;
+    if (crowdGain) {
+      crowdGain.gain.setTargetAtTime(0.006, t, 0.05); // 屏息
+      crowdGain.gain.setTargetAtTime(0.05, t + 0.9, 0.4); // 回常態
+    }
+    const len = Math.floor(ctx.sampleRate * 1.6);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1100;
+    bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.34, t + 0.62);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
+    src.connect(bp).connect(g).connect(ctx.destination);
+    src.start(t + 0.45);
+  }
+
   // 觸網音：中低頻悶「啪」帶餘震（配網面波動視覺）
   function netHit(power = 1) {
     if (!ensure()) return;
@@ -231,6 +258,7 @@ export function createSfx() {
     setCrowdLevel,
     netHit,
     cheer, // W7 C3②：COMEBACK_SPARK 觀眾爆聲外呼——matchLoop 直接加碼一次（獨立於 DEAD_BALL 自動歡呼）
+    gaspCheer, // W3(P4) L 魚躍演出：倒抽氣→爆歡呼
     onEvents(events, opts = {}) {
       for (const e of events) {
         if (e.type === 'SERVE') crack(0.7);

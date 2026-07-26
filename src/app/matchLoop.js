@@ -13,6 +13,8 @@ import {
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
+import { setPanelTitle, CALL_BALL_AT } from '../input/setOptions.js';
+import { mbPanelTitle } from '../input/blockRead.js';
 import { serverId } from '../sim/match.js';
 import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
@@ -486,13 +488,21 @@ function runReplayFrame(s, now, delta) {
   }
 }
 
-// 簡化模式決策窗：進攻選區/發球選區面板＋攔網防守窗；回傳本幀是否放慢時間
+// 簡化模式決策窗：進攻選區/發球選區面板＋攔網防守窗；回傳放慢倍率（0＝不放慢）
 function updateDecisions(s, now) {
-  if (!s.config.simpleMode) return false;
+  if (!s.config.simpleMode) return 0;
   const { game, aiState, gates, stage } = s;
   const { controls, panel, rig, sfx, floatText } = stage;
+  // W3 L：digBias 生命週期——我方第一觸之後/死球＝指令歸零（一次指揮只管一次對手
+  // 攻擊）。注意：攻擊過網瞬間 possession 即翻到我方（touches=0、profile 仍 spike）
+  // ——此時指令必須還活著（Perfect 窗在我方起球當下才結算），不得提前清
+  if (aiState.digBias && (game.phase !== 'rally'
+    || (game.rally.possession === game.players[s.controlledId]?.teamId
+      && game.rally.touches >= 1))) {
+    aiState.digBias = null;
+  }
   // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
-  if (!onCourt(game, s.controlledId)) { panel.hide(); return false; }
+  if (!onCourt(game, s.controlledId)) { panel.hide(); return 0; }
   // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
   rig.setAttackView(controls.isAttackMoment(game));
   // 技術閘門：吊球未解鎖＝面板無吊球；後排 pipe 未解鎖＝後排不彈面板（保底出手照舊）
@@ -505,12 +515,44 @@ function updateDecisions(s, now) {
   const attackDeciding =
     !!zones && (gates.canPipe || !meBackRow) &&
     game.ball.vy < 0 && game.ball.y > 2.0 && !controls.attackPending();
+  // ①b 二傳分配決策（W3 S 玩法）：一傳起球、這球歸我舉、尚未分配——
+  // 選項池＝一傳品質分支（setOptions 純函式）；窗尾（球墜破 1.8m）未選＝
+  // 二傳保底自動舉給 AI 建議攻擊手（matchControls collect 既有路徑）
+  const setZones = controls.setOptions(game);
+  const setDeciding =
+    !!setZones && setZones.length > 0 &&
+    game.ball.vy < 0 && game.ball.y > 1.8 && !controls.setPending();
+  // ①c MB 攔網讀心（W3）：對手舉球出手（touches===2 起）、我＝前排 MB、尚未選——
+  // 線索面板（一傳品質＋助跑動向，誠實非全知）；球墜近對手扣點（y<2.3）＝來不及
+  // 重站位，窗關（未選＝就位自動跳攔照舊）
+  const mbRead = controls.mbOptions(game, aiState);
+  const mbDeciding = !!mbRead && !controls.mbPending() &&
+    !(game.ball.vy < 0 && game.ball.y < 2.3);
+  // ①e L 防守指揮（W3 附錄 A1/A2）：對手舉球出手、我＝場上 L、尚未選——
+  // 0.6× 放慢（比 OH 0.4× 短）、預設高亮 AI 建議、1 秒未動＝自動照建議
+  const digRead = controls.digOptions(game, aiState);
+  const digDeciding = !!digRead && !controls.digPending() &&
+    !(game.ball.vy < 0 && game.ball.y < 2.3);
+  if (digDeciding) {
+    if (s.digWindowSince < 0 || s.digWindowSince === undefined) s.digWindowSince = now;
+    if (now - s.digWindowSince > 1000) {
+      // A2 快選：1 秒不動＝自動照 AI 建議執行（點選＝改判走 panel 回呼同一入口）
+      controls.chooseDig();
+      aiState.digBias = {
+        team: game.players[s.controlledId].teamId,
+        choice: digRead.suggestion,
+        override: false,
+      };
+    }
+  } else {
+    s.digWindowSince = -1;
+  }
   // ②攔網決策：對方第三擊將至、我在前排；自由模式收面板（全手動讀線），
   // 但慢速窗與攔網第一視角照給——時間留給你自己站位抓時機
   const defendMoment =
     controls.isDefendMoment(game, aiState) &&
     game.ball.vy < 0 && game.ball.y > 2.0;
-  rig.setDefendView(defendMoment);
+  rig.setDefendView(defendMoment || mbDeciding);
   // ③發球決策：發球員是受控玩家本人（AI 隊友發球自動）、哨音已過、尚未選
   const serveDeciding =
     game.phase === 'serve' && serverId(game.match) === s.controlledId &&
@@ -523,7 +565,9 @@ function updateDecisions(s, now) {
   }
   if (game.phase !== 'serve') s.whistledServe = false;
 
-  const deciding = attackDeciding || defendMoment; // 攻/防決策窗＝時間放慢
+  // 攻/防/分配/讀舉球決策窗＝0.4×；L 防守指揮＝0.6×（附錄 A2）
+  const deciding = (attackDeciding || defendMoment || setDeciding || mbDeciding) ? 0.4
+    : (digDeciding && !controls.digPending() ? 0.6 : 0);
   // 讀攔網 slow 檔：決策窗開了 0.6 秒才上色（讀得慢）；instant 即時；none 恆中性
   if (attackDeciding) {
     if (s.attackDecidingSince < 0) s.attackDecidingSince = now;
@@ -550,6 +594,66 @@ function updateDecisions(s, now) {
         s.feintsUsedThisMatch += 1;
         controls.chooseAttackFake(fromIt.zone, toIt.zone);
         floatText.show('🎭 假動作!', '#ffd166', 2000);
+      },
+    );
+  } else if (mbDeciding) {
+    // W3 MB 讀心面板：三翼×（等高球/搶快）六選項；🏃＝該翼攻擊手正在助跑（誠實觀察）。
+    // 搶快＝橘色（高風險高報酬語彙同跳發）
+    panel.show(
+      mbPanelTitle(mbRead.tier),
+      mbRead.lanes.flatMap((l) => {
+        const tell = l.approaching ? '🏃' : '';
+        return [
+          { key: l.key, label: `${l.label}${tell}`, color: 'neutral', zone: l, early: false },
+          { key: `${l.key}-q`, label: `${l.label.slice(1)}搶快${tell}`, color: 'orange', zone: l, early: true },
+        ];
+      }),
+      (it) => { controls.chooseMbBlock(it.zone, it.early); },
+    );
+  } else if (digDeciding && !controls.digPending()) {
+    // W3 L 指揮面板（附錄 A2）：AI 建議預設高亮（綠）、其餘中性；標題帶習慣標記線索
+    // （A3② 縮時偵察的產出——回場面板顯示）；點選＝改判（override 旗標供演出/數據）
+    panel.show(
+      digRead.markText ? `指揮後排！${digRead.markText}` : '指揮後排！',
+      digRead.choices.map((c) => ({
+        key: c.key,
+        label: c.key === digRead.suggestion ? `${c.label}◎` : c.label,
+        color: c.key === digRead.suggestion ? 'green' : 'neutral',
+        zone: c,
+      })),
+      (it) => {
+        controls.chooseDig();
+        aiState.digBias = {
+          team: game.players[s.controlledId].teamId,
+          choice: it.zone.key,
+          override: it.zone.key !== digRead.suggestion,
+        };
+      },
+    );
+  } else if (setDeciding) {
+    // W3 S 分配面板：標題誠實播報一傳品質；猶豫選項變暗＋標註（甲2 C 案：可選）。
+    // 高 trust 隊友開窗喊聲要球（表現層；每個 flight 一次）
+    if (s.calledBallFlight !== game.rally.flightId) {
+      s.calledBallFlight = game.rally.flightId;
+      const loud = setZones.filter((z) => z.trust >= CALL_BALL_AT)
+        .sort((a, b) => b.trust - a.trust)[0];
+      if (loud) floatText.show(`${loud.name}：「這球給我！」`, '#7ee787', 1400);
+    }
+    panel.show(
+      setPanelTitle(setZones[0].tier),
+      setZones.map((z) => ({
+        key: z.key,
+        label: z.hesitant ? `${z.label}·猶豫` : z.label,
+        color: z.hesitant ? 'dim' : 'neutral',
+        zone: z,
+      })),
+      (it) => {
+        controls.chooseSet(it.zone);
+        // 決策注入 AI 協調層：攻擊手改為玩家選定——第三擊呼叫鎖定與一氣呵成助跑
+        // （ensureFlightPlan touches===2 讀 attackerId）沿用既有機制
+        aiState.attackerId = it.zone.pid;
+        aiState.attackKind = it.zone.kind;
+        if (it.zone.hesitant) floatText.show(`${it.zone.name}猶豫了一下…`, '#c8d6eb', 1400);
       },
     );
   } else if (serveDeciding) {
@@ -647,12 +751,30 @@ function applyEvents(s, frameEvents, now) {
       s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
       if ((e.power ?? 1) >= 0.7) s.slowUntil = now + 450; // 重扣＝定格接慢動作
       s.shake = Math.max(s.shake, 0.12);
+    } else if (e.type === 'TOUCH' && e.playerId === s.controlledId && e.touches === 1
+        && stage.controls.consumeDigHeroSignal?.()) {
+      // W3(P4) L 魚躍演出（附錄 A4①）：改判成功/Perfect 撲必死球的起球確認——
+      // 慢動作＋低機位貼地鏡頭＋倒抽氣→爆歡呼；隊友回饋（A4③）：當屆 S 專屬台詞
+      // （45 秒節流——前輩的關心不是罐頭）。塵土粒子＝試玩債（快照記錄）
+      s.slowUntil = now + 650;
+      s.diveCamUntil = now + 850;
+      stage.sfx.gaspCheer?.();
+      stage.floatText.show('⚡ 神救球！', '#6ee7ff', 1600);
+      if (!s.liberoPraiseAt || now - s.liberoPraiseAt > 45000) {
+        s.liberoPraiseAt = now;
+        const setter = Object.values(game.players)
+          .find((p) => p.teamId === e.team && p.currentRole === 'setter');
+        if (setter) {
+          stage.floatText.show(`${setter.name}：「有你在後面，我敢舉快攻！」`, '#7ee787', 2000);
+        }
+      }
     } else if (e.type === 'BLOCK_TOUCH') {
       s.hitStopUntil = now + 60;
       s.shake = Math.max(s.shake, 0.2);
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
+      stage.controls.consumeDigHeroSignal?.(); // W3 L：丟棄未兌現的演出武裝（撲空）
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
@@ -856,13 +978,27 @@ function frameStep(s, now) {
   // 點完最後一句才恢復。教練選項對話框刻意不凍（倒數是 sim tick 驅動、有提早開賽鈕）
   if (stage.teachDialog?.isOpen?.()) delta = 0;
 
+  // W3(P4) L 魚躍鏡頭（時間窗驅動）＋A3③ 替換即儀式（換入場輕演出）
+  stage.rig.setDiveCam(now < (s.diveCamUntil ?? 0));
+  const meNow = game.players[s.controlledId];
+  if (meNow?.currentRole === 'libero') {
+    const onNow = onCourt(game, s.controlledId);
+    if (onNow && s.lWasOnCourt === false) {
+      stage.floatText.show(`🔄 異色球衣——${meNow.name} 進場`, '#6ee7ff', 1400);
+      stage.sfx.cheer?.(0.5);
+    }
+    s.lWasOnCourt = onNow;
+  }
+
   // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區
   const deciding = updateDecisions(s, now);
 
   // 擊球定格（hit-stop）：短暫凍結模擬推進、畫面照跑——打擊的「頓」感
   if (now < s.hitStopUntil) delta = 0;
-  // 進攻/防守決策窗＝放慢（時間膨脹只作用推進率，決定論不碰）
-  else if (deciding) { delta *= 0.4; s.slowEaseFrom = now; }
+  // 進攻/防守決策窗＝放慢（時間膨脹只作用推進率，決定論不碰）；
+  // W3：updateDecisions 回傳放慢倍率（0.4＝攻防/分配/讀舉球、0.6＝L 防守指揮——
+  // 附錄 A2：比 OH 攻擊 0.4× 短）
+  else if (deciding) { delta *= deciding; s.slowEaseFrom = now; }
   // 決策窗結束的緩出：0.35s 內 0.4→1.0 漸變——瞬間回速會讓攔網/出手看起來慢半拍
   else if (now - s.slowEaseFrom < 350) delta *= 0.4 + 0.6 * ((now - s.slowEaseFrom) / 350);
   // 重扣慢動作：定格後 0.4 秒半速

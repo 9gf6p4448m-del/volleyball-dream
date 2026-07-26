@@ -29,6 +29,8 @@ function fieldMemberIds(members) {
 const SLOT_ROLES = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
 export function defaultStarters(members, playerId = 'A2', playerRole = 'outside') {
   const queues = { setter: [], outside: [], middle: [], opposite: [] };
+  // W3(P4) 玩家=L 特例：自由人不入先發（FIVB）——玩家不進任何佇列，
+  // 六席全由名冊隊友出（缺額由轉位時的補位員機制補齊）
   if (queues[playerRole]) queues[playerRole].push(playerId);
   for (const m of members ?? []) if (queues[m.role]) queues[m.role].push(m.id);
   const used = new Set();
@@ -41,9 +43,12 @@ export function defaultStarters(members, playerId = 'A2', playerRole = 'outside'
     }
   }
   // 防呆：某角色缺員（正常名冊結構上不會發生）→ 以未用場上球員遞補保長度 6，
-  // 讓 validateLineup 用具體理由擋、而不是在建隊當下崩
+  // 讓 validateLineup 用具體理由擋、而不是在建隊當下崩（玩家=L 不得被防呆塞回先發）
   if (starters.length < LINEUP_SIZE) {
-    for (const id of [playerId, ...fieldMemberIds(members)]) {
+    const pool = playerRole === 'libero'
+      ? fieldMemberIds(members)
+      : [playerId, ...fieldMemberIds(members)];
+    for (const id of pool) {
       if (starters.length >= LINEUP_SIZE) break;
       if (!used.has(id)) {
         used.add(id);
@@ -60,7 +65,10 @@ export function defaultStarters(members, playerId = 'A2', playerRole = 'outside'
 export function defaultLineup(members, playerId = 'A2', playerRole = 'outside') {
   const trust = {};
   for (const id of fieldMemberIds(members)) trust[id] = DEFAULT_TEAMMATE_TRUST;
-  const libero = (members ?? []).find((m) => m.role === 'libero')?.id ?? DEFAULT_LIBERO_ID;
+  // W3(P4) 玩家=L：異色球衣是玩家的——lineup.libero＝玩家 id（小守讓位，見轉位事件）
+  const libero = playerRole === 'libero'
+    ? playerId
+    : (members ?? []).find((m) => m.role === 'libero')?.id ?? DEFAULT_LIBERO_ID;
   return {
     starters: defaultStarters(members, playerId, playerRole),
     libero,
@@ -72,12 +80,16 @@ export function defaultLineup(members, playerId = 'A2', playerRole = 'outside') 
 // 結構驗證（schema 匯入路徑＋UI 排陣即時用）：長度 6、無重複、id 為合法場上球員
 // （非自由人隊友 ∪ 玩家）、自由人不排入先發、rotationStart 為 0-5 整數。
 // 回傳 { valid, errors:[] }（starters 須非 null——null＝建檔中間態，呼叫端自行跳過）。
-export function validateLineup(lineup, members, playerId = null) {
+export function validateLineup(lineup, members, playerId = null, playerRole = 'outside') {
   const errors = [];
   const { starters, libero, rotationStart } = lineup ?? {};
+  const playerIsLibero = playerRole === 'libero';
   const fieldIds = new Set(fieldMemberIds(members));
-  if (playerId) fieldIds.add(playerId);
+  if (playerId && !playerIsLibero) fieldIds.add(playerId);
   const liberoIds = new Set((members ?? []).filter((m) => m.role === 'libero').map((m) => m.id));
+  // W3(P4) 玩家=L：合法自由人＝玩家本人（小守讓位不再是現任；名冊自由人仍可為
+  // 板凳自由人語意——W4 若做輪替再議，本週只認玩家）
+  if (playerId && playerIsLibero) liberoIds.add(playerId);
 
   if (!Array.isArray(starters) || starters.length !== LINEUP_SIZE) {
     errors.push(`先發須為 ${LINEUP_SIZE} 人`);
@@ -86,12 +98,14 @@ export function validateLineup(lineup, members, playerId = null) {
     for (const id of starters) {
       if (!fieldIds.has(id)) errors.push(`先發含非法球員：${id}`);
     }
-    // 主控球員必在先發（排球鐵律：玩家恆在場上）——W3 場上恰 6 人必含 A2，此檢查為
-    // W4 fieldIds>6 時的防線，擋下「6 名隊友、無主控」的非法排列
-    if (playerId && !starters.includes(playerId)) errors.push('先發須含主控球員');
+    // 主控球員必在先發（排球鐵律：玩家恆在場上）——玩家=L 例外：不入先發、
+    // 走 lineup.libero＋applyLiberoSwaps（後排替換進場）
+    if (playerId && !playerIsLibero && !starters.includes(playerId)) errors.push('先發須含主控球員');
     if (libero != null && starters.includes(libero)) errors.push('自由人不可排入先發');
   }
   if (libero != null && !liberoIds.has(libero)) errors.push(`${libero} 非名冊自由人`);
+  // 玩家=L：lineup.libero 必須是玩家（異色球衣是玩家的——排陣不得把玩家晾在場外）
+  if (playerId && playerIsLibero && libero !== playerId) errors.push('玩家為自由人時 libero 須為玩家');
   if (!Number.isInteger(rotationStart) || rotationStart < 0 || rotationStart > 5) {
     errors.push('起始輪轉須為 0-5 整數');
   }
