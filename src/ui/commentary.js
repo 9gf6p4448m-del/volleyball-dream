@@ -228,6 +228,16 @@ export function createCommentary(opponentDef = null, revenge = []) {
           const mine = e.team === game.players[controlledId]?.teamId;
           setBeat(mine ? `${label}請求暫停——穩住呼吸，重新來` : `${label}喊了暫停——他們被打疼了`,
             now, STREAK_TTL, LEVEL_MAJOR, e.team);
+        } else if (e.type === 'TIMEOUT_BOOST') {
+          // W8（07-26 拍板）：暫停教練選項公開——對手選了什麼是可據以應對的情報
+          // （穩住＝他們在回血、長球磨他更有利／燃起來＝要衝氣勢，先穩住一傳）；
+          // 我方自選有浮字＋戰術板，播報只報對手那邊，不重複蓋自家台詞
+          const mineB = e.team === game.players[controlledId]?.teamId;
+          if (!mineB) {
+            setBeat(e.boost === 'calm'
+              ? `${oppName}選擇調整呼吸——他們在回血`
+              : `${oppName}在場邊喊聲——他們要衝一波`, now, STREAK_TTL, LEVEL_MAJOR, e.team);
+          }
         }
       }
     },

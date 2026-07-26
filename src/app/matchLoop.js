@@ -8,7 +8,7 @@ import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
 import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout, TUNING,
 } from '../sim/game.js';
-import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../sim/ai.js';
+import { createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
@@ -661,14 +661,19 @@ function applyEvents(s, frameEvents, now) {
       }
       // W7 B3：對手 AI 暫停判準（死球節拍檢查，成立才喊——被連 4 分＋死球＋有額度）；
       // W7.1：對面集合帶位＋倒數條（同我方一套事實源）＋提示「趁機換人」（換人窗口本來就開著）；
-      // AI 對手無教練選項（拍板：維持 sim 現況，B 已有 0.6 慢耗優勢）
+      // W8（07-26 拍板，推翻 W7「AI 無教練選項」）：對手也選 calm/fire——情境決定論
+      // （ai.js aiTimeoutBoost），走與我方同一條 sim 路徑；選擇公開（戰術行動非幕後
+      // 平衡）＝對面戰術板畫出＋播報告知，玩家可據以應對
       if (aiTimeoutWanted(game, 'B') && applyTimeout(game, { team: 'B' }).ok) {
         s.timeoutHuddleTeam = 'B';
         cards.push({ pri: 25, text: '對方喊暫停——趁機換人 ⚙', color: '#ff9d7a', dur: 1800 });
-        stage.commentary?.onEvents(
-          [{ type: 'TIMEOUT', tick: game.tick, team: 'B', remaining: game.timeouts.B.remaining }],
-          game, s.aiState, now, s.controlledId,
-        );
+        const feed = [{ type: 'TIMEOUT', tick: game.tick, team: 'B', remaining: game.timeouts.B.remaining }];
+        const bBoost = aiTimeoutBoost(game, 'B');
+        if (applyTimeoutBoost(game, { team: 'B', boost: bBoost }).ok) {
+          stage.matchView.setHuddlePlay('B', bBoost);
+          feed.push({ type: 'TIMEOUT_BOOST', tick: game.tick, team: 'B', boost: bBoost });
+        }
+        stage.commentary?.onEvents(feed, game, s.aiState, now, s.controlledId);
       }
     } else if (e.type === 'MOMENTUM') {
       // W7.1 #4①：滿檔進入一次性字卡（判定在 heroCards.js 純函式，node 可直測）

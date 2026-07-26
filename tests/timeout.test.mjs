@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import {
   createGame, stepGame, applyTimeout, applyTimeoutBoost, resumeFromTimeout, TUNING,
 } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../src/sim/ai.js';
+import {
+  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost,
+} from '../src/sim/ai.js';
 import { STAMINA, attrRecovMul } from '../src/sim/stamina.js';
 
 function playUntil(g, ai, pred, maxTicks = 200000) {
@@ -23,6 +25,33 @@ test('applyTimeout：死球窗合法喊——額度/事件/死球延長全同步
   assert.equal(g.timeouts.A.remaining, TUNING.TIMEOUTS_PER_SET - 1);
   assert.ok(g.events.some((e) => e.type === 'TIMEOUT' && e.team === 'A'));
   assert.ok(g.serveReadyTick >= g.tick + TUNING.TIMEOUT_DEAD_TICKS, '死球時間未延長');
+});
+
+test('W8 aiTimeoutBoost：情境決定論——體力低選穩住、否則衝氣勢；無氣勢恆穩住', () => {
+  const g = createGame({
+    seed: 21, setTarget: 15, momentum: true, stamina: { A: {}, B: {} },
+  });
+  assert.equal(aiTimeoutBoost(g, 'B'), 'fire', '滿體力＝衝氣勢');
+  for (const id of g.match.rotations.B) g.stamina[id] = STAMINA.TIER1_BELOW - 0.05;
+  assert.equal(aiTimeoutBoost(g, 'B'), 'calm', '場上均值跌破輕度門檻＝先回血');
+  assert.equal(aiTimeoutBoost(g, 'A'), 'fire', '判定分隊獨立（A 仍滿體力）');
+  const noMo = createGame({ seed: 21, setTarget: 15, stamina: { A: {}, B: {} } });
+  assert.equal(aiTimeoutBoost(noMo, 'B'), 'calm', '氣勢未啟用＝fire 無效果，恆穩住');
+  // 決定論：同狀態多次呼叫同結果（零 rng）
+  assert.equal(aiTimeoutBoost(g, 'B'), aiTimeoutBoost(g, 'B'));
+});
+
+test('W8 對手 boost 走同一條 sim 路徑：fire 推 B 側氣勢、calm 回 B 隊體力', () => {
+  const g = createGame({
+    seed: 22, setTarget: 15, momentum: true, stamina: { A: {}, B: {} },
+  });
+  const ai = createAiState();
+  playUntil(g, ai, (s) => s.match.score.A + s.match.score.B >= 1 && s.phase === 'serve');
+  assert.equal(applyTimeout(g, { team: 'B' }).ok, true);
+  const prev = g.momentum.value;
+  assert.equal(applyTimeoutBoost(g, { team: 'B', boost: 'fire' }).ok, true);
+  assert.equal(g.momentum.value, prev - TUNING.TIMEOUT_FIRE_STEP, 'B 的 fire＝往負向（B 側）推');
+  assert.ok(g.events.some((e) => e.type === 'TIMEOUT_BOOST' && e.team === 'B' && e.boost === 'fire'));
 });
 
 test('applyTimeout：驗證閘——rally 中擋下、額度用盡擋下', () => {

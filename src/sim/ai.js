@@ -13,6 +13,7 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
+import { STAMINA } from './stamina.js';
 
 const AI = {
   SERVE_DELAY: 30,        // 可發球後再等的 tick 數（模擬哨音到發球的節奏）
@@ -43,6 +44,22 @@ export function aiTimeoutWanted(game, team) {
   if ((game.timeouts?.[team]?.remaining ?? 0) <= 0) return false;
   const ps = game.pointStreak;
   return !!ps && ps.team === otherTeam(team) && ps.n >= AI.TIMEOUT_STREAK;
+}
+
+// W8（07-26 Sawmah 拍板：對手暫停也該有教練選項——原本只有我方能選＝對手暫停是
+// 空包彈）：AI 選項＝情境決定論（零 rng，可讀＝真情報）——
+// ①場上均值跌破輕度門檻＝先回血（穩住）②否則衝氣勢（燃起來）；
+// 氣勢未啟用時恆穩住（fire 無效果時不浪費該次選擇）。呼叫端：matchLoop/治具
+export function aiTimeoutBoost(game, team) {
+  if (!game.momentum) return 'calm';
+  if (game.stamina) {
+    const rot = game.match.rotations[team] ?? [];
+    const avg = rot.length
+      ? rot.reduce((s, id) => s + (game.stamina[id] ?? 1), 0) / rot.length
+      : 1;
+    if (avg < STAMINA.TIER1_BELOW) return 'calm';
+  }
+  return 'fire';
 }
 
 // 每隊 AI 風格參數：生涯對手參數檔經 createGame({ aiProfiles }) 注入；

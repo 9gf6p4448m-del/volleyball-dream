@@ -16,8 +16,12 @@ import {
   buildRecruitMember, RECRUIT_TRUST, RECRUIT_CONDS,
   accrueRecruitProgress, conditionMet, nextRecruitId,
 } from '../src/career/recruitment.js';
-import { createGame, stepGame, applySubstitution, applyTimeout, TUNING } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents, aiTimeoutWanted } from '../src/sim/ai.js';
+import {
+  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, TUNING,
+} from '../src/sim/game.js';
+import {
+  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost,
+} from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 
 const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
@@ -69,8 +73,11 @@ function playMatch(setup) {
     if (g.phase === 'serve') {
       const d = g.match.score.B - g.match.score.A;
       if (d > maxDeficit) maxDeficit = d;
-      // 對手 AI 暫停（生涯實況鏡像：matchLoop 為 B 隊喊）——W7 臂才開，基準臂零擾動
-      if (W7_ON && aiTimeoutWanted(g, 'B')) applyTimeout(g, { team: 'B' });
+      // 對手 AI 暫停（生涯實況鏡像：matchLoop 為 B 隊喊）——W7 臂才開，基準臂零擾動；
+      // W8：對手教練選項同步鏡像（matchLoop 同一顆 aiTimeoutBoost）
+      if (W7_ON && aiTimeoutWanted(g, 'B') && applyTimeout(g, { team: 'B' }).ok) {
+        applyTimeoutBoost(g, { team: 'B', boost: aiTimeoutBoost(g, 'B') });
+      }
       if (USE_MANAGE) autoManage(g);
     }
   }
