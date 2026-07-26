@@ -20,7 +20,7 @@ import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, TUNING,
 } from '../src/sim/game.js';
 import {
-  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost,
+  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
 } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 
@@ -63,8 +63,14 @@ function playMatch(setup) {
     ...(setup.scoutRead ? { scoutRead: setup.scoutRead } : {}),
     ...(USE_STAMINA ? { stamina: { A: {}, B: { costMul: 0.6, heavyExempt: true } } } : {}),
     ...(USE_MOMENTUM ? { momentum: true } : {}),
-    // 板凳只在管理臂帶入（帶而不換＝零擾動已有測試背書；不帶＝基準臂逐位不變）
-    ...(USE_MANAGE && setup.benches?.A?.length ? { benches: { A: setup.benches.A } } : {}),
+    // 板凳只在管理臂帶入（帶而不換＝零擾動已有測試背書；不帶＝基準臂逐位不變）。
+    // W1(P4)：對手板凳鏡像生涯——體力臂即帶（對手疲勞換人只在體力開時有意義）
+    ...(USE_MANAGE || (USE_STAMINA && setup.benches?.B?.length) ? {
+      benches: {
+        ...(USE_MANAGE && setup.benches?.A?.length ? { A: setup.benches.A } : {}),
+        ...(USE_STAMINA && setup.benches?.B?.length ? { B: setup.benches.B } : {}),
+      },
+    } : {}),
   });
   const ai = createAiState();
   let maxDeficit = 0; // E1 雪球哨兵：本場最大落後分差（A 視角）
@@ -77,6 +83,11 @@ function playMatch(setup) {
       // W8：對手教練選項同步鏡像（matchLoop 同一顆 aiTimeoutBoost）
       if (W7_ON && aiTimeoutWanted(g, 'B') && applyTimeout(g, { team: 'B' }).ok) {
         applyTimeoutBoost(g, { team: 'B', boost: aiTimeoutBoost(g, 'B') });
+      }
+      // W1(P4)：對手疲勞換人鏡像（matchLoop 同一顆判準；無體力/無板凳＝恆 null 零擾動）
+      if (W7_ON) {
+        const oppSub = aiSubstitutionWanted(g, 'B');
+        if (oppSub) applySubstitution(g, { team: 'B', ...oppSub });
       }
       if (USE_MANAGE) autoManage(g);
     }

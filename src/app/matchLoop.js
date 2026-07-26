@@ -8,7 +8,9 @@ import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
 import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout, TUNING,
 } from '../sim/game.js';
-import { createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost } from '../sim/ai.js';
+import {
+  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
+} from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
@@ -680,6 +682,18 @@ function applyEvents(s, frameEvents, now) {
           s.pendingOppBoost = bBoost; // 散圈回場時再浮字（見下方暫停窗收尾）
         }
         stage.commentary?.onEvents(feed, game, s.aiState, now, s.controlledId);
+      }
+      // W1(P4) A1 對手疲勞換人：判準在 ai.js（決定論）、sim 唯一寫入路徑
+      // applySubstitution（與我方同一條）；播報一句＝字卡（沿對手暫停的浮字語言，
+      // 體力標籤變色＋迷你條已雙方對稱——換誰下去玩家看得出為什麼）
+      const oppSub = aiSubstitutionWanted(game, 'B');
+      if (oppSub && applySubstitution(game, { team: 'B', ...oppSub }).ok) {
+        const outName = game.players[oppSub.outId]?.name ?? '';
+        const inName = game.players[oppSub.inId]?.name ?? '';
+        cards.push({
+          pri: 20, text: `對方換人——${outName} 下，${inName} 上`,
+          color: '#ff9d7a', dur: 1800,
+        });
       }
     } else if (e.type === 'MOMENTUM') {
       // W7.1 #4①：滿檔進入一次性字卡（判定在 heroCards.js 純函式，node 可直測）

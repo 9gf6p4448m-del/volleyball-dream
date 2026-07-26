@@ -3,6 +3,7 @@
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
   careerStage, opponentById, normalizeCareerPlayer, resolveForfeit, applyPoaching,
+  applySeasonRoster, graduatingAces, currentGrade,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, applyOffseasonTraining } from '../career/growth.js';
 import {
@@ -15,9 +16,11 @@ import {
 } from '../career/lineup.js';
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
+  recruitCurrentGrade, recruitTargetGone,
 } from '../career/recruitment.js';
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
+  graduationCeremonyLines, freshmenIntroLines,
 } from '../career/events.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
@@ -390,7 +393,14 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const members = roster.members;
     const playerId = player.id;
     const oldMates = members.filter((m) => m.dna?.teamId === next.opponentId);
-    const def = applyPoaching(baseDef, oldMates.map((m) => m.fullName).filter(Boolean));
+    // W1(P4)：與開賽同一條轉換鏈——①ace 畢業遞補（第 2 屆起換臉：新王牌金框＋新稱號）
+    // ②挖角/校友除名（畢業的招募生不還魂）
+    const seasonN = store.seasonIndex?.() ?? 1;
+    const seasonDef = applySeasonRoster(baseDef, seasonN);
+    const def = applyPoaching(seasonDef, [
+      ...oldMates.map((m) => m.fullName),
+      ...(roster.alumni ?? []).map((a) => a.member?.fullName),
+    ].filter(Boolean));
     let working = structuredClone(saved);
     // W4 選取模型：{kind:'field',si}｜{kind:'bench',id}｜null（si＝starters 索引）
     let selected = null;
@@ -490,9 +500,16 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     // 他們的前排 P2/P3/P4 貼網、後排 P1/P6/P5 靠底線——from 我方視角左右已鏡射，
     // 直欄即真實對位（我方 P4 直面他們 P2）
     const OPP_ROLE = ['S', 'OH', 'MB', 'OPP', 'OH', 'MB'];
+    // W1(P4)：敵方名牌標年級（Q3「資訊落在要用的前一刻」——挖三年級只能用一年，
+    // 看得到才有取捨）。現行年級＝基準＋屆數−1；顯示夾限三年級（非 ace 無輪替＝已知債）
+    const oppGradeLabel = (i) => {
+      const g = def.grades?.[i];
+      return g ? (GRADE_LABEL[Math.min(3, currentGrade(g, seasonN))] ?? '') : '';
+    };
     const oppChip = (i) => chipEl({
       name: def.squad?.[i] ?? `${def.name}${i + 1}號`,
-      sub: `${OPP_ROLE[i]}・${(def.heights?.[i] ?? 1.85).toFixed(2)}m`,
+      sub: [OPP_ROLE[i], oppGradeLabel(i), `${(def.heights?.[i] ?? 1.85).toFixed(2)}m`]
+        .filter(Boolean).join('・'),
       tone: 'enemy',
       isAce: def.ace?.slot === i,
       aceTitle: def.ace?.title,
@@ -529,7 +546,8 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         const aceRole = def.ace.slot === 'L' ? '自由人' : OPP_ROLE[def.ace.slot];
         intel.appendChild(el('div', ['font-size:12.5px', 'font-weight:800', `color:${COLOR.gold}`],
           `王牌 ${def.ace.name}（${aceRole}）——「${def.ace.title}」`));
-      } else if (baseDef.ace) {
+      } else if (seasonDef.ace) {
+        // W1(P4)：以「該屆應有的王牌」為基準——畢業拔除不誤報成被挖走
         intel.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.cyan}`],
           `他們的王牌？現在穿著遊隼的球衣。`));
       }
@@ -990,21 +1008,33 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     // W6：招募槽鍵＝recruitKey（同隊可掛招牌＋第二人）；成員對映走 member.recruitKey
     // （W6 前入隊的舊成員缺欄＝回退 origin，該世代 recruitKey 恆等 origin）
     const memberOf = (key) => roster.members.find((x) => (x.recruitKey ?? x.origin) === key);
+    const seasonN = store.seasonIndex?.() ?? 1; // W1(P4)：目標年級/畢業下架顯示
     for (const [key, cond] of Object.entries(RECRUIT_CONDS)) {
       const def = opponentById(cond.opponentId);
       const p = progressOf(rec, key);
       const done = rec.recruited.includes(key);
       const met = conditionMet(rec, key);
+      const gone = !done && recruitTargetGone(key, seasonN); // 未招到且已畢業＝此線關閉
       const row = el('div', [
         'display:flex', 'flex-direction:column', 'gap:2px', 'padding:7px 10px',
         'border-radius:10px', `background:${done ? 'rgba(255,209,102,0.1)' : 'rgba(30,40,64,0.55)'}`,
+        ...(gone ? ['opacity:0.55'] : []),
       ]);
       const top = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
       const second = key !== cond.opponentId; // 同隊第二人（-2 鍵）
       top.appendChild(el('div', ['font-size:14px', 'font-weight:700', 'flex:1'],
         `${def?.name ?? cond.opponentId}${second ? '・第二人' : ''}`));
       top.appendChild(badge(ROLE_ABBR[cond.role] ?? cond.role, '#22304e', COLOR.cyan));
-      if (done) {
+      // W1(P4) Q3 真實年級 UI 明示：三年級＝挖來只能用一年（金字警示色）
+      const curGrade = Math.min(3, recruitCurrentGrade(key, seasonN));
+      top.appendChild(badge(
+        GRADE_LABEL[curGrade] ?? '',
+        '#22304e', curGrade >= 3 ? COLOR.gold : COLOR.dim,
+      ));
+      if (gone) {
+        top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.dim}`],
+          '已畢業'));
+      } else if (done) {
         const m = memberOf(key);
         if (m) {
           top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.gold}`],
@@ -1024,7 +1054,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
           '條件達成'));
       }
       row.appendChild(top);
-      if (!done) {
+      if (!done && !gone) {
         const parts = [];
         if (cond.wins != null) parts.push(`勝場 ${Math.min(p.wins, cond.wins)}/${cond.wins}`);
         if (cond.feat) {
@@ -1234,21 +1264,46 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
 
     // W5 賽季輪迴：季末（奪冠/止步）→ 進入下一屆——名冊/招募/技巧/宿敵全保留。
     // 難度綁成就：止步＝對手原強度（帶著成長捲土重來）；奪冠＝衛冕屆對手升級
-    // A4 最小劇情：進入下一屆後先播開場（衛冕 defend／捲土重來 comeback，隊長各一段）
     // W6 A2：先選指定邀請（或不指定）再推進——選完即輪抽、賽程視圖直接公開結果
+    // W1(P4) 時間系統：流程＝畢業儀式（我方三年級具名離別＋對手 ace 畢業播報）→
+    // 指定邀請 → advanceSeason（名冊換血：畢業→年級推進→新生入學，單次 RMW）→
+    // 新生入學見面 → 下屆開場（衛冕 defend／捲土重來 comeback）＋屆間訓練營
     const nextSeasonBtn = (label, openerKey) => button(label, true, () => {
-      showInvitePicker((invitedId) => {
-        if (!store.advanceSeason?.({ invitedId })) return;
-        // W7.1 屆間訓練營（#6 拍板 C）：主角耐力 +2（上限 80）——寫檔後接開場對話尾播
-        const trained = applyOffseasonTraining(player);
-        player.attributes = trained.attributes;
-        store.savePlayer(player);
-        const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
-        if (opener.length) dialogPlay([{ lines: opener }], () => renderCareer());
-        else renderCareer();
+      const roster = ensureStarterRoster(store);
+      const graduates = (roster?.members ?? []).filter((m) => (m.growth?.grade ?? 2) >= 3);
+      const aceGrads = graduatingAces(store.seasonIndex?.() ?? 1);
+      const ceremony = graduationCeremonyLines({ graduates, aceGrads });
+      dialogPlay([{ lines: ceremony }], () => {
+        showInvitePicker((invitedId) => {
+          const adv = store.advanceSeason?.({ invitedId });
+          if (!adv) return;
+          // W7.1 屆間訓練營（#6 拍板 C）：主角耐力 +2（上限 80）——寫檔後接對話尾播
+          const trained = applyOffseasonTraining(player);
+          player.attributes = trained.attributes;
+          store.savePlayer(player);
+          const seqs = [];
+          const intro = freshmenIntroLines(adv.freshmen ?? []);
+          if (intro.length) seqs.push({ lines: intro });
+          const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
+          if (opener.length) seqs.push({ lines: opener });
+          if (seqs.length) dialogPlay(seqs, () => renderCareer());
+          else renderCareer();
+        });
       });
     });
-    if (stage === 'champion') {
+    // W1(P4)：高中章固定三屆——第 3 屆收束不再推進，掛生涯結算佔位（W4 實作）
+    const careerOver = (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
+    if (careerOver) {
+      root.appendChild(el('div', [
+        'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,
+        'margin-top:8px', 'letter-spacing:2px',
+      ], stage === 'champion' ? '🏆 全國冠軍！' : `止步全國賽`));
+      root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
+        `第 3 屆結束（${rec.wins} 勝 ${rec.losses} 敗）——高中三年，打完了`));
+      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.gold}`, 'font-weight:700',
+        'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.6', 'margin-top:4px'],
+      '生涯結算即將到來——三年的數據、關鍵球與送別（開發中）'));
+    } else if (stage === 'champion') {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
         'letter-spacing:2px',

@@ -85,7 +85,8 @@ test('settleCareerMatch：第 2 屆同名場次隊友成長不被第 1 屆 log �
     career = recordResult(career, { matchId: id, won, scoreFor: won ? 15 : 8, scoreAgainst: won ? 8 : 15 });
   }
   store.saveCareer(career);
-  assert.equal(store.advanceSeason(), true);
+  // W1(P4)：advanceSeason 成功改回 { ok, graduates, freshmen }（truthy；失敗仍 false）
+  assert.ok(store.advanceSeason());
   assert.equal(store.seasonIndex(), 2);
 
   settle(); // 第 2 屆 group-1（修前：靜默跳過、log 仍為 1）

@@ -150,9 +150,11 @@ export const EVENT_DEFS = [
 // ---- W5 逐出台詞（B5 拍板：2 行極簡，被逐者一行＋隊長一行，平靜克制）----
 // 玩家主動點擊觸發（非賽程狀態驅動），故不進 EVENT_DEFS 條件比對；沿用 {speaker,text}
 // 形狀以復用 dialogPlay（呼叫端包一層 [{ lines: EXPEL_LINES }]）。
+// W1(P4)：speaker 大山→阿哲——大山第 1 屆末畢業，第 2 屆起逐出仍可觸發，畢業者
+// 不得開口（隊長交接未拍板＝W2 議題，暫由三屆全程在隊的信任核心代言）
 export const EXPEL_LINES = [
   { speaker: '（離隊者）', text: '……我明白。這段路，謝謝你們帶我走過。' },
-  { speaker: '大山', text: '是你自己選的路。走吧——別回頭。' },
+  { speaker: '阿哲', text: '是你自己選的路。走吧——別回頭。' },
 ];
 
 // ---- W7.1 屆間訓練營台詞（#6 拍板 C 案：主角 stamina +2/屆走事件不走灑點）----
@@ -162,12 +164,14 @@ export const OFFSEASON_TRAINING_LINES = [
 
 // ---- W5 賽季開場（A4 拍板：最小劇情，衛冕/捲土重來各一段隊長對話）----
 // advanceSeason 成功後由 careerScreen 播放（衛冕＝defend、止步捲土重來＝comeback）。
+// W1(P4)：speaker 大山→阿哲——開場只在進入第 2/3 屆時播，而大山第 1 屆末必畢業，
+// 亡靈不得訓話（UI 實跑抓到的敘事 bug）；隊長交接未拍板＝W2 議題
 export const SEASON_OPENERS = {
   defend: [
-    { speaker: '大山', text: '新的一屆了。現在全國都認得遊隼——冠軍掛在我們身上，每一隊都衝著我們來。' },
+    { speaker: '阿哲', text: '新的一屆了。現在全國都認得遊隼——冠軍掛在我們身上，每一隊都衝著我們來。' },
   ],
   comeback: [
-    { speaker: '大山', text: '輸掉的那場記著就好。名冊還在、你也更強了——這一屆，遊隼重新起飛。' },
+    { speaker: '阿哲', text: '輸掉的那場記著就好。名冊還在、你也更強了——這一屆，遊隼重新起飛。' },
   ],
 };
 
@@ -205,6 +209,9 @@ export function oldTeamPreEvents(career, roster) {
   if (!next) return [];
   const triggered = career.events ?? [];
   const teamName = opponentById(next.opponentId)?.name ?? '老東家';
+  // W1(P4)：收尾句由現任隊長講——大山畢業後（第 2 屆起）不得開口；名冊無 captain
+  // 旗標時（隊長交接未拍板＝W2 議題）暫由阿哲代言
+  const captain = (roster?.members ?? []).find((m) => m.captain)?.name ?? '阿哲';
   return (roster?.members ?? [])
     .filter((m) => m.dna?.teamId === next.opponentId)
     .map((m) => ({
@@ -212,10 +219,91 @@ export function oldTeamPreEvents(career, roster) {
       moment: 'pre',
       lines: [
         { speaker: m.name, text: `${teamName}……我以前的隊。這場讓我上，我不會手軟。` },
-        { speaker: '大山', text: '不用你說。把你練出來的人就在網子對面——打給他們看。' },
+        { speaker: captain, text: '不用你說。把你練出來的人就在網子對面——打給他們看。' },
       ],
     }))
     .filter((e) => !triggered.includes(e.id));
+}
+
+// ---- W1(P4) 畢業儀式（憲法 Q1/Q3/Q4；儀式規格對標來投開箱）----
+// 我方畢業者具名台詞：大山＝隊長級離別重場、阿烈＝輕量但有記憶點、三年級招募生＝
+// 「短暫相遇的告別」（四名三年級招牌各有專屬句，其餘走通用款）；
+// 播報＝對手 ace 畢業一句話＋「舊王牌去向」伏筆（大學章埋線，不展開）。
+// 純建構器：吃畢業名單回台詞列，呼叫端（careerScreen）以 dialogPlay 播放。
+
+// 我方創隊班底的專屬離別（member id 對句；查無＝通用款）
+const FAREWELL_BY_ID = {
+  A3: [
+    { speaker: '大山', text: '……三年，就這樣打完了。體育館的燈，原來這麼亮。' },
+    { speaker: '大山', text: '我把遊隼交給你們。牆不在了——你們自己，就要是牆。' },
+    { speaker: '大山', text: '還有你，新人。那種關鍵球，以後每一顆都要敢打。學長只能陪你到這裡了。' },
+  ],
+  A4: [
+    { speaker: '阿烈', text: '哼——不習慣講這種話。球給你們了，別打得比我斯文。' },
+  ],
+};
+
+// 三年級招牌球員的專屬告別（recruitKey 對句）
+const FAREWELL_BY_RECRUIT = {
+  obsidian: [{ speaker: '阿曜', text: '只有一年，但跟你們打球，比在曜石三年都痛快。網子對面再見——大學的舞台。' }],
+  'sky-hawk': [{ speaker: '阿鷹', text: '決賽的天空，讓給你了。下次見面，我會在更高的地方等。' }],
+  'gale-shore': [{ speaker: '小嵐', text: '風要往前吹了。你們的節奏——我會在某個球場想起來。' }],
+  'black-pine': [{ speaker: '老松', text: '這面牆，最後一年砌在遊隼。……值得。' }],
+};
+
+// 對手 ace 畢業播報（ace 名對句：一句話＋去向伏筆；查無＝通用款）
+const ACE_FAREWELL_BY_NAME = {
+  詹子曜: '曜石體中「黑曜箭」詹子曜畢業——據說北部的大學強豪，已經為他留了球衣。',
+  王勝翔: '天鷹學園「制空者」王勝翔畢業——傳聞他要直接挑戰企業聯賽的天空。',
+  簡子嵐: '青嵐水產「颱風眼」簡子嵐畢業——風停了？不，聽說只是換了一片更大的海。',
+  曾家松: '黑松實業「最後的牆」曾家松畢業。牆離開了黑松——但牆沒有倒，大學排壇等著他。',
+  劉振鎧: '鐵霧工業「鐵彈道」劉振鎧畢業——下一站，據說是國家隊青年隊的靶場。',
+};
+
+// graduates＝我方畢業成員快照（graduation.splitGraduates）；aceGrads＝
+// careerState.graduatingAces 輸出。回傳 dialogPlay 可直接吃的台詞列
+export function graduationCeremonyLines({ graduates = [], aceGrads = [] } = {}) {
+  const lines = [
+    { speaker: '教練', text: '賽季結束了。三年級的最後一天——全隊到齊，送他們一程。' },
+  ];
+  for (const m of graduates) {
+    const own = FAREWELL_BY_ID[m.id] ?? FAREWELL_BY_RECRUIT[m.recruitKey ?? m.origin];
+    if (own) lines.push(...own);
+    else lines.push({ speaker: m.name, text: '謝謝大家。這段路，我不會忘。' });
+  }
+  for (const a of aceGrads) {
+    lines.push({
+      speaker: '播報',
+      text: ACE_FAREWELL_BY_NAME[a.name]
+        ?? `${a.teamName}「${a.title}」${a.name} 畢業——他的去向，是下一個舞台的故事。`,
+    });
+  }
+  lines.push({ speaker: '教練', text: '明天起，新的一屆。體育館的鑰匙——交給留下來的人。' });
+  return lines;
+}
+
+// W1(P4) 新生入學（輕量見面演出；手寫新生的支線重場＝之後的週次，本週不做內容）
+const FRESHMAN_GREETING_BY_ROLE = {
+  setter: '我來讓球去它該去的地方。',
+  middle: '攔網——交給我試試。',
+  opposite: '右邊的砲位，我想接下來。',
+  outside: '主攻的位置，我會追上學長們的。',
+  libero: '球不落地——聽說這是遊隼的規矩。',
+};
+
+export function freshmenIntroLines(freshmen = []) {
+  if (!freshmen.length) return [];
+  const lines = [{ speaker: '教練', text: '進來吧——今年的新生。' }];
+  for (const f of freshmen) {
+    lines.push({
+      speaker: f.name,
+      text: f.origin === 'handwritten'
+        ? '請、請多指教！'
+        : (FRESHMAN_GREETING_BY_ROLE[f.role] ?? '請多指教！'),
+    });
+  }
+  lines.push({ speaker: '教練', text: '都是生面孔——場上見真章。解散！' });
+  return lines;
 }
 
 // 事件入帳（不可變）；career.events 為已觸發 id 清單（v3 相容：欄位缺席視同空）

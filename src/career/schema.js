@@ -142,6 +142,10 @@ export function deserializeSave(json) {
   if (typeof raw.roster.capacity !== 'number' || !Array.isArray(raw.roster.members)) {
     throw new Error('roster 結構不合法（需 capacity:number 與 members:array）');
   }
+  // W1(P4) alumni（畢業校友快照）：舊檔可無此鍵（讀取端 ?? [] 容錯）；若存在必為陣列
+  if (raw.roster.alumni !== undefined && !Array.isArray(raw.roster.alumni)) {
+    throw new Error('roster.alumni 若存在須為 array');
+  }
   // W2 名冊成員驗證（匯入壞資料在建隊當下才炸畫面——這裡先擋）
   for (const m of raw.roster.members) {
     for (const f of ['id', 'name', 'origin', 'role']) {

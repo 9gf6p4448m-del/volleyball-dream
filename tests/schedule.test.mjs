@@ -114,7 +114,7 @@ test('store.advanceSeason({invitedId})：邀請隊落入第 2 屆賽程並持久
   const store = createCareerStore(fakeStorage());
   store.saveCareer(endSeason(createCareer({ seed: 42, playerName: '測' })));
   store.savePlayer(createCareerPlayer('測'));
-  assert.equal(store.advanceSeason({ invitedId: 'obsidian' }), true);
+  assert.ok(store.advanceSeason({ invitedId: 'obsidian' })); // W1(P4)：成功回 {ok,...}
   const c2 = store.loadCareer();
   assert.ok(c2.schedule.some((m) => m.stage === 'group' && m.opponentId === 'obsidian' && m.invited));
   assert.equal(store.seasonIndex(), 2);

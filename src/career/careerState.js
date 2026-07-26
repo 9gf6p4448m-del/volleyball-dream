@@ -206,18 +206,96 @@ export function buildOpponentTeam(def) {
 // 命名工程 07-25 挖角除名：名冊裡來自該隊的招募生（同一人，以 fullName 對應）不得
 // 再出現在原隊名單——對應槽位由 def.reserves 依序遞補；王牌被挖＝ace 拔除（賽前敵情/
 // 播報不再喊他）。fullName 對不上（玩家改過名/極舊存檔）＝維持原名單的可接受退化。
-// 純函式：回傳新 def，原參數檔不動（快速比賽/未招募路徑零影響）
+// 純函式：回傳新 def，原參數檔不動（快速比賽/未招募路徑零影響）。
+// W1：reserves 改物件（{name, role, grade, drop, title?}）——遞補上場取 .name、
+// 年級隨人同步進 grades；被消耗的遞補從輸出 def.reserves 移除（剩餘者＝該場板凳，
+// careerMatchSetup 消費）。W1 起 poachedNames 亦含畢業校友（alumni）——畢業的
+// 招募生不得在下屆「還魂」回原隊名單。
 export function applyPoaching(def, poachedNames = []) {
   const hit = (n) => poachedNames.includes(n);
   if (!poachedNames.length || (!def.squad?.some(hit) && !hit(def.libero))) return def;
   const reserves = [...(def.reserves ?? [])];
-  const sub = (n) => (hit(n) ? (reserves.shift() ?? `${def.name}替補`) : n);
+  const grades = def.grades ? [...def.grades] : null;
+  let liberoGrade = def.liberoGrade;
+  const take = () => reserves.shift() ?? null;
+  const squad = def.squad?.map((n, i) => {
+    if (!hit(n)) return n;
+    const r = take();
+    if (grades) grades[i] = r?.grade ?? grades[i];
+    return r?.name ?? `${def.name}替補`;
+  });
+  let libero = def.libero;
+  if (libero && hit(libero)) {
+    const r = take();
+    liberoGrade = r?.grade ?? liberoGrade;
+    libero = r?.name ?? `${def.name}替補`;
+  }
   return {
     ...def,
-    squad: def.squad?.map(sub),
-    libero: def.libero ? sub(def.libero) : def.libero,
+    squad,
+    libero,
+    reserves,
+    ...(grades ? { grades } : {}),
+    ...(liberoGrade !== undefined ? { liberoGrade } : {}),
     ...(def.ace && hit(def.ace.name) ? { ace: null } : {}),
   };
+}
+
+// ---- Phase 4 W1 年級系統（憲法 Q1/Q3/Q4）----
+
+// 基準年級 → 某屆的現行年級（opponents.js grades／member.growth.grade 皆為「第 1 屆
+// 基準」語意時用；我方名冊的 grade 由賽季推進實際 +1，不走此換算）
+export function currentGrade(baseGrade, seasonIndex = 1) {
+  return baseGrade + (seasonIndex - 1);
+}
+
+// Q4 對手 ace 畢業遞補（純函式；applyPoaching 同款路徑）：三年級 ace 於該屆結束畢業
+// →下屆起由 reserves 中最強者（drop 最小）升格新 ace、頂上原槽位、掛接班稱號。
+// 只動 ace 層（49 人全名單輪替＝明定不做）；接班人自 reserves 移除（剩餘者＝板凳）。
+// 自由人 ace（slot 'L'）同邏輯換 libero。資料不變式（tests 把關）：接班人基準年級 1
+// ——三屆生涯內不二次畢業，單次遞補即完備。
+export function applySeasonRoster(def, seasonIndex = 1) {
+  if (seasonIndex <= 1 || !def.ace || !def.grades) return def;
+  const aceGrade = def.ace.slot === 'L' ? def.liberoGrade : def.grades[def.ace.slot];
+  if (aceGrade == null || currentGrade(aceGrade, seasonIndex) <= 3) return def; // 尚未畢業
+  const reserves = [...(def.reserves ?? [])];
+  let best = -1;
+  for (let i = 0; i < reserves.length; i += 1) {
+    if (best < 0 || reserves[i].drop < reserves[best].drop) best = i;
+  }
+  if (best < 0) return { ...def, ace: null }; // 無人可接（防呆）：王牌缺席
+  const [heir] = reserves.splice(best, 1);
+  const next = { ...def, reserves, ace: { slot: def.ace.slot, name: heir.name, title: heir.title ?? '新王牌' } };
+  if (def.ace.slot === 'L') {
+    next.libero = heir.name;
+    next.liberoGrade = heir.grade;
+  } else {
+    next.squad = def.squad.map((n, i) => (i === def.ace.slot ? heir.name : n));
+    next.grades = def.grades.map((g, i) => (i === def.ace.slot ? heir.grade : g));
+  }
+  return next;
+}
+
+// 該屆結束時畢業的對手 ace 清單（畢業播報／儀式消費；seasonIndex＝剛結束的屆）：
+// 現行年級=3 的 ace 本屆打完離開。回傳含接班人資訊（播報「舊王牌去向」伏筆＋新王牌預告）
+export function graduatingAces(seasonIndex = 1) {
+  const out = [];
+  for (const def of OPPONENTS) {
+    if (!def.ace || !def.grades) continue;
+    const aceGrade = def.ace.slot === 'L' ? def.liberoGrade : def.grades[def.ace.slot];
+    if (aceGrade == null || currentGrade(aceGrade, seasonIndex) !== 3) continue;
+    const heir = (def.reserves ?? []).reduce(
+      (a, r) => (a == null || r.drop < a.drop ? r : a), null,
+    );
+    out.push({
+      opponentId: def.id,
+      teamName: def.name,
+      name: def.ace.name,
+      title: def.ace.title,
+      heir: heir ? { name: heir.name, title: heir.title ?? '新王牌' } : null,
+    });
+  }
+  return out;
 }
 
 // 跨版本存檔補正（就地修正；開賽與生涯畫面渲染都會跑，下次存檔即固定）：
@@ -330,14 +408,19 @@ export function buildLibero(team, name, level = 60) {
 // 生涯單場開賽包：種子＋兩隊 roster＋對手 AI 風格＋情蒐讀取——main.js 一次拿齊餵 createGame
 // W2 起第 4 參數 roster（save.roster 或 null）：A 隊五槽與自由人吃名冊具名/個性化/成長後屬性。
 // W3 起第 5 參數 lineup（save.lineup 或 null）：A 隊依先發輪轉序建隊、自由人由 lineup.libero 選。
-export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null) {
+// W1(P4) 第 6 參數 seasonIndex：屆數——對手 ace 畢業遞補（applySeasonRoster）換算用；
+// 省略＝1＝第 1 屆行為不變。
+export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1) {
   const baseDef = opponentById(matchEntry.opponentId);
   if (!baseDef) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
   // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度（難度綁成就不綁屆數）
   const titles = career.titles ?? 0;
-  const def = titles > 0
+  let def = titles > 0
     ? { ...baseDef, level: baseDef.level + TITLE_LEVEL_BONUS * titles }
     : baseDef;
+  // W1(P4) Q4：三年級 ace 畢業＝下屆起遞補換臉（先於挖角除名——原 ace 已畢業離隊，
+  // 挖角比對自然落空；接班人已頂上槽位）
+  def = applySeasonRoster(def, seasonIndex);
   // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
   const seen = career.scouting?.[matchEntry.opponentId];
   const scoutRead = seen && (def.scoutRead ?? 0) > 0
@@ -383,12 +466,39 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
   // D2 trustDyn 開場 +8（含板凳/自由人：換上場也帶勁；場末即散不污染持久信任）、
   // D3 播報名單（開賽環境句＋首次建功加一句，commentary 消費）
   const oldTeamMates = (members ?? []).filter((m) => m.dna?.teamId === matchEntry.opponentId);
-  // 命名工程 07-25：挖角除名——已入我隊的招募生不得再出現在原隊名單（同一人分身兩隊）
-  const oppDef = applyPoaching(def, oldTeamMates.map((m) => m.fullName).filter(Boolean));
+  // 命名工程 07-25：挖角除名——已入我隊的招募生不得再出現在原隊名單（同一人分身兩隊）。
+  // W1(P4)：畢業校友（roster.alumni）一併除名——畢業的招募生不得在下屆還魂回原隊
+  const goneNames = [
+    ...oldTeamMates.map((m) => m.fullName),
+    ...(roster?.alumni ?? []).map((a) => a.member?.fullName),
+  ].filter(Boolean);
+  const oppDef = applyPoaching(def, goneNames);
+  // W1(P4) A1 對手板凳：遞補/挖角消耗後剩餘的 reserves＝場邊待命。能力＝
+  // (該場 def.level − drop)＋attrBias＋roleBias——弱隊 drop 大＝板凳落差可感；
+  // 疲勞換人判準在 ai.js aiSubstitutionWanted（呼叫端 matchLoop/治具），sim 唯一
+  // 寫入路徑仍是 applySubstitution
+  const RESERVE_HEIGHT_SLOT = { setter: 0, outside: 1, middle: 2, opposite: 3 };
+  const benchB = (oppDef.reserves ?? []).map((r, i) => {
+    const attrs = {};
+    for (const k of ATTRIBUTE_KEYS) {
+      attrs[k] = (oppDef.level - (r.drop ?? 0))
+        + (oppDef.attrBias?.[k] ?? 0) + (oppDef.roleBias?.[r.role]?.[k] ?? 0);
+    }
+    return createPlayer({
+      id: `BR${i + 1}`,
+      name: r.name,
+      teamId: 'B',
+      naturalRole: r.role ?? 'outside',
+      currentRole: r.role ?? 'outside',
+      height: oppDef.heights?.[RESERVE_HEIGHT_SLOT[r.role] ?? 1] ?? 1.86,
+      trust: 20,
+      attributes: attrs,
+    });
+  });
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, oppDef, members, lineup),
-    benches: { A: benchA, B: [] },
+    benches: { A: benchA, B: benchB },
     ...(oldTeamMates.length ? {
       trustDynInit: Object.fromEntries(
         oldTeamMates.map((m) => [m.id, TRUST_DYN.OLD_TEAM_BOOST]),

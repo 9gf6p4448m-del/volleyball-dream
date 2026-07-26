@@ -35,6 +35,8 @@ const AI = {
   DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
   //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
   TIMEOUT_STREAK: 4,      // W7 B3：被對方連得幾分時 AI 喊暫停（拍板＝4）
+  SUB_BELOW: STAMINA.TIER2_BELOW, // W1(P4) A1：場上球員體力跌破重度疲勞＝考慮換人
+  SUB_MARGIN: 0.25,       // W1(P4) A1：板凳體力須高出疲勞者此值才換（防上下場乒乓）
 };
 
 // W7 B3 對手 AI 暫停判準（純讀取零副作用；呼叫端＝matchLoop/治具，
@@ -44,6 +46,46 @@ export function aiTimeoutWanted(game, team) {
   if ((game.timeouts?.[team]?.remaining ?? 0) <= 0) return false;
   const ps = game.pointStreak;
   return !!ps && ps.team === otherTeam(team) && ps.n >= AI.TIMEOUT_STREAK;
+}
+
+// W1(P4) A1 對手疲勞換人判準（純讀取零副作用、決定論；呼叫端＝matchLoop/治具，
+// 成立時再走 sim 唯一寫入路徑 applySubstitution）：死球窗＋有額度＋場上最累者
+// 體力 < SUB_BELOW＋板凳有「同位置、體力高出 SUB_MARGIN」者（取板凳最有體力者，
+// 平手取板凳序前位）。板凳強弱由 careerMatchSetup 的 reserve drop 供給——
+// 弱隊換上者明顯變弱＝板凳深度差異可感；我方（受控隊）換人是玩家決策，不走此判準
+export function aiSubstitutionWanted(game, team) {
+  if (game.phase !== 'serve' || !game.stamina) return null;
+  if ((game.subs?.[team]?.remaining ?? 0) <= 0) return null;
+  const rot = game.match.rotations[team] ?? [];
+  const bench = game.bench?.[team] ?? [];
+  if (!bench.length) return null;
+  let outId = null;
+  let outSta = 1;
+  for (const id of rot) {
+    const p = game.players[id];
+    if (!p || p.currentRole === 'libero') continue;
+    const sta = game.stamina[id] ?? 1;
+    if (sta < AI.SUB_BELOW && sta < outSta) {
+      outId = id;
+      outSta = sta;
+    }
+  }
+  if (!outId) return null;
+  const role = game.players[outId].currentRole;
+  let inId = null;
+  let inSta = -1;
+  for (const id of bench) {
+    const p = game.players[id];
+    if (!p || p.currentRole !== role) continue;
+    if (game.liberos?.[team]?.replacedId === id) continue; // 自由人配對暫離者不經此路
+    const sta = game.stamina[id] ?? 1;
+    if (sta > inSta) {
+      inId = id;
+      inSta = sta;
+    }
+  }
+  if (!inId || inSta < outSta + AI.SUB_MARGIN) return null;
+  return { outId, inId };
 }
 
 // W8（07-26 Sawmah 拍板：對手暫停也該有教練選項——原本只有我方能選＝對手暫停是

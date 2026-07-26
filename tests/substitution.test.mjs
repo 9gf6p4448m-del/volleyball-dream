@@ -150,8 +150,17 @@ test('careerMatchSetup：板凳＝名冊非先發非自由人成員；快速比�
   for (const id of setup.teams.A.map((p) => p.id)) {
     assert.ok(!benchIds.includes(id), '先發不得同時在板凳');
   }
-  assert.deepEqual(setup.benches.B, []);
-  // 快速比賽（無名冊）＝零板凳
+  // W1(P4) A1：對手板凳＝參數檔 reserves（本場無挖角消耗＝4 名具名，能力帶 drop 降幅）
+  assert.equal(setup.benches.B.length, 4);
+  const oppDef = setup.opponent;
+  for (const b of setup.benches.B) {
+    const r = oppDef.reserves.find((x) => x.name === b.name);
+    assert.ok(r, `板凳 ${b.name} 須出自 reserves`);
+    assert.equal(b.currentRole, r.role);
+    assert.equal(b.attributes.power, oppDef.level - r.drop + (oppDef.attrBias?.power ?? 0)
+      + (oppDef.roleBias?.[r.role]?.power ?? 0));
+  }
+  // 快速比賽（無名冊）＝我方零板凳；對手板凳走參數檔（生涯路徑），快速比賽不經此路
   const quick = careerMatchSetup(career, player, career.schedule[0], null, null);
-  assert.deepEqual(quick.benches, { A: [], B: [] });
+  assert.deepEqual(quick.benches.A, []);
 });

@@ -84,7 +84,7 @@ test('store.advanceSeason：index+1、名冊/招募/lineup/技巧/宿敵/已播�
   store.savePlayer(player);
   ensureStarterRoster(store);
   store.saveRecruitment({ progress: { 'north-tech': { wins: 1, feat: 0, stageCleared: false } }, recruited: [] });
-  assert.equal(store.advanceSeason(), true);
+  assert.ok(store.advanceSeason()); // W1(P4)：成功回 { ok, graduates, freshmen }
   assert.equal(store.seasonIndex(), 2);
   const view = store.loadCareer();
   assert.equal(view.results.length, 0);
@@ -131,7 +131,7 @@ test('招募跨屆累積（驗收條款）：第二屆再勝同隊 → progress.
     ['north-tech', 'white-wave', 'obsidian', 'iron-mist', 'sky-hawk']
       .map((id) => [id, progressOf(store.loadRecruitment(), id).wins]),
   );
-  assert.equal(store.advanceSeason({ invitedId: 'north-tech' }), true); // 邀請＝保證再遇
+  assert.ok(store.advanceSeason({ invitedId: 'north-tech' })); // 邀請＝保證再遇（W1：回物件）
   const s2group = store.loadCareer().schedule.filter((m) => m.stage === 'group');
   assert.ok(s2group.some((m) => m.opponentId === 'north-tech'));
   settleAll(); // 第二屆再打——場次 id 同、對手依輪抽

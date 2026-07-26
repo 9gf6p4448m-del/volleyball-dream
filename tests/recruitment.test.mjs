@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, featGainFor, accrueRecruitProgress,
-  conditionMet, buildRecruitMember, nextRecruitId, settleRecruitJoins,
+  conditionMet, buildRecruitMember, nextRecruitId, settleRecruitJoins, recruitGradeOf,
 } from '../src/career/recruitment.js';
 import {
   DEFAULT_STARTERS, defaultStarters, defaultLineup, validateLineup, checkRoleStructure,
@@ -162,7 +162,9 @@ test('buildRecruitMember：成員形狀合約（角色/年級/DNA/屬性夾限�
     assert.equal(m.role, RECRUIT_CONDS[key].role);
     assert.equal(m.origin, RECRUIT_CONDS[key].opponentId);
     assert.equal(m.recruitKey, key);
-    assert.equal(m.growth.grade, 2); // 固定二年級轉學生
+    // W1(P4) Q3：真實年級——由來源隊名單導出（取代舊「固定二年級」拍板）
+    assert.equal(m.growth.grade, recruitGradeOf(key));
+    assert.ok([1, 2, 3].includes(m.growth.grade));
     assert.deepEqual(m.growth.log, []);
     assert.equal(m.dna.teamId, RECRUIT_CONDS[key].opponentId);
     assert.equal(typeof m.height, 'number');

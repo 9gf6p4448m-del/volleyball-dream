@@ -42,7 +42,10 @@ const XP_RULES = [
 // title＝輕稱號（僅隊長；播報偶爾喊）。名字是預設稿——ensureStarterRoster 不覆蓋已改名
 export const OUR_TEAM_NAME = '遊隼高中';
 export const STARTER_DEFS = [
-  { id: 'A1', name: '阿哲', fullName: '林承哲', role: 'setter', grade: 2, height: 1.83,
+  // grade＝入學年級（P4 W1 起接畢業流程：賽季推進 +1、滿三年級季末畢業）。
+  // 阿哲=1（2026-07-26 Sawmah 拍板）：三屆全程在隊——縫隙 1 師徒線（玩家轉 S 時
+  // 阿哲讓出主舉轉導師，W3 實作）的時間窗不論何屆轉位都成立；成長率隨之 1.0
+  { id: 'A1', name: '阿哲', fullName: '林承哲', role: 'setter', grade: 1, height: 1.83,
     persona: '冷靜的組織者——手感細膩，把球送到你最好打的位置',
     attributes: { jump: 58, power: 58, reaction: 63, stamina: 61, speed: 63, control: 72, serve: 61, block: 54 } },
   // A2＝玩家（主攻手槽）——不在 members 裡，計數時佔 1 席（見 rosterCount）
@@ -50,7 +53,9 @@ export const STARTER_DEFS = [
     title: '沉默高牆',
     persona: '隊長。沉默的高牆——三年級最後一個夏天，全押在遊隼身上',
     attributes: { jump: 64, power: 63, reaction: 59, stamina: 60, speed: 58, control: 64, serve: 56, block: 66 } },
-  { id: 'A4', name: '阿烈', fullName: '洪振烈', role: 'opposite', grade: 2, height: 1.90,
+  // 阿烈=3（憲法 Q1 第二名畢業者，2026-07-26 Sawmah 拍板）：兩翼台詞量同為零句，
+  // 判準落資料一致性——小飛 persona 鎖死一年級成長弧；畢業戰力洞=一中(大山)一翼(阿烈)
+  { id: 'A4', name: '阿烈', fullName: '洪振烈', role: 'opposite', grade: 3, height: 1.90,
     persona: '右翼重砲——脾氣跟扣球一樣衝，準度差點但誰都不想正面擋他',
     attributes: { jump: 62, power: 67, reaction: 58, stamina: 61, speed: 60, control: 63, serve: 64, block: 55 } },
   { id: 'A5', name: '小飛', fullName: '葉翊飛', role: 'outside', grade: 1, height: 1.86,

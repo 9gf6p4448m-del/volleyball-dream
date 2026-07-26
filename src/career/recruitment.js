@@ -102,6 +102,32 @@ export function recruitDefOf(recruitKey) {
   return RECRUIT_DEFS[recruitKey] ?? null;
 }
 
+// ---- W1(P4) 年級（憲法 Q3：真實年級——三年級挖來只能用一年）----
+
+// 招募目標的基準年級＝來源隊名單同一人的年級（單一事實源在 opponents.js grades/
+// liberoGrade，以 fullName 對槽——「年級與來源隊名單同一人一致」由構造保證，
+// naming.test 再靜態把關）。查無＝回退 2（防呆，不應發生）
+export function recruitGradeOf(recruitKey) {
+  const cond = RECRUIT_CONDS[recruitKey];
+  const meta = RECRUIT_DEFS[recruitKey];
+  const def = cond ? opponentById(cond.opponentId) : null;
+  if (!def || !meta) return 2;
+  if (cond.role === 'libero') return def.liberoGrade ?? 2;
+  const slot = def.squad?.indexOf(meta.fullName) ?? -1;
+  return slot >= 0 ? (def.grades?.[slot] ?? 2) : 2;
+}
+
+// 目標現行年級（第 seasonIndex 屆）；>3＝已畢業離校
+export function recruitCurrentGrade(recruitKey, seasonIndex = 1) {
+  return recruitGradeOf(recruitKey) + (seasonIndex - 1);
+}
+
+// 已畢業＝不可再招（UI 顯示「已畢業」、settleRecruitJoins 跳過；progress 保留不清
+// ——歷史就是歷史，短暫相遇也是敘事資產）
+export function recruitTargetGone(recruitKey, seasonIndex = 1) {
+  return recruitCurrentGrade(recruitKey, seasonIndex) > 3;
+}
+
 // ---- 壯舉事件掃描（賽末 state.events；純函式）----
 
 // 敵方扣球後的第一時間救球（receive/dive）＝dig；掃描器與 matchStatsFor 同一套
@@ -238,14 +264,15 @@ const ROLE_HEIGHT_SLOT = { setter: 0, outside: 1, middle: 2, opposite: 3 };
 
 // 依來源隊 level＋attrBias（＋該角色 roleBias）決定論生成成員；每屬性帶 −2..+2
 // 決定論抖動（hash(careerSeed, recruitKey:attr)）讓同角色轉學生不是複製人。
-// 年級固定二年級轉學生（拍板：不做年級×成長分檔）；自由人走 buildLibero 防守專才
-// 公式為基底（與小守同一條屬性哲學）再抖動。
+// 自由人走 buildLibero 防守專才公式為基底（與小守同一條屬性哲學）再抖動。
 // W6：第一參數改 recruitKey（既有 5 隊鍵值＝opponentId，抖動 hash 輸入不變＝
 // 舊存檔重演逐值一致）；origin 維持「來源隊 id」語義（cond.opponentId），
 // recruitKey 另立欄位（同隊第二人與招牌的 UI/防重招對映靠它；舊成員缺欄回退 origin）
 // 第 4 參數 rosterMembers（W6）：給了就做入隊補正（settleRecruitJoins 傳現役名冊）；
-// 省略＝無補正（治具基準臂/舊呼叫端行為不變）
-export function buildRecruitMember(recruitKey, careerSeed, id, rosterMembers = null) {
+// 省略＝無補正（治具基準臂/舊呼叫端行為不變）。
+// 第 5 參數 seasonIndex（W1/P4，取代舊「固定二年級」拍板）：入隊年級＝來源隊
+// 基準年級＋(屆數−1)——真實年級接成長率分檔（RATE_BY_GRADE）與畢業流程
+export function buildRecruitMember(recruitKey, careerSeed, id, rosterMembers = null, seasonIndex = 1) {
   const cond = RECRUIT_CONDS[recruitKey];
   const def = cond ? opponentById(cond.opponentId) : null;
   const meta = RECRUIT_DEFS[recruitKey];
@@ -275,7 +302,8 @@ export function buildRecruitMember(recruitKey, careerSeed, id, rosterMembers = n
     role,
     height: role === 'libero' ? 1.72 : (def.heights?.[ROLE_HEIGHT_SLOT[role]] ?? 1.86),
     attributes,
-    growth: { grade: 2, xp: {}, log: [] }, // 二年級：成長率 0.7（RATE_BY_GRADE 既有分檔）
+    // W1(P4)：真實年級（夾限 3——理論上 settleRecruitJoins 已擋畢業者）
+    growth: { grade: Math.min(3, recruitGradeOf(recruitKey) + (seasonIndex - 1)), xp: {}, log: [] },
     dna: { teamId: def.id, style: def.style, tag: def.name },
     persona: meta.persona,
   };
@@ -309,6 +337,7 @@ export function nextRecruitId(members, expelled = []) {
 // applyRecruit 的 opponentId 參數自 W6 起承載 recruitKey（store 只作 recruited push 用）
 export function settleRecruitJoins(store, careerSeed) {
   const joined = [];
+  const seasonIndex = store.seasonIndex?.() ?? 1; // W1(P4)：真實年級與畢業下架
   for (const recruitKey of Object.keys(RECRUIT_CONDS)) {
     const rec = store.loadRecruitment();
     const roster = store.loadRoster();
@@ -316,10 +345,11 @@ export function settleRecruitJoins(store, careerSeed) {
     // 非空＝已補）誤判而永遠缺創隊班底；實務上 progress>0 必經開賽（已補齊），此為防線
     if (!rec || !roster || roster.members.length === 0) return joined;
     if (rec.recruited.includes(recruitKey) || !conditionMet(rec, recruitKey)) continue;
+    if (recruitTargetGone(recruitKey, seasonIndex)) continue; // 已畢業＝條件達成也不入隊
     if (openSlots(roster) <= 0) continue;
     const id = nextRecruitId(roster.members, rec.expelled ?? []); // 含 expelled：id 不回收
     // W6：傳現役名冊＝入隊補正生效（晚招的人跟上隊伍成長水位）
-    const member = buildRecruitMember(recruitKey, careerSeed, id, roster.members);
+    const member = buildRecruitMember(recruitKey, careerSeed, id, roster.members, seasonIndex);
     if (!store.applyRecruit({ member, opponentId: recruitKey, trust: RECRUIT_TRUST })) return joined;
     joined.push(member);
   }
@@ -334,12 +364,14 @@ export function expelCountThisSeason(recruitment, seasonIndex) {
 }
 
 // 可否逐出某成員（拍板邊界，回傳 { ok, reason }——reason 供 UI 對應提示）：
-//   僅招募生（創隊班底 origin='starter' 不可逐）、不在現役先發或自由人位（先發保護；
+//   僅招募生可逐（W5 拍板「僅可逐招募生」；W1/P4 起 origin 家族擴為
+//   starter/handwritten/generated——判準改「origin 是對手隊 id」＝招募生，
+//   創隊班底與新生一律不可逐）、不在現役先發或自由人位（先發保護；
 //   libero 一併擋——避免逐掉現役自由人孤兒化 lineup.libero）、每屆上限 1。
 export function canExpel(save, memberId) {
   const member = save?.roster?.members?.find((m) => m.id === memberId);
   if (!member) return { ok: false, reason: 'not-found' };
-  if (member.origin === 'starter') return { ok: false, reason: 'starter-origin' };
+  if (!opponentById(member.origin)) return { ok: false, reason: 'starter-origin' };
   const lineup = save.lineup ?? {};
   if ((lineup.starters ?? []).includes(memberId) || lineup.libero === memberId) {
     return { ok: false, reason: 'in-lineup' };

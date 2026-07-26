@@ -5,6 +5,8 @@
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
 import { advanceSeason } from './careerState.js';
+import { applySeasonTurnover } from './graduation.js';
+import { defaultLineup } from './lineup.js';
 import { canExpel, EXPEL_TRUST_PENALTY } from './recruitment.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
@@ -105,23 +107,47 @@ export function createCareerStore(storage) {
     saveLineup(lineup) {
       return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), lineup }));
     },
-    // W5 賽季輪迴：季末（奪冠/止步）→ 下一屆。season 重置賽程戰績＋index+1；
-    // 名冊/招募/lineup/player/宿敵/已播事件全數保留（RMW 只動 season）。
+    // W5 賽季輪迴：季末（奪冠/止步）→ 下一屆。season 重置賽程戰績＋index+1。
     // 賽季未結束＝no-op 回 false（防 UI 誤觸）。
-    // W6 A2：opts.invitedId＝指定邀請隊（輪抽必入小組；null＝不指定）
+    // W6 A2：opts.invitedId＝指定邀請隊（輪抽必入小組；null＝不指定）。
+    // W1(P4) 時間系統：①高中章固定三屆——第 3 屆季末不再推進（回 false；生涯結算
+    // ＝W4）②單次 RMW 一併換血：畢業（三年級離隊→alumni）→年級推進→新生入學
+    // （graduation.applySeasonTurnover）→lineup 重排預設陣（畢業者出陣、trust
+    // 倖存者沿用/新生顯式 20）。成功回 { ok:true, graduates, freshmen }（UI 儀式
+    // 消費；truthy 相容既有 if (!advanceSeason()) 判式）。
     advanceSeason(opts = {}) {
       const save = loadSave();
       const view = save ? careerViewOf(save) : null;
       if (!view) return false;
+      if ((save.season.index ?? 1) >= 3) return false; // 高中章三屆封頂（W4 接生涯結算）
       const next = advanceSeason(view, opts);
       if (next === view) return false; // 賽季未結束
-      return writeSave((prev) => ({
-        ...prev,
-        season: {
-          ...seasonFromCareer(next, prev),
-          index: (prev.season.index ?? 1) + 1,
-        },
-      }));
+      let turnover = null;
+      const ok = writeSave((prev) => {
+        turnover = applySeasonTurnover({
+          roster: prev.roster,
+          seasonIndex: prev.season.index ?? 1,
+          seed: next.seed,
+        });
+        // 預設陣重排：畢業者不可留在 starters；trust 跟人——倖存者沿用舊值、
+        // 畢業者鍵自然消失、新生取預設 20（顯式寫入，勿依賴缺鍵回退——W3 §6b）
+        const lineup = defaultLineup(turnover.roster.members);
+        const prevTrust = prev.lineup?.trust ?? {};
+        for (const id of Object.keys(lineup.trust)) {
+          if (prevTrust[id] !== undefined) lineup.trust[id] = prevTrust[id];
+        }
+        return {
+          ...prev,
+          roster: turnover.roster,
+          lineup,
+          season: {
+            ...seasonFromCareer(next, prev),
+            index: (prev.season.index ?? 1) + 1,
+          },
+        };
+      });
+      if (!ok) return false;
+      return { ok: true, graduates: turnover.graduates, freshmen: turnover.freshmen };
     },
     // 現在第幾屆（UI 顯示用）
     seasonIndex() {

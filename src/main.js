@@ -66,7 +66,11 @@ function showCareerEntry(ctx) {
       // W2：出戰前補齊/讀取名冊（空名冊一次性升級），隊友屬性由名冊驅動
       // W3：ensureStarterRoster 一併補齊 lineup；先發輪轉序由 save.lineup 驅動建隊
       const roster = ensureStarterRoster(store);
-      runMatch(ctx, { store, career, player, matchEntry, roster, lineup: store.loadLineup() });
+      // W1(P4)：seasonIndex 供對手 ace 畢業遞補換算（careerMatchSetup 第 6 參數）
+      runMatch(ctx, {
+        store, career, player, matchEntry, roster,
+        lineup: store.loadLineup(), seasonIndex: store.seasonIndex?.() ?? 1,
+      });
     },
   });
   const resume = ctx.params.get('career') === 'resume' && store.hasSave();
