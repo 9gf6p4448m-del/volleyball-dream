@@ -3,3 +3,6 @@ dist/
 dev-dist/
 .vite/
 *.local
+
+# 治具產生的季末存檔（本機測試用，不入庫）
+tools/w6-save*.json
