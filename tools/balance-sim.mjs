@@ -167,6 +167,9 @@ let stamGames = 0;
 let subsUsed = 0;
 let oppSubsUsed = 0; // W2(P4)：B 隊實際換人人次（樣本量測）
 let oppSubGames = 0; // 至少換過一人的場數
+// W2(P4) 身高體感代理（第 1 屆六場的 A2 個人數據；跨身高臂對照＝
+// 「190 攔網體感明顯較強」的無頭驗法）
+const a2 = { kills: 0, tips: 0, aces: 0, blocks: 0, games: 0 };
 
 // 跨屆收集器（SEASONS>1 才輸出；wins/margins/champions 維持「第 1 屆」語義不變）
 const perSeason = Array.from({ length: SEASONS }, () => ({
@@ -252,6 +255,13 @@ for (let run = 0; run < RUNS; run += 1) {
       }
       // 成長：實算 gp → 平均灑點；技術照傳授時程；隊友表現驅動成長（W2；W6 起帶屆數冪等鍵）
       const stats = matchStatsFor(g.events, 'A2', 'A');
+      if (season === 1) {
+        a2.kills += stats.kills;
+        a2.tips += stats.tipKills;
+        a2.aces += stats.aces;
+        a2.blocks += stats.blockPoints;
+        a2.games += 1;
+      }
       spendEvenly(player, growthPointsFor(stats, won));
       for (const k of TEACH_AFTER[mi] ?? []) player.techniques[k] = 1;
       if (USE_GROWTH) {
@@ -303,6 +313,8 @@ console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A
 for (const id of matchIds) {
   console.log(`${id.padEnd(16)} 勝率 ${pct(wins[id]).padStart(4)}  平均分差 ${avg(margins[id])}`);
 }
+console.log(`A2 場均（身高體感代理）：殺球 ${(a2.kills / a2.games).toFixed(2)}｜吊球 ${(a2.tips / a2.games).toFixed(2)}`
+  + `｜ACE ${(a2.aces / a2.games).toFixed(2)}｜攔網得分 ${(a2.blocks / a2.games).toFixed(2)}`);
 console.log(`\n決賽帶（真實連勝踏進決賽）：${pct(reachedFinal)}`);
 console.log(`奪冠率（國賽三連勝）：${pct(champions)}`);
 const totalMatches = RUNS * SEASONS * matchIds.length;
