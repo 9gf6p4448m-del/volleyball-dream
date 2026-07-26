@@ -174,15 +174,24 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         let x = a.px + (a.x - a.px) * alpha;
         let z = a.pz + (a.z - a.pz) * alpha;
 
-        // W7.1 #3A→W8 暫停圍圈：任一方喊暫停＝兩隊各自圍自家教練（弧形槽位依輪轉序，
-        // 不再全員擠同一點）；倒數剩 1.5s 散開走回。純顯示位移（比照魚躍前例）
+        // W7.1 #3A→W8 暫停圍圈（07-26 二輪：真圓圈）：任一方喊暫停＝兩隊各自圍自家
+        // 教練；我方主角恆佔圈口（slot 0＝固定視角），隊友依輪轉序填 1..5 環繞。
+        // 倒數剩 1.5s 散開走回。純顯示位移（比照魚躍前例）
         const inHuddleWindow = huddleTeam != null && onCourt && gameState.phase === 'serve' &&
           (gameState.serveReadyTick - gameState.tick) > HUDDLE.WALK_BACK_TICKS;
         u.huddleW = (u.huddleW ?? 0) +
           ((inHuddleWindow ? 1 : 0) - (u.huddleW ?? 0)) * (1 - Math.exp(-HUDDLE_K * dt));
         if (u.huddleW > 0.001) {
-          const slotIdx = gameState.match.rotations[pTeam]?.indexOf(id) ?? 0;
-          const hp = huddleSlot(TEAM_SIDE[pTeam], slotIdx < 0 ? 0 : slotIdx);
+          const rot = gameState.match.rotations[pTeam] ?? [];
+          let slotIdx;
+          if (pTeam === gameState.players[highlightId]?.teamId) {
+            slotIdx = id === highlightId
+              ? 0
+              : rot.filter((pid) => pid !== highlightId).indexOf(id) + 1;
+          } else {
+            slotIdx = Math.max(0, rot.indexOf(id));
+          }
+          const hp = huddleSlot(TEAM_SIDE[pTeam], slotIdx);
           x += (hp.x - x) * u.huddleW;
           z += (hp.z - z) * u.huddleW;
         }

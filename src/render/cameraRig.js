@@ -111,11 +111,10 @@ export function createCameraRig(camera, initialPlayerId) {
         pos.set(CAMERA_TUNING.BENCH_X, CAMERA_TUNING.BENCH_HEIGHT, side * CAMERA_TUNING.BENCH_Z);
         target.set(0, 1.1, 0);
       } else if (mode === 'huddle') {
-        // W8 暫停演出：主角圈位的第一人稱——沿「教練→我的槽位」方向再退半步取景
-        // （純鏡頭後拉，隊員站位不動），對準教練胸前的戰術板：板置中、教練頭在上緣、
-        // 兩側隊友入鏡。槽位幾何與 matchView 聚攏帶位同一套（huddleLayout）
-        const slotIdx = game.match.rotations[me.teamId]?.indexOf(playerId) ?? 0;
-        const slot = huddleSlot(side, slotIdx < 0 ? 0 : slotIdx);
+        // W8 暫停演出（07-26 二輪拍板）：圈口固定視角——主角恆佔 slot 0（朝球場的
+        // 圈口），每次暫停同一構圖；沿「教練→圈口」方向退半步取景，對準教練胸前
+        // 戰術板：板置中、教練頭上緣、隊友環繞兩側與教練身後。幾何同 huddleLayout
+        const slot = huddleSlot(side, 0);
         const coach = coachPos(side);
         const dx = slot.x - coach.x;
         const dz = slot.z - coach.z;
