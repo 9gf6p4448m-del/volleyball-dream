@@ -144,6 +144,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // W7.1 #3A：目前正在集合帶位/倒數的暫停隊伍（'A'|'B'|null）——matchLoop 唯一事實源，
     // matchView/countdown 都吃這個
     timeoutHuddleTeam: null,
+    // W8（07-26 試玩回饋）：對手教練選項待報——暫停當下播報會與「喊暫停」擠同一瞬間
+    // 且 3s 就過期（玩家正在讀自己的選項面板），改存到散圈回場那一刻才浮字告知
+    pendingOppBoost: null,
     // W7.1 #4①：滿檔字卡「跨進才發」的比對基準（同 sim momentum 初值 0）
     prevMomentumValue: 0,
     last: performance.now(),
@@ -672,6 +675,7 @@ function applyEvents(s, frameEvents, now) {
         if (applyTimeoutBoost(game, { team: 'B', boost: bBoost }).ok) {
           stage.matchView.setHuddlePlay('B', bBoost);
           feed.push({ type: 'TIMEOUT_BOOST', tick: game.tick, team: 'B', boost: bBoost });
+          s.pendingOppBoost = bBoost; // 散圈回場時再浮字（見下方暫停窗收尾）
         }
         stage.commentary?.onEvents(feed, game, s.aiState, now, s.controlledId);
       }
@@ -867,6 +871,16 @@ function frameStep(s, now) {
   // W8 暫停演出：圈內第一人稱窗——聚攏 0.9s 後進、散圈走回前 0.5s 退（板凳視角優先）；
   // 同一顆布林餵 rig（鏡頭）與 matchView（隱藏受控者本體防擋鏡）
   const huddleRemain = game.serveReadyTick - game.tick;
+  // W8（07-26 試玩回饋「沒看到對方選了什麼」）：對手選項改在散圈回場那一刻浮字——
+  // 資訊落在「你要用它」的前一刻（暫停中你在讀自己的面板，且播報 3s 就過期）
+  if (s.pendingOppBoost && (game.phase !== 'serve' || huddleRemain <= HUDDLE.WALK_BACK_TICKS)) {
+    const b = s.pendingOppBoost;
+    s.pendingOppBoost = null;
+    stage.floatText.show(
+      b === 'calm' ? '⚠ 對手調整呼吸——他們回了體力' : '⚠ 對手燃起氣勢——擋住這一波',
+      '#ff9d7a', 2600,
+    );
+  }
   const huddleFPV = !benched && s.timeoutHuddleTeam != null && game.phase === 'serve' &&
     (TUNING.TIMEOUT_DEAD_TICKS - huddleRemain) > HUDDLE_VIEW_IN_TICKS &&
     huddleRemain > HUDDLE.WALK_BACK_TICKS + 30;
