@@ -17,8 +17,12 @@
   自由人、發球三式＋魚躍、帶位接管操控（cover 自悟）、棄賽機制、160 自動化測試。
   生涯層在 `src/career/`；平衡治具 `tools/balance-sim.mjs`（node 跑勝率曲線）；
   存檔 `vd-career-v1`/`vd-career-player-v1` 雙 key 自動遷移。
-- **Phase 3 待拍板**：`docs/kickoffs/phase3-kickoff.md`（招募條件制/名冊/先發編排/
-  賽季制/決賽終調/技術債第 0 項）——帶去 Claude.ai 討論後回填開工。
+- **Phase 3 已結案**（2026-07-26，**權威快照＝`docs/phase3-w8-status.md`**）：W1–W8 全交付
+  ——招募/名冊/先發編排/賽季輪迴/Scouting/體力/氣勢/暫停/賽中換人/劇情事件/命名工程/
+  賽前對陣畫面/暫停圍圈演出全上線；401 測綠。**C3 難度三選一裁定＝維持現狀**（真人第 1 屆
+  體感 OK，難度題關卷）。
+- **Phase 4 待拍板**：`docs/kickoffs/phase4-kickoff.md`（三方向擇一：真實感補完／生涯縱深／
+  上架準備，六道決策題）——帶去 Claude.ai 討論後回填開工。
 
 ## 架構鐵律（違反即停）
 
