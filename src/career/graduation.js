@@ -27,13 +27,15 @@ export function promoteMembers(members) {
 
 // ---- 手寫新生（Q2：每屆 1 名具名，位置呼應該屆畢業者）----
 
-// 第 2 屆：MB——接班大山（「前輩的影子」）。本週佔位名接線；人設方向稿 2-3 案
-// 由週末快照供 Sawmah 挑選，定案後改 name/fullName/persona（id 不變＝存檔穩定）。
+// 第 2 屆：MB——接班大山（「前輩的影子」）。人設 2026-07-26 Sawmah 拍板＝B 案叛逆型
+// 「拆牆的人」雷紹齊（三案見 phase4-w1-status §4；id N1 不變＝存檔穩定）。
+// 支線鉤子（W2+ 展開）：用整個賽季對抗前輩的影子，最後發現「反著學」也是被影子
+// 定義的一種——真正的自由是承認自己學過他。
 // 第 3 屆手寫新生不在 W1 範圍（該屆缺口由程序補位員補；W2+ 再議）。
 export const FRESHMAN_HANDWRITTEN = {
   2: {
-    id: 'N1', name: '新生', fullName: '（新生・待定名）', role: 'middle', height: 1.93,
-    persona: '（佔位）大山畢業後補進的一年級中間手——人設待 Sawmah 拍板',
+    id: 'N1', name: '小雷', fullName: '雷紹齊', role: 'middle', height: 1.93,
+    persona: '拒絕當第二個大山——嘴上說老派攔網過時了，置物櫃裡卻收著大山那屆的比賽剪報',
     attributes: { jump: 61, power: 57, reaction: 56, stamina: 59, speed: 54, control: 58, serve: 51, block: 63 },
   },
 };

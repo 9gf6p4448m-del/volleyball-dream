@@ -283,6 +283,10 @@ export function graduationCeremonyLines({ graduates = [], aceGrads = [] } = {}) 
 }
 
 // W1(P4) 新生入學（輕量見面演出；手寫新生的支線重場＝之後的週次，本週不做內容）
+// 手寫新生見面句依 id 對句（人設定案後在此補；07-26 拍板 B 案雷紹齊＝叛逆型）
+const FRESHMAN_GREETING_BY_ID = {
+  N1: '……雷紹齊，中間手。先說好——我不是來當第二個大山的。',
+};
 const FRESHMAN_GREETING_BY_ROLE = {
   setter: '我來讓球去它該去的地方。',
   middle: '攔網——交給我試試。',
@@ -298,7 +302,7 @@ export function freshmenIntroLines(freshmen = []) {
     lines.push({
       speaker: f.name,
       text: f.origin === 'handwritten'
-        ? '請、請多指教！'
+        ? (FRESHMAN_GREETING_BY_ID[f.id] ?? '請、請多指教！')
         : (FRESHMAN_GREETING_BY_ROLE[f.role] ?? '請多指教！'),
     });
   }
