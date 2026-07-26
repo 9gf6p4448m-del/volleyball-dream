@@ -23,6 +23,7 @@ import { TECH_DEFS } from '../career/growth.js';
 import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js';
 import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
+import { CAMERA_TUNING } from '../render/cameraRig.js';
 
 // W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
 // 先用三人稱看全隊聚攏一小段，再切進圈裡，避免自己的身體從鏡頭裡穿過
@@ -69,6 +70,7 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     tapeCount: s.config.tapeClips.length, // 情蒐錄影帶卷數（測試用）
     floatText: stage.floatText,       // 字卡把手（W6.1 疊排的自動化驗證用）
     cardStats: () => stage.floatText.stats(), // W7.1：字卡遙測（真人實玩後查密度）
+    cameraTuning: CAMERA_TUNING,      // W8：鏡位即時調參（真機/自動化改值即生效，免重建）
   };
   // W7.1 六輪：?probe=cards 字卡壓力探針——自動比賽觸發不到主角字卡（自動接球拿不到
   // Perfect、不主動攔網），密度/遮擋無法自動驗證。本旗標以「真人激戰上限」節奏
@@ -886,6 +888,8 @@ function frameStep(s, now) {
     huddleRemain > HUDDLE.WALK_BACK_TICKS + 30;
   stage.rig.setHuddleView(huddleFPV);
   stage.matchView.setHuddleView(huddleFPV);
+  // 07-26：近身視角藏自己的頭上標籤（防守/攻擊/一人稱＝鏡頭貼在自己身後，標籤爆大擋線）
+  stage.matchView.setHideOwnTag(['defend', 'attack', 'first'].includes(stage.rig.getMode()));
   stage.rig.update(game, alpha, delta);
   // 局點張力：燈光收攏＋心跳（deuce 內建於 setPointTeam 判定）
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;

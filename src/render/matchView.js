@@ -32,6 +32,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   let highlightId = initialControlledId;
   let huddleTeam = null; // W7.1 #3A：目前正在集合帶位的隊伍（'A'|'B'|null）——matchLoop 逐幀灌入
   let huddleViewOn = false; // W8：圈內第一人稱進行中——隱藏受控者本體（鏡頭＝他的眼睛）
+  let hideOwnTag = false;   // 近身視角（defend/attack/first）：藏自己的頭上標籤
   const castShadow = quality.shadowSize > 0;
 
   // InstancedMesh 池（每種幾何一池＝10 draw calls，取代每人 16 個獨立 Mesh）；
@@ -109,6 +110,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // W8 暫停演出：教練在戰術板上畫本次選項（'calm'/'fire'；散場自動重置）
     setHuddlePlay(team, play) { huddleProps[team]?.drawPlay(play); },
     setHuddleView(v) { huddleViewOn = v; }, // 與 cameraRig 同一顆布林（matchLoop 灌入）
+    // 07-26：近身視角（防守/攻擊/一人稱）隱藏「自己的」頭上標籤——近距離下標籤爆大
+    // 橫在畫面中央擋住讀線；身分已由視角本身確立，不需要再標「你·OH」
+    setHideOwnTag(v) { hideOwnTag = v; },
     setHot(hot) {
       if (hot === ringHot) return;
       ringHot = hot;
@@ -168,7 +172,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         // W8 圈內第一人稱：鏡頭就是受控者的眼睛——隱藏他的本體與標籤（防身體擋鏡）
         const hideMe = huddleViewOn && id === highlightId;
         u.rig.root.scale.setScalar(hideMe ? 0.0001 : 1);
-        u.tag.sprite.visible = !hideMe;
+        // 標籤另加近身視角條件（07-26）：自己的標籤在防守/攻擊/一人稱下爆大擋讀線
+        u.tag.sprite.visible = !hideMe && !(hideOwnTag && id === highlightId);
 
         const a = gameState.actors[id];
         let x = a.px + (a.x - a.px) * alpha;

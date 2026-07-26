@@ -22,6 +22,19 @@ export const CAMERA_TUNING = {
   BENCH_X: -6.6,
   BENCH_Z: 10.6,
   BENCH_HEIGHT: 1.8,
+  // W8（07-26 檢查）：防守/攔網視角參數化（原硬編）——距離實測穩定（恆定、抖動 2mm），
+  // 但原高度 eye+1.15≈2.9m 高於網頂 2.43m＝俯視；INSET 1 代表相機在球員正後方
+  // （原 0.92＝隨站位往中線側偏，邊線站位偏移達 28cm）
+  // 07-26 定稿（三案同場景截圖對照）：原 1.7/1.15 ＝離地 2.9m 高於網頂 2.43m＝俯視
+  // 上帝視角；改 1.45/0.7 ＝離地約 2.45m ≈ 網頂高＝與對面攻擊手「平視隔網對峙」，
+  // 對面整排前排入鏡、自己的頭在畫面下緣定錨。INSET 0.92→1＝相機回到正後方
+  // （原值使相機隨站位往中線側偏，邊線站位偏移達 28cm）
+  DEFEND_BACK: 1.45,      // 球員身後距離（m）
+  DEFEND_UP: 0.7,         // 眼高之上再抬（m）
+  DEFEND_INSET: 1,        // 相機 x＝球員 x × 此值（1＝正後方）
+  DEFEND_LOOK_H: 2.35,    // 注視點高度（m；網頂略下＝視線水平帶落在對面攻擊手身上）
+  DEFEND_LOOK_AHEAD: 5.0, // 注視點在球員前方距離（m）
+  DEFEND_LOOK_INSET: 0.85, // 注視點 x＝球員 x × 此值
 };
 
 // 幀率無關的平滑係數：每幀吃掉的比例＝1-e^(-k·dt)，任何 fps 下同樣的秒級收斂
@@ -127,8 +140,9 @@ export function createCameraRig(camera, initialPlayerId) {
       } else if (mode === 'defend') {
         // 攔網手身後略高，隔網看對面攻擊手的助跑與起跳（守方讀攻擊——與攻擊視角對稱）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
-        pos.set(ax * 0.92, eye + 1.15, az + side * 1.7);
-        target.set(ax * 0.6, 2.0, az - side * 5.0);
+        const T = CAMERA_TUNING;
+        pos.set(ax * T.DEFEND_INSET, eye + T.DEFEND_UP, az + side * T.DEFEND_BACK);
+        target.set(ax * T.DEFEND_LOOK_INSET, T.DEFEND_LOOK_H, az - side * T.DEFEND_LOOK_AHEAD);
       } else if (mode === 'attack') {
         // 攻擊手身後略高，越過網看對面攔網手與空檔（讀攔網視角）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
