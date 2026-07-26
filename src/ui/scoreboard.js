@@ -52,6 +52,10 @@ export function createScoreboard(playerId) {
       <div class="mHeat" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;
         transform:translate(-50%,-50%);opacity:0;transition:opacity 250ms ease"></div>
       <div class="mFlash" style="position:absolute;top:50%;font-size:13px;font-weight:900;opacity:0"></div>
+      <div class="mStreak" style="position:absolute;top:12px;display:flex;gap:4px;
+        align-items:center;opacity:0;transition:opacity 160ms ease">
+        <span class="sd"></span><span class="sd"></span><span class="sd"></span>
+      </div>
     </div>
     <div class="bubble" style="display:none;background:#f7f9ff;transition:opacity 120ms ease">
       <div class="tail" style="background:#f7f9ff"></div>
@@ -105,7 +109,13 @@ export function createScoreboard(playerId) {
   #scoreboard .mFill.glow{animation:none;filter:brightness(1.3)}
   #scoreboard .mFlash.flash{animation:vd-mflash-reduced 0.6s ease-out}
 }
-@keyframes vd-mflash-reduced{0%{opacity:0}30%{opacity:1}100%{opacity:0}}`;
+@keyframes vd-mflash-reduced{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+/* 07-26 試玩回饋（推檔門檻不可讀：「得分了怎麼沒漲」）：連得進度三點——
+   集滿三顆才推一檔；對手得分歸零。取代原「蓄勢微光」的隱晦漸亮 */
+#scoreboard .mStreak .sd{width:7px;height:7px;border-radius:50%;
+  background:rgba(255,255,255,0.22);box-shadow:0 1px 2px rgba(0,0,0,0.5);
+  transition:background 140ms ease,transform 140ms ease}
+#scoreboard .mStreak .sd.on{transform:scale(1.3)}`;
     document.head.appendChild(st);
   }
   const lineEl = el.querySelector('.line');
@@ -114,6 +124,8 @@ export function createScoreboard(playerId) {
   const mFillEl = el.querySelector('.mFill');
   const mFlashEl = el.querySelector('.mFlash');
   const mHeatEl = el.querySelector('.mHeat');
+  const mStreakEl = el.querySelector('.mStreak');
+  const streakDots = [...el.querySelectorAll('.mStreak .sd')];
   let shownV = 0; // W7.1 三輪 A：顯示值向機制值平滑補間（update 每 rAF 一次，固定係數）
   const bubbleEl = el.querySelector('.bubble');
   const tailEl = el.querySelector('.tail');
@@ -222,6 +234,25 @@ export function createScoreboard(playerId) {
           mHeatEl.style.opacity = `${0.3 + 0.3 * heatN}`;
         } else {
           mHeatEl.style.opacity = '0';
+        }
+        // 07-26 試玩回饋：連得進度三點——推檔門檻視覺化（「得分了怎麼沒漲」＝
+        // 只有連得 3 分才推一檔、對手得 1 分即收檔）。滿檔後不再需要進度＝隱藏
+        const sN = ps?.team ? Math.min(ps.n, TUNING.MOMENTUM_STREAK_MIN) : 0;
+        const atMax = ps?.team && Math.abs(v) >= TUNING.MOMENTUM_MAX
+          && (ps.team === 'A') === (v > 0);
+        if (sN > 0 && !atMax) {
+          const dir = ps.team === 'A' ? 1 : -1;
+          mStreakEl.style.opacity = '1';
+          mStreakEl.style.left = dir > 0 ? '2%' : 'auto';
+          mStreakEl.style.right = dir > 0 ? 'auto' : '2%';
+          const c = MOMENTUM_COLOR[ps.team];
+          streakDots.forEach((d, i) => {
+            const on = i < sN;
+            d.style.background = on ? c : 'rgba(255,255,255,0.22)';
+            d.classList.toggle('on', on);
+          });
+        } else {
+          mStreakEl.style.opacity = '0';
         }
       }
 
