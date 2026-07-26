@@ -12,6 +12,9 @@ export const DEFAULT_STARTERS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'];
 // 玩家（A2）trust 恆取 save.player（唯一權威），刻意不入本映射——避免雙真相。
 // 預設值承 W2 隊友槽位 trust＝全 20（見 careerState 舊 BASE_TRUST）。
 export const DEFAULT_TEAMMATE_TRUST = 20;
+// W2(P4) 拍板：新生入隊 trust 初值 10（對齊招募生；「新生要贏得信任」體感）——
+// careerStore.advanceSeason 換血後顯式寫入，只作用於新生、創隊班底維持 20
+export const FRESHMAN_TRUST = 10;
 
 // 名冊 → 可排入先發的隊友 id（非自由人；不含玩家、不含自由人 AL）
 function fieldMemberIds(members) {

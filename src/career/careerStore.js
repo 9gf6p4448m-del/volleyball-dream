@@ -6,7 +6,8 @@
 import { serializePlayer } from '../sim/player.js';
 import { advanceSeason } from './careerState.js';
 import { applySeasonTurnover } from './graduation.js';
-import { defaultLineup } from './lineup.js';
+import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
+import { revealHeightForSeason } from './heightGrowth.js';
 import { canExpel, EXPEL_TRUST_PENALTY } from './recruitment.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
@@ -113,8 +114,9 @@ export function createCareerStore(storage) {
     // W1(P4) 時間系統：①高中章固定三屆——第 3 屆季末不再推進（回 false；生涯結算
     // ＝W4）②單次 RMW 一併換血：畢業（三年級離隊→alumni）→年級推進→新生入學
     // （graduation.applySeasonTurnover）→lineup 重排預設陣（畢業者出陣、trust
-    // 倖存者沿用/新生顯式 20）。成功回 { ok:true, graduates, freshmen }（UI 儀式
-    // 消費；truthy 相容既有 if (!advanceSeason()) 判式）。
+    // 倖存者沿用/新生顯式 10——W2 拍板）→身高揭曉（heightGrowth，W2）。成功回
+    // { ok:true, graduates, freshmen, heightReveal }（UI 儀式消費；truthy 相容
+    // 既有 if (!advanceSeason()) 判式；heightReveal 舊檔無曲線＝null）。
     advanceSeason(opts = {}) {
       const save = loadSave();
       const view = save ? careerViewOf(save) : null;
@@ -123,6 +125,7 @@ export function createCareerStore(storage) {
       const next = advanceSeason(view, opts);
       if (next === view) return false; // 賽季未結束
       let turnover = null;
+      let heightReveal = null;
       const ok = writeSave((prev) => {
         turnover = applySeasonTurnover({
           roster: prev.roster,
@@ -130,24 +133,34 @@ export function createCareerStore(storage) {
           seed: next.seed,
         });
         // 預設陣重排：畢業者不可留在 starters；trust 跟人——倖存者沿用舊值、
-        // 畢業者鍵自然消失、新生取預設 20（顯式寫入，勿依賴缺鍵回退——W3 §6b）
+        // 畢業者鍵自然消失、新生顯式寫入（勿依賴缺鍵回退——W3 §6b）。
+        // W2(P4) 拍板：新生 trust 初值 10（對齊招募生；創隊班底維持預設 20）
         const lineup = defaultLineup(turnover.roster.members);
         const prevTrust = prev.lineup?.trust ?? {};
         for (const id of Object.keys(lineup.trust)) {
           if (prevTrust[id] !== undefined) lineup.trust[id] = prevTrust[id];
         }
+        for (const f of turnover.freshmen) {
+          if (lineup.trust[f.id] !== undefined) lineup.trust[f.id] = FRESHMAN_TRUST;
+        }
+        const nextIndex = (prev.season.index ?? 1) + 1;
+        // W2(P4) 身高揭曉：曲線創角時已預生成（player.height.plan），此處只揭曉
+        // 下一屆值並 push timeline（同一次 RMW——儀式演出由 UI 吃回傳 heightReveal）
+        const revealed = revealHeightForSeason(prev.player, nextIndex);
+        heightReveal = revealed.reveal;
         return {
           ...prev,
+          player: revealed.player,
           roster: turnover.roster,
           lineup,
           season: {
             ...seasonFromCareer(next, prev),
-            index: (prev.season.index ?? 1) + 1,
+            index: nextIndex,
           },
         };
       });
       if (!ok) return false;
-      return { ok: true, graduates: turnover.graduates, freshmen: turnover.freshmen };
+      return { ok: true, graduates: turnover.graduates, freshmen: turnover.freshmen, heightReveal };
     },
     // 現在第幾屆（UI 顯示用）
     seasonIndex() {

@@ -8,6 +8,7 @@ import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 import { buildSchedule } from './schedule.js';
+import { initialHeightState } from './heightGrowth.js';
 
 // v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
 export const CAREER_VERSION = 3;
@@ -151,15 +152,20 @@ export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp 
 }
 
 // 生涯主角：固定佔 A 隊主攻手槽（main.js PLAYER_ID＝'A2'，index 1＝2 號位）。
-// 初值與預設隊友同基準——成長差異由 stage 3 的雙層成長系統拉開
-export function createCareerPlayer(name) {
-  return createPlayer({
+// 初值與預設隊友同基準——成長差異由 stage 3 的雙層成長系統拉開。
+// W2(P4) 身高創角（憲法 Q6/Q7）：heightCm＝創角輸入（140–220 已 clamp）；
+// aspiration＝志願位置（志願登記，一律 OH 出道——currentRole 恆 outside）；
+// seed＝career.seed（成長曲線子種子來源）。三年曲線於此刻預生成（heightGrowth）。
+// 不帶 opts＝舊路徑（測試/治具）：188 基準、志願主攻，行為與 Phase 1 相容。
+export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside', seed = 1 } = {}) {
+  const height = initialHeightState({ seed, heightCm });
+  const player = createPlayer({
     id: 'A2',
     name,
     teamId: 'A',
     naturalRole: 'outside',
     currentRole: 'outside',
-    height: 1.88,
+    height: height.current,
     trust: 40, // 拍板 07-22：60→40——「打好球→球權變多」的成長弧要看得見（地板 0.27 保底）
     attributes: {
       jump: 60, power: 62, reaction: 60, stamina: 60,
@@ -173,6 +179,11 @@ export function createCareerPlayer(name) {
       jumpServe: 0, floatServe: 0, dive: 0, v: 2,
     },
   });
+  // 單一事實源在 timeline（current＝末項快取）＋隱藏曲線 plan（逐屆揭曉）
+  player.height = height;
+  // 志願登記（W2 只落欄位；轉位事件＝W3——該位置驗證開放時優先觸發）
+  player.aspiration = aspiration;
+  return player;
 }
 
 // ---- 對手建隊（參數檔→6 個 Player）----

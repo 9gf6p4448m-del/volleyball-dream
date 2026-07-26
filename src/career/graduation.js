@@ -168,6 +168,17 @@ export function buildFreshmen({ seasonIndex, seed, members, usedNames, alumni = 
 // seasonIndex＝剛結束的屆；seed＝下一屆種子（advanceSeason 已決定論衍生）。
 // 校友（alumni）：畢業者完整快照＋屆數——①擋還魂（careerMatchSetup 除名清單）
 // ②W4 生涯結算素材 ③id 不回收掃描。capacity 不變（12）。
+// W2(P4) 隊長交接（拍板：阿哲正式接任）：換血後名冊無人帶 captain 旗標（大山 A3
+// 第 1 屆末畢業）→ 落給阿哲（A1）；A1 缺席（理論上不會——創隊班底不可逐）＝首位
+// 非自由人遞補防呆。交接台詞在畢業儀式鏈（events.js graduationCeremonyLines）。
+function ensureCaptain(members) {
+  if (members.some((m) => m.captain)) return members;
+  const heirId = members.some((m) => m.id === 'A1')
+    ? 'A1'
+    : members.find((m) => m.role !== 'libero')?.id;
+  return members.map((m) => (m.id === heirId ? { ...m, captain: true } : m));
+}
+
 export function applySeasonTurnover({ roster, seasonIndex, seed, playerRole = 'outside' }) {
   const { graduates, remaining } = splitGraduates(roster.members);
   const promoted = promoteMembers(remaining);
@@ -188,7 +199,7 @@ export function applySeasonTurnover({ roster, seasonIndex, seed, playerRole = 'o
     playerRole,
   });
   return {
-    roster: { ...roster, members: [...promoted, ...freshmen], alumni },
+    roster: { ...roster, members: ensureCaptain([...promoted, ...freshmen]), alumni },
     graduates,
     freshmen,
   };

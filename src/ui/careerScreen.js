@@ -20,8 +20,13 @@ import {
 } from '../career/recruitment.js';
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
-  graduationCeremonyLines, freshmenIntroLines,
+  graduationCeremonyLines, freshmenIntroLines, resolveEventsForRoster,
 } from '../career/events.js';
+import { clampHeightCm } from '../career/heightGrowth.js';
+import {
+  adviceFor, coachAdviceLines, aspirationReplyLines, bandShiftLines, roleLabel,
+} from '../career/heightAdvice.js';
+import { showHeightRitual } from './heightRitual.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
@@ -201,6 +206,40 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       card.appendChild(button(`${def.name}（強度 ${def.level}）`, false, () => pick(id)));
     }
     card.appendChild(button('不指定——全交給輪抽', true, () => pick(null)));
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  // ---- W2(P4) 志願登記（憲法 Q7）：教練面談後全位置自由選（可無視建議）；
+  // 一律 OH 出道——志願只落 save.player.aspiration，轉位事件＝W3 ----
+  function showAspirationPicker(cm, onPick) {
+    const adv = adviceFor(cm);
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+      'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'padding:24px 16px',
+    ]);
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+      'flex-direction:column', 'gap:8px', 'align-items:stretch',
+    ]);
+    card.appendChild(el('div', [
+      'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+    ], '📋 志願登記'));
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+      '路是你自己選的——志願全位置自由填，教練的建議只是建議。一年級一律從主攻手出發。'));
+    for (const role of ['outside', 'setter', 'middle', 'opposite', 'libero']) {
+      const tag = adv.primary.includes(role) ? '★ 教練建議'
+        : adv.secondary === role ? '☆ 次選' : '';
+      card.appendChild(button(
+        `${roleLabel(role)}${tag ? `——${tag}` : ''}`,
+        adv.primary.includes(role),
+        () => { overlay.remove(); onPick(role); },
+      ));
+    }
+    card.appendChild(button('再想想——返回', false, () => overlay.remove()));
     overlay.appendChild(card);
     document.body.appendChild(overlay);
   }
@@ -1127,7 +1166,8 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         `${career.playerName}・地區賽 ${rec.wins} 勝 ${rec.losses} 敗`));
     }
 
-    // 新生涯：展開名字輸入；已有存檔時要點兩次確認覆蓋
+    // 新生涯（W2 憲法 Q6/Q7 創角流程）：名字＋真實身高 → 教練面談（A4 三段式）→
+    // 志願登記（全位置自由選）→ 建檔（一律 OH 出道）。已有存檔時要點兩次確認覆蓋。
     const newPanel = el('div', [
       'display:none', 'flex-direction:column', 'align-items:center', 'gap:10px',
       `background:${COLOR.card}`, 'border-radius:14px', 'padding:16px 20px',
@@ -1139,6 +1179,18 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     nameInput.maxLength = 12;
     nameInput.placeholder = '你的名字';
     nameInput.value = '小夢';
+    const heightInput = el('input', [
+      'width:200px', 'height:44px', 'border-radius:10px', 'border:1px solid #2c3a58',
+      'background:#0d1322', `color:${COLOR.text}`, 'font-size:16px', 'text-align:center',
+    ]);
+    heightInput.type = 'number';
+    heightInput.inputMode = 'numeric';
+    heightInput.placeholder = '身高（公分）';
+    heightInput.value = '175';
+    newPanel.appendChild(nameInput);
+    newPanel.appendChild(heightInput);
+    newPanel.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.5'],
+      '輸入真實身高（140–220cm）——教練會誠實跟你談'));
     let confirmArmed = false;
     const startBtn = button('開始生涯', true, () => {
       if (hasUsableSave && !confirmArmed) {
@@ -1148,17 +1200,32 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         return;
       }
       const playerName = nameInput.value.trim() || '小夢';
-      // 新生涯＝全新存檔：先清舊檔，否則 saveCareer 只覆寫 season/player、
-      // 舊名冊（含隊友成長）/先發/招募會被繼承進「新」生涯
-      store.clear();
-      const career = createCareer({ seed: Date.now() % 1000000007, playerName });
-      const player = createCareerPlayer(playerName);
-      if (!store.saveCareer(career) || !store.savePlayer(player)) {
-        setMsg('存檔寫入失敗——瀏覽器儲存空間不可用（進度將無法保留）');
+      // 超界＝軟提示後 clamp（憲法 W2 驗收條：不 crash、參數誠實映射不美化）
+      const { cm, clamped } = clampHeightCm(heightInput.value);
+      if (clamped) {
+        setMsg(`教練看了體檢表一眼：「這數字……先按 ${cm}cm 記。」（有效範圍 140–220）`);
+        heightInput.value = String(cm);
       }
-      renderCareer();
+      dialogPlay([{ lines: coachAdviceLines(cm) }], () => {
+        showAspirationPicker(cm, (role) => {
+          dialogPlay([{ lines: aspirationReplyLines(cm, role) }], () => {
+            // 新生涯＝全新存檔：先清舊檔，否則 saveCareer 只覆寫 season/player、
+            // 舊名冊（含隊友成長）/先發/招募會被繼承進「新」生涯。
+            // 面談/志願中途返回都還沒走到這裡＝舊檔安全。
+            store.clear();
+            const career = createCareer({ seed: Date.now() % 1000000007, playerName });
+            // 三年成長曲線於此刻預生成（career.seed 衍生子種子；heightGrowth）
+            const player = createCareerPlayer(playerName, {
+              heightCm: cm, aspiration: role, seed: career.seed,
+            });
+            if (!store.saveCareer(career) || !store.savePlayer(player)) {
+              setMsg('存檔寫入失敗——瀏覽器儲存空間不可用（進度將無法保留）');
+            }
+            renderCareer();
+          });
+        });
+      });
     });
-    newPanel.appendChild(nameInput);
     newPanel.appendChild(startBtn);
 
     root.appendChild(button('新生涯', false, () => {
@@ -1188,8 +1255,11 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       career = settled;
       if (forfeited) setMsg('上一場中途離開——依規記為棄賽敗（0:25）');
     }
-    // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）
-    const postEvs = dueEvents(career, 'post');
+    // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）。
+    // W2(P4) canon 年級守衛：大山已畢業＝帶 elderId 的事件改播轉授版
+    const postEvs = resolveEventsForRoster(
+      dueEvents(career, 'post'), store.loadRoster?.()?.members ?? null,
+    );
     if (postEvs.length) {
       fireEvents(postEvs, career, player, () => renderCareer());
       return;
@@ -1277,17 +1347,33 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         showInvitePicker((invitedId) => {
           const adv = store.advanceSeason?.({ invitedId });
           if (!adv) return;
+          // W2(P4)：advanceSeason 已在存檔內揭曉身高——必須重載 player，
+          // 拿閉包舊物件直接 savePlayer 會把新身高蓋回去（timeline 倒退）
+          const freshPlayer = store.loadPlayer() ?? player;
           // W7.1 屆間訓練營（#6 拍板 C）：主角耐力 +2（上限 80）——寫檔後接對話尾播
-          const trained = applyOffseasonTraining(player);
-          player.attributes = trained.attributes;
-          store.savePlayer(player);
-          const seqs = [];
-          const intro = freshmenIntroLines(adv.freshmen ?? []);
-          if (intro.length) seqs.push({ lines: intro });
-          const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
-          if (opener.length) seqs.push({ lines: opener });
-          if (seqs.length) dialogPlay(seqs, () => renderCareer());
-          else renderCareer();
+          const trained = applyOffseasonTraining(freshPlayer);
+          freshPlayer.attributes = trained.attributes;
+          store.savePlayer(freshPlayer);
+          const continueChain = () => {
+            const seqs = [];
+            // A3 跨帶檢查：長高跨進新身高帶＝教練追加動態評語（接在儀式演出後）
+            if (adv.heightReveal) {
+              const shift = bandShiftLines(adv.heightReveal.fromCm, adv.heightReveal.toCm);
+              if (shift) seqs.push({ lines: shift });
+            }
+            const intro = freshmenIntroLines(adv.freshmen ?? []);
+            if (intro.length) seqs.push({ lines: intro });
+            const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
+            if (opener.length) seqs.push({ lines: opener });
+            if (seqs.length) dialogPlay(seqs, () => renderCareer());
+            else renderCareer();
+          };
+          // W2(P4) 「你長高了」儀式演出（暗場聚光/身高尺/模型即時長高/參數刻度）
+          if (adv.heightReveal) {
+            showHeightRitual({ player: freshPlayer, reveal: adv.heightReveal, onDone: continueChain });
+          } else {
+            continueChain();
+          }
         });
       });
     });
@@ -1335,10 +1421,12 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
           onPlay({ career: store.loadCareer() ?? career, player, matchEntry: next });
         };
         // W7 D1 舊隊情結：靜態表＋動態事件（對戰原隊的招募生賽前對話）合流；
-        // fireEvents 以 e.id 入帳＝動態 id 同管道去重（每人對原隊一生一次）
+        // fireEvents 以 e.id 入帳＝動態 id 同管道去重（每人對原隊一生一次）。
+        // W2(P4) canon 年級守衛：大山已畢業＝teach-jump/rematch 改播轉授版
+        const rosterNow = store.loadRoster?.() ?? null;
         const preEvs = [
-          ...dueEvents(career, 'pre'),
-          ...oldTeamPreEvents(career, store.loadRoster?.() ?? null),
+          ...resolveEventsForRoster(dueEvents(career, 'pre'), rosterNow?.members ?? null),
+          ...oldTeamPreEvents(career, rosterNow),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();

@@ -88,7 +88,7 @@ test('buildFreshmen 決定論：同種子同名同屬性、不同種子屬性有
   assert.ok(!FRESHMAN_NAME_POOL.includes(genJ.fullName));
 });
 
-test('store.advanceSeason 換血整合：畢業者出名冊出先發、trust 鍵清除、新生顯式 trust 20', () => {
+test('store.advanceSeason 換血整合：畢業者出名冊出先發、trust 鍵清除、新生顯式 trust 10', () => {
   const store = createCareerStore(fakeStorage());
   store.saveCareer(endSeason(createCareer({ seed: 9, playerName: '測' })));
   store.savePlayer(createCareerPlayer('測'));
@@ -105,7 +105,9 @@ test('store.advanceSeason 換血整合：畢業者出名冊出先發、trust 鍵
   assert.equal(validateLineup(lineup, roster.members, 'A2').valid, true);
   assert.equal(checkRoleStructure(lineup.starters, roster.members, 'A2').legal, true);
   assert.equal(lineup.trust.A3, undefined); // 畢業者 trust 鍵清除
-  for (const f of adv.freshmen) assert.equal(lineup.trust[f.id], 20); // 新生顯式初值
+  // W2(P4) 拍板：新生 trust 初值 20→10（對齊招募生；創隊班底維持 20）
+  for (const f of adv.freshmen) assert.equal(lineup.trust[f.id], 10);
+  assert.equal(lineup.trust.A1, 20); // 創隊班底不受新生初值影響
   // 倖存者年級推進
   assert.equal(roster.members.find((m) => m.id === 'A1').growth.grade, 2);
   assert.equal(roster.members.find((m) => m.id === 'A6').growth.grade, 3);

@@ -44,6 +44,9 @@ const USE_STAMINA = process.env.VD_STAMINA === '1' || USE_MANAGE;
 // AI 暫停照生涯實況鏡像（被連 4 分喊）；基準臂不開＝與 pre-W7 逐位一致
 const USE_MOMENTUM = process.env.VD_MOMENTUM === '1';
 const W7_ON = USE_STAMINA || USE_MOMENTUM;
+// W2(P4) 身高錨點臂：VD_HEIGHT=公分（150/175/195 三錨點；工單 B3）。
+// 未給＝188 基準（Phase 1 遺留值；本週校準後 175 為主錨、188＝「明顯優勢」）
+const HEIGHT_CM = process.env.VD_HEIGHT ? Number.parseInt(process.env.VD_HEIGHT, 10) : null;
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖（跨屆冪等——已學不重覆）
 const TEACH_AFTER = {
@@ -162,6 +165,8 @@ let stamSum = 0;
 let stamMin = 1;
 let stamGames = 0;
 let subsUsed = 0;
+let oppSubsUsed = 0; // W2(P4)：B 隊實際換人人次（樣本量測）
+let oppSubGames = 0; // 至少換過一人的場數
 
 // 跨屆收集器（SEASONS>1 才輸出；wins/margins/champions 維持「第 1 屆」語義不變）
 const perSeason = Array.from({ length: SEASONS }, () => ({
@@ -174,7 +179,9 @@ let rosterEndSizeSum = 0;
 
 for (let run = 0; run < RUNS; run += 1) {
   let career = createCareer({ seed: 100000 + run * 7919, playerName: '治具' });
-  const player = createCareerPlayer('治具');
+  const player = createCareerPlayer('治具', HEIGHT_CM
+    ? { heightCm: HEIGHT_CM, seed: career.seed }
+    : {});
   // W2 名冊管線（鏡像正式路徑）：具名個性化 starter＋逐場表現驅動成長
   // capacity 12＝schema v2 現值（W5 拍板 10→12）
   let roster = { capacity: 12, members: buildStarterMembers() };
@@ -229,6 +236,10 @@ for (let run = 0; run < RUNS; run += 1) {
         stamMin = Math.min(stamMin, ...onCourt);
         stamGames += 1;
         subsUsed += TUNING.SUBS_PER_SET - g.subs.A.remaining;
+        // W2(P4) 對手換人樣本量測（拍板：閾值不調只量測，數據留 W4 多局制再判）
+        const bUsed = TUNING.SUBS_PER_SET - g.subs.B.remaining;
+        oppSubsUsed += bUsed;
+        if (bUsed > 0) oppSubGames += 1;
       }
       if (season === 1) {
         if (won) wins[entry.id] += 1;
@@ -286,18 +297,22 @@ const avg = (a) => (a.reduce((s, v) => s + v, 0) / a.length).toFixed(1);
 const armName = [
   USE_MANAGE ? '體力＋自動管理' : USE_STAMINA ? '體力＋無管理' : null,
   USE_MOMENTUM ? '氣勢' : null,
+  HEIGHT_CM ? `身高${HEIGHT_CM}` : null,
 ].filter(Boolean).join('＋') || '基準（W7 全關）';
 console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A2=AI 代打基準）===`);
 for (const id of matchIds) {
   console.log(`${id.padEnd(16)} 勝率 ${pct(wins[id]).padStart(4)}  平均分差 ${avg(margins[id])}`);
 }
-console.log(`\n奪冠率（國賽三連勝）：${pct(champions)}`);
+console.log(`\n決賽帶（真實連勝踏進決賽）：${pct(reachedFinal)}`);
+console.log(`奪冠率（國賽三連勝）：${pct(champions)}`);
 const totalMatches = RUNS * SEASONS * matchIds.length;
 console.log(`逆轉哨兵（落後≥5 後翻盤，全 ${totalMatches} 場）：樣本 ${deficit5} 場、翻盤 ${comeback5}`
   + `（${deficit5 > 0 ? Math.round((comeback5 / deficit5) * 100) : 0}%）`);
 if (USE_STAMINA) {
   console.log(`體力診斷：A 隊終場場上均值 ${(stamSum / stamGames).toFixed(2)}、`
     + `單場最低 ${stamMin.toFixed(2)}、場均換人 ${(subsUsed / stamGames).toFixed(2)} 人次`);
+  console.log(`對手換人樣本（W2 量測）：全 ${stamGames} 場共 ${oppSubsUsed} 人次、`
+    + `有換人場數 ${oppSubGames}（${stamGames > 0 ? Math.round((oppSubGames / stamGames) * 100) : 0}%）`);
 }
 
 if (SEASONS > 1) {

@@ -113,9 +113,16 @@ export const EVENT_DEFS = [
     moment: 'pre',
     when: { matchId: 'national-final' },
     effect: { unlock: 'jumpServe' },
+    // W2(P4) 年級守衛（拍板①保底轉授）：大山（A3）已畢業＝播 altLines 轉授版
+    // ——新隊長阿哲以「大山留下的東西」名義轉授，跳發照樣學到（effect 不變）
+    elderId: 'A3',
     lines: [
       { speaker: '大山', text: '決賽了。把我壓箱的東西給你——跳躍發球，我們隊史上只有兩個人發得動。' },
       { speaker: '大山', text: '助跑、拋球、當它是扣球打下去。天鷹統治天空的高度——去讓他們見識，遊隼統治天空的速度。' },
+    ],
+    altLines: [
+      { speaker: '阿哲', text: '決賽了。大山學長畢業前，把他壓箱的東西留給了球隊——跳躍發球。他說，交給下一個敢打關鍵球的人。' },
+      { speaker: '阿哲', text: '助跑、拋球、當它是扣球打下去。人不在，牆留下的東西還在——去讓天鷹見識，遊隼統治天空的速度。' },
     ],
   },
   {
@@ -131,8 +138,13 @@ export const EVENT_DEFS = [
     id: 'rematch-won',
     moment: 'pre',
     when: { matchId: 'national-sf', wonVs: 'obsidian' },
+    elderId: 'A3', // W2(P4) 年級守衛：大山已畢業＝阿哲以隊長身分接手宿敵情報
     lines: [
       { speaker: '大山', text: '曜石。小組賽輸給我們之後，他們把你的每一球都看了三遍。' },
+      { speaker: '阿哲', text: '他們衝著你來的。慣用的線路會被讀死——換節奏，或者用騙的。' },
+    ],
+    altLines: [
+      { speaker: '阿哲', text: '曜石。小組賽輸給我們之後，他們把你的每一球都看了三遍——這種執念，大山學長那屆就領教過。' },
       { speaker: '阿哲', text: '他們衝著你來的。慣用的線路會被讀死——換節奏，或者用騙的。' },
     ],
   },
@@ -140,12 +152,29 @@ export const EVENT_DEFS = [
     id: 'rematch-lost',
     moment: 'pre',
     when: { matchId: 'national-sf', lostVs: 'obsidian' },
+    elderId: 'A3',
     lines: [
       { speaker: '大山', text: '又是曜石。小組賽欠他們一場——今天當面討回來。' },
       { speaker: '阿哲', text: '他們記得你怎麼打的。上次的套路不會再通——拿出新的東西。' },
     ],
+    altLines: [
+      { speaker: '阿哲', text: '又是曜石。小組賽欠他們一場——學長們沒討回來的帳，今天當面討。' },
+      { speaker: '阿哲', text: '他們記得你怎麼打的。上次的套路不會再通——拿出新的東西。' },
+    ],
   },
 ];
+
+// W2(P4) canon 事件年級守衛（拍板①保底轉授）：帶 elderId 的事件，該成員已不在
+// 現役名冊（畢業入 alumni）＝改播 altLines（effect/id 不變——技術照學、去重照走）。
+// members＝現役名冊；null/undefined（無名冊的舊路徑）＝視同在隊、播原版（安全預設）。
+export function resolveEventsForRoster(evs, members) {
+  if (!Array.isArray(members)) return evs;
+  return evs.map((e) => (
+    e.elderId && e.altLines && !members.some((m) => m.id === e.elderId)
+      ? { ...e, lines: e.altLines }
+      : e
+  ));
+}
 
 // ---- W5 逐出台詞（B5 拍板：2 行極簡，被逐者一行＋隊長一行，平靜克制）----
 // 玩家主動點擊觸發（非賽程狀態驅動），故不進 EVENT_DEFS 條件比對；沿用 {speaker,text}
@@ -270,6 +299,11 @@ export function graduationCeremonyLines({ graduates = [], aceGrads = [] } = {}) 
     const own = FAREWELL_BY_ID[m.id] ?? FAREWELL_BY_RECRUIT[m.recruitKey ?? m.origin];
     if (own) lines.push(...own);
     else lines.push({ speaker: m.name, text: '謝謝大家。這段路，我不會忘。' });
+    // W2(P4) 隊長交接（拍板：阿哲正式接任）：大山離別後、儀式鏈內完成交接
+    if (m.id === 'A3') {
+      lines.push({ speaker: '大山', text: '阿哲。隊長臂章，從今天起是你的——遊隼的節奏，交給你握。' });
+      lines.push({ speaker: '阿哲', text: '……收下了，學長。牆不在了不算完——牆教過的東西，換我來傳。' });
+    }
   }
   for (const a of aceGrads) {
     lines.push({
