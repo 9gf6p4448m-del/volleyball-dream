@@ -17,15 +17,21 @@ import {
   accrueRecruitProgress, conditionMet, nextRecruitId,
 } from '../src/career/recruitment.js';
 import {
-  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, TUNING,
+  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, startNextSet, TUNING,
 } from '../src/sim/game.js';
+import { STAMINA } from '../src/sim/stamina.js';
+import { matchFormatOf } from '../src/career/schedule.js';
+import { isBackRow } from '../src/sim/rotation.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
 } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 import { buildDeficitFillIns } from '../src/career/graduation.js';
 import { defaultLineup } from '../src/career/lineup.js';
-import { digSuggestionFor } from '../src/input/liberoRead.js';
+import {
+  digSuggestionFor, schemeByKey, schemeForDig, noteScheme, counterReadOf,
+} from '../src/input/liberoRead.js';
+import { opponentById } from '../src/career/opponents.js';
 import { boxScoreLFor } from '../src/career/boxScoreL.js';
 
 const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
@@ -60,6 +66,31 @@ const HEIGHT_CM = process.env.VD_HEIGHT ? Number.parseInt(process.env.VD_HEIGHT,
 // 上下限勝率差＝改判價值空間（附錄 A5：初擬 8-15%，輸出實測供 Sawmah 裁定不強湊）
 const PLAYER_ROLE = process.env.VD_ROLE ?? 'outside';
 const L_MODE = process.env.VD_L_MODE ?? null;
+// W4(P4) Q8 多局制（工單 §10）：
+// VD_BO=3|5＝全部場次強制多局（體力曲線臂：bo5 五局打滿情境）；
+// VD_MULTISET=1＝生涯場依 matchFormatOf 自動賽制（決賽 bo5／準決・宿敵 bo3——
+//   多局制全臂重跑的新基準；單局錨 23%/7% 為對照系，允許新帶不強拉）；
+// VD_NO_BREAK_RECOV=1＝關局間恢復（「裸延續」對照——題7 校準目標的下界）；
+// VD_CALL=1＝OPP 要球近似（AI 代打：後排一傳起球按頻率要球＋grant 同 matchLoop
+//   決定論公式——權重增益按建議頻率近似，工單 §10）
+const FORCE_BO = [3, 5].includes(Number.parseInt(process.env.VD_BO ?? '', 10))
+  ? Number.parseInt(process.env.VD_BO, 10) : 0;
+const MULTISET = process.env.VD_MULTISET === '1';
+const USE_CALL = process.env.VD_CALL === '1';
+const CALL_FREQ = 0.6; // 建議頻率近似（玩家不會每窗都按；初擬）
+const CALL_GRANT = 0.7; // 與 matchLoop 同值
+if (process.env.VD_NO_BREAK_RECOV === '1') STAMINA.RECOV_SET_BREAK = 0; // 治具端 patch
+// W4 附錄 B-4 治具臂：VD_RIVAL=1＝把天鷹現任 ace 臨時打上宿敵旗（宿敵人設落檔前的
+// 反讀量測用——對宿敵場另記 suggest/omni 差＝反讀對改判空間的制衡量化）
+const USE_RIVAL = process.env.VD_RIVAL === '1';
+if (USE_RIVAL) opponentById('sky-hawk').ace.rival = true;
+function hash01(n) {
+  let x = Math.imul(n | 0, 2654435761);
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x45d9f3b);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖（跨屆冪等——已學不重覆）
 const TEACH_AFTER = {
@@ -70,10 +101,10 @@ const TEACH_AFTER = {
 };
 const TEACH_BEFORE_FINAL = ['jumpServe'];
 
-// W3 L 臂指令注入（playMatch 內逐 tick）：對手舉球＝下指令；omni＝對手扣球瞬間
-// 改判成真值（球飛行中收縮與 Perfect 窗都吃得到——「作弊讀真實落點」的語意）；
-// 我方第一觸後清指令（生命週期同 matchLoop）
-function driveLiberoBias(g, ai) {
+// W3 L 臂指令注入（playMatch 內逐 tick）；W4 附錄 B-1 配套版：suggest＝照配套建議
+// （dig＋block 雙驅動）；omni＝對手扣球瞬間改判成真值（收縮吃真值、block 反查配套）。
+// schemeLog（B-4/B-6 治具）：配套史統計——ace 反讀臂的資料底
+function driveLiberoBias(g, ai, schemeLog = null) {
   if (!L_MODE) return;
   const r = g.rally;
   if (g.phase !== 'rally' || (r.possession === 'A' && r.touches >= 1)) {
@@ -81,19 +112,29 @@ function driveLiberoBias(g, ai) {
     return;
   }
   if (r.possession === 'B' && r.touches === 2 && !ai.digBias) {
-    ai.digBias = { team: 'A', choice: digSuggestionFor(g, ai), override: false };
+    const key = digSuggestionFor(g, ai);
+    const sch = schemeByKey(key);
+    ai.digBias = { team: 'A', choice: sch?.dig ?? 'cross', block: sch?.block, override: false };
+    if (schemeLog) Object.assign(schemeLog, noteScheme(schemeLog, key));
   } else if (L_MODE === 'omni' && r.profile === 'spike' && r.lastSpikeZone
     && ai.digBias && ai.digBias.choice !== r.lastSpikeZone) {
-    ai.digBias = { team: 'A', choice: r.lastSpikeZone, override: true };
+    const sch = schemeForDig(r.lastSpikeZone); // middle＝null（三配套皆不中——保原指令的 block）
+    ai.digBias = {
+      team: 'A', choice: r.lastSpikeZone,
+      block: sch?.block ?? ai.digBias.block, override: true,
+    };
   }
 }
 
-function playMatch(setup) {
+function playMatch(setup, entry = null) {
+  // W4 Q8：賽制——VD_BO 強制 > VD_MULTISET 依賽程推導 > 單局（現行零擾動）
+  const bestOf = FORCE_BO || (MULTISET && entry ? matchFormatOf(entry) : 1);
   const g = createGame({
     seed: setup.seed,
     teams: setup.teams,
     aiProfiles: setup.aiProfiles,
     liberos: setup.liberos,
+    ...(bestOf > 1 ? { series: { bestOf } } : {}),
     ...(setup.scoutRead ? { scoutRead: setup.scoutRead } : {}),
     ...(USE_STAMINA ? { stamina: { A: {}, B: { costMul: 0.6, heavyExempt: true } } } : {}),
     ...(USE_MOMENTUM ? { momentum: true } : {}),
@@ -106,11 +147,56 @@ function playMatch(setup) {
       },
     } : {}),
   });
-  const ai = createAiState();
+  let ai = createAiState();
   let maxDeficit = 0; // E1 雪球哨兵：本場最大落後分差（A 視角）
+  // W4 題7 體力曲線：各局開局的 A 隊場上均值（bo>1 才有意義；[0]＝第 1 局）
+  const setStartStamina = [];
+  const noteSetStart = () => {
+    if (!g.stamina) return;
+    const onCourt = g.match.rotations.A.map((id) => g.stamina[id] ?? 1);
+    setStartStamina.push(onCourt.reduce((s, v) => s + v, 0) / onCourt.length);
+  };
+  noteSetStart();
+  let calledFlight = -1;
+  // W4 B-4 ace 反讀（治具鏡像 matchLoop）：宿敵 ace pid＋配套史
+  const schemeLog = { total: 0, counts: {} };
+  const rivalAcePid = USE_RIVAL && entry?.opponentId === 'sky-hawk'
+    ? Object.values(g.players).find((p) => p.teamId === 'B'
+      && p.name === opponentById('sky-hawk').ace?.name)?.id ?? null
+    : null;
   while (g.phase !== 'set_over' && g.tick < MAX_TICKS) {
-    driveLiberoBias(g, ai);
-    stepGame(g, aiCollectIntents(g, ai));
+    // 局間：治具自動推進（UI 的「下一局」鈕等效；aiState 局界重建＝matchLoop 同構）
+    if (g.phase === 'set_break') {
+      startNextSet(g);
+      ai = createAiState();
+      noteSetStart();
+      continue;
+    }
+    driveLiberoBias(g, ai, schemeLog);
+    if (rivalAcePid && g.phase === 'rally' && g.rally.possession === 'B'
+      && ai.attackerId === rivalAcePid) {
+      const counter = counterReadOf(schemeLog);
+      ai.counterRead = counter ? { pid: rivalAcePid, openLine: counter.openLine } : null;
+    } else if (ai.counterRead) {
+      ai.counterRead = null;
+    }
+    const intents = aiCollectIntents(g, ai);
+    // W4 題5 OPP 要球近似（AI 代打）：後排一傳起球＝按頻率要球（決定論 hash）；
+    // grant 公式與 matchLoop 同（權重增益按建議頻率近似）
+    if (USE_CALL && g.phase === 'rally' && g.rally.possession === 'A' && g.rally.touches === 1
+      && g.players.A2?.currentRole === 'opposite'
+      && g.match.rotations.A.includes('A2') && isBackRow(g.match.rotations.A, 'A2')
+      && calledFlight !== g.rally.flightId) {
+      calledFlight = g.rally.flightId;
+      if (hash01(g.rally.flightId * 977 + g.seed * 31 + 3) < CALL_FREQ) {
+        intents.push({ tick: g.tick, playerId: 'A2', action: 'call' });
+        if (hash01(g.rally.flightId * 613 + (g.seed ?? 0) * 17 + 9) < CALL_GRANT) {
+          ai.attackerId = 'A2';
+          ai.attackKind = 'dball';
+        }
+      }
+    }
+    stepGame(g, intents);
     if (g.phase === 'serve') {
       const d = g.match.score.B - g.match.score.A;
       if (d > maxDeficit) maxDeficit = d;
@@ -127,7 +213,7 @@ function playMatch(setup) {
       if (USE_MANAGE) autoManage(g);
     }
   }
-  return { g, maxDeficit };
+  return { g, maxDeficit, setStartStamina };
 }
 
 // E1 自動管理臂政策（簡單教練腦）：死球窗掃場上 <25% 者換下——同角色板凳
@@ -204,6 +290,9 @@ let oppSubGames = 0; // 至少換過一人的場數
 const a2 = { kills: 0, tips: 0, aces: 0, blocks: 0, games: 0 };
 // W3(P4) L 三欄場均（VD_ROLE=libero 才累積；契約＝career/boxScoreL）
 const lBox = { digs: 0, assistDigs: 0, rallySaves: 0 };
+// W4 題7 體力曲線：各局開局的 A 隊場上均值（跨場累積；bo>1 臂才有樣本）
+const setCurve = [];
+let fullDistanceGames = 0; // 打滿場數（bo5＝五局打滿）
 
 // 跨屆收集器（SEASONS>1 才輸出；wins/margins/champions 維持「第 1 屆」語義不變）
 const perSeason = Array.from({ length: SEASONS }, () => ({
@@ -270,9 +359,21 @@ for (let run = 0; run < RUNS; run += 1) {
       if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
       const entry = career.schedule[mi];
       const setup = careerMatchSetup(career, player, entry, USE_ROSTER ? roster : null, lineup);
-      const { g, maxDeficit } = playMatch(setup);
-      const won = g.match.winner === 'A';
-      const s = g.match.score;
+      const { g, maxDeficit, setStartStamina } = playMatch(setup, entry);
+      // W4 Q8：多局系列＝勝負吃 series、分差記局差；bo1 照舊
+      const won = (g.series?.winner ?? g.match.winner) === 'A';
+      const s = g.series
+        ? { A: g.series.setsWon.A, B: g.series.setsWon.B }
+        : g.match.score;
+      // W4 題7 體力曲線：逐局開局帶累積（bo>1＋體力臂才有樣本）
+      if (setStartStamina.length > 1) {
+        for (let si = 0; si < setStartStamina.length; si += 1) {
+          setCurve[si] = setCurve[si] ?? { sum: 0, n: 0 };
+          setCurve[si].sum += setStartStamina[si];
+          setCurve[si].n += 1;
+        }
+        if (setStartStamina.length >= (g.series?.bestOf ?? 9)) fullDistanceGames += 1;
+      }
       // E1 雪球哨兵：落後 ≥5 分後翻盤佔比（氣勢上線前後 n=300 對照用）
       if (maxDeficit >= 5) {
         deficit5 += 1;
@@ -360,6 +461,10 @@ const armName = [
   USE_MOMENTUM ? '氣勢' : null,
   HEIGHT_CM ? `身高${HEIGHT_CM}` : null,
   PLAYER_ROLE !== 'outside' ? `位置${PLAYER_ROLE}${L_MODE ? `·${L_MODE}` : ''}` : null,
+  FORCE_BO ? `bo${FORCE_BO} 強制` : MULTISET ? '多局制（賽程推導）' : null,
+  USE_CALL ? '要球近似' : null,
+  USE_RIVAL ? '宿敵反讀' : null,
+  process.env.VD_NO_BREAK_RECOV === '1' ? '裸延續（無局間恢復）' : null,
 ].filter(Boolean).join('＋') || '基準（W7 全關）';
 console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A2=AI 代打基準）===`);
 for (const id of matchIds) {
@@ -382,6 +487,15 @@ if (USE_STAMINA) {
     + `單場最低 ${stamMin.toFixed(2)}、場均換人 ${(subsUsed / stamGames).toFixed(2)} 人次`);
   console.log(`對手換人樣本（W2 量測）：全 ${stamGames} 場共 ${oppSubsUsed} 人次、`
     + `有換人場數 ${oppSubGames}（${stamGames > 0 ? Math.round((oppSubGames / stamGames) * 100) : 0}%）`);
+}
+// W4 題7 體力曲線（bo>1＋體力臂）：各局開局的 A 隊場上均值——校準目標＝
+// 決勝局開局帶明顯低於首局、但高於裸延續（VD_NO_BREAK_RECOV=1 對照）
+if (setCurve.length > 1) {
+  const row = setCurve
+    .map((c, i) => `第${i + 1}局 ${(c.sum / c.n).toFixed(3)}(n=${c.n})`)
+    .join('　');
+  console.log(`\n=== 體力曲線（局開局帶；局間恢復 ${STAMINA.RECOV_SET_BREAK}）===\n${row}`);
+  console.log(`打滿場數：${fullDistanceGames}`);
 }
 
 if (SEASONS > 1) {

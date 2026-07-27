@@ -39,11 +39,11 @@ test('習慣標記：樣本門檻與佔比門檻、無標記建議守斜線、�
   // 平均分佈＝無標記
   game.scoutTally.B2 = { zones: { line: 2, cross: 2, middle: 1, tip: 1 }, spikes: 6, feints: 0, serves: { jumps: 0, floats: 0, total: 0 } };
   assert.equal(spikeBiasOf(game, 'B2'), null);
-  // 建議：無攻擊手/無標記＝cross；有標記＝標記
-  assert.equal(digSuggestionFor(game, null), 'cross');
-  assert.equal(digSuggestionFor(game, { claimId: 'B2' }), 'cross');
+  // 建議（W4 附錄 B-1 起＝配套 key）：無攻擊手/無標記＝封斜線；有標記＝封他慣用線的配套
+  assert.equal(digSuggestionFor(game, null), 'block-cross');
+  assert.equal(digSuggestionFor(game, { claimId: 'B2' }), 'block-cross');
   game.scoutTally.B2 = { zones: { line: 0, cross: 0, middle: 0, tip: 3 }, spikes: 3, feints: 0, serves: { jumps: 0, floats: 0, total: 0 } };
-  assert.equal(digSuggestionFor(game, { claimId: 'B2' }), 'tip');
+  assert.equal(digSuggestionFor(game, { claimId: 'B2' }), 'no-block');
 });
 
 test('讀對判定：嚴格相等（middle＝三選項皆不中）、非 spike/無指令＝false', () => {

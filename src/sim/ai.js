@@ -29,6 +29,7 @@ const AI = {
   ATTACK_LZ: 1.3,         // 舉球目標深度
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
+  BLOCK_SCHEME_SHIFT: 0.9, // W4 附錄 B-1：L 配套封線站位偏移（封直線往邊線/封斜線往內）
   TIP_RATE: 0.1,          // AI 第三擊輕吊機率（攻擊分支：不被讀死；重扣為絕對主體）
   DUMP_RATE: 0.07,        // S 前排二次球機率（球到位時偶發）
   DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
@@ -127,6 +128,9 @@ export function createAiState() {
     hitPoint: null,    // 第三擊：球墜到扣球窗上緣的時空點（一氣呵成助跑的推遲起跑基準）
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
+    // W4(P4) 附錄 B-4 ace 反讀：{ pid, openLine }——宿敵 ace 且玩家配套被讀死時
+    // 由呼叫端（matchLoop/治具）注入；chooseTouch 第三擊消費＝改打讓開的線
+    counterRead: null,
   };
 }
 
@@ -592,6 +596,15 @@ function decideOne(game, aiState, playerId) {
     const role = player.currentRole;
     const lane = role === 'middle' ? 0 : role === 'outside' ? -1 : 1;
     const laneOff = TEAM_SIDE[team] * lane * AI.BLOCK_SPREAD;
+    // W4(P4) 附錄 B-1：L 配套的攔網手站線（blockScheme——digBias 同一指令的前排半）。
+    // 'off'（攔手讓開・收吊球）＝前排退攻擊線一帶補吊球、不開攔網窗（賭吊球的語意）；
+    // 站線幾何自然改變攔網涵蓋——攔網數值零特例
+    const scheme = aiState.digBias?.team === team ? aiState.digBias.block : undefined;
+    if (scheme === 'off') {
+      return moveIntent(playerId, tick, actor, {
+        x: clampCourtX(game.ball.x * 0.4 + laneOff), z: TEAM_SIDE[team] * 2.6,
+      });
+    }
     // 遠側翼（球在對側且離中線夠遠）＝不參與攔網、撤退到攻擊線附近補吊球
     const farWing = lane !== 0 && Math.abs(game.ball.x) > 1.8 &&
       Math.sign(laneOff) !== Math.sign(game.ball.x);
@@ -610,6 +623,12 @@ function decideOne(game, aiState, playerId) {
       if (bs !== 0 && Math.abs(nearWingX - nx) < AI.BLOCK_SPREAD * 0.9) {
         nx = nearWingX - bs * AI.BLOCK_SPREAD;
       }
+    }
+    // 封線站位（B-1）：封直線＝往邊線側壓（守直線走廊外肩）、封斜線＝往內收（斜線角度）
+    if (scheme === 'line') {
+      nx = clampCourtX(nx + Math.sign(game.ball.x || 1) * AI.BLOCK_SCHEME_SHIFT);
+    } else if (scheme === 'cross') {
+      nx = clampCourtX(nx - Math.sign(game.ball.x || 1) * AI.BLOCK_SCHEME_SHIFT);
     }
     const netSpot = { x: nx, z: TEAM_SIDE[team] * AI.BLOCK_LZ };
     const action = r.profile === 'spike' && aiState.landingTeam === team ? 'block' : null;
@@ -672,6 +691,15 @@ function chooseTouch(game, aiState, player, actor) {
   const canSpike =
     legalSpike && game.ball.y >= AI.SPIKE_MIN_Y && spikeClearsNet(game, player, target);
   if (canSpike) {
+    // W4(P4) 附錄 B-4 ace 反讀：宿敵 ace 且配套被讀死（counterRead 由呼叫端決定論
+    // 注入）＝改打讓開的線——封線配套讓開吊球、讓開配套讓開斜線強攻。零隨機
+    if (aiState.counterRead && aiState.counterRead.pid === player.id) {
+      if (aiState.counterRead.openLine === 'tip') {
+        return ['spike', localToWorld(otherTeam(team), 1.2, 2.3), 0.35];
+      }
+      const ballLx = TEAM_SIDE[team] * game.ball.x;
+      return ['spike', localToWorld(otherTeam(team), -Math.sign(ballLx || 1) * 4.1, 5)];
+    }
     // 攻擊選擇分支：小機率輕吊淺區（決定論 hash，不耗 game rng）——重扣仍是主體
     // 機率吃每隊風格參數（防守隊愛吊、紀律隊少吊）
     const { tipRate } = aiProfileOf(game, team);

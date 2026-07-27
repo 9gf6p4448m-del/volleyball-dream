@@ -16,7 +16,8 @@ import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import { setPanelTitle, CALL_BALL_AT } from '../input/setOptions.js';
 import { mbPanelTitle } from '../input/blockRead.js';
-import { digReadCorrect } from '../input/liberoRead.js';
+import { digReadCorrect, schemeByKey, noteScheme, counterReadOf } from '../input/liberoRead.js';
+import { applySeasonRoster } from '../career/careerState.js';
 import { serverId } from '../sim/match.js';
 import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
@@ -96,6 +97,18 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   // W4(P4) Q8 局間存檔續玩：快照開機即在 set_break（prevPhase 同值＝一次性轉場
   // 不會觸發）——直接喚起局間 huddle，「從局間 huddle 前恢復」的拍板語意
   if (game.phase === 'set_break') showSetBreak(s);
+  // W4(P4) 附錄 B-4：宿敵 ace pid 解析（rival 隊限定——ace 反讀的對象；
+  // 宿敵人設未落檔時 def.rival ace 名對不上＝null＝機制沉睡，零擾動）
+  if (careerCtx) {
+    const rivalBase = opponentById(careerCtx.matchEntry.opponentId);
+    if (rivalBase?.rival) {
+      const rivalDef = applySeasonRoster(rivalBase, careerCtx.seasonIndex ?? 1);
+      const aceName = rivalDef.ace?.name ?? null;
+      s.rivalAcePid = aceName
+        ? Object.values(game.players).find((p) => p.teamId === 'B' && p.name === aceName)?.id ?? null
+        : null;
+    }
+  }
   // 燈光秀跳過（點擊任意處）：立即恢復常態燈光、進正常開賽流程
   window.addEventListener('pointerdown', () => {
     if (s.openingShow === 'running') endOpeningShow(s);
@@ -143,6 +156,10 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lOverrideTally: careerCtx?.resumeMid?.lOverrides ?? { n: 0, ok: 0 },
     digReadWasOverride: false,
     boxShown: false, // 局終兩段式：第一次點＝單場結算頁、第二次點＝返回生涯
+    // W4 附錄 B：L 2.0 配套統計（ace 反讀的資料底；scoutTally 鏡像決定論）＋宿敵 ace
+    schemeTally: { total: 0, counts: {} },
+    rivalAcePid: null,       // 宿敵 ace 的 pid（rival 隊限定；startMatchLoop 解析）
+    counterArmedFlight: -1,  // 本波 ace 反讀已武裝（字卡揭曉用）
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
     dumpLive: false,
     callWindowUntil: 0,   // 浮鈕失效時刻（0.8s 牆鐘窗）
@@ -540,6 +557,7 @@ function updateDecisions(s, now) {
     || (game.rally.possession === game.players[s.controlledId]?.teamId
       && game.rally.touches >= 1))) {
     aiState.digBias = null;
+    stage.blockShadow?.hide(); // B-3 佈陣可視化隨指令生命週期收
   }
   // 07-27 試玩回饋：L 讀對追蹤——對手攻擊飛行中持續結算，我方第一觸出結果字卡
   // W4 Q9：同步記下這次指令是否改判（digBias 在第一觸即清、字卡時刻已不可考）
@@ -584,10 +602,15 @@ function updateDecisions(s, now) {
     if (s.digWindowSince < 0 || s.digWindowSince === undefined) s.digWindowSince = now;
     if (now - s.digWindowSince > 1000) {
       // A2 快選：1 秒不動＝自動照 AI 建議執行（點選＝改判走 panel 回呼同一入口）
+      // W4 B-1：建議＝配套 key——展開為 dig（後排收縮）＋block（攔網站線）雙驅動
       controls.chooseDig();
+      const autoScheme = schemeByKey(digRead.suggestion);
+      s.schemeTally = noteScheme(s.schemeTally, digRead.suggestion); // B-4：自動也算配套史
+      s.stage.blockShadow?.set(digRead.suggestion, game.ball.x); // B-3 佈陣可視化
       aiState.digBias = {
         team: game.players[s.controlledId].teamId,
-        choice: digRead.suggestion,
+        choice: autoScheme?.dig ?? 'cross',
+        block: autoScheme?.block,
         override: false,
       };
     }
@@ -659,10 +682,10 @@ function updateDecisions(s, now) {
       },
     );
   } else if (digDeciding && !controls.digPending()) {
-    // W3 L 指揮面板（附錄 A2）：AI 建議預設高亮（綠）、其餘中性；標題帶習慣標記線索
-    // （A3② 縮時偵察的產出——回場面板顯示）；點選＝改判（override 旗標供演出/數據）
+    // W4 附錄 B-1 L 指揮面板（A2 節奏資產不動）：三選項升級攔防配套——
+    // 一個指令雙驅動（前排站線 block＋後排收縮 dig）；點選＝改判（override 旗標）
     panel.show(
-      digRead.markText ? `指揮後排！${digRead.markText}` : '指揮後排！',
+      digRead.markText ? `攔防配套！${digRead.markText}` : '攔防配套！',
       digRead.choices.map((c) => ({
         key: c.key,
         label: c.key === digRead.suggestion ? `${c.label}◎` : c.label,
@@ -671,13 +694,16 @@ function updateDecisions(s, now) {
       })),
       (it) => {
         controls.chooseDig();
+        s.schemeTally = noteScheme(s.schemeTally, it.zone.key); // B-4 配套史
+        stage.blockShadow?.set(it.zone.key, game.ball.x); // B-3 佈陣可視化
         aiState.digBias = {
           team: game.players[s.controlledId].teamId,
-          choice: it.zone.key,
+          choice: it.zone.dig,
+          block: it.zone.block,
           override: it.zone.key !== digRead.suggestion,
         };
         // 07-27 試玩回饋：手選（含改判）給確認浮字；1 秒自動照建議維持靜默（A2 拍板）
-        floatText.show(`🛡 ${it.zone.label}！全隊收縮`, '#6ee7ff', 1200);
+        floatText.show(`🛡 ${it.zone.label}！`, '#6ee7ff', 1200);
       },
     );
   } else if (setDeciding) {
@@ -861,7 +887,8 @@ function applyEvents(s, frameEvents, now) {
       }
       s.mbCommit = null;
     }
-    // 07-27 L 指揮結果：我方第一觸出讀對/讀反字卡（神救球演出時已讓位不疊）
+    // 07-27 L 指揮結果（W4 B-2 兩層讀對之「漏接起」層）：我方第一觸出字卡——
+    // 球走留的線、後排起球＝也是你的功（神救球演出時已讓位不疊）
     // W4 Q9：改判記帳（box score 第四欄「改判成功率」——A2 預留消費就此定形入帳）
     if (e.type === 'TOUCH' && e.touches === 1 && s.digReadResult != null
       && game.players[s.controlledId]?.currentRole === 'libero'
@@ -871,11 +898,24 @@ function applyEvents(s, frameEvents, now) {
         if (s.digReadResult) s.lOverrideTally.ok += 1;
       }
       stage.floatText.show(
-        s.digReadResult ? '📖 讀對了！' : '讀反了……',
+        s.digReadResult ? '📖 讀對了——球走你留的線' : '讀反了……',
         s.digReadResult ? '#7ee787' : '#c8d6eb', 1300,
       );
       s.digReadResult = null;
       s.digReadWasOverride = false;
+    }
+    // W4 B-2「封到」層：攔網觸球在指令線上（配套的封線賭對）——分開字卡、皆玩家的功
+    if (e.type === 'BLOCK_TOUCH' && e.team === game.players[s.controlledId]?.teamId
+      && game.players[s.controlledId]?.currentRole === 'libero'
+      && s.aiState.digBias?.block && s.aiState.digBias.block !== 'off'
+      && game.rally.lastSpikeZone === s.aiState.digBias.block) {
+      stage.floatText.show('🧱 封線成功！', '#ffd166', 1400);
+    }
+    // W4 B-4：ace 反讀揭曉（誠實字卡——他改打讓開的線的那一拍）
+    if (e.type === 'TOUCH' && e.kind === 'spike' && e.playerId === s.rivalAcePid
+      && s.counterArmedFlight === game.rally.flightId) {
+      s.counterArmedFlight = -1;
+      stage.floatText.show('他改線了——他在讀你的暗號', '#ff9d7a', 2200);
     }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
       s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
@@ -1282,6 +1322,19 @@ function frameStep(s, now) {
   if (stage.callButton?.isVisible()
     && (now > s.callWindowUntil || game.phase !== 'rally' || game.rally.touches !== 1)) {
     stage.callButton.hide();
+  }
+
+  // W4 附錄 B-4：ace 反讀注入（宿敵 ace＝本波攻擊手且玩家配套史被讀死——
+  // scoutTally 鏡像決定論統計；counterArmedFlight＝字卡揭曉旗）
+  if (s.rivalAcePid && game.phase === 'rally' && game.rally.possession === 'B'
+    && s.aiState.attackerId === s.rivalAcePid) {
+    const counter = counterReadOf(s.schemeTally);
+    s.aiState.counterRead = counter
+      ? { pid: s.rivalAcePid, openLine: counter.openLine }
+      : null;
+    if (counter) s.counterArmedFlight = game.rally.flightId;
+  } else if (s.aiState.counterRead) {
+    s.aiState.counterRead = null;
   }
 
   // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區
