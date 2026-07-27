@@ -1155,12 +1155,15 @@ function applyEvents(s, frameEvents, now) {
       // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
       if (e.playerId === s.controlledId && s.mbCommit) {
         stage.floatText.show('🧱 封到了！', '#ffd166', 1400);
-        // 4.5B §3「早到的人」：搶快賭對且結實封到（擦手不算）——這一拍直接
-        // 終結（後續任何觸球即解除，見 trackSignature）才起鏡
-        if (game.players[s.controlledId]?.currentRole === 'middle' && !e.graze) {
-          s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
-        }
         s.mbCommit = null;
+      }
+      // 4.5B §3「早到的人」（07-28 Sawmah 拍板擴大：**攔網直接得分皆給**，
+      // 不限搶快——搶快只是達成路徑之一，攔死本身即 MB 的身分時刻）：
+      // 玩家＝MB、結實封到（擦手不算）、這一拍直接終結（後續任何觸球即解除，
+      // 見 trackSignature）才起鏡
+      if (e.playerId === s.controlledId && !e.graze
+        && game.players[s.controlledId]?.currentRole === 'middle') {
+        s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
       }
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
