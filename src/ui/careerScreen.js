@@ -1508,7 +1508,8 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     root.appendChild(msgEl);
   }
 
-  // 手批面板：四位置旗標現況＋逐位/全部批准（只有 ready 可批——approveOpenPosition 守衛）
+  // 手批面板：四位置旗標現況＋逐位/全部批准（只有 ready 可批——approveOpenPosition
+  // 守衛）。原地重繪＋明確回饋（remove/重開會閃跳頂部、看起來像沒反應——07-27 修）
   function showOpenPanel() {
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
@@ -1521,34 +1522,50 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
       'flex-direction:column', 'gap:8px', 'align-items:stretch',
     ]);
-    card.appendChild(el('div', [
-      'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
-    ], '🔓 位置開放（試玩手批）'));
-    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
-      '批准的位置會在屆間由教練找你談轉位。這是試玩驗收入口——正式上架前會移除。'));
-    const flags = store.loadPositionFlags?.() ?? {};
-    const STATE_LABEL = { locked: '未就緒', ready: '可批准', open: '✓ 已開放' };
-    for (const p of ['setter', 'middle', 'opposite', 'libero']) {
-      const st = flags[p] ?? 'locked';
-      card.appendChild(button(
-        `${roleLabel(p)}｜${STATE_LABEL[st]}${st === 'ready' ? '——點我批准' : ''}`,
-        st === 'ready',
-        () => {
-          if (st !== 'ready') return;
-          store.approveOpenPosition?.(p);
-          overlay.remove();
-          showOpenPanel(); // 重繪現況
-        },
-      ));
-    }
-    card.appendChild(button('✓ 全部批准', true, () => {
-      for (const p of ['setter', 'middle', 'opposite', 'libero']) store.approveOpenPosition?.(p);
-      overlay.remove();
-      showOpenPanel();
-    }));
-    card.appendChild(button('關閉', false, () => overlay.remove()));
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+    const STATE_LABEL = { locked: '未就緒', ready: '可批准', open: '✓ 已開放' };
+    const paint = (note) => {
+      card.replaceChildren();
+      card.appendChild(el('div', [
+        'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+      ], '🔓 位置開放（試玩手批）'));
+      card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+        '批准的位置會在屆間由教練找你談轉位。這是試玩驗收入口——正式上架前會移除。'));
+      const flags = store.loadPositionFlags?.() ?? {};
+      for (const p of ['setter', 'middle', 'opposite', 'libero']) {
+        const st = flags[p] ?? 'locked';
+        card.appendChild(button(
+          `${roleLabel(p)}｜${STATE_LABEL[st]}${st === 'ready' ? '——點我批准' : ''}`,
+          st === 'ready',
+          () => {
+            if ((store.loadPositionFlags?.() ?? {})[p] !== 'ready') return;
+            store.approveOpenPosition?.(p);
+            paint(`✓ ${roleLabel(p)} 已開放`);
+          },
+        ));
+      }
+      const allOpen = ['setter', 'middle', 'opposite', 'libero']
+        .every((p) => flags[p] === 'open');
+      if (allOpen) {
+        card.appendChild(el('div', [
+          'font-size:15px', 'font-weight:800', 'color:#7ee787', 'text-align:center',
+          'padding:6px 0',
+        ], '✓ 四位置全數開放——屆間教練會來找你談轉位'));
+      } else {
+        card.appendChild(button('✓ 全部批准', true, () => {
+          for (const p of ['setter', 'middle', 'opposite', 'libero']) store.approveOpenPosition?.(p);
+          paint('✓ 已全部批准');
+        }));
+      }
+      if (note) {
+        card.appendChild(el('div', [
+          'font-size:13px', 'font-weight:700', 'color:#7ee787', 'text-align:center',
+        ], note));
+      }
+      card.appendChild(button('關閉', false, () => overlay.remove()));
+    };
+    paint();
   }
 
   // stage 3 成長區：點數/上場表現/屬性加點（次要）/技術解鎖（主要）
