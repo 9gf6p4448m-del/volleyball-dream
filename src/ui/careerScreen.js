@@ -733,6 +733,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       const intel = el('div', [
         'display:flex', 'flex-direction:column', 'gap:2px', 'align-items:center',
       ]);
+      // W4(P4) 題6：宿敵標記（隊級 rival 旗標——情蒐數據面的宿敵感；
+      // 宿敵 ace 人設選定落檔後此行語意由劇情輪補強）
+      if (def.rival) {
+        intel.appendChild(el('div', [
+          'font-size:12.5px', 'font-weight:800', 'color:#ff6b6b', 'letter-spacing:2px',
+        ], '🔥 宿敵之戰——他們記得每一次交手'));
+      }
       if (def.ace) {
         const aceRole = def.ace.slot === 'L' ? '自由人' : OPP_ROLE[def.ace.slot];
         intel.appendChild(el('div', ['font-size:12.5px', 'font-weight:800', `color:${COLOR.gold}`],

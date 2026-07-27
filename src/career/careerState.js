@@ -276,6 +276,9 @@ export function currentGrade(baseGrade, seasonIndex = 1) {
 // ——三屆生涯內不二次畢業，單次遞補即完備。
 export function applySeasonRoster(def, seasonIndex = 1) {
   if (seasonIndex <= 1 || !def.ace || !def.grades) return def;
+  // W4(P4) 題6 硬約束：宿敵 ace 豁免（ace.rival＝true）——三年間不被遞補純函式
+  // 無差別滾掉；與玩家同屆（grade 1 特設）＝第 3 屆末同屆畢業、資料語意自然收束
+  if (def.ace.rival) return def;
   const aceGrade = def.ace.slot === 'L' ? def.liberoGrade : def.grades[def.ace.slot];
   if (aceGrade == null || currentGrade(aceGrade, seasonIndex) <= 3) return def; // 尚未畢業
   const reserves = [...(def.reserves ?? [])];
@@ -302,6 +305,7 @@ export function graduatingAces(seasonIndex = 1) {
   const out = [];
   for (const def of OPPONENTS) {
     if (!def.ace || !def.grades) continue;
+    if (def.ace.rival) continue; // W4 題6：宿敵 ace 不入畢業播報（與玩家同屆走完三年）
     const aceGrade = def.ace.slot === 'L' ? def.liberoGrade : def.grades[def.ace.slot];
     if (aceGrade == null || currentGrade(aceGrade, seasonIndex) !== 3) continue;
     const heir = (def.reserves ?? []).reduce(

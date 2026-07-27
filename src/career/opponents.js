@@ -178,6 +178,11 @@ export const OPPONENTS = [
   {
     id: 'sky-hawk',
     name: '天鷹學園',
+    // W4(P4) 題6 拍板：天鷹＝宿敵所屬（三屆三幕同屆宿敵的舞台）。隊級旗標供
+    // 關鍵戰館主客場氛圍（橫幅/應援）、情蒐宿敵標記、L 2.0 ace 反讀（附錄 B-4）
+    // 的隊判定共用；宿敵 ace 人設＝三案待 Sawmah 挑（快照存檔），選定落檔時：
+    // ace 換宿敵（grade 1 同屆＋rival:true 豁免旗標）、王勝翔留 squad（招募語意不動）
+    rival: true,
     style: 'power',
     trait: '全國決賽常客——兩翼重砲全面壓制，硬碰硬幾乎沒有勝算',
     level: 72,
