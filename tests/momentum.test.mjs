@@ -113,6 +113,7 @@ test('B3 暫停歸中：只斬對方氣勢、自家氣勢不動', () => {
   assert.equal(g.momentum.value, 0);
   assert.ok(g.events.some((e) => e.type === 'MOMENTUM' && e.value === 0));
   g.momentum.value = 2; // A 氣勢——A 再喊（用第二次額度）不得斬自己
+  g.timeoutAtPoint = { A: -1, B: -1 }; // W4 同分防重：模擬已換分（防重專測在 timeout-once）
   assert.equal(applyTimeout(g, { team: 'A' }).ok, true);
   assert.equal(g.momentum.value, 2);
 });

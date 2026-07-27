@@ -180,6 +180,9 @@ export function createGame({
       A: { remaining: TUNING.TIMEOUTS_PER_SET },
       B: { remaining: TUNING.TIMEOUTS_PER_SET },
     },
+    // W4 試玩修正（07-27）：同一分（同一死球窗）每隊至多喊一次暫停——
+    // 記「喊過暫停的分數 key」（同局比分恆遞增＝天然的分識別；跨局歸零）
+    timeoutAtPoint: { A: -1, B: -1 },
     timeoutBoostArmed: false, // W7.1 暫停教練選項：applyTimeout 上膛、用掉或下個死球窗自動收
     pointStreak: { team: null, n: 0 },
     // W7 B1 團隊氣勢：value ∈ [−MOMENTUM_MAX, +MOMENTUM_MAX]（＋＝A、−＝B）；
@@ -1092,6 +1095,7 @@ export function startNextSet(state) {
     A: { remaining: TUNING.TIMEOUTS_PER_SET },
     B: { remaining: TUNING.TIMEOUTS_PER_SET },
   };
+  state.timeoutAtPoint = { A: -1, B: -1 }; // 同分防重 key 跨局歸零（新局比分重來）
   state.serveSeq = {
     A: { order: [...s.startRotations.A], nextIdx: 0 },
     B: { order: [...s.startRotations.B], nextIdx: 0 },
@@ -1167,6 +1171,15 @@ export function applySubstitution(state, { team, outId, inId }) {
   return { ok: true, reason: '' };
 }
 
+// W4（07-27）：同一分是否已喊過暫停——sim 與 UI 反灰共用的單一事實源。
+// 分識別＝該局比分 key（rally point 同局恆遞增；跨局由 startNextSet 歸零）
+function timeoutPointKey(state) {
+  return state.match.score.A * 1000 + state.match.score.B;
+}
+export function timeoutUsedThisPoint(state, team) {
+  return state.timeoutAtPoint?.[team] === timeoutPointKey(state);
+}
+
 // ---- W7 B3 暫停（拍板 A：每場每隊 2 次、死球時可喊；對手 AI 也會喊——判準在
 // ai.js aiTimeoutWanted，呼叫端＝matchLoop/治具）。比照 applySubstitution：死球窗
 // 純 state 副作用、不經 Intent。效果＝我方全隊小回體力（stamina 未啟用＝純演出）
@@ -1175,6 +1188,10 @@ export function applyTimeout(state, { team }) {
   const deny = (reason) => ({ ok: false, reason });
   if (state.phase !== 'serve') return deny('not-dead-ball');
   if ((state.timeouts[team]?.remaining ?? 0) <= 0) return deny('limit');
+  // W4 試玩修正（07-27 Sawmah）：同一分每隊至多一次——防連喊把死球窗疊長/
+  // 教練選項疊發（兩隊各自可喊；下一分即恢復）
+  if (timeoutUsedThisPoint(state, team)) return deny('already-this-point');
+  state.timeoutAtPoint = { ...(state.timeoutAtPoint ?? {}), [team]: timeoutPointKey(state) };
   state.timeouts[team].remaining -= 1;
   // 對方的連得分被斬斷（自家連得不歸零——沒人會喊暫停斬自己氣勢，防呆為主）
   if (state.pointStreak.team && state.pointStreak.team !== team) {

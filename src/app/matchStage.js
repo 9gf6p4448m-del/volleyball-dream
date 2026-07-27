@@ -24,6 +24,7 @@ import { createBlockShadow } from '../render/blockShadow.js';
 import { createSubPanel } from '../ui/subPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
+import { timeoutUsedThisPoint } from '../sim/game.js';
 
 export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
@@ -326,11 +327,11 @@ function createTimeoutButton({ handlers, playerId }) {
   document.body.appendChild(btn);
   return {
     el: btn,
-    // 每幀同步：死球窗＋我方（playerId 所屬隊）還有額度才可按
+    // 每幀同步：死球窗＋還有額度＋本分未喊過（W4 07-27：同一分每隊至多一次）才可按
     sync(g) {
       const team = g.players[playerId].teamId;
       const remaining = g.timeouts?.[team]?.remaining ?? 0;
-      const usable = g.phase === 'serve' && remaining > 0;
+      const usable = g.phase === 'serve' && remaining > 0 && !timeoutUsedThisPoint(g, team);
       btn.dataset.enabled = usable ? '1' : '0';
       btn.style.opacity = usable ? '1' : '0.45';
       btn.textContent = `⏱ 暫停×${remaining}`;

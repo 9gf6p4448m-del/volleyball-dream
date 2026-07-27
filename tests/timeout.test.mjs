@@ -61,7 +61,9 @@ test('applyTimeout：驗證閘——rally 中擋下、額度用盡擋下', () =>
   assert.equal(applyTimeout(g, { team: 'A' }).reason, 'not-dead-ball');
   playUntil(g, ai, (s) => s.phase === 'serve');
   assert.equal(applyTimeout(g, { team: 'A' }).ok, true);
+  g.timeoutAtPoint = { A: -1, B: -1 }; // W4 同分防重：模擬已換分（防重專測在 timeout-once）
   assert.equal(applyTimeout(g, { team: 'A' }).ok, true);
+  g.timeoutAtPoint = { A: -1, B: -1 };
   assert.equal(applyTimeout(g, { team: 'A' }).reason, 'limit');
 });
 
@@ -119,6 +121,7 @@ test('W7.1 暫停選項：calm 全隊額外小回／fire 我方氣勢推檔／�
   // 同一個暫停窗第二次 boost 擋下
   assert.equal(applyTimeoutBoost(g, { team: 'A', boost: 'fire' }).reason, 'already-boosted');
   // 第二次暫停（新窗）→ fire：氣勢推一檔
+  g.timeoutAtPoint = { A: -1, B: -1 }; // W4 同分防重：模擬已換分（防重專測在 timeout-once）
   assert.equal(applyTimeout(g, { team: 'A' }).ok, true);
   const prevM = g.momentum.value;
   assert.equal(applyTimeoutBoost(g, { team: 'A', boost: 'fire' }).ok, true);
