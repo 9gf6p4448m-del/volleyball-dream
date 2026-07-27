@@ -603,19 +603,18 @@ function updateDecisions(s, now) {
       },
     );
   } else if (mbDeciding) {
-    // W3 MB 讀心面板（07-27 Sawmah 拍板二改：站位全交搖桿手動、面板只管時機賭局）：
-    // 一顆「⚡搶快攻」鈕——按＝立即起跳開窗（賭快攻）、不按＝等高球（自動跳攔照舊）。
-    // 線索進標題：一傳品質＋哪一翼正在助跑（🏃 誠實觀察非全知）
+    // W3 MB 讀心面板（07-27 Sawmah 拍板三改：按鈕正名「起跳攔網」——它的真實語意
+    // 就是「現在跳」：早按賭快攻、晚按攔高球都合法，攔網時機全程交玩家；不按＝
+    // 交給自動跳攔。線索進標題：一傳品質＋哪一翼正在助跑（🏃 誠實觀察非全知）
     const tells = mbRead.lanes.filter((l) => l.approaching)
       .map((l) => `🏃${l.label.slice(1)}`).join(' ');
     panel.show(
       `${mbPanelTitle(mbRead.tier)}${tells ? `　${tells}` : ''}`,
-      [{ key: 'quick-gamble', label: '⚡搶快攻', color: 'orange' }],
+      [{ key: 'jump-now', label: '🧱 起跳攔網', color: 'orange' }],
       () => {
         controls.chooseMbTiming(true);
-        // 07-27 試玩回饋：決策要看得見自己——確認浮字＋commit 記錄（結果字卡用）
-        floatText.show('⚡ 賭快攻——跳！', '#ffd166', 1200);
-        s.mbCommit = { early: true };
+        floatText.show('🧱 起跳！', '#ffd166', 1000);
+        s.mbCommit = { jumped: true };
       },
     );
   } else if (digDeciding && !controls.digPending()) {
@@ -757,15 +756,22 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
     }
-    // 07-27 MB 搶快賭局結算：對手出手那一拍揭曉——賭對快攻/賭錯高球（字卡回饋）
-    if (e.type === 'TOUCH' && e.kind === 'spike' && s.mbCommit?.early
-      && e.team !== game.players[s.controlledId]?.teamId) {
-      const wasQuick = s.aiState.attackKind === 'quick';
-      stage.floatText.show(
-        wasQuick ? '⚡ 賭對快攻！' : '早了——是高球…',
-        wasQuick ? '#7ee787' : '#c8d6eb', 1400,
-      );
-      s.mbCommit = { ...s.mbCommit, early: false }; // 賭局只揭曉一次；封到球回饋另留
+    // 07-27 三改：MB 時機字卡改判「真值」——不看攻擊種類（晚按攔高球不算賭錯），
+    // 看你的攔網窗 vs 球實際過網：窗已過期＝跳太早落地了；窗內但沒碰到且球在附近
+    // ＝線差一點；封到＝BLOCK_TOUCH 回饋（上方）。球沒被攔到才有 BALL_OVER_NET
+    if (e.type === 'BALL_OVER_NET' && s.mbCommit?.jumped
+      && e.toTeam === game.players[s.controlledId]?.teamId
+      && game.players[s.controlledId]?.currentRole === 'middle') {
+      const a = game.actors[s.controlledId];
+      const jumpedThisAttack = game.tick - (a.blockStartTick ?? -9999) < 90;
+      if (jumpedThisAttack) {
+        if (a.blockUntil < game.tick) {
+          stage.floatText.show('早了——落地時球才過來…', '#c8d6eb', 1400);
+        } else if (Math.abs(game.ball.x - a.x) < 1.6) {
+          stage.floatText.show('時機對了——線差一點！', '#ffd166', 1400);
+        } // 球不在你這條線＝不評（不是你的球）
+      }
+      s.mbCommit = null;
     }
     // 07-27 L 指揮結果：我方第一觸出讀對/讀反字卡（神救球演出時已讓位不疊）
     if (e.type === 'TOUCH' && e.touches === 1 && s.digReadResult != null
