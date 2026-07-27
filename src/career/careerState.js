@@ -464,9 +464,11 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
       liberoA.attributes = { ...liberoA.attributes, ...al.attributes };
     }
   }
-  // W6.1 隊友魚躍鏡像：自由人同全隊（防守核心也是「主角教全隊」的一員；
-  // 未解鎖前 standard 路徑本就被 diveRate=0 擋、此處補救噴必撲路徑的一致性）
-  if (members) liberoA.techniques.dive = player.techniques?.dive ?? 0;
+  // W3(P4) 07-27 Sawmah 拍板 B：自由人豁免魚躍鏡像——防守專精者天生會撲
+  // （「不會魚躍的自由人」敘事與體感皆不成立；前兩場小守放球落地的病根）。
+  // 一般隊友照舊鏡像（careerTeams teamDive——「主角教全隊」敘事保留）；
+  // 玩家轉 L＝liberoA 即玩家本人（上方分支），自己的魚躍仍走教學解鎖
+  if (members && liberoA !== player) liberoA.techniques.dive = 1;
   // W6 賽中換人：板凳＝名冊中非先發、非現任自由人、非 libero 角色的成員
   // （libero 角色只走自由人體系進場；對手無板凳＝B3 拍板不做）
   const lu = members

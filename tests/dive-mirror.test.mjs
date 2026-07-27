@@ -17,13 +17,14 @@ function setupWith(dive) {
   return careerMatchSetup(career, player, career.schedule[0], roster, null);
 }
 
-test('未解鎖：先發隊友/自由人 dive=0；對手隊維持預設 1', () => {
+test('未解鎖：先發隊友 dive=0；自由人豁免鏡像（07-27 拍板 B）；對手隊維持預設 1', () => {
   const setup = setupWith(0);
   for (const p of setup.teams.A) {
     if (p.id === 'A2') continue; // 主角本體（dive=0 由 createCareerPlayer 供給）
     assert.equal(p.techniques.dive, 0, `${p.id} 應未解鎖`);
   }
-  assert.equal(setup.liberos.A.techniques.dive, 0, '我方自由人應未解鎖');
+  // 07-27 Sawmah 拍板 B：防守專精者天生會撲——「不會魚躍的自由人」不成立
+  assert.equal(setup.liberos.A.techniques.dive, 1, '我方自由人天生會魚躍（豁免鏡像）');
   for (const p of setup.teams.B) assert.equal(p.techniques.dive, 1, `${p.id} 對手不受影響`);
   assert.equal(setup.liberos.B.techniques.dive, 1, '對手自由人不受影響');
 });
