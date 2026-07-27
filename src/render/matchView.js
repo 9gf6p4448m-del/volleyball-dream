@@ -32,6 +32,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   let highlightId = initialControlledId;
   let huddleTeam = null; // W7.1 #3A：目前正在集合帶位的隊伍（'A'|'B'|null）——matchLoop 逐幀灌入
   let huddleViewOn = false; // W8：圈內第一人稱進行中——隱藏受控者本體（鏡頭＝他的眼睛）
+  // 4.5B §7 局間 3D 圍攏：外部進度覆蓋（{team, w 0..1}｜null）——牆鐘驅動、
+  // sim 凍結相容（set_break 下 tick 不動，tick 制圍圈管線不可用＝W4 §8-8 癥結的解）
+  let breakHuddle = null;
   let hideOwnTag = false;   // 近身視角（defend/attack/first）：藏自己的頭上標籤
   const castShadow = quality.shadowSize > 0;
 
@@ -110,6 +113,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // W8 暫停演出：教練在戰術板上畫本次選項（'calm'/'fire'；散場自動重置）
     setHuddlePlay(team, play) { huddleProps[team]?.drawPlay(play); },
     setHuddleView(v) { huddleViewOn = v; }, // 與 cameraRig 同一顆布林（matchLoop 灌入）
+    // 4.5B §7：局間圍攏進度（team＋w 0..1；null＝關）——演出時鐘逐幀灌入
+    setBreakHuddle(team, w = 0) { breakHuddle = team ? { team, w } : null; },
     // 07-26：近身視角（防守/攻擊/一人稱）隱藏「自己的」頭上標籤——近距離下標籤爆大
     // 橫在畫面中央擋住讀線；身分已由視角本身確立，不需要再標「你·OH」
     setHideOwnTag(v) { hideOwnTag = v; },
@@ -125,8 +130,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       // W8 暫停演出：教練與戰術板只在圍圈窗內現身（與隊員聚攏同一組判準）
       const huddleActive = huddleTeam != null && gameState.phase === 'serve' &&
         (gameState.serveReadyTick - gameState.tick) > HUDDLE.WALK_BACK_TICKS;
-      huddleProps.A.setVisible(huddleActive);
-      huddleProps.B.setVisible(huddleActive);
+      huddleProps.A.setVisible(huddleActive || (breakHuddle?.team === 'A' && breakHuddle.w > 0.05));
+      huddleProps.B.setVisible(huddleActive || (breakHuddle?.team === 'B' && breakHuddle.w > 0.05));
       // W7 B4④：氣勢極端不利方（僅正負滿檔 ±MOMENTUM_MAX 才觸發，讀原始 value 不做粗訊號分級）
       const dejectedTeam = gameState.momentum && Math.abs(gameState.momentum.value) === TUNING.MOMENTUM_MAX
         ? (gameState.momentum.value > 0 ? 'B' : 'A')
@@ -184,8 +189,12 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         // 倒數剩 1.5s 散開走回。純顯示位移（比照魚躍前例）
         const inHuddleWindow = huddleTeam != null && onCourt && gameState.phase === 'serve' &&
           (gameState.serveReadyTick - gameState.tick) > HUDDLE.WALK_BACK_TICKS;
-        u.huddleW = (u.huddleW ?? 0) +
-          ((inHuddleWindow ? 1 : 0) - (u.huddleW ?? 0)) * (1 - Math.exp(-HUDDLE_K * dt));
+        // 4.5B §7：局間圍攏＝外部進度直接定權重（牆鐘演出時鐘驅動；跳過＝定 1，
+        // 與播完逐值一致）；否則沿 tick 制暫停圍圈的指數平滑
+        const breakW = breakHuddle && onCourt && pTeam === breakHuddle.team
+          ? breakHuddle.w : null;
+        u.huddleW = breakW ?? ((u.huddleW ?? 0) +
+          ((inHuddleWindow ? 1 : 0) - (u.huddleW ?? 0)) * (1 - Math.exp(-HUDDLE_K * dt)));
         if (u.huddleW > 0.001) {
           const rot = gameState.match.rotations[pTeam] ?? [];
           let slotIdx;

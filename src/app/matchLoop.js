@@ -36,7 +36,10 @@ import { CAMERA_TUNING } from '../render/cameraRig.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
 } from '../ui/signatureBeats.js';
-import { loadPresentationPref, keyPointOf } from '../ui/presentation.js';
+import {
+  loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
+} from '../ui/presentation.js';
+import { easeInOutCubic } from '../render/ritualStage.js';
 import { sHotspotItems, lSignalItems, createLatencyStats } from '../ui/diegeticItems.js';
 
 // W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
@@ -231,6 +234,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     latencyStats: createLatencyStats(),
     setWindowSince: -1,
     digWindowSince: -1,
+    // 4.5B §7：局間圍攏過場的圈內第一人稱段（演出時鐘置真、卡片開啟/續局收回）
+    breakHuddleFPV: false,
     last: performance.now(),
     accumulator: 0,
     rafFn: null,
@@ -1342,19 +1347,50 @@ function settleIfOver(s) {
 // W4(P4) Q8 局間 huddle：sim 凍結中（stepGame 對 set_break 短路），按鈕驅動推進。
 // aiState 在局界重建＝與局間存檔續玩同構（AI 記憶為 rally 內草稿，局界重建零體感差；
 // 決定論等價由 tests/match-sets 背書）
+// 4.5B §7：前置 3D 圍攏過場（≤4s）→ 落回 DOM 卡片。比分/教練指示/存檔離開全留
+// DOM（3D 可以吞氛圍，不得吞退出權——憲法 Q8）；牆鐘演出時鐘驅動（sim 凍結相容）；
+// 恆可點擊跳過（跳過＝定格終態，與播完逐值一致）；首次全長 3.8s、之後 2s（2a 哲學）；
+// 演出 off／reduced-motion＝直接卡片（資訊卡不經頻率框架、不省）
 function showSetBreak(s) {
   const { game, stage } = s;
-  stage.setBreakOverlay.show({
-    series: game.series,
-    playerTeam: game.players[s.playerId].teamId,
-    onNext: () => {
-      stage.setBreakOverlay.hide();
-      startNextSet(game);
-      s.aiState = createAiState();
-      s.vcrCurrent = { snapshot: null, steps: [] }; // 新局重開錄影（跨局殘影不可重演）
-    },
-    onSaveQuit: s.careerCtx ? () => saveMidAndQuit(s) : null,
-  });
+  let cardShown = false;
+  const openCard = () => {
+    if (cardShown) return;
+    cardShown = true;
+    stage.setBreakOverlay.show({
+      series: game.series,
+      playerTeam: game.players[s.playerId].teamId,
+      onNext: () => {
+        stage.setBreakOverlay.hide();
+        // 收圍攏演出（定格背景到此為止）——回開賽狀態
+        stage.matchView.setBreakHuddle(null);
+        s.breakHuddleFPV = false;
+        startNextSet(game);
+        s.aiState = createAiState();
+        s.vcrCurrent = { snapshot: null, steps: [] }; // 新局重開錄影（跨局殘影不可重演）
+      },
+      onSaveQuit: s.careerCtx ? () => saveMidAndQuit(s) : null,
+    });
+  };
+  const motionOff = typeof window !== 'undefined'
+    && (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
+  if (s.presentation.pref === 'off' || motionOff) { openCard(); return; }
+  const full = !s.presentation.isSeen('huddle3d');
+  s.presentation.markSeen('huddle3d');
+  const total = full ? 3800 : 2000; // 首次全長、之後短版（≤2s）；上限 ≤4s（拍板題4）
+  const team = game.players[s.playerId].teamId;
+  const tl = createBeatTimeline([
+    // 三人稱看全隊聚攏（權重絕對式：跳過＝1＝圍好）
+    { dur: total * 0.55, apply: (t) => stage.matchView.setBreakHuddle(team, easeInOutCubic(t)) },
+    // 鏡頭進圈內（既有 W8 圈內第一人稱鏡位）→ 定格，淡出交給 DOM 卡片浮上
+    { dur: total * 0.45, apply: () => { s.breakHuddleFPV = true; } },
+  ]);
+  const driver = driveTimeline(tl, { onDone: openCard });
+  const onTap = () => {
+    window.removeEventListener('pointerdown', onTap);
+    if (!tl.done) driver.skip();
+  };
+  window.addEventListener('pointerdown', onTap);
 }
 
 // W4(P4) 題5 OPP 要球 tap：①sim 登記（'call' Intent→trust 2×＋甜蜜區放寬）
@@ -1605,9 +1641,10 @@ function frameStep(s, now) {
       '#ff9d7a', 2600,
     );
   }
-  const huddleFPV = !benched && s.timeoutHuddleTeam != null && game.phase === 'serve' &&
+  const huddleFPV = (!benched && s.timeoutHuddleTeam != null && game.phase === 'serve' &&
     (TUNING.TIMEOUT_DEAD_TICKS - huddleRemain) > HUDDLE_VIEW_IN_TICKS &&
-    huddleRemain > HUDDLE.WALK_BACK_TICKS + 30;
+    huddleRemain > HUDDLE.WALK_BACK_TICKS + 30)
+    || s.breakHuddleFPV === true; // 4.5B §7：局間圍攏過場的圈內段（牆鐘演出時鐘驅動）
   stage.rig.setHuddleView(huddleFPV);
   stage.matchView.setHuddleView(huddleFPV);
   // 07-26：近身視角藏自己的頭上標籤（防守/攻擊/一人稱＝鏡頭貼在自己身後，標籤爆大擋線）
