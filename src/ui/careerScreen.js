@@ -44,7 +44,10 @@ import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
 import { createBeatStage } from '../render/beatStage.js';
-import { loadPresentationPref, savePresentationPref } from './presentation.js';
+import {
+  loadPresentationPref, savePresentationPref, createBeatTimeline, driveTimeline,
+} from './presentation.js';
+import { createRitualStage } from '../render/ritualStage.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 const ATTR_LABELS = {
@@ -1903,6 +1906,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       ], `🎬 關鍵球典藏：第 ${finalRally.seasonIndex} 屆冠軍點——決賽的最後一球，已永久收藏`));
     }
     overlay.appendChild(button('謝幕——', true, () => {
+      ritual?.dispose();
       overlay.remove();
       const members = roster?.members ?? [];
       dialogPlay([{ lines: finaleFarewellLines(members, player.id) }], () => {
@@ -1912,11 +1916,51 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             champion,
             role: player.currentRole,
             heightM: player.height?.current ?? 1.75,
+            // 4.5B §5-2：三年遞進——一年級身高（timeline 首項＝創角揭曉值）
+            heightStartM: player.height?.timeline?.[0]?.height ?? null,
           }),
           onDone: () => showNextChapter(),
         });
       });
     }));
+
+    // 4.5B §5-1 生涯結算＝全遊戲唯一上限規格：暗場→主角聚光→三屆戰績逐張點亮
+    //（對標冠軍館燈光秀 tour 的「逐盞亮」語彙）；恆可點擊跳過（§2-2 演出時鐘：
+    // 跳過＝播完逐值一致）；reduced-motion／WebGL 失敗＝直接定格全部可見
+    let ritual = null;
+    if (!reduceMotion()) {
+      try {
+        ritual = createRitualStage({
+          playerId: player.id ?? 'A2',
+          teamId: 'A',
+          role: player.currentRole ?? 'outside',
+          heightM: player.height?.current ?? 1.75,
+          width: 220,
+          height: 230,
+        });
+        overlay.insertBefore(ritual.el, overlay.children[2] ?? null);
+      } catch { ritual = null; }
+    }
+    const kids = [...overlay.children].filter((n) => n !== ritual?.el);
+    const seq = createBeatTimeline([
+      ...(ritual ? [{ dur: 700, apply: (t) => ritual.setSpot(t) }] : []),
+      ...kids.map((node) => ({
+        dur: 300,
+        apply: (t) => {
+          node.style.opacity = String(t);
+          node.style.transform = `translateY(${(1 - t) * 10}px)`;
+        },
+      })),
+    ]);
+    if (reduceMotion()) {
+      seq.finish();
+    } else {
+      for (const node of kids) node.style.opacity = '0';
+      const driver = driveTimeline(seq);
+      overlay.addEventListener('pointerdown', (e) => {
+        if (!seq.done) { e.stopPropagation(); e.preventDefault(); driver.skip(); }
+      }, true);
+    }
     document.body.appendChild(overlay);
   }
 

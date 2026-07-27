@@ -81,6 +81,23 @@ export function showHeightRitual({ player, reveal, onDone }) {
       'color:#5a6c92',
     ], String(cm)));
   }
+  // 4.5B §5-3 刻痕累積：尺上留前幾年的刻痕——第一次一道線、第三年三道線並排。
+  // 份量自己長出來（B＋案：不加規格、加累積）；同時＝幕三長高變體
+  // 「比對三年前的尺」的視覺基礎。資料源＝height.timeline（已揭曉的歷屆身高）。
+  const pastMarks = (player.height?.timeline ?? [])
+    .filter((t) => t.season < (reveal.season ?? Infinity));
+  for (const mk of pastMarks) {
+    const cm = mk.height * 100;
+    const y = (1 - (cm - RULER_MIN) / (RULER_MAX - RULER_MIN)) * 100;
+    ruler.appendChild(el('div', [
+      'position:absolute', 'left:0', 'right:10px', 'height:1px', `top:${y}%`,
+      'background:rgba(255,209,102,0.45)',
+    ]));
+    ruler.appendChild(el('div', [
+      'position:absolute', 'left:3px', `top:calc(${y}% - 11px)`, 'font-size:8px',
+      'color:rgba(255,209,102,0.7)', 'letter-spacing:1px',
+    ], `${mk.season}屆`));
+  }
   const marker = el('div', [
     'position:absolute', 'left:0', 'right:0', 'height:2px', 'background:#ffd166',
     'box-shadow:0 0 8px rgba(255,209,102,0.8)', 'top:50%',

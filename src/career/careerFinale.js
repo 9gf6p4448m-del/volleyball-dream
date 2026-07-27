@@ -65,19 +65,41 @@ export function finaleFarewellLines(members, playerId = 'A2') {
 }
 
 // 主角版畢業儀式段落（graduationRitual.perGraduate 同形 [{member, lines}]——
-// 逐位聚光鏈的單人版：這次站在光裡的是你）。台詞吃戰績誠實分版
-export function finaleRitualSegments({ playerName, champion, role = 'outside', heightM = 1.75 }) {
-  return [{
-    member: { id: 'A2', name: playerName, role, height: heightM },
-    lines: [
-      { speaker: '教練', text: `${playerName}——三年前你走進體育館，遞給我一張寫著身高的體檢表。` },
-      champion
-        ? { speaker: '教練', text: '三年後，你把全國冠軍的獎盃放在了那張桌上。謝謝你，讓我看到這一天。' }
-        : { speaker: '教練', text: '獎盃我們沒能全部拿下。但你打出來的每一球，都不欠這三年。' },
-      { speaker: playerName, text: '……謝謝教練。謝謝大家。' },
-      { speaker: playerName, text: '排球，我會一直打下去。' },
-    ],
-  }];
+// 逐位聚光鏈的單人版：這次站在光裡的是你）。台詞吃戰績誠實分版。
+// 4.5B §5-2（B＋案「同一套架構、三年遞進」）：傳入 heightStartM（一年級身高）
+// 且與現在身高有差＝拆兩段——先聚光「三年前走進體育館的你」（一年級身高的模型），
+// 收光、再聚光「現在的你」。零新機制：多一位「畢業者」＝同一條逐位聚光鏈。
+export function finaleRitualSegments({
+  playerName, champion, role = 'outside', heightM = 1.75, heightStartM = null,
+}) {
+  const openLine = { speaker: '教練', text: `${playerName}——三年前你走進體育館，遞給我一張寫著身高的體檢表。` };
+  const restLines = [
+    champion
+      ? { speaker: '教練', text: '三年後，你把全國冠軍的獎盃放在了那張桌上。謝謝你，讓我看到這一天。' }
+      : { speaker: '教練', text: '獎盃我們沒能全部拿下。但你打出來的每一球，都不欠這三年。' },
+    { speaker: playerName, text: '……謝謝教練。謝謝大家。' },
+    { speaker: playerName, text: '排球，我會一直打下去。' },
+  ];
+  const grew = heightStartM != null && Math.abs(heightStartM - heightM) > 0.005;
+  if (!grew) {
+    return [{
+      member: { id: 'A2', name: playerName, role, height: heightM },
+      lines: [openLine, ...restLines],
+    }];
+  }
+  return [
+    {
+      member: { id: 'A2', name: playerName, role, height: heightStartM },
+      lines: [
+        openLine,
+        { speaker: '教練', text: '那時的你，就這麼高。站在網子底下，抬著頭看每一個人。' },
+      ],
+    },
+    {
+      member: { id: 'A2', name: playerName, role, height: heightM },
+      lines: restLines,
+    },
+  ];
 }
 
 // 三屆總結（吃 Q9 累積頁同一資料底）：seasons＝歷屆封存＋本屆；recruitment＝招募全記錄

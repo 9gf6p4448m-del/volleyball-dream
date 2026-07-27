@@ -45,6 +45,21 @@ test('主角畢業儀式段落：graduationRitual perGraduate 同形；奪冠/�
   assert.ok(NEXT_CHAPTER_LINES.title.includes('完'));
 });
 
+test('4.5B §5-2 主角儀式三年遞進：帶一年級身高＝兩段（先矮後高）；無成長＝維持單段', () => {
+  const grown = finaleRitualSegments({
+    playerName: '小夢', champion: true, heightM: 1.78, heightStartM: 1.65,
+  });
+  assert.equal(grown.length, 2, '一年級的你＋現在的你＝同一條逐位聚光鏈');
+  assert.equal(grown[0].member.height, 1.65);
+  assert.equal(grown[1].member.height, 1.78);
+  assert.ok(grown[0].lines.every((l) => l.speaker && l.text));
+  assert.ok(grown[1].lines.some((l) => l.text.includes('獎盃')));
+  const flat = finaleRitualSegments({
+    playerName: '小夢', champion: false, heightM: 1.75, heightStartM: 1.75,
+  });
+  assert.equal(flat.length, 1, '身高沒變＝不硬拆兩段');
+});
+
 test('三屆總結：合計/冠軍數/招募名單解析', () => {
   const seasons = [
     { index: 1, wins: 5, losses: 1, champion: false, totals: { kills: 10, aces: 2, blockPoints: 1, tipKills: 0, perfects: 3, digs: 0, assistDigs: 0, rallySaves: 0 } },
