@@ -12,10 +12,12 @@
 export const FLAG_POSITIONS = ['setter', 'middle', 'opposite', 'libero']; // OH=現役不入旗標
 export const FLAG_STATES = ['locked', 'ready', 'open'];
 
-// 甲4 locked→ready＝「該位置工程全綠＋治具達標時由實作端設定」——這是 build 級事實，
-// 不是存檔級事實：本清單＝當前版本已達 ready 門檻的位置（W3 結案：四位置全上），
-// main.js 開機以 markPositionReady 冪等回填（不動 open、不降級——守衛見下）
-export const ENGINEERED_READY = ['setter', 'middle', 'opposite', 'libero'];
+// 甲4 驗收流程完結（07-27 Sawmah 拍板）：四位置手感全數試玩驗訖＝「Sawmah 已批」
+// 固化為 build 級事實——開機回填 ready→open 兩段合法轉移（守衛不動；open 的寫入
+// 源頭仍是 Sawmah 的驗收拍板，只是從逐存檔手批變成版本內建）。正式玩家視角＝
+// 四位置恆開放，progression 走轉位事件（教練談話＋志願）本身。
+// 未來新位置（如 Phase 4.5+）再走 locked→ready→試玩驗收→入此清單 的同一條流程
+export const ENGINEERED_OPEN = ['setter', 'middle', 'opposite', 'libero'];
 
 export function defaultPositionFlags() {
   return Object.fromEntries(FLAG_POSITIONS.map((p) => [p, 'locked']));

@@ -1529,82 +1529,11 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
     ioRow.appendChild(smallButton('返回主選單', renderHome));
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
-    // W3(P4) 甲4 手批面板（PWA 版入口）：主畫面 standalone 無網址列、存檔又與瀏覽器
-    // 分離＝?openPosition= 蓋不到章——改附生涯畫面入口（仍是 Sawmah 手動批，守衛不變；
-    // 上架前移除此入口——快照試玩清單記錄）。
-    // 07-27 Sawmah 裁定：四位置全開後自動隱藏（不干擾遊戲畫面）；刪檔重開＝旗標
-    // 歸零＝按鈕自動回來（PWA 上唯一補批管道，不能全刪）
-    const pFlags = store.loadPositionFlags?.() ?? {};
-    const allOpen = ['setter', 'middle', 'opposite', 'libero']
-      .every((p) => pFlags[p] === 'open');
-    if (!allOpen) ioRow.appendChild(smallButton('🔓 位置開放', showOpenPanel));
     root.appendChild(ioRow);
     root.appendChild(msgEl);
   }
-
-  // 手批面板：四位置旗標現況＋逐位/全部批准（只有 ready 可批——approveOpenPosition
-  // 守衛）。原地重繪＋明確回饋（remove/重開會閃跳頂部、看起來像沒反應——07-27 修）
-  function showOpenPanel() {
-    const overlay = el('div', [
-      'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
-      'background:rgba(4,6,12,0.72)', 'flex-direction:column',
-      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
-      'padding:24px 16px',
-    ]);
-    const card = el('div', [
-      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
-      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
-      'flex-direction:column', 'gap:8px', 'align-items:stretch',
-    ]);
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
-    const STATE_LABEL = { locked: '未就緒', ready: '可批准', open: '✓ 已開放' };
-    const paint = (note) => {
-      card.replaceChildren();
-      card.appendChild(el('div', [
-        'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
-      ], '🔓 位置開放（試玩手批）'));
-      card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
-        '批准的位置會在屆間由教練找你談轉位。這是試玩驗收入口——正式上架前會移除。'));
-      const flags = store.loadPositionFlags?.() ?? {};
-      for (const p of ['setter', 'middle', 'opposite', 'libero']) {
-        const st = flags[p] ?? 'locked';
-        card.appendChild(button(
-          `${roleLabel(p)}｜${STATE_LABEL[st]}${st === 'ready' ? '——點我批准' : ''}`,
-          st === 'ready',
-          () => {
-            if ((store.loadPositionFlags?.() ?? {})[p] !== 'ready') return;
-            store.approveOpenPosition?.(p);
-            paint(`✓ ${roleLabel(p)} 已開放`);
-          },
-        ));
-      }
-      const allOpen = ['setter', 'middle', 'opposite', 'libero']
-        .every((p) => flags[p] === 'open');
-      if (allOpen) {
-        card.appendChild(el('div', [
-          'font-size:15px', 'font-weight:800', 'color:#7ee787', 'text-align:center',
-          'padding:6px 0',
-        ], '✓ 四位置全數開放——屆間教練會來找你談轉位'));
-      } else {
-        card.appendChild(button('✓ 全部批准', true, () => {
-          for (const p of ['setter', 'middle', 'opposite', 'libero']) store.approveOpenPosition?.(p);
-          paint('✓ 已全部批准');
-        }));
-      }
-      if (note) {
-        card.appendChild(el('div', [
-          'font-size:13px', 'font-weight:700', 'color:#7ee787', 'text-align:center',
-        ], note));
-      }
-      // 關閉＝重繪生涯畫面（07-27 修：全開後按鈕要即時消失，不能等下次導航才刷新）
-      card.appendChild(button('關閉', false, () => {
-        overlay.remove();
-        renderCareer();
-      }));
-    };
-    paint();
-  }
+  // 🔓 手批面板已移除（07-27 Sawmah 拍板：四位置驗收完結→版本級 open，見
+  // positionFlags.ENGINEERED_OPEN；未來新位置驗收用 ?openPosition= 入口即可）
 
   // stage 3 成長區：點數/上場表現/屬性加點（次要）/技術解鎖（主要）
   function growthSection(career, player) {

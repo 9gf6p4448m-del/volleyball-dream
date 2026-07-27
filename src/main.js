@@ -16,7 +16,7 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createCareerStore } from './career/careerStore.js';
-import { ENGINEERED_READY } from './career/positionFlags.js';
+import { ENGINEERED_OPEN } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
 import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
 import { buildMatchStage } from './app/matchStage.js';
@@ -61,11 +61,13 @@ async function init() {
 function showCareerEntry(ctx) {
   ctx.loadingEl.remove();
   const store = createCareerStore();
-  // W3(P4) 甲4 旗標：①工程 ready 回填（build 級事實，開機冪等；不動 open）
-  // ②手批入口 ?openPosition=setter|middle|opposite|libero——ready→open 的唯一路徑
-  // （Sawmah 試玩通過後手動帶參數進入）。逗號清單與 all（＝四位置一次批，07-27
-  // Sawmah 口頭裁定加入）皆可；未 ready/未知位置＝store 內安全回 false
-  for (const p of ENGINEERED_READY) store.markPositionReady(p);
+  // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置開機回填至 open
+  // （ready→open 兩段合法轉移、冪等；上架版語意＝四位置恆開放）。
+  // ?openPosition= 手批入口保留給未來新位置的驗收流程（守衛不動）
+  for (const p of ENGINEERED_OPEN) {
+    store.markPositionReady(p);
+    store.approveOpenPosition(p);
+  }
   const openPos = ctx.params.get('openPosition');
   if (openPos) {
     const wanted = openPos === 'all'

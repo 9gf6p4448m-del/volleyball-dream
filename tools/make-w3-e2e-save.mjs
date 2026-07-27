@@ -4,7 +4,7 @@
 import { createCareer, createCareerPlayer, careerStage } from '../src/career/careerState.js';
 import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
 import { ensureStarterRoster } from '../src/career/roster.js';
-import { ENGINEERED_READY } from '../src/career/positionFlags.js';
+import { ENGINEERED_OPEN } from '../src/career/positionFlags.js';
 import { settleCareerMatch } from '../src/app/matchCareer.js';
 
 const aspiration = process.argv[2] ?? 'setter';
@@ -31,7 +31,7 @@ for (;;) {
   });
   if (careerStage(store.loadCareer()) === 'eliminated') break;
 }
-for (const p of ENGINEERED_READY) store.markPositionReady(p);
+for (const p of ENGINEERED_OPEN) { store.markPositionReady(p); store.approveOpenPosition(p); }
 // 第 3 參數＝直接套用轉位（跳過談話——驗賽中面板用）：node ... setter libero
 const applyRole = process.argv[3];
 if (applyRole) {

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FLAG_POSITIONS, defaultPositionFlags, positionFlagsOf,
-  markPositionReady, approvePositionOpen, isPositionOpen, ENGINEERED_READY,
+  markPositionReady, approvePositionOpen, isPositionOpen, ENGINEERED_OPEN,
 } from '../src/career/positionFlags.js';
 import { createCareerStore } from '../src/career/careerStore.js';
 import { createSaveV2, serializeSave, deserializeSave } from '../src/career/schema.js';
@@ -88,17 +88,18 @@ test('store 整合：markPositionReady 持久化＋其餘頂層鍵原樣；appro
   assert.equal(roster.capacity, 12);
 });
 
-test('ENGINEERED_READY 回填（W3 結案定義）：四位置全 ready、開機冪等、不動 open', () => {
-  assert.deepEqual([...ENGINEERED_READY].sort(), [...FLAG_POSITIONS].sort()); // 結案＝四位置全 ready
+test('ENGINEERED_OPEN 回填（07-27 驗收完結）：開機四位置直達 open、冪等、走合法兩段轉移', () => {
+  assert.deepEqual([...ENGINEERED_OPEN].sort(), [...FLAG_POSITIONS].sort()); // 四位置全驗訖
   const store = createCareerStore(fakeStorage());
-  // 開機回填（main.js 同款）×2＝冪等
-  for (let i = 0; i < 2; i += 1) for (const p of ENGINEERED_READY) store.markPositionReady(p);
+  // 開機回填（main.js 同款：ready→open 兩段合法轉移）×2＝冪等
+  for (let i = 0; i < 2; i += 1) {
+    for (const p of ENGINEERED_OPEN) {
+      store.markPositionReady(p);
+      store.approveOpenPosition(p);
+    }
+  }
   const flags = store.loadPositionFlags();
-  for (const p of FLAG_POSITIONS) assert.equal(flags[p], 'ready');
-  // 手批 open 後再回填＝open 不被降級
-  assert.ok(store.approveOpenPosition('setter'));
-  for (const p of ENGINEERED_READY) store.markPositionReady(p);
-  assert.equal(store.loadPositionFlags().setter, 'open');
+  for (const p of FLAG_POSITIONS) assert.equal(flags[p], 'open');
 });
 
 test('schema 驗證：壞旗標值 throw、合法旗標 round-trip、缺鍵容許', () => {
