@@ -1502,8 +1502,13 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
     // W3(P4) 甲4 手批面板（PWA 版入口）：主畫面 standalone 無網址列、存檔又與瀏覽器
     // 分離＝?openPosition= 蓋不到章——改附生涯畫面入口（仍是 Sawmah 手動批，守衛不變；
-    // 上架前移除此入口——快照試玩清單記錄）
-    ioRow.appendChild(smallButton('🔓 位置開放', showOpenPanel));
+    // 上架前移除此入口——快照試玩清單記錄）。
+    // 07-27 Sawmah 裁定：四位置全開後自動隱藏（不干擾遊戲畫面）；刪檔重開＝旗標
+    // 歸零＝按鈕自動回來（PWA 上唯一補批管道，不能全刪）
+    const pFlags = store.loadPositionFlags?.() ?? {};
+    const allOpen = ['setter', 'middle', 'opposite', 'libero']
+      .every((p) => pFlags[p] === 'open');
+    if (!allOpen) ioRow.appendChild(smallButton('🔓 位置開放', showOpenPanel));
     root.appendChild(ioRow);
     root.appendChild(msgEl);
   }
