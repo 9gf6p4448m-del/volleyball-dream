@@ -1500,8 +1500,55 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
     ioRow.appendChild(smallButton('返回主選單', renderHome));
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
+    // W3(P4) 甲4 手批面板（PWA 版入口）：主畫面 standalone 無網址列、存檔又與瀏覽器
+    // 分離＝?openPosition= 蓋不到章——改附生涯畫面入口（仍是 Sawmah 手動批，守衛不變；
+    // 上架前移除此入口——快照試玩清單記錄）
+    ioRow.appendChild(smallButton('🔓 位置開放', showOpenPanel));
     root.appendChild(ioRow);
     root.appendChild(msgEl);
+  }
+
+  // 手批面板：四位置旗標現況＋逐位/全部批准（只有 ready 可批——approveOpenPosition 守衛）
+  function showOpenPanel() {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+      'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'padding:24px 16px',
+    ]);
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+      'flex-direction:column', 'gap:8px', 'align-items:stretch',
+    ]);
+    card.appendChild(el('div', [
+      'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+    ], '🔓 位置開放（試玩手批）'));
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+      '批准的位置會在屆間由教練找你談轉位。這是試玩驗收入口——正式上架前會移除。'));
+    const flags = store.loadPositionFlags?.() ?? {};
+    const STATE_LABEL = { locked: '未就緒', ready: '可批准', open: '✓ 已開放' };
+    for (const p of ['setter', 'middle', 'opposite', 'libero']) {
+      const st = flags[p] ?? 'locked';
+      card.appendChild(button(
+        `${roleLabel(p)}｜${STATE_LABEL[st]}${st === 'ready' ? '——點我批准' : ''}`,
+        st === 'ready',
+        () => {
+          if (st !== 'ready') return;
+          store.approveOpenPosition?.(p);
+          overlay.remove();
+          showOpenPanel(); // 重繪現況
+        },
+      ));
+    }
+    card.appendChild(button('✓ 全部批准', true, () => {
+      for (const p of ['setter', 'middle', 'opposite', 'libero']) store.approveOpenPosition?.(p);
+      overlay.remove();
+      showOpenPanel();
+    }));
+    card.appendChild(button('關閉', false, () => overlay.remove()));
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
   }
 
   // stage 3 成長區：點數/上場表現/屬性加點（次要）/技術解鎖（主要）
