@@ -10,7 +10,7 @@
 // 班底 20 要連續失誤（−6×2）才會跌進來。
 import { attackPointsOf, setAimFor } from '../sim/ai.js';
 import { effectiveTrust } from '../sim/trust.js';
-import { localToWorld } from '../sim/rotation.js';
+import { localToWorld, otherTeam, isBackRow } from '../sim/rotation.js';
 
 export const SET_HESITANT_BELOW = 12;
 // 主動呼叫要球（表現層）：有效 trust 達此值的最高者在面板開啟時喊聲（甲2「高 trust
@@ -28,7 +28,7 @@ export function setOptionsFor(game, aiState, setterId) {
   if (!me) return [];
   const team = me.teamId;
   const tier = aiState?.passTier ?? 'perfect';
-  return attackPointsOf(game, team, setterId, tier).map((pt) => {
+  const options = attackPointsOf(game, team, setterId, tier).map((pt) => {
     const p = game.players[pt.pid];
     const a = setAimFor(game, team, pt.pid, pt.kind);
     const trust = effectiveTrust(game, p);
@@ -45,6 +45,24 @@ export function setOptionsFor(game, aiState, setterId) {
       tier,
     };
   });
+  // W4(P4) 題3 拍板：玩家 S 前排＋一傳 Perfect 檔→多一顆「🎯二次球」偷襲——
+  // 沿 AI setterDump 同 sim 路徑（輕推對方淺區、t=0.3＝chooseTouch dump 分支同值）、
+  // 零數值特例；懲罰＝機會成本本身（被守淺區就地處理）、不吃 trust（代價留在比分層）
+  if (tier === 'perfect' && !isBackRow(game.match.rotations[team], setterId)) {
+    options.push({
+      key: 'dump',
+      pid: setterId,
+      name: me.name,
+      kind: 'dump',
+      label: '🎯二次球',
+      aim: localToWorld(otherTeam(team), 1.5, 2.6),
+      t: 0.3,
+      trust: 100,
+      hesitant: false,
+      tier,
+    });
+  }
+  return options;
 }
 
 // 面板標題（一傳品質誠實播報——資訊落在要用的前一刻）

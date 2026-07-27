@@ -41,14 +41,15 @@ export const TRUST_DYN = {
   OLD_TEAM_BOOST: 8, // W7 D2 舊隊情結：對戰原隊開場 trustDyn +8（憋著一股勁；場末即散）
 };
 
-// 攻擊定勝負的歸因（settlePoint 呼叫）：scored＝這記攻擊直接得分/失分
-export function applyAttackOutcome(state, playerId, scored) {
+// 攻擊定勝負的歸因（settlePoint 呼叫）：scored＝這記攻擊直接得分/失分。
+// mul（W4 題5 OPP 要球「信任雙倍下注」）：升降幅同倍放大——沿乘係數、零新機制
+export function applyAttackOutcome(state, playerId, scored, mul = 1) {
   const prev = state.trustStreak[playerId] ?? 0;
   const streak = scored ? Math.max(1, prev + 1) : Math.min(-1, prev - 1);
   state.trustStreak[playerId] = streak;
-  const delta = scored
+  const delta = (scored
     ? TRUST_DYN.KILL + (streak >= 2 ? TRUST_DYN.KILL_STREAK : 0)
-    : TRUST_DYN.ERR + (streak <= -2 ? TRUST_DYN.ERR_STREAK : 0);
+    : TRUST_DYN.ERR + (streak <= -2 ? TRUST_DYN.ERR_STREAK : 0)) * mul;
   const next = (state.trustDyn[playerId] ?? 0) + delta;
   state.trustDyn[playerId] = Math.max(-TRUST_DYN.CLAMP, Math.min(TRUST_DYN.CLAMP, next));
 }

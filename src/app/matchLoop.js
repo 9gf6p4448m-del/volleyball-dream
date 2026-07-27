@@ -143,6 +143,11 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lOverrideTally: careerCtx?.resumeMid?.lOverrides ?? { n: 0, ok: 0 },
     digReadWasOverride: false,
     boxShown: false, // 局終兩段式：第一次點＝單場結算頁、第二次點＝返回生涯
+    // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
+    dumpLive: false,
+    callWindowUntil: 0,   // 浮鈕失效時刻（0.8s 牆鐘窗）
+    calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
+    pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
     slowEaseFrom: -1e9,         // 決策窗結束時刻（時間膨脹 0.4→1.0 緩出的起點）
     tapeIdx: 0,
@@ -693,6 +698,13 @@ function updateDecisions(s, now) {
         zone: z,
       })),
       (it) => {
+        // W4(P4) 題3：二次球偷襲——第二擊直接攻擊（沿 AI setterDump 同 sim 路徑）；
+        // 真值字卡由後續事件結算（得手/被識破），s.dumpLive 追蹤本波
+        if (it.zone.kind === 'dump') {
+          controls.chooseSetDump(it.zone);
+          aiState.attackerId = null; // 沒有第三擊——攻擊手協調層本波不啟動
+          return; // 真值字卡由事件流結算（實際出手才追蹤，非按了就算）
+        }
         controls.chooseSet(it.zone);
         // 決策注入 AI 協調層：攻擊手改為玩家選定——第三擊呼叫鎖定與一氣呵成助跑
         // （ensureFlightPlan touches===2 讀 attackerId）沿用既有機制
@@ -756,6 +768,12 @@ function stepSim(s) {
       ...stage.controls.collect(game, s.aiState),
       ...aiCollectIntents(game, s.aiState, [s.controlledId]),
     ];
+    // W4(P4) 題5：OPP 要球——浮鈕 tap 於下一個 sim tick 注入 'call' Intent
+    // （Intent 唯一輸入鐵律；VCR 同錄可重演）
+    if (s.pendingCallIntent) {
+      s.pendingCallIntent = false;
+      intents.push({ tick: game.tick, playerId: s.playerId, action: 'call' });
+    }
     if (s.vcrCurrent.snapshot) s.vcrCurrent.steps.push({ tick: game.tick, intents });
     const events = stepGame(game, intents);
     frameEvents.push(...events);
@@ -778,9 +796,37 @@ function applyEvents(s, frameEvents, now) {
   const { game, stage } = s;
   const cards = []; // [{ pri, text, color, dur, onShown? }]
   // W4(P4) Q8 多局賽制字卡：決勝局 8 分換邊（FIVB 事件化——物理半場不換，演出告知）
+  const myTeam = game.players[s.playerId]?.teamId ?? 'A';
   for (const e of frameEvents) {
     if (e.type === 'SIDE_SWITCH') {
       cards.push({ pri: 45, text: '🔄 決勝局 8 分——換邊！', color: '#ffd166', dur: 2600 });
+    }
+    // W4 題3 二次球真值字卡：實際出手（S 第二擊 spike）才立旗——
+    // 得手「🎯偷襲得手！」／被識破（對手接起/攔到）「被看穿了——他守著淺區」；
+    // 出界失分＝pointBanner 講故事，不出偷襲字卡（真值：那不是被識破，是自己失手）
+    if (e.type === 'TOUCH' && e.playerId === s.playerId && e.kind === 'spike'
+      && e.touches === 2 && game.players[s.playerId]?.currentRole === 'setter') {
+      s.dumpLive = true;
+    } else if (s.dumpLive && (e.type === 'TOUCH' || e.type === 'BLOCK_TOUCH') && e.team !== myTeam) {
+      cards.push({ pri: 40, text: '被看穿了——他守著淺區', color: '#c8d6eb', dur: 1800 });
+      s.dumpLive = false;
+    } else if (s.dumpLive && e.type === 'SCORE') {
+      if (e.team === myTeam) {
+        cards.push({ pri: 40, text: '🎯 偷襲得手！', color: '#ffd166', dur: 1800 });
+      }
+      s.dumpLive = false;
+    }
+    // W4 題5 OPP 要球窗：一傳起球＋玩家 OPP 後排→「⚡跟上！」浮鈕（0.8s；
+    // OH 不加任何要球機制——§0 題5 關卷）；每 flight 一次
+    if (e.type === 'TOUCH' && e.touches === 1 && e.team === myTeam && !s.replay
+      && game.players[s.playerId]?.currentRole === 'opposite'
+      && e.playerId !== s.playerId
+      && onCourt(game, s.playerId)
+      && isBackRow(game.match.rotations[myTeam], s.playerId)
+      && s.calledFlight !== game.rally.flightId) {
+      s.calledFlight = game.rally.flightId;
+      s.callWindowUntil = now + 800;
+      stage.callButton?.show(() => onCallTap(s));
     }
   }
   stage.sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - s.rallyStartFlight });
@@ -1045,6 +1091,36 @@ function showSetBreak(s) {
   });
 }
 
+// W4(P4) 題5 OPP 要球 tap：①sim 登記（'call' Intent→trust 2×＋甜蜜區放寬）
+// ②S 分配池 D 球權重大增（非保證——決定論 hash 抽授予；治具近似同語意）
+// ③表現層：喊聲＋S 回頭；未被舉＝助跑白耗（既有體力系統，零特例）
+const CALL_GRANT = 0.7; // 授予率初擬（「權重大增非保證」；治具驗）
+function callHash01(n) {
+  let x = Math.imul(n | 0, 2654435761);
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x45d9f3b);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+function onCallTap(s) {
+  const { game, stage } = s;
+  if (game.phase !== 'rally' || game.rally.touches !== 1) return; // 窗已過（防競態）
+  const me = game.players[s.playerId];
+  s.pendingCallIntent = true;
+  const granted = callHash01(game.rally.flightId * 613 + (game.seed ?? 0) * 17 + 9) < CALL_GRANT;
+  if (granted) {
+    s.aiState.attackerId = s.playerId;
+    s.aiState.attackKind = 'dball';
+  }
+  stage.floatText.show(`${me.name}：「我來！」`, '#ffd166', 1300);
+  const setter = Object.values(game.players)
+    .find((p) => p.teamId === me.teamId && p.currentRole === 'setter'
+      && game.match.rotations[me.teamId].includes(p.id));
+  if (setter) {
+    setTimeout(() => stage.floatText.show(`${setter.name}回頭看了你一眼`, '#9fb0cc', 1100), 380);
+  }
+}
+
 // W4(P4) Q9 單場結算頁資料（顯示時刻即時由事件流建——與 settle 落檔同一組純函式）
 function buildBoxPanelData(s) {
   const { game } = s;
@@ -1188,6 +1264,12 @@ function frameStep(s, now) {
       stage.sfx.cheer?.(0.5);
     }
     s.lWasOnCourt = onNow;
+  }
+
+  // W4 題5：要球浮鈕窗管理（0.8s 過期／球已進第二擊／死球＝收）
+  if (stage.callButton?.isVisible()
+    && (now > s.callWindowUntil || game.phase !== 'rally' || game.rally.touches !== 1)) {
+    stage.callButton.hide();
   }
 
   // 簡化模式：進攻決策——輪到玩家扣球且球還在空中→彈面板、時間放慢給你讀攔網選區

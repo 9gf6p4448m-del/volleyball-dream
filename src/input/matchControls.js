@@ -537,6 +537,17 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         expiresTick: null, jumpAt: null, attack: false, set: true,
       };
     },
+    // W4(P4) 題3 S 二次球偷襲：第二擊改攻擊——沿 AI setterDump 同 sim 路徑
+    // （spike、輕推 t=0.3、瞄對方淺區；chooseTouch dump 分支同值＝零數值特例）
+    chooseSetDump(opt) {
+      setChosen = true;
+      jumpSignal = true;
+      queuedAction = {
+        timing: opt.t, gaze: { x: opt.aim.x, z: opt.aim.z }, aimWorld: opt.aim,
+        aimNdc: null, aimVec: null, forceAction: 'spike',
+        expiresTick: null, jumpAt: performance.now(), attack: true,
+      };
+    },
     // 本次舉球是否已分配（main 用來停止彈面板）
     setPending() { return setChosen; },
 

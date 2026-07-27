@@ -63,6 +63,10 @@ export const TUNING = {
   TIP_SPEED_MIN: 0.55,    // 輕吊速度下限＝全力的 55%（timing=0 時）
   // 出手品質（2K 式甜蜜區）：蓄力進度落在甜蜜區＝準、超蓄＝飄
   SWEET_LO: 0.7, SWEET_HI: 1.05, OVERCHARGE_T: 1.15,
+  // W4(P4) 題5 OPP 要球（初擬值、治具驗）：品質提升＝甜蜜區時機窗微放寬（非傷害加成）；
+  // 信任雙倍下注＝要球後成功/失誤 trust 升降幅同倍放大（沿 trust.js 乘係數零新機制）
+  CALL_SWEET_WIDEN: 0.06,
+  CALL_TRUST_MUL: 2,
   SWEET_ACC: 0.55,        // 甜蜜區散佈乘數（越小越準）
   OVER_ACC: 1.5,          // 超蓄散佈乘數
   PERFECT_RECV_ACC: 0.5,  // Perfect 接球（timing≥0.95）的散佈乘數
@@ -234,6 +238,7 @@ export function createGame({
       lastSpikeZone: null, // 本波扣球的線路分類（line/cross/middle/tip；情蒐讀取用）
       serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
+      callPid: null,     // W4 題5 OPP 要球：本波要球者（trust 2×/甜蜜區放寬的資料底）
     },
     events: [], // 完整事件日誌（測試/回放用）
   };
@@ -390,6 +395,16 @@ function tryAction(state, intent, ev) {
 
   if (state.phase !== 'rally') return;
 
+  // W4(P4) 題5 OPP 要球：登記本波要球者（信任雙倍下注＋甜蜜區微放寬的資料底）；
+  // 每波一次、走 Intent 管線（VCR 可重演）；效果全掛既有結算點——零新機制
+  if (intent.action === 'call') {
+    if (rally.callPid == null && player) {
+      rally.callPid = intent.playerId;
+      ev.push({ type: 'CALL_BALL', tick: state.tick, team: player.teamId, playerId: intent.playerId });
+    }
+    return;
+  }
+
   if (intent.action === 'block') {
     // 攔網＝開啟時機窗；是否攔到在球過網瞬間結算（tryBlock）
     // 起跳時刻只在新窗開啟時記錄（連續 intent 延長窗但不重置起跳）——時機判定用
@@ -484,7 +499,8 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     ? receiveQualityMul(dist, TUNING.REACH_RADIUS, player) * receivePerfectMul(rawT)
       * serveRecvMul * staminaRecvMul(state, player) // W7 A2：重度疲勞手軟（餵爆接湧現）
     : intent.action === 'spike'
-      ? timingQualityMul(rawT)
+      // W4 題5：要球者的甜蜜區微放寬（callPid＝本波要球者；非傷害加成、只放時機窗）
+      ? timingQualityMul(rawT, rally.callPid === player.id ? TUNING.CALL_SWEET_WIDEN : 0)
       : 1) * momentumScatterMul(state, team);
   // 爆接判定（僅第一觸的接球類；純 hash 不動 rng 流——非爆接時間線 rand 消費順序不變）：
   // 品質乘數（含發球/重扣壓迫）超過門檻→機率把出球換成低平噴射（真噴）
@@ -745,9 +761,10 @@ export function computeDeception(from, aim, gaze) {
   };
 }
 
-// 出手品質（純函式）：蓄力進度 t（可>1）→散佈乘數。甜蜜區線性外皆 1、超蓄劣化
-export function timingQualityMul(t) {
-  if (t >= TUNING.SWEET_LO && t <= TUNING.SWEET_HI) return TUNING.SWEET_ACC;
+// 出手品質（純函式）：蓄力進度 t（可>1）→散佈乘數。甜蜜區線性外皆 1、超蓄劣化。
+// widen（W4 題5）：甜蜜區窗兩側微放寬（要球者的品質提升——時機窗變寬、上限不變）
+export function timingQualityMul(t, widen = 0) {
+  if (t >= TUNING.SWEET_LO - widen && t <= TUNING.SWEET_HI + widen) return TUNING.SWEET_ACC;
   if (t > TUNING.OVERCHARGE_T) return TUNING.OVER_ACC;
   return 1.0;
 }
@@ -931,10 +948,12 @@ function settlePoint(state, winner, reason, ev) {
   // 只認乾淨歸因（最後觸球＝扣球）；攔網回彈等混合責任不記帳
   const r = state.rally;
   if (r.profile === 'spike' && r.lastToucherId) {
+    // W4 題5：要球者的信任雙倍下注——要了球又是這記攻擊的歸因者＝升降幅同倍放大
+    const mul = r.callPid === r.lastToucherId ? TUNING.CALL_TRUST_MUL : 1;
     if (reason === 'BALL_IN' && r.lastTouchTeam === winner) {
-      applyAttackOutcome(state, r.lastToucherId, true);
+      applyAttackOutcome(state, r.lastToucherId, true, mul);
     } else if (reason === 'OUT' && r.lastTouchTeam !== winner) {
-      applyAttackOutcome(state, r.lastToucherId, false);
+      applyAttackOutcome(state, r.lastToucherId, false, mul);
     }
   }
   // W7 B3：隊級連得分（暫停 AI 判準＋氣勢輸入）——純記帳零 rng
@@ -1327,6 +1346,7 @@ function setupServePhase(state) {
   r.lastToucherId = null;
   r.deceiveP = 0;
   r.touchLockTick = -1;
+  r.callPid = null; // 要球一波一效（死球即清）
 }
 
 // ---- 預設隊伍（測試/示範用；正式生涯隊伍由 Phase 2+ 資料驅動）----
