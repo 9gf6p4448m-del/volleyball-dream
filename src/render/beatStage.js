@@ -13,23 +13,46 @@ import { beatShot } from './cameraRig.js';
 const MAX_DT = 0.1;
 const NET_TOP = 2.43;
 
-// 模板預設演員（消費端可用 opts.subjects 覆蓋；rival 場景的身高由呼叫端帶入）
-function defaultSubjects(template) {
+// 4.5B §6 專屬 beat 姿勢（欄位語彙同 geoAnimator/recruitPortrait 的 POSES）：
+// wipe＝他第一次擦汗（右手背抬到額前——幕二斷句 beat 勝版）；
+// fist＝握拳盯著手心的靜止一拍（幕二敗版）；
+// knee＝膝蓋著地（撲救收勢、單膝跪地——小白事件一「不落地教」立教時刻）
+const BEAT_POSES = {
+  wipe: { rSh: [-2.55, -0.55], lSh: [0.05, 0.08], rEl: -2.2, lEl: -0.15, spine: 0.08, neck: 0.12 },
+  fist: { rSh: [-0.85, -0.2], lSh: [-0.85, 0.2], rEl: -1.7, lEl: -1.7, spine: 0.4, neck: 0.5 },
+  knee: { rSh: [-1.3, -0.3], lSh: [-1.3, 0.3], rEl: -0.2, lEl: -0.2, spine: 0.5, neck: 0.15 },
+};
+
+// 模板預設演員（消費端以語意 opts 覆蓋：playerHeightM/rivalHeightM/heightM/pose/
+// formation——career 層只宣告語意，幾何在這裡收斂）
+function defaultSubjects(template, opts = {}) {
   if (template === 'confront') {
+    if (opts.formation === 'trio') {
+      // 三人版轉位並排（小守/玩家/小白——三個自由人的隊）：confront 變體、不新增模板
+      return [
+        { id: 'AL', teamId: 'A', heightM: 1.72, role: 'libero', x: -0.95, z: -1.2, facing: 0 },
+        { id: 'A2', teamId: 'A', heightM: opts.playerHeightM ?? 1.75, role: 'libero', x: 0, z: -1.2, facing: 0 },
+        { id: 'N2', teamId: 'A', heightM: 1.6, role: 'libero', x: 0.95, z: -1.2, facing: 0 },
+      ];
+    }
     return [
-      { id: 'B1', teamId: 'B', heightM: 1.88, role: 'outside', x: 0, z: -1.4, facing: 0 },
-      { id: 'A2', teamId: 'A', heightM: 1.75, role: 'outside', x: 0.35, z: 1.4, facing: Math.PI },
+      { id: 'B1', teamId: 'B', heightM: opts.rivalHeightM ?? 1.88, role: 'outside', x: 0, z: -1.4, facing: 0 },
+      { id: 'A2', teamId: 'A', heightM: opts.playerHeightM ?? 1.75, role: 'outside', x: 0.35, z: 1.4, facing: Math.PI },
     ];
   }
   if (template === 'exit') {
     return [
-      { id: 'B1', teamId: 'B', heightM: 1.88, role: 'outside', x: -0.4, z: -1.0, facing: Math.PI, walk: true },
+      { id: 'B1', teamId: 'B', heightM: opts.rivalHeightM ?? 1.88, role: 'outside', x: -0.4, z: -1.0, facing: Math.PI, walk: true },
       { id: 'B2', teamId: 'B', heightM: 1.82, role: 'middle', x: -1.7, z: -2.2, facing: 0 },
       { id: 'B3', teamId: 'B', heightM: 1.78, role: 'setter', x: -2.4, z: -1.8, facing: 0 },
     ];
   }
   if (template === 'rimlight-solo') {
-    return [{ id: 'B4', teamId: 'B', heightM: 1.84, role: 'opposite', x: 0, z: 0, facing: 0 }];
+    return [{
+      id: opts.subjectId ?? 'B4', teamId: opts.teamId ?? 'B', heightM: opts.heightM ?? 1.84,
+      role: opts.role ?? 'opposite', x: 0, z: 0, facing: 0,
+      pose: opts.pose ?? null, sink: opts.sink ?? 0,
+    }];
   }
   // stands：遠景球場上的兩隊剪影（止步旁觀——你在看台上）
   return [
@@ -40,8 +63,47 @@ function defaultSubjects(template) {
   ];
 }
 
-// 燈光預設（beatShot.lighting）：match 賽場感／dusk 賽後餘暉剪影／rim 邊光單人／arena 遠景場館
+// 膝蓋著地悶響（零音檔架構——憲法 Q3 未開，一律 WebAudio 合成；失敗靜默）
+function playThud() {
+  try {
+    const AC = window.AudioContext ?? window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(38, ctx.currentTime + 0.16);
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.24);
+    osc.onended = () => ctx.close();
+  } catch { /* 音效失敗不擋演出 */ }
+}
+
+// 燈光預設（beatShot.lighting；opts.lighting 可覆蓋）：match 賽場感／dusk 賽後餘暉剪影
+// ／rim 邊光單人／arena 遠景場館／confess 坦白燈光帶（幕三專屬：場館燈滅、只留兩人光帶）
 function buildLights(scene, preset) {
+  if (preset === 'confess') {
+    scene.add(new THREE.HemisphereLight(0x1a2334, 0x05060b, 0.1));
+    for (const [x, z] of [[0, -1.4], [0.35, 1.4]]) {
+      const spot = new THREE.SpotLight(0xfff1d0, 220, 9, 0.42, 0.65, 1.2);
+      spot.position.set(x + 0.3, 4.6, z + 0.5);
+      spot.target.position.set(x, 1.0, z);
+      scene.add(spot);
+      scene.add(spot.target);
+      const pool = new THREE.Mesh(
+        new THREE.CircleGeometry(0.85, 36),
+        new THREE.MeshBasicMaterial({ color: 0xffe9b8, transparent: true, opacity: 0.1 }),
+      );
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(x, 0.004, z);
+      scene.add(pool);
+    }
+    return;
+  }
   if (preset === 'rim') {
     scene.add(new THREE.HemisphereLight(0x2c3c60, 0x090b12, 0.18));
     const rim = new THREE.DirectionalLight(0x9ec4ff, 2.4);
@@ -53,8 +115,9 @@ function buildLights(scene, preset) {
     return;
   }
   if (preset === 'dusk') {
-    scene.add(new THREE.HemisphereLight(0x36466e, 0x0a0c14, 0.3));
-    const warm = new THREE.DirectionalLight(0xffb37a, 0.55);
+    // 亮度經 Playwright 像素採樣校正（07-27：0.3/0.55 檔近全黑——剪影要「看得見的暗」）
+    scene.add(new THREE.HemisphereLight(0x36466e, 0x0a0c14, 0.5));
+    const warm = new THREE.DirectionalLight(0xffb37a, 0.9);
     warm.position.set(3.2, 1.2, -1.0);
     scene.add(warm);
     return;
@@ -98,7 +161,8 @@ export function createBeatStage({ template, opts = {}, width = 460, height = 240
   camera.position.set(shot.cam.x, shot.cam.y, shot.cam.z);
   camera.lookAt(shot.look.x, shot.look.y, shot.look.z);
 
-  buildLights(scene, shot.lighting);
+  buildLights(scene, opts.lighting ?? shot.lighting);
+  if (opts.sound === 'thud') playThud();
 
   // 地板＋場地帶（極簡佈景：暗底、場地略亮——語意到位即可，遠景靠霧收掉）
   const floor = new THREE.Mesh(
@@ -129,13 +193,17 @@ export function createBeatStage({ template, opts = {}, width = 460, height = 240
   netTape.position.set(0, NET_TOP, 0);
   scene.add(netTape);
 
-  const subjects = (opts.subjects?.length ? opts.subjects : defaultSubjects(template))
-    .map((s) => ({ ...s }));
+  const subjects = (opts.subjects?.length ? opts.subjects : defaultSubjects(template, opts))
+    .map((s) => ({
+      ...s,
+      // 每人的基準姿勢：專屬 beat 姿勢（wipe/fist/knee）優先於位置亮相姿
+      basePose: BEAT_POSES[s.pose] ?? pickPortraitPose(s.role ?? 'outside') ?? DEFAULT_POSE,
+    }));
   const pool = createGeoPool(scene, false, subjects.length);
   const rigs = subjects.map((s) => {
     const rig = createGeoCharacter(pool, s.id ?? 'A2', s.teamId ?? 'A', s.heightM ?? BASE_H, s.role === 'libero');
-    applyPortraitPose(rig.joints, pickPortraitPose(s.role ?? 'outside') ?? DEFAULT_POSE);
-    rig.root.position.set(s.x ?? 0, 0, s.z ?? 0);
+    applyPortraitPose(rig.joints, s.basePose);
+    rig.root.position.set(s.x ?? 0, -(s.sink ?? 0), s.z ?? 0);
     rig.root.rotation.y = s.facing ?? 0;
     return rig;
   });
@@ -151,9 +219,8 @@ export function createBeatStage({ template, opts = {}, width = 460, height = 240
     for (let i = 0; i < rigs.length; i += 1) {
       const s = subjects[i];
       const rig = rigs[i];
-      // 呼吸感（ritualStage 慣例）：站著不是雕像
-      const base = pickPortraitPose(s.role ?? 'outside') ?? DEFAULT_POSE;
-      rig.joints.spine.rotation.x = base.spine + Math.sin(elapsed * 1.6 + i) * 0.012;
+      // 呼吸感（ritualStage 慣例）：站著不是雕像——以各自基準姿勢的脊柱為中心
+      rig.joints.spine.rotation.x = (s.basePose.spine ?? 0) + Math.sin(elapsed * 1.6 + i) * 0.012;
       // exit 模板：主體轉身走離（鏡頭定住不追——beatShot 約定）
       if (s.walk) {
         rig.root.position.z = Math.max((s.z ?? -1) - elapsed * 0.42, -5.2);

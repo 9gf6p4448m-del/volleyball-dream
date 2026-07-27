@@ -279,6 +279,14 @@ const WATCH = {
 
 // ---- 事件建構（動態事件：{id, moment, lines}——fireEvents 以 id 入帳去重）----
 
+// 4.5B §6：演出 metadata（camera/camOpts——careerScreen dialogPlay 消費；
+// 純表現層宣告、零邏輯影響；career 層只給語意（角度/身高），幾何在 beatStage 收斂）
+const withCam = (lines, cam, camOpts = null) => lines.map((l) => ({ ...l, cam, camOpts }));
+const RIVAL_HEIGHT_M = 1.88;
+const confrontOpts = (player, angle) => ({
+  angle, playerHeightM: playerHeightCm(player) / 100, rivalHeightM: RIVAL_HEIGHT_M,
+});
+
 // 賽前：下一場＝本屆掛點場且對手＝天鷹
 export function rivalPreEvents({ career, seasonIndex, player }) {
   const next = nextMatch(career);
@@ -287,10 +295,21 @@ export function rivalPreEvents({ career, seasonIndex, player }) {
   const triggered = career.events ?? [];
   const id = `rival-act${act}-pre`;
   if (triggered.includes(id)) return [];
+  const side = mirrorOrWall(playerHeightCm(player));
   let lines;
-  if (act === 1) lines = ACT1_PRE[mirrorOrWall(playerHeightCm(player))];
-  else if (act === 2) lines = hasFacedRival(career) ? ACT2_PRE_FACED : ACT2_PRE_FIRST;
-  else lines = hasFacedRival(career) ? ACT3_PRE[mirrorOrWall(playerHeightCm(player))] : ACT3_PRE.first;
+  if (act === 1) {
+    // 幕一隔網注視（專屬 beat #3）：牆版＝他俯視量你、鏡子版＝平視
+    lines = withCam(ACT1_PRE[side], 'confront',
+      confrontOpts(player, side === 'wall' ? 'down' : 'level'));
+  } else if (act === 2) {
+    lines = hasFacedRival(career) ? ACT2_PRE_FACED : ACT2_PRE_FIRST;
+  } else if (hasFacedRival(career)) {
+    // 幕三賽前對峙：鏡子版同高度平視／牆版仰角（三年對照組的收尾格）
+    lines = withCam(ACT3_PRE[side], 'confront',
+      confrontOpts(player, side === 'wall' ? 'up' : 'level'));
+  } else {
+    lines = withCam(ACT3_PRE.first, 'confront', confrontOpts(player, 'level'));
+  }
   return [{ id, moment: 'pre', lines }];
 }
 
@@ -304,19 +323,31 @@ export function rivalPostEvents({ career, seasonIndex, player }) {
   if (triggered.includes(id)) return [];
   const side = mirrorOrWall(playerHeightCm(player));
   let lines;
-  if (act === 1) lines = (last.won ? ACT1_POST_WON : ACT1_POST_LOST)[side];
-  else if (act === 2) lines = last.won ? ACT2_POST_WON : ACT2_POST_LOST;
-  else {
+  if (act === 1) {
+    // 幕一賽後：他轉身走離、鏡頭不追，餘隊伍剪影（exit 模板）
+    lines = withCam((last.won ? ACT1_POST_WON : ACT1_POST_LOST)[side], 'exit',
+      { rivalHeightM: RIVAL_HEIGHT_M });
+  } else if (act === 2) {
+    // 幕二斷句 beat（專屬 #2）：勝版＝他第一次擦汗、敗版＝握拳盯著手心的靜止一拍
+    lines = withCam(
+      last.won ? ACT2_POST_WON : ACT2_POST_LOST,
+      'rimlight-solo',
+      { heightM: RIVAL_HEIGHT_M, role: 'outside', pose: last.won ? 'wipe' : 'fist' },
+    );
+  } else {
     const outcome = last.won ? 'won' : 'lost';
     const variant = confessionVariant({ player, career });
+    const facing = confrontOpts(player, side === 'wall' ? 'up' : 'level');
+    const confess = { ...facing, lighting: 'confess' }; // 專屬 #1：場館燈滅、只留兩人光帶
     lines = [
-      ...ACT3_OPEN[outcome][side],
-      ...ACT3_VARIANT[variant.key],
-      ...ACT3_CONFESS,
-      ...ACT3_CLOSE[outcome],
-      ...(variant.grewTall ? ACT3_GROWN_EXTRA : []),
-      ...MA_LINE,
-      ...ACT3_TAIL[outcome],
+      ...withCam(ACT3_OPEN[outcome][side], 'confront', facing),
+      ...withCam(ACT3_VARIANT[variant.key], 'confront', facing),
+      ...withCam(ACT3_CONFESS, 'confront', confess),
+      ...withCam(ACT3_CLOSE[outcome], 'confront', confess),
+      ...(variant.grewTall ? withCam(ACT3_GROWN_EXTRA, 'confront', confess) : []),
+      // 馬振羽一句：隊伍末端邊光單人（rimlight-solo 模板，不搶主場景）
+      ...withCam(MA_LINE, 'rimlight-solo', { heightM: 1.84, role: 'opposite' }),
+      ...ACT3_TAIL[outcome], // 阿哲收尾＝回純對話卡（演出讓位給收束）
     ];
   }
   return [{ id, moment: 'post', lines }];
@@ -331,5 +362,6 @@ export function rivalSpectatorEvents({ career, seasonIndex }) {
   const triggered = career.events ?? [];
   const id = `rival-act${act}-watch`;
   if (triggered.includes(id)) return [];
-  return [{ id, moment: 'post', lines: WATCH[act] }];
+  // 止步旁觀（三幕通用）：看台視角遠景＋頒獎台定格（stands 模板）
+  return [{ id, moment: 'post', lines: WATCH[act], camera: 'stands' }];
 }

@@ -117,10 +117,13 @@ function acceptLinesFor(role, members) {
       { speaker: '小守', text: '後排這片地，比看起來大十倍。摔下去的時候，想著球，別想著痛。' },
     ];
     if (fresh) {
+      // 4.5B §6：三人版轉位並排 beat（小守/玩家/小白——confront 變體 trio 隊形，
+      // 不新增第五模板；camera metadata＝純表現層宣告）
+      const trio = { cam: 'confront', camOpts: { formation: 'trio' } };
       base.push(
-        { speaker: nameOf(members, fresh.id, '小白'), text: '學長也走這條路……太好了。' },
-        { speaker: nameOf(members, fresh.id, '小白'), text: '得分欄裡沒有我們的名字。但從今天起，遊隼的地板上有三個人的——這裡不會再掉一顆該救的球。' },
-        { speaker: '小守', text: '三個自由人的隊……哈，全國也找不到第二支。地板的規矩，我們自己定。' },
+        { speaker: nameOf(members, fresh.id, '小白'), text: '學長也走這條路……太好了。', ...trio },
+        { speaker: nameOf(members, fresh.id, '小白'), text: '得分欄裡沒有我們的名字。但從今天起，遊隼的地板上有三個人的——這裡不會再掉一顆該救的球。', ...trio },
+        { speaker: '小守', text: '三個自由人的隊……哈，全國也找不到第二支。地板的規矩，我們自己定。', ...trio },
       );
     }
     return base;

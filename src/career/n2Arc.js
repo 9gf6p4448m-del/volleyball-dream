@@ -63,7 +63,17 @@ const EV1_BASE = [
   { speaker: '小白', text: '碰到地板之前，誰說得準。' },
   { speaker: '小白', text: '學長，我的排球只有一條規則——球不落地，就還沒輸。' },
   { speaker: '阿哲', text: '……行。但這裡是遊隼，膝蓋也是隊上的。收著點用。' },
-  { speaker: '小白', text: '膝蓋碰得到地。球不行。' },
+  // 4.5B §6 專屬 beat #4：「不落地教」立教時刻——膝蓋著地定格＋WebAudio 合成悶響
+  //（camera metadata＝純表現層宣告；careerScreen dialogPlay 消費、beatStage 收斂幾何）
+  {
+    speaker: '小白',
+    text: '膝蓋碰得到地。球不行。',
+    cam: 'rimlight-solo',
+    camOpts: {
+      heightM: 1.6, role: 'libero', teamId: 'A', subjectId: 'N2',
+      pose: 'knee', sink: 0.28, sound: 'thud',
+    },
+  },
   { speaker: '阿哲', text: '把一件事信成全部的眼神……我在網子對面，也見過一個。' },
 ];
 

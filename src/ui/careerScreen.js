@@ -191,8 +191,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     } catch { dlgStage = null; /* WebGL 失敗＝退化純對話卡（ritualStage 慣例） */ }
   }
   function dialogPlay(events, onDone) {
+    // camera 宣告兩層：line 級（劇情段落內換鏡位——幕三坦白/馬振羽句）優先於事件級
     const queue = events.flatMap((e) => e.lines.map((line) => ({
-      ...line, cam: e.camera ?? null, camOpts: e.cameraOpts ?? null,
+      ...line,
+      cam: line.cam ?? e.camera ?? null,
+      camOpts: line.camOpts ?? e.cameraOpts ?? null,
     })));
     if (!queue.length) { onDone(); return; }
     dlgState = { queue, onDone };
