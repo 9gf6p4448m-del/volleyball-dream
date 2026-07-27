@@ -7,7 +7,7 @@
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
 import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout,
-  startNextSet, TUNING,
+  startNextSet, applyLiberoRecall, TUNING,
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
@@ -160,6 +160,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     schemeTally: { total: 0, counts: {} },
     rivalAcePid: null,       // 宿敵 ace 的 pid（rival 隊限定；startMatchLoop 解析）
     counterArmedFlight: -1,  // 本波 ace 反讀已武裝（字卡揭曉用）
+    // W4：自由人回場二次確認窗（07-27 拍板 B；performance.now 時刻）
+    recallArmedUntil: 0,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
     dumpLive: false,
     callWindowUntil: 0,   // 浮鈕失效時刻（0.8s 牆鐘窗）
@@ -251,6 +253,9 @@ export function comebackAvailability(s) {
   const { game, playerId } = s;
   const team = game.players[playerId].teamId;
   if (game.phase !== 'serve') return { enabled: false, reason: '只能在死球時回場' };
+  // W4（07-27 Sawmah 拍板 B）：被自由人替換者＝走 recall 路徑——FIVB 替換不算換人、
+  // 不吃額度；防守變弱是真代價（二次確認在 requestComeback）
+  if (game.liberos?.[team]?.replacedId === playerId) return { enabled: true, reason: '' };
   if ((game.subs[team]?.remaining ?? 0) <= 0) return { enabled: false, reason: '換人次數已用盡' };
   if (!findComebackOut(game, playerId)) return { enabled: false, reason: '場上找不到可換下的同位置隊友' };
   return { enabled: true, reason: '' };
@@ -261,6 +266,19 @@ export function comebackAvailability(s) {
 function requestComeback(s) {
   const { game, playerId } = s;
   const team = game.players[playerId].teamId;
+  // W4（07-27 Sawmah 拍板 B）：自由人配對回場——二次確認（防守變弱是真代價，
+  // 講清楚再換；4 秒確認窗，同刪檔二段語彙）
+  if (game.liberos?.[team]?.replacedId === playerId) {
+    if (!s.recallArmedUntil || performance.now() > s.recallArmedUntil) {
+      s.recallArmedUntil = performance.now() + 4000;
+      s.stage.floatText.show('確定換下自由人、自己守後排？——再按一次確認', '#ffb454', 2600);
+      return { ok: false, reason: 'confirm' };
+    }
+    s.recallArmedUntil = 0;
+    const r = applyLiberoRecall(game, { team });
+    if (r.ok) s.stage.floatText.show('🔥 自己來！——自由人退場', '#ffd166', 1600);
+    return r;
+  }
   const outId = findComebackOut(game, playerId);
   if (!outId) return { ok: false, reason: 'no-target' };
   const r = applySubstitution(game, { team, outId, inId: playerId });
@@ -841,6 +859,16 @@ function applyEvents(s, frameEvents, now) {
         cards.push({ pri: 40, text: '🎯 偷襲得手！', color: '#ffd166', dur: 1800 });
       }
       s.dumpLive = false;
+    }
+    // W4（07-27 試玩回饋 C 案）：被自由人換下那一刻講清楚節拍——去哪、何時回、
+    // 主動權在哪（顯示哲學：狀態誠實呈現）
+    if (e.type === 'LIBERO_SWAP' && e.outId === s.playerId && e.team === myTeam) {
+      cards.push({
+        pri: 30,
+        text: '自由人替補後排——輪到前排自動回場；想自己守＝板凳「回場」鈕',
+        color: '#9fb0cc',
+        dur: 2800,
+      });
     }
     // W4 題5 OPP 要球窗：一傳起球＋玩家 OPP 後排→「⚡跟上！」浮鈕（0.8s；
     // OH 不加任何要球機制——§0 題5 關卷）；每 flight 一次

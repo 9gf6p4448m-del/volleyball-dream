@@ -1098,10 +1098,14 @@ export function startNextSet(state) {
   };
   state.rotationFault = { A: null, B: null };
   state.bench = { A: [...s.startBench.A], B: [...s.startBench.B] };
-  // 自由人配對歸零：先發全回場，setupServePhase 依新局輪轉重新換入
+  // 自由人配對歸零：先發全回場，setupServePhase 依新局輪轉重新換入（hold 同歸零
+  // ——手動回場的抑制窗不跨局）
   if (state.liberos) {
     for (const team of ['A', 'B']) {
-      if (state.liberos[team]) state.liberos[team].replacedId = null;
+      if (state.liberos[team]) {
+        state.liberos[team].replacedId = null;
+        state.liberos[team].hold = false;
+      }
     }
   }
   if (state.momentum && state.momentum.value !== 0) {
@@ -1263,6 +1267,16 @@ function applyLiberoSwaps(state) {
       });
       lib.replacedId = null;
     }
+    // W4(P4) 手動回場的抑制窗（applyLiberoRecall 拍板 07-27）：原對位還在後排＝
+    // 這輪次自己守、不自動換入；後排已無 MB（輪到前排）＝窗結束，下一位後排 MB
+    // 恢復預設換入
+    if (lib.hold) {
+      const backRowMb = [4, 5].some(
+        (idx) => state.players[rot[idx]]?.currentRole === 'middle',
+      );
+      if (backRowMb) continue;
+      lib.hold = false;
+    }
     if (!rot.includes(lib.liberoId)) {
       for (const idx of [4, 5]) {
         const pid = rot[idx];
@@ -1278,6 +1292,38 @@ function applyLiberoSwaps(state) {
       }
     }
   }
+}
+
+// W4(P4) 試玩回饋（07-27 Sawmah 拍板 B）：自由人配對的手動回場——FIVB 真實規則
+// （自由人替換不算換人、不吃額度、任何死球可換回）。代價全由既有系統誠實承擔：
+// 回場者接球屬性差（爆接風險）＋留場上不吃板凳快回（多局制放大）。
+// hold＝本輪次抑制自動換入（見 applyLiberoSwaps）；死球窗限定、唯一寫入路徑
+export function applyLiberoRecall(state, { team }) {
+  const deny = (reason) => ({ ok: false, reason });
+  if (state.phase !== 'serve') return deny('not-dead-ball');
+  const lib = state.liberos?.[team];
+  if (!lib || lib.replacedId == null) return deny('no-pair');
+  const rot = state.match.rotations[team];
+  const li = rot.indexOf(lib.liberoId);
+  if (li < 0) return deny('libero-not-on-court');
+  const backId = lib.replacedId;
+  rot[li] = backId;
+  lib.replacedId = null;
+  lib.hold = true;
+  state.events.push({
+    type: 'LIBERO_SWAP', tick: state.tick, team, inId: backId, outId: lib.liberoId,
+  });
+  // 回場者站進槽位、自由人停板凳（沿換人瞬移慣例——死球窗內無插值拖影）
+  const pos = basePosition(team, li + 1);
+  const a = state.actors[backId];
+  a.x = pos.x;
+  a.z = pos.z;
+  a.px = pos.x;
+  a.pz = pos.z;
+  a.blockUntil = -1;
+  a.divedUntil = -1;
+  parkBenchActor(state, team, lib.liberoId);
+  return { ok: true, reason: '' };
 }
 
 // 板凳停放（全隊通用；W6 起與自由人解耦——無自由人的隊也有板凳要停）：
