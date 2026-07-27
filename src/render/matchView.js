@@ -147,6 +147,13 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           dust.burst(diveActor.x, diveActor.z, 8, 0.7);
         }
         u.lastDived = diveActor.divedUntil;
+        // 4.5B §8（07-28 二輪，Sawmah：「重量感怎麼變回以前」）：攔網重量感綁
+        // 「起跳」不綁「碰球」——偵測 sim 起跳沿（blockUntil 前沿，魚躍同範式），
+        // 每次真跳都播蹲→蹬→滯空→落地；待命牆姿維持舉手 hold（合攔的牆不動）
+        if (diveActor.blockUntil > gameState.tick && diveActor.blockUntil !== u.lastBlockUntil) {
+          u.animator.trigger('blockJump');
+        }
+        u.lastBlockUntil = diveActor.blockUntil;
         // 舉手備戰：①攔網窗開著②對方進攻組織中且我在網前——攻擊方讀攔網看得到手牆
         let blockDuty = false;
         const onCourt = gameState.match.rotations[pTeam].includes(id);
