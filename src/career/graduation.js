@@ -31,14 +31,20 @@ export function promoteMembers(members) {
 // 「拆牆的人」雷紹齊（三案見 phase4-w1-status §4；id N1 不變＝存檔穩定）。
 // 支線鉤子（W2+ 展開）：用整個賽季對抗前輩的影子，最後發現「反著學」也是被影子
 // 定義的一種——真正的自由是承認自己學過他。
-// ★ 第 3 屆佔位（W3 甲3①②）：L（自由人）手寫新生——核心題「不能得分的人怎麼證明
-// 自己」。三案人設已產出存 phase4-w3-status.md §7 待 Sawmah 挑，**選定前不寫入本表、
-// 不接線劇情**（該屆缺口暫由程序補位員補；選定後於此新增鍵 3、id 用 N2）。
+// 第 3 屆：L（自由人）——核心題「不能得分的人怎麼證明自己」。人設 2026-07-27
+// Sawmah 拍板＝B 案「不落地教」紀慕白（三案全文與落選案 A 溫以恆/C 高承嶽存
+// phase4-w3-status.md §7 備查；C 案兄弟對決概念移植入 W4「世界觀大戲軸」）。
+// 支線劇情接線＝另輪（甲3② 拍板：本輪只落資料）。
 export const FRESHMAN_HANDWRITTEN = {
   2: {
     id: 'N1', name: '小雷', fullName: '雷紹齊', role: 'middle', height: 1.93,
     persona: '拒絕當第二個大山——嘴上說老派攔網過時了，置物櫃裡卻收著大山那屆的比賽剪報',
     attributes: { jump: 61, power: 57, reaction: 56, stamina: 59, speed: 54, control: 58, serve: 51, block: 63 },
+  },
+  3: {
+    id: 'N2', name: '小白', fullName: '紀慕白', role: 'libero', height: 1.60,
+    persona: '球不落地就還沒輸——這不是戰術是信仰；膝蓋常年瘀青但從不提，連敗更衣室裡最響的一句話是他說的',
+    attributes: { jump: 40, power: 40, reaction: 64, stamina: 74, speed: 62, control: 62, serve: 30, block: 30 },
   },
 };
 

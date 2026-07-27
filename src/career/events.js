@@ -360,6 +360,8 @@ export function graduationCeremonyLines({ graduates = [], aceGrads = [], members
 // 手寫新生見面句依 id 對句（人設定案後在此補；07-26 拍板 B 案雷紹齊＝叛逆型）
 const FRESHMAN_GREETING_BY_ID = {
   N1: '……雷紹齊，中間手。先說好——我不是來當第二個大山的。',
+  // 第 3 屆手寫 L（07-27 拍板 B 案）：安靜篤定型——與小雷叛逆型對照的入場句
+  N2: '紀慕白，自由人。……球落地之前，都還不算輸。請多指教。',
 };
 const FRESHMAN_GREETING_BY_ROLE = {
   setter: '我來讓球去它該去的地方。',
