@@ -16,6 +16,8 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
+import { RIVAL_TEAM_ID } from './career/schedule.js';
+import { opponentById } from './career/opponents.js';
 import { ENGINEERED_OPEN } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
 import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
@@ -40,14 +42,15 @@ async function init() {
   const camera = createCamera();
   const lights = createLights(scene, quality);
   const court = createCourt(scene, quality);
-  createArena(scene); // 夜賽場館：看台/觀眾/廣告板（純視覺）
+  // 夜賽場館（W4 Q10 三館制：預設常規館；開賽時依賽制切館）
+  const arena = createArena(scene);
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
   // HUD：預設極簡（小 FPS 角標）；?hud=1 或 bench 基準場景＝完整偵錯資訊
   const fullHud = params.get('hud') === '1' || params.get('mode') === 'bench';
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality), fullHud);
 
-  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights };
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else if (params.get('quick') === '1') {
@@ -118,6 +121,18 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
     quickRole, // W3(P4) 快速比賽選位置（生涯場恆 null）
     randomSeed: Date.now() % 1000000007, // 開局隨機（快速比賽）；隨機化住在 main（sim 外）
   });
+  // W4(P4) Q10 三館制：依賽制切館（bo5 冠軍館／bo3 關鍵戰館／bo1 常規館）＋地板換色。
+  // 主客場氛圍：關鍵戰館打宿敵（天鷹）＝客隊橫幅＋客隊應援區＋音場偏對手；冠軍館＝中立場
+  const bestOf = config.gameOptions.series?.bestOf ?? 1;
+  const venueKey = bestOf >= 5 ? 'final' : bestOf === 3 ? 'key' : 'regular';
+  const rival = venueKey === 'key' && careerCtx?.matchEntry?.opponentId === RIVAL_TEAM_ID
+    ? opponentById(RIVAL_TEAM_ID)
+    : null;
+  const venueSpec = ctx.arena.setVenue(
+    venueKey, rival ? { awayBanner: { name: rival.name, color: '#7db2ff' } } : {},
+  );
+  ctx.court.setFloorPalette(venueSpec.floor);
+  config.venue = { key: venueKey, rivalAway: !!rival }; // matchLoop：應援偏向＋冠軍館燈光秀
   // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
   if (careerCtx) markMatchStarted(careerCtx);
   // W4(P4) Q8 局間存檔續玩：整包 sim state 快照直接當 game 開機（phase='set_break'

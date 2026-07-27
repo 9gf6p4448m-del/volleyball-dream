@@ -82,8 +82,13 @@ export function createLights(scene, quality) {
   let tension = 0;
   // W7 B4③：氣勢聚光微聯動（+3 微增亮／−3 微收）——幀率無關指數收斂，獨立於 tension 狀態
   let momentumGlow = 0;
+  // W4(P4) Q10 冠軍館燈光秀：暗場→聚光逐盞亮→底光回升（牆鐘驅動；rig 巡場同窗）。
+  // 進行中 setTension/setMomentum 短路——常態燈控不與演出打架；跳過＝stopOpeningShow
+  let show = null; // { t0, dur }
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
   return {
     setTension(active, dt) {
+      if (show) return;
       const t = active ? 1 : 0;
       tension += (t - tension) * (1 - Math.exp(-3 * dt));
       hemi.intensity = 0.5 - 0.22 * tension;
@@ -93,6 +98,7 @@ export function createLights(scene, quality) {
     // value：momentum.value/MOMENTUM_MAX 正規化後的 −1..1（呼叫端已除好，這裡不吃 sim 常數）；
     // 局點張力優先——tensionActive 時目標收斂回 0，避免與局點壓暗管線疊加打架
     setMomentum(value, tensionActive, dt) {
+      if (show) return;
       const target = tensionActive ? 0 : value;
       momentumGlow += (target - momentumGlow) * (1 - Math.exp(-3 * dt));
       const mul = 1 + momentumGlow * 0.1; // 「微」增亮/微收，幅度封頂 ±10%——不可搶戲
@@ -102,6 +108,43 @@ export function createLights(scene, quality) {
         spot.intensity = SPOT_BASE * mul;
         spot.color.copy(SPOT_BASE_COLOR).lerp(SPOT_TEAM_TINT, tint);
       }
+    },
+    startOpeningShow(now, dur = 5600) {
+      show = { t0: now, dur };
+    },
+    stopOpeningShow() {
+      show = null;
+      hemi.intensity = 0.5;
+      key.intensity = 2.6;
+      rim.intensity = 0.7;
+      for (const spot of spots) {
+        spot.intensity = SPOT_BASE;
+        spot.color.copy(SPOT_BASE_COLOR);
+      }
+    },
+    openingShowActive() {
+      return !!show;
+    },
+    // 每幀驅動；回傳 0..1 進度（rig 巡場共用時間軸）、結束回 null 並自動恢復常態
+    updateOpeningShow(now) {
+      if (!show) return null;
+      const p = (now - show.t0) / show.dur;
+      if (p >= 1) {
+        this.stopOpeningShow();
+        return null;
+      }
+      // 0–0.22 暗場；0.22–0.72 聚光逐盞亮；0.72–1 底光回升（開演）
+      const rise = clamp01((p - 0.72) / 0.28);
+      hemi.intensity = 0.04 + rise * 0.46;
+      key.intensity = 0.12 + rise * 2.48;
+      rim.intensity = p < 0.5 ? 0.08 : 0.08 + clamp01((p - 0.5) / 0.3) * 0.62;
+      spots.forEach((spot, i) => {
+        const t0 = 0.22 + i * 0.24; // 逐盞亮（兩盞錯開）
+        const ramp = clamp01((p - t0) / 0.14);
+        spot.intensity = SPOT_BASE * ramp * (1.3 - rise * 0.3); // 亮起瞬間略過曝再回常態
+        spot.color.copy(SPOT_BASE_COLOR);
+      });
+      return p;
     },
   };
 }

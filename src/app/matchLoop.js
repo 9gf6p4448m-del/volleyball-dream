@@ -77,16 +77,27 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     floatText: stage.floatText,       // 字卡把手（W6.1 疊排的自動化驗證用）
     cardStats: () => stage.floatText.stats(), // W7.1：字卡遙測（真人實玩後查密度）
     cameraTuning: CAMERA_TUNING,      // W8：鏡位即時調參（真機/自動化改值即生效，免重建）
+    loop: () => s,                    // W4：迴圈狀態檢視（openingShow/venue 等自動化驗證用）
   };
   // W7.1 六輪：?probe=cards 字卡壓力探針——自動比賽觸發不到主角字卡（自動接球拿不到
   // Perfect、不主動攔網），密度/遮擋無法自動驗證。本旗標以「真人激戰上限」節奏
   // 週期性注入代表性字卡，供 Playwright 量疊排深度/FPS；純表現層、sim 完全不碰
   if (ctx.params.get('probe') === 'cards') startCardProbe(s);
-  if (s.config.tapeClips.length) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
+  // W4(P4) Q10 主客場氛圍：關鍵戰館打宿敵＝應援音場偏對手（對手得分聲量放大、我方縮）
+  if (s.config.venue?.rivalAway) stage.sfx.setCrowdBias?.({ A: 0.75, B: 1.35 });
+  // W4(P4) Q10 冠軍館燈光秀開場：暗場→聚光逐盞亮→巡場（sim 凍結、點擊可跳過）；
+  // 演出結束才播情蒐帶（決賽時序：燈光秀→錄影帶→發球）；局間存檔續玩不重播
+  const showFirst = s.config.venue?.key === 'final' && !careerCtx?.resumeMid;
+  if (showFirst) s.openingShow = 'pending';
+  if (s.config.tapeClips.length && !showFirst) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
   showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
   // W4(P4) Q8 局間存檔續玩：快照開機即在 set_break（prevPhase 同值＝一次性轉場
   // 不會觸發）——直接喚起局間 huddle，「從局間 huddle 前恢復」的拍板語意
   if (game.phase === 'set_break') showSetBreak(s);
+  // 燈光秀跳過（點擊任意處）：立即恢復常態燈光、進正常開賽流程
+  window.addEventListener('pointerdown', () => {
+    if (s.openingShow === 'running') endOpeningShow(s);
+  });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) s.last = performance.now();
   });
@@ -153,6 +164,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     staminaAdviceShown: false,
     // W7 C2②：板凳狀態轉換偵測（false→true 那一幀自動開一次 ⚙ 儀表板）
     wasBenched: false,
+    // W4(P4) Q10 冠軍館燈光秀：null｜'pending'｜'running'（牆鐘驅動、sim 凍結、可跳過）
+    openingShow: null,
+    openingTapeStarted: false, // 燈光秀後補播情蒐帶（一次性）
     // W7.1 #3A：目前正在集合帶位/倒數的暫停隊伍（'A'|'B'|null）——matchLoop 唯一事實源，
     // matchView/countdown 都吃這個
     timeoutHuddleTeam: null,
@@ -1009,6 +1023,17 @@ function showSetBreak(s) {
   });
 }
 
+// W4(P4) Q10 燈光秀收場（自然結束或點擊跳過共用）：恢復常態燈光/鏡頭、補播情蒐帶
+function endOpeningShow(s) {
+  s.openingShow = null;
+  s.ctx.lights.stopOpeningShow();
+  s.stage.rig.setTourProgress(null);
+  if (s.config.tapeClips.length && !s.openingTapeStarted) {
+    s.openingTapeStarted = true;
+    startTapeClip(s);
+  }
+}
+
 // 局間存檔離開（Q8 必配）：整包 sim state JSON 快照落槽位 mid key → 返回生涯。
 // 續玩＝runMatch 以快照為 game 直接開機（phase 仍為 set_break＝「從局間 huddle 前恢復」）
 function saveMidAndQuit(s) {
@@ -1049,6 +1074,21 @@ function frameStep(s, now) {
   if (s.replay) {
     runReplayFrame(s, now, delta);
     return;
+  }
+
+  // W4(P4) Q10 冠軍館燈光秀：暗場→逐盞亮（lights）＋巡場（rig 'tour'）；
+  // sim 凍結（delta=0）、結束或點擊跳過後才進情蒐帶/發球
+  if (s.openingShow) {
+    if (s.openingShow === 'pending') {
+      s.openingShow = 'running';
+      ctx.lights.startOpeningShow(now);
+    }
+    const showP = ctx.lights.updateOpeningShow(now);
+    if (showP === null) endOpeningShow(s);
+    else {
+      stage.rig.setTourProgress(showP);
+      delta = 0;
+    }
   }
 
   const game = s.game;

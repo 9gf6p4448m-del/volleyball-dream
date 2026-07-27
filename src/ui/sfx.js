@@ -48,6 +48,13 @@ export function createSfx() {
     crowdGain.gain.setTargetAtTime(level, ctx.currentTime, 0.5);
   }
 
+  // W4(P4) Q10 主客場氛圍：{A:mul, B:mul} 得分歡呼偏向（null＝中立）——
+  // 關鍵戰館打宿敵＝對手得分聲量放大、我方縮（「他們的主場」的聽覺事實）
+  let crowdBias = null;
+  function setCrowdBias(bias) {
+    crowdBias = bias;
+  }
+
   // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）
   function whistle(durMs = 450) {
     if (!ensure()) return;
@@ -256,6 +263,7 @@ export function createSfx() {
     whistle,
     setHeartbeat,
     setCrowdLevel,
+    setCrowdBias, // W4(P4) Q10 主客場氛圍：得分歡呼按隊伍偏向縮放（宿敵客場感）
     netHit,
     cheer, // W7 C3②：COMEBACK_SPARK 觀眾爆聲外呼——matchLoop 直接加碼一次（獨立於 DEAD_BALL 自動歡呼）
     gaspCheer, // W3(P4) L 魚躍演出：倒抽氣→爆歡呼
@@ -265,9 +273,12 @@ export function createSfx() {
         else if (e.type === 'BLOCK_TOUCH') thud();
         else if (e.type === 'DEAD_BALL') {
           // 音層：落地悶擊 → 哨音 → 歡呼（長 rally 歡呼加倍）
+          // W4(P4) Q10：應援偏向——得分隊決定歡呼聲量倍率（同批事件裡撈 SCORE）
           floorThud();
           whistle(480);
-          cheer(Math.min(1 + (opts.rallyFlights ?? 0) / 10, 1.8));
+          const scorer = events.find((s2) => s2.type === 'SCORE')?.team ?? null;
+          const biasMul = scorer && crowdBias ? (crowdBias[scorer] ?? 1) : 1;
+          cheer(Math.min(1 + (opts.rallyFlights ?? 0) / 10, 1.8) * biasMul);
         }
         else if (e.type === 'TOUCH') {
           if (e.kind === 'spike') {

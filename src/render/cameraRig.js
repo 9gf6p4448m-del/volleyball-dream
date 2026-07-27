@@ -57,10 +57,12 @@ export function createCameraRig(camera, initialPlayerId) {
   let benchMode = false;     // W7 C2①：主角在板凳＝教練視角，優先於其餘所有模式
   let huddleView = false;    // W8 暫停演出：第一人稱圍圈看教練戰術板
   let diveCam = false;       // W3(P4) L 魚躍演出：低機位貼地鏡頭（附錄 A4①）
+  let tourProgress = null;   // W4(P4) Q10 冠軍館燈光秀巡場：0..1（null＝關）——與燈光秀共時間軸
 
   function desiredMode(game) {
     const me = game.players[playerId];
     if (!me) return 'third';
+    if (tourProgress !== null) return 'tour'; // 開場燈光秀巡場——凌駕一切（sim 凍結中）
     if (benchMode) return 'bench'; // 板凳視角最高優先——沒有身體可跟，不吃攻防切換
     if (huddleView) return 'huddle'; // 暫停圍圈：主角在場上時的第一人稱
     if (diveCam) return 'dive'; // L 魚躍慢動作：貼地仰起（與 OH 俯衝反向）
@@ -87,6 +89,7 @@ export function createCameraRig(camera, initialPlayerId) {
     setBenchMode(v) { benchMode = v; },
     setHuddleView(v) { huddleView = v; },
     setDiveCam(v) { diveCam = v; },
+    setTourProgress(p) { tourProgress = p; }, // null＝關；0..1＝燈光秀巡場進度
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
     getMode() { return mode; },
@@ -122,6 +125,20 @@ export function createCameraRig(camera, initialPlayerId) {
 
       const pos = new THREE.Vector3();
       const target = new THREE.Vector3();
+      if (mode === 'tour') {
+        // W4(P4) Q10 冠軍館燈光秀巡場：低空弧線繞場半圈（從客側繞到我方側），
+        // 視線從穹頂緩降到球場中央——「頂點舞台」的第一眼。時間軸＝燈光秀進度
+        const p = tourProgress ?? 0;
+        const ang = Math.PI * 1.25 - p * Math.PI * 0.9; // 半圈弧
+        const r = 19 - p * 5; // 漸進貼場
+        pos.set(Math.cos(ang) * r, 9.5 - p * 4.2, Math.sin(ang) * r);
+        target.set(0, 3.5 - p * 2.3, 0);
+        curPos.copy(pos);
+        curTarget.copy(target);
+        camera.position.copy(curPos);
+        camera.lookAt(curTarget);
+        return;
+      }
       if (mode === 'bench') {
         // W7 C2①：板凳側位廣角——固定機位看整個球場（兩隊都在畫面內），不跟任何球員
         pos.set(CAMERA_TUNING.BENCH_X, CAMERA_TUNING.BENCH_HEIGHT, side * CAMERA_TUNING.BENCH_Z);

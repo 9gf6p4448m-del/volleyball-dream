@@ -6,7 +6,7 @@ export function createCourt(scene, quality) {
   const receiveShadow = quality.shadowSize > 0;
   const group = new THREE.Group();
 
-  buildFloor(group, receiveShadow);
+  const floorMats = buildFloor(group, receiveShadow);
   buildLines(group);
   const net = buildNet(group);
   group.traverse((o) => { if (o.isMesh) o.matrixAutoUpdate = false; });
@@ -18,6 +18,11 @@ export function createCourt(scene, quality) {
   let prevVz = 0;
   return {
     group,
+    // W4(P4) Q10 三館制：地板換色系（palette＝VENUES[].floor；null＝回常規預設）
+    setFloorPalette(palette) {
+      floorMats.zone.color.setHex(palette?.zone ?? 0x6b4f35);
+      floorMats.court.color.setHex(palette?.court ?? 0xc97b3d);
+    },
     update(dt, ball) {
       let hitPower = 0; // 本幀觸網力度（回傳給呼叫端配音效）
       if (ball) {
@@ -59,25 +64,22 @@ function buildFloor(group, receiveShadow) {
   const freeL = COURT.LENGTH + COURT.FREE_ZONE * 2;
 
   // 自由區（暗色木地板）
-  const zone = new THREE.Mesh(
-    new THREE.PlaneGeometry(freeW + 4, freeL + 4),
-    new THREE.MeshStandardMaterial({ color: 0x6b4f35, roughness: 0.9 }),
-  );
+  const zoneMat = new THREE.MeshStandardMaterial({ color: 0x6b4f35, roughness: 0.9 });
+  const zone = new THREE.Mesh(new THREE.PlaneGeometry(freeW + 4, freeL + 4), zoneMat);
   zone.rotation.x = -Math.PI / 2;
   zone.receiveShadow = receiveShadow;
   zone.updateMatrix();
   group.add(zone);
 
   // 比賽場地（亮橘色區）
-  const court = new THREE.Mesh(
-    new THREE.PlaneGeometry(COURT.WIDTH, COURT.LENGTH),
-    new THREE.MeshStandardMaterial({ color: 0xc97b3d, roughness: 0.85 }),
-  );
+  const courtMat = new THREE.MeshStandardMaterial({ color: 0xc97b3d, roughness: 0.85 });
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(COURT.WIDTH, COURT.LENGTH), courtMat);
   court.rotation.x = -Math.PI / 2;
   court.position.y = 0.005;
   court.receiveShadow = receiveShadow;
   court.updateMatrix();
   group.add(court);
+  return { zone: zoneMat, court: courtMat }; // W4 三館制：地板換色把手
 }
 
 function buildLines(group) {
