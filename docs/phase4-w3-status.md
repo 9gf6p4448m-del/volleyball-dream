@@ -72,6 +72,7 @@
 | 治具 | `VD_ROLE`（四位置臂，正式轉位鏈同款建隊）＋`VD_L_MODE=suggest/omni`（下限/上限）＋L 三欄場均輸出 | `tools/balance-sim.mjs` |
 | 驗收工具 | 屆間/轉位注入存檔產生器（Playwright/試玩用） | `tools/make-w3-e2e-save.mjs` |
 | 順手修 | 生涯 home 頭銜「你·OH」硬編→吃 currentRole（轉位後顯示誠實） | `careerScreen.js` |
+| 試玩追修（07-27） | ①貼網攔網情境不自動墊球（攔網變接球病根；網帶 2.15m 以上留給攔網體系）②**自由人豁免魚躍鏡像**（Sawmah 拍板 B——「不會魚躍的自由人」不成立；前兩場小守放球落地病根；一般隊友照舊鏡像＋teach-dive 大山句配套點名小守；錨點重驗 23%/7% 零擾動）③手機教學「點一下起跳」死指令文案修正④手批面板（PWA 入口＋all/自動隱藏） | `matchControls.js`／`careerState.js`／`events.js`／`tutorial.js`／`careerScreen.js` |
 
 ## 3. 導師介面契約（縫隙 1 層次二——W4 接線用）
 
