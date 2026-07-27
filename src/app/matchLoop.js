@@ -164,6 +164,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     recallArmedUntil: 0,
     // 07-27 四輪：L 封線卡時刻（同波讀對/讀反不疊發——一波至多一張結果卡）
     lWallCardAt: -1e9,
+    // 07-27 六輪：影子收帶排程（我方第一觸後 +1.2s 收；0＝未排程）
+    shadowFadeAt: 0,
     // W4 B-3：封線影子首次教學（07-27 試玩回饋「看不懂黑色陰影」——每場一次講色語）
     shadowHintShown: false,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
@@ -579,11 +581,20 @@ function updateDecisions(s, now) {
     || (game.rally.possession === game.players[s.controlledId]?.teamId
       && game.rally.touches >= 1))) {
     aiState.digBias = null;
-    // B-3 影子刻意不在此收（07-27 二輪：隨第一觸收＝顯示窗僅球飛行 ~0.5s，
-    // 玩家盯著球根本來不及看地板）——佈陣可視化留到死球，見下
+    // B-3 影子收帶時機（07-27 六輪 Sawmah：留到死球太長、殘留到下一波）：
+    // 我方第一觸（這波攻擊結算點）後再留 1.2s——「讀對了」字卡與帶子同框對照
+    // （球真的從綠帶進來），之後收、rally 續打地板淨空
+    if (!s.shadowFadeAt) s.shadowFadeAt = performance.now() + 1200;
   }
-  // B-3 佈陣可視化收在死球：整段 rally 尾都看得到「這波的佈陣」
-  if (game.phase !== 'rally') stage.blockShadow?.hide();
+  if (s.shadowFadeAt && performance.now() > s.shadowFadeAt) {
+    s.shadowFadeAt = 0;
+    stage.blockShadow?.hide();
+  }
+  // 死球一律收（保險：出界/攔死等無我方觸球的結算路徑）
+  if (game.phase !== 'rally') {
+    s.shadowFadeAt = 0;
+    stage.blockShadow?.hide();
+  }
   // 07-27 試玩回饋：L 讀對追蹤——對手攻擊飛行中持續結算，我方第一觸出結果字卡
   // W4 Q9：同步記下這次指令是否改判（digBias 在第一觸即清、字卡時刻已不可考）
   if (aiState.digBias && game.phase === 'rally'
@@ -631,6 +642,7 @@ function updateDecisions(s, now) {
       controls.chooseDig();
       const autoScheme = schemeByKey(digRead.suggestion);
       s.schemeTally = noteScheme(s.schemeTally, digRead.suggestion); // B-4：自動也算配套史
+      s.shadowFadeAt = 0; // 新波佈陣＝舊收帶排程作廢
       s.stage.blockShadow?.set(digRead.suggestion, game.ball.x); // B-3 佈陣可視化
       showShadowHintOnce(s);
       aiState.digBias = {
@@ -726,6 +738,7 @@ function updateDecisions(s, now) {
       (it) => {
         controls.chooseDig();
         s.schemeTally = noteScheme(s.schemeTally, it.zone.key); // B-4 配套史
+        s.shadowFadeAt = 0; // 新波佈陣＝舊收帶排程作廢
         stage.blockShadow?.set(it.zone.key, game.ball.x); // B-3 佈陣可視化
         showShadowHintOnce(s);
         aiState.digBias = {
