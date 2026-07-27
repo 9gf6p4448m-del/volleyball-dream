@@ -77,6 +77,7 @@
 | 治具 | `VD_ROLE`（四位置臂，正式轉位鏈同款建隊）＋`VD_L_MODE=suggest/omni`（下限/上限）＋L 三欄場均輸出 | `tools/balance-sim.mjs` |
 | 驗收工具 | 屆間/轉位注入存檔產生器（Playwright/試玩用） | `tools/make-w3-e2e-save.mjs` |
 | 快速比賽選位置（07-27 拍板追加） | 位置遊樂場：主選單快速比賽→五位置任選直接開打（S/MB/OPP＝槽互換、L＝玩家穿異色走 liberos 通道、A8 頂先發）；`?role=` 網址同效；生涯轉位 gate 不動——玩法試駕入口兼試玩驗收利器；測試 +4（479 全綠） | `matchConfig.buildQuickSetup`／`careerScreen.js`／`main.js` |
+| MB/L 決策可視化（07-27 試玩回饋「按了不知道差別」） | 決策要看得見自己：①選擇確認浮字（🧱封X·搶快！／🛡守X！全隊收縮——手選才浮、1 秒自動維持靜默）②MB 封線地面標記（簡化模式借 aimMarker）③結果字卡：搶快賭局在對手出手拍揭曉（⚡賭對快攻！／早了是高球…）、封到球（🧱封到了！）、L 我方第一觸出 📖讀對了！/讀反了……（神救球演出優先不疊）④L 收縮偏移 0.9→1.3m（六人陣型看得見的重量）。**W4 拍板的「MB 時機字卡」核心版提前落地**；字卡文案/幅度細調仍歸試玩清單 | `matchLoop.js`／`matchControls.js`／`ai.js digTargetFor` |
 | 順手修 | 生涯 home 頭銜「你·OH」硬編→吃 currentRole（轉位後顯示誠實） | `careerScreen.js` |
 | 試玩追修（07-27） | ①貼網攔網情境不自動墊球（攔網變接球病根；網帶 2.15m 以上留給攔網體系）②**自由人豁免魚躍鏡像**（Sawmah 拍板 B——「不會魚躍的自由人」不成立；前兩場小守放球落地病根；一般隊友照舊鏡像＋teach-dive 大山句配套點名小守；錨點重驗 23%/7% 零擾動）③手機教學「點一下起跳」死指令文案修正④手批面板（PWA 入口＋all/自動隱藏）⑤**A7 替補 OH 莊明遠（阿遠）入創隊名冊**（Sawmah 拍板三點：第 1 屆有板凳＝主角可下場快回 RECOV_BENCH 閉環＋新玩家早體驗換人；grade 2＝第 2 屆末與阿岩同屆畢業「替補學長」告別；capacity 維持 12＝招募空位 5→4 取捨更緊）——persona「把板凳坐成專業的人」、體力 72 全隊最高、屬性總和守 490；轉位缺額改由 A7 頂上（足額零補位員，縫隙 1「讓位由隊上補」更自然）；錨點零擾動 | `matchControls.js`／`careerState.js`／`events.js`／`tutorial.js`／`careerScreen.js`／`roster.js` |
 
