@@ -370,16 +370,36 @@ export function passTierOf(team, landing) {
 // 前排：OH 左翼、MB 中、OPP/S 右翼
 // 後排：OH 後中（pipe 準備位）、OPP/S 右後（D 球/插上起點）、MB 左後
 // （自由人 Phase 2 於左後替換後排 MB 掛鉤）
+//
+// 07-28 追修（Sawmah：「AI 換站位會撞在一起卡在中間」）：槽位按角色寫死會撞號
+// ——前排 S＋OPP 同排（六人輪轉必然出現）目標點完全相同，目標追蹤與同隊避讓
+// 推拉平衡＝兩人卡死互抖。改「整排指派」：照偏好槽分配，撞號者拿最近的空槽
+//（輪轉序迭代＝決定論；無撞號的輪轉逐值維持原行為＝零平衡漂移）。
+const DUTY_SLOTS = [-3, 0, 3];
+function dutyPrefer(role, front) {
+  if (front) return role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
+  return role === 'outside' ? 0 : (role === 'middle' || role === 'libero') ? -3 : 3;
+}
+
 export function dutyPosition(game, team, playerId) {
   const rot = game.match.rotations[team];
-  const role = game.players[playerId].currentRole;
-  if (isFrontRow(rot, playerId)) {
-    const lx = role === 'outside' ? -3 : role === 'middle' ? 0 : 3;
-    return localToWorld(team, lx, 3);
+  const front = isFrontRow(rot, playerId);
+  const lz = front ? 3 : 7;
+  // 同排成員照輪轉序逐一佔槽；輪到自己時的結果即答案（每人各自呼叫也逐值一致）
+  const row = rot.filter((pid) => isFrontRow(rot, pid) === front);
+  const taken = new Set();
+  for (const pid of row) {
+    const prefer = dutyPrefer(game.players[pid].currentRole, front);
+    let lx = prefer;
+    if (taken.has(lx)) {
+      // 撞號：拿距偏好槽最近的空槽（距離同＝取較小 lx；恆有空槽——排員 ≤ 槽數）
+      lx = DUTY_SLOTS.filter((s) => !taken.has(s))
+        .sort((a, b) => (Math.abs(a - prefer) - Math.abs(b - prefer)) || a - b)[0];
+    }
+    taken.add(lx);
+    if (pid === playerId) return localToWorld(team, lx, lz);
   }
-  // 自由人接手 MB 的左後職責位（stage 6 掛鉤兌現）
-  const lx = role === 'outside' ? 0 : (role === 'middle' || role === 'libero') ? -3 : 3;
-  return localToWorld(team, lx, 7);
+  return localToWorld(team, dutyPrefer(game.players[playerId].currentRole, front), lz);
 }
 
 // W3 L（附錄 A1）：收縮指令是否讀對——與 input/liberoRead.digReadCorrect 同語意
