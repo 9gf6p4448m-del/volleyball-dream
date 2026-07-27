@@ -20,7 +20,7 @@ import {
 } from '../career/recruitment.js';
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
-  graduationCeremonySegments, freshmenIntroLines, resolveEventsForRoster,
+  graduationCeremonySegments, freshmenIntroLines, resolveEventsForRoster, isOnceEvent,
 } from '../career/events.js';
 import { clampHeightCm } from '../career/heightGrowth.js';
 import {
@@ -34,6 +34,9 @@ import {
 } from '../career/positionEvents.js';
 import { dueMentorLines } from '../career/mentor.js';
 import { archiveSeasonSummary } from '../career/careerStore.js';
+import {
+  finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
+} from '../career/careerFinale.js';
 import { readSlotHeads } from '../career/saveSlots.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
@@ -1280,6 +1283,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   }
 
   // 事件入帳＋效果套用（先落檔再播對話——中斷不掉進度），對話播完接 after
+  // W4(P4) W3 債務 5：一次性事件過濾（跨屆持久旗標）——dueEvents 的呼叫端統一過
+  function filterPlayedOnce(evs) {
+    const played = new Set(store.loadPlayedOnce?.() ?? []);
+    return evs.filter((e) => !played.has(e.id));
+  }
+
   function fireEvents(evs, career, player, after) {
     let c = career;
     for (const e of evs) {
@@ -1294,6 +1303,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     }
     const okCareer = store.saveCareer(c);
     const okPlayer = store.savePlayer(player);
+    // W4：一次性事件入帳跨屆旗標（debut 類生涯內不再重播）
+    store.markPlayedOnce?.(evs.filter((e) => isOnceEvent(e.id)).map((e) => e.id));
     if (!okCareer || !okPlayer) setMsg('⚠ 存檔寫入失敗——事件進度可能未保存');
     dialogPlay(evs, after);
   }
@@ -1504,9 +1515,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     }
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）。
     // W2(P4) canon 年級守衛：大山已畢業＝帶 elderId 的事件改播轉授版
-    const postEvs = resolveEventsForRoster(
+    // W4：一次性事件（debut 類）跨屆旗標過濾——播過的生涯內不再播
+    const postEvs = filterPlayedOnce(resolveEventsForRoster(
       dueEvents(career, 'post'), store.loadRoster?.()?.members ?? null,
-    );
+    ));
     if (postEvs.length) {
       fireEvents(postEvs, career, player, () => renderCareer());
       return;
@@ -1670,7 +1682,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         }),
       }));
     });
-    // W1(P4)：高中章固定三屆——第 3 屆收束不再推進，掛生涯結算佔位（W4 實作）
+    // W1(P4)：高中章固定三屆——第 3 屆收束不再推進；W4(P4) Q5 生涯結算在此開幕
     const careerOver = (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
     if (careerOver) {
       root.appendChild(el('div', [
@@ -1679,9 +1691,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       ], stage === 'champion' ? '🏆 全國冠軍！' : `止步全國賽`));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
         `第 3 屆結束（${rec.wins} 勝 ${rec.losses} 敗）——高中三年，打完了`));
-      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.gold}`, 'font-weight:700',
-        'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.6', 'margin-top:4px'],
-      '生涯結算即將到來——三年的數據、關鍵球與送別（開發中）'));
+      root.appendChild(button('▶ 生涯結算——三年的一切', true,
+        () => showCareerFinale(career, player, stage === 'champion')));
     } else if (stage === 'champion') {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
@@ -1731,7 +1742,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         // W2(P4) canon 年級守衛：大山已畢業＝teach-jump/rematch 改播轉授版
         const rosterNow = store.loadRoster?.() ?? null;
         const preEvs = [
-          ...resolveEventsForRoster(dueEvents(career, 'pre'), rosterNow?.members ?? null),
+          ...filterPlayedOnce(resolveEventsForRoster(dueEvents(career, 'pre'), rosterNow?.members ?? null)),
           ...oldTeamPreEvents(career, rosterNow),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
@@ -1751,6 +1762,130 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   }
   // 🔓 手批面板已移除（07-27 Sawmah 拍板：四位置驗收完結→版本級 open，見
   // positionFlags.ENGINEERED_OPEN；未來新位置驗收用 ?openPosition= 入口即可）
+
+  // ---- W4(P4) Q5 生涯結算（第 3 屆終點）：三屆定格→招募全記錄→關鍵球典藏→
+  // 隊友具名送別→主角版畢業儀式（逐位聚光鏈單人版）→下一章佔位。
+  // 資料底＝Q9 累積頁（歷屆封存＋本屆）＋recruitment＋finalRally（VCR 典藏）----
+  function showCareerFinale(career, player, champion) {
+    const seasons = [...(store.loadSeasonArchive?.() ?? [])];
+    seasons.push({
+      ...archiveSeasonSummary({ index: store.seasonIndex?.() ?? 1, results: career.results }),
+      current: true,
+    });
+    const roster = store.loadRoster?.();
+    const memberNames = {};
+    for (const m of roster?.members ?? []) {
+      if (m.origin && m.origin !== 'starter') memberNames[m.origin] = m.name;
+    }
+    const data = buildFinaleSummary({
+      seasons, recruitment: store.loadRecruitment?.(), memberNames,
+    });
+    const finalRally = store.loadFinalRally?.();
+
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:rgba(4,6,12,0.94)', 'gap:10px', 'padding:26px 14px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
+      '生涯結算'));
+    overlay.appendChild(el('div', [
+      'font-size:26px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:3px',
+      'text-shadow:0 4px 24px rgba(0,0,0,0.8)',
+    ], `${career.playerName}・遊隼高中三年`));
+    // 三屆戰績定格
+    for (const sn of data.seasons) {
+      const card = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:9px 16px', 'width:min(340px, 94vw)', 'display:flex',
+        'justify-content:space-between', 'align-items:center',
+      ]);
+      card.appendChild(el('div', ['font-size:14px', 'font-weight:800'], `第 ${sn.index} 屆`));
+      card.appendChild(el('div', ['font-size:13px', `color:${sn.champion ? COLOR.gold : COLOR.dim}`],
+        `${sn.wins} 勝 ${sn.losses} 敗${sn.champion ? '・🏆 全國冠軍' : ''}`));
+      overlay.appendChild(card);
+    }
+    // 生涯數據定格（吃 Q9 累積）
+    const t = data.sum;
+    const numCard = el('div', [
+      'background:rgba(40,34,14,0.9)', 'border-radius:12px', `border:1px solid ${COLOR.gold}`,
+      'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left', 'line-height:1.6',
+      'font-size:12px', `color:${COLOR.text}`,
+    ]);
+    numCard.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.gold}`,
+      'margin-bottom:2px'], `生涯合計　${t.wins} 勝 ${t.losses} 敗${t.titles ? `・🏆×${t.titles}` : ''}`));
+    const bits = [`殺球 ${t.kills + t.tipKills}`, `ACE ${t.aces}`, `攔網 ${t.blockPoints}`, `Perfect ${t.perfects}`];
+    if (t.digs + t.assistDigs + t.rallySaves > 0) {
+      bits.push(`起球 ${t.digs}`, `助攻一傳 ${t.assistDigs}`, `續命 ${t.rallySaves}`);
+    }
+    numCard.appendChild(el('div', [], bits.join('・')));
+    overlay.appendChild(numCard);
+    // 招募全記錄
+    if (data.recruits.joined.length || data.recruits.expelled.length) {
+      const rc = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:9px 16px', 'width:min(340px, 94vw)', 'text-align:left', 'line-height:1.6',
+        'font-size:12px', `color:${COLOR.dim}`,
+      ]);
+      rc.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.cyan}`],
+        '招募全記錄'));
+      if (data.recruits.joined.length) {
+        rc.appendChild(el('div', [], `入隊：${data.recruits.joined.join('、')}`));
+      }
+      if (data.recruits.expelled.length) {
+        rc.appendChild(el('div', [], `離隊：${data.recruits.expelled.filter(Boolean).join('、')}`));
+      }
+      overlay.appendChild(rc);
+    }
+    // 關鍵球典藏（VCR 資料底；完整回放引擎＝4.5——宿敵之戰回放位同屬此區的資料預留）
+    if (finalRally) {
+      overlay.appendChild(el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:9px 16px', 'width:min(340px, 94vw)', 'text-align:left',
+        'font-size:12px', `color:${COLOR.dim}`, 'line-height:1.6',
+      ], `🎬 關鍵球典藏：第 ${finalRally.seasonIndex} 屆冠軍點——決賽的最後一球，已永久收藏`));
+    }
+    overlay.appendChild(button('謝幕——', true, () => {
+      overlay.remove();
+      const members = roster?.members ?? [];
+      dialogPlay([{ lines: finaleFarewellLines(members, player.id) }], () => {
+        showGraduationRitual({
+          perGraduate: finaleRitualSegments({
+            playerName: career.playerName,
+            champion,
+            role: player.currentRole,
+            heightM: player.height?.current ?? 1.75,
+          }),
+          onDone: () => showNextChapter(),
+        });
+      });
+    }));
+    document.body.appendChild(overlay);
+  }
+
+  // 下一章佔位（Q5：大學章 kickoff 另開，本輪只留門）——點擊回選檔頁（新的夢）
+  function showNextChapter() {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:#05070d',
+      'gap:16px', 'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', [
+      'font-size:40px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:10px',
+      'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
+    ], NEXT_CHAPTER_LINES.title));
+    overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
+      NEXT_CHAPTER_LINES.sub));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
+      'margin-top:18px'], NEXT_CHAPTER_LINES.next));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
+      '點擊任意處返回'));
+    overlay.addEventListener('pointerdown', () => {
+      overlay.remove();
+      renderSlots();
+    });
+    document.body.appendChild(overlay);
+  }
 
   // ---- W4(P4) Q9 生涯累積頁：歷屆封存（advanceSeason 屆末寫入）＋本屆進行中——
   // 三屆總數據；Q5 生涯結算直接吃此處 ----

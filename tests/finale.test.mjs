@@ -1,0 +1,98 @@
+// W4(P4) Q5 生涯結算＋W3 債務 5（debut 跨屆旗標）＋雙人畢業量能
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
+} from '../src/career/careerFinale.js';
+import { isOnceEvent, ONCE_EVENT_IDS, graduationCeremonySegments } from '../src/career/events.js';
+import { createCareerStore } from '../src/career/careerStore.js';
+
+function fakeStorage() {
+  const m = new Map();
+  return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    removeItem: (k) => { m.delete(k); },
+  };
+}
+
+test('送別台詞：具名班底手寫、其餘 generic 一句、玩家不自送、決定論', () => {
+  const members = [
+    { id: 'A2', name: '小夢', role: 'outside' },
+    { id: 'A1', name: '林承哲', role: 'setter' },
+    { id: 'A5', name: '葉翊飛', role: 'outside' },
+    { id: 'R1', name: '路人甲', role: 'middle', origin: 'north-tech' },
+  ];
+  const lines = finaleFarewellLines(members, 'A2');
+  assert.ok(lines.length >= 4, '手寫（阿哲 2＋小飛 2）＋generic 1');
+  assert.ok(!lines.some((l) => l.speaker === '小夢'), '玩家不出現在送別名單');
+  assert.ok(lines.some((l) => l.speaker === '路人甲'), '非班底也被記得（generic）');
+  assert.deepEqual(lines, finaleFarewellLines(members, 'A2'), '決定論');
+});
+
+test('主角畢業儀式段落：graduationRitual perGraduate 同形；奪冠/未冠分版', () => {
+  const champ = finaleRitualSegments({ playerName: '小夢', champion: true });
+  assert.equal(champ.length, 1);
+  assert.equal(champ[0].member.name, '小夢', 'graduationRitual 消費形狀 [{member, lines}]');
+  assert.ok(champ[0].lines.every((l) => l.speaker && l.text), '台詞形狀完整');
+  assert.ok(champ[0].lines.some((l) => l.text.includes('獎盃')));
+  const lost = finaleRitualSegments({ playerName: '小夢', champion: false });
+  assert.notDeepEqual(champ[0].lines, lost[0].lines, '戰績誠實分版');
+  assert.ok(NEXT_CHAPTER_LINES.title.includes('完'));
+});
+
+test('三屆總結：合計/冠軍數/招募名單解析', () => {
+  const seasons = [
+    { index: 1, wins: 5, losses: 1, champion: false, totals: { kills: 10, aces: 2, blockPoints: 1, tipKills: 0, perfects: 3, digs: 0, assistDigs: 0, rallySaves: 0 } },
+    { index: 2, wins: 6, losses: 0, champion: true, totals: { kills: 12, aces: 3, blockPoints: 2, tipKills: 1, perfects: 4, digs: 5, assistDigs: 2, rallySaves: 1 } },
+  ];
+  const data = buildFinaleSummary({
+    seasons,
+    recruitment: { recruited: ['north-tech'], expelled: [{ member: { name: '被逐者' } }] },
+    memberNames: { 'north-tech': '方振正' },
+  });
+  assert.equal(data.sum.wins, 11);
+  assert.equal(data.sum.titles, 1);
+  assert.equal(data.sum.kills, 22);
+  assert.equal(data.sum.digs, 5);
+  assert.deepEqual(data.recruits.joined, ['方振正']);
+  assert.deepEqual(data.recruits.expelled, ['被逐者']);
+});
+
+test('W3 債務 5：一次性事件分類（debut 類 once／hot-hand 每屆可重）＋跨屆旗標存取', () => {
+  assert.ok(isOnceEvent('debut'));
+  assert.ok(isOnceEvent('teach-jump'));
+  assert.ok(isOnceEvent('rematch-won'));
+  assert.ok(!isOnceEvent('hot-hand'), '狀態性事件保留每屆重置語意');
+  assert.ok(ONCE_EVENT_IDS.size >= 10);
+  const store = createCareerStore(fakeStorage(), 1);
+  assert.deepEqual(store.loadPlayedOnce(), []);
+  store.markPlayedOnce(['debut', 'first-win']);
+  store.markPlayedOnce(['debut']); // 冪等
+  assert.deepEqual(store.loadPlayedOnce().sort(), ['debut', 'first-win']);
+});
+
+test('雙人畢業量能：阿岩＋阿遠同屆畢業——一次暗場、逐位聚光兩段', () => {
+  const members = [
+    { id: 'A6', name: '陳定岩', role: 'middle' },
+    { id: 'A7', name: '莊明遠', role: 'outside' },
+    { id: 'N1', name: '雷紹齊', role: 'middle' },
+  ];
+  const graduates = [members[0], members[1]];
+  const segs = graduationCeremonySegments({ graduates, aceGrads: [], members });
+  assert.equal(segs.perGraduate.length, 2, '逐位聚光＝兩段（節奏：合場一次暗場、逐位上光）');
+  assert.ok(segs.opening.length >= 1, '開場（暗場）只有一次');
+  const names = segs.perGraduate.map((g) => g.member.name);
+  assert.deepEqual(names, ['陳定岩', '莊明遠']);
+  for (const g of segs.perGraduate) {
+    assert.ok(g.lines.length >= 1, `${g.name} 有離別台詞`);
+  }
+});
+
+test('finalRally 典藏：store 落檔/讀回 roundtrip', () => {
+  const store = createCareerStore(fakeStorage(), 1);
+  assert.equal(store.loadFinalRally(), null);
+  const payload = { matchId: 'national-final', seasonIndex: 3, snapshot: { tick: 99 }, steps: [{ tick: 99, intents: [] }] };
+  assert.ok(store.recordFinalRally(payload));
+  assert.deepEqual(store.loadFinalRally(), payload);
+});

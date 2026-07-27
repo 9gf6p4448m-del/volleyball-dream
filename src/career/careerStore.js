@@ -371,6 +371,32 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       return structuredClone(save?.career?.seasons ?? []);
     },
+    // W4(P4) W3 債務 5：一次性事件已播旗標（跨屆持久——不隨 season.events 逐屆重置）
+    loadPlayedOnce() {
+      const save = loadSave();
+      return [...(save?.career?.playedOnce ?? [])];
+    },
+    markPlayedOnce(ids) {
+      if (!ids?.length) return true;
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        const played = new Set(next.career.playedOnce ?? []);
+        for (const id of ids) played.add(id);
+        return { ...next, career: { ...next.career, playedOnce: [...played] } };
+      });
+    },
+    // W4(P4) Q5 生涯結算：決賽勝利的最後一球 VCR 資料底（關鍵球回放；
+    // 完整回放引擎接線＝4.5，資料先落——snapshot＋Intent 流可逐格重演）
+    recordFinalRally(payload) {
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        return { ...next, career: { ...next.career, finalRally: payload } };
+      });
+    },
+    loadFinalRally() {
+      const save = loadSave();
+      return save?.career?.finalRally ?? null;
+    },
     clear() {
       try {
         store.removeItem(saveKey);

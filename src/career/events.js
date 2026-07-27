@@ -218,6 +218,20 @@ export function upcomingTeach(career, matchId) {
     .map((e) => e.effect.unlock);
 }
 
+// W4(P4) W3 債務 5：一次性事件分類（跨屆持久旗標）——events 逐屆重置會讓 debut
+// 等敘事一次性事件每屆重播；此清單內的事件播過一次＝生涯內不再播（旗標存
+// save.career.playedOnce，careerScreen fireEvents 入帳、dueEvents 呼叫端過濾）。
+// 「每屆重置」語意保留給狀態性事件（hot-hand）與轉位談話「下屆再問」節拍（分類處理）。
+// teach-*/mb-warn 未觸發者不受影響（旗標只擋「播過的」——canon 轉授版路徑不變）
+export const ONCE_EVENT_IDS = new Set([
+  'debut', 'first-win', 'first-loss', 'nationals',
+  'teach-tip', 'teach-dive', 'teach-pipe', 'teach-float', 'teach-feint', 'teach-jump',
+  'mb-warn', 'rematch-won', 'rematch-lost',
+]);
+export function isOnceEvent(id) {
+  return ONCE_EVENT_IDS.has(id);
+}
+
 // 取當下應觸發的事件（依表序；已觸發者不重複）。
 // moment 'pre'＝出戰前（條件看下一場）；'post'＝賽後回到生涯畫面（條件看最後一場）
 export function dueEvents(career, moment) {

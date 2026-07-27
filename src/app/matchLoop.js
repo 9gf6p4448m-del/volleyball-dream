@@ -1059,6 +1059,18 @@ function settleIfOver(s) {
         lOverrides: s.lOverrideTally, // W4 Q9：L 改判記帳（box 第四欄）
       });
       if (!saveOk) stage.floatText.show('⚠ 戰績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
+      // W4(P4) Q5：決賽勝利＝最後一球 VCR 典藏（關鍵球回放資料底——快照＋Intent 流
+      // 可逐格重演；回放引擎接線與宿敵之戰回放位＝4.5，資料先落）
+      const finaleWinner = game.series?.winner ?? game.match.winner;
+      if (s.careerCtx.matchEntry.id === 'national-final' && s.vcrLast
+        && finaleWinner === game.players[s.playerId].teamId) {
+        s.careerCtx.store.recordFinalRally?.(JSON.parse(JSON.stringify({
+          matchId: 'national-final',
+          seasonIndex: s.careerCtx.seasonIndex ?? 1,
+          snapshot: s.vcrLast.snapshot ?? null,
+          steps: s.vcrLast.steps ?? [],
+        })));
+      }
     }
     // W4(P4) Q8：多局系列＝顯示局數與系列勝方（bo1 照舊單局分數）
     const winner = game.series?.winner ?? game.match.winner;
