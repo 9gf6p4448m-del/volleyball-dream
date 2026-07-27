@@ -162,6 +162,17 @@ export function createCameraRig(camera, initialPlayerId) {
           // OH 俯衝/L 貼地/MB 靜止的三角鏡頭語言之「靜止」）
           pos.set(focus.x * 0.65, 3.55, side * 1.0);
           target.set(focus.x, 1.55, focus.z * 0.7);
+        } else if (sigBeat.kind === 'line' && sigBeat.at) {
+          // 邊線是我的（07-28 A 案）：貼地低機位看落點咬線——從場內側望向界線，
+          // 球痕與白線同框（球在死球後停在落點＝現成道具）
+          const at = sigBeat.at;
+          const dSide = COURT.WIDTH / 2 - Math.abs(at.x);
+          const dBase = COURT.LENGTH / 2 - Math.abs(at.z);
+          const inX = at.x >= 0 ? -1 : 1; // 朝場中央退
+          const inZ = at.z >= 0 ? -1 : 1;
+          if (dSide <= dBase) pos.set(at.x + inX * 1.7, 0.5, at.z + 0.9);
+          else pos.set(at.x + 0.9, 0.5, at.z + inZ * 1.7);
+          target.set(at.x, 0.06, at.z);
         } else if (sigBeat.kind === 'opp') {
           // 三米線起飛的回報：低機位框住 OPP（自己）與 S 的專屬擊掌
           const mate = sigBeat.mateId ? game.actors[sigBeat.mateId] : null;

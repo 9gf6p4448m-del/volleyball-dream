@@ -6,18 +6,35 @@
 // 起鏡（fire）只認 SCORE：對手把球救起（TOUCH）＝解除、對手得分＝解除、
 // 新發球（SERVE＝操作開始）＝解除。matchLoop 只做狀態搬運，判定全在這裡。
 import { signatureMode, SHORT_BEAT_MS } from './presentation.js';
+import { COURT } from '../sim/constants.js';
 
 // 全版時長（ms）：勝負已定後的死球窗內播畢；短版統一 SHORT_BEAT_MS（≤1.5s）
-export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600 };
+export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600, line: 2400 };
+
+// 「邊線是我的」咬線門檻（07-28 拍板 A 案；tools/line-kill-probe.mjs 實測定值：
+// AI 亂打 0.25m＝8.4% 殺球觸發≈場均 0.4 次；玩家選邊線區應更高。試玩嫌多嫌少
+// 重跑 probe 改此值）
+export const SIG_LINE_M = 0.25;
+
+// 落點離最近界線的距離（m）；出界＝null（咬線演出只認 BALL_IN）
+export function lineKillDistance(at) {
+  if (!at) return null;
+  const d = Math.min(
+    COURT.WIDTH / 2 - Math.abs(at.x),
+    COURT.LENGTH / 2 - Math.abs(at.z),
+  );
+  return d >= 0 ? d : null;
+}
 
 // 「敘事第一次」計數鍵（save.career.presentation.seenSignature 的 key）
 export function sigKey(kind) {
   return `sig-${kind}`;
 }
 
-// 武裝：成因事件成立時記下這道演出的候選（focusId＝鏡頭焦點對象）
-export function armSignature(kind, { focusId = null, mateId = null, flightId = null } = {}) {
-  return { kind, focusId, mateId, flightId };
+// 武裝：成因事件成立時記下這道演出的候選（focusId＝鏡頭焦點對象；
+// 其餘欄位透傳——'line' 帶 at 落點座標供鏡頭取景）
+export function armSignature(kind, { focusId = null, mateId = null, flightId = null, ...extra } = {}) {
+  return { kind, focusId, mateId, flightId, ...extra };
 }
 
 // 逐事件追蹤：回傳新的 pending（null＝解除）。

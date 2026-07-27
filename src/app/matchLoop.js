@@ -36,6 +36,7 @@ import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
+  lineKillDistance, SIG_LINE_M,
 } from '../ui/signatureBeats.js';
 import {
   loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
@@ -282,7 +283,10 @@ function fireSignatureBeat(s, pending, now) {
       && p.currentRole === 'setter'
       && game.match.rotations[me.teamId].includes(p.id))?.id ?? null;
   }
-  s.sigBeat = { kind: pending.kind, focusId: pending.focusId, mateId, until: plan.until };
+  s.sigBeat = {
+    kind: pending.kind, focusId: pending.focusId, mateId,
+    at: pending.at ?? null, until: plan.until,
+  };
   s.slowUntil = Math.max(s.slowUntil ?? 0, plan.until);
   if (pending.kind === 'opp') {
     stage.matchView.triggerPose(s.playerId, 'highfive');
@@ -1168,6 +1172,17 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
+      // 4.5B「邊線是我的」（07-28 拍板 A 案，綁事件＝任何受控攻擊者）：我方殺球/
+      // 吊球 BALL_IN 且落點咬線（≤SIG_LINE_M）——不覆蓋更特定的已武裝演出
+      //（假動作/攔死/要球）；SCORE 我方（同批緊隨）才起鏡
+      if (!s.pendingSig && e.reason === 'BALL_IN' && e.at
+        && s.lastTouch?.playerId === s.controlledId
+        && (s.lastTouch.kind === 'spike' || s.lastTouch.kind === 'tip')) {
+        const lineD = lineKillDistance(e.at);
+        if (lineD !== null && lineD <= SIG_LINE_M) {
+          s.pendingSig = armSignature('line', { at: { x: e.at.x, z: e.at.z } });
+        }
+      }
       stage.controls.consumeDigHeroSignal?.(); // W3 L：丟棄未兌現的演出武裝（撲空）
       s.digReadResult = null; // 07-27 結果字卡狀態隨球清
       s.mbCommit = null;

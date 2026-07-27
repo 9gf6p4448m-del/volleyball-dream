@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   armSignature, trackSignature, signatureFire, planSignatureBeat, sigKey, SIG_FULL_MS,
+  lineKillDistance, SIG_LINE_M,
 } from '../src/ui/signatureBeats.js';
 import { SHORT_BEAT_MS } from '../src/ui/presentation.js';
 
@@ -59,8 +60,25 @@ test('節拍計畫：off＝null；首次/關鍵分＝全版；已看過＝短版
   }
 });
 
-test('seenSignature 鍵：三道演出各自獨立計數', () => {
-  const keys = ['oh', 'mb', 'opp'].map(sigKey);
-  assert.equal(new Set(keys).size, 3);
+test('seenSignature 鍵：四道演出各自獨立計數', () => {
+  const keys = ['oh', 'mb', 'opp', 'line'].map(sigKey);
+  assert.equal(new Set(keys).size, 4);
   for (const k of keys) assert.match(k, /^sig-/);
+});
+
+test('「邊線是我的」（07-28 A 案）：離線距離／出界 null／門檻與武裝透傳', () => {
+  // 場地 9×18（半場 x±4.5、z±9）：貼邊線/貼底線/場中央/出界
+  assert.ok(Math.abs(lineKillDistance({ x: 4.4, z: -5 }) - 0.1) < 1e-9, '貼邊線');
+  assert.ok(Math.abs(lineKillDistance({ x: 0, z: -8.9 }) - 0.1) < 1e-9, '貼底線');
+  assert.ok(lineKillDistance({ x: 0, z: -5 }) > 3, '場中央離線遠');
+  assert.equal(lineKillDistance({ x: 4.6, z: -5 }), null, '出界＝null（咬線只認 BALL_IN）');
+  assert.equal(lineKillDistance(null), null);
+  assert.ok(SIG_LINE_M > 0 && SIG_LINE_M <= 0.5, '門檻在 probe 量測帶內');
+  // 武裝透傳 at 座標（鏡頭取景用）＋計畫時長就位
+  const p = armSignature('line', { at: { x: 4.4, z: -5 } });
+  assert.deepEqual(p.at, { x: 4.4, z: -5 });
+  const plan = planSignatureBeat({ kind: 'line', pref: 'on', seen: false, keyPoint: false, now: 0 });
+  assert.equal(plan.until, SIG_FULL_MS.line);
+  // 咬線武裝同樣走「任何後續觸球即解除」（冒領防護一體適用）
+  assert.equal(trackSignature(p, { type: 'TOUCH', team: 'A' }, 'A'), null);
 });
