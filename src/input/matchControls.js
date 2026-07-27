@@ -385,7 +385,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         const near = Math.hypot(b.x - a.x, b.z - a.z) <= AUTO_RECEIVE_DIST;
         const reachable = near && b.vy < 0 && b.y <= standingReach(me) + 0.3;
         const claimedToMe = aiState?.claimId === playerId;
-        if (canTouch && reachable && r.touches === 0) {
+        // 攔網情境不自動墊（07-27 Sawmah 試玩抓包：貼網站位時，對手扣球過網瞬間
+        // 球權翻面＋觸球歸零，「到位自動接」搶在攔網體系前把球墊掉＝攔網變接球）：
+        // 前排、貼網（|z|<2.2＝自動跳攔同帶）、對方攻擊來球、球還在網帶高度（>2.15m）
+        // ＝攔網的球不是墊球的球；輕吊/漏球墜到 2.15 以下照常自動救
+        const spikeAtNet = r.profile === 'spike' && r.lastTouchTeam !== me.teamId &&
+          isFrontRow(game.match.rotations[me.teamId], playerId) &&
+          Math.abs(a.z) < 2.2 && b.y > 2.15;
+        if (canTouch && reachable && r.touches === 0 && !spikeAtNet) {
           // 到位自動接（一傳是反射不是瞄準）；品質 0.6——主動抓 Perfect 才有更準的一傳
           action = 'receive';
           aim = localToWorld(me.teamId, 1.2, 1.2);
