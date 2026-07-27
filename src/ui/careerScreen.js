@@ -43,6 +43,8 @@ import { readSlotHeads } from '../career/saveSlots.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
+import { createBeatStage } from '../render/beatStage.js';
+import { loadPresentationPref, savePresentationPref } from './presentation.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 const ATTR_LABELS = {
@@ -146,7 +148,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   // ---- stage 4 劇情對話框（輕量：文字、無立繪；點擊逐句推進）----
   const dlg = el('div', [
     'position:fixed', 'inset:0', 'z-index:34', 'display:none',
-    'background:rgba(4,6,12,0.5)', 'align-items:flex-end', 'justify-content:center',
+    'background:rgba(4,6,12,0.5)', 'flex-direction:column', 'align-items:center',
+    'justify-content:flex-end', 'gap:12px',
     'padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 26px)',
   ]);
   const dlgCard = el('div', [
@@ -170,9 +173,24 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   dlg.appendChild(dlgCard);
   document.body.appendChild(dlg);
 
-  let dlgState = null; // { queue:[{speaker,text}], onDone }
+  let dlgState = null; // { queue:[{speaker,text,cam,camOpts}], onDone }
+  // 4.5B §2：beat 舞台（事件宣告 camera 模板時掛在對話卡上方；同模板跨句沿用）
+  let dlgStage = null; // { stage, sig }
+  function dlgStageSync(line) {
+    const sig = line?.cam ? `${line.cam}|${JSON.stringify(line.camOpts ?? null)}` : null;
+    if (dlgStage?.sig === sig) return;
+    if (dlgStage) { dlgStage.stage.dispose(); dlgStage.stage.el.remove(); dlgStage = null; }
+    if (!sig || reduceMotion()) return;
+    try {
+      const stage = createBeatStage({ template: line.cam, opts: line.camOpts ?? {} });
+      dlg.insertBefore(stage.el, dlgCard);
+      dlgStage = { stage, sig };
+    } catch { dlgStage = null; /* WebGL 失敗＝退化純對話卡（ritualStage 慣例） */ }
+  }
   function dialogPlay(events, onDone) {
-    const queue = events.flatMap((e) => e.lines);
+    const queue = events.flatMap((e) => e.lines.map((line) => ({
+      ...line, cam: e.camera ?? null, camOpts: e.cameraOpts ?? null,
+    })));
     if (!queue.length) { onDone(); return; }
     dlgState = { queue, onDone };
     dlg.style.display = 'flex';
@@ -182,12 +200,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const line = dlgState.queue[0];
     dlgSpeaker.textContent = line.speaker;
     dlgText.textContent = line.text;
+    dlgStageSync(line);
   }
   dlg.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     if (!dlgState) return;
     dlgState.queue.shift();
     if (dlgState.queue.length) { paintLine(); return; }
+    dlgStageSync(null);
     dlg.style.display = 'none';
     const done = dlgState.onDone;
     dlgState = null;
@@ -1782,10 +1802,18 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true,
         () => showMatchupScreen(career, player, next, startMatch)));
     }
-    const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
+    const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px', 'flex-wrap:wrap']);
     ioRow.appendChild(smallButton('返回選檔', renderSlots)); // 生涯的上一層＝選檔頁（W4 題2）
     ioRow.appendChild(smallButton('📊 生涯數據', showCareerTotals)); // W4 Q9 累積頁
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
+    // 4.5B §2-3：招牌演出開關（全域偏好；off 只省演出，真值字卡不受影響）
+    const prefLabel = () => `🎬 演出：${loadPresentationPref(window.localStorage) === 'off' ? '關' : '開'}`;
+    const prefBtn = smallButton(prefLabel(), () => {
+      const cur = loadPresentationPref(window.localStorage);
+      savePresentationPref(window.localStorage, cur === 'off' ? 'on' : 'off');
+      prefBtn.textContent = prefLabel();
+    });
+    ioRow.appendChild(prefBtn);
     root.appendChild(ioRow);
     root.appendChild(msgEl);
   }

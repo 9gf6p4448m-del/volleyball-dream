@@ -386,6 +386,25 @@ export function createCareerStore(storage, slot = 1) {
         return { ...next, career: { ...next.career, playedOnce: [...played] } };
       });
     },
+    // 4.5B §2-3 頻率框架：招牌演出「敘事第一次」計數（跨屆持久、逐槽）。
+    // 落 save.career.presentation.seenSignature（career 自由區慣例，同 aceBook）；
+    // 舊存檔無此欄＝空物件＝全部視為未看過（工單原文）
+    loadSeenSignatures() {
+      const save = loadSave();
+      return structuredClone(save?.career?.presentation?.seenSignature ?? {});
+    },
+    markSignatureSeen(key) {
+      if (!key) return true;
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        const pres = next.career.presentation ?? {};
+        const seen = { ...(pres.seenSignature ?? {}), [key]: true };
+        return {
+          ...next,
+          career: { ...next.career, presentation: { ...pres, seenSignature: seen } },
+        };
+      });
+    },
     // W4(P4) Q5 生涯結算：決賽勝利的最後一球 VCR 資料底（關鍵球回放；
     // 完整回放引擎接線＝4.5，資料先落——snapshot＋Intent 流可逐格重演）
     recordFinalRally(payload) {

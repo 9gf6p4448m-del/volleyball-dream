@@ -215,6 +215,46 @@ export function createCameraRig(camera, initialPlayerId) {
   };
 }
 
+// ---- Phase 4.5B §2-1 四鏡位模板（劇情 beat 用；Phase 5 劇情輪直接吃）----
+// 純組成函式：回傳 plain object（cam/look/fov/lighting），由 beatStage 的獨立小場景
+// 消費——不掛主賽場 rig（劇情事件播在 careerScreen DOM 層，主場景不在場）。
+// 舞台空間約定（beatStage 座標）：網帶在 z=0，對方（焦點人物）站 z=-1.4 面向 +z，
+// 玩家站 z=+1.4 面向 -z；單人模板主體站原點。
+//
+// 模板語意（工單 §2-1）：
+//   confront      對峙——兩人隔網；angle:'level' 同高度平視（鏡子版）/'up' 仰角（牆版）
+//                 /'down' 俯視（幕一牆版「他量你」）
+//   exit          離場——人物轉身走離、鏡頭定住不追（餘隊伍剪影由 stage 佈景給）
+//   rimlight-solo 單人邊光——隊伍末端單人、邊光強調、不搶主場景
+//   stands        看台遠景——觀眾席視角、球場在下方遠景（止步旁觀/頒獎台定格）
+export const BEAT_SHOT_NAMES = ['confront', 'exit', 'rimlight-solo', 'stands'];
+
+export function beatShot(name, opts = {}) {
+  if (name === 'confront') {
+    // 鏡頭沿玩家肩後越網取對方；angle 改變高度與注視俯仰
+    const angle = opts.angle ?? 'level';
+    if (angle === 'up') {
+      return { cam: { x: 0.5, y: 0.9, z: 2.6 }, look: { x: 0, y: 2.0, z: -1.4 }, fov: 40, lighting: 'match' };
+    }
+    if (angle === 'down') {
+      return { cam: { x: 0.5, y: 3.0, z: 2.4 }, look: { x: 0, y: 1.1, z: -1.4 }, fov: 40, lighting: 'match' };
+    }
+    return { cam: { x: 0.55, y: 1.55, z: 3.0 }, look: { x: 0, y: 1.5, z: -1.4 }, fov: 38, lighting: 'match' };
+  }
+  if (name === 'exit') {
+    // 定機位側後方廣角：人物走離（+depth 由 stage 動畫給），鏡頭不追
+    return { cam: { x: 2.6, y: 1.7, z: 2.8 }, look: { x: -0.4, y: 1.1, z: -1.6 }, fov: 44, lighting: 'dusk' };
+  }
+  if (name === 'rimlight-solo') {
+    return { cam: { x: 0.85, y: 1.5, z: 2.3 }, look: { x: 0, y: 1.35, z: 0 }, fov: 36, lighting: 'rim' };
+  }
+  if (name === 'stands') {
+    // 觀眾席視角：高機位、球場遠在下方
+    return { cam: { x: 0, y: 6.4, z: 10.5 }, look: { x: 0, y: 0.4, z: -1.0 }, fov: 46, lighting: 'arena' };
+  }
+  return null;
+}
+
 // 面向球網的基準 yaw：A 隊（z>0）朝 -z＝π、B 隊朝 +z＝0
 function baseYaw(side) {
   return side === 1 ? Math.PI : 0;
