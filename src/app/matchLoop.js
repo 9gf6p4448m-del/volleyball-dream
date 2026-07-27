@@ -577,8 +577,11 @@ function updateDecisions(s, now) {
     || (game.rally.possession === game.players[s.controlledId]?.teamId
       && game.rally.touches >= 1))) {
     aiState.digBias = null;
-    stage.blockShadow?.hide(); // B-3 佈陣可視化隨指令生命週期收
+    // B-3 影子刻意不在此收（07-27 二輪：隨第一觸收＝顯示窗僅球飛行 ~0.5s，
+    // 玩家盯著球根本來不及看地板）——佈陣可視化留到死球，見下
   }
+  // B-3 佈陣可視化收在死球：整段 rally 尾都看得到「這波的佈陣」
+  if (game.phase !== 'rally') stage.blockShadow?.hide();
   // 07-27 試玩回饋：L 讀對追蹤——對手攻擊飛行中持續結算，我方第一觸出結果字卡
   // W4 Q9：同步記下這次指令是否改判（digBias 在第一觸即清、字卡時刻已不可考）
   if (aiState.digBias && game.phase === 'rally'
@@ -1209,7 +1212,7 @@ function onCallTap(s) {
 function showShadowHintOnce(s) {
   if (s.shadowHintShown) return;
   s.shadowHintShown = true;
-  s.stage.floatText.show('地板佈陣：金帶＝攔網封住的線・青帶＝留給你接的線', '#ffd166', 3200);
+  s.stage.floatText.show('地板佈陣：紅帶＝攔網封住的線・綠帶＝留給你接的線', '#ffb454', 3200);
 }
 
 // W4(P4) Q9 單場結算頁資料（顯示時刻即時由事件流建——與 settle 落檔同一組純函式）

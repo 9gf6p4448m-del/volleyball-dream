@@ -33,8 +33,10 @@ export function createBlockShadow(scene) {
       return;
     }
     mesh.visible = true;
-    mesh.material.color.setHex(mode === 'wall' ? 0xffd166 : 0x6ee7ff);
-    mesh.material.opacity = mode === 'wall' ? 0.16 : 0.10;
+    // 07-27 三輪（Sawmah 拍板）：紅＝封住的線／綠＝留給自由球員的線——普世色語
+    // 高對比；濃度實測定帶（金/青 0.34/0.24 疊暖橘地板人眼無感、渲染管線本身無誤）
+    mesh.material.color.setHex(mode === 'wall' ? 0xff4d4d : 0x35e07a);
+    mesh.material.opacity = mode === 'wall' ? 0.38 : 0.32;
   };
 
   return {
@@ -42,15 +44,15 @@ export function createBlockShadow(scene) {
     // side＝我方半場（TEAM_SIDE，A=+1）。幾何＝從網口鋪向我方後場的走廊帶
     set(schemeKey, ballX, side = 1) {
       const bx = Math.max(-COURT.WIDTH / 2 + 1, Math.min(COURT.WIDTH / 2 - 1, ballX));
-      // 直線走廊：攻擊點正對縱帶
-      lineStrip.position.set(bx, 0.015, side * 4.2);
+      // 直線走廊：攻擊點正對縱帶（y 墊在界線 0.011 之上防蓋）
+      lineStrip.position.set(bx, 0.02, side * 4.2);
       lineStrip.rotation.z = 0;
       // 斜線走廊：攻擊點斜向對角（帶體旋轉指向遠角）
       const crossTargetX = -Math.sign(bx || 1) * (COURT.WIDTH / 2 - 1.2);
-      crossStrip.position.set((bx + crossTargetX) / 2, 0.015, side * 4.4);
+      crossStrip.position.set((bx + crossTargetX) / 2, 0.02, side * 4.4);
       crossStrip.rotation.z = Math.atan2(crossTargetX - bx, 7.4) * -side;
       // 吊球短區：網後前區
-      tipZone.position.set(0, 0.015, side * 2.2);
+      tipZone.position.set(0, 0.02, side * 2.2);
       if (schemeKey === 'block-line') {
         paint(lineStrip, 'wall');
         paint(crossStrip, 'open');
