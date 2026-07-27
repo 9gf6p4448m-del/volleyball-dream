@@ -87,7 +87,7 @@ W4 題 9 拍板：**演出債整批 4.5 開專輪**；題 0/題 6 拍板：**劇
 
 ## 5. 工程事實（規劃時的錨；程式檔名/資料形狀的完整落點見 W4 快照 §1 交付總表）
 
-- 基線：`main@c00219f`、**521 測綠只增不減**、蒸的 build 綠、gh-pages 已部署。
+- 基線：`main@c00219f`、**521 測綠只增不減**、vite build 綠、gh-pages 已部署。
 - 演出管線資產：`ritualStage.js`（暗場聚光/tween 把手）、cameraRig 模式機
   （third/first/attack/defend/dive/huddle/bench/tour——新演出鏡位照此範式擴）、
   floatText 字卡整流（優先序 flush）、sfx 零音檔合成（cheer/gaspCheer/心跳）、
