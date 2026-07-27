@@ -13,7 +13,7 @@ export function showTutorialOnce(simple = true) {
        <div style="line-height:2">
        ⚔️ <b>進攻</b>：舉球給你→時間放慢，讀攔網選攻擊區<br>
        （<span style="color:#60ffa0">綠＝空檔</span>、<span style="color:#ff5b5b">紅✋＝被封</span>；按A滑B＝假動作）<br>
-       🧱 <b>攔網</b>：對方要扣→自己沿網卡位、${isTouch ? '點一下' : '<b>K</b>'}起跳封他<br>
+       🧱 <b>攔網</b>：對方要扣→自己沿網卡位${isTouch ? '，站到位自動起跳' : '、<b>K</b>起跳封他'}<br>
        🏐 <b>發球</b>：輪你發球→面板選球路與落點<br>
        🤿 <b>魚躍</b>：右側大鈕亮起＝搆得到→拍下去飛身救球<br>
        💡 隊友扣球時該站哪掩護？——打著打著你會懂的</div>`
