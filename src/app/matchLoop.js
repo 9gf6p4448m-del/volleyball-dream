@@ -162,6 +162,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     counterArmedFlight: -1,  // 本波 ace 反讀已武裝（字卡揭曉用）
     // W4：自由人回場二次確認窗（07-27 拍板 B；performance.now 時刻）
     recallArmedUntil: 0,
+    // 07-27 四輪：L 封線卡時刻（同波讀對/讀反不疊發——一波至多一張結果卡）
+    lWallCardAt: -1e9,
     // W4 B-3：封線影子首次教學（07-27 試玩回饋「看不懂黑色陰影」——每場一次講色語）
     shadowHintShown: false,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
@@ -700,8 +702,9 @@ function updateDecisions(s, now) {
       `${mbPanelTitle(mbRead.tier)}${tells ? `　${tells}` : ''}`,
       [{ key: 'jump-now', label: '🧱 起跳攔網', color: 'orange' }],
       () => {
+        // 07-27 四輪（Sawmah：字卡太多以體驗為主）：起跳確認浮字移除——
+        // 你自己按的鈕零資訊量；結果真值卡（賭對/早了）才是 MB 身分核心，保留
         controls.chooseMbTiming(true);
-        floatText.show('🧱 起跳！', '#ffd166', 1000);
         s.mbCommit = { jumped: true };
       },
     );
@@ -727,8 +730,8 @@ function updateDecisions(s, now) {
           block: it.zone.block,
           override: it.zone.key !== digRead.suggestion,
         };
-        // 07-27 試玩回饋：手選（含改判）給確認浮字；1 秒自動照建議維持靜默（A2 拍板）
-        floatText.show(`🛡 ${it.zone.label}！`, '#6ee7ff', 1200);
+        // 07-27 四輪（Sawmah：字卡太多以體驗為主）：手選確認浮字移除——
+        // 紅綠帶佈陣可視化即確認（文字重複）；結果卡（封到/讀對）保留
       },
     );
   } else if (setDeciding) {
@@ -932,18 +935,23 @@ function applyEvents(s, frameEvents, now) {
         s.lOverrideTally.n += 1;
         if (s.digReadResult) s.lOverrideTally.ok += 1;
       }
-      stage.floatText.show(
-        s.digReadResult ? '📖 讀對了——球走你留的線' : '讀反了……',
-        s.digReadResult ? '#7ee787' : '#c8d6eb', 1300,
-      );
+      // 07-27 四輪：同波已出封線卡（1.5s 窗）＝讀對/讀反不再出（一波至多一張結果卡）
+      if (now - (s.lWallCardAt ?? -1e9) > 1500) {
+        stage.floatText.show(
+          s.digReadResult ? '📖 讀對了——球走你留的線' : '讀反了……',
+          s.digReadResult ? '#7ee787' : '#c8d6eb', 1300,
+        );
+      }
       s.digReadResult = null;
       s.digReadWasOverride = false;
     }
-    // W4 B-2「封到」層：攔網觸球在指令線上（配套的封線賭對）——分開字卡、皆玩家的功
+    // W4 B-2「封到」層：攔網觸球在指令線上（配套的封線賭對）——分開字卡、皆玩家的功。
+    // 07-27 四輪：同波整流——封到卡出過＝讀對/讀反卡不再出（擦手情境曾連發兩張）
     if (e.type === 'BLOCK_TOUCH' && e.team === game.players[s.controlledId]?.teamId
       && game.players[s.controlledId]?.currentRole === 'libero'
       && s.aiState.digBias?.block && s.aiState.digBias.block !== 'off'
       && game.rally.lastSpikeZone === s.aiState.digBias.block) {
+      s.lWallCardAt = now;
       stage.floatText.show('🧱 封線成功！', '#ffd166', 1400);
     }
     // W4 B-4：ace 反讀揭曉（誠實字卡——他改打讓開的線的那一拍）
