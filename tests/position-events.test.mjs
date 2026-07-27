@@ -31,13 +31,16 @@ test('gating：locked/ready 無談話、open 才觸發、現任位置跳過、OH
   const lTalk = positionTalkFor({ flags: FLAGS({ libero: 'open' }), player: P(), members: S2 });
   assert.equal(lTalk.role, 'libero');
   assert.ok(lTalk.acceptLines.every((l) => l.speaker === '小守'));
-  // 第 3 屆 L 手寫新生在隊＝三人關係版（多一句、不具名——人設未定案）
+  // 4.5A 三人版轉位敘事（拍板 §2）：手寫 L 小白在隊＝小守讓位＋小白入教三句
+  // （小白台詞具名——speaker 取名冊現名）
   const withFresh = positionTalkFor({
     flags: FLAGS({ libero: 'open' }),
     player: P(),
-    members: [...S2, { id: 'N2', name: '新生', role: 'libero', origin: 'handwritten' }],
+    members: [...S2, { id: 'N2', name: '小白', role: 'libero', origin: 'handwritten' }],
   });
-  assert.equal(withFresh.acceptLines.length, lTalk.acceptLines.length + 1);
+  assert.equal(withFresh.acceptLines.length, lTalk.acceptLines.length + 3);
+  assert.ok(withFresh.acceptLines.some((l) => l.speaker === '小白'));
+  assert.ok(withFresh.acceptLines.some((l) => l.text.includes('三個')));
 });
 
 test('縫隙 3 志願優先：多位置 open 時志願位置先談；志願命中＝回收培育話術', () => {

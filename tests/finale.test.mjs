@@ -16,17 +16,21 @@ function fakeStorage() {
   };
 }
 
-test('送別台詞：具名班底手寫、其餘 generic 一句、玩家不自送、決定論', () => {
+test('送別台詞：班底手寫、招募生具名（4.5A）、補位員 generic、玩家不自送、決定論', () => {
   const members = [
     { id: 'A2', name: '小夢', role: 'outside' },
     { id: 'A1', name: '林承哲', role: 'setter' },
     { id: 'A5', name: '葉翊飛', role: 'outside' },
-    { id: 'R1', name: '路人甲', role: 'middle', origin: 'north-tech' },
+    { id: 'R1', name: '阿澄', role: 'setter', origin: 'north-tech', recruitKey: 'north-tech' },
+    { id: 'G1', name: '小樂', role: 'middle', origin: 'generated' },
   ];
   const lines = finaleFarewellLines(members, 'A2');
-  assert.ok(lines.length >= 4, '手寫（阿哲 2＋小飛 2）＋generic 1');
+  assert.ok(lines.length >= 6, '手寫（阿哲 2＋小飛 2）＋招募具名 1＋generic 1');
   assert.ok(!lines.some((l) => l.speaker === '小夢'), '玩家不出現在送別名單');
-  assert.ok(lines.some((l) => l.speaker === '路人甲'), '非班底也被記得（generic）');
+  assert.ok(lines.some((l) => l.speaker === '阿澄' && !l.text.includes('畢業快樂')),
+    '招募生具名句（4.5A：不再落 generic）');
+  assert.ok(lines.some((l) => l.speaker === '小樂' && l.text.includes('畢業快樂')),
+    '補位員仍被記得（generic）');
   assert.deepEqual(lines, finaleFarewellLines(members, 'A2'), '決定論');
 });
 

@@ -9,6 +9,7 @@ import { boxScoreLFor } from '../career/boxScoreL.js';
 import { buildTeamBox, buildAceBox, buildMentorFeed } from '../career/boxScore.js';
 import { applyRosterGrowth } from '../career/roster.js';
 import { accrueRecruitProgress } from '../career/recruitment.js';
+import { scanChaseLost, actingLiberoFor } from '../career/n2Arc.js';
 
 // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
 export function markMatchStarted(careerCtx) {
@@ -36,6 +37,14 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0, l
       ...boxScoreLFor(game.events, playerId),
       overrides: lOverrides ?? { n: 0, ok: 0 },
     };
+  }
+  // 4.5A 小白支線事件二資料：場上自由人（玩家=L 或 lineup 選小白）魚躍後該 rally
+  // 失分的次數——記入 stats（隨 recordResult 落 results；觸發由 results 推導＝重放安全）
+  const lineupForN2 = careerCtx.store.loadLineup?.() ?? null;
+  const acting = actingLiberoFor({ player: game.players[playerId], lineup: lineupForN2 });
+  if (acting) {
+    stats.lbChase = scanChaseLost(game.events, acting.pid, myTeam);
+    stats.lbWho = acting.who;
   }
   // W4(P4) Q9 box score：全員記帳＋對手 ace＋（玩家=S）導師契約供給——
   // 全部由事件流攔截（決定論；非新算），落 entry.box 供結算頁/賽後鏈消費

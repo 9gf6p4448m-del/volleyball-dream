@@ -87,7 +87,9 @@ export function matchSeed(career, matchId) {
 export const TITLE_LEVEL_BONUS = 3; // 每座冠軍讓對手全屬性 +3（平衡幅度 W6 複核）
 // W6 A2：第 2 屆起小組賽程輪抽（屆間輪換＋指定邀請 invitedId；國賽階梯固定）。
 // 第 1 屆恆為故事模板（createCareer）——教學鏈綁定北原/白浪/曜石場次（schedule.js 註）
-export function advanceSeason(career, { invitedId = null } = {}) {
+// 4.5A：opts.seasonIndex＝下一屆屆數（宿敵保底階梯——第 2 屆天鷹改掛準決賽；
+// 省略＝預設階梯＝既有行為不變，舊呼叫端/測試零遷移）
+export function advanceSeason(career, { invitedId = null, seasonIndex = null } = {}) {
   const stage = careerStage(career);
   if (stage !== 'champion' && stage !== 'eliminated') return career; // 賽季未結束＝不動
   let h = (career.seed ^ 0x9e3779b9) >>> 0;
@@ -100,6 +102,7 @@ export function advanceSeason(career, { invitedId = null } = {}) {
     schedule: buildSchedule({
       seed,
       invitedId,
+      seasonIndex,
       prevGroupIds: career.schedule
         .filter((m) => m.stage === 'group')
         .map((m) => m.opponentId),

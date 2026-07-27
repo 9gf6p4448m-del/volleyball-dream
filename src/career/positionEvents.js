@@ -109,15 +109,19 @@ function acceptLinesFor(role, members) {
     ];
   }
   if (role === 'libero') {
-    // 小守（AL）讓位＝層次一；第 3 屆 L 手寫新生在隊＝三人關係版（人設未定案＝
-    // 不具名不寫性格，只留位置關係——甲3② 拍板：選案接線另輪，屆時改寫此版）
-    const hasFreshLibero = members.some((m) => m.role === 'libero' && m.origin === 'handwritten');
+    // 小守（AL）讓位＝層次一；4.5A：第 3 屆手寫 L 小白在隊＝三人版轉位敘事
+    // （拍板 §2：僅轉 L 路徑觸發——小守讓位＋小白入教，三個自由人的隊）
+    const fresh = members.find((m) => m.role === 'libero' && m.origin === 'handwritten');
     const base = [
       { speaker: '小守', text: '異色球衣給你。……說真的，有一點鬆了口氣，也有一點捨不得。' },
       { speaker: '小守', text: '後排這片地，比看起來大十倍。摔下去的時候，想著球，別想著痛。' },
     ];
-    if (hasFreshLibero) {
-      base.push({ speaker: '小守', text: '那個一年級的，也走這條路。你們倆——會把彼此逼得更強吧。' });
+    if (fresh) {
+      base.push(
+        { speaker: nameOf(members, fresh.id, '小白'), text: '學長也走這條路……太好了。' },
+        { speaker: nameOf(members, fresh.id, '小白'), text: '得分欄裡沒有我們的名字。但從今天起，遊隼的地板上有三個人的——這裡不會再掉一顆該救的球。' },
+        { speaker: '小守', text: '三個自由人的隊……哈，全國也找不到第二支。地板的規矩，我們自己定。' },
+      );
     }
     return base;
   }

@@ -113,7 +113,9 @@ export const EVENT_DEFS = [
   {
     id: 'teach-jump',
     moment: 'pre',
-    when: { matchId: 'national-final' },
+    // 4.5A 保底階梯配套：第 2 屆決賽＝曜石（天鷹移準決賽）——台詞指名天鷹，
+    // 加對手守衛防「對著曜石喊天鷹」；跳發＝對天鷹的武器，只在天鷹決賽場傳授
+    when: { matchId: 'national-final', opponentId: 'sky-hawk' },
     effect: { unlock: 'jumpServe' },
     // W2(P4) 年級守衛（拍板①保底轉授）：大山（A3）已畢業＝播 altLines 轉授版
     // ——新隊長阿哲以「大山留下的東西」名義轉授，跳發照樣學到（effect 不變）

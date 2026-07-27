@@ -27,14 +27,32 @@ const FINALE_FAREWELL_BY_ID = {
 
 const roleWord = { setter: '舉球', middle: '攔網', opposite: '重砲', libero: '防守', outside: '攻擊' };
 
-// 隊友具名送別（Q5）：手寫者用手寫、其餘每人一句 generic（具名、帶位置詞——
-// 招募生/補位員也被記得）。順序＝手寫班底先、其餘按名冊序
+// 4.5A 小件：招募生具名送別（recruitKey 對句，13 槽全補——含 -2 第二人；
+// 招募生不再落 generic）。speaker＝隊內暱稱（與名冊 m.name 一致，naming 慣例）
+const FINALE_FAREWELL_BY_RECRUIT = {
+  'north-tech': [{ speaker: '阿澄', text: '你這三年的節奏，我都幫你數過了——一拍都沒亂。接下來的路，照這個拍子走。' }],
+  'white-wave': [{ speaker: '小浪', text: '白浪教你的那句話，你帶到了最後——球沒落地，你的排球就不會結束。' }],
+  obsidian: [{ speaker: '阿曜', text: '跟得上我快攻的人不多，你是一個。大學的球場——換你逼我跟上。' }],
+  'iron-mist': [{ speaker: '阿鐵', text: '發球跟人生一樣，往死裡打就對了。畢業快樂——下次，網子對面見。' }],
+  'sky-hawk': [{ speaker: '阿鷹', text: '在天鷹，我把王牌讓了出去。在遊隼——謝謝你讓我重新當回主角。天空的事，交給後面的人吧。' }],
+  'gale-shore': [{ speaker: '小嵐', text: '我設計過幾百套球路。沒算到的只有一件事——最後一站，會捨不得走。' }],
+  'black-pine': [{ speaker: '老松', text: '牆的最後一年，砌在遊隼。值得——這兩個字，畢業前再說一次。' }],
+  'obsidian-2': [{ speaker: '小磐', text: '在曜石，我是第二座山。在這裡——我當了一次自己的山。謝了。' }],
+  'iron-mist-2': [{ speaker: '阿霜', text: '出手不帶感情——但這句有：跟你打球，很好。' }],
+  'sky-hawk-2': [{ speaker: '大隼', text: '在天鷹我是影子。在這裡，你讓我當過主角——這份帳，大學見面再還。' }],
+  'gale-shore-2': [{ speaker: '阿汐', text: '潮水會退。可是在遊隼打過的每一條線，都不會消失。' }],
+  'black-pine-2': [{ speaker: '大柏', text: '牆後面那門砲，你真的把它拉出來用了。……打得很痛快。' }],
+};
+
+// 隊友具名送別（Q5）：手寫者用手寫、招募生用 recruitKey 具名句（4.5A）、
+// 其餘（補位員）每人一句 generic（具名、帶位置詞）。順序＝具名先、其餘按名冊序
 export function finaleFarewellLines(members, playerId = 'A2') {
   const lines = [];
   const rest = [];
   for (const m of members ?? []) {
     if (m.id === playerId) continue;
-    const own = FINALE_FAREWELL_BY_ID[m.id];
+    const own = FINALE_FAREWELL_BY_ID[m.id]
+      ?? FINALE_FAREWELL_BY_RECRUIT[m.recruitKey ?? m.origin];
     if (own) lines.push(...own);
     else {
       rest.push({

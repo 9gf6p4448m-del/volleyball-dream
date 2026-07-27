@@ -15,6 +15,21 @@ export const NATIONAL_LADDER = [
   { id: 'national-sf', stage: 'national', opponentId: 'obsidian', label: '準決賽' },
   { id: 'national-final', stage: 'national', opponentId: 'sky-hawk', label: '決賽' },
 ];
+// 4.5A 宿敵三幕硬保底（拍板 §1-1）：天鷹的國賽位置逐屆固定——第 1/3 屆決賽（現狀）、
+// 第 2 屆準決賽（幕二＝bo3 關鍵戰，matchFormatOf 依 label 自動跟）；決賽由曜石補位。
+// 保底＝生成約束（賽程項靜態依屆數組裝），同種子同賽程重現性不受影響。
+// 注意副作用（Sawmah 已拍板不動招募條件）：第 2 屆決賽非天鷹＝王勝翔「決賽擊敗天鷹
+// 即可招」該屆無達成窗（僅第 1/3 屆決賽可達）。
+export function nationalLadderFor(seasonIndex = null) {
+  if (seasonIndex === 2) {
+    return [
+      { id: 'national-qf', stage: 'national', opponentId: 'iron-mist', label: '八強' },
+      { id: 'national-sf', stage: 'national', opponentId: 'sky-hawk', label: '準決賽' },
+      { id: 'national-final', stage: 'national', opponentId: 'obsidian', label: '決賽' },
+    ];
+  }
+  return NATIONAL_LADDER;
+}
 const NATIONAL_IDS = new Set(NATIONAL_LADDER.map((m) => m.opponentId));
 
 // 小組輪抽池＝全對手（強隊也可被邀/被抽進小組——復仇之戰、壯舉刷點都靠這）
@@ -76,7 +91,8 @@ export function matchFormatOf(entry) {
 }
 
 // 整份賽程（輪抽小組＋固定國賽）；invited 旗標落在賽程項上（UI 顯邀請徽章、存檔即公開）
-export function buildSchedule({ seed, invitedId = null, prevGroupIds = null }) {
+// seasonIndex＝目標屆數（宿敵保底階梯用；省略＝預設階梯＝既有行為不變）
+export function buildSchedule({ seed, invitedId = null, prevGroupIds = null, seasonIndex = null }) {
   const group = drawGroupOpponents({ seed, invitedId, prevGroupIds });
   return [
     ...group.map((oppId, i) => ({
@@ -86,6 +102,6 @@ export function buildSchedule({ seed, invitedId = null, prevGroupIds = null }) {
       label: '',
       ...(invitedId && oppId === invitedId ? { invited: true } : {}),
     })),
-    ...NATIONAL_LADDER.map((m) => ({ ...m })),
+    ...nationalLadderFor(seasonIndex).map((m) => ({ ...m })),
   ];
 }

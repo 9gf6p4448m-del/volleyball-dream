@@ -87,7 +87,8 @@ const RECRUIT_DEFS = {
   'white-wave': { name: '小浪', fullName: '蔡沐恩', persona: '白浪最黏的那道浪——球不落地，是他唯一的信仰' },
   obsidian: { name: '阿曜', fullName: '詹子曜', persona: '曜石的快攻箭頭——起跳永遠比你的判斷快半拍' },
   'iron-mist': { name: '阿鐵', fullName: '劉振鎧', persona: '鐵霧的重砲右翼——發球跟扣球一樣，都往死裡打' },
-  'sky-hawk': { name: '阿鷹', fullName: '王勝翔', persona: '天鷹的王牌翼手——全國決賽的舞台，是他的日常' },
+  // 4.5A 小件：讓位後心境（W4 ace 讓位莊敬嶺、移第 4 槽；招募條件不動）
+  'sky-hawk': { name: '阿鷹', fullName: '王勝翔', persona: '天鷹的前任王牌——舞台讓給了一年級，他想在畢業前證明：天空，還記得他的名字' },
   'obsidian-2': { name: '小磐', fullName: '許嘉碩', persona: '曜石的第二座山——不如阿曜快，但攔下來的球一顆都不還' },
   'iron-mist-2': { name: '阿霜', fullName: '徐世銘', persona: '鐵霧的左翼冷刃——安靜，準，出手不帶感情' },
   'sky-hawk-2': { name: '大隼', fullName: '李振騰', persona: '天鷹的右翼重錘——王牌的影子，也想當一次主角' },

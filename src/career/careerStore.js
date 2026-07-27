@@ -146,7 +146,8 @@ export function createCareerStore(storage, slot = 1) {
       const view = save ? careerViewOf(save) : null;
       if (!view) return false;
       if ((save.season.index ?? 1) >= 3) return false; // 高中章三屆封頂（W4 接生涯結算）
-      const next = advanceSeason(view, opts);
+      // 4.5A 宿敵保底：下一屆屆數傳入賽程生成（第 2 屆天鷹掛準決賽）
+      const next = advanceSeason(view, { ...opts, seasonIndex: (save.season.index ?? 1) + 1 });
       if (next === view) return false; // 賽季未結束
       let turnover = null;
       let heightReveal = null;

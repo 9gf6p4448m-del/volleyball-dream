@@ -33,6 +33,8 @@ import {
   interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV,
 } from '../career/positionEvents.js';
 import { dueMentorLines } from '../career/mentor.js';
+import { rivalPreEvents, rivalPostEvents, rivalSpectatorEvents } from '../career/rivalArc.js';
+import { n2OpeningLines, n2PostEvents, n2FinaleEvents } from '../career/n2Arc.js';
 import { archiveSeasonSummary } from '../career/careerStore.js';
 import {
   finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
@@ -1516,9 +1518,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）。
     // W2(P4) canon 年級守衛：大山已畢業＝帶 elderId 的事件改播轉授版
     // W4：一次性事件（debut 類）跨屆旗標過濾——播過的生涯內不再播
-    const postEvs = filterPlayedOnce(resolveEventsForRoster(
-      dueEvents(career, 'post'), store.loadRoster?.()?.members ?? null,
-    ));
+    // 4.5A：宿敵三幕賽後版（勝/敗分版）＋小白事件二（數據觸發）併入同一管道——
+    // 動態 id 走 career.events 去重（oldTeamPreEvents 同範式），小場先播、大場收尾
+    const rosterForPost = store.loadRoster?.() ?? null;
+    const seasonForPost = store.seasonIndex?.() ?? 1;
+    const postEvs = [
+      ...filterPlayedOnce(resolveEventsForRoster(
+        dueEvents(career, 'post'), rosterForPost?.members ?? null,
+      )),
+      ...rivalPostEvents({ career, seasonIndex: seasonForPost, player }),
+      ...n2PostEvents({ career, seasonIndex: seasonForPost, player, roster: rosterForPost }),
+    ];
     if (postEvs.length) {
       fireEvents(postEvs, career, player, () => renderCareer());
       return;
@@ -1640,7 +1650,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       const segs = graduationCeremonySegments({
         graduates, aceGrads, members: roster?.members ?? [],
       });
-      dialogPlay([{ lines: segs.opening }], () => showGraduationRitual({
+      // 4.5A 止步降級版（拍板 §1-1）：本屆止步且國賽未實戰天鷹＝屆末旁觀播報——
+      // 場邊看他奪冠（時序在畢業儀式前：賽事落幕→送學長）；三幕鏈不斷
+      const beginGraduation = () => dialogPlay([{ lines: segs.opening }], () => showGraduationRitual({
         perGraduate: segs.perGraduate,
         onDone: () => dialogPlay([{ lines: [...segs.aceLines, ...segs.closing] }], () => {
           showInvitePicker((invitedId) => {
@@ -1662,6 +1674,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             }
             const intro = freshmenIntroLines(adv.freshmen ?? []);
             if (intro.length) seqs.push({ lines: intro });
+            // 4.5A 小白事件一・入學宣言（第 3 屆開幕限定；轉 L 玩家＝前輩自由人追加）
+            const n2Intro = n2OpeningLines({ freshmen: adv.freshmen ?? [], player: freshPlayer });
+            if (n2Intro.length) seqs.push({ lines: n2Intro });
             const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
             if (opener.length) seqs.push({ lines: opener });
             // W3(P4)：屆間鏈尾端接轉位教練談話（旗標 open 才觸發，無談話＝直接回賽程）
@@ -1681,6 +1696,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
           });
         }),
       }));
+      const specEvs = rivalSpectatorEvents({ career, seasonIndex: seasonN });
+      if (specEvs.length) fireEvents(specEvs, career, player, beginGraduation);
+      else beginGraduation();
     });
     // W1(P4)：高中章固定三屆——第 3 屆收束不再推進；W4(P4) Q5 生涯結算在此開幕
     const careerOver = (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
@@ -1691,8 +1709,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       ], stage === 'champion' ? '🏆 全國冠軍！' : `止步全國賽`));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
         `第 3 屆結束（${rec.wins} 勝 ${rec.losses} 敗）——高中三年，打完了`));
-      root.appendChild(button('▶ 生涯結算——三年的一切', true,
-        () => showCareerFinale(career, player, stage === 'champion')));
+      // 4.5A 屆末鏈（第 3 屆）：幕三旁觀版（止步且未實戰天鷹）→ 小白事件三・承認
+      // → 生涯結算——賽事落幕在前、更衣室告白在後、結算收尾
+      root.appendChild(button('▶ 生涯結算——三年的一切', true, () => {
+        const endEvs = [
+          ...rivalSpectatorEvents({ career, seasonIndex: seasonN }),
+          ...n2FinaleEvents({ career, player, roster: store.loadRoster?.() ?? null }),
+        ];
+        const goFinale = () => showCareerFinale(career, player, stage === 'champion');
+        if (endEvs.length) fireEvents(endEvs, career, player, goFinale);
+        else goFinale();
+      }));
     } else if (stage === 'champion') {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
@@ -1740,10 +1767,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         // W7 D1 舊隊情結：靜態表＋動態事件（對戰原隊的招募生賽前對話）合流；
         // fireEvents 以 e.id 入帳＝動態 id 同管道去重（每人對原隊一生一次）。
         // W2(P4) canon 年級守衛：大山已畢業＝teach-jump/rematch 改播轉授版
+        // 4.5A：宿敵三幕賽前版（幕一首遇/幕二牆邊/幕三對峙；鏡子/牆分版）收尾合流
         const rosterNow = store.loadRoster?.() ?? null;
         const preEvs = [
           ...filterPlayedOnce(resolveEventsForRoster(dueEvents(career, 'pre'), rosterNow?.members ?? null)),
           ...oldTeamPreEvents(career, rosterNow),
+          ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
