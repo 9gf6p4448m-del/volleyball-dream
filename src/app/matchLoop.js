@@ -166,6 +166,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lWallCardAt: -1e9,
     // 07-27 六輪：影子收帶排程（我方第一觸後 +1.2s 收；0＝未排程）
     shadowFadeAt: 0,
+    // 07-27 七輪：對方本波舉球是否快攻低弧（「早了」卡的原因分語）
+    oppQuickSet: false,
     // W4 B-3：封線影子首次教學（07-27 試玩回饋「看不懂黑色陰影」——每場一次講色語）
     shadowHintShown: false,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
@@ -927,9 +929,16 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
     }
-    // 07-27 三改：MB 時機字卡改判「真值」——不看攻擊種類（晚按攔高球不算賭錯），
-    // 看你的攔網窗 vs 球實際過網：窗已過期＝跳太早落地了；窗內但沒碰到且球在附近
-    // ＝線差一點；封到＝BLOCK_TOUCH 回饋（上方）。球沒被攔到才有 BALL_OVER_NET
+    // 07-27 七輪：對方舉球球種真值（e.power＝舉球 timing、<0.5＝快攻低弧 sim 同判準）
+    // ——「早了」卡的原因說明用（賭輸快攻 vs 高球按太早，玩家最想知道的是哪一種）
+    if (e.type === 'TOUCH' && e.kind === 'set'
+      && e.team !== game.players[s.controlledId]?.teamId) {
+      s.oppQuickSet = (e.power ?? 1) < 0.5;
+    }
+    // 07-27 三改：MB 時機字卡改判「真值」——看你的攔網窗 vs 球實際過網：
+    // 窗已過期＝跳太早落地了（七輪：補球種原因——快攻賭輸/高球按早分語）；
+    // 窗內但沒碰到且球在附近＝線差一點；封到＝BLOCK_TOUCH 回饋（上方）。
+    // 球沒被攔到才有 BALL_OVER_NET
     if (e.type === 'BALL_OVER_NET' && s.mbCommit?.jumped
       && e.toTeam === game.players[s.controlledId]?.teamId
       && game.players[s.controlledId]?.currentRole === 'middle') {
@@ -937,7 +946,10 @@ function applyEvents(s, frameEvents, now) {
       const jumpedThisAttack = game.tick - (a.blockStartTick ?? -9999) < 90;
       if (jumpedThisAttack) {
         if (a.blockUntil < game.tick) {
-          stage.floatText.show('早了——落地時球才過來…', '#c8d6eb', 1400);
+          stage.floatText.show(
+            s.oppQuickSet ? '快攻比你更快——再搶半拍' : '早了——是高球，等它下來',
+            '#c8d6eb', 1400,
+          );
         } else if (Math.abs(game.ball.x - a.x) < 1.6) {
           stage.floatText.show('時機對了——線差一點！', '#ffd166', 1400);
         } // 球不在你這條線＝不評（不是你的球）
