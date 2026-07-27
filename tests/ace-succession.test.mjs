@@ -9,13 +9,12 @@ import { OPPONENTS } from '../src/career/opponents.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { buildRecruitMember } from '../src/career/recruitment.js';
 
-test('applySeasonRoster：第 1 屆恆等；第 2 屆四名三年級 ace 換臉（接班人頂槽＋新稱號＋板凳減員）', () => {
+test('applySeasonRoster：第 1 屆恆等；第 2 屆三名三年級 ace 換臉（07-27 宿敵拍板：天鷹豁免）', () => {
   for (const o of OPPONENTS) {
     assert.equal(applySeasonRoster(o, 1), o, `${o.id} 第 1 屆不得變`);
   }
   const cases = [
     ['obsidian', '古承岳', '第二支箭'],
-    ['sky-hawk', '馬振羽', '逐空者'],
     ['gale-shore', '侯俊帆', '起風點'],
     ['black-pine', '姚松霖', '下一堵牆'],
   ];
@@ -31,10 +30,12 @@ test('applySeasonRoster：第 1 屆恆等；第 2 屆四名三年級 ace 換臉�
     assert.equal(base.reserves.length, 4, '原參數檔不可變');
     assert.equal(base.ace.name === s2.ace.name, false);
   }
-  // 非三年級 ace 隊伍第 2 屆不動
-  for (const id of ['north-tech', 'white-wave', 'iron-mist']) {
+  // 非三年級 ace 隊伍第 2 屆不動；天鷹＝宿敵豁免（莊敬嶺 grade 1＋rival——
+  // 三屆恆在、馬振羽接班線凍結）
+  for (const id of ['north-tech', 'white-wave', 'iron-mist', 'sky-hawk']) {
     assert.equal(applySeasonRoster(opponentById(id), 2), opponentById(id), `${id} 第 2 屆不得換臉`);
   }
+  assert.equal(applySeasonRoster(opponentById('sky-hawk'), 3).ace.name, '莊敬嶺', '宿敵三屆恆在');
 });
 
 test('applySeasonRoster：第 3 屆——鐵霧（基準 2 的劉振鎧）換臉；已換臉隊維持接班人', () => {
@@ -46,9 +47,9 @@ test('applySeasonRoster：第 3 屆——鐵霧（基準 2 的劉振鎧）換臉
   assert.equal(obsidian.ace.name, '古承岳'); // 接班人基準 1＝第 3 屆恰三年級，仍在任
 });
 
-test('graduatingAces：第 1 屆末＝拍板四人；第 2 屆末＝劉振鎧；含接班人資訊', () => {
+test('graduatingAces：第 1 屆末＝三人（07-27 宿敵拍板：天鷹豁免）；第 2 屆末＝劉振鎧', () => {
   const s1 = graduatingAces(1);
-  assert.deepEqual(s1.map((a) => a.name).sort(), ['曾家松', '王勝翔', '簡子嵐', '詹子曜'].sort());
+  assert.deepEqual(s1.map((a) => a.name).sort(), ['曾家松', '簡子嵐', '詹子曜'].sort());
   for (const a of s1) assert.ok(a.heir?.name && a.heir?.title, `${a.name} 缺接班人資訊`);
   const s2 = graduatingAces(2);
   assert.deepEqual(s2.map((a) => a.name), ['劉振鎧']);

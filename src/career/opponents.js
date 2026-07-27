@@ -189,18 +189,24 @@ export const OPPONENTS = [
     attrBias: { power: 6, jump: 5 },
     roleBias: { outside: { power: 6 } },
     trustBias: { outside: 8 },
-    heights: [1.86, 1.92, 1.99, 1.94, 1.90, 1.97],
-    squad: ['梁鴻宇', '王勝翔', '謝鵬翰', '李振騰', '周羽辰', '丁昱昇'],
-    grades: [2, 3, 2, 2, 1, 2], // 王勝翔=3（拍板：決賽擊敗即可招——決賽舞台的最後一年）
+    heights: [1.86, 1.88, 1.99, 1.94, 1.92, 1.97], // slot1 莊敬嶺 1.88（爬上來的高）／slot4 王勝翔 1.92
+    // W4 題6 選案落檔（07-27 Sawmah 拍板 B 案「攀天者」）：宿敵莊敬嶺＝新 ace
+    // （grade 1 與玩家同屆＋rival 豁免＝三年不滾、第 3 屆同屆畢業）；
+    // 王勝翔讓 ace 移 slot 4——年級 3→2（還魂防線收束：非 ace 無遞補機制、grade 3
+    // 會畢業後續出賽；「決賽擊敗即可招」條件不動＝招募從陪一年變陪兩年）；
+    // 原 slot 4 周羽辰移 reserves。人設全文＝phase4-w4-status.md §7；台詞＝4.5 劇情輪
+    squad: ['梁鴻宇', '莊敬嶺', '謝鵬翰', '李振騰', '王勝翔', '丁昱昇'],
+    grades: [2, 1, 2, 2, 2, 2],
     libero: '蘇冠羽',
     liberoGrade: 1,
     reserves: [
-      { name: '馬振羽', role: 'outside', grade: 1, drop: 3, title: '逐空者' }, // 接班人
+      { name: '馬振羽', role: 'outside', grade: 1, drop: 3, title: '逐空者' },
       { name: '康宇鵬', role: 'middle', grade: 2, drop: 5 },
       { name: '雷俊昇', role: 'setter', grade: 1, drop: 4 },
       { name: '文鴻騰', role: 'opposite', grade: 2, drop: 6 },
+      { name: '周羽辰', role: 'outside', grade: 1, drop: 5 }, // 讓位莊敬嶺（W4 題6）
     ],
-    ace: { slot: 1, name: '王勝翔', title: '制空者' }, // OH・阿鷹——天鷹統治天空的高度
+    ace: { slot: 1, name: '莊敬嶺', title: '攀天者', rival: true }, // 宿敵——把牆砌得更高的人
     scoutRead: 0.9,
     ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1, diveRate: 0.13 }, // 強隊全能：積極魚躍
   },

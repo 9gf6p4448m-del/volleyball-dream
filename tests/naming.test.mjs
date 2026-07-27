@@ -43,7 +43,9 @@ test('naming：ace slot 有效且 name 指向該槽位本人、title 非空', ()
 test('naming：全專案全名不撞名（七隊 49 人＋替補 28 人＋我方 6 人＋新生）', () => {
   const names = [];
   for (const o of OPPONENTS) {
-    assert.equal(o.reserves?.length, 4, `${o.id} 須有 4 名遞補（W1 板凳擴充）`);
+    // W4 題6：天鷹 5 名（周羽辰讓位宿敵移板凳）；其餘 4 名（W1 板凳擴充）
+    assert.equal(o.reserves?.length, o.id === 'sky-hawk' ? 5 : 4,
+      `${o.id} 遞補人數不符（W1 擴充 4；sky-hawk 宿敵改編 5）`);
     names.push(...o.squad, o.libero, ...o.reserves.map((r) => r.name));
   }
   for (const d of STARTER_DEFS) names.push(d.fullName);
@@ -125,8 +127,13 @@ test('naming：grades 不變式——非 ace 基準年級 ≤2、三年級 ace �
       assert.equal(heir.grade, 1, `${o.id} 接班人 ${heir.name} 年級須 1`);
     }
   }
-  // 拍板名單（2026-07-26 Sawmah）：曜/鷹/嵐/松
-  assert.deepEqual(gradeThreeAces.sort(), ['曾家松', '王勝翔', '簡子嵐', '詹子曜'].sort());
+  // 拍板名單（2026-07-26 曜/鷹/嵐/松 → 07-27 宿敵拍板修訂：天鷹 ace 換莊敬嶺
+  // grade 1＋rival 豁免、王勝翔降格 grade 2 讓位）＝三年級 ace 三人
+  assert.deepEqual(gradeThreeAces.sort(), ['曾家松', '簡子嵐', '詹子曜'].sort());
+  // 宿敵 ace 不變式：rival 旗標＋與玩家同屆（grade 1）＝第 3 屆同屆畢業自然收束
+  const hawk = OPPONENTS.find((o) => o.id === 'sky-hawk');
+  assert.equal(hawk.ace.rival, true);
+  assert.equal(hawk.grades[hawk.ace.slot], 1, '宿敵與玩家同屆（grade 1）');
 });
 
 test('naming：招募目標年級由來源隊導出——逐鍵可解析、配比符合 Q3（≥1 三年級、≥2 一年級）', () => {
