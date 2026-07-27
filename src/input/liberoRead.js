@@ -69,8 +69,10 @@ export function digReadFor(game, aiState) {
 
 // ---- W4(P4) 附錄 B-4 — ace 反讀（宿敵 ace 專屬；scoutTally 架構鏡像）----
 // 玩家連續同配套達門檻（n≥3 且佔比≥0.5 同款決定論統計）→ ace 改打「讓開的線」：
-// 封線配套覆蓋 封線＋收縮線 → 讓開＝吊球；讓開配套全收吊球 → 讓開＝強攻線（斜線常態）。
-// 零隨機、狀態誠實呈現（字卡揭曉）；混配套＝玩家的反制技術（佔比跌破門檻即失效）
+// 封線配套覆蓋 封線＋收縮線 → 讓開＝**中路重扣**（兩層讀對後的唯一重扣縫；
+// 中路＝三選項皆不中＝玩家兩層皆撲空——治具實證：對映成吊球會把 ace 每球降級
+// 輕推＝自廢武功，反讀臂奪冠反而暴增，故取重扣縫）；讓開配套全收吊球 → 讓開＝
+// 強攻線（斜線常態）。零隨機、誠實字卡；混配套＝玩家的反制技術（佔比跌破即失效）
 
 export function noteScheme(tally, schemeKey) {
   return {
@@ -84,7 +86,7 @@ export function counterReadOf(tally) {
   if (!tally || (tally.total ?? 0) < MARK_MIN_SPIKES) return null;
   for (const [key, n] of Object.entries(tally.counts ?? {})) {
     if (n / tally.total >= MARK_SHARE) {
-      return { scheme: key, openLine: key === 'no-block' ? 'cross' : 'tip' };
+      return { scheme: key, openLine: key === 'no-block' ? 'cross' : 'middle' };
     }
   }
   return null;

@@ -692,10 +692,11 @@ function chooseTouch(game, aiState, player, actor) {
     legalSpike && game.ball.y >= AI.SPIKE_MIN_Y && spikeClearsNet(game, player, target);
   if (canSpike) {
     // W4(P4) 附錄 B-4 ace 反讀：宿敵 ace 且配套被讀死（counterRead 由呼叫端決定論
-    // 注入）＝改打讓開的線——封線配套讓開吊球、讓開配套讓開斜線強攻。零隨機
+    // 注入）＝改打讓開的線——封線配套讓開中路重扣（兩層讀對後的唯一重扣縫）、
+    // 讓開配套讓開斜線強攻。殺傷保留（重扣非輕推）、零隨機
     if (aiState.counterRead && aiState.counterRead.pid === player.id) {
-      if (aiState.counterRead.openLine === 'tip') {
-        return ['spike', localToWorld(otherTeam(team), 1.2, 2.3), 0.35];
+      if (aiState.counterRead.openLine === 'middle') {
+        return ['spike', localToWorld(otherTeam(team), 0, 4.8)];
       }
       const ballLx = TEAM_SIDE[team] * game.ball.x;
       return ['spike', localToWorld(otherTeam(team), -Math.sign(ballLx || 1) * 4.1, 5)];

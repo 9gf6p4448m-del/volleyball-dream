@@ -50,7 +50,8 @@ test('B-4 反讀決定論統計：n≥3 且佔比≥0.5 才觸發；openLine 對
   assert.equal(counterReadOf(t), null, '樣本不足（n=2）');
   t = noteScheme(t, 'block-line');
   const c = counterReadOf(t);
-  assert.deepEqual(c, { scheme: 'block-line', openLine: 'tip' }, '封線配套讓開＝吊球');
+  assert.deepEqual(c, { scheme: 'block-line', openLine: 'middle' },
+    '封線配套讓開＝中路重扣（兩層讀對後的唯一重扣縫；殺傷保留）');
   // no-block 連用＝讓開強攻線
   let t2 = null;
   for (let i = 0; i < 3; i += 1) t2 = noteScheme(t2, 'no-block');
