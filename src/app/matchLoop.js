@@ -14,7 +14,8 @@ import {
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
-import { setPanelTitle, CALL_BALL_AT } from '../input/setOptions.js';
+import { setPanelTitle, CALL_BALL_AT, SET_HESITANT_BELOW } from '../input/setOptions.js';
+import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
 import { digReadCorrect, schemeByKey, noteScheme, counterReadOf } from '../input/liberoRead.js';
 import { applySeasonRoster } from '../career/careerState.js';
@@ -1301,7 +1302,12 @@ function updateAssistAndPoses(s) {
     const b = game.ball;
     if (b.vy < 0 && b.y < 3.6 && Math.hypot(b.x - atk.x, b.z - atk.z) < 2.2) {
       s.lastWindupFlight = aiState.flightId;
-      stage.matchView.triggerPose(aiState.claimId, 'windup');
+      // 4.5B §8 遲疑/果斷：低 trust 快攻＝抬手一半跳得矮的遲疑版（W3 S 分配的
+      // 表現層遺留——「猶豫」從面板標註長到身體語言上；門檻同 setOptions 猶豫線）
+      const attacker = game.players[aiState.claimId];
+      const hesitant = aiState.attackKind === 'quick'
+        && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
+      stage.matchView.triggerPose(aiState.claimId, hesitant ? 'windupHesitant' : 'windup');
     }
   }
   return myBall;

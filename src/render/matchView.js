@@ -143,6 +143,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const diveActor = gameState.actors[id];
         if (diveActor.divedUntil > gameState.tick && diveActor.divedUntil !== u.lastDived) {
           u.animator.trigger('dive');
+          // 4.5B §8 小件：魚躍塵土（落地擦出的塵——重量感；同 DEAD_BALL 塵土管線）
+          dust.burst(diveActor.x, diveActor.z, 8, 0.7);
         }
         u.lastDived = diveActor.divedUntil;
         // 舉手備戰：①攔網窗開著②對方進攻組織中且我在網前——攻擊方讀攔網看得到手牆
