@@ -15,7 +15,7 @@ import { createBallView } from './render/ballView.js';
 import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
-import { createCareerStore } from './career/careerStore.js';
+import { createSlotStoreProxy } from './career/careerStore.js';
 import { ENGINEERED_OPEN } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
 import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
@@ -57,40 +57,55 @@ async function init() {
   }
 }
 
-// Phase 2 生涯入口；比賽局終回寫結果後以 ?career=resume 導回賽程視圖
+// Phase 2 生涯入口；比賽局終回寫結果後以 ?career=resume&slot=N 導回賽程視圖
 function showCareerEntry(ctx) {
   ctx.loadingEl.remove();
-  const store = createCareerStore();
-  // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置開機回填至 open
+  // W4(P4) 題2 多槽：可切槽代理——選檔頁 useSlot 重綁，careerScreen 內部零改動
+  const store = createSlotStoreProxy();
+  // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置回填至 open
   // （ready→open 兩段合法轉移、冪等；上架版語意＝四位置恆開放）。
+  // W4 起搬到「選定槽」時執行（per-slot 寫入；未選槽不寫檔——空槽不留骨架）。
   // ?openPosition= 手批入口保留給未來新位置的驗收流程（守衛不動）
-  for (const p of ENGINEERED_OPEN) {
-    store.markPositionReady(p);
-    store.approveOpenPosition(p);
-  }
-  const openPos = ctx.params.get('openPosition');
-  if (openPos) {
-    const wanted = openPos === 'all'
-      ? ['setter', 'middle', 'opposite', 'libero']
-      : openPos.split(',');
-    for (const p of wanted) store.approveOpenPosition(p.trim());
-  }
+  const primeSlot = () => {
+    for (const p of ENGINEERED_OPEN) {
+      store.markPositionReady(p);
+      store.approveOpenPosition(p);
+    }
+    const openPos = ctx.params.get('openPosition');
+    if (openPos) {
+      const wanted = openPos === 'all'
+        ? ['setter', 'middle', 'opposite', 'libero']
+        : openPos.split(',');
+      for (const p of wanted) store.approveOpenPosition(p.trim());
+    }
+  };
   const screen = createCareerScreen(store, {
+    primeSlot,
     // W3(P4)：快速比賽＝位置遊樂場——careerScreen 選位面板傳 role（null＝OH 現況）
     onQuick: (role = null) => { runMatch(ctx, null, role); },
-    onPlay: ({ career, player, matchEntry }) => {
+    onPlay: ({ career, player, matchEntry, resumeMid = null }) => {
       // W2：出戰前補齊/讀取名冊（空名冊一次性升級），隊友屬性由名冊驅動
       // W3：ensureStarterRoster 一併補齊 lineup；先發輪轉序由 save.lineup 驅動建隊
       const roster = ensureStarterRoster(store);
       // W1(P4)：seasonIndex 供對手 ace 畢業遞補換算（careerMatchSetup 第 6 參數）
+      // W4(P4) Q8：resumeMid＝局間存檔續玩（game 直接吃快照、跳過情蒐帶）
       runMatch(ctx, {
         store, career, player, matchEntry, roster,
         lineup: store.loadLineup(), seasonIndex: store.seasonIndex?.() ?? 1,
+        resumeMid,
       });
     },
   });
-  const resume = ctx.params.get('career') === 'resume' && store.hasSave();
-  screen.show(resume ? 'career' : 'home');
+  // 賽末返回：?slot=N 指回打球的那個槽（缺省＝槽 1，涵蓋 W4 前的舊返回連結）
+  if (ctx.params.get('career') === 'resume') {
+    const slotParam = Number.parseInt(ctx.params.get('slot'), 10);
+    const slot = Number.isFinite(slotParam) && slotParam >= 1 && slotParam <= 3 ? slotParam : 1;
+    store.useSlot(slot);
+    primeSlot();
+    screen.show(store.hasSave() ? 'career' : 'home');
+    return;
+  }
+  screen.show('home');
 }
 
 // ---- 比賽模式（三段編排；細節在 src/app/*）----
@@ -105,7 +120,11 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
   });
   // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
   if (careerCtx) markMatchStarted(careerCtx);
-  const game = createGame(config.gameOptions);
+  // W4(P4) Q8 局間存檔續玩：整包 sim state 快照直接當 game 開機（phase='set_break'
+  // ＝從局間 huddle 前恢復；決定論等價由 tests/match-sets 背書）；情蒐帶不重播
+  const resumeMid = careerCtx?.resumeMid ?? null;
+  const game = resumeMid ? resumeMid.game : createGame(config.gameOptions);
+  if (resumeMid) config.tapeClips = [];
   const aiState = createAiState();
   // 賽前準備②：技術閘門與讀攔網檔位（開場讀一次，場中不變）；
   // ?hints=off：想裸讀攔網的人強制 readTier='none'（取代已移除的 👁 提示手動開關）

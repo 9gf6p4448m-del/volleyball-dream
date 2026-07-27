@@ -21,8 +21,12 @@ export function markMatchStarted(careerCtx) {
 // - 情蒐入庫：這場對手看到的我（宿敵同 id 跨賽段累積——「他們記得你」）
 export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 }) {
   const myTeam = game.players[playerId].teamId; // 生涯主角固定 A 隊
+  const other = myTeam === 'A' ? 'B' : 'A';
   const s = game.match.score;
-  const won = game.match.winner === myTeam;
+  // W4(P4) Q8 多局系列：勝負吃 series.winner、賽果記局數（bo1 照舊記單局分數）；
+  // 各局終分明細落 entry.sets（box score／生涯結算／關鍵球回放消費）
+  const series = game.series?.over ? game.series : null;
+  const won = series ? series.winner === myTeam : game.match.winner === myTeam;
   const stats = matchStatsFor(game.events, playerId, myTeam);
   // W3(P4) L 三欄契約（附錄 A4④）：玩家=自由人＝逐場記帳（起球/助攻一傳/續命）；
   // 數值頁 W4 消費——契約先立、帳先記（Q9 事件流攔截原則）
@@ -45,14 +49,17 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
   saveOk = careerCtx.store.saveCareer(recordResult(scouted, {
     matchId: careerCtx.matchEntry.id,
     won,
-    scoreFor: myTeam === 'A' ? s.A : s.B,
-    scoreAgainst: myTeam === 'A' ? s.B : s.A,
+    scoreFor: series ? series.setsWon[myTeam] : (myTeam === 'A' ? s.A : s.B),
+    scoreAgainst: series ? series.setsWon[other] : (myTeam === 'A' ? s.B : s.A),
     gp: growthPointsFor(stats, won),
     stats,
+    sets: series ? series.setScores.map((sc) => ({ ...sc })) : null,
   })) && saveOk;
   // W2 隊友自動成長：與主角同節拍（賽末一次）、同管線（matchStatsFor 表現歸因）。
   // 讀最新 roster 走 RMW（不用 careerCtx 快照）；applyRosterGrowth 依 matchId＋屆數冪等
   // （W6 修：W5 輪迴後 matchId 每屆重複，冪等鍵不帶屆數會讓第二屆起成長全滅）
+  // W4(P4) Q8：完賽即清局間存檔（殘留會變成「已結算比賽的假續玩入口」）
+  careerCtx.store.clearMidMatch?.();
   const roster = careerCtx.store.loadRoster?.() ?? null;
   if (roster && roster.members.length > 0) {
     const grown = applyRosterGrowth(
@@ -103,9 +110,11 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
 }
 
 // 局終點擊返回生涯的網址（保留測試/操作相關參數）；pathname 由呼叫端給（window 不進本檔）
-export function careerReturnUrl(params, pathname) {
+// W4(P4) 題2：slot＝打球的存檔槽（多槽返回要指回原槽；null＝不帶、入口端回退槽 1）
+export function careerReturnUrl(params, pathname, slot = null) {
   const back = new URLSearchParams();
   back.set('career', 'resume');
+  if (slot !== null) back.set('slot', String(slot));
   for (const k of ['points', 'classic', 'assist']) {
     const v = params.get(k);
     if (v !== null) back.set(k, v);

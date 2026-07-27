@@ -29,6 +29,7 @@ import {
 import { showHeightRitual } from './heightRitual.js';
 import { showGraduationRitual } from './graduationRitual.js';
 import { positionTalkFor } from '../career/positionEvents.js';
+import { readSlotHeads } from '../career/saveSlots.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
@@ -97,7 +98,7 @@ function countUp(node, target, delayMs, durMs = 320) {
   requestAnimationFrame(step);
 }
 
-export function createCareerScreen(store, { onPlay, onQuick }) {
+export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   const root = el('div', [
     'position:fixed', 'inset:0', 'z-index:30', 'display:none',
     // safe center：內容高於視窗時退化為 flex-start——修手機頂部被裁切、捲不到
@@ -1237,20 +1238,96 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       'font-size:15px', `color:${COLOR.dim}`, 'letter-spacing:4px', 'margin-bottom:10px',
     ], '生涯模式'));
 
-    // 用實際解析結果判斷（壞檔時 key 還在但讀不回來——不給沒作用的按鈕）
-    const career = store.loadCareer();
-    const hasUsableSave = career !== null && store.loadPlayer() !== null;
-    if (hasUsableSave) {
-      const rec = careerRecord(career);
-      root.appendChild(button('▶ 繼續生涯', true, () => renderCareer()));
-      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`],
-        `${career.playerName}・地區賽 ${rec.wins} 勝 ${rec.losses} 敗`));
-    }
+    // W4(P4) 題2：生涯入口收斂為選檔頁（進生涯前一層）——繼續/新生涯/匯入都在槽卡片上
+    root.appendChild(button('▶ 生涯', true, renderSlots));
+    root.appendChild(button('快速比賽', false, showQuickRolePicker));
+    root.appendChild(msgEl);
+  }
 
-    // 新生涯（W2 憲法 Q6/Q7 創角流程）：名字＋真實身高 → 教練面談（A4 三段式）→
-    // 志願登記（全位置自由選）→ 建檔（一律 OH 出道）。已有存檔時要點兩次確認覆蓋。
+  // ---- W4(P4) 題2 選檔頁：三槽卡片＝讀存檔頭不解整包；刪檔二次確認；零槽間互通 ----
+  function enterSlot(slot, then) {
+    store.useSlot?.(slot);
+    primeSlot?.(); // 位置旗標回填（per-slot 寫入；main 提供）
+    then();
+  }
+
+  function renderSlots() {
+    root.replaceChildren();
+    setMsg('');
+    root.appendChild(el('div', [
+      'font-size:30px', 'font-weight:900', 'letter-spacing:8px', `color:${COLOR.gold}`,
+      'text-shadow:0 4px 24px rgba(0,0,0,0.8)',
+    ], '選擇你的夢'));
+    root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'letter-spacing:2px'],
+      '三個存檔槽・各自獨立的生涯'));
+    for (const { slot, head } of readSlotHeads(store.storage())) {
+      root.appendChild(slotCard(slot, head));
+    }
+    root.appendChild(smallButton('返回主選單', renderHome));
+    root.appendChild(msgEl);
+  }
+
+  function slotCard(slot, head) {
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:14px', 'border:1px solid #2c3a58',
+      'padding:14px 18px', 'width:min(340px, 92vw)', 'cursor:pointer',
+      'display:flex', 'flex-direction:column', 'gap:6px', 'text-align:left',
+    ]);
+    const top = el('div', [
+      'display:flex', 'justify-content:space-between', 'align-items:center', 'gap:10px',
+    ]);
+    if (head) {
+      top.appendChild(el('div', ['font-size:17px', 'font-weight:800'], head.playerName));
+      top.appendChild(badge(`槽 ${slot}`, 'rgba(110,231,255,0.15)', COLOR.cyan));
+      card.appendChild(top);
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
+        `${roleLabel(head.role)}・第 ${head.seasonIndex} 屆・${head.heightCm}cm`));
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
+        `${head.wins} 勝 ${head.losses} 敗${(head.titles ?? 0) > 0 ? `・🏆 冠軍 ×${head.titles}` : ''}`));
+      const row = el('div', ['display:flex', 'gap:8px', 'margin-top:4px']);
+      const delBtn = smallButton('刪除', () => {
+        // 二次確認（題2 拍板）：第一次點＝上膛變紅、第二次點才真刪；不可復原
+        if (delBtn.dataset.armed !== '1') {
+          delBtn.dataset.armed = '1';
+          delBtn.textContent = '確定刪除？不可復原';
+          delBtn.style.color = COLOR.red;
+          delBtn.style.borderColor = '#8a3a3a';
+          return;
+        }
+        enterSlot(slot, () => {
+          store.clear();
+          renderSlots();
+        });
+      });
+      row.appendChild(delBtn);
+      card.appendChild(row);
+      card.addEventListener('pointerdown', () => enterSlot(slot, renderCareer));
+    } else {
+      top.appendChild(el('div', ['font-size:17px', 'font-weight:800', `color:${COLOR.dim}`], '新的夢'));
+      top.appendChild(badge(`槽 ${slot}`, 'rgba(159,176,204,0.12)', COLOR.dim));
+      card.appendChild(top);
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
+        '空的存檔槽——從這裡開始新的生涯'));
+      const row = el('div', ['display:flex', 'gap:8px', 'margin-top:4px']);
+      row.appendChild(smallButton('匯入存檔', () => enterSlot(slot, () => fileInput.click())));
+      card.appendChild(row);
+      card.addEventListener('pointerdown', () => enterSlot(slot, renderNewCareer));
+    }
+    return card;
+  }
+
+  // ---- 新生涯（W2 憲法 Q6/Q7 創角流程；W4 題2 起僅由空槽卡片進入）----
+  function renderNewCareer() {
+    root.replaceChildren();
+    setMsg('');
+    root.appendChild(el('div', [
+      'font-size:30px', 'font-weight:900', 'letter-spacing:8px', `color:${COLOR.gold}`,
+      'text-shadow:0 4px 24px rgba(0,0,0,0.8)',
+    ], '新的夢'));
+    root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'letter-spacing:2px'],
+      `存檔槽 ${store.activeSlot?.() ?? 1}`));
     const newPanel = el('div', [
-      'display:none', 'flex-direction:column', 'align-items:center', 'gap:10px',
+      'display:flex', 'flex-direction:column', 'align-items:center', 'gap:10px',
       `background:${COLOR.card}`, 'border-radius:14px', 'padding:16px 20px',
     ]);
     const nameInput = el('input', [
@@ -1272,9 +1349,10 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     newPanel.appendChild(heightInput);
     newPanel.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.5'],
       '輸入真實身高（140–220cm）——教練會誠實跟你談'));
+    // 空槽入口理論上無舊檔；仍留二次確認守最後防線（匯入/競態把槽填了的邊界）
     let confirmArmed = false;
     const startBtn = button('開始生涯', true, () => {
-      if (hasUsableSave && !confirmArmed) {
+      if (store.loadCareer() !== null && !confirmArmed) {
         confirmArmed = true;
         startBtn.textContent = '將覆蓋現有生涯——再點一次確認';
         startBtn.style.background = '#8a3a3a';
@@ -1302,23 +1380,15 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
             if (!store.saveCareer(career) || !store.savePlayer(player)) {
               setMsg('存檔寫入失敗——瀏覽器儲存空間不可用（進度將無法保留）');
             }
+            primeSlot?.(); // clear() 帶走了位置旗標——當場回填（不等下次重載）
             renderCareer();
           });
         });
       });
     });
     newPanel.appendChild(startBtn);
-
-    root.appendChild(button('新生涯', false, () => {
-      newPanel.style.display = newPanel.style.display === 'none' ? 'flex' : 'none';
-    }));
     root.appendChild(newPanel);
-    root.appendChild(button('快速比賽', false, showQuickRolePicker));
-
-    const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:6px']);
-    if (hasUsableSave) ioRow.appendChild(smallButton('匯出存檔', exportSave));
-    ioRow.appendChild(smallButton('匯入存檔', () => fileInput.click()));
-    root.appendChild(ioRow);
+    root.appendChild(smallButton('返回選檔', renderSlots));
     root.appendChild(msgEl);
   }
 
@@ -1326,10 +1396,17 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
   function renderCareer() {
     let career = store.loadCareer();
     const player = store.loadPlayer();
-    if (!career || !player) { renderHome(); return; }
+    if (!career || !player) { renderSlots(); return; } // 槽空/壞檔→回選檔頁（W4 題2）
     normalizeCareerPlayer(player); // 跨版本存檔補正（顯示與開賽同一套語意）
-    // 拍板 07-22：中途退出＝棄賽敗（開賽 pending 標記未清＝沒打完就跑）
-    const settled = resolveForfeit(career);
+    // W4(P4) Q8 局間存檔：合法離場（存檔離開）＝豁免棄賽判定；殘檔（比賽已結算或
+    // 對不上 pending）＝清掉——不留「已結束比賽的假續玩入口」
+    const mid = store.loadMidMatch?.() ?? null;
+    const midValid = !!(mid && career.pendingMatch === mid.matchId
+      && !career.results.some((r) => r.matchId === mid.matchId));
+    if (mid && !midValid) store.clearMidMatch?.();
+    // 拍板 07-22：中途退出＝棄賽敗（開賽 pending 標記未清＝沒打完就跑）；
+    // 局間存檔是唯一豁免（Q8 手機場景保護——那不是跑，是暫停）
+    const settled = midValid ? career : resolveForfeit(career);
     if (settled !== career) {
       const forfeited = settled.results.length > career.results.length;
       store.saveCareer(settled);
@@ -1503,6 +1580,19 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`,
         'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
       '名冊成長、招募進度、學會的技巧全數保留——變強的是你們'));
+    } else if (midValid && next && next.id === mid.matchId) {
+      // W4(P4) Q8 局間存檔續玩：比賽進行中（第 N 局打完存檔離開）——跳過對陣畫面
+      // 與賽前事件（都播過了），直接回到局間 huddle
+      root.appendChild(button(
+        `▶ 繼續比賽 ${opponentName(next.opponentId)}（第 ${(mid.savedAtSet ?? 1) + 1} 局起）`,
+        true,
+        () => {
+          hide();
+          onPlay({ career, player, matchEntry: next, resumeMid: mid });
+        },
+      ));
+      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
+        '局間存檔——從換邊休息點恢復'));
     } else if (next) {
       // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
       const startMatch = () => {
@@ -1527,7 +1617,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
         () => showMatchupScreen(career, player, next, startMatch)));
     }
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
-    ioRow.appendChild(smallButton('返回主選單', renderHome));
+    ioRow.appendChild(smallButton('返回選檔', renderSlots)); // 生涯的上一層＝選檔頁（W4 題2）
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
     root.appendChild(ioRow);
     root.appendChild(msgEl);

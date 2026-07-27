@@ -6,7 +6,8 @@
 // 與賽末收束（matchCareer）僅在局終呼叫 settleCareerMatch 一次。
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
 import {
-  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout, TUNING,
+  createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout,
+  startNextSet, TUNING,
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
@@ -83,6 +84,9 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   if (ctx.params.get('probe') === 'cards') startCardProbe(s);
   if (s.config.tapeClips.length) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
   showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
+  // W4(P4) Q8 局間存檔續玩：快照開機即在 set_break（prevPhase 同值＝一次性轉場
+  // 不會觸發）——直接喚起局間 huddle，「從局間 huddle 前恢復」的拍板語意
+  if (game.phase === 'set_break') showSetBreak(s);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) s.last = performance.now();
   });
@@ -120,7 +124,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     servedThisTurn: false,      // 每個發球回合只處理一次發球決策
     whistledServe: false,       // 每個發球回合只吹一次發球前短哨
     diveReady: false,           // 魚躍鈕當幀可用性（Space/L 鍵共用判定）
-    feintsUsedThisMatch: 0,     // 假動作熟練度：場終一次累積寫回 Player
+    // 假動作熟練度：場終一次累積寫回 Player；局間存檔續玩＝接回快照時的累計
+    feintsUsedThisMatch: careerCtx?.resumeMid?.feintsUsed ?? 0,
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
     slowEaseFrom: -1e9,         // 決策窗結束時刻（時間膨脹 0.4→1.0 緩出的起點）
     tapeIdx: 0,
@@ -315,7 +320,9 @@ function bindInputHandlers(s) {
   window.addEventListener('pointerdown', () => {
     if (s.game.phase !== 'set_over') return;
     if (s.careerCtx) {
-      window.location.assign(careerReturnUrl(s.ctx.params, window.location.pathname));
+      window.location.assign(careerReturnUrl(
+        s.ctx.params, window.location.pathname, s.careerCtx.store?.activeSlot?.() ?? null,
+      ));
       return;
     }
     s.seed += 1;
@@ -741,6 +748,12 @@ function stepSim(s) {
 function applyEvents(s, frameEvents, now) {
   const { game, stage } = s;
   const cards = []; // [{ pri, text, color, dur, onShown? }]
+  // W4(P4) Q8 多局賽制字卡：決勝局 8 分換邊（FIVB 事件化——物理半場不換，演出告知）
+  for (const e of frameEvents) {
+    if (e.type === 'SIDE_SWITCH') {
+      cards.push({ pri: 45, text: '🔄 決勝局 8 分——換邊！', color: '#ffd166', dur: 2600 });
+    }
+  }
   stage.sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - s.rallyStartFlight });
   stage.controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.controlledId);
@@ -954,7 +967,7 @@ function updateAssistAndPoses(s) {
   return myBall;
 }
 
-// 局終轉場（一次性）；生涯模式先落檔再顯示——點擊返回前進度已保住
+// 局終/局間轉場（一次性）；生涯模式先落檔再顯示——點擊返回前進度已保住
 function settleIfOver(s) {
   const { game, stage } = s;
   if (game.phase === 'set_over' && s.prevPhase !== 'set_over') {
@@ -965,10 +978,53 @@ function settleIfOver(s) {
       });
       if (!saveOk) stage.floatText.show('⚠ 戰績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
     }
-    stage.setOverOverlay.show(game.match.winner, game.match.score,
+    // W4(P4) Q8：多局系列＝顯示局數與系列勝方（bo1 照舊單局分數）
+    const winner = game.series?.winner ?? game.match.winner;
+    const score = game.series ? game.series.setsWon : game.match.score;
+    stage.setOverOverlay.show(winner, score,
       game.players[s.controlledId].teamId, s.careerCtx ? '點擊任意處返回生涯' : undefined);
   }
+  // W4(P4) Q8 局間（多局賽制限定）：huddle 過場——比分回顧＋教練指示＋下一局/存檔離開
+  if (game.phase === 'set_break' && s.prevPhase !== 'set_break') {
+    showSetBreak(s);
+  }
   s.prevPhase = game.phase;
+}
+
+// W4(P4) Q8 局間 huddle：sim 凍結中（stepGame 對 set_break 短路），按鈕驅動推進。
+// aiState 在局界重建＝與局間存檔續玩同構（AI 記憶為 rally 內草稿，局界重建零體感差；
+// 決定論等價由 tests/match-sets 背書）
+function showSetBreak(s) {
+  const { game, stage } = s;
+  stage.setBreakOverlay.show({
+    series: game.series,
+    playerTeam: game.players[s.playerId].teamId,
+    onNext: () => {
+      stage.setBreakOverlay.hide();
+      startNextSet(game);
+      s.aiState = createAiState();
+      s.vcrCurrent = { snapshot: null, steps: [] }; // 新局重開錄影（跨局殘影不可重演）
+    },
+    onSaveQuit: s.careerCtx ? () => saveMidAndQuit(s) : null,
+  });
+}
+
+// 局間存檔離開（Q8 必配）：整包 sim state JSON 快照落槽位 mid key → 返回生涯。
+// 續玩＝runMatch 以快照為 game 直接開機（phase 仍為 set_break＝「從局間 huddle 前恢復」）
+function saveMidAndQuit(s) {
+  const ok = s.careerCtx.store.saveMidMatch?.({
+    matchId: s.careerCtx.matchEntry.id,
+    savedAtSet: s.game.series.setIndex,
+    feintsUsed: s.feintsUsedThisMatch,
+    game: JSON.parse(JSON.stringify(s.game)),
+  });
+  if (!ok) {
+    s.stage.floatText.show('⚠ 局間存檔失敗（儲存空間不可用）', '#ff8a8a', 2600);
+    return;
+  }
+  window.location.assign(careerReturnUrl(
+    s.ctx.params, window.location.pathname, s.careerCtx.store?.activeSlot?.() ?? null,
+  ));
 }
 
 // 魚躍手動觸發可用性（07-24 拍板：常駐鈕移除、撲救交自動判斷 matchControls）：

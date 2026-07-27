@@ -62,6 +62,19 @@ export function drawGroupOpponents({ seed, invitedId = null, prevGroupIds = null
   return picks;
 }
 
+// W4(P4) Q8 分級賽制：由賽程項推導該場賽制（bestOf）——純推導、零存檔遷移
+// （舊存檔賽程無 format 欄位；label/opponentId 是本檔資料約定，決定論）。
+// 拍板映射：冠軍戰（決賽）＝bo5、關鍵戰（準決賽＋宿敵場）＝bo3、其餘＝bo1；
+// 宿敵＝天鷹（題6 拍板：sky-hawk ace 同屆宿敵）——小組抽到天鷹也算關鍵戰
+export const RIVAL_TEAM_ID = 'sky-hawk';
+export function matchFormatOf(entry) {
+  if (!entry) return 1;
+  if (entry.label === '決賽') return 5;
+  if (entry.label === '準決賽') return 3;
+  if (entry.opponentId === RIVAL_TEAM_ID) return 3;
+  return 1;
+}
+
 // 整份賽程（輪抽小組＋固定國賽）；invited 旗標落在賽程項上（UI 顯邀請徽章、存檔即公開）
 export function buildSchedule({ seed, invitedId = null, prevGroupIds = null }) {
   const group = drawGroupOpponents({ seed, invitedId, prevGroupIds });

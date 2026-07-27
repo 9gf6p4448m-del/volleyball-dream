@@ -9,6 +9,7 @@ import { createPlayer } from '../sim/player.js';
 import { buildScoutTape, TAPE_FEATURE_KEYS } from '../career/scoutTape.js';
 import { upcomingTeach } from '../career/events.js';
 import { blockReadTier } from '../career/growth.js';
+import { matchFormatOf } from '../career/schedule.js';
 
 // W3(P4) 07-27 Sawmah 拍板：快速比賽＝位置遊樂場（五位置任選；生涯轉位 gate 不動——
 // 快速比賽本來就是測試/試駕場）。建隊＝預設隊伍最小變換：玩家（A2）與目標槽位互換、
@@ -106,8 +107,14 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   const stamina = careerSetup
     ? { A: {}, B: { costMul: 0.6, heavyExempt: true } }
     : { A: {}, B: {} };
+  // W4(P4) Q8 分級賽制：生涯場由賽程項推導（決賽 bo5／準決賽・宿敵場 bo3／其餘 bo1）；
+  // ?bo= 測試覆寫（3/5；快速比賽驗多局用）；bestOf 1＝series 不進 gameOptions＝零擾動
+  const boParam = Number.parseInt(params.get('bo'), 10);
+  const bestOf = [3, 5].includes(boParam) ? boParam
+    : careerCtx ? matchFormatOf(careerCtx.matchEntry) : 1;
   const gameOptions = {
     seed, setTarget, liberos, stamina,
+    ...(bestOf > 1 ? { series: { bestOf } } : {}),
     momentum: true, // W7 B1 團隊氣勢（生涯/快速比賽一律啟用）
     ...(careerSetup ? {
       teams: careerSetup.teams,

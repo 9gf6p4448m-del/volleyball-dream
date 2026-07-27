@@ -14,15 +14,20 @@ import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
   SCHEMA_VERSION,
 } from './schema.js';
+import { slotKey, slotHeadKey, slotMidKey, headOf } from './saveSlots.js';
 
-export const SAVE_KEY = 'vd-save';
+export const SAVE_KEY = 'vd-save'; // ＝slotKey(1)：槽 1 沿用既有單檔 key（零遷移）
 // Phase 2 雙 key 舊制（v1）：拍板不相容——偵測到即清空並提示重置，不做資料遷移
 export const LEGACY_CAREER_KEY = 'vd-career-v1';
 export const LEGACY_PLAYER_KEY = 'vd-career-player-v1';
 export const SAVE_FORMAT = 'volleyball-dream-save';
 
-export function createCareerStore(storage) {
+// W4(P4) 題2：slot（1–3）決定 storage key——槽間零互通（各槽各自整包＋head＋mid 三 key）
+export function createCareerStore(storage, slot = 1) {
   const store = storage ?? safeLocalStorage();
+  const saveKey = slotKey(slot);
+  const headKey = slotHeadKey(slot);
+  const midKey = slotMidKey(slot);
 
   const read = (key) => {
     try {
@@ -40,21 +45,24 @@ export function createCareerStore(storage) {
     }
   };
 
-  // v1 偵測（建 store 當下裁決一次）：無 v2 存檔而有舊 key＝Phase 2 存檔——清空＋記旗標
+  // v1 偵測（建 store 當下裁決一次；v1 是單檔時代產物＝只關槽 1 的事）：
+  // 無 v2 存檔而有舊 key＝Phase 2 存檔——清空＋記旗標
   // 供 UI 提示「Phase 2 存檔不相容，已重置」；有 v2 存檔時舊 key 屬殘留，靜默清除
   let legacyReset = false;
-  try {
-    const hadLegacy = read(LEGACY_CAREER_KEY) !== null || read(LEGACY_PLAYER_KEY) !== null;
-    if (hadLegacy) {
-      if (read(SAVE_KEY) === null) legacyReset = true;
-      store.removeItem(LEGACY_CAREER_KEY);
-      store.removeItem(LEGACY_PLAYER_KEY);
-    }
-  } catch { /* storage 不可用：當作無舊檔 */ }
+  if (slot === 1) {
+    try {
+      const hadLegacy = read(LEGACY_CAREER_KEY) !== null || read(LEGACY_PLAYER_KEY) !== null;
+      if (hadLegacy) {
+        if (read(saveKey) === null) legacyReset = true;
+        store.removeItem(LEGACY_CAREER_KEY);
+        store.removeItem(LEGACY_PLAYER_KEY);
+      }
+    } catch { /* storage 不可用：當作無舊檔 */ }
+  }
 
   // 讀整包 v2 存檔；任何損毀（壞 JSON/缺鍵/版本無路徑）→ null（壞檔視同無存檔，不炸開機）
   const loadSave = () => {
-    const json = read(SAVE_KEY);
+    const json = read(saveKey);
     if (json === null) return null;
     try {
       return deserializeSave(json);
@@ -62,14 +70,29 @@ export function createCareerStore(storage) {
       return null;
     }
   };
+  // 存檔頭同步（題2「寫入時同步維護」）：選檔頁卡片讀 head 不解整包。
+  // head 寫失敗不影響主存檔成敗（卡片資料走 readSlotHeads 自癒路徑補）
+  const syncHead = (save) => {
+    const head = headOf(save);
+    try {
+      if (head) store.setItem(headKey, JSON.stringify(head));
+      else store.removeItem(headKey);
+    } catch { /* 下次寫入或自癒再補 */ }
+  };
   // 讀寫合一（RMW）：saveCareer/savePlayer 各自只動自己的欄位，其餘鍵原樣保留
   const writeSave = (mutate) => {
     const prev = loadSave();
     const next = mutate(prev);
-    return write(SAVE_KEY, serializeSave(next));
+    const ok = write(saveKey, serializeSave(next));
+    if (ok) syncHead(next);
+    return ok;
   };
 
   return {
+    // 本 store 綁定的槽號（返回網址帶槽、UI 顯示用）
+    slotIndex() {
+      return slot;
+    },
     // v1 清空是否發生（UI 顯示重置提示用；session 內恆定）
     wasLegacyReset() {
       return legacyReset;
@@ -314,10 +337,37 @@ export function createCareerStore(storage) {
     },
     clear() {
       try {
-        store.removeItem(SAVE_KEY);
-        store.removeItem(LEGACY_CAREER_KEY);
-        store.removeItem(LEGACY_PLAYER_KEY);
+        store.removeItem(saveKey);
+        store.removeItem(headKey);
+        store.removeItem(midKey);
+        if (slot === 1) {
+          store.removeItem(LEGACY_CAREER_KEY);
+          store.removeItem(LEGACY_PLAYER_KEY);
+        }
       } catch { /* ignore */ }
+    },
+    // W4(P4) Q8 局間存檔：比賽中間態（多局賽制的換邊休息點快照）獨立 key 讀寫。
+    // 形狀由多局狀態機定義（matchSets）——store 只管序列化與槽綁定；
+    // 壞檔＝null（沿「壞檔視同無存檔」慣例，不炸開機）
+    saveMidMatch(data) {
+      return write(midKey, JSON.stringify(data));
+    },
+    loadMidMatch() {
+      const json = read(midKey);
+      if (json === null) return null;
+      try {
+        return JSON.parse(json);
+      } catch {
+        return null;
+      }
+    },
+    clearMidMatch() {
+      try {
+        store.removeItem(midKey);
+      } catch { /* ignore */ }
+    },
+    hasMidMatch() {
+      return read(midKey) !== null;
     },
     // 匯出/匯入：整包 v2 存檔（換裝置用）；匯入走 schema 完整驗證，壞檔直接 throw
     exportSave() {
@@ -338,12 +388,40 @@ export function createCareerStore(storage) {
       if (!save.player || !careerViewOf(save)) {
         throw new Error('存檔內容不完整（缺主角或賽季資料）');
       }
-      if (!write(SAVE_KEY, serializeSave(save))) {
+      if (!write(saveKey, serializeSave(save))) {
         throw new Error('存檔寫入失敗（儲存空間不可用）');
       }
+      syncHead(save);
       return { career: careerViewOf(save), player: structuredClone(save.player) };
     },
   };
+}
+
+// W4(P4) 題2：可切槽 store 代理——careerScreen 與比賽鏈拿它當單一 store 用（API 同形），
+// 選檔頁切槽時 useSlot 重綁內部實體。設計動機：careerScreen 內部數十處 store.* 呼叫
+// 零改動（代理轉呼叫恆指向現任槽）；比賽期間不切槽（選定即鎖）。
+export function createSlotStoreProxy(storage, initialSlot = 1) {
+  const backing = storage ?? safeLocalStorage(); // 三槽共用同一個 storage 替身（槽間隔離靠 key）
+  let slot = initialSlot;
+  let inner = createCareerStore(backing, slot);
+  const proxy = {
+    useSlot(n) {
+      slot = n;
+      inner = createCareerStore(backing, n);
+    },
+    activeSlot() {
+      return slot;
+    },
+    storage() {
+      return backing; // 選檔頁 readSlotHeads 用（跨槽讀 head 不經單槽 store）
+    },
+  };
+  for (const k of Object.keys(inner)) {
+    if (typeof inner[k] === 'function' && !(k in proxy)) {
+      proxy[k] = (...args) => inner[k](...args);
+    }
+  }
+  return proxy;
 }
 
 // 私密模式連 localStorage 物件都可能 throw——退化為記憶體存檔（本次分頁有效）

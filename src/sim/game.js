@@ -115,9 +115,11 @@ export const TUNING = {
 // 零副作用（state.stamina 為 null，所有掛點短路）
 // momentum（W7 B1）：true＝啟用團隊氣勢（雙向檔位計）；未傳＝關閉零副作用
 // trustDynInit（W7 D2）：{ playerId: 偏移 } 場內動態信任開場值（舊隊情結 +8；場末即散）
+// series（W4 Q8 分級賽制）：{ bestOf: 3|5 }＝多局系列（關鍵戰 bo3／冠軍戰 bo5、
+// 決勝局 15 分＋8 分換邊照 FIVB）；未傳或 bestOf 1＝現行單局、state.series null 零擾動
 export function createGame({
   seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina, momentum,
-  trustDynInit,
+  trustDynInit, series,
 } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
@@ -196,7 +198,29 @@ export function createGame({
       rotationB: rosters.B.map((p) => p.id),
       ...(setTarget ? { target: setTarget } : {}),
     }),
-    phase: 'serve', // 'serve' | 'rally' | 'set_over'
+    // W4(P4) Q8 多局系列狀態機：局間收束/重置語意逐項明列於 startNextSet；
+    // 決勝局（最終局）＝15 分＋8 分換邊（FIVB）；短局測試（?points=）決勝局取較小值。
+    // startRotations/startBench＝每局重排的基準（工單「沿用現行 lineup 鏈」＝
+    // 每局回到開場先發序；換人/暫停額度按 FIVB 每局重置）
+    series: series && series.bestOf > 1 ? {
+      bestOf: series.bestOf,
+      setsToWin: Math.ceil(series.bestOf / 2),
+      baseTarget: setTarget ?? 25,
+      deciderTarget: Math.min(15, setTarget ?? 25),
+      setIndex: 1,
+      setsWon: { A: 0, B: 0 },
+      setScores: [], // 各局終分 [{A,B}]（box score／生涯結算消費）
+      startRotations: { A: rosters.A.map((p) => p.id), B: rosters.B.map((p) => p.id) },
+      startBench: {
+        A: (benches?.A ?? []).map((p) => p.id),
+        B: (benches?.B ?? []).map((p) => p.id),
+      },
+      startServing: 'A', // 各局首發球權交替（FIVB 語意的決定論化：奇數局 A、偶數局 B）
+      sideSwitched: false, // 決勝局 8 分換邊（一次性；事件化＋表現層演出）
+      over: false,
+      winner: null,
+    } : null,
+    phase: 'serve', // 'serve' | 'rally' | 'set_break'（多局局間） | 'set_over'
     serveReadyTick: 0,
     ball: createBall(),
     rally: {
@@ -220,7 +244,9 @@ export function createGame({
 // 推進一個固定步長。intents：本 tick 生效的 Intent 陣列（玩家與 AI 混在一起，sim 不區分）
 // 回傳本 tick 產生的事件陣列
 export function stepGame(state, intents = []) {
-  if (state.phase === 'set_over') return [];
+  // set_break（多局局間）＝模擬凍結：下一局由呼叫端 startNextSet 顯式開啟
+  // （UI 的「下一局」按鈕／治具的自動推進）——局間存檔的同步點就在這裡
+  if (state.phase === 'set_over' || state.phase === 'set_break') return [];
   const ev = [];
 
   // 快照上一步位置：供 render 層插值（同 ball 的 px/py/pz 慣例）；
@@ -957,6 +983,16 @@ function settlePoint(state, winner, reason, ev) {
       }
     }
   }
+  // W4(P4) Q8 決勝局 8 分換邊（FIVB）：任一隊先到 8 分的那一分，一次性事件化
+  // （表現層吃事件做轉場演出；物理半場不真換——鏡頭/操作恆我方視角，裁量點記錄快照）
+  if (
+    state.series && !state.match.setOver
+    && state.series.setIndex === state.series.bestOf && !state.series.sideSwitched
+    && (state.match.score.A === 8 || state.match.score.B === 8)
+  ) {
+    state.series.sideSwitched = true;
+    ev.push({ type: 'SIDE_SWITCH', tick: state.tick, score: { ...state.match.score } });
+  }
   if (state.match.setOver) {
     // W6 B4（7.7.2 追溯扣分）：曾記違序的隊伍，自 faultTick 起得分全數取消、
     // 對隊保留；調整後重判勝方（最後防線——合法路徑下永不觸發）
@@ -979,10 +1015,92 @@ function settlePoint(state, winner, reason, ev) {
         score: { ...score }, winner: state.match.winner,
       });
     }
-    state.phase = 'set_over';
+    // W4(P4) Q8 多局系列結算：記局→判系列勝負；未分出＝set_break（局間，模擬凍結）
+    if (state.series && !state.series.over) {
+      const s = state.series;
+      const w = state.match.winner;
+      s.setsWon[w] += 1;
+      s.setScores.push({ ...state.match.score });
+      if (s.setsWon[w] >= s.setsToWin) {
+        s.over = true;
+        s.winner = w;
+        ev.push({
+          type: 'MATCH_END', tick: state.tick, winner: w,
+          setsWon: { ...s.setsWon }, setScores: s.setScores.map((sc) => ({ ...sc })),
+        });
+        state.phase = 'set_over';
+      } else {
+        ev.push({
+          type: 'SET_BREAK', tick: state.tick, setIndex: s.setIndex,
+          setsWon: { ...s.setsWon }, score: { ...state.match.score },
+        });
+        state.phase = 'set_break';
+      }
+    } else {
+      state.phase = 'set_over';
+    }
   } else {
     setupServePhase(state);
   }
+}
+
+// W4(P4) Q8 下一局開局（唯一合法的局間推進路徑；UI「下一局」鈕／治具／局間存檔續玩
+// 皆走此函式）。局間收束/重置語意逐項（工單 §3 明列）：
+// - 體力：跨局延續＋局間恢復一次性（RECOV_SET_BREAK；量＝題7 治具輪校準）
+// - 氣勢：跨局歸零（W7「無跨局持續」原則）；連得分/暫停選項一併歸零
+// - 輪轉/先發：回到開場先發序（FIVB 每局重排；沿現行 lineup 鏈——不做局間換陣 UI）
+// - trust 場內動態（trustDyn）：跨局延續（同一場比賽的連續敘事）；subLog 同（回歸弧跨局成立）
+// - 換人/暫停額度：每局重置（FIVB per set）；發球序/違序監看隨新局重建
+// - 發球權：各局交替（奇 A 偶 B，決定論）；決勝局 target＝15（deciderTarget）
+export function startNextSet(state) {
+  const s = state.series;
+  if (!s || state.phase !== 'set_break') return false;
+  s.setIndex += 1;
+  const decider = s.setIndex === s.bestOf;
+  const target = decider ? s.deciderTarget : s.baseTarget;
+  const servingTeam = s.setIndex % 2 === 1 ? s.startServing : otherTeam(s.startServing);
+  state.match = createMatch({
+    rotationA: [...s.startRotations.A],
+    rotationB: [...s.startRotations.B],
+    servingTeam,
+    target,
+  });
+  state.subs = {
+    A: { remaining: TUNING.SUBS_PER_SET },
+    B: { remaining: TUNING.SUBS_PER_SET },
+  };
+  state.timeouts = {
+    A: { remaining: TUNING.TIMEOUTS_PER_SET },
+    B: { remaining: TUNING.TIMEOUTS_PER_SET },
+  };
+  state.serveSeq = {
+    A: { order: [...s.startRotations.A], nextIdx: 0 },
+    B: { order: [...s.startRotations.B], nextIdx: 0 },
+  };
+  state.rotationFault = { A: null, B: null };
+  state.bench = { A: [...s.startBench.A], B: [...s.startBench.B] };
+  // 自由人配對歸零：先發全回場，setupServePhase 依新局輪轉重新換入
+  if (state.liberos) {
+    for (const team of ['A', 'B']) {
+      if (state.liberos[team]) state.liberos[team].replacedId = null;
+    }
+  }
+  if (state.momentum && state.momentum.value !== 0) {
+    state.momentum.value = 0;
+    state.events.push({ type: 'MOMENTUM', tick: state.tick, value: 0 });
+  }
+  state.pointStreak = { team: null, n: 0 };
+  state.timeoutBoostArmed = false;
+  if (state.stamina) {
+    for (const id of Object.keys(state.stamina)) {
+      recoverStamina(state, id, STAMINA.RECOV_SET_BREAK);
+    }
+  }
+  state.events.push({
+    type: 'SET_START', tick: state.tick, setIndex: s.setIndex, target, servingTeam,
+  });
+  setupServePhase(state);
+  return true;
 }
 
 // ---- W6 賽中換人（B1 簡化版拍板：死球可換、每局 6 人次、不限原對；自由人體系
