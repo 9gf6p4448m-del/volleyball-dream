@@ -63,10 +63,16 @@ function showCareerEntry(ctx) {
   const store = createCareerStore();
   // W3(P4) 甲4 旗標：①工程 ready 回填（build 級事實，開機冪等；不動 open）
   // ②手批入口 ?openPosition=setter|middle|opposite|libero——ready→open 的唯一路徑
-  // （Sawmah 試玩通過後手動帶參數進入）。未 ready/未知位置＝store 內安全回 false
+  // （Sawmah 試玩通過後手動帶參數進入）。逗號清單與 all（＝四位置一次批，07-27
+  // Sawmah 口頭裁定加入）皆可；未 ready/未知位置＝store 內安全回 false
   for (const p of ENGINEERED_READY) store.markPositionReady(p);
   const openPos = ctx.params.get('openPosition');
-  if (openPos) store.approveOpenPosition(openPos);
+  if (openPos) {
+    const wanted = openPos === 'all'
+      ? ['setter', 'middle', 'opposite', 'libero']
+      : openPos.split(',');
+    for (const p of wanted) store.approveOpenPosition(p.trim());
+  }
   const screen = createCareerScreen(store, {
     onQuick: () => { runMatch(ctx, null); },
     onPlay: ({ career, player, matchEntry }) => {

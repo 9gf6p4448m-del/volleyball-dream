@@ -191,7 +191,8 @@
 - L 全套：改判節奏（0.6×/1 秒自動）、Perfect 窗大小、偵察視角節奏、魚躍演出規格
 - W3 新增：猶豫門檻 12 與只標快攻的體感（§8-1/2）／L 改判價值空間裁定（§9-2）
   ／OPP 臂勝率偏低是否調（§4）／D 球全局寫實化要不要付重校準成本（§8-5）
-- 各位置 `ready → open` 手批裁定（入口：`?openPosition=setter|middle|opposite|libero`）
+- 各位置 `ready → open` 手批裁定（入口：`?openPosition=setter|middle|opposite|libero`，
+  逗號清單與 `all` 可一次批多個——07-27 Sawmah 裁定加入）
 
 **優先級 2|儀式演出規格**：
 - W1：畢業儀式情感／換血亮相／換人可感／對話卡落差（第 4 項本輪已修——演出版上線，驗收後銷帳）
