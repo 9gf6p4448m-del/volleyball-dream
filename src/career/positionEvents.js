@@ -132,3 +132,73 @@ function acceptLinesFor(role, members) {
 export const DECLINE_LINES = [
   { speaker: '教練', text: '行。位置不是我塞給你的，是你自己拿的——想通了，門一直開著。' },
 ];
+
+// ---- W4(P4) 題1 賽季中「去找教練」請調（折衷案拍板）----
+// 對話事件（與隊友對話同一語彙層級，非選單功能按鈕——Q7 語意守住）。
+// Gate 三條件：目標位置 open ＋ 當屆已打滿 3 場 ＋ 每屆一次；
+// 當屆二選一：賽季中轉位用掉（transfer-used）＝屆間 positionTalk 不觸發。
+// 旗標記在 career.events（逐屆重置＝「每屆」語意的現成節拍——W3 債務 5 分類處理
+// 中「依賴每屆重置」的那一類）；生效＝下一場（applyPositionChange 現成鏈零新工程）
+
+export const TRANSFER_MIN_MATCHES = 3;
+export const TRANSFER_ASKED_EV = 'transfer-asked'; // 入口每屆一次（不論接受/婉拒）
+export const TRANSFER_USED_EV = 'transfer-used';   // 轉位發生＝屆間談話不觸發（二選一）
+
+// 當屆請調狀態（events 逐屆重置＝天然的「每屆」計數守衛）
+export function seasonTransferState(career) {
+  const evs = career?.events ?? [];
+  return { asked: evs.includes(TRANSFER_ASKED_EV), used: evs.includes(TRANSFER_USED_EV) };
+}
+
+// 入口可用的目標位置清單（gate 三條件；空陣列＝入口不出現）
+export function transferCandidates({ flags, player, career }) {
+  const st = seasonTransferState(career);
+  if (st.asked || st.used) return [];
+  if ((career?.results?.length ?? 0) < TRANSFER_MIN_MATCHES) return [];
+  const cur = player?.currentRole ?? 'outside';
+  return TALK_CANDIDATES.filter((r) => r !== cur && flags?.[r] === 'open');
+}
+
+// 屆間教練談話是否放行（二選一互斥：賽季中轉位用掉＝當屆屆間不再談）
+export function interSeasonTalkAllowed(career) {
+  return !seasonTransferState(career).used;
+}
+
+const ROLE_LABEL = { setter: '舉球員', middle: '攔中', opposite: '主攻對角', libero: '自由人' };
+
+// 教練反問開場（場景拍板：教練會反問、依表現分版；performanceGood＝當屆勝率 ≥ 5 成）
+export function transferAskLines(career) {
+  const results = career?.results ?? [];
+  const wins = results.filter((r) => r.won).length;
+  const performanceGood = results.length > 0 && wins / results.length >= 0.5;
+  return [
+    { speaker: '教練', text: '練球不去，跑來找我——說吧。' },
+    { speaker: '你', text: '教練……我想換位置。' },
+    { speaker: '教練', text: '你想清楚了？' },
+    performanceGood
+      ? { speaker: '教練', text: '……也好。你最近打的球，讓我沒理由把你留在原地。' }
+      : { speaker: '教練', text: '現在的你，是想走，還是想逃？——想走的人，眼睛不會飄。' },
+  ];
+}
+
+// 選定目標位置後的教練回應（拍板：志願位＝「我等你這句話很久了」／非志願位＝勸但尊重）
+// ＋接受/婉拒沿現制（acceptLinesFor 縫隙 1 被取代者劇情、DECLINE_LINES 語意）
+export function transferTalkFor({ role, player, members }) {
+  const aspMatch = player?.aspiration === role;
+  const label = ROLE_LABEL[role] ?? role;
+  const offerLines = aspMatch
+    ? [
+      { speaker: '教練', text: `${label}——我等你這句話很久了。` },
+      { speaker: '教練', text: '從下一場起，位置是你的。去把它變成你的樣子。' },
+    ]
+    : [
+      { speaker: '教練', text: `你現在的位置打得沒毛病，這一步不是非走不可。` },
+      { speaker: '教練', text: `但位置從來是自己拿的。${label}——你確定要，我就給。` },
+    ];
+  return {
+    role,
+    offerLines,
+    acceptLines: acceptLinesFor(role, members ?? []),
+    declineLines: DECLINE_LINES,
+  };
+}

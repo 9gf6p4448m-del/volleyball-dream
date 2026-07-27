@@ -28,7 +28,10 @@ import {
 } from '../career/heightAdvice.js';
 import { showHeightRitual } from './heightRitual.js';
 import { showGraduationRitual } from './graduationRitual.js';
-import { positionTalkFor } from '../career/positionEvents.js';
+import {
+  positionTalkFor, transferCandidates, transferAskLines, transferTalkFor,
+  interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV,
+} from '../career/positionEvents.js';
 import { dueMentorLines } from '../career/mentor.js';
 import { archiveSeasonSummary } from '../career/careerStore.js';
 import { readSlotHeads } from '../career/saveSlots.js';
@@ -286,6 +289,74 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         overlay.remove();
         dialogPlay([{ lines: talk.declineLines }], onDone);
       }));
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+    });
+  }
+
+  // ---- W4(P4) 題1 賽季中請調（「去找教練」對話事件；gate＝transferCandidates）----
+  // 流程：教練反問（依表現分版）→ 選目標位置（此階段退出＝不耗機會——話還沒說出口）
+  // → 教練回應（志願分版）→ 接受（記 asked+used、applyPositionChange、生效下一場）
+  // ／婉拒（記 asked——入口當屆收起；屆間談話因未 used 仍會來問）
+  function showTransferTalk(career, player, roles) {
+    dialogPlay([{ lines: transferAskLines(career) }], () => {
+      const overlay = el('div', [
+        'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+        'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+        'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+        'padding:24px 16px',
+      ]);
+      const card = el('div', [
+        `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+        'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+        'flex-direction:column', 'gap:8px', 'align-items:stretch',
+      ]);
+      card.appendChild(el('div', [
+        'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+      ], '🚪 請調——你想去哪個位置'));
+      card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+        '每屆只有一次轉位機會（賽季中請調或屆間教練談話，二選一）；轉位下一場生效。'));
+      const markEvents = (ids) => {
+        let c = store.loadCareer() ?? career;
+        for (const id of ids) c = recordEvent(c, id);
+        store.saveCareer(c);
+      };
+      for (const role of roles) {
+        card.appendChild(button(roleLabel(role), false, () => {
+          overlay.remove();
+          const members = store.loadRoster?.()?.members ?? [];
+          const talk = transferTalkFor({ role, player, members });
+          dialogPlay([{ lines: talk.offerLines }], () => {
+            const confirm = el('div', [
+              'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+              'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+              'align-items:center', 'justify-content:safe center', 'padding:24px 16px',
+            ]);
+            const cc = el('div', [
+              `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+              'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+              'flex-direction:column', 'gap:8px', 'align-items:stretch',
+            ]);
+            cc.appendChild(button(`✓ 轉任${roleLabel(role)}——下一場生效`, true, () => {
+              confirm.remove();
+              markEvents([TRANSFER_ASKED_EV, TRANSFER_USED_EV]);
+              if (store.applyPositionChange?.(role)) {
+                dialogPlay([{ lines: talk.acceptLines }], () => renderCareer());
+              } else {
+                renderCareer();
+              }
+            }));
+            cc.appendChild(button('……再想想', false, () => {
+              confirm.remove();
+              markEvents([TRANSFER_ASKED_EV]);
+              dialogPlay([{ lines: talk.declineLines }], () => renderCareer());
+            }));
+            confirm.appendChild(cc);
+            document.body.appendChild(confirm);
+          });
+        }));
+      }
+      card.appendChild(button('……還是算了（先回去練球）', false, () => overlay.remove()));
       overlay.appendChild(card);
       document.body.appendChild(overlay);
     });
@@ -1472,6 +1543,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     root.appendChild(recruitSection()); // W4 招募進度（五條進度×空位並列）
     const stage = careerStage(career);
 
+    // W4(P4) 題1：賽季中「去找教練」請調入口（對話事件語彙、非功能按鈕——
+    // gate 三條件成立才浮現；賽季已收束＝屆間談話的時段，不重疊）
+    const transferRoles = transferCandidates({
+      flags: store.loadPositionFlags?.() ?? {}, player, career,
+    });
+    if (transferRoles.length && stage !== 'champion' && stage !== 'eliminated') {
+      const t = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px dashed #3a4a68',
+        'padding:10px 16px', 'width:min(340px, 92vw)', 'cursor:pointer',
+        'font-size:13px', `color:${COLOR.dim}`, 'text-align:left', 'line-height:1.5',
+      ], '🚪 去找教練——有些話，想當面說');
+      t.addEventListener('pointerdown', () => showTransferTalk(career, player, transferRoles));
+      root.appendChild(t);
+    }
+
     // 賽程列（兩區共用）：勝負／下一場／鎖定／止步後不再進行
     const rowFor = (m) => {
       const result = career.results.find((r) => r.matchId === m.id);
@@ -1524,6 +1610,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     // 指定邀請 → advanceSeason（名冊換血：畢業→年級推進→新生入學，單次 RMW）→
     // 新生入學見面 → 下屆開場（衛冕 defend／捲土重來 comeback）＋屆間訓練營
     const nextSeasonBtn = (label, openerKey) => button(label, true, () => {
+      // W4(P4) 題1 二選一互斥：賽季中請調用掉＝當屆屆間談話不觸發——
+      // 必須在 advanceSeason（events 逐屆重置）之前讀舊屆旗標
+      const talkAllowed = interSeasonTalkAllowed(store.loadCareer() ?? career);
       const roster = ensureStarterRoster(store);
       const graduates = (roster?.members ?? []).filter((m) => (m.growth?.grade ?? 2) >= 3);
       const aceGrads = graduatingAces(store.seasonIndex?.() ?? 1);
@@ -1557,7 +1646,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
             if (opener.length) seqs.push({ lines: opener });
             // W3(P4)：屆間鏈尾端接轉位教練談話（旗標 open 才觸發，無談話＝直接回賽程）
-            const finish = () => maybePositionTalk(() => renderCareer());
+            // W4 題1：賽季中請調已用掉＝當屆屆間不談（talkAllowed 於換屆前捕捉）
+            const finish = () => (talkAllowed
+              ? maybePositionTalk(() => renderCareer())
+              : renderCareer());
             if (seqs.length) dialogPlay(seqs, finish);
             else finish();
           };
