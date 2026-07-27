@@ -162,10 +162,18 @@ export function createDiegeticUi() {
       if (mode === null) return;
       if (mode === 'set') {
         for (const sp of spots) {
+          // 二次球＝自己出手：sset 鏡頭就架在 S 身位——自己的投影常在鏡外，
+          // 固定錨畫面下緣中央（「我自己」在鏡頭這一側的 diegetic 語意）
+          if (sp.item.kind === 'dump') {
+            sp.el.style.display = 'flex';
+            sp.el.style.left = `${window.innerWidth / 2}px`;
+            sp.el.style.top = `${window.innerHeight - 110}px`;
+            continue;
+          }
           const a = game.actors[sp.item.pid];
           const p = game.players[sp.item.pid];
           if (!a || !p) { sp.el.style.display = 'none'; continue; }
-          const h = (p.height?.current ?? 1.85) * (sp.item.kind === 'dump' ? 0.55 : 0.72);
+          const h = (p.height?.current ?? 1.85) * 0.72;
           const pt = project(camera, a.x, h, a.z);
           if (!pt) { sp.el.style.display = 'none'; continue; }
           // 07-27 追修保底：投影落在畫面外＝夾回螢幕邊緣——選項永遠點得到
