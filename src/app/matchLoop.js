@@ -37,6 +37,7 @@ import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
 } from '../ui/signatureBeats.js';
 import { loadPresentationPref, keyPointOf } from '../ui/presentation.js';
+import { sHotspotItems, lSignalItems, createLatencyStats } from '../ui/diegeticItems.js';
 
 // W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
 // 先用三人稱看全隊聚攏一小段，再切進圈裡，避免自己的身體從鏡頭裡穿過
@@ -226,6 +227,10 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lastOppSpikerId: null,
     callLive: false,
     presentation: createPresentationCtx(careerCtx),
+    // 4.5B §4：diegetic 決策耗時（窗開→指令送出；硬性驗收數據，落結案快照）
+    latencyStats: createLatencyStats(),
+    setWindowSince: -1,
+    digWindowSince: -1,
     last: performance.now(),
     accumulator: 0,
     rafFn: null,
@@ -665,7 +670,13 @@ function updateDecisions(s, now) {
     s.digReadWasOverride = aiState.digBias.override === true;
   }
   // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
-  if (!onCourt(game, s.controlledId)) { panel.hide(); return 0; }
+  if (!onCourt(game, s.controlledId)) {
+    panel.hide();
+    stage.diegetic?.hide();
+    rig.setSetScan(false);
+    s.setWindowSince = -1;
+    return 0;
+  }
   // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
   rig.setAttackView(controls.isAttackMoment(game));
   // 技術閘門：吊球未解鎖＝面板無吊球；後排 pipe 未解鎖＝後排不彈面板（保底出手照舊）
@@ -685,6 +696,9 @@ function updateDecisions(s, now) {
   const setDeciding =
     !!setZones && setZones.length > 0 &&
     game.ball.vy < 0 && game.ball.y > 1.8 && !controls.setPending();
+  // 4.5B §4：S diegetic 掃場鏡位（分配決策窗＝自 S 視線回望自家半場）；窗外歸位
+  rig.setSetScan(!!stage.diegetic && setDeciding);
+  if (!setDeciding) s.setWindowSince = -1;
   // ①c MB 攔網讀心（W3）：對手舉球出手（touches===2 起）、我＝前排 MB、尚未選——
   // 線索面板（一傳品質＋助跑動向，誠實非全知）；球墜近對手扣點（y<2.3）＝來不及
   // 重站位，窗關（未選＝就位自動跳攔照舊）
@@ -787,67 +801,101 @@ function updateDecisions(s, now) {
       'low',
     );
   } else if (digDeciding && !controls.digPending()) {
-    // W4 附錄 B-1 L 指揮面板（A2 節奏資產不動）：三選項升級攔防配套——
+    // W4 附錄 B-1 L 指揮（A2 節奏資產不動；4.5B §4 diegetic 化：背後手勢
+    // 一指/二指/握拳——B-5 原文；stage.diegetic 為 null＝?panel=classic 舊面板）。
     // 一個指令雙驅動（前排站線 block＋後排收縮 dig）；點選＝改判（override 旗標）
-    panel.show(
-      digRead.markText ? `攔防配套！${digRead.markText}` : '攔防配套！',
-      digRead.choices.map((c) => ({
-        key: c.key,
-        label: c.key === digRead.suggestion ? `${c.label}◎` : c.label,
-        color: c.key === digRead.suggestion ? 'green' : 'neutral',
-        zone: c,
-      })),
-      (it) => {
-        controls.chooseDig();
-        s.schemeTally = noteScheme(s.schemeTally, it.zone.key); // B-4 配套史
-        s.shadowFadeAt = 0; // 新波佈陣＝舊收帶排程作廢
-        stage.blockShadow?.set(it.zone.key, game.ball.x); // B-3 佈陣可視化
-        showShadowHintOnce(s);
-        aiState.digBias = {
-          team: game.players[s.controlledId].teamId,
-          choice: it.zone.dig,
-          block: it.zone.block,
-          override: it.zone.key !== digRead.suggestion,
-        };
-        // 07-27 四輪（Sawmah：字卡太多以體驗為主）：手選確認浮字移除——
-        // 紅綠帶佈陣可視化即確認（文字重複）；結果卡（封到/讀對）保留
-      },
-      null,
-      'low', // 07-27 五輪：L 同為隔網讀對面的情境——貼底模式淨空視線區
-    );
+    const pickDig = (choice) => {
+      if (s.digWindowSince >= 0) s.latencyStats.push('L', performance.now() - s.digWindowSince);
+      controls.chooseDig();
+      s.schemeTally = noteScheme(s.schemeTally, choice.key); // B-4 配套史
+      s.shadowFadeAt = 0; // 新波佈陣＝舊收帶排程作廢
+      stage.blockShadow?.set(choice.key, game.ball.x); // B-3 佈陣可視化
+      showShadowHintOnce(s);
+      aiState.digBias = {
+        team: game.players[s.controlledId].teamId,
+        choice: choice.dig,
+        block: choice.block,
+        override: choice.key !== digRead.suggestion,
+      };
+      // 07-27 四輪（Sawmah：字卡太多以體驗為主）：手選確認浮字移除——
+      // 紅綠帶佈陣可視化即確認；結果卡（封到/讀對）保留。
+      // 4.5B §4：攔網手偷瞄點頭確認（暗號收到——肢體確認非字卡）
+      const team = game.players[s.controlledId].teamId;
+      const mbId = game.match.rotations[team].find((pid) => game.players[pid]?.currentRole === 'middle'
+        && !isBackRow(game.match.rotations[team], pid));
+      if (mbId) stage.matchView.triggerPose(mbId, 'nod');
+    };
+    const digTitle = digRead.markText ? `攔防配套！${digRead.markText}` : '攔防配套！';
+    if (stage.diegetic) {
+      panel.hide();
+      stage.diegetic.showDig(
+        lSignalItems(digRead), digTitle,
+        (item) => pickDig(item.zone), s.controlledId, game.rally.flightId,
+      );
+    } else {
+      panel.show(
+        digTitle,
+        digRead.choices.map((c) => ({
+          key: c.key,
+          label: c.key === digRead.suggestion ? `${c.label}◎` : c.label,
+          color: c.key === digRead.suggestion ? 'green' : 'neutral',
+          zone: c,
+        })),
+        (it) => pickDig(it.zone),
+        null,
+        'low', // 07-27 五輪：L 同為隔網讀對面的情境——貼底模式淨空視線區
+      );
+    }
   } else if (setDeciding) {
-    // W3 S 分配面板：標題誠實播報一傳品質；猶豫選項變暗＋標註（甲2 C 案：可選）。
-    // 高 trust 隊友開窗喊聲要球（表現層；每個 flight 一次）
+    // W3 S 分配（4.5B §4 diegetic 化：點隊友模型本身＝分配；stage.diegetic 為 null
+    // ＝?panel=classic 退路走舊面板）。標題誠實播報一傳品質（真值不落空）。
+    // 高 trust 隊友開窗喊聲要球（表現層；每個 flight 一次）＋揮手（wave 姿勢，diegetic 補的肢體）
     if (s.calledBallFlight !== game.rally.flightId) {
       s.calledBallFlight = game.rally.flightId;
       const loud = setZones.filter((z) => z.trust >= CALL_BALL_AT)
         .sort((a, b) => b.trust - a.trust)[0];
-      if (loud) floatText.show(`${loud.name}：「這球給我！」`, '#7ee787', 1400);
+      if (loud) {
+        floatText.show(`${loud.name}：「這球給我！」`, '#7ee787', 1400);
+        if (loud.pid) stage.matchView.triggerPose(loud.pid, 'wave');
+      }
     }
-    panel.show(
-      setPanelTitle(setZones[0].tier),
-      setZones.map((z) => ({
-        key: z.key,
-        label: z.hesitant ? `${z.label}·猶豫` : z.label,
-        color: z.hesitant ? 'dim' : 'neutral',
-        zone: z,
-      })),
-      (it) => {
-        // W4(P4) 題3：二次球偷襲——第二擊直接攻擊（沿 AI setterDump 同 sim 路徑）；
-        // 真值字卡由後續事件結算（得手/被識破），s.dumpLive 追蹤本波
-        if (it.zone.kind === 'dump') {
-          controls.chooseSetDump(it.zone);
-          aiState.attackerId = null; // 沒有第三擊——攻擊手協調層本波不啟動
-          return; // 真值字卡由事件流結算（實際出手才追蹤，非按了就算）
-        }
-        controls.chooseSet(it.zone);
-        // 決策注入 AI 協調層：攻擊手改為玩家選定——第三擊呼叫鎖定與一氣呵成助跑
-        // （ensureFlightPlan touches===2 讀 attackerId）沿用既有機制
-        aiState.attackerId = it.zone.pid;
-        aiState.attackKind = it.zone.kind;
-        if (it.zone.hesitant) floatText.show(`${it.zone.name}猶豫了一下…`, '#c8d6eb', 1400);
-      },
-    );
+    if (s.setWindowSince < 0) s.setWindowSince = now;
+    // 與舊面板逐字同一條指令路徑（sim 零改動）；耗時樣本＝硬性驗收數據
+    const pickSet = (zone) => {
+      // 窗外殘留點擊（面板收起後的 stale 按鈕）不記樣本——樣本只認開窗中的決策
+      if (s.setWindowSince >= 0) s.latencyStats.push('S', performance.now() - s.setWindowSince);
+      // W4(P4) 題3：二次球偷襲——第二擊直接攻擊（沿 AI setterDump 同 sim 路徑）；
+      // 真值字卡由後續事件結算（得手/被識破），s.dumpLive 追蹤本波
+      if (zone.kind === 'dump') {
+        controls.chooseSetDump(zone);
+        aiState.attackerId = null; // 沒有第三擊——攻擊手協調層本波不啟動
+        return; // 真值字卡由事件流結算（實際出手才追蹤，非按了就算）
+      }
+      controls.chooseSet(zone);
+      // 決策注入 AI 協調層：攻擊手改為玩家選定——第三擊呼叫鎖定與一氣呵成助跑
+      // （ensureFlightPlan touches===2 讀 attackerId）沿用既有機制
+      aiState.attackerId = zone.pid;
+      aiState.attackKind = zone.kind;
+      if (zone.hesitant) floatText.show(`${zone.name}猶豫了一下…`, '#c8d6eb', 1400);
+    };
+    if (stage.diegetic) {
+      panel.hide();
+      stage.diegetic.showSet(
+        sHotspotItems(setZones), setPanelTitle(setZones[0].tier),
+        (item) => pickSet(item.zone), game.rally.flightId,
+      );
+    } else {
+      panel.show(
+        setPanelTitle(setZones[0].tier),
+        setZones.map((z) => ({
+          key: z.key,
+          label: z.hesitant ? `${z.label}·猶豫` : z.label,
+          color: z.hesitant ? 'dim' : 'neutral',
+          zone: z,
+        })),
+        (it) => pickSet(it.zone),
+      );
+    }
   } else if (serveDeciding) {
     // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
     const zs = controls.serveZones(game);
@@ -874,6 +922,10 @@ function updateDecisions(s, now) {
     );
   } else {
     panel.hide();
+  }
+  // 4.5B §4：diegetic 介面只活在 S 分配/L 指揮兩個窗——其餘分支（攻擊/MB/發球/無窗）收
+  if (stage.diegetic && !setDeciding && !(digDeciding && !controls.digPending())) {
+    stage.diegetic.hide();
   }
   return deciding;
 }
@@ -1561,6 +1613,8 @@ function frameStep(s, now) {
   // 07-26：近身視角藏自己的頭上標籤（防守/攻擊/一人稱＝鏡頭貼在自己身後，標籤爆大擋線）
   stage.matchView.setHideOwnTag(['defend', 'attack', 'first'].includes(stage.rig.getMode()));
   stage.rig.update(game, alpha, delta);
+  // 4.5B §4：diegetic 熱點每幀重錨（rAF 驅動；用 rig 更新後的鏡頭投影）
+  stage.diegetic?.sync(game, ctx.camera);
   // 局點張力：燈光收攏＋心跳（deuce 內建於 setPointTeam 判定）
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
   ctx.lights.setTension(tension, delta);

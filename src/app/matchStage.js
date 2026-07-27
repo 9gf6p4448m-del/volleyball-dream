@@ -21,6 +21,7 @@ import { createSetBreakOverlay } from '../ui/setBreakOverlay.js';
 import { createBoxScorePanel } from '../ui/boxScorePanel.js';
 import { createCallButton } from '../ui/callButton.js';
 import { createBlockShadow } from '../render/blockShadow.js';
+import { createDiegeticUi } from '../render/diegeticUi.js';
 import { createSubPanel } from '../ui/subPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
@@ -104,13 +105,15 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const blockShadow = createBlockShadow(ctx.scene);
   // W7 A6：主角體力條（HUD 角落；stamina 未啟用時 update() 內部短路不顯示）
   const heroStamina = createHeroStaminaBar();
+  // 4.5B §4：S/L diegetic 介面（取代舊面板；?panel=classic＝降規/開發退路）
+  const diegetic = simpleMode && params.get('panel') !== 'classic' ? createDiegeticUi() : null;
   showTutorialOnce(simpleMode);
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, setBreakOverlay,
-    boxScorePanel, callButton, blockShadow, heroStamina,
+    boxScorePanel, callButton, blockShadow, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
 }

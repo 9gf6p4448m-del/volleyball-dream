@@ -35,6 +35,12 @@ const POSES = {
   gasp: { rSh: [-0.35, -0.12], lSh: [-0.35, 0.12], rEl: -0.7, lEl: -0.7, spine: 0.85, neck: 0.3, crouch: 0.32 },
   // W7 B4④：氣勢極端不利（−3）idle——垂肩低頭，手臂鬆垮下垂、無下蹲（走位回位、非喘氣）
   dejected: { rSh: [0.08, -0.04], lSh: [0.08, 0.04], rEl: -0.15, lEl: -0.15, spine: 0.32, neck: 0.32, crouch: 0.03 },
+  // 4.5B §4：S diegetic——高 trust 隊友揮手喊球（右臂高舉左右擺；左臂自然）
+  waveUp: { rSh: [-2.9, -0.35], lSh: [0, 0.06], rEl: -0.2, lEl: -0.1, spine: -0.05, neck: -0.2 },
+  waveSide: { rSh: [-2.9, 0.3], lSh: [0, 0.06], rEl: -0.2, lEl: -0.1, spine: -0.05, neck: -0.2 },
+  // 4.5B §4：L 暗號——攔網手偷瞄點頭確認（頸部小幅點放）
+  nodNeutral: { neck: -0.12 },
+  nodDown: { neck: 0.3 },
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
@@ -66,6 +72,9 @@ const SEQUENCES = {
   // 撲出/落地壓前（真實飛撲本就爆發）→ 趴住一拍（0.34-0.52 重量感）→ 撐地→起身；
   // 搭配 matchView 的「先低姿爬回、後起身」曲線（該處緩動同輪調整）
   dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.14, p: 'diveReach' }, { at: 0.34, p: 'diveSprawl' }, { at: 0.52, p: 'diveSprawl' }, { at: 0.74, p: 'divePush' }, { at: 1, p: 'bumpReady' }] },
+  // 4.5B §4：揮手喊球（舉臂左右擺兩拍）＋攔網手點頭確認（快而小）
+  wave: { dur: 0.9, jump: 0, land: false, keys: [{ at: 0, p: 'waveUp' }, { at: 0.25, p: 'waveSide' }, { at: 0.5, p: 'waveUp' }, { at: 0.75, p: 'waveSide' }, { at: 1, p: 'waveUp' }] },
+  nod: { dur: 0.45, jump: 0, land: false, keys: [{ at: 0, p: 'nodNeutral' }, { at: 0.4, p: 'nodDown' }, { at: 1, p: 'nodNeutral' }] },
 };
 
 const ATTACK_MS = 0.08;

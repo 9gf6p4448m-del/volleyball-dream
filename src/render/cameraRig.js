@@ -59,6 +59,7 @@ export function createCameraRig(camera, initialPlayerId) {
   let diveCam = false;       // W3(P4) L 魚躍演出：低機位貼地鏡頭（附錄 A4①）
   let tourProgress = null;   // W4(P4) Q10 冠軍館燈光秀巡場：0..1（null＝關）——與燈光秀共時間軸
   let sigBeat = null;        // 4.5B §3 招牌演出：{kind:'oh'|'mb'|'opp', focusId, mateId}（勝負已定後的回放性一拍）
+  let setScan = false;       // 4.5B §4 S diegetic：分配決策＝自 S 視線回望自家半場（點隊友＝分配）
 
   function desiredMode(game) {
     const me = game.players[playerId];
@@ -68,6 +69,7 @@ export function createCameraRig(camera, initialPlayerId) {
     if (sigBeat) return 'sig'; // 4.5B §3 招牌演出：死球窗內的回放性一拍（SERVE 即收）
     if (huddleView) return 'huddle'; // 暫停圍圈：主角在場上時的第一人稱
     if (diveCam) return 'dive'; // L 魚躍慢動作：貼地仰起（與 OH 俯衝反向）
+    if (setScan) return 'sset'; // 4.5B §4：S 分配決策——全場等你的一秒
     if (attackView) return 'attack'; // 讀攔網視角優先
     if (defendView) return 'defend'; // 攔網第一視角（隔網讀對面攻擊手）
     if (game.phase === 'serve' && serverId(game.match) === playerId) return 'first';
@@ -92,6 +94,7 @@ export function createCameraRig(camera, initialPlayerId) {
     setHuddleView(v) { huddleView = v; },
     setDiveCam(v) { diveCam = v; },
     setSigBeat(b) { sigBeat = b; }, // 4.5B §3：null＝關；{kind, focusId, mateId}
+    setSetScan(v) { setScan = v; }, // 4.5B §4：S 分配決策窗
     setTourProgress(p) { tourProgress = p; }, // null＝關；0..1＝燈光秀巡場進度
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
@@ -185,6 +188,12 @@ export function createCameraRig(camera, initialPlayerId) {
         pos.set(slot.x + (dx / d) * back, eye + 0.08, slot.z + (dz / d) * back);
         // 注視點＝戰術板本體（教練胸前 0.42m、板高 1.26）
         target.set(coach.x + (dx / d) * 0.42, 1.26, coach.z + (dz / d) * 0.42);
+      } else if (mode === 'sset') {
+        // 4.5B §4 S 掃場：自 S 眼位回望自家半場——候選攻擊手全數入鏡，
+        // 點隊友模型本身＝分配（網在身後：分配決策看的是自己人，非隔網情境）
+        const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
+        pos.set(ax * 0.8, eye + 0.18, az - side * 0.5);
+        target.set(0, 1.3, az + side * 4.5);
       } else if (mode === 'defend') {
         // 攔網手身後略高，隔網看對面攻擊手的助跑與起跳（守方讀攻擊——與攻擊視角對稱）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
