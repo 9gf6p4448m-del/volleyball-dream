@@ -64,6 +64,13 @@ export const STARTER_DEFS = [
   { id: 'A6', name: '阿岩', fullName: '陳定岩', role: 'middle', grade: 2, height: 1.94,
     persona: '第二中間手——不搶戲的耐力型攔網工兵，教練最信任的輪替',
     attributes: { jump: 62, power: 61, reaction: 60, stamina: 63, speed: 57, control: 65, serve: 57, block: 65 } },
+  // A7 替補 OH（W3 07-27 Sawmah 拍板：①第 1 屆就有板凳可換＝主角能下場休息
+  // （RECOV_BENCH 快回閉環）＋新玩家第一屆體驗換人 ②grade 2＝第 2 屆末與阿岩同屆
+  // 畢業（「替補學長」的告別）③capacity 維持 12＝招募空位 5→4，取捨更緊）。
+  // 屬性＝替補級但體力全隊最高——他的職業就是隨時能上
+  { id: 'A7', name: '阿遠', fullName: '莊明遠', role: 'outside', grade: 2, height: 1.85,
+    persona: '替補主攻——把板凳坐成專業的人：誰累了、誰慌了，他都第一個看見',
+    attributes: { jump: 60, power: 59, reaction: 63, stamina: 72, speed: 62, control: 64, serve: 58, block: 52 } },
   { id: 'AL', name: '小守', fullName: '魏守恆', role: 'libero', grade: 1, height: 1.72, libero: true,
     persona: '自由人——個子最小、嗓門最大，球落地前絕不放棄' },
 ];

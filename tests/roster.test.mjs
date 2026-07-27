@@ -44,11 +44,11 @@ function killEvents(playerId, n, power = 1) {
 
 // ---- 任務 1：具名化與個性化 ----
 
-test('buildStarterMembers：六名成員具名、槽位角色正確、隊長必為 MB', () => {
+test('buildStarterMembers：七名成員具名（含 A7 替補 OH）、槽位角色正確、隊長必為 MB', () => {
   const members = buildStarterMembers();
-  assert.deepEqual(members.map((m) => m.id), ['A1', 'A3', 'A4', 'A5', 'A6', 'AL']);
+  assert.deepEqual(members.map((m) => m.id), ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'AL']);
   assert.deepEqual(members.map((m) => m.role),
-    ['setter', 'middle', 'opposite', 'outside', 'middle', 'libero']);
+    ['setter', 'middle', 'opposite', 'outside', 'middle', 'outside', 'libero']);
   for (const m of members) {
     assert.equal(m.origin, 'starter');
     assert.equal(typeof m.name, 'string');
@@ -64,7 +64,7 @@ test('buildStarterMembers：六名成員具名、槽位角色正確、隊長必�
   assert.equal(libero.name, '小守'); // 已定名不重開
 });
 
-test('個性化：脫離六人全同，且屬性總和守恆（＝舊基準 490，近中性設計）', () => {
+test('個性化：脫離全同，且屬性總和守恆（＝舊基準 490，近中性設計）', () => {
   const members = buildStarterMembers();
   const nonLibero = members.filter((m) => m.role !== 'libero');
   // 全同檢查：任兩人屬性向量不得完全相同
@@ -79,8 +79,8 @@ test('個性化：脫離六人全同，且屬性總和守恆（＝舊基準 490�
     const sum = ATTRIBUTE_KEYS.reduce((s, k) => s + m.attributes[k], 0);
     assert.equal(sum, 490, `${m.name} 屬性總和須為 490`);
   }
-  // 身高沿用既有基準（槽序 A1,A3..A6）
-  assert.deepEqual(nonLibero.map((m) => m.height), [1.83, 1.96, 1.90, 1.86, 1.94]);
+  // 身高沿用既有基準（槽序 A1,A3..A7）
+  assert.deepEqual(nonLibero.map((m) => m.height), [1.83, 1.96, 1.90, 1.86, 1.94, 1.85]);
 });
 
 test('小守屬性＝buildLibero 防守專才公式輸出（結構不推翻）', () => {
@@ -91,10 +91,10 @@ test('小守屬性＝buildLibero 防守專才公式輸出（結構不推翻）',
 
 // ---- D1：capacity 語義 ----
 
-test('capacity 語義：10＝玩家＋小守＋隊友；現員 7、招募空位 3', () => {
+test('capacity 語義：10＝玩家＋小守＋隊友；現員 8（含 A7）、招募空位 2', () => {
   const roster = { capacity: 10, members: buildStarterMembers() };
-  assert.equal(rosterCount(roster), 7); // members 6（含小守）＋玩家 1
-  assert.equal(openSlots(roster), 3);
+  assert.equal(rosterCount(roster), 8); // members 7（含小守＋A7）＋玩家 1
+  assert.equal(openSlots(roster), 2);
 });
 
 // ---- 任務 4：空名冊一次性補齊 ----
@@ -103,9 +103,9 @@ test('ensureStarterRoster：空名冊自動補齊並持久化；player/season �
   const { store, storage } = storeWithCareer();
   const beforeSave = JSON.parse(storage.getItem(SAVE_KEY));
   const roster = ensureStarterRoster(store);
-  assert.equal(roster.members.length, 6);
+  assert.equal(roster.members.length, 7);
   const afterSave = JSON.parse(storage.getItem(SAVE_KEY));
-  assert.equal(afterSave.roster.members.length, 6); // 已持久化
+  assert.equal(afterSave.roster.members.length, 7); // 已持久化
   assert.deepEqual(afterSave.player, beforeSave.player); // 玩家不動
   assert.deepEqual(afterSave.season, beforeSave.season); // 賽季不動
 });
@@ -226,7 +226,7 @@ test('schema：含 starter 名冊的存檔通過驗證；壞成員（缺屬性�
   ensureStarterRoster(store);
   const json = storage.getItem(SAVE_KEY);
   const ok = deserializeSave(json); // 不 throw
-  assert.equal(ok.roster.members.length, 6);
+  assert.equal(ok.roster.members.length, 7);
   const bad = JSON.parse(json);
   delete bad.roster.members[0].attributes.jump;
   assert.throws(() => deserializeSave(JSON.stringify(bad)), /attributes 缺數值欄位/);

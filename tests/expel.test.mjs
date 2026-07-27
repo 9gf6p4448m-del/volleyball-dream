@@ -138,8 +138,8 @@ test('applyExpel 招募連動：額滿+條件達成→逐出騰位→自動入�
     recruited: [],
     expelled: [],
   });
-  // 人工滿編（正常玩到不了）：capacity 8＝現員 7＋1 空位，只容 1 名招募生
-  store.saveRoster({ ...store.loadRoster(), capacity: 8 });
+  // 人工滿編（正常玩到不了）：capacity 9＝現員 8（含 A7）＋1 空位，只容 1 名招募生
+  store.saveRoster({ ...store.loadRoster(), capacity: 9 });
   const first = settleRecruitJoins(store, 42);
   assert.deepEqual(first.map((m) => m.id), ['R1'], '只入 north-tech（R1）、obsidian 額滿卡住');
   assert.equal(openSlots(store.loadRoster()), 0, '滿編');

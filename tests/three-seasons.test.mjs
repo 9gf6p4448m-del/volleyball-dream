@@ -56,13 +56,13 @@ test('三屆快進：換血全鏈無錯——每屆名冊/先發合法、畢業�
   // 第 1→2 屆：大山＋阿烈畢業；手寫 MB（N1）＋補位員入隊
   assert.deepEqual(advances[0].graduates.map((m) => m.id).sort(), ['A3', 'A4']);
   assert.ok(advances[0].freshmen.some((f) => f.id === 'N1' && f.origin === 'handwritten'));
-  // 第 2→3 屆：阿岩（基準 2）畢業；阿哲/小飛/小守（基準 1）仍在
-  assert.deepEqual(advances[1].graduates.map((m) => m.id), ['A6']);
+  // 第 2→3 屆：阿岩＋阿遠（基準 2）畢業；阿哲/小飛/小守（基準 1）仍在
+  assert.deepEqual(advances[1].graduates.map((m) => m.id).sort(), ['A6', 'A7']);
   const roster = store.loadRoster();
   const ids = roster.members.map((m) => m.id);
   for (const id of ['A1', 'A5', 'AL', 'N1']) assert.ok(ids.includes(id), `${id} 應在第 3 屆名冊`);
-  for (const id of ['A3', 'A4', 'A6']) assert.ok(!ids.includes(id), `${id} 應已畢業`);
-  assert.deepEqual(roster.alumni.map((a) => a.member.id).sort(), ['A3', 'A4', 'A6']);
+  for (const id of ['A3', 'A4', 'A6', 'A7']) assert.ok(!ids.includes(id), `${id} 應已畢業`);
+  assert.deepEqual(roster.alumni.map((a) => a.member.id).sort(), ['A3', 'A4', 'A6', 'A7']);
   // 第 3 屆全員年級合法（1-3）、最後一屆的老三人組皆三年級
   for (const m of roster.members) assert.ok([1, 2, 3].includes(m.growth.grade), `${m.id} 年級非法`);
   assert.equal(roster.members.find((m) => m.id === 'A1').growth.grade, 3);

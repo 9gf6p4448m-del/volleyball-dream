@@ -61,24 +61,24 @@ function playSeason(store) {
   }
 }
 
-test('轉 S：currentRole 持久化、OH 缺額補位員入隊（trust=10）、預設陣合法且玩家佔 S 槽', () => {
+test('轉 S：currentRole 持久化、A7 頂上 OH 缺口（不需補位員）、預設陣合法且玩家佔 S 槽', () => {
   const store = freshStore();
   const before = store.loadRoster().members.length;
   assert.ok(store.applyPositionChange('setter'));
   assert.equal(store.loadPlayer().currentRole, 'setter');
-  // 創隊名冊 OH=A2+A5：玩家轉走後 OH 剩 1 → 補位員恰 1 名 OH
+  // 創隊名冊 OH=A2+A5+A7（07-27 A7 入隊）：玩家轉走後 OH 仍足額 → 零補位員
   const members = store.loadRoster().members;
-  assert.equal(members.length, before + 1);
-  const fill = members.find((m) => m.origin === 'generated');
-  assert.equal(fill.role, 'outside');
-  assert.equal(fill.growth.grade, 1);
+  assert.equal(members.length, before);
+  assert.ok(!members.some((m) => m.origin === 'generated'), '足額不得生成補位員');
   assertLineupLegal(store, 'setter', '轉 S');
-  // SLOT_ROLES[0]=setter＋玩家佇列優先 → 玩家在 starters[0]；阿哲（A1）讓出主舉落板凳
+  // SLOT_ROLES[0]=setter＋玩家佇列優先 → 玩家在 starters[0]；阿哲（A1）讓出主舉落板凳；
+  // 兩個 OH 槽＝A5＋A7（替補轉正——「讓出的主攻位由隊上補位」的具現）
   const lineup = store.loadLineup();
   assert.equal(lineup.starters[0], 'A2');
   assert.ok(!lineup.starters.includes('A1'), '阿哲應讓位（不在先發）');
-  // trust 跟人：既有隊友沿用、補位員顯式 10、玩家不入映射
-  assert.equal(lineup.trust[fill.id], 10);
+  assert.ok(lineup.starters.includes('A5') && lineup.starters.includes('A7'), 'A5+A7 佔兩翼');
+  // trust 跟人：創隊班底 20、玩家不入映射
+  assert.equal(lineup.trust.A7, 20);
   assert.equal(lineup.trust.A5, 20);
   assert.equal(lineup.trust.A2, undefined);
 });
@@ -89,9 +89,9 @@ test('轉 MB／轉 OPP：缺額補位、陣容合法、careerTeams 玩家落對�
     assert.ok(store.applyPositionChange(role), `applyPositionChange(${role})`);
     assert.equal(store.loadPlayer().currentRole, role);
     assertLineupLegal(store, role, `轉 ${role}`);
-    // OH 洞由補位員補（玩家原佔 OH 一席）
+    // OH 洞由 A7 頂上（足額＝零補位員；07-27 A7 入隊後的新現實）
     const members = store.loadRoster().members;
-    assert.ok(members.some((m) => m.origin === 'generated' && m.role === 'outside'));
+    assert.ok(!members.some((m) => m.origin === 'generated'), '足額不得生成補位員');
     // careerTeams：玩家物件原樣入隊、落在 starters 對應槽位
     const player = store.loadPlayer();
     const lineup = store.loadLineup();
@@ -106,14 +106,26 @@ test('轉 MB／轉 OPP：缺額補位、陣容合法、careerTeams 玩家落對�
   }
 });
 
-test('轉位決定論：同 seed 兩個存檔各轉 S——補位員 id/全名/屬性逐值相同', () => {
+test('轉位決定論：同 seed 兩個存檔各轉 S——名冊/陣容逐值相同（缺額時補位員亦同）', () => {
   const a = freshStore(123);
   const b = freshStore(123);
   a.applyPositionChange('setter');
   b.applyPositionChange('setter');
-  const fa = a.loadRoster().members.find((m) => m.origin === 'generated');
-  const fb = b.loadRoster().members.find((m) => m.origin === 'generated');
-  assert.deepEqual(fa, fb);
+  assert.deepEqual(a.loadRoster().members, b.loadRoster().members);
+  assert.deepEqual(a.loadLineup(), b.loadLineup());
+  // 缺額路徑的補位員決定論（A7 挖走＝人工製造 OH 缺）
+  const c = freshStore(123);
+  const d = freshStore(123);
+  for (const s of [c, d]) {
+    const roster = s.loadRoster();
+    roster.members = roster.members.filter((m) => m.id !== 'A7');
+    s.saveRoster(roster);
+    s.applyPositionChange('setter');
+  }
+  const fc = c.loadRoster().members.find((m) => m.origin === 'generated');
+  const fd = d.loadRoster().members.find((m) => m.origin === 'generated');
+  assert.ok(fc, '缺額時應生成補位員');
+  assert.deepEqual(fc, fd);
 });
 
 test('轉回 OH：不再新增補位員（名冊已有足額）、陣容合法、玩家回主攻槽', () => {
@@ -136,8 +148,8 @@ test('轉 L（工單 §8 建隊特例）：不入先發、libero=玩家、六席
   // 玩家不入先發、異色球衣是玩家的
   assert.ok(!lineup.starters.includes('A2'), '玩家=L 不得在先發');
   assert.equal(lineup.libero, 'A2');
-  // OH 洞由補位員補（玩家原佔 OH 一席）；六席全為名冊隊友
-  assert.ok(members.some((m) => m.origin === 'generated' && m.role === 'outside'));
+  // OH 洞由 A7 頂上（足額零補位員）；六席全為名冊隊友
+  assert.ok(!members.some((m) => m.origin === 'generated'));
   assert.equal(lineup.starters.length, 6);
   for (const id of lineup.starters) assert.ok(members.some((m) => m.id === id));
   // 三重合法性（validateLineup 吃 playerRole='libero'）

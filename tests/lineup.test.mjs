@@ -156,8 +156,8 @@ test('ensureStarterRoster：補齊 lineup 為預設陣容', () => {
   assert.deepEqual(lu.starters, DEFAULT_STARTERS);
   assert.equal(lu.libero, DEFAULT_LIBERO_ID);
   assert.equal(lu.rotationStart, 0);
-  // trust 映射：隊友全 20、玩家 A2 不入映射
-  assert.deepEqual(lu.trust, { A1: 20, A3: 20, A4: 20, A5: 20, A6: 20 });
+  // trust 映射：隊友全 20（含 A7 替補）、玩家 A2 不入映射
+  assert.deepEqual(lu.trust, { A1: 20, A3: 20, A4: 20, A5: 20, A6: 20, A7: 20 });
   assert.equal(lu.trust.A2, undefined);
 });
 
