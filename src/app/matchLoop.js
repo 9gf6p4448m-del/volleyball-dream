@@ -33,6 +33,10 @@ import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js
 import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
+import {
+  trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
+} from '../ui/signatureBeats.js';
+import { loadPresentationPref, keyPointOf } from '../ui/presentation.js';
 
 // W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
 // 先用三人稱看全隊聚攏一小段，再切進圈裡，避免自己的身體從鏡頭裡穿過
@@ -213,10 +217,66 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     pendingOppBoost: null,
     // W7.1 #4①：滿檔字卡「跨進才發」的比對基準（同 sim momentum 初值 0）
     prevMomentumValue: 0,
+    // 4.5B §3 招牌演出：pendingSig＝武裝中的候選（成因已發生、勝負未定）；
+    // sigBeat＝起鏡中的演出窗（SCORE 後、SERVE 前）；keyPointRally＝本球是否關鍵分
+    //（發球當下判定——局點/賽點恆全版）；callLive＝要球喊聲已出、等兌現
+    pendingSig: null,
+    sigBeat: null,
+    keyPointRally: false,
+    lastOppSpikerId: null,
+    callLive: false,
+    presentation: createPresentationCtx(careerCtx),
     last: performance.now(),
     accumulator: 0,
     rafFn: null,
   };
+}
+
+// 4.5B §2-3 頻率框架的存取面：生涯＝store 持久（跨屆、逐槽）；快速比賽＝session
+// 記憶（無槽可落——裁量記錄於 4.5B 快照）。演出偏好＝全域 localStorage 單鍵。
+function createPresentationCtx(careerCtx) {
+  const store = careerCtx?.store;
+  let seen = store?.loadSeenSignatures?.() ?? {};
+  const pref = typeof window !== 'undefined' && window.localStorage
+    ? loadPresentationPref(window.localStorage) : 'on';
+  return {
+    pref,
+    isSeen: (k) => !!seen[k],
+    markSeen: (k) => {
+      seen = { ...seen, [k]: true };
+      store?.markSignatureSeen?.(k);
+    },
+  };
+}
+
+// 4.5B §3 起鏡：頻率框架決定 full/short/off → 設演出窗＋沿用既有慢動作機構
+//（slowUntil 0.35×＋FOV 收緊）；OPP＝與 S 的專屬擊掌（信任下注回報可視化）。
+// 真值字卡（🎭/🧱/pointBanner）不經此處——off 只省演出、不吃資訊。
+function fireSignatureBeat(s, pending, now) {
+  const { stage, game } = s;
+  const key = sigKey(pending.kind);
+  const plan = planSignatureBeat({
+    kind: pending.kind,
+    pref: s.presentation.pref,
+    seen: s.presentation.isSeen(key),
+    keyPoint: s.keyPointRally,
+    now,
+  });
+  if (!plan) return;
+  s.presentation.markSeen(key);
+  let mateId = pending.mateId;
+  if (pending.kind === 'opp' && !mateId) {
+    const me = game.players[s.playerId];
+    mateId = Object.values(game.players).find((p) => p.teamId === me.teamId
+      && p.currentRole === 'setter'
+      && game.match.rotations[me.teamId].includes(p.id))?.id ?? null;
+  }
+  s.sigBeat = { kind: pending.kind, focusId: pending.focusId, mateId, until: plan.until };
+  s.slowUntil = Math.max(s.slowUntil ?? 0, plan.until);
+  if (pending.kind === 'opp') {
+    stage.matchView.triggerPose(s.playerId, 'highfive');
+    if (mateId) stage.matchView.triggerPose(mateId, 'highfive');
+  }
 }
 
 // W6 換人執行（stage.handlers.requestSub）：sim 換人＋敘事對話
@@ -919,9 +979,27 @@ function applyEvents(s, frameEvents, now) {
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.controlledId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
   for (const e of frameEvents) {
+    // 4.5B §3 招牌演出追蹤：解除（對手救起/新發球）→武裝（成因事件）；
+    // 起鏡只認 SCORE（追加條 B：勝負已定的那一拍之後——見下方 SCORE 分支）
+    s.pendingSig = trackSignature(s.pendingSig, e, myTeam);
+    if (e.type === 'TOUCH' && e.kind === 'spike' && e.team !== myTeam) {
+      s.lastOppSpikerId = e.playerId; // MB 俯視鏡的對面攻擊手（他抬頭看你）
+    }
+    if (e.type === 'BLOCK_DECEIVED' && e.spikerId === s.controlledId) {
+      s.pendingSig = armSignature('oh', { focusId: e.blockerId }); // 被騙的人入鏡
+    }
+    if (e.type === 'TOUCH' && e.kind === 'spike' && e.playerId === s.playerId && s.callLive
+      && game.players[s.playerId]?.currentRole === 'opposite') {
+      s.pendingSig = armSignature('opp', {}); // 要球出手——得手才兌現（mate 於起鏡時解析）
+      s.callLive = false;
+    }
     if (e.type === 'SERVE') {
       s.rallyStartFlight = game.rally.flightId;
       stage.floatText.setBaseOffset?.(0); // banner 已自動收（1.6s）——字卡帶歸位泡泡下
+      // 4.5B §3：發球＝操作開始——演出窗必收（主角視角條款）；本球關鍵分判定落此
+      s.sigBeat = null;
+      s.keyPointRally = keyPointOf(game);
+      s.callLive = false;
     }
     // 得分原因面板：追蹤最後觸球（含發球/攔網）；DEAD_BALL+SCORE 湊齊即顯示
     if (e.type === 'TOUCH' || e.type === 'SERVE') {
@@ -1019,6 +1097,10 @@ function applyEvents(s, frameEvents, now) {
       // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
       if (e.playerId === s.controlledId && s.mbCommit) {
         stage.floatText.show('🧱 封到了！', '#ffd166', 1400);
+        // 4.5B §3「早到的人」：搶快賭對且封到——若這球就此死掉（SCORE 我方）才起鏡
+        if (game.players[s.controlledId]?.currentRole === 'middle') {
+          s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
+        }
         s.mbCommit = null;
       }
     } else if (e.type === 'DEAD_BALL') {
@@ -1027,6 +1109,7 @@ function applyEvents(s, frameEvents, now) {
       stage.controls.consumeDigHeroSignal?.(); // W3 L：丟棄未兌現的演出武裝（撲空）
       s.digReadResult = null; // 07-27 結果字卡狀態隨球清
       s.mbCommit = null;
+      s.callLive = false; // 4.5B §3：死球＝要球兌現窗關（得手與否由 SCORE 分支結案）
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
@@ -1106,6 +1189,11 @@ function applyEvents(s, frameEvents, now) {
         s.pendingDead = null;
         s.lastTouch = null;
       }
+      // 4.5B §3：招牌演出起鏡——勝負已定的那一拍之後（追加條 B）。
+      // 我方得分且武裝中＝發放；對方得分＝空手；一球一議（SCORE 後必清）
+      const fired = signatureFire(s.pendingSig, e, myTeam);
+      s.pendingSig = null;
+      if (fired && !s.replay) fireSignatureBeat(s, fired, now);
     }
     // 主角字卡統一出口（判定在 heroCards.js 純函式：Perfect 一傳／攔網碰球／
     // 假動作騙贏／回歸建功——測試用真 sim 事件流直測，不必開瀏覽器目視）
@@ -1233,6 +1321,7 @@ function onCallTap(s) {
   if (game.phase !== 'rally' || game.rally.touches !== 1) return; // 窗已過（防競態）
   const me = game.players[s.playerId];
   s.pendingCallIntent = true;
+  s.callLive = true; // 4.5B §3：喊聲已出——這球我方出手得手＝「三米線起飛」兌現
   const granted = callHash01(game.rally.flightId * 613 + (game.seed ?? 0) * 17 + 9) < CALL_GRANT;
   if (granted) {
     s.aiState.attackerId = s.playerId;
@@ -1389,6 +1478,9 @@ function frameStep(s, now) {
 
   // W3(P4) L 魚躍鏡頭（時間窗驅動）＋A3③ 替換即儀式（換入場輕演出）
   stage.rig.setDiveCam(now < (s.diveCamUntil ?? 0));
+  // 4.5B §3：招牌演出鏡位窗（勝負已定後的死球窗；到期/SERVE 即收）
+  if (s.sigBeat && now >= s.sigBeat.until) s.sigBeat = null;
+  stage.rig.setSigBeat(s.sigBeat);
   const meNow = game.players[s.controlledId];
   if (meNow?.currentRole === 'libero') {
     const onNow = onCourt(game, s.controlledId);

@@ -58,12 +58,14 @@ export function createCameraRig(camera, initialPlayerId) {
   let huddleView = false;    // W8 暫停演出：第一人稱圍圈看教練戰術板
   let diveCam = false;       // W3(P4) L 魚躍演出：低機位貼地鏡頭（附錄 A4①）
   let tourProgress = null;   // W4(P4) Q10 冠軍館燈光秀巡場：0..1（null＝關）——與燈光秀共時間軸
+  let sigBeat = null;        // 4.5B §3 招牌演出：{kind:'oh'|'mb'|'opp', focusId, mateId}（勝負已定後的回放性一拍）
 
   function desiredMode(game) {
     const me = game.players[playerId];
     if (!me) return 'third';
     if (tourProgress !== null) return 'tour'; // 開場燈光秀巡場——凌駕一切（sim 凍結中）
     if (benchMode) return 'bench'; // 板凳視角最高優先——沒有身體可跟，不吃攻防切換
+    if (sigBeat) return 'sig'; // 4.5B §3 招牌演出：死球窗內的回放性一拍（SERVE 即收）
     if (huddleView) return 'huddle'; // 暫停圍圈：主角在場上時的第一人稱
     if (diveCam) return 'dive'; // L 魚躍慢動作：貼地仰起（與 OH 俯衝反向）
     if (attackView) return 'attack'; // 讀攔網視角優先
@@ -89,6 +91,7 @@ export function createCameraRig(camera, initialPlayerId) {
     setBenchMode(v) { benchMode = v; },
     setHuddleView(v) { huddleView = v; },
     setDiveCam(v) { diveCam = v; },
+    setSigBeat(b) { sigBeat = b; }, // 4.5B §3：null＝關；{kind, focusId, mateId}
     setTourProgress(p) { tourProgress = p; }, // null＝關；0..1＝燈光秀巡場進度
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
@@ -143,6 +146,31 @@ export function createCameraRig(camera, initialPlayerId) {
         // W7 C2①：板凳側位廣角——固定機位看整個球場（兩隊都在畫面內），不跟任何球員
         pos.set(CAMERA_TUNING.BENCH_X, CAMERA_TUNING.BENCH_HEIGHT, side * CAMERA_TUNING.BENCH_Z);
         target.set(0, 1.1, 0);
+      } else if (mode === 'sig') {
+        // 4.5B §3 招牌演出鏡位（勝負已定後的回放性一拍；SERVE 前必收）
+        const focus = sigBeat.focusId ? game.actors[sigBeat.focusId] : null;
+        const fh = sigBeat.focusId ? (game.players[sigBeat.focusId]?.height?.current ?? 1.85) : 1.85;
+        if (sigBeat.kind === 'oh' && focus) {
+          // 被騙的人：我方近網低位隔網特寫被晃過的攔網手（撲錯的方向本身入鏡）
+          pos.set(focus.x * 0.7 + 0.85, 1.75, side * 1.15);
+          target.set(focus.x, fh * 0.88, focus.z);
+        } else if (sigBeat.kind === 'mb' && focus) {
+          // 早到的人：網帶上方俯視——對面攻擊手抬頭（focus＝對面攻擊手；
+          // OH 俯衝/L 貼地/MB 靜止的三角鏡頭語言之「靜止」）
+          pos.set(focus.x * 0.65, 3.55, side * 1.0);
+          target.set(focus.x, 1.55, focus.z * 0.7);
+        } else if (sigBeat.kind === 'opp') {
+          // 三米線起飛的回報：低機位框住 OPP（自己）與 S 的專屬擊掌
+          const mate = sigBeat.mateId ? game.actors[sigBeat.mateId] : null;
+          const mx = mate ? (ax + mate.x) / 2 : ax;
+          const mz = mate ? (az + mate.z) / 2 : az;
+          pos.set(mx + 2.3, 0.68, mz + side * 2.4);
+          target.set(mx, 1.25, mz);
+        } else {
+          // 焦點缺席（資料缺）＝退回三人稱構圖
+          pos.set(ax * 0.72, CAMERA_TUNING.THIRD_HEIGHT, az + side * CAMERA_TUNING.THIRD_BACK);
+          target.set(ax * 0.5, CAMERA_TUNING.LOOK_HEIGHT, az - side * CAMERA_TUNING.LOOK_AHEAD);
+        }
       } else if (mode === 'huddle') {
         // W8 暫停演出（07-26 二輪拍板）：圈口固定視角——主角恆佔 slot 0（朝球場的
         // 圈口），每次暫停同一構圖；沿「教練→圈口」方向退半步取景，對準教練胸前
