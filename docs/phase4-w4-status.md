@@ -1,7 +1,34 @@
-# Phase 4 W4 結案快照 — 賽制＋場館＋數據＋結算（建置中；結案時定稿）
+# Phase 4 W4 結案快照 — 賽制＋場館＋數據＋結算＋L 2.0
 
 > 2026-07-27。工單＝`kickoffs/phase4-w4-implementation-prompt.md`（§0 拍板＋附錄 B 與憲法同效力）。
-> 基準 `main@5386c27`（W3 結案 479 測綠）。本檔隨實作滾動更新，結案 commit 定稿。
+> 基準 `main@5386c27`（W3 結案 479 測綠）→ 結案 **517 測綠（+38，只增不減）**、vite build 綠。
+> 驗證：全套 node:test＋治具多臂 n=150＋Playwright 對 preview 實跑
+> （選檔頁→創角→生涯→生涯數據頁→選檔卡片回讀；快速比賽 bo3 局間 huddle→續局；
+> 冠軍館燈光秀 tour 鏡頭＋sim 凍結），全程 **0 console error/warning**。
+> **工單十件全數交付（含 L 2.0 整包——未滑 4.5）**；宿敵三案待 Sawmah 挑（§7）。
+
+## 0. 待 Sawmah 事項（開箱先看）
+
+1. **宿敵三案挑一**（§7）：雲上人楊擎霄／攀天者莊敬嶺／量天尺顏世衡——選定後落
+   `opponents.js` sky-hawk ace（grade 1＋`rival: true`），ace 反讀/情蒐數據面自動生效。
+2. **真機試玩批次**（§11）：冠軍館滿場景 **60 FPS 復測＝硬驗收**（題9）；
+   五局打滿體力體感（決勝局該不該這麼累）＝題7 調參的輸入。
+3. **平衡裁定**（§4 治具數據）：多局制新帶／OPP 要球回帶／L 2.0 改判空間與反讀制衡。
+
+## 1. 交付總表（工單 §1 十件）
+
+| # | 區塊 | 內容 | 落點 |
+|---|------|------|------|
+| 1 | 多槽存檔＋局間存檔鏈（題2/Q8 地基） | 3 槽 key 映射（槽1沿用 `vd-save` 零遷移；`-s2/-s3`）＋存檔頭同步維護與自癒（讀卡不解整包）＋選檔頁卡片（角色名/位置/屆/戰績/身高；空槽「新的夢」；刪檔二次確認）＋可切槽 store 代理（careerScreen 零改動）＋賽末返回帶槽號；局間存檔＝整包 sim state JSON 快照落槽位 mid key，**存讀續打＝不中斷逐 tick 等價（rngState 同步，測試背書）**；存檔離開豁免棄賽、完賽/殘檔自動清理；快速比賽不入槽 | `career/saveSlots.js`（新）／`careerStore.js`（slot 參數＋`createSlotStoreProxy`＋mid API）／`careerScreen.js`／`main.js`／`matchCareer.js` |
+| 2 | 分級賽制（Q8 全配套） | 多局系列狀態機：`series`（bo3/bo5）＋`set_break` 相位＋`startNextSet`（唯一局間推進路徑）——體力跨局延續＋局間恢復（`RECOV_SET_BREAK` 0.12 初擬）、氣勢跨局歸零、trust 場內動態延續、換人/暫停額度每局重置、輪轉回開場先發序、發球權逐局交替、決勝局 15 分＋8 分換邊（`SIDE_SWITCH` 事件化＋字卡；物理半場不換＝裁量點 §8-1）；賽制推導 `matchFormatOf`（決賽 bo5／準決賽・宿敵場 bo3／其餘 bo1；純推導零存檔遷移）；bo1 零擾動（同種子逐事件等價測試）；局間 huddle 過場（比分回顧＋教練指示決定論選句＋下一局/存檔離開；S 導師句掛點預留） | `sim/game.js`／`sim/stamina.js`／`career/schedule.js`／`app/matchConfig.js`／`app/matchCareer.js`／`ui/setBreakOverlay.js`（新） |
+| 3 | 三館制（Q10） | `VENUES` 三館規格單一事實源：常規館不動／關鍵戰館（貼場五層環繞＋桁架＋藍灰膠地）／冠軍館（穹頂骨架＋上下兩層看台＋滿場觀眾＋國際賽配色地板）；`createArena` 參數化重建＋`court.setFloorPalette`；主客場氛圍＝天鷹橫幅＋客隊應援色塊＋`sfx.setCrowdBias` 音場偏對手（冠軍館中立）；冠軍館燈光秀開場（暗場→聚光逐盞亮→巡場 `tour` 鏡頭；sim 凍結、點擊跳過、演出畢才播情蒐帶、續玩不重播）；降規把手＝attendance→上層 count→桁架/穹頂 | `render/arena.js`（重寫）／`render/court.js`／`render/scene.js`／`render/cameraRig.js`／`ui/sfx.js`／`main.js`／`app/matchLoop.js` |
+| 4 | box score（Q9） | `career/boxScore.js` 純函式事件流攔截：全員逐人記帳（得分/攻擊/攔網/ACE/接發分檔）＋S 欄（分配/二次球）＋`buildAceBox`＋`buildMentorFeed`（契約形狀）；單場結算頁（局終第一點＝結算頁、第二點＝返回；我方全員＋對手王牌行＋位置差異行）；L 四欄「改判成功率」定形入帳（表現層 tally→`stats.liberoBox.overrides`）；導師接線上線（賽後鏈 `dueMentorLines` 決定論每場至多一句、events 防重播）；對手 ace 記帳餵情蒐（`recordAceBook` 跨屆累積→對陣畫面「上次交手他扣了 N 分」）；生涯累積頁（屆末封存 `archiveSeasonSummary`＋📊 生涯數據 overlay） | `career/boxScore.js`（新）／`ui/boxScorePanel.js`（新）／`app/matchCareer.js`／`app/matchLoop.js`／`careerStore.js`／`careerScreen.js` |
+| 5 | 題3 二次球＋題5 OPP 要球 | 二次球：S 前排＋Perfect 檔→「🎯二次球」（`chooseSetDump` 沿 AI setterDump 同 sim 路徑 t=0.3、零特例、不吃 trust；真值字卡＝實際出手才追蹤，出界不冒認被識破）；OPP 要球：後排一傳起球→「⚡跟上！」浮鈕 0.8s（blockTap 語彙不減速）→`call` Intent（VCR 同錄）→sim 登記 `rally.callPid`——D 球授予決定論 hash（`CALL_GRANT` 0.7 初擬非保證）＋甜蜜區微放寬（`CALL_SWEET_WIDEN` 0.06）＋trust 升降 2×（`CALL_TRUST_MUL` 沿乘係數）；表現層喊「我來！」＋S 回頭；**OH 零新機制（關卷）** | `input/setOptions.js`／`input/matchControls.js`／`sim/game.js`／`sim/trust.js`／`ui/callButton.js`（新）／`app/matchLoop.js` |
+| 6 | 題1 請調事件 | `transferCandidates`（gate＝目標 open＋打滿 3 場＋每屆一次）＋教練反問（勝率分版）＋志願分版台詞（「我等你這句話很久了」/勸但尊重）；二選一互斥＝`TRANSFER_USED_EV`（接受）→當屆屆間談話不觸發（換屆前捕捉舊屆旗標）；婉拒僅 asked＝入口收起、屆間照常；「去找教練」對話事件入口（非功能按鈕）；生效下一場（`applyPositionChange` 現成鏈） | `career/positionEvents.js`／`careerScreen.js` |
+| 7 | 題6 宿敵 | 三案人設存 §7（未落檔未接線）；資料鉤全落：`applySeasonRoster`/`graduatingAces` 宿敵豁免（`ace.rival` 旗標、合成 def 測試背書）＋sky-hawk 隊級 `rival: true`＋關鍵戰館橫幅/應援指向天鷹＋對陣畫面 🔥 宿敵標記行＋ace 反讀旗標鏈（B-4） | `career/opponents.js`／`career/careerState.js`／`career/schedule.js`／`careerScreen.js` |
+| 8 | 生涯結算（Q5） | `careerFinale.js`：隊友具名送別（班底手寫 5 組＋generic 名冊解版本）＋主角版畢業儀式（graduationRitual 逐位聚光鏈單人版、戰績誠實分版）＋三屆總結＋下一章佔位；結算流程＝三屆定格→生涯數據→招募全記錄→關鍵球典藏行→謝幕→送別→儀式→「第一章・完」→回選檔頁；關鍵球回放資料底＝決賽勝利最後一球 VCR（snapshot＋Intent 流）落 `career.finalRally`（回放引擎＋宿敵之戰回放位＝4.5）；雙人畢業量能（阿岩＋阿遠＝一次暗場逐位聚光兩段，測試背書）；W3 債務 5＝`ONCE_EVENT_IDS` 分類＋`playedOnce` 跨屆旗標（debut 類生涯一次；hot-hand/轉位談話每屆節拍保留） | `career/careerFinale.js`（新）／`career/events.js`／`careerStore.js`／`careerScreen.js`／`app/matchLoop.js` |
+| 9 | 治具與平衡（題7/8） | 治具多局化：`VD_BO`（強制 bo3/5）／`VD_MULTISET`（賽程推導）／`VD_NO_BREAK_RECOV`（裸延續對照）／`VD_CALL`（OPP 要球近似：頻率 0.6＋grant 0.7 同 matchLoop 公式）／`VD_RIVAL`（反讀臂）；體力曲線收集（各局開局帶＋打滿場數）；數據見 §4 | `tools/balance-sim.mjs` |
+| 10 | L 2.0 整包（附錄 B，未滑） | B-1 合併配套（封直線・收斜線／封斜線・收直線／攔手讓開・收吊球＝`digBias{choice,block}` 一指令雙驅動；攔網站線 `BLOCK_SCHEME_SHIFT` 0.9／'off'＝退攻擊線；攔網數值零特例；A2 節奏資產不動）；B-2 兩層讀對（🧱封線成功！／📖讀對了——球走你留的線；Perfect 窗語意不變；中路皆不中；讓開不補償）；B-3 封線影子（`blockShadow.js` 佈陣可視化＝封線暗牆影/留線微亮，非落點提示，隨指令生命週期收）；B-4 ace 反讀（宿敵 ace 專屬 `rivalAcePid`；scoutTally 鏡像 n≥3 佔比≥0.5→改打讓開的線＋誠實字卡；混配套＝反制；人設未落檔＝機制沉睡零擾動）；B-6 建議品質吃標記比重（硬＞軟 n≥2 佔比≥0.4＞預設封斜線）；B-5 暗號手勢＝4.5 勿實作（照拍板） | `input/liberoRead.js`／`sim/ai.js`／`render/blockShadow.js`（新）／`app/matchLoop.js` |
 
 ## 7. 宿敵三案人設（題6——Fable 深推理產出，待 Sawmah 挑）
 
@@ -68,3 +95,71 @@
   稱號 雲上人／攀天者／量天尺 未被使用；naming.test 全綠。
 - 機制咬合預留：ace 反讀（附錄 B-4）＝rival 隊 ace 專屬；Q9 aceBook「上次交手他扣了
   N 分」已上線——選案後宿敵的數據面自動生效。
+
+## 5. 測試（479 → 517，+38）
+
+新增：`save-slots`（7：key 映射/槽間零洩漏/存檔頭同步與自癒/局間存檔 key/代理同形）、
+`match-sets`（6：系列推進/局間收束重置語意/決勝局 15+8 分換邊/**局間存檔決定論
+（存讀續打逐事件等價＋rngState 同步）**/賽制推導/bo1 零擾動逐事件等價）、
+`box-score`（5：歸因/二次球/導師契約/aceBook 累積/屆末封存）、`call-dump`（4：二次球
+選項條件/call Intent 流/甜蜜區放寬/信任 2×）、`transfer`（3：gate 三條件/二選一互斥/
+決定論分版）、`rival`（3：遞補豁免/畢業播報豁免/隊級旗標＋bo3 聯動）、`finale`（6：
+送別/主角儀式分版/三屆總結/once 分類與跨屆旗標/雙人畢業量能/finalRally roundtrip）、
+`l2-scheme`（4：配套語意/B-6 建議品質/B-4 反讀統計/blockScheme 站位幾何）。
+`libero-play` 建議斷言依附錄 B-1 更新（配套 key）。
+
+## 8. 實作裁量點（如實記錄待裁）
+
+1. **決勝局 8 分換邊＝事件化不真換**：SIDE_SWITCH 事件＋字卡演出；物理半場/鏡頭/
+   操作恆我方視角（真換＝全鏡像大工程且體驗混亂；多數排球遊戲同解）。
+2. **RECOV_SET_BREAK=0.12 初擬**：題7 調參序第一位；§4 曲線數據供裁。
+3. **CALL_GRANT 0.7／CALL_SWEET_WIDEN 0.06／CALL_TRUST_MUL 2×**：題5 三初擬值，
+   治具驗＋試玩體感裁。
+4. **BLOCK_SCHEME_SHIFT 0.9**：封線站位偏移（站線幾何自然改變攔網涵蓋——攔網數值
+   零特例）；體感歸試玩清單。
+5. **B-4 讓開線對映**：封線配套（覆蓋封線＋收縮線）→讓開＝吊球；讓開配套→讓開＝
+   斜線強攻。附錄未逐字指明，依「兩層覆蓋後的唯一縫」推導，如實記錄。
+6. **多局場賽果記局數**（entry.scoreFor/Against＝setsWon；各局明細落 entry.sets）；
+   棄賽敗維持 0:25 舊格式（bo 場棄賽極端情境，未特化）。
+7. **結算頁「宿敵之戰回放位」＝資料預留非 UI 空位**（finalRally 結構可擴陣列；
+   顯示哲學：不給玩家看空欄）。
+8. **局間 huddle＝DOM 卡片版**（比分回顧＋教練指示＋按鈕）；W7 圍圈 3D 演出未接
+   （sim 凍結下 tick 驅動的圍圈管線不可用）——嫌單薄則 4.5 演出輪升級。
+
+## 10. 債務與依賴
+
+1. 宿敵選定落檔（Sawmah 挑 §7 三案）→ ace 換人＋grade 1＋ace.rival:true；
+   王勝翔留 squad（招募語意不動）。落檔後：ace 反讀/情蒐同屆語意自動生效。
+2. 三幕劇情/台詞/N2 支線接線＝4.5 劇情輪（工單 §13）。
+3. 關鍵球回放引擎接線＋宿敵之戰回放收藏＝4.5（資料底已落：finalRally snapshot+steps）。
+4. 演出債整批 4.5 專輪（§11 優先級 2 全集＋暗號手勢 B-5）。
+5. 治具跨屆臂不吃身高揭曉（W2 債務 2 未解，沿滾）。
+6. 舊隊情結動態事件跨屆重播（W7 D1 的 events 逐屆重置遺留——本週只修 debut 類，
+   此項如實記錄未修）。
+
+## 11. 試玩批次清單（滾動版；工單 §14 原樣滾動＋銷帳）
+
+- **銷帳修正（照工單）**：W3 快照 §11「⚠ 上架前 Phase 6 移除面板入口」——面板已於
+  07-27 移除，此行銷掉勿再滾動。
+- **優先級 1｜W4 新增**：
+  - 五局打滿體力體感（決勝局該不該這麼累——題7 調參的輸入；曲線數據見 §4）
+  - 局間 huddle 節奏（DOM 卡片版份量夠不夠——嫌單薄＝4.5 升級 3D 圍圈）
+  - 二次球出現頻率手感／OPP 要球窗 0.8s 與 2× 乘子體感（CALL_GRANT 0.7/放寬 0.06 初擬）
+  - 請調對話語氣（教練反問分版）
+  - L 2.0：配套三選項與封線影子可讀性／ace 反讀被讀穿的體感（宿敵落檔後）
+  - 選檔頁/生涯數據頁/單場結算頁 手機版面
+  - **冠軍館滿場景真機 60 FPS 復測（題9 硬驗收——不得以常規館數字交差；未達標依
+    Phase 0 精神逐項降規：attendance→上層看台 count→桁架/穹頂）**
+- **優先級 2｜儀式演出規格（4.5 專輪待辦全集）**：W1-W3 既有全部＋冠軍館燈光秀精緻度
+  ／結算演出份量／雙人畢業節奏＋**五位置招牌演出（07-27 拍板，各位置身分機制的
+  決定性瞬間，純表現層吃現有 cameraRig/慢動作/幾何骨架管線）**：
+  - **OH「被騙的人」**：假動作得手＝慢動作帶攔網手（頭隨視線走/撲錯線/從指尖旁打穿）
+    ——欺敵的騙局本身入鏡
+  - **S「全場等你的一秒」**：分配面板 diegetic 化＝鏡頭掃場、高 trust 隊友揮手喊球、
+    點隊友模型本身＝分配；二次球＝假舉手型→壓球→靜半拍→爆
+  - **MB「早到的人」**：搶快賭對＝最高點滯空等球、網帶上方俯視鏡頭
+    （OH 俯衝/L 貼地/MB 靜止＝三角鏡頭語言）
+  - **OPP「三米線起飛」**：要球兌現＝低機位跟拍後排起動助跑全程；得手落地＝
+    與 S 專屬擊掌（信任下注回報可視化）
+  - **L「暗號手勢」**：附錄 B-5（三種真實手勢＋攔網手偷瞄點頭）
+- **優先級 3**：heights 巨人體感/190 攔網複驗（沿 W3）
