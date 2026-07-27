@@ -1,4 +1,4 @@
-import{I as ho,D as mo,C as xo,G as Et,B as go,a as Ge,S as $t,M as bo,O as yo,W as Mn,b as Ln,c as _n,P as Pn,H as zn,d as Bt,e as vo,f as wo,g as ko,h as Co}from"./three-C_41FSQm.js";import{i as Eo,c as We,A as He,T as $o,a as Ao,s as To,b as So,u as Ro,d as Io,e as Oo,f as Mo,g as Lo,h as _o,j as Po,k as zo,l as Be,m as Nn,S as nn}from"./sim-CaNPmuF7.js";function Ds(e,t,n,o=!1){const i=No(n);let r=0,a=0,s=0,l=performance.now();o||e.classList.add("hud-min"),e.innerHTML=`
+import{I as ho,D as mo,C as xo,G as Et,B as go,a as Ge,S as $t,M as bo,O as yo,W as Mn,b as Ln,c as _n,P as Pn,H as zn,d as Bt,e as vo,f as wo,g as ko,h as Co}from"./three-C_41FSQm.js";import{i as Eo,c as We,A as He,T as $o,a as Ao,s as To,b as So,u as Ro,d as Io,e as Oo,f as Mo,g as Lo,h as _o,j as Po,k as zo,l as Be,m as Nn,S as nn}from"./sim-BPPWCFKM.js";function Ds(e,t,n,o=!1){const i=No(n);let r=0,a=0,s=0,l=performance.now();o||e.classList.add("hud-min"),e.innerHTML=`
     <div class="fps">— <span>FPS</span></div>
     <div class="stats">${o?"量測中…":""}</div>
     <div class="settings">${i}</div>
