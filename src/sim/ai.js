@@ -396,9 +396,10 @@ export function digTargetFor(game, team, playerId, bias = null) {
   let shift = Math.max(-1.2, Math.min(1.2, ballLx * AI.DIG_SHIFT));
   let forward = 0.8; // 收前 0.8m（lz 7→6.2）：防守預備深度
   if (bias === 'line') {
-    shift = Math.max(-2.0, Math.min(2.0, shift + Math.sign(ballLx) * 0.9));
+    // 偏移 1.3m（07-27 試玩回饋：0.9 在六人陣型裡看不見——指揮要有可見的重量）
+    shift = Math.max(-2.2, Math.min(2.2, shift + Math.sign(ballLx) * 1.3));
   } else if (bias === 'cross') {
-    shift = Math.max(-2.0, Math.min(2.0, shift - Math.sign(ballLx) * 0.9));
+    shift = Math.max(-2.2, Math.min(2.2, shift - Math.sign(ballLx) * 1.3));
   } else if (bias === 'tip') {
     forward = 2.2; // 前壓短區（吊球斷點）
   }

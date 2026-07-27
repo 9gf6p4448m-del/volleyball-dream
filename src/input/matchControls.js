@@ -584,6 +584,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       mbEarly = !!early;
     },
     mbPending() { return mbChosen; },
+    // 表現層讀取（07-27 試玩回饋：決策要看得見自己）——封線目標點（地面標記用）
+    mbCommitPoint() { return mbChosen ? mbTarget : null; },
 
     // ---- L 防守指揮（W3 附錄 A1/A2：玩家＝場上自由人、對手舉球出手瞬間）----
     isLMoment(game) {

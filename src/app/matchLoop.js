@@ -15,6 +15,7 @@ import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import { setPanelTitle, CALL_BALL_AT } from '../input/setOptions.js';
 import { mbPanelTitle } from '../input/blockRead.js';
+import { digReadCorrect } from '../input/liberoRead.js';
 import { serverId } from '../sim/match.js';
 import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
@@ -501,6 +502,11 @@ function updateDecisions(s, now) {
       && game.rally.touches >= 1))) {
     aiState.digBias = null;
   }
+  // 07-27 試玩回饋：L 讀對追蹤——對手攻擊飛行中持續結算，我方第一觸出結果字卡
+  if (aiState.digBias && game.phase === 'rally'
+    && game.rally.profile === 'spike' && game.rally.lastSpikeZone) {
+    s.digReadResult = digReadCorrect(game, aiState);
+  }
   // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
   if (!onCourt(game, s.controlledId)) { panel.hide(); return 0; }
   // 進攻時刻＝切攻擊手視角越過網看攔網（讀攔網要看得清）
@@ -608,7 +614,12 @@ function updateDecisions(s, now) {
           { key: `${l.key}-q`, label: `${l.label.slice(1)}搶快${tell}`, color: 'orange', zone: l, early: true },
         ];
       }),
-      (it) => { controls.chooseMbBlock(it.zone, it.early); },
+      (it) => {
+        controls.chooseMbBlock(it.zone, it.early);
+        // 07-27 試玩回饋：決策要看得見自己——選擇確認浮字＋commit 記錄（結果字卡用）
+        floatText.show(`🧱 ${it.zone.label}${it.early ? '·搶快！' : '！'}`, '#ffd166', 1200);
+        s.mbCommit = { label: it.zone.label, early: it.early };
+      },
     );
   } else if (digDeciding && !controls.digPending()) {
     // W3 L 指揮面板（附錄 A2）：AI 建議預設高亮（綠）、其餘中性；標題帶習慣標記線索
@@ -628,6 +639,8 @@ function updateDecisions(s, now) {
           choice: it.zone.key,
           override: it.zone.key !== digRead.suggestion,
         };
+        // 07-27 試玩回饋：手選（含改判）給確認浮字；1 秒自動照建議維持靜默（A2 拍板）
+        floatText.show(`🛡 ${it.zone.label}！全隊收縮`, '#6ee7ff', 1200);
       },
     );
   } else if (setDeciding) {
@@ -747,6 +760,26 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
     }
+    // 07-27 MB 搶快賭局結算：對手出手那一拍揭曉——賭對快攻/賭錯高球（字卡回饋）
+    if (e.type === 'TOUCH' && e.kind === 'spike' && s.mbCommit?.early
+      && e.team !== game.players[s.controlledId]?.teamId) {
+      const wasQuick = s.aiState.attackKind === 'quick';
+      stage.floatText.show(
+        wasQuick ? '⚡ 賭對快攻！' : '早了——是高球…',
+        wasQuick ? '#7ee787' : '#c8d6eb', 1400,
+      );
+      s.mbCommit = { ...s.mbCommit, early: false }; // 賭局只揭曉一次；封到球回饋另留
+    }
+    // 07-27 L 指揮結果：我方第一觸出讀對/讀反字卡（神救球演出時已讓位不疊）
+    if (e.type === 'TOUCH' && e.touches === 1 && s.digReadResult != null
+      && game.players[s.controlledId]?.currentRole === 'libero'
+      && e.team === game.players[s.controlledId].teamId) {
+      stage.floatText.show(
+        s.digReadResult ? '📖 讀對了！' : '讀反了……',
+        s.digReadResult ? '#7ee787' : '#c8d6eb', 1300,
+      );
+      s.digReadResult = null;
+    }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
       s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
       if ((e.power ?? 1) >= 0.7) s.slowUntil = now + 450; // 重扣＝定格接慢動作
@@ -758,6 +791,7 @@ function applyEvents(s, frameEvents, now) {
       // （45 秒節流——前輩的關心不是罐頭）。塵土粒子＝試玩債（快照記錄）
       s.slowUntil = now + 650;
       s.diveCamUntil = now + 850;
+      s.digReadResult = null; // 神救球演出優先，不疊讀對字卡
       stage.sfx.gaspCheer?.();
       stage.floatText.show('⚡ 神救球！', '#6ee7ff', 1600);
       if (!s.liberoPraiseAt || now - s.liberoPraiseAt > 45000) {
@@ -771,10 +805,17 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.hitStopUntil = now + 60;
       s.shake = Math.max(s.shake, 0.2);
+      // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
+      if (e.playerId === s.controlledId && s.mbCommit) {
+        stage.floatText.show('🧱 封到了！', '#ffd166', 1400);
+        s.mbCommit = null;
+      }
     } else if (e.type === 'DEAD_BALL') {
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
       stage.controls.consumeDigHeroSignal?.(); // W3 L：丟棄未兌現的演出武裝（撲空）
+      s.digReadResult = null; // 07-27 結果字卡狀態隨球清
+      s.mbCommit = null;
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
@@ -1085,7 +1126,10 @@ function frameStep(s, now) {
     stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());
   stage.touchUi.update(stage.controls.uiState());
-  const aimAt = s.config.simpleMode ? null : stage.controls.currentAimPoint(game);
+  // 07-27：簡化模式借 aimMarker 畫 MB 封線承諾點（決策要看得見自己）；經典模式照舊瞄準點
+  const aimAt = s.config.simpleMode
+    ? (stage.controls.mbCommitPoint?.() ?? null)
+    : stage.controls.currentAimPoint(game);
   if (aimAt) stage.aimMarker.show(aimAt);
   else stage.aimMarker.hide();
   ctx.renderer.render(ctx.scene, ctx.camera);
