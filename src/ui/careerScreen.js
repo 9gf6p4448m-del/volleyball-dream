@@ -1597,7 +1597,11 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
           'font-size:13px', 'font-weight:700', 'color:#7ee787', 'text-align:center',
         ], note));
       }
-      card.appendChild(button('關閉', false, () => overlay.remove()));
+      // 關閉＝重繪生涯畫面（07-27 修：全開後按鈕要即時消失，不能等下次導航才刷新）
+      card.appendChild(button('關閉', false, () => {
+        overlay.remove();
+        renderCareer();
+      }));
     };
     paint();
   }
