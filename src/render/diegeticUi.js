@@ -53,21 +53,48 @@ export function createDiegeticUi() {
     return b;
   }
 
-  // S 熱點：光圈（身上亮起）＋玩法標籤；loud＝脈動金圈（他在揮手喊球）
+  // S 熱點：光圈（身上亮起）＋玩法標籤。
+  // 07-28 追修（Sawmah：「每次都在找是哪個球員」「二次球不明顯」）：
+  // loud＝金圈放大＋「🙋 這球給我！」徽章（揮手的人一眼可辨，不必找背號）；
+  // dump＝膠囊按鈕（畫面下緣中央的明確動作鈕，不再是小光圈）
   function buildSetSpot(item, onPick) {
     const b = baseSpot();
+    if (item.kind === 'dump') {
+      const pill = document.createElement('div');
+      pill.style.cssText = [
+        'height:46px', 'padding:0 22px', 'border-radius:23px', 'display:flex',
+        'align-items:center', 'font-size:16px', 'font-weight:900', 'letter-spacing:1px',
+        'color:#ffd166', 'background:rgba(14,12,4,0.85)', 'border:2.5px solid #ffd166',
+        'box-shadow:0 0 18px #ffd16655', 'white-space:nowrap',
+      ].join(';');
+      pill.textContent = '🎯 二次球';
+      b.appendChild(pill);
+      b.addEventListener('pointerdown', (e) => { e.stopPropagation(); onPick(item); });
+      return b;
+    }
+    const ringColor = item.loud ? '#ffd166' : item.hesitant ? '#5a6a8a' : '#6ee7ff';
+    const size = item.loud ? 76 : 58;
+    if (item.loud) {
+      const badge = document.createElement('div');
+      badge.style.cssText = [
+        'font-size:13px', 'font-weight:900', 'white-space:nowrap', 'color:#0a0c14',
+        'background:#ffd166', 'border-radius:10px', 'padding:2px 10px',
+        'box-shadow:0 0 14px #ffd166aa', 'letter-spacing:1px',
+      ].join(';');
+      badge.textContent = '🙋 這球給我！';
+      b.appendChild(badge);
+    }
     const ring = document.createElement('div');
-    const ringColor = item.kind === 'dump' ? '#ffd166' : item.hesitant ? '#5a6a8a' : '#6ee7ff';
     ring.style.cssText = [
-      'width:58px', 'height:58px', 'border-radius:50%',
-      `border:3px solid ${ringColor}`,
-      `box-shadow:0 0 18px ${ringColor}66, inset 0 0 14px ${ringColor}33`,
+      `width:${size}px`, `height:${size}px`, 'border-radius:50%',
+      `border:${item.loud ? 4 : 3}px solid ${ringColor}`,
+      `box-shadow:0 0 ${item.loud ? 26 : 18}px ${ringColor}${item.loud ? '99' : '66'}, inset 0 0 14px ${ringColor}33`,
       item.loud ? 'animation:vd-diegetic-pulse 0.9s ease-in-out infinite' : '',
     ].join(';');
     const tag = document.createElement('div');
     tag.style.cssText = [
       'font-size:12px', 'font-weight:800', 'white-space:nowrap',
-      `color:${item.hesitant ? '#9fb0cc' : '#eef2fa'}`,
+      `color:${item.hesitant ? '#9fb0cc' : item.loud ? '#ffd166' : '#eef2fa'}`,
       'text-shadow:0 1px 6px rgba(0,0,0,0.9)', 'padding:1px 6px',
       'background:rgba(8,10,18,0.55)', 'border-radius:8px',
     ].join(';');

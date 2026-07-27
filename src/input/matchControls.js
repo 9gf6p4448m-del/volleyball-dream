@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { createIntent } from '../sim/intent.js';
 import { serverId } from '../sim/match.js';
 import {
-  TEAM_SIDE, isFrontRow, localToWorld, positionOf, basePosition,
+  TEAM_SIDE, isFrontRow, localToWorld, positionOf, basePosition, servePosition,
 } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
@@ -263,6 +263,17 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       // rally 中一碰搖桿＝整球歸你（職責位不再拉回）；發球階段重置重新帶位
       if (game.phase === 'serve') manualOwned = false;
       else if (game.phase === 'rally' && Math.hypot(move.x, move.z) >= 0.1) manualOwned = true;
+
+      // 07-28 追修（Sawmah 試玩：發球員可遊走、甚至走進場內發球）：發球員＝定點
+      // 發球——發球前搖桿不生效、自動站回發球區（端線外 1 號位後方，sim 佈陣同源）。
+      // FIVB 語意：發球必須在發球區出手；輸入層攔截、sim 零改動
+      if (game.phase === 'serve' && playerId === serverId(game.match)) {
+        const sp = servePosition(me.teamId);
+        const dx = sp.x - a.x;
+        const dz = sp.z - a.z;
+        const len = Math.hypot(dx, dz);
+        move = len > 0.3 ? { x: dx / len, z: dz / len } : { x: 0, z: 0 };
+      }
 
       // 發球階段自動歸位（FIVB 7.5：發球瞬間站位違規＝對方得分）——
       // 沒推搖桿就走回輪轉基準位；堅持推著亂站＝吃真實站位犯規（發球員不歸位）
