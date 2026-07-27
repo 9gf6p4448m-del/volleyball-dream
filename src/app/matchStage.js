@@ -18,6 +18,7 @@ import { createPointBanner } from '../ui/pointBanner.js';
 import { showTutorialOnce } from '../ui/tutorial.js';
 import { createSetOverOverlay } from '../ui/setOverOverlay.js';
 import { createSetBreakOverlay } from '../ui/setBreakOverlay.js';
+import { createBoxScorePanel } from '../ui/boxScorePanel.js';
 import { createSubPanel } from '../ui/subPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
@@ -90,6 +91,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const setOverOverlay = createSetOverOverlay();
   // W4(P4) Q8 局間 huddle 過場（多局賽制限定；bo1 恆不觸發＝零擾動）
   const setBreakOverlay = createSetBreakOverlay();
+  // W4(P4) Q9 單場結算頁（生涯場局終第一次點擊顯示）
+  const boxScorePanel = createBoxScorePanel();
   // W7 A6：主角體力條（HUD 角落；stamina 未啟用時 update() 內部短路不顯示）
   const heroStamina = createHeroStaminaBar();
   showTutorialOnce(simpleMode);
@@ -97,7 +100,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
-    aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, setBreakOverlay, heroStamina,
+    aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, setBreakOverlay,
+    boxScorePanel, heroStamina,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
 }

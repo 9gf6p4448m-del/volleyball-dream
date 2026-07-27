@@ -29,6 +29,8 @@ import {
 import { showHeightRitual } from './heightRitual.js';
 import { showGraduationRitual } from './graduationRitual.js';
 import { positionTalkFor } from '../career/positionEvents.js';
+import { dueMentorLines } from '../career/mentor.js';
+import { archiveSeasonSummary } from '../career/careerStore.js';
 import { readSlotHeads } from '../career/saveSlots.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
@@ -664,6 +666,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         const aceRole = def.ace.slot === 'L' ? '自由人' : OPP_ROLE[def.ace.slot];
         intel.appendChild(el('div', ['font-size:12.5px', 'font-weight:800', `color:${COLOR.gold}`],
           `王牌 ${def.ace.name}（${aceRole}）——「${def.ace.title}」`));
+        // W4(P4) Q9：對手 ace 對戰數據餵情蒐（宿敵感數據面——「上次交手他扣了 18 分」）
+        const aceRec = store.loadAceBook?.()?.[next.opponentId];
+        if (aceRec?.last && aceRec.name === def.ace.name) {
+          const bits = [`扣了 ${aceRec.last.kills} 分`];
+          if (aceRec.last.aces > 0) bits.push(`ACE ${aceRec.last.aces}`);
+          if (aceRec.last.blocks > 0) bits.push(`攔死 ${aceRec.last.blocks}`);
+          intel.appendChild(el('div', ['font-size:11.5px', 'color:#ff9d7a'],
+            `📋 上次交手：他${bits.join('、')}${aceRec.matches > 1 ? `（交手 ${aceRec.matches} 次）` : ''}`));
+        }
       } else if (seasonDef.ace) {
         // W1(P4)：以「該屆應有的王牌」為基準——畢業拔除不誤報成被挖走
         intel.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.cyan}`],
@@ -1422,6 +1433,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       fireEvents(postEvs, career, player, () => renderCareer());
       return;
     }
+    // W4(P4) Q9 導師接線（縫隙 1 層次二上線）：玩家=S 且最近一場有 box.mentor
+    // → dueMentorLines 決定論選句（每場至多一句）；events 入帳防重播（mentor-<matchId>）
+    if (player.currentRole === 'setter') {
+      const lastR = career.results[career.results.length - 1];
+      const mentorEvId = lastR ? `mentor-${lastR.matchId}` : null;
+      if (lastR?.box?.mentor && !(career.events ?? []).includes(mentorEvId)) {
+        const due = dueMentorLines(lastR.box.mentor);
+        const marked = recordEvent(career, mentorEvId); // 無句也入帳——不重複檢查同一場
+        store.saveCareer(marked);
+        if (due) {
+          dialogPlay([{ lines: due.lines }], () => renderCareer());
+          return;
+        }
+        career = marked;
+      }
+    }
     // W4 招募入隊：條件達成且有空位→入隊（單次原子 RMW，冪等），賽後結算畫面彈
     // 儀式演出（名字/位置/屬性亮相）；播完重繪即見新成員入名冊
     const joined = settleRecruitJoins(store, career.seed);
@@ -1618,12 +1645,85 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     }
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px']);
     ioRow.appendChild(smallButton('返回選檔', renderSlots)); // 生涯的上一層＝選檔頁（W4 題2）
+    ioRow.appendChild(smallButton('📊 生涯數據', showCareerTotals)); // W4 Q9 累積頁
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
     root.appendChild(ioRow);
     root.appendChild(msgEl);
   }
   // 🔓 手批面板已移除（07-27 Sawmah 拍板：四位置驗收完結→版本級 open，見
   // positionFlags.ENGINEERED_OPEN；未來新位置驗收用 ?openPosition= 入口即可）
+
+  // ---- W4(P4) Q9 生涯累積頁：歷屆封存（advanceSeason 屆末寫入）＋本屆進行中——
+  // 三屆總數據；Q5 生涯結算直接吃此處 ----
+  function showCareerTotals() {
+    const career = store.loadCareer();
+    if (!career) return;
+    const seasons = [...(store.loadSeasonArchive?.() ?? [])];
+    seasons.push({
+      ...archiveSeasonSummary({ index: store.seasonIndex?.() ?? 1, results: career.results }),
+      current: true,
+    });
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:rgba(4,6,12,0.88)', 'gap:10px', 'padding:24px 14px', 'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', [
+      'font-size:15px', `color:${COLOR.dim}`, 'letter-spacing:4px',
+    ], '生涯數據'));
+    overlay.appendChild(el('div', [
+      'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:2px',
+    ], career.playerName));
+    const totalLine = (t) => {
+      const bits = [`殺球 ${t.kills + t.tipKills}`, `ACE ${t.aces}`, `攔網 ${t.blockPoints}`, `Perfect ${t.perfects}`];
+      if (t.digs + t.assistDigs + t.rallySaves > 0) {
+        bits.push(`起球 ${t.digs}`, `助攻一傳 ${t.assistDigs}`, `續命 ${t.rallySaves}`);
+      }
+      return bits.join('・');
+    };
+    const sum = {
+      kills: 0, tipKills: 0, aces: 0, blockPoints: 0, perfects: 0,
+      digs: 0, assistDigs: 0, rallySaves: 0, wins: 0, losses: 0, titles: 0,
+    };
+    for (const sn of seasons) {
+      for (const k of ['kills', 'tipKills', 'aces', 'blockPoints', 'perfects', 'digs', 'assistDigs', 'rallySaves']) {
+        sum[k] += sn.totals[k] ?? 0;
+      }
+      sum.wins += sn.wins;
+      sum.losses += sn.losses;
+      if (sn.champion) sum.titles += 1;
+      const card = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left',
+        'display:flex', 'flex-direction:column', 'gap:3px',
+      ]);
+      const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
+      head.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
+        `第 ${sn.index} 屆${sn.current ? '（進行中）' : ''}`));
+      head.appendChild(el('div', ['font-size:13px', `color:${sn.champion ? COLOR.gold : COLOR.dim}`],
+        `${sn.wins} 勝 ${sn.losses} 敗${sn.champion ? '・🏆 全國冠軍' : ''}`));
+      card.appendChild(head);
+      card.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.dim}`, 'line-height:1.5'],
+        totalLine(sn.totals)));
+      overlay.appendChild(card);
+    }
+    const sumCard = el('div', [
+      'background:rgba(40,34,14,0.9)', 'border-radius:12px', `border:1px solid ${COLOR.gold}`,
+      'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left',
+      'display:flex', 'flex-direction:column', 'gap:3px',
+    ]);
+    const sumHead = el('div', ['display:flex', 'justify-content:space-between']);
+    sumHead.appendChild(el('div', ['font-size:14px', 'font-weight:800', `color:${COLOR.gold}`], '生涯合計'));
+    sumHead.appendChild(el('div', ['font-size:13px', `color:${COLOR.gold}`],
+      `${sum.wins} 勝 ${sum.losses} 敗${sum.titles ? `・🏆×${sum.titles}` : ''}`));
+    sumCard.appendChild(sumHead);
+    sumCard.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.text}`, 'line-height:1.5'],
+      totalLine(sum)));
+    overlay.appendChild(sumCard);
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], '點擊任意處關閉'));
+    overlay.addEventListener('pointerdown', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
 
   // stage 3 成長區：點數/上場表現/屬性加點（次要）/技術解鎖（主要）
   function growthSection(career, player) {

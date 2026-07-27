@@ -129,7 +129,8 @@ export function resolveForfeit(career) {
 // 記錄一場結果（不可變更新）；同場重複記錄＝原樣返回（局終畫面重入保護）
 // gp＝本場獲得的成長點數（累加進 growthPoints）；stats＝表現摘要（成長畫面顯示用）
 // W4(P4) Q8：sets＝多局系列各局終分（[{A,B}]；bo1 不帶）——box score／生涯結算消費
-export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp = 0, stats = null, sets = null }) {
+// W4(P4) Q9：box＝單場全員記帳 {team, oppAce, mentor}（結算頁/導師賽後鏈消費）
+export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp = 0, stats = null, sets = null, box = null }) {
   const entry = career.schedule.find((m) => m.id === matchId);
   if (!entry) throw new Error(`recordResult：賽程裡沒有比賽 ${matchId}`);
   if (career.results.some((r) => r.matchId === matchId)) return career;
@@ -148,6 +149,7 @@ export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp 
         gp: gp | 0,
         ...(stats ? { stats } : {}),
         ...(sets ? { sets } : {}),
+        ...(box ? { box } : {}),
       },
     ],
   };

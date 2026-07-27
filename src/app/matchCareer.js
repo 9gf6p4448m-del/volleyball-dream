@@ -2,10 +2,11 @@
 // node 可測（store 可注入假體）；three.js/DOM 一概不進本檔。
 // 開賽標記也住這裡：生涯場次的「開始→結束」生命週期收在同一模組。
 import {
-  recordResult, mergeScouting, markPending,
+  recordResult, mergeScouting, markPending, opponentById, applySeasonRoster,
 } from '../career/careerState.js';
 import { matchStatsFor, growthPointsFor } from '../career/growth.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
+import { buildTeamBox, buildAceBox, buildMentorFeed } from '../career/boxScore.js';
 import { applyRosterGrowth } from '../career/roster.js';
 import { accrueRecruitProgress } from '../career/recruitment.js';
 
@@ -19,7 +20,7 @@ export function markMatchStarted(careerCtx) {
 // - 局終當下呼叫一次（先落檔再顯示結算畫面——點擊返回前進度已保住）
 // - stage 3：從事件日誌統計表現→成長點數；假動作熟練度場終一次累積
 // - 情蒐入庫：這場對手看到的我（宿敵同 id 跨賽段累積——「他們記得你」）
-export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 }) {
+export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0, lOverrides = null }) {
   const myTeam = game.players[playerId].teamId; // 生涯主角固定 A 隊
   const other = myTeam === 'A' ? 'B' : 'A';
   const s = game.match.score;
@@ -29,10 +30,24 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
   const won = series ? series.winner === myTeam : game.match.winner === myTeam;
   const stats = matchStatsFor(game.events, playerId, myTeam);
   // W3(P4) L 三欄契約（附錄 A4④）：玩家=自由人＝逐場記帳（起球/助攻一傳/續命）；
-  // 數值頁 W4 消費——契約先立、帳先記（Q9 事件流攔截原則）
+  // W4 第四欄拍定：改判 {n, ok}（表現層 tally——override 旗標產生處記帳，同 feintsUsed 範式）
   if (game.players[playerId].currentRole === 'libero') {
-    stats.liberoBox = boxScoreLFor(game.events, playerId);
+    stats.liberoBox = {
+      ...boxScoreLFor(game.events, playerId),
+      overrides: lOverrides ?? { n: 0, ok: 0 },
+    };
   }
+  // W4(P4) Q9 box score：全員記帳＋對手 ace＋（玩家=S）導師契約供給——
+  // 全部由事件流攔截（決定論；非新算），落 entry.box 供結算頁/賽後鏈消費
+  const box = {
+    team: buildTeamBox(game.events, game.players, myTeam),
+    oppAce: resolveOppAceBox(game, careerCtx, other),
+    mentor: game.players[playerId].currentRole === 'setter'
+      ? buildMentorFeed(game.events, game.players, playerId, myTeam, {
+        won, initialTarget: game.series?.baseTarget ?? game.match.target,
+      })
+      : null,
+  };
   // W4 招募進度的重入防線：讀存檔現況判斷本場是否已結算過（recordResult 靠 results
   // 冪等，但招募 progress 是累加器——重入會重複累加，要在寫入前擋）
   const settledBefore = (careerCtx.store.loadCareer?.() ?? careerCtx.career)
@@ -54,7 +69,13 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
     gp: growthPointsFor(stats, won),
     stats,
     sets: series ? series.setScores.map((sc) => ({ ...sc })) : null,
+    box,
   })) && saveOk;
+  // W4(P4) Q9：對手 ace 對戰數據入帳（跨屆累積器——settledBefore 防重入，同招募閘）
+  if (box.oppAce && !settledBefore) {
+    saveOk = (careerCtx.store.recordAceBook?.(careerCtx.matchEntry.opponentId, box.oppAce) ?? true)
+      && saveOk;
+  }
   // W2 隊友自動成長：與主角同節拍（賽末一次）、同管線（matchStatsFor 表現歸因）。
   // 讀最新 roster 走 RMW（不用 careerCtx 快照）；applyRosterGrowth 依 matchId＋屆數冪等
   // （W6 修：W5 輪迴後 matchId 每屆重複，冪等鍵不帶屆數會讓第二屆起成長全滅）
@@ -107,6 +128,22 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0 })
     }
   }
   return { saveOk, won };
+}
+
+// W4(P4) Q9：對手 ace 的 pid 對映——當屆名冊（含畢業遞補/挖角除名）的 ace 名字
+// 對回 game.players（B 隊按名冊順序建隊，名字為唯一對映鍵；命名工程全名唯一背書）。
+// ace 被挖走（def.ace null／名冊查無此人）＝無記帳對象，回 null。
+// export 供 matchLoop 結算頁共用（同一條對映、同一組純函式）
+export function resolveOppAceBox(game, careerCtx, oppTeam) {
+  const base = opponentById(careerCtx.matchEntry.opponentId);
+  if (!base) return null;
+  const def = applySeasonRoster(base, careerCtx.store.seasonIndex?.() ?? 1);
+  const aceName = def.ace?.name ?? null;
+  if (!aceName) return null;
+  const acePid = Object.values(game.players)
+    .find((p) => p.teamId === oppTeam && p.name === aceName)?.id ?? null;
+  if (!acePid) return null;
+  return buildAceBox(game.events, game.players, acePid, oppTeam);
 }
 
 // 局終點擊返回生涯的網址（保留測試/操作相關參數）；pathname 由呼叫端給（window 不進本檔）

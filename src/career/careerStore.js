@@ -176,11 +176,18 @@ export function createCareerStore(storage, slot = 1) {
         // 下一屆值並 push timeline（同一次 RMW——儀式演出由 UI 吃回傳 heightReveal）
         const revealed = revealHeightForSeason(prev.player, nextIndex);
         heightReveal = revealed.reveal;
+        // W4(P4) Q9/Q5：屆末封存本屆摘要（season.results 換屆即重置——生涯累積頁
+        // 與 Q5 結算吃這裡；同一次 RMW 原子寫入）
+        const seasons = [
+          ...(prev.career.seasons ?? []),
+          archiveSeasonSummary(prev.season),
+        ];
         return {
           ...prev,
           player: revealed.player,
           roster: turnover.roster,
           lineup,
+          career: { ...prev.career, seasons },
           season: {
             ...seasonFromCareer(next, prev),
             index: nextIndex,
@@ -335,6 +342,35 @@ export function createCareerStore(storage, slot = 1) {
       const plain = JSON.parse(serializePlayer(player));
       return writeSave((prev) => ({ ...(prev ?? createSaveV2({})), player: plain }));
     },
+    // W4(P4) Q9：對手 ace 對戰數據（跨屆累積——餵情蒐「上次交手他扣了 18 分」）。
+    // 落 save.career.aceBook（career 鍵＝Phase 4 預留自由區；schema 不動）
+    recordAceBook(opponentId, ace) {
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        const book = { ...(next.career.aceBook ?? {}) };
+        const old = book[opponentId] ?? { matches: 0, total: { kills: 0, aces: 0, blocks: 0 } };
+        book[opponentId] = {
+          name: ace.name,
+          matches: old.matches + 1,
+          last: { kills: ace.kills, aces: ace.aces, blocks: ace.blocks },
+          total: {
+            kills: old.total.kills + ace.kills,
+            aces: old.total.aces + ace.aces,
+            blocks: old.total.blocks + ace.blocks,
+          },
+        };
+        return { ...next, career: { ...next.career, aceBook: book } };
+      });
+    },
+    loadAceBook() {
+      const save = loadSave();
+      return structuredClone(save?.career?.aceBook ?? {});
+    },
+    // W4(P4) Q9 生涯累積頁：歷屆封存摘要（advanceSeason 屆末寫入）＋讀取
+    loadSeasonArchive() {
+      const save = loadSave();
+      return structuredClone(save?.career?.seasons ?? []);
+    },
     clear() {
       try {
         store.removeItem(saveKey);
@@ -422,6 +458,37 @@ export function createSlotStoreProxy(storage, initialSlot = 1) {
     }
   }
   return proxy;
+}
+
+// W4(P4) Q9：屆末摘要（生涯累積頁/Q5 結算的資料底）——戰績＋主角逐場數據總和。
+// 純函式；liberoBox 若該屆有 L 場次一併加總（四欄中的三欄；改判在 overrides）
+export function archiveSeasonSummary(season) {
+  const results = season.results ?? [];
+  const totals = {
+    kills: 0, tipKills: 0, aces: 0, blockPoints: 0, perfects: 0,
+    digs: 0, assistDigs: 0, rallySaves: 0,
+  };
+  for (const r of results) {
+    const st = r.stats;
+    if (!st) continue;
+    totals.kills += st.kills ?? 0;
+    totals.tipKills += st.tipKills ?? 0;
+    totals.aces += st.aces ?? 0;
+    totals.blockPoints += st.blockPoints ?? 0;
+    totals.perfects += st.perfects ?? 0;
+    if (st.liberoBox) {
+      totals.digs += st.liberoBox.digs ?? 0;
+      totals.assistDigs += st.liberoBox.assistDigs ?? 0;
+      totals.rallySaves += st.liberoBox.rallySaves ?? 0;
+    }
+  }
+  return {
+    index: season.index ?? 1,
+    wins: results.filter((r) => r.won).length,
+    losses: results.filter((r) => !r.won).length,
+    champion: results.some((r) => r.matchId === 'national-final' && r.won),
+    totals,
+  };
 }
 
 // 私密模式連 localStorage 物件都可能 throw——退化為記憶體存檔（本次分頁有效）

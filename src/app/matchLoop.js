@@ -23,7 +23,9 @@ import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
-import { settleCareerMatch, careerReturnUrl } from './matchCareer.js';
+import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
+import { buildTeamBox } from '../career/boxScore.js';
+import { boxScoreLFor } from '../career/boxScoreL.js';
 import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
 import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js';
@@ -137,6 +139,10 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     diveReady: false,           // 魚躍鈕當幀可用性（Space/L 鍵共用判定）
     // 假動作熟練度：場終一次累積寫回 Player；局間存檔續玩＝接回快照時的累計
     feintsUsedThisMatch: careerCtx?.resumeMid?.feintsUsed ?? 0,
+    // W4 Q9 L 改判記帳（box score 第四欄；表現層 tally，同 feints 續玩接回）
+    lOverrideTally: careerCtx?.resumeMid?.lOverrides ?? { n: 0, ok: 0 },
+    digReadWasOverride: false,
+    boxShown: false, // 局終兩段式：第一次點＝單場結算頁、第二次點＝返回生涯
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
     slowEaseFrom: -1e9,         // 決策窗結束時刻（時間膨脹 0.4→1.0 緩出的起點）
     tapeIdx: 0,
@@ -330,10 +336,17 @@ function checkRecruitFeats(s, cards) {
 // 輸入/導航事件绑定：局終點擊、回放（R/🎬）、魚躍（L/Space/鈕）、情蒐跳過
 function bindInputHandlers(s) {
   const { stage, config } = s;
-  // 局終點擊 → 生涯：回生涯畫面（結果已在局終當下落檔）；快速比賽：換種子再開一局
+  // 局終點擊 → 生涯：第一次點＝單場結算頁（W4 Q9）、第二次點＝返回（結果已落檔）；
+  // 快速比賽：換種子再開一局
   window.addEventListener('pointerdown', () => {
     if (s.game.phase !== 'set_over') return;
     if (s.careerCtx) {
+      if (!s.boxShown) {
+        s.boxShown = true;
+        s.stage.setOverOverlay.hide();
+        s.stage.boxScorePanel?.show(buildBoxPanelData(s));
+        return;
+      }
       window.location.assign(careerReturnUrl(
         s.ctx.params, window.location.pathname, s.careerCtx.store?.activeSlot?.() ?? null,
       ));
@@ -524,9 +537,11 @@ function updateDecisions(s, now) {
     aiState.digBias = null;
   }
   // 07-27 試玩回饋：L 讀對追蹤——對手攻擊飛行中持續結算，我方第一觸出結果字卡
+  // W4 Q9：同步記下這次指令是否改判（digBias 在第一觸即清、字卡時刻已不可考）
   if (aiState.digBias && game.phase === 'rally'
     && game.rally.profile === 'spike' && game.rally.lastSpikeZone) {
     s.digReadResult = digReadCorrect(game, aiState);
+    s.digReadWasOverride = aiState.digBias.override === true;
   }
   // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
   if (!onCourt(game, s.controlledId)) { panel.hide(); return 0; }
@@ -801,14 +816,20 @@ function applyEvents(s, frameEvents, now) {
       s.mbCommit = null;
     }
     // 07-27 L 指揮結果：我方第一觸出讀對/讀反字卡（神救球演出時已讓位不疊）
+    // W4 Q9：改判記帳（box score 第四欄「改判成功率」——A2 預留消費就此定形入帳）
     if (e.type === 'TOUCH' && e.touches === 1 && s.digReadResult != null
       && game.players[s.controlledId]?.currentRole === 'libero'
       && e.team === game.players[s.controlledId].teamId) {
+      if (s.digReadWasOverride) {
+        s.lOverrideTally.n += 1;
+        if (s.digReadResult) s.lOverrideTally.ok += 1;
+      }
       stage.floatText.show(
         s.digReadResult ? '📖 讀對了！' : '讀反了……',
         s.digReadResult ? '#7ee787' : '#c8d6eb', 1300,
       );
       s.digReadResult = null;
+      s.digReadWasOverride = false;
     }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
       s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
@@ -989,6 +1010,7 @@ function settleIfOver(s) {
       const { saveOk } = settleCareerMatch({
         careerCtx: s.careerCtx, game, playerId: s.playerId,
         feintsUsed: s.feintsUsedThisMatch,
+        lOverrides: s.lOverrideTally, // W4 Q9：L 改判記帳（box 第四欄）
       });
       if (!saveOk) stage.floatText.show('⚠ 戰績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
     }
@@ -1023,6 +1045,43 @@ function showSetBreak(s) {
   });
 }
 
+// W4(P4) Q9 單場結算頁資料（顯示時刻即時由事件流建——與 settle 落檔同一組純函式）
+function buildBoxPanelData(s) {
+  const { game } = s;
+  const me = game.players[s.playerId];
+  const myTeam = me.teamId;
+  const rows = Object.values(buildTeamBox(game.events, game.players, myTeam));
+  const series = game.series;
+  const won = (series?.winner ?? game.match.winner) === myTeam;
+  const scoreLine = series
+    ? `局數 ${series.setsWon.A} : ${series.setsWon.B}（${series.setScores.map((sc) => `${sc.A}:${sc.B}`).join('、')}）`
+    : `${game.match.score.A} : ${game.match.score.B}`;
+  const oppAce = s.careerCtx
+    ? resolveOppAceBox(game, s.careerCtx, myTeam === 'A' ? 'B' : 'A')
+    : null;
+  // 位置差異欄位（Q9 四位置全數上線）：玩家現任位置的專屬行
+  const extras = [];
+  const myRow = rows.find((r) => r.pid === s.playerId);
+  if (me.currentRole === 'setter' && myRow) {
+    extras.push(`🏐 S 分配：舉球 ${myRow.sets}・二次球 ${myRow.dumps}${myRow.dumps ? `（得手 ${myRow.dumpKills}）` : ''}`);
+  } else if (me.currentRole === 'libero') {
+    const lb = boxScoreLFor(game.events, s.playerId);
+    const ov = s.lOverrideTally;
+    const ovText = ov.n ? `${ov.ok}/${ov.n}（${Math.round((ov.ok / ov.n) * 100)}%）` : '—';
+    extras.push(`🛡 L 四欄：起球 ${lb.digs}・助攻一傳 ${lb.assistDigs}・續命 ${lb.rallySaves}・改判成功 ${ovText}`);
+  } else if (me.currentRole === 'middle' && myRow) {
+    extras.push(`🧱 MB 攔網歸因：攔網得分 ${myRow.blocks}`);
+  }
+  return {
+    title: won ? '🏆 勝利' : '敗北',
+    scoreLine,
+    rows,
+    playerPid: s.playerId,
+    oppAce,
+    extras,
+  };
+}
+
 // W4(P4) Q10 燈光秀收場（自然結束或點擊跳過共用）：恢復常態燈光/鏡頭、補播情蒐帶
 function endOpeningShow(s) {
   s.openingShow = null;
@@ -1041,6 +1100,7 @@ function saveMidAndQuit(s) {
     matchId: s.careerCtx.matchEntry.id,
     savedAtSet: s.game.series.setIndex,
     feintsUsed: s.feintsUsedThisMatch,
+    lOverrides: { ...s.lOverrideTally }, // W4 Q9：改判 tally 隨局間存檔續玩接回
     game: JSON.parse(JSON.stringify(s.game)),
   });
   if (!ok) {
