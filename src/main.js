@@ -74,7 +74,8 @@ function showCareerEntry(ctx) {
     for (const p of wanted) store.approveOpenPosition(p.trim());
   }
   const screen = createCareerScreen(store, {
-    onQuick: () => { runMatch(ctx, null); },
+    // W3(P4)：快速比賽＝位置遊樂場——careerScreen 選位面板傳 role（null＝OH 現況）
+    onQuick: (role = null) => { runMatch(ctx, null, role); },
     onPlay: ({ career, player, matchEntry }) => {
       // W2：出戰前補齊/讀取名冊（空名冊一次性升級），隊友屬性由名冊驅動
       // W3：ensureStarterRoster 一併補齊 lineup；先發輪轉序由 save.lineup 驅動建隊
@@ -92,11 +93,12 @@ function showCareerEntry(ctx) {
 
 // ---- 比賽模式（三段編排；細節在 src/app/*）----
 
-async function runMatch(ctx, careerCtx = null) {
+async function runMatch(ctx, careerCtx = null, quickRole = null) {
   // 賽前準備①：設定解析（種子/模式/生涯建隊/情蒐帶——純函式，node 可測）
   const config = resolveMatchConfig({
     params: ctx.params,
     careerCtx,
+    quickRole, // W3(P4) 快速比賽選位置（生涯場恆 null）
     randomSeed: Date.now() % 1000000007, // 開局隨機（快速比賽）；隨機化住在 main（sim 外）
   });
   // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）

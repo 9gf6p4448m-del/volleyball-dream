@@ -4,9 +4,51 @@
 // 三段以明確資料介面銜接：config →（createGame）→ gates → stage → loop。
 import { careerMatchSetup, buildLibero } from '../career/careerState.js';
 import { matchSeed } from '../career/careerState.js';
+import { createDefaultTeams } from '../sim/game.js';
+import { createPlayer } from '../sim/player.js';
 import { buildScoutTape, TAPE_FEATURE_KEYS } from '../career/scoutTape.js';
 import { upcomingTeach } from '../career/events.js';
 import { blockReadTier } from '../career/growth.js';
+
+// W3(P4) 07-27 Sawmah 拍板：快速比賽＝位置遊樂場（五位置任選；生涯轉位 gate 不動——
+// 快速比賽本來就是測試/試駕場）。建隊＝預設隊伍最小變換：玩家（A2）與目標槽位互換、
+// 被換者改打 OH；L＝玩家穿異色球衣走 liberos 通道、先發槽由替補預設員（A8）頂上。
+// 純函式：role 為 null/'outside'＝回 null（照舊預設建隊，零擾動）
+export function buildQuickSetup(role) {
+  if (!role || role === 'outside') return null;
+  const teams = createDefaultTeams();
+  if (role === 'libero') {
+    teams.A[1] = createPlayer({
+      id: 'A8', name: 'A隊8號', teamId: 'A',
+      naturalRole: 'outside', currentRole: 'outside', height: 1.88, trust: 60,
+      attributes: {
+        jump: 60, power: 62, reaction: 60, stamina: 60,
+        speed: 62, control: 68, serve: 60, block: 58,
+      },
+    });
+    // 玩家＝自由人：防守身型與專才屬性（鏡像 buildLibero 公式 level 60）
+    const liberoA = createPlayer({
+      id: 'A2', name: 'A隊2號', teamId: 'A',
+      naturalRole: 'libero', currentRole: 'libero', height: 1.72, trust: 5,
+      attributes: {
+        jump: 40, power: 40, reaction: 74, stamina: 70,
+        speed: 72, control: 72, serve: 30, block: 30,
+      },
+    });
+    return { teams, liberoA };
+  }
+  const idx = { setter: 0, middle: 2, opposite: 3 }[role];
+  if (idx === undefined) return null; // 未知角色＝照舊（防呆）
+  const me = teams.A[1];
+  const displaced = teams.A[idx];
+  me.naturalRole = role;
+  me.currentRole = role;
+  displaced.naturalRole = 'outside';
+  displaced.currentRole = 'outside';
+  teams.A[idx] = me;
+  teams.A[1] = displaced;
+  return { teams, liberoA: null };
+}
 
 // 介面契約（tests/app-config.test.js 把關）：
 // resolveMatchConfig({ params, careerCtx, randomSeed }) → {
@@ -16,7 +58,7 @@ import { blockReadTier } from '../career/growth.js';
 // - params：URLSearchParams（或任何有 .get(name) 的物件）
 // - careerCtx：{ career, player, matchEntry, store } 或 null（快速比賽）
 // - randomSeed：快速比賽無 ?seed= 時用的種子——隨機化住在呼叫端（main），sim 內仍決定論
-export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
+export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quickRole = null }) {
   const seedParam = Number.parseInt(params.get('seed'), 10);
   // 種子優先序：?seed=（重現/測試）→ 生涯場次種子（生涯種子×場次 id 決定論導出）→ 開局隨機
   const seed = Number.isFinite(seedParam) ? seedParam
@@ -51,9 +93,12 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
       careerCtx.seasonIndex ?? 1,
     )
     : null;
-  // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才）
+  // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）
+  const quick = careerCtx ? null : buildQuickSetup(quickRole ?? params.get('role'));
+  // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才；
+  // 快速選 L＝玩家本人穿異色球衣）
   const liberos = careerSetup?.liberos ?? {
-    A: buildLibero('A', 'A隊自由人'),
+    A: quick?.liberoA ?? buildLibero('A', 'A隊自由人'),
     B: buildLibero('B', 'B隊自由人'),
   };
   // W7 A1-A5 體力（雙方啟用）：生涯對手吃 A4 拍板（costMul 0.6 慢耗＋豁免重度門檻
@@ -71,7 +116,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed }) {
       ...(careerSetup.scoutRead ? { scoutRead: careerSetup.scoutRead } : {}),
       // W7 D2 舊隊情結：對戰原隊的隊友開場 trustDyn +8（場末即散）
       ...(careerSetup.trustDynInit ? { trustDynInit: careerSetup.trustDynInit } : {}),
-    } : {}),
+    } : (quick ? { teams: quick.teams } : {})),
   };
   // stage 5 情蒐錄影帶：賽前播對手預演的 2-3 球關鍵回放（決定論預生成；點擊跳過）
   // W5+ 學招預告連動：這場會教的招→帶子剪輯偏好（吊球場收吊球片段；不可偵測者略過）

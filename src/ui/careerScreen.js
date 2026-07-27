@@ -212,6 +212,35 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
     document.body.appendChild(overlay);
   }
 
+  // ---- W3(P4) 07-27 快速比賽選位置（位置遊樂場）：五位置任選直接開打——
+  // 生涯轉位 gate 不動；玩法試駕入口（S 分配/MB 讀心/L 指揮不用打生涯也吃得到）----
+  function showQuickRolePicker() {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+      'background:rgba(4,6,12,0.72)', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'padding:24px 16px',
+    ]);
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+      'flex-direction:column', 'gap:8px', 'align-items:stretch',
+    ]);
+    card.appendChild(el('div', [
+      'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+    ], '🏐 快速比賽——選位置'));
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
+      '每個位置有自己的玩法：S 分配決策、MB 讀舉球、L 防守指揮。快速比賽隨便試——生涯裡要靠教練談話轉位。'));
+    const pick = (role) => { overlay.remove(); hide(); onQuick(role); };
+    card.appendChild(button(`${roleLabel('outside')}——現況出道位`, true, () => pick(null)));
+    for (const role of ['setter', 'middle', 'opposite', 'libero']) {
+      card.appendChild(button(roleLabel(role), false, () => pick(role)));
+    }
+    card.appendChild(button('取消', false, () => overlay.remove()));
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
   // ---- W3(P4) 轉位事件（教練談話）：屆間鏈尾端觸發——旗標 open（Sawmah 手批）
   // 才會有談話；縫隙 3 志願優先；接受＝careerStore.applyPositionChange（單次 RMW：
   // currentRole＋缺額補位員＋預設陣重排）→ 被取代者劇情（縫隙 1，名冊解版本）。
@@ -1284,7 +1313,7 @@ export function createCareerScreen(store, { onPlay, onQuick }) {
       newPanel.style.display = newPanel.style.display === 'none' ? 'flex' : 'none';
     }));
     root.appendChild(newPanel);
-    root.appendChild(button('快速比賽', false, () => { hide(); onQuick(); }));
+    root.appendChild(button('快速比賽', false, showQuickRolePicker));
 
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:6px']);
     if (hasUsableSave) ioRow.appendChild(smallButton('匯出存檔', exportSave));
