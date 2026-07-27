@@ -162,6 +162,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     counterArmedFlight: -1,  // 本波 ace 反讀已武裝（字卡揭曉用）
     // W4：自由人回場二次確認窗（07-27 拍板 B；performance.now 時刻）
     recallArmedUntil: 0,
+    // W4 B-3：封線影子首次教學（07-27 試玩回饋「看不懂黑色陰影」——每場一次講色語）
+    shadowHintShown: false,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
     dumpLive: false,
     callWindowUntil: 0,   // 浮鈕失效時刻（0.8s 牆鐘窗）
@@ -625,6 +627,7 @@ function updateDecisions(s, now) {
       const autoScheme = schemeByKey(digRead.suggestion);
       s.schemeTally = noteScheme(s.schemeTally, digRead.suggestion); // B-4：自動也算配套史
       s.stage.blockShadow?.set(digRead.suggestion, game.ball.x); // B-3 佈陣可視化
+      showShadowHintOnce(s);
       aiState.digBias = {
         team: game.players[s.controlledId].teamId,
         choice: autoScheme?.dig ?? 'cross',
@@ -714,6 +717,7 @@ function updateDecisions(s, now) {
         controls.chooseDig();
         s.schemeTally = noteScheme(s.schemeTally, it.zone.key); // B-4 配套史
         stage.blockShadow?.set(it.zone.key, game.ball.x); // B-3 佈陣可視化
+        showShadowHintOnce(s);
         aiState.digBias = {
           team: game.players[s.controlledId].teamId,
           choice: it.zone.dig,
@@ -1199,6 +1203,13 @@ function onCallTap(s) {
   if (setter) {
     setTimeout(() => stage.floatText.show(`${setter.name}回頭看了你一眼`, '#9fb0cc', 1100), 380);
   }
+}
+
+// W4 B-3 封線影子首次教學（07-27 試玩回饋）：第一次下配套講清楚地板色語——每場一次
+function showShadowHintOnce(s) {
+  if (s.shadowHintShown) return;
+  s.shadowHintShown = true;
+  s.stage.floatText.show('地板佈陣：金帶＝攔網封住的線・青帶＝留給你接的線', '#ffd166', 3200);
 }
 
 // W4(P4) Q9 單場結算頁資料（顯示時刻即時由事件流建——與 settle 落檔同一組純函式）

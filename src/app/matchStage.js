@@ -81,8 +81,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // W7 B3：我方暫停鈕（⚙ 換人鈕同排；生涯／快速比賽皆可喊——timeouts 與 subs 一樣不綁生涯）
   const timeoutBtn = createTimeoutButton({ handlers, playerId });
   // W7 C2③④：板凳期間才有意義（無板凳＝快速比賽自然零出現）——同 subPanel 生涯閘
-  const benchAccelBtn = careerSetup ? createBenchAccelButton() : null;
-  const comebackBtn = careerSetup ? createComebackButton({ handlers, floatText }) : null;
+  // W4 試玩回饋（07-27）：快速比賽也建板凳鈕組——選 L 試駕會遇到場外輪次
+  // （MB 回場換下你），加速/回場鈕不該是生涯限定；鈕只在坐板凳時顯示＝其他位置零干擾
+  const benchAccelBtn = createBenchAccelButton();
+  const comebackBtn = createComebackButton({ handlers, floatText });
   // W7.1 #3A：暫停教練選項（我方喊暫停才彈）＋倒數條（雙方暫停都顯示，讓玩家知道還要多久）
   const coachOptionDialog = createCoachOptionDialog();
   const timeoutCountdown = createTimeoutCountdown(handlers);

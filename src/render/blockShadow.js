@@ -25,14 +25,16 @@ export function createBlockShadow(scene) {
   scene.add(group);
 
   const paint = (mesh, mode) => {
-    // mode：'wall'＝封住的線（暗牆影）／'open'＝留給後排的線（微亮）／null＝隱藏
+    // mode：'wall'＝封住的線／'open'＝留給後排的線／null＝隱藏。
+    // 07-27 試玩回饋：暗牆影（黑）在夜賽地板上讀不出語意——改琥珀金
+    // （與「🧱封線成功！」字卡同色＝封線的色彩語言）；留線維持青（防守隊色）
     if (!mode) {
       mesh.visible = false;
       return;
     }
     mesh.visible = true;
-    mesh.material.color.setHex(mode === 'wall' ? 0x000000 : 0x6ee7ff);
-    mesh.material.opacity = mode === 'wall' ? 0.32 : 0.10;
+    mesh.material.color.setHex(mode === 'wall' ? 0xffd166 : 0x6ee7ff);
+    mesh.material.opacity = mode === 'wall' ? 0.16 : 0.10;
   };
 
   return {
