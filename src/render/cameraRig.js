@@ -189,11 +189,12 @@ export function createCameraRig(camera, initialPlayerId) {
         // 注視點＝戰術板本體（教練胸前 0.42m、板高 1.26）
         target.set(coach.x + (dx / d) * 0.42, 1.26, coach.z + (dz / d) * 0.42);
       } else if (mode === 'sset') {
-        // 4.5B §4 S 掃場：自 S 眼位回望自家半場——候選攻擊手全數入鏡，
-        // 點隊友模型本身＝分配（網在身後：分配決策看的是自己人，非隔網情境）
-        const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;
-        pos.set(ax * 0.8, eye + 0.18, az - side * 0.5);
-        target.set(0, 1.3, az + side * 4.5);
+        // 4.5B §4 S 掃場（07-27 試玩追修二輪）：鏡位錨在「球場幾何」非玩家座標
+        // ——網前定點、略高、回望自家半場（一輪錨玩家：S 深位接應時鏡頭跟人跑到
+        // 後場，攻擊手整排落在鏡頭背後＝熱點全滅）。「全場等你的一秒」＝候選
+        // 攻擊手必須全數入鏡；點隊友模型本身＝分配
+        pos.set(0, 2.4, side * 0.6);
+        target.set(0, 1.0, side * 4.6);
       } else if (mode === 'defend') {
         // 攔網手身後略高，隔網看對面攻擊手的助跑與起跳（守方讀攻擊——與攻擊視角對稱）
         const eye = me.height.current * CAMERA_TUNING.FP_EYE_RATIO;

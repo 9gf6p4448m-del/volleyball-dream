@@ -168,9 +168,12 @@ export function createDiegeticUi() {
           const h = (p.height?.current ?? 1.85) * (sp.item.kind === 'dump' ? 0.55 : 0.72);
           const pt = project(camera, a.x, h, a.z);
           if (!pt) { sp.el.style.display = 'none'; continue; }
+          // 07-27 追修保底：投影落在畫面外＝夾回螢幕邊緣——選項永遠點得到
+          //（「看不到所有攻擊手」的第二道防線；第一道＝sset 鏡位全員入鏡）
+          const pad = 36;
           sp.el.style.display = 'flex';
-          sp.el.style.left = `${pt.x}px`;
-          sp.el.style.top = `${pt.y}px`;
+          sp.el.style.left = `${Math.min(Math.max(pt.x, pad), window.innerWidth - pad)}px`;
+          sp.el.style.top = `${Math.min(Math.max(pt.y, pad + 18), window.innerHeight - pad)}px`;
         }
         return;
       }

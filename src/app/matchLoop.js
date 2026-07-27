@@ -1675,7 +1675,9 @@ function frameStep(s, now) {
   const punchFov = now < s.fovPunchUntil
     ? 6.5 * Math.sin(Math.PI * (1 - (s.fovPunchUntil - now) / 700)) : 0;
   const slowFov = now < s.slowUntil ? 3.5 : 0;
-  const fovTarget = 55 - punchFov - slowFov;
+  // 4.5B §4 追修（07-27）：S 分配窗視野加寬——兩翼候選在窄視野下出鏡＝熱點點不到
+  const ssetFov = stage.rig.getMode() === 'sset' ? 12 : 0;
+  const fovTarget = 55 - punchFov - slowFov + ssetFov;
   if (Math.abs(ctx.camera.fov - fovTarget) > 0.01) {
     ctx.camera.fov = fovTarget;
     ctx.camera.updateProjectionMatrix();
