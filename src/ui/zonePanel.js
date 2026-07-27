@@ -83,7 +83,13 @@ export function createZonePanel() {
     });
   }
 
-  function show(titleText, items, onChoose, onFake = null) {
+  // layout（07-27 試玩回饋）：'low'＝貼底模式——MB 攔網第一視角要讀穿網對面，
+  // 預設 bottom 90px 在手機橫向（螢幕高僅 ~390 CSS px）會落在畫面正中擋視線；
+  // 貼底＝拇指位＋視線區淨空。其他面板維持預設（零擾動）
+  function show(titleText, items, onChoose, onFake = null, layout = 'default') {
+    const low = layout === 'low';
+    wrap.style.bottom = `calc(env(safe-area-inset-bottom, 0px) + ${low ? 22 : 90}px)`;
+    title.style.bottom = `calc(env(safe-area-inset-bottom, 0px) + ${low ? 88 : 168}px)`;
     title.textContent = titleText;
     const key = titleText + items.map((i) => i.key + (i.color ?? '')).join(',');
     if (key !== shownKey) {

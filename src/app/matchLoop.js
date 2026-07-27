@@ -696,8 +696,10 @@ function updateDecisions(s, now) {
     // W3 MB 讀心面板（07-27 Sawmah 拍板三改：按鈕正名「起跳攔網」——它的真實語意
     // 就是「現在跳」：早按賭快攻、晚按攔高球都合法，攔網時機全程交玩家；不按＝
     // 交給自動跳攔。線索進標題：一傳品質＋哪一翼正在助跑（🏃 誠實觀察非全知）
+    // 07-27 五輪（截圖實證）：線索縮單字防手機折行；面板走貼底模式（'low'）——
+    // 攔網第一視角的網對面視線區淨空，讀舉/抓時機不被 UI 自己擋住
     const tells = mbRead.lanes.filter((l) => l.approaching)
-      .map((l) => `🏃${l.label.slice(1)}`).join(' ');
+      .map((l) => `🏃${l.label.slice(1, 2)}`).join(' ');
     panel.show(
       `${mbPanelTitle(mbRead.tier)}${tells ? `　${tells}` : ''}`,
       [{ key: 'jump-now', label: '🧱 起跳攔網', color: 'orange' }],
@@ -707,6 +709,8 @@ function updateDecisions(s, now) {
         controls.chooseMbTiming(true);
         s.mbCommit = { jumped: true };
       },
+      null,
+      'low',
     );
   } else if (digDeciding && !controls.digPending()) {
     // W4 附錄 B-1 L 指揮面板（A2 節奏資產不動）：三選項升級攔防配套——
@@ -733,6 +737,8 @@ function updateDecisions(s, now) {
         // 07-27 四輪（Sawmah：字卡太多以體驗為主）：手選確認浮字移除——
         // 紅綠帶佈陣可視化即確認（文字重複）；結果卡（封到/讀對）保留
       },
+      null,
+      'low', // 07-27 五輪：L 同為隔網讀對面的情境——貼底模式淨空視線區
     );
   } else if (setDeciding) {
     // W3 S 分配面板：標題誠實播報一傳品質；猶豫選項變暗＋標註（甲2 C 案：可選）。
