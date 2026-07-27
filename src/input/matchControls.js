@@ -43,9 +43,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let blockSignal = false;          // 本次出手是攔網（main 轉給表現層立即播跳攔）
   let attackChosen = false;         // 進攻決策：本次扣球已選區（面板不再彈、緩衝不過期）
   let setChosen = false;            // W3 S 玩法：本次舉球已分配（面板不再彈）
-  let mbChosen = false;             // W3 MB 玩法：本次讀舉球已選（面板不再彈）
-  let mbTarget = null;              // 選定攔網位移的世界座標（自動走位目標）
-  let mbEarly = false;              // 搶快攻＝到位即提前跳（一次性）
+  let mbChosen = false;             // W3 MB 玩法：本次讀舉球已決定時機（面板不再彈）
   let digChosen = false;            // W3 L 玩法：本次防守指揮已選/已自動（面板不再彈）
   let digHeroSignal = false;        // W3 L 演出武裝：Perfect/魚躍起球——TOUCH 確認後消費
   let manualOwned = false;          // 本球玩家已接管走位（碰過搖桿＝整球歸你；發球階段重置）
@@ -252,12 +250,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       if (attackChosen && !this.isAttackMoment(game)) attackChosen = false;
       // 非舉球時刻＝重置分配旗標（下次一傳起球重新彈面板）
       if (setChosen && !this.isSetMoment(game)) setChosen = false;
-      // 非讀舉球時刻＝重置 MB 讀心狀態（位移承諾/搶快只活在該次對手攻擊）
-      if (mbChosen && !this.isMbMoment(game)) {
-        mbChosen = false;
-        mbTarget = null;
-        mbEarly = false;
-      }
+      // 非讀舉球時刻＝重置 MB 讀心旗標（時機承諾只活在該次對手攻擊）
+      if (mbChosen && !this.isMbMoment(game)) mbChosen = false;
       // 非防守指揮時刻＝重置 L 選擇旗標（digBias 本體由 matchLoop 管理生命週期）
       if (digChosen && !this.isLMoment(game)) digChosen = false;
       const tick = game.tick;
@@ -293,14 +287,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           game.rally.possession !== me.teamId &&
           game.rally.profile !== 'serve' &&
           isFrontRow(game.match.rotations[me.teamId], playerId);
-        if (mbTarget) {
-          // W3 MB 讀心位移承諾：面板選定＝玩家親下的站位命令，走向封線點
-          // （不違反 07-24「攔網站位全交玩家」——這正是玩家的選擇；搖桿隨時接管）
-          const dx = mbTarget.x - a.x;
-          const dz = mbTarget.z - a.z;
-          const len = Math.hypot(dx, dz);
-          if (len > 0.25) move = { x: dx / len, z: dz / len };
-        } else if (me.currentRole === 'libero' && aiState?.digBias?.team === me.teamId &&
+        if (me.currentRole === 'libero' && aiState?.digBias?.team === me.teamId &&
             game.rally.possession && game.rally.possession !== me.teamId &&
             aiState?.claimId !== playerId) {
           // W3 L（附錄 A1）：玩家自己的站位是收縮陣型的一部分——同一指令（digBias）
@@ -438,14 +425,6 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           if (me.currentRole === 'libero' && r.profile === 'spike' && r.touches === 0) {
             digHeroSignal = true;
           }
-        } else if (simpleMode && mbEarly && mbTarget &&
-            (Math.abs(a.x - mbTarget.x) < 0.45 || (b.vy < 0 && b.y < 3.4))) {
-          // W3 MB 搶快攻＝提前開攔網窗（一次性）：到達封線點（或球已下墜＝最後時機）
-          // 立即起跳。賭錯高球＝48-tick 攔網窗過期、落地時球才來——真實懲罰
-          // （blockTiming 既有機制，sim 零特例）
-          action = 'block';
-          blockSignal = true;
-          mbEarly = false;
         } else if (simpleMode && contextAction(game) === 'block' &&
             r.profile === 'spike' && aiState?.landingTeam === me.teamId &&
             Math.abs(a.z) < 2.2) {
@@ -574,18 +553,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     mbOptions(game, aiState) {
       return this.isMbMoment(game) ? mbReadFor(game, aiState, playerId) : null;
     },
-    // 選定封線＋時機：位移＝玩家親下的站位命令（自動走位到封線點）；
-    // early＝搶快攻（到位即提前開攔網窗）；等高球＝就位後交自動跳攔（07-24 路徑）
-    chooseMbBlock(lane, early = false) {
+    // 選定時機（07-27 Sawmah 拍板：站位全交搖桿手動——面板只管時機賭局）：
+    // early＝搶快攻＝立即起跳開攔網窗（你自己先站好位負責）；不按＝等高球＝
+    // 就位後自動跳攔（07-24 路徑）。賭錯高球＝48-tick 窗過期落地球才來（真實懲罰）
+    chooseMbTiming(early = false) {
       mbChosen = true;
-      const me = lastGame?.players[playerId];
-      const side = me ? TEAM_SIDE[me.teamId] : 1;
-      mbTarget = { x: lane.x, z: side * 1.0 };
-      mbEarly = !!early;
+      if (early) blockTap();
     },
     mbPending() { return mbChosen; },
-    // 表現層讀取（07-27 試玩回饋：決策要看得見自己）——封線目標點（地面標記用）
-    mbCommitPoint() { return mbChosen ? mbTarget : null; },
 
     // ---- L 防守指揮（W3 附錄 A1/A2：玩家＝場上自由人、對手舉球出手瞬間）----
     isLMoment(game) {

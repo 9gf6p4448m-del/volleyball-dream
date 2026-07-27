@@ -603,22 +603,19 @@ function updateDecisions(s, now) {
       },
     );
   } else if (mbDeciding) {
-    // W3 MB 讀心面板：三翼×（等高球/搶快）六選項；🏃＝該翼攻擊手正在助跑（誠實觀察）。
-    // 搶快＝橘色（高風險高報酬語彙同跳發）
+    // W3 MB 讀心面板（07-27 Sawmah 拍板二改：站位全交搖桿手動、面板只管時機賭局）：
+    // 一顆「⚡搶快攻」鈕——按＝立即起跳開窗（賭快攻）、不按＝等高球（自動跳攔照舊）。
+    // 線索進標題：一傳品質＋哪一翼正在助跑（🏃 誠實觀察非全知）
+    const tells = mbRead.lanes.filter((l) => l.approaching)
+      .map((l) => `🏃${l.label.slice(1)}`).join(' ');
     panel.show(
-      mbPanelTitle(mbRead.tier),
-      mbRead.lanes.flatMap((l) => {
-        const tell = l.approaching ? '🏃' : '';
-        return [
-          { key: l.key, label: `${l.label}${tell}`, color: 'neutral', zone: l, early: false },
-          { key: `${l.key}-q`, label: `${l.label.slice(1)}搶快${tell}`, color: 'orange', zone: l, early: true },
-        ];
-      }),
-      (it) => {
-        controls.chooseMbBlock(it.zone, it.early);
-        // 07-27 試玩回饋：決策要看得見自己——選擇確認浮字＋commit 記錄（結果字卡用）
-        floatText.show(`🧱 ${it.zone.label}${it.early ? '·搶快！' : '！'}`, '#ffd166', 1200);
-        s.mbCommit = { label: it.zone.label, early: it.early };
+      `${mbPanelTitle(mbRead.tier)}${tells ? `　${tells}` : ''}`,
+      [{ key: 'quick-gamble', label: '⚡搶快攻', color: 'orange' }],
+      () => {
+        controls.chooseMbTiming(true);
+        // 07-27 試玩回饋：決策要看得見自己——確認浮字＋commit 記錄（結果字卡用）
+        floatText.show('⚡ 賭快攻——跳！', '#ffd166', 1200);
+        s.mbCommit = { early: true };
       },
     );
   } else if (digDeciding && !controls.digPending()) {
@@ -1126,10 +1123,7 @@ function frameStep(s, now) {
     stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());
   stage.touchUi.update(stage.controls.uiState());
-  // 07-27：簡化模式借 aimMarker 畫 MB 封線承諾點（決策要看得見自己）；經典模式照舊瞄準點
-  const aimAt = s.config.simpleMode
-    ? (stage.controls.mbCommitPoint?.() ?? null)
-    : stage.controls.currentAimPoint(game);
+  const aimAt = s.config.simpleMode ? null : stage.controls.currentAimPoint(game);
   if (aimAt) stage.aimMarker.show(aimAt);
   else stage.aimMarker.hide();
   ctx.renderer.render(ctx.scene, ctx.camera);
