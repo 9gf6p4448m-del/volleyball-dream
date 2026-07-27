@@ -89,7 +89,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const style = gameState.rally.serveStyle;
         u.animator.trigger(style === 'power' ? 'serveJump' : style === 'float' ? 'serveFloat' : 'serve');
       }
-      else if (e.type === 'BLOCK_TOUCH') u.animator.trigger('block');
+      else if (e.type === 'BLOCK_TOUCH') u.animator.trigger('blockJump'); // 4.5B §8 重量感版（蹲→蹬→滯空→落地）
       else if (e.type === 'TOUCH') {
         if (e.kind === 'spike') u.animator.trigger('spike');
         else if (e.kind === 'set') u.animator.trigger('overhead');

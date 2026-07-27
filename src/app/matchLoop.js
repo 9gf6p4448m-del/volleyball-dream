@@ -1155,8 +1155,9 @@ function applyEvents(s, frameEvents, now) {
       // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
       if (e.playerId === s.controlledId && s.mbCommit) {
         stage.floatText.show('🧱 封到了！', '#ffd166', 1400);
-        // 4.5B §3「早到的人」：搶快賭對且封到——若這球就此死掉（SCORE 我方）才起鏡
-        if (game.players[s.controlledId]?.currentRole === 'middle') {
+        // 4.5B §3「早到的人」：搶快賭對且結實封到（擦手不算）——這一拍直接
+        // 終結（後續任何觸球即解除，見 trackSignature）才起鏡
+        if (game.players[s.controlledId]?.currentRole === 'middle' && !e.graze) {
           s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
         }
         s.mbCommit = null;

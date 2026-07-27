@@ -21,11 +21,13 @@ export function armSignature(kind, { focusId = null, mateId = null, flightId = n
 }
 
 // 逐事件追蹤：回傳新的 pending（null＝解除）。
-// 解除規則：對手觸球（把球救起——勝負未定）／發球（新球開始）。
+// 解除規則（07-27 試玩追修：MB 俯視鏡曾在「攔到→球回我方→重新組織打死」的
+// 不相干得分上播出）：**任何後續觸球**＝成因那一拍沒有直接終結——解除；
+// 發球（新球開始）＝解除。成因與得分必須同拍，演出才配得上「招牌」二字。
 export function trackSignature(pending, e, myTeam) {
   if (!pending) return null;
   if (e.type === 'SERVE') return null;
-  if (e.type === 'TOUCH' && e.team !== myTeam) return null;
+  if (e.type === 'TOUCH') return null;
   return pending;
 }
 

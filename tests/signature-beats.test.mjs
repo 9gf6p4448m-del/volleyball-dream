@@ -10,25 +10,29 @@ const MY = 'A';
 
 test('主角視角條款：武裝後只有 SCORE 能起鏡；rally 進行中的任何事件都不起鏡', () => {
   let p = armSignature('oh', { focusId: 'B3' });
-  // 武裝存續期間，非 SCORE 事件一律不發放
+  // 武裝存續期間，非 SCORE 事件一律不發放（攔網擦手/死球都不解除——那一拍仍在終結中）
   for (const e of [
-    { type: 'TOUCH', team: MY, kind: 'set' },
     { type: 'BLOCK_TOUCH', team: 'B' },
     { type: 'DEAD_BALL', reason: 'floor' },
   ]) {
     p = trackSignature(p, e, MY);
     assert.equal(signatureFire(p, e, MY), null, `${e.type} 不得起鏡`);
   }
-  assert.ok(p, '我方觸球/死球不解除武裝');
+  assert.ok(p, '攔網擦手/死球不解除武裝');
   const fired = signatureFire(p, { type: 'SCORE', team: MY }, MY);
   assert.equal(fired.kind, 'oh');
   assert.equal(fired.focusId, 'B3');
 });
 
-test('對手救起＝勝負未定＝解除；對手得分＝空手', () => {
-  let p = armSignature('mb', { focusId: 'B2' });
-  p = trackSignature(p, { type: 'TOUCH', team: 'B', kind: 'receive' }, MY);
+test('任何後續觸球＝那一拍沒有直接終結＝解除（07-27 追修：不相干得分不得冒領演出）', () => {
+  // 對手救起
+  let p = trackSignature(armSignature('mb', { focusId: 'B2' }),
+    { type: 'TOUCH', team: 'B', kind: 'receive' }, MY);
   assert.equal(p, null, '對手把球救起＝解除');
+  // 我方後續觸球（攔到彈回我方、重新組織）——同樣解除：之後的得分不屬於這一拍
+  p = trackSignature(armSignature('mb', { focusId: 'B2' }),
+    { type: 'TOUCH', team: MY, kind: 'receive' }, MY);
+  assert.equal(p, null, '我方接續處理＝成因那一拍未終結＝解除');
   const q = armSignature('opp', {});
   assert.equal(signatureFire(q, { type: 'SCORE', team: 'B' }, MY), null, '對方得分＝不起鏡');
 });
