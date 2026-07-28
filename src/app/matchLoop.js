@@ -26,6 +26,7 @@ import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
+import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
 import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
 import { upcomingTeach } from '../career/events.js';
@@ -36,7 +37,7 @@ import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
-  lineKillDistance, SIG_LINE_M,
+  lineKillDistance, SIG_LINE_M, timingVerdict,
 } from '../ui/signatureBeats.js';
 import {
   loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
@@ -188,10 +189,11 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
     slowEaseFrom: -1e9,         // 決策窗結束時刻（時間膨脹 0.4→1.0 緩出的起點）
     tapeIdx: 0,
-    // VCR 資料底：每球錄「發球前快照＋整球 Intent 流」；快照＋同序 Intent 重演＝逐格一致
-    vcrCurrent: { snapshot: null, steps: [] },
+    // VCR 資料底（4.6 v2）：每球錄「發球前 game＋aiState 快照＋玩家 Intent 流」；
+    // AI 那十一份 Intent 重演時重算（§3-0 容量裁定）——重演仍逐格一致
+    recorder: createRallyRecorder(),
     vcrLast: null,
-    replay: null,               // { state, steps, idx, acc, tape? }
+    replay: null,               // { player, acc, tape? }
     prevPhase: game.phase,
     fovPunchUntil: 0,
     rallyStartFlight: 0,        // 本球起始 flight（rally 長度＝歡呼強度）
@@ -486,7 +488,7 @@ function bindInputHandlers(s) {
     s.switchKey = '';
     s.replay = null;
     s.vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
-    s.vcrCurrent = { snapshot: null, steps: [] };
+    s.recorder.reset();
     s.servedThisTurn = false;
     s.staminaAdviceShown = false;
     s.wasBenched = false;
@@ -528,12 +530,11 @@ function bindInputHandlers(s) {
 // 🎬 回放：重播＝從快照重新模擬（決定論保證逐格一致）；只播最後 3 秒、半速
 function startReplay(s) {
   const rec = s.vcrLast;
-  if (!rec || !rec.snapshot || rec.steps.length === 0 || s.replay) return;
-  const state = structuredClone(rec.snapshot);
+  if (!isPlayableTape(rec) || s.replay) return;
+  const player = createRallyPlayer(rec);
   // 快轉到尾段起點（不渲染），只播殺球/落地的關鍵 3 秒
-  const startIdx = Math.max(0, rec.steps.length - REPLAY_TAIL);
-  for (let i = 0; i < startIdx; i += 1) stepGame(state, rec.steps[i].intents);
-  s.replay = { state, steps: rec.steps, idx: startIdx, acc: 0 };
+  player.fastForward(Math.max(0, player.length - REPLAY_TAIL));
+  s.replay = { player, acc: 0 };
   s.stage.floatText.show('🎬 回放', '#ffd166', 1200);
 }
 
@@ -567,10 +568,11 @@ function startTapeClip(s) {
   const clips = s.config.tapeClips;
   const clip = clips[s.tapeIdx];
   if (!clip) return;
-  const state = structuredClone(clip.snapshot);
-  const startIdx = Math.max(0, clip.steps.length - TAPE_TAIL);
-  for (let i = 0; i < startIdx; i += 1) stepGame(state, clip.steps[i].intents);
-  s.replay = { state, steps: clip.steps, idx: startIdx, acc: 0, tape: true };
+  // 情蒐帶＝賽前現場生成的舊格式卷（十二人全錄、不落存檔＝無容量問題）——
+  // 重演器同時吃兩種格式，播放路徑共用
+  const player = createRallyPlayer(clip);
+  player.fastForward(Math.max(0, player.length - TAPE_TAIL));
+  s.replay = { player, acc: 0, tape: true };
   s.stage.floatText.show(`📼 情蒐：對手關鍵球 ${s.tapeIdx + 1}/${clips.length}（點擊跳過）`, '#6ee7ff', 2000);
   s.tapeIdx += 1;
 }
@@ -619,16 +621,16 @@ function syncControlled(s) {
 function runReplayFrame(s, now, delta) {
   const { stage, ctx } = s;
   const replay = s.replay;
+  const { player } = replay;
   replay.acc += delta * REPLAY_SPEED;
-  while (replay.acc >= SIM_DT && replay.idx < replay.steps.length) {
-    stepGame(replay.state, replay.steps[replay.idx].intents);
-    replay.idx += 1;
+  while (replay.acc >= SIM_DT && !player.done) {
+    player.step();
     replay.acc -= SIM_DT;
   }
   const rAlpha = Math.min(replay.acc / SIM_DT, 1);
-  ctx.ballView.sync(replay.state.ball, rAlpha, delta,
-    replay.state.rally?.profile === 'serve' && replay.state.rally?.serveStyle === 'float');
-  stage.matchView.sync(replay.state, rAlpha, delta, []);
+  ctx.ballView.sync(player.state.ball, rAlpha, delta,
+    player.state.rally?.profile === 'serve' && player.state.rally?.serveStyle === 'float');
+  stage.matchView.sync(player.state, rAlpha, delta, []);
   stage.aimMarker.hide();
   stage.landingMarker.hide();
   ctx.camera.position.set(0, 12, 12.5);
@@ -636,7 +638,7 @@ function runReplayFrame(s, now, delta) {
   ctx.renderer.render(ctx.scene, ctx.camera);
   ctx.hud.frame(now, delta, 0);
   if (stage.panel) stage.panel.hide();
-  if (replay.idx >= replay.steps.length) {
+  if (player.done) {
     const wasTape = replay.tape;
     s.replay = null; // 播完回現場
     if (wasTape) {
@@ -947,10 +949,9 @@ function stepSim(s) {
   const frameEvents = [];
   while (s.accumulator >= SIM_DT) {
     const game = s.game;
-    // 每球開錄：發球佈陣完成、尚未錄過 → 快照當下狀態
-    if (game.phase === 'serve' && s.vcrCurrent.snapshot === null) {
-      s.vcrCurrent.snapshot = structuredClone({ ...game, events: [] });
-    }
+    // 每球開錄：發球佈陣完成、尚未錄過 → 快照當下 game＋aiState（AI 協調層的跨 tick
+    // 記憶；重演端靠它把十一份 AI Intent 算回來——4.6 §3-0 容量裁定）
+    if (game.phase === 'serve') s.recorder.begin(game, s.aiState);
     // 決定論代打（?autopilot=1 治具）：發球時刻一到（tick 條件）立即發往固定深區
     if (s.config.autopilot && game.phase === 'serve' &&
         serverId(game.match) === s.controlledId &&
@@ -961,23 +962,30 @@ function stepSim(s) {
     // 先依球權決定受控者（固定模式下不動），再收集 Intent
     syncControlled(s);
     // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
-    const intents = [
-      ...stage.controls.collect(game, s.aiState),
-      ...aiCollectIntents(game, s.aiState, [s.controlledId]),
-    ];
+    const playerIntents = [...stage.controls.collect(game, s.aiState)];
     // W4(P4) 題5：OPP 要球——浮鈕 tap 於下一個 sim tick 注入 'call' Intent
     // （Intent 唯一輸入鐵律；VCR 同錄可重演）
     if (s.pendingCallIntent) {
       s.pendingCallIntent = false;
-      intents.push({ tick: game.tick, playerId: s.playerId, action: 'call' });
+      playerIntents.push({ tick: game.tick, playerId: s.playerId, action: 'call' });
     }
-    if (s.vcrCurrent.snapshot) s.vcrCurrent.steps.push({ tick: game.tick, intents });
+    // 4.6 §7 準度可讀性：受控者這一拍的**出手時機真值**（Intent 的 timing 原值——
+    // TOUCH 事件的 power 已被超蓄夾到 0.85，分不出「放太晚」與「甜蜜區」）。
+    // 純表現層取值：只讀不寫，sim 不知道有人在看
+    const spikeIntent = playerIntents.find((i) => i.action === 'spike' && i.playerId === s.controlledId);
+    if (spikeIntent) s.lastSpikeTiming = spikeIntent.timing ?? 1;
+    // 錄影必須在 aiCollectIntents 之前——那一步會演進 aiState，而重演端是
+    // 「先套 patch 再 collect」；順序對齊才逐格一致（rallyTape.js 契約）
+    s.recorder.step(game, s.aiState, s.controlledId, playerIntents);
+    const intents = [
+      ...playerIntents,
+      ...aiCollectIntents(game, s.aiState, [s.controlledId]),
+    ];
     const events = stepGame(game, intents);
     frameEvents.push(...events);
     // 死球＝一球結束：本球錄影歸檔、開新錄影
     if (events.some((e) => e.type === 'DEAD_BALL')) {
-      s.vcrLast = s.vcrCurrent;
-      s.vcrCurrent = { snapshot: null, steps: [] };
+      s.vcrLast = s.recorder.end() ?? s.vcrLast;
     }
     s.accumulator -= SIM_DT;
     simSteps += 1;
@@ -1181,7 +1189,27 @@ function applyEvents(s, frameEvents, now) {
         const lineD = lineKillDistance(e.at);
         if (lineD !== null && lineD <= SIG_LINE_M) {
           s.pendingSig = armSignature('line', { at: { x: e.at.x, z: e.at.z } });
+          // 4.6 §7：咬線得手的半格資訊——**甜蜜區命中**寫明白（同樣選邊線，
+          // 一年級常出界、三年級咬白線＝成長兩層地基的自然兌現，讓玩家讀得到）
+          const tm = timingVerdict(s.lastSpikeTiming, TUNING);
+          if (tm === 'sweet') {
+            cards.push({
+              pri: 20,
+              text: `🎯 甜蜜區——咬線 ${Math.round(lineD * 100)}cm`,
+              color: '#ffd166',
+              dur: 1800,
+            });
+          }
         }
+      }
+      // 4.6 §7：出手失手的成因**歸給時機、不歸運氣**（既有字卡通道，不新增通道）。
+      // 只在受控者本人的攻擊上出——4.5B 字卡減量哲學：不是每球都要講話
+      if (e.reason === 'OUT' && s.lastTouch?.playerId === s.controlledId
+        && (s.lastTouch.kind === 'spike' || s.lastTouch.kind === 'tip')) {
+        const tm = timingVerdict(s.lastSpikeTiming, TUNING);
+        if (tm === 'late') cards.push({ pri: 12, text: '放太晚——手型跑掉了', color: '#c8d6eb', dur: 1600 });
+        else if (tm === 'early') cards.push({ pri: 12, text: '早了半拍——還沒到最高點', color: '#c8d6eb', dur: 1600 });
+        else cards.push({ pri: 12, text: '時機是對的——線壓過頭了', color: '#c8d6eb', dur: 1600 });
       }
       stage.controls.consumeDigHeroSignal?.(); // W3 L：丟棄未兌現的演出武裝（撲空）
       s.digReadResult = null; // 07-27 結果字卡狀態隨球清
@@ -1343,17 +1371,29 @@ function settleIfOver(s) {
         lOverrides: s.lOverrideTally, // W4 Q9：L 改判記帳（box 第四欄）
       });
       if (!saveOk) stage.floatText.show('⚠ 戰績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
-      // W4(P4) Q5：決賽勝利＝最後一球 VCR 典藏（關鍵球回放資料底——快照＋Intent 流
-      // 可逐格重演；回放引擎接線與宿敵之戰回放位＝4.5，資料先落）
+      // W4(P4) Q5＋4.6 §3-2：最後一球（勝負點）落典藏牆四槽。
+      // champion＝決賽勝利的冠軍點（W4 既有語意不動）；rival[屆數]＝天鷹掛點場
+      // （第 1 屆決賽／第 2 屆準決賽／第 3 屆決賽，nationalLadderFor 保底）——
+      // **勝敗皆錄**：幕一碾壓的敗點是三幕結構的視覺回收，只錄勝場等於把宿敵線
+      // 前半段從典藏刪掉。錄製走既有 VCR 規格，不新增 sim 事件型別。
       const finaleWinner = game.series?.winner ?? game.match.winner;
-      if (s.careerCtx.matchEntry.id === 'national-final' && s.vcrLast
-        && finaleWinner === game.players[s.playerId].teamId) {
-        s.careerCtx.store.recordFinalRally?.(JSON.parse(JSON.stringify({
-          matchId: 'national-final',
+      const entry = s.careerCtx.matchEntry;
+      const myTeamId = game.players[s.playerId].teamId;
+      if (isPlayableTape(s.vcrLast)) {
+        const meta = {
+          matchId: entry.id,
           seasonIndex: s.careerCtx.seasonIndex ?? 1,
-          snapshot: s.vcrLast.snapshot ?? null,
-          steps: s.vcrLast.steps ?? [],
-        })));
+          opponentId: entry.opponentId ?? null,
+          label: entry.label ?? '',
+          won: finaleWinner === myTeamId,
+          tape: s.vcrLast,
+        };
+        if (entry.id === 'national-final' && meta.won) {
+          s.careerCtx.store.recordVaultRally?.('champion', JSON.parse(JSON.stringify(meta)));
+        }
+        if (entry.opponentId === 'sky-hawk') {
+          s.careerCtx.store.recordVaultRally?.(meta.seasonIndex, JSON.parse(JSON.stringify(meta)));
+        }
       }
     }
     // W4(P4) Q8：多局系列＝顯示局數與系列勝方（bo1 照舊單局分數）
@@ -1392,7 +1432,7 @@ function showSetBreak(s) {
         s.breakHuddleFPV = false;
         startNextSet(game);
         s.aiState = createAiState();
-        s.vcrCurrent = { snapshot: null, steps: [] }; // 新局重開錄影（跨局殘影不可重演）
+        s.recorder.reset(); // 新局重開錄影（跨局殘影不可重演）
       },
       onSaveQuit: s.careerCtx ? () => saveMidAndQuit(s) : null,
     });

@@ -22,6 +22,18 @@ export const LEGACY_CAREER_KEY = 'vd-career-v1';
 export const LEGACY_PLAYER_KEY = 'vd-career-player-v1';
 export const SAVE_FORMAT = 'volleyball-dream-save';
 
+// 4.6 §3-1 典藏牆槽結構正規化：{ champion, rival:{屆數: 卷} }。
+// 舊存檔的單筆 finalRally（W4 格式：{matchId,seasonIndex,snapshot,steps}）沒有
+// champion/rival 欄位＝一律讀成空牆（憲法縫隙 4：不寫回退相容層，但不得報錯）
+export function vaultOf(career) {
+  const v = career?.finalRally;
+  const isSlots = v && typeof v === 'object' && ('champion' in v || 'rival' in v);
+  return {
+    champion: isSlots ? (v.champion ?? null) : null,
+    rival: isSlots ? structuredClone(v.rival ?? {}) : {},
+  };
+}
+
 // W4(P4) 題2：slot（1–3）決定 storage key——槽間零互通（各槽各自整包＋head＋mid 三 key）
 export function createCareerStore(storage, slot = 1) {
   const store = storage ?? safeLocalStorage();
@@ -405,17 +417,31 @@ export function createCareerStore(storage, slot = 1) {
         };
       });
     },
-    // W4(P4) Q5 生涯結算：決賽勝利的最後一球 VCR 資料底（關鍵球回放；
-    // 完整回放引擎接線＝4.5，資料先落——snapshot＋Intent 流可逐格重演）
-    recordFinalRally(payload) {
+    // 4.6 §3-1 典藏牆固定四槽：champion＝冠軍點（W4 起既有語意）、rival[屆數]＝
+    // 該屆天鷹掛點場的最後一球（勝敗皆錄）。**上限恆為 4 筆、屆數即 key、永不覆寫**
+    // ——已有內容就不動（同屆重打不覆蓋既有記憶）。
+    // 存檔結構由單筆改槽結構＝不寫回退相容層（憲法縫隙 4：刪檔重開）；
+    // 舊存檔的單筆 finalRally 無 champion/rival 欄位＝讀成空牆、不報錯。
+    recordVaultRally(slot, payload) {
       return writeSave((prev) => {
         const next = prev ?? createSaveV2({});
-        return { ...next, career: { ...next.career, finalRally: payload } };
+        const vault = vaultOf(next.career);
+        if (slot === 'champion') {
+          return { ...next, career: { ...next.career, finalRally: { ...vault, champion: payload } } };
+        }
+        const key = String(slot);
+        if (vault.rival[key]) return next; // 永不覆寫
+        return {
+          ...next,
+          career: {
+            ...next.career,
+            finalRally: { ...vault, rival: { ...vault.rival, [key]: payload } },
+          },
+        };
       });
     },
-    loadFinalRally() {
-      const save = loadSave();
-      return save?.career?.finalRally ?? null;
+    loadRallyVault() {
+      return vaultOf(loadSave()?.career);
     },
     clear() {
       try {

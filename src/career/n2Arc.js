@@ -93,7 +93,14 @@ export function n2OpeningLines({ freshmen = [], player = null } = {}) {
 const EV2_COURT = [
   { speaker: '阿哲', text: '紀慕白。今天那幾顆——你明知道救不回來，還是撲了。' },
   { speaker: '小白', text: '救得回來。差一點而已。' },
-  { speaker: '阿哲', text: '你撲出去的那一刻，你身後就空了。那幾分，是從你讓出來的地方進的。' },
+  // 4.6 §6：位置示意圖層（靜態俯視半場圖——讓出的區域＝空白亮區；
+  // 純表現層宣告，careerScreen dlgStageSync 消費、chaseDiagram 收斂構圖）
+  {
+    speaker: '阿哲',
+    text: '你撲出去的那一刻，你身後就空了。那幾分，是從你讓出來的地方進的。',
+    diagram: 'court',
+    diagramSubject: '小白',
+  },
   { speaker: '小白', text: '…………' },
   { speaker: '小白', text: '球不落地，就還沒輸。這句話——難道錯了嗎？' },
   { speaker: '阿哲', text: '沒有錯。只是你還沒學會它的下半句。' },
@@ -102,7 +109,11 @@ const EV2_COURT = [
 const EV2_MENTOR = [
   { speaker: '小白', text: '學長。今天那幾顆，你也撲了——明知道救不回來的球。' },
   { speaker: '小白', text: '我們這個位置，就該這樣嗎？每一顆都撲，撲到最後？' },
-  { speaker: '小白', text: '可是你倒地的時候，我從板凳上看得最清楚——場中央，空出來一塊。' },
+  {
+    speaker: '小白',
+    text: '可是你倒地的時候，我從板凳上看得最清楚——場中央，空出來一塊。',
+    diagram: 'mentor',
+  },
   { speaker: '小白', text: '改判的時候，學長封住一條線，就是放掉另一條線。……那撲球呢？撲球有沒有，該放的球？' },
   { speaker: '小白', text: '球不落地就還沒輸。那「該放的球」……算什麼？' },
 ];
@@ -111,7 +122,11 @@ const EV2_MENTOR = [
 // 「數落地的球」；「未上場」本身即決定論事實，三事件鏈不因排陣選擇而斷
 const EV2_SIDELINE = [
   { speaker: '小白', text: '學長。今天的比賽，我在場邊把每一顆落地的球都數過了。' },
-  { speaker: '小白', text: '有幾顆……如果是我，撲得到。至少，摸得到。' },
+  {
+    speaker: '小白',
+    text: '有幾顆……如果是我，撲得到。至少，摸得到。',
+    diagram: 'sideline',
+  },
   { speaker: '阿哲', text: '數球的人不會有答案。想知道撲不撲得到——把位置爭來。' },
   { speaker: '小白', text: '……嗯。在那之前，午休的牆會陪我練。一百顆起跳。' },
 ];

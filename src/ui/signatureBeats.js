@@ -16,6 +16,17 @@ export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600, line: 2400 };
 // 重跑 probe 改此值）
 export const SIG_LINE_M = 0.25;
 
+// 4.6 §7 準度可讀性（純表現層、零 sim diff）：出手時機 → 玩家讀得懂的三檔。
+// 判準與 sim 的 timingQualityMul **同一組門檻**（甜蜜區＝散佈乘數 0.55 的窗）——
+// 顯示的是真值，不是安慰話。吃 Intent 的 timing 原值：TOUCH 事件的 power 已被
+// 超蓄夾到 0.85，分不出「放太晚」與「甜蜜區」
+export function timingVerdict(t, tuning) {
+  if (t === null || t === undefined) return null;
+  if (t < tuning.SWEET_LO) return 'early';
+  if (t <= tuning.SWEET_HI) return 'sweet';
+  return 'late';
+}
+
 // 落點離最近界線的距離（m）；出界＝null（咬線演出只認 BALL_IN）
 export function lineKillDistance(at) {
   if (!at) return null;

@@ -5,7 +5,7 @@ import {
   finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
 } from '../src/career/careerFinale.js';
 import { isOnceEvent, ONCE_EVENT_IDS, graduationCeremonySegments } from '../src/career/events.js';
-import { createCareerStore } from '../src/career/careerStore.js';
+import { createCareerStore, vaultOf } from '../src/career/careerStore.js';
 
 function fakeStorage() {
   const m = new Map();
@@ -108,10 +108,34 @@ test('雙人畢業量能：阿岩＋阿遠同屆畢業——一次暗場、逐�
   }
 });
 
-test('finalRally 典藏：store 落檔/讀回 roundtrip', () => {
+// 4.6 §3-1：典藏牆由單筆改固定四槽（champion＋天鷹三屆）。上限恆為 4 筆、
+// 屆數即 key、永不覆寫；空槽不出現（顯示哲學：不給玩家看空欄）
+test('典藏牆四槽：store 落檔/讀回 roundtrip＋永不覆寫', () => {
   const store = createCareerStore(fakeStorage(), 1);
-  assert.equal(store.loadFinalRally(), null);
-  const payload = { matchId: 'national-final', seasonIndex: 3, snapshot: { tick: 99 }, steps: [{ tick: 99, intents: [] }] };
-  assert.ok(store.recordFinalRally(payload));
-  assert.deepEqual(store.loadFinalRally(), payload);
+  assert.deepEqual(store.loadRallyVault(), { champion: null, rival: {} });
+  const tape = { v: 2, snapshot: { tick: 99 }, ai: {}, steps: [{ p: [] }] };
+  const champ = { matchId: 'national-final', seasonIndex: 3, won: true, tape };
+  assert.ok(store.recordVaultRally('champion', champ));
+  assert.deepEqual(store.loadRallyVault().champion, champ);
+
+  const act1 = { matchId: 'national-final', seasonIndex: 1, opponentId: 'sky-hawk', label: '決賽', won: false, tape };
+  assert.ok(store.recordVaultRally(1, act1));
+  assert.deepEqual(store.loadRallyVault().rival['1'], act1);
+  // 同屆重打不覆蓋既有記憶
+  assert.ok(store.recordVaultRally(1, { ...act1, won: true }));
+  assert.equal(store.loadRallyVault().rival['1'].won, false);
+  // 四槽並存、上限即四
+  store.recordVaultRally(2, { ...act1, seasonIndex: 2 });
+  store.recordVaultRally(3, { ...act1, seasonIndex: 3 });
+  const vault = store.loadRallyVault();
+  assert.deepEqual(Object.keys(vault.rival).sort(), ['1', '2', '3']);
+  assert.ok(vault.champion);
+});
+
+test('舊存檔的單筆 finalRally＝讀成空牆（不寫回退相容層，但不得報錯）', () => {
+  assert.deepEqual(
+    vaultOf({ finalRally: { matchId: 'national-final', seasonIndex: 3, snapshot: {}, steps: [] } }),
+    { champion: null, rival: {} },
+  );
+  assert.deepEqual(vaultOf(undefined), { champion: null, rival: {} });
 });

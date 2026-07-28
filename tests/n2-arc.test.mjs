@@ -111,3 +111,30 @@ test('事件三：轉 L/未轉差分；信仰升級為選擇權；去重', () =>
   assert.equal(n2FinaleEvents({ career: { events: ['n2-arc-3'], results: [] }, player: {}, roster }).length, 0);
   assert.equal(n2FinaleEvents({ career, player: {}, roster: noN2 }).length, 0);
 });
+
+// 4.6 §6：位置示意圖層——三版共用同一張圖（上場/師徒/場邊保底），
+// 純表現層宣告（不吃重演引擎、不新增錄製鏈）
+test('事件二三版各自帶位置示意圖宣告（court/mentor/sideline）', () => {
+  const diagrams = (evs) => evs[0].lines.filter((l) => l.diagram).map((l) => l.diagram);
+  const courtCareer = {
+    results: [R('group-1', { lbChase: 2, lbWho: 'N2' }), R('group-2', { lbChase: 1, lbWho: 'N2' })],
+  };
+  assert.deepEqual(
+    diagrams(n2PostEvents({ career: courtCareer, seasonIndex: 3, player: { currentRole: 'outside' }, roster })),
+    ['court'],
+  );
+  const mentorCareer = {
+    results: [R('group-1', { lbChase: 2, lbWho: 'player' }), R('group-2', { lbChase: 1, lbWho: 'player' })],
+  };
+  assert.deepEqual(
+    diagrams(n2PostEvents({ career: mentorCareer, seasonIndex: 3, player: { currentRole: 'libero' }, roster })),
+    ['mentor'],
+  );
+  const sideCareer = {
+    results: [R('group-1', {}), R('group-2', {}), R('group-3', {})],
+  };
+  assert.deepEqual(
+    diagrams(n2PostEvents({ career: sideCareer, seasonIndex: 3, player: { currentRole: 'outside' }, roster })),
+    ['sideline'],
+  );
+});

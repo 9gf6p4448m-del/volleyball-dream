@@ -48,6 +48,8 @@ import {
   loadPresentationPref, savePresentationPref, createBeatTimeline, driveTimeline,
 } from './presentation.js';
 import { createRitualStage } from '../render/ritualStage.js';
+import { createVaultCard, openReplayViewer } from './replayVault.js';
+import { createChaseDiagram } from './chaseDiagram.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 const ATTR_LABELS = {
@@ -180,10 +182,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   // 4.5B §2：beat 舞台（事件宣告 camera 模板時掛在對話卡上方；同模板跨句沿用）
   let dlgStage = null; // { stage, sig }
   function dlgStageSync(line) {
-    const sig = line?.cam ? `${line.cam}|${JSON.stringify(line.camOpts ?? null)}` : null;
+    // 4.6 §6：line 級 `diagram` 宣告＝靜態示意圖層（不吃重演引擎、不建 WebGL）——
+    // 事件二的敘事點是「位置讓出來了」，給的是空間不是動作。靜圖無動畫，
+    // reduced-motion 下照給（它本來就不動）
+    const dSig = line?.diagram ? `diagram|${line.diagram}` : null;
+    const sig = dSig ?? (line?.cam ? `${line.cam}|${JSON.stringify(line.camOpts ?? null)}` : null);
     if (dlgStage?.sig === sig) return;
     if (dlgStage) { dlgStage.stage.dispose(); dlgStage.stage.el.remove(); dlgStage = null; }
-    if (!sig || reduceMotion()) return;
+    if (!sig) return;
+    if (dSig) {
+      const svg = createChaseDiagram({ variant: line.diagram, subjectName: line.diagramSubject ?? '小白' });
+      dlg.insertBefore(svg, dlgCard);
+      dlgStage = { sig, stage: { el: svg, dispose() {} } };
+      return;
+    }
+    if (reduceMotion()) return;
     try {
       const stage = createBeatStage({ template: line.cam, opts: line.camOpts ?? {} });
       dlg.insertBefore(stage.el, dlgCard);
@@ -1843,7 +1856,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const data = buildFinaleSummary({
       seasons, recruitment: store.loadRecruitment?.(), memberNames,
     });
-    const finalRally = store.loadFinalRally?.();
+    const vault = store.loadRallyVault?.() ?? { champion: null, rival: {} };
 
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
@@ -1900,14 +1913,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       }
       overlay.appendChild(rc);
     }
-    // 關鍵球典藏（VCR 資料底；完整回放引擎＝4.5——宿敵之戰回放位同屬此區的資料預留）
-    if (finalRally) {
-      overlay.appendChild(el('div', [
-        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
-        'padding:9px 16px', 'width:min(340px, 94vw)', 'text-align:left',
-        'font-size:12px', `color:${COLOR.dim}`, 'line-height:1.6',
-      ], `🎬 關鍵球典藏：第 ${finalRally.seasonIndex} 屆冠軍點——決賽的最後一球，已永久收藏`));
-    }
+    // 4.6 §5 關鍵球典藏牆（原為一行點不開的靜態文字）：四格入口卡——冠軍點＋
+    // 天鷹三屆掛點場。點一格開重演舞台，播完回本流程原位；空槽不出現、
+    // 全空＝整張卡不出現（顯示哲學：不給玩家看空欄）。不自動插播（拍板）
+    const vaultCard = createVaultCard(vault, (item) => {
+      openReplayViewer({ item, reduceMotion: reduceMotion() });
+    });
+    if (vaultCard) overlay.appendChild(vaultCard);
     overlay.appendChild(button('謝幕——', true, () => {
       ritual?.dispose();
       overlay.remove();

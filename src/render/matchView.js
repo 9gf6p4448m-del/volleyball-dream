@@ -36,6 +36,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   // sim 凍結相容（set_break 下 tick 不動，tick 制圍圈管線不可用＝W4 §8-8 癥結的解）
   let breakHuddle = null;
   let hideOwnTag = false;   // 近身視角（defend/attack/first）：藏自己的頭上標籤
+  let tagsVisible = true;   // 4.6 §2 重演特寫：全員標籤總開關（賽中恆 true）
   const castShadow = quality.shadowSize > 0;
 
   // InstancedMesh 池（每種幾何一池＝10 draw calls，取代每人 16 個獨立 Mesh）；
@@ -118,6 +119,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // 07-26：近身視角（防守/攻擊/一人稱）隱藏「自己的」頭上標籤——近距離下標籤爆大
     // 橫在畫面中央擋住讀線；身分已由視角本身確立，不需要再標「你·OH」
     setHideOwnTag(v) { hideOwnTag = v; },
+    // 4.6 §2：重演特寫時收掉全部頭上標籤（回放是記憶不是 HUD——近身構圖下
+    // 名牌會爆大擋住那一拍）。預設 true＝賽中行為零改變
+    setTagsVisible(v) { tagsVisible = v; },
     setHot(hot) {
       if (hot === ringHot) return;
       ringHot = hot;
@@ -187,7 +191,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const hideMe = huddleViewOn && id === highlightId;
         u.rig.root.scale.setScalar(hideMe ? 0.0001 : 1);
         // 標籤另加近身視角條件（07-26）：自己的標籤在防守/攻擊/一人稱下爆大擋讀線
-        u.tag.sprite.visible = !hideMe && !(hideOwnTag && id === highlightId);
+        u.tag.sprite.visible = tagsVisible && !hideMe && !(hideOwnTag && id === highlightId);
 
         const a = gameState.actors[id];
         let x = a.px + (a.x - a.px) * alpha;

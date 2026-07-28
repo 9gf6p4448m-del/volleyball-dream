@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import {
   armSignature, trackSignature, signatureFire, planSignatureBeat, sigKey, SIG_FULL_MS,
   lineKillDistance, SIG_LINE_M,
+  timingVerdict,
 } from '../src/ui/signatureBeats.js';
+import { timingQualityMul } from '../src/sim/game.js';
 import { SHORT_BEAT_MS } from '../src/ui/presentation.js';
 
 const MY = 'A';
@@ -81,4 +83,18 @@ test('「邊線是我的」（07-28 A 案）：離線距離／出界 null／門�
   assert.equal(plan.until, SIG_FULL_MS.line);
   // 咬線武裝同樣走「任何後續觸球即解除」（冒領防護一體適用）
   assert.equal(trackSignature(p, { type: 'TOUCH', team: 'A' }, 'A'), null);
+});
+
+// 4.6 §7 準度可讀性：時機三檔與 sim 的 timingQualityMul 同門檻（顯示真值不是安慰話）
+test('timingVerdict：甜蜜區/早了/放太晚，與 sim 散佈乘數同一組門檻', () => {
+  const T = { SWEET_LO: 0.7, SWEET_HI: 1.05 };
+  assert.equal(timingVerdict(0.5, T), 'early');
+  assert.equal(timingVerdict(0.7, T), 'sweet');
+  assert.equal(timingVerdict(1.05, T), 'sweet');
+  assert.equal(timingVerdict(1.3, T), 'late', '超蓄＝放太晚（TOUCH.power 夾到 0.85 分不出來）');
+  assert.equal(timingVerdict(null, T), null);
+  // 與 sim 實作對齊：甜蜜區＝散佈乘數優於 1
+  assert.ok(timingQualityMul(0.9) < 1);
+  assert.equal(timingQualityMul(0.5), 1);
+  assert.ok(timingQualityMul(1.3) > 1);
 });
