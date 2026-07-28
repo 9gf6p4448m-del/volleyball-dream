@@ -12,6 +12,7 @@ import { standingReach, spikeReach, moveSpeed } from './player.js';
 import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
 import { createIntent } from './intent.js';
 import { approachRoutesFor, approachStartOf } from './approach.js';
+import { blockLaneRead, digForBlock } from './blockRead.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA } from './stamina.js';
@@ -145,6 +146,10 @@ export function createAiState() {
     // W4(P4) 附錄 B-4 ace 反讀：{ pid, openLine }——宿敵 ace 且玩家配套被讀死時
     // 由呼叫端（matchLoop/治具）注入；chooseTouch 第三擊消費＝改打讓開的線
     counterRead: null,
+    // Phase 5 W1 §7 C2：受控玩家前排攔網的**身體站位**推論（{ team, block, dig }）——
+    // 由 aiCollectIntents 逐 tick 從 excludeIds 重算（零面板、零玩家指令），
+    // block 可為 null＝模稜兩可的中性讀（同時是遲滯的記憶槽）
+    blockRead: null,
   };
 }
 
@@ -152,6 +157,7 @@ export function createAiState() {
 // 輸出與玩家輸入同型的 Intent、走同一條管線進 sim —— sim 不知來源
 export function aiCollectIntents(game, aiState, excludeIds = []) {
   ensureFlightPlan(game, aiState);
+  updateBlockRead(game, aiState, excludeIds); // C2：先讀受控玩家的攔網站位，後排本 tick 就吃得到
   const intents = [];
   // 以輪轉名單的顯式順序遍歷（不靠 Object.keys 插入序；接生涯資料換 id 型別也不變序）
   for (const playerId of [...game.match.rotations.A, ...game.match.rotations.B]) {
@@ -256,6 +262,34 @@ function ensureFlightPlan(game, aiState) {
     && !(r.touches === 2 && aiState.claimId === aiState.attackerId)
     && !canReachLanding(game, aiState, aiState.claimId)) {
     aiState.backupId = arbitrate(game, team, landing, [r.lastToucherId, aiState.claimId]);
+  }
+}
+
+// Phase 5 W1 §7 C2（07-28 Sawmah 拍板 A 案）——後排防守跟著攔網走，**零新面板**：
+// 玩家在前排攔網時是用身體站位在封線，所以後排讀的是「他實際站到哪條過網線」，
+// 不是他按了什麼（跟真實排球一致：隊友看你站哪）。
+// 生效窗＝與前排攔網／後排 dig 分支同一組條件（對方持球、非接發弧線、我在前排），
+// 讀不出明確傾向（模稜兩可）＝中性、陣型不動。遲滯由 prev 提供（見 blockRead.js）。
+// **只讀受控玩家**（excludeIds）；AI 攔網手的站位不驅動後排（本輪 out of scope）。
+function updateBlockRead(game, aiState, excludeIds) {
+  const prev = aiState.blockRead;
+  aiState.blockRead = null;
+  if (game.phase !== 'rally' || !excludeIds?.length) return;
+  const r = game.rally;
+  const atkId = aiState.attackerId;
+  if (!atkId || !game.players[atkId]) return;
+  const atkTeam = game.players[atkId].teamId;
+  for (const pid of excludeIds) {
+    const p = game.players[pid];
+    if (!p || p.teamId === atkTeam) continue;            // 我方進攻中＝沒有攔網這回事
+    const team = p.teamId;
+    if (!r.possession || r.possession === team) continue; // 對方持球才有得讀
+    if (aiState.landingTeam === team && r.profile !== 'spike') continue; // 接發局面（同 receivingArc）
+    if (!isFrontRow(game.match.rotations[team], pid)) continue;
+    const memo = prev?.team === team ? prev.block : null;
+    const block = blockLaneRead(game, pid, atkId, memo);
+    aiState.blockRead = { team, block, dig: digForBlock(block) };
+    return;
   }
 }
 
@@ -712,7 +746,11 @@ function decideOne(game, aiState, playerId) {
   // 吃同一指令（玩家自身站位由輸入層用同一 digTargetFor 帶動）
   if (opponentHasBall && !receivingArc &&
       !isFrontRow(game.match.rotations[team], playerId)) {
-    const bias = aiState.digBias?.team === team ? aiState.digBias.choice : null;
+    // C2 優先序（拍板）：L 面板下的**明確指令**優先於身體站位推論；
+    // 玩家不是 L（沒有面板可下指令）時才吃前排隊友站位的推論值
+    const explicit = aiState.digBias?.team === team ? aiState.digBias.choice : null;
+    const read = aiState.blockRead?.team === team ? aiState.blockRead.dig : null;
+    const bias = explicit ?? read;
     return moveIntent(playerId, tick, actor, digTargetFor(game, team, playerId, bias));
   }
 
