@@ -143,10 +143,9 @@ export function createGeoCharacter(pool, playerId, teamId, height, isLibero = fa
     return j;
   };
 
-  // 骨盆（短褲）＋雙腿
-  const pelvis = new THREE.Group();
-  pelvis.position.y = 0.96;
-  root.add(pelvis);
+  // 骨盆（短褲）＋雙腿。4.7 動作重製：pelvis 升格為**可驅動關節**（髖肩分離要它
+  // 能獨立於軀幹轉）——預設 rotation 0＝既有動作外觀一格不變
+  const pelvis = joint(root, 'pelvis', 0, 0.96, 0);
   add(pelvis, 'hips', kit.shorts, 0, 0, 0).scale.set(1.05, 0.9, 0.8);
   for (const [side, sx] of [['r', 1], ['l', -1]]) {
     const hip = joint(pelvis, `${side}Hip`, sx * 0.095, -0.04, 0);
@@ -156,19 +155,27 @@ export function createGeoCharacter(pool, playerId, teamId, height, isLibero = fa
     add(knee, 'shoe', SHOE, 0, -0.44, 0.05);
   }
 
-  // 軀幹（球衣）→ 頸/頭 → 雙臂
+  // 軀幹（球衣）→ 胸椎 → 頸/頭 → 雙臂。
+  // 4.7 動作重製：脊椎分兩節——`spine`（腰／下段，既有名稱與位置不動，動畫層舊欄位
+  // 照樣驅動它）＋ `spineUpper`（胸／上段，帶著頸與雙肩）。弓身→收腹的輪廓要兩節
+  // 才做得出來。**插入層的位置數學等價**（0.3+0.2=0.5、0.3+0.12=0.42），
+  // 新關節預設 rotation 0 → 所有既有姿勢外觀不變
   const spine = joint(pelvis, 'spine', 0, 0.12, 0);
   add(spine, 'torso', kit.jersey, 0, 0.26, 0).scale.set(1.12, 1, 0.8);
-  const neck = joint(spine, 'neck', 0, 0.5, 0);
+  const chest = joint(spine, 'spineUpper', 0, 0.3, 0);
+  const neck = joint(chest, 'neck', 0, 0.2, 0);
   add(neck, 'head', skin, 0, 0.14, 0);
   // 髮帽：只蓋頭頂與後腦（露臉）——縮扁、上移、後偏
   add(neck, 'hair', hair, 0, 0.195, -0.035).scale.set(0.98, 0.62, 0.95);
   for (const [side, sx] of [['r', 1], ['l', -1]]) {
-    const sh = joint(spine, `${side}Shoulder`, sx * 0.225, 0.42, 0);
+    const sh = joint(chest, `${side}Shoulder`, sx * 0.225, 0.12, 0);
     add(sh, 'upperArm', kit.jersey, 0, 0, 0); // 短袖
     const el = joint(sh, `${side}Elbow`, 0, -0.32, 0);
     add(el, 'forearm', skin, 0, 0, 0);
-    add(el, 'hand', skin, 0, -0.34, 0);
+    // 手腕（4.7）：觸球瞬間的壓腕 snap 是排球辨識度最高的一幀。
+    // 手掌從掛在肘下 -0.34 改為掛在腕關節（同座標）下的原點＝位置等價
+    const wr = joint(el, `${side}Wrist`, 0, -0.34, 0);
+    add(wr, 'hand', skin, 0, 0, 0);
   }
 
   root.scale.setScalar(height / BASE_H);

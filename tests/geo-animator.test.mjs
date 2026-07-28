@@ -4,8 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGeoAnimator } from '../src/render/geoAnimator.js';
 
-const JOINT_NAMES = ['rHip', 'lHip', 'rKnee', 'lKnee', 'spine', 'neck',
-  'rShoulder', 'lShoulder', 'rElbow', 'lElbow'];
+// 4.7 動作重製新增三關節：pelvis（骨盆獨立轉）／spineUpper（胸椎）／r-lWrist（壓腕）
+const JOINT_NAMES = ['rHip', 'lHip', 'rKnee', 'lKnee', 'spine', 'spineUpper', 'neck',
+  'pelvis', 'rShoulder', 'lShoulder', 'rElbow', 'lElbow', 'rWrist', 'lWrist'];
 
 function mkRig() {
   const joints = {};
@@ -98,4 +99,65 @@ test('geoAnimator：未知動作不崩（trigger 防呆）', () => {
   anim.trigger('nonexistent');
   assert.ok(anim.isIdle());
   anim.update(0.1, 0); // 不應丟例外
+});
+
+// 4.7 動作重製（工單 §7「動作正確性」）：鞭打順序與落地緩衝
+test('鞭打順序：肩→肘→腕的角速度峰值嚴格遞增（不得同幀一起轉）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('spike');
+  const dt = 1 / 60;
+  const prev = { sh: 0, el: 0, wr: 0 };
+  const peak = { sh: { v: -1, t: -1 }, el: { v: -1, t: -1 }, wr: { v: -1, t: -1 } };
+  for (let i = 0; i < 40; i += 1) {
+    anim.update(dt, 0);
+    const cur = {
+      sh: rig.joints.rShoulder.rotation.x,
+      el: rig.joints.rElbow.rotation.x,
+      wr: rig.joints.rWrist.rotation.x,
+    };
+    for (const k of ['sh', 'el', 'wr']) {
+      const v = Math.abs(cur[k] - prev[k]);
+      if (i > 0 && v > peak[k].v) peak[k] = { v, t: i };
+      prev[k] = cur[k];
+    }
+  }
+  assert.ok(peak.sh.t >= 0 && peak.el.t >= 0 && peak.wr.t >= 0, '三關節都要有動作');
+  assert.ok(peak.sh.t <= peak.el.t, `肩(${peak.sh.t}) 不得晚於肘(${peak.el.t})`);
+  assert.ok(peak.el.t <= peak.wr.t, `肘(${peak.el.t}) 不得晚於腕(${peak.wr.t})`);
+  assert.ok(peak.wr.t > peak.sh.t, '腕的峰值必須嚴格晚於肩＝鞭打不是同幀一起轉');
+});
+
+test('落地緩衝：扣球落地後膝角持續低於站立值（不得瞬間回站姿）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  const dt = 1 / 60;
+  anim.update(dt, 0);
+  const standKnee = rig.joints.rKnee.rotation.x;
+  anim.trigger('spike');
+  const knees = [];
+  for (let i = 0; i < 48; i += 1) { // spike 0.6s ＋ 自動接的落地緩衝 0.26s
+    anim.update(dt, 0);
+    knees.push(rig.joints.rKnee.rotation.x);
+  }
+  // 落地段（spike 尾 + landSoft）：屈膝吸收＝膝角明顯大於站立，且持續 ≥10 tick
+  const tail = knees.slice(36, 48);
+  assert.ok(tail.filter((k) => k > standKnee + 0.05).length >= 10,
+    `落地段應有連續屈膝吸收（實際 ${tail.map((k) => k.toFixed(2)).join(',')}）`);
+});
+
+test('步幅匹配：擺腿振幅隨移速上升（滑冰的成因是步幅不匹配）', () => {
+  const sample = (speed) => {
+    const rig = mkRig();
+    const anim = createGeoAnimator(rig);
+    let max = 0;
+    for (let i = 0; i < 120; i += 1) {
+      anim.update(1 / 60, speed);
+      max = Math.max(max, Math.abs(rig.joints.rHip.rotation.x));
+    }
+    return max;
+  };
+  const slow = sample(1.2);
+  const fast = sample(4.2);
+  assert.ok(fast > slow, `快跑的擺腿幅度要大於慢走（slow=${slow.toFixed(2)} fast=${fast.toFixed(2)}）`);
 });
