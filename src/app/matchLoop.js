@@ -60,9 +60,15 @@ export function onCourt(game, playerId) {
   return game.match.rotations[team].includes(playerId);
 }
 
-// AI 攻擊手引臂起跳的提前量（tick）：略短於 windup 動畫本身（0.75s＝45 tick）
-// ——寧可差一點播完，也不要播完落地再重跳一次（那比現在更糟）
-const WINDUP_LEAD_TICKS = 40;
+// AI 攻擊手的兩段提前量（tick）——07-28 二輪（Sawmah：動作流暢度）：
+// **助跑與起跳分家**。原本只有一個 windup（自帶 jump 0.5m），提前觸發＝提前浮空、
+// 在空中飄 2.67m 過去；不提前又只剩 0.1s＝站著突然揮。
+// APPROACH＝助跑起手（零跳躍、雙臂後擺前傾），TAKEOFF＝真正離地。
+// **TAKEOFF 對齊 sim 自己的起跳定義**（TUNING.TAKEOFF_LOOKBACK_TICKS＝24：
+// 後排踏線違例就是用這個回溯窗判起跳腳位置）——動畫與規則同一個時間錨點，
+// 玩家看到的起跳點就是規則認定的起跳點
+const APPROACH_LEAD_TICKS = 40;
+const TAKEOFF_LEAD_TICKS = TUNING.TAKEOFF_LOOKBACK_TICKS;
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
 const TAPE_TAIL = 240;     // 情蒐錄影帶：尾段 4 秒、略快於一般回放
@@ -207,6 +213,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     controlledId: playerId,
     switchKey: '',
     lastWindupFlight: -1,       // AI 攻擊手起跳動畫：每個 flight 只播一次
+    lastApproachFlight: -1,     // 同上，助跑段（零跳躍）獨立旗標
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
     shake: 0,
@@ -1382,7 +1389,13 @@ function updateAssistAndPoses(s) {
       ? aiState.hitPoint.ticks - (game.tick - aiState.planTick)
       : null;
     const near = Math.hypot(b.x - atk.x, b.z - atk.z);
-    const timed = ticksToHit !== null && ticksToHit <= WINDUP_LEAD_TICKS && near < 4.5;
+    // 兩段：助跑（零跳躍）→ 起跳離地。旗標各自獨立、每 flight 一次
+    if (ticksToHit !== null && ticksToHit <= APPROACH_LEAD_TICKS && near < 4.5
+      && aiState.flightId !== s.lastApproachFlight) {
+      s.lastApproachFlight = aiState.flightId;
+      stage.matchView.triggerPose(aiState.claimId, 'approach');
+    }
+    const timed = ticksToHit !== null && ticksToHit <= TAKEOFF_LEAD_TICKS;
     if (timed || (b.vy < 0 && b.y < 3.6 && near < 2.2)) {
       s.lastWindupFlight = aiState.flightId;
       // 4.5B §8 遲疑/果斷：低 trust 快攻＝抬手一半跳得矮的遲疑版（W3 S 分配的

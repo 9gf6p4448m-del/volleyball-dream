@@ -50,9 +50,10 @@ for (let seed = 1; seed <= 40; seed += 1) {
       const b = g.ball;
       const ticksToHit = ai.hitPoint?.ticks != null ? ai.hitPoint.ticks - (g.tick - ai.planTick) : null;
       const near = Math.hypot(b.x - a.x, b.z - a.z);
+      // 起跳（離地）觸發：新版對齊 sim 的 TAKEOFF_LOOKBACK_TICKS(24)；old＝追修前
       const hit = OLD_RULE
         ? (b.vy < 0 && b.y < 3.6 && near < 2.2)
-        : ((ticksToHit !== null && ticksToHit <= 40 && near < 4.5)
+        : ((ticksToHit !== null && ticksToHit <= 24)
           || (b.vy < 0 && b.y < 3.6 && near < 2.2));
       if (hit) { windupAt[ai.claimId] = g.tick; nearAt.push(near); }
     }
@@ -116,6 +117,6 @@ for (const [k, arr] of [['前排', windupLead.front], ['後排(pipe)', windupLea
 }
 
 console.log('');
-console.log('-- 4 起手當下離球距離（>3m 就有浮空滑行的風險）--');
+console.log('-- 4 **離地起跳**當下離球距離＝空中前飄（真人前排 0.3-0.5m、後排更大）--');
 console.log('n=' + nearAt.length + '：p50=' + q(nearAt, 0.5).toFixed(2) + 'm  p90=' + q(nearAt, 0.9).toFixed(2) + 'm  max=' + Math.max(...nearAt).toFixed(2) + 'm');
 console.log('   超過 3m 的比例：' + ((nearAt.filter((d) => d > 3).length / nearAt.length) * 100).toFixed(1) + '%');
