@@ -5,13 +5,16 @@ import * as THREE from 'three';
 import { SIM_DT } from '../sim/constants.js';
 import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
-import { createGeoCharacter, createGeoPool } from './geoCharacter.js';
+import { createGeoCharacter, createGeoPool, BASE_H } from './geoCharacter.js';
 import { createGeoAnimator } from './geoAnimator.js';
 import { STAMINA, tierOf } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
 import { HUDDLE, huddleSlot, coachPos } from './huddleLayout.js';
 import { createHuddleProps } from './huddleProps.js';
 import { FACING, facingTarget, approachYaw, shortestArc } from './facing.js';
+import {
+  REACH, reachWindow, reachBias, applyReachBias, localBallOffset, worldReachOffset,
+} from './reachAssist.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
@@ -28,6 +31,15 @@ const DIVE_HOP = 0.22;     // 撲出微騰空（m，飛撲離地的弧）
 // W8 暫停演出（07-26 拍板 B 案）：幾何改圍圈弧（huddleLayout 單一事實源）、
 // 兩隊各自圍自家教練（真實排球任一方暫停雙方都回板凳圈）、教練＋戰術板道具
 const HUDDLE_K = 3.2;              // 走位插值收斂率（指數平滑，同 TURN_K 家族手感）
+// 夠球視覺補償（reachAssist.js）：哪些動作用哪一組手臂——舉球/接球＝雙手平墊、
+// 扣球/發球＝慣用手。未列出的動作（cheer/wave/nod/block…）不改變上一次的設定，
+// 真正該關掉補償的情境（攔網/魚躍/非 rally/圍圈）由 sync 內的閘門負責
+const REACH_KIND = {
+  bump: 'both', overhead: 'both', receiveReady: 'both', setReady: 'both', dive: 'both',
+  spike: 'dominant', windup: 'dominant', windupHesitant: 'dominant',
+  approach3: 'dominant', approach4: 'dominant',
+  serve: 'dominant', serveJump: 'dominant', serveFloat: 'dominant',
+};
 
 export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null) {
   let highlightId = initialControlledId;
@@ -58,7 +70,15 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       tag: makeTag(scene),
       tagText: '',
       tagY: p.height.current + 0.45,
+      reachKind: 'both', // 夠球補償的手臂組（見 REACH_KIND；由 setPose 逐次更新）
+      reachW: 0,         // 夠球包絡的平滑值（0..1）
     };
+  }
+  // 觸發動作＝同時記下這個動作該用哪一組手臂夠球（表格未列＝沿用上次）
+  function setPose(u, type) {
+    u.animator.trigger(type);
+    const kind = REACH_KIND[type];
+    if (kind) u.reachKind = kind;
   }
   pool.finishColors();
 
@@ -89,14 +109,14 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       if (e.type === 'SERVE') {
         // 發球分式（07-24）：依本球式樣選動畫——跳發高跳全揮／飄浮站立推擊／穩定原樣
         const style = gameState.rally.serveStyle;
-        u.animator.trigger(style === 'power' ? 'serveJump' : style === 'float' ? 'serveFloat' : 'serve');
+        setPose(u, style === 'power' ? 'serveJump' : style === 'float' ? 'serveFloat' : 'serve');
       }
-      else if (e.type === 'BLOCK_TOUCH') u.animator.trigger('blockJump'); // 4.5B §8 重量感版（蹲→蹬→滯空→落地）
+      else if (e.type === 'BLOCK_TOUCH') setPose(u, 'blockJump'); // 4.5B §8 重量感版（蹲→蹬→滯空→落地）
       else if (e.type === 'TOUCH') {
-        if (e.kind === 'spike') u.animator.trigger('spike');
-        else if (e.kind === 'set') u.animator.trigger('overhead');
+        if (e.kind === 'spike') setPose(u, 'spike');
+        else if (e.kind === 'set') setPose(u, 'overhead');
         // kind==='dive'＝魚躍觸球：動畫由 sync 的 divedUntil 偵測負責（撲到/撲空都演），不走墊球
-        else if (e.kind !== 'dive') u.animator.trigger(e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
+        else if (e.kind !== 'dive') setPose(u, e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
       }
     }
     // 死球落點塵土（e.at＝球落地/犯規點）
@@ -108,7 +128,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   return {
     count: Object.keys(units).length,
     triggerPose(playerId, type) {
-      units[playerId]?.animator.trigger(type);
+      const u = units[playerId];
+      if (u) setPose(u, type);
     },
     setControlled(id) { highlightId = id; },
     setTimeoutHuddle(team) { huddleTeam = team; }, // W7.1 #3A：null＝無人集合
@@ -309,7 +330,39 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const totalY = bodyY + diveY;
         if ((u.lastBodyY ?? 0) > 0.18 && totalY <= 0.03) dust.burst(x + diveX, z + diveZ, 8, 0.7);
         u.lastBodyY = totalY;
-        u.rig.root.position.set(x + diveX, totalY, z + diveZ);
+
+        // 夠球視覺補償（純表現，見 reachAssist.js）：sim 的 REACH_RADIUS 1.3m 很寬鬆，
+        // 球在快一公尺外就被觸到＝「沒碰到手就接起來」。判定半徑不動（平衡命脈），
+        // 改讓人去夠球——軀幹傾／轉＋手臂延伸＋小幅根位移。閘門：只在 rally、
+        // 魚躍（自己有撲出位移）／攔網（合攔的牆不該歪）／圍圈一律關閉
+        const assistOff = gameState.phase !== 'rally'
+          || a.divedUntil > gameState.tick
+          || blockDuty || a.blockUntil >= gameState.tick
+          || (u.huddleW ?? 0) > 0.05;
+        const wTarget = assistOff ? 0 : reachWindow(
+          Math.hypot(b.x - x, b.z - z), b.y - totalY, gameState.players[id].height.current,
+        );
+        // 包絡另加時間平滑：閘門翻面／sim 逐幀跳動不得讓身體瞬間彈一下
+        u.reachW += (wTarget - u.reachW) * (1 - Math.exp(-REACH.SMOOTH_K * dt));
+        const off = localBallOffset(b.x - x, b.z - z, u.yaw);
+        const bias = reachBias({
+          right: off.right,
+          fwd: off.fwd,
+          up: b.y - totalY,
+          w: u.reachW,
+          kind: u.reachKind,
+          armXR: u.rig.joints.rShoulder.rotation.x,
+          armXL: u.rig.joints.lShoulder.rotation.x,
+          elbowXR: u.rig.joints.rElbow.rotation.x,
+          elbowXL: u.rig.joints.lElbow.rotation.x,
+          trunkX: u.rig.joints.spine.rotation.x + u.rig.joints.spineUpper.rotation.x,
+          scale: gameState.players[id].height.current / BASE_H,
+        });
+        applyReachBias(u.rig.joints, bias); // 必須無條件呼叫：spine.rotation.z 只有這裡寫
+        const rOff = worldReachOffset(bias.rootRight, bias.rootFwd, u.yaw);
+
+        // 垂直伸展加在 dust 判定之後：落地塵土仍只看動畫的跳躍弧，不被伸展誤觸
+        u.rig.root.position.set(x + diveX + rOff.dx, totalY + bias.rootUp, z + diveZ + rOff.dz);
         u.rig.root.rotation.set(diveTilt, u.yaw, 0);
 
         // root 不在 scene 裡（無 Mesh 可畫），手動推一次 matrixWorld，
