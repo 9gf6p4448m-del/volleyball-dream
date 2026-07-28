@@ -11,13 +11,14 @@ import { STAMINA, tierOf } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
 import { HUDDLE, huddleSlot, coachPos } from './huddleLayout.js';
 import { createHuddleProps } from './huddleProps.js';
+import { FACING, facingTarget, approachYaw, shortestArc } from './facing.js';
 
 const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
 // 頭上標籤＝排球標準角色縮寫（命名統一：廢除 P1–P6 泛稱）
 const ROLE_TAG = { setter: 'S', outside: 'OH', middle: 'MB', opposite: 'OPP', libero: 'L' };
 
-const TURN_K = 25; // 轉身收斂率（1/秒，指數衰減；排球轉身要快，慢了像背對球）
+// 轉身收斂率／轉速上限／近身混合帶皆在 facing.js 的 FACING（純函式可單測）
 // 魚躍飛撲視覺（純表現，sim 不含位移）：沿朝向撲出一段＋身體前傾接近水平
 const DIVE_RECOVER = 42;   // 同 sim TUNING.DIVE_RECOVER_TICKS（魚躍倒地恢復＝撲救動畫時長）
 const DIVE_LUNGE = 1.35;   // 撲出水平距離（m）
@@ -248,31 +249,32 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const vz = (a.z - a.pz) / SIM_DT;
         const speed = Math.hypot(vx, vz);
 
-        // 朝向（職責制）：攔網職責鎖面向網；其餘面向球；近身改面向來球方向
+        // 朝向（職責制）：攔網職責鎖面向網；其餘追球；圍圈轉向教練。
+        // 決策全在 facing.js 的純函式（可 node 單測）——07-28 修「扣球時角色會轉圈」：
+        // 原本 1.1m 硬門檻把「面向球位置」與「面向來球方向」硬切，加上舉球弧頂球速
+        // 方向純屬雜訊，三次同號跳變把人捲滿一圈；現改連續混合＋球速可信門檻＋轉速上限
         const team = gameState.players[id].teamId;
         const netYaw = TEAM_SIDE[team] === 1 ? Math.PI : 0;
-        let targetYaw = netYaw;
-        if (gameState.phase === 'rally' && !blockDuty) {
-          const b = gameState.ball;
-          const bdx = b.x - x;
-          const bdz = b.z - z;
-          if (Math.hypot(bdx, bdz) > 1.1) {
-            targetYaw = Math.atan2(bdx, bdz);
-          } else {
-            const bvx = b.x - b.px;
-            const bvz = b.z - b.pz;
-            targetYaw = Math.hypot(bvx, bvz) > 1e-4
-              ? Math.atan2(-bvx, -bvz)
-              : u.yaw;
-          }
-        }
-        // W8 圍圈朝向（四輪回饋：站定後背對教練不合理）：聚攏中/站定＝轉向教練看板；
-        // 死球 targetYaw 原預設面向球網，圍圈權重高時覆蓋
-        if ((u.huddleW ?? 0) > 0.35) {
-          const cp = coachPos(TEAM_SIDE[team]);
-          targetYaw = Math.atan2(cp.x - x, cp.z - z);
-        }
-        u.yaw += shortestArc(u.yaw, targetYaw) * (1 - Math.exp(-TURN_K * dt));
+        const b = gameState.ball;
+        // W8 圍圈朝向（四輪回饋：站定後背對教練不合理）：權重夠高才取教練座標
+        const cp = (u.huddleW ?? 0) > FACING.HUDDLE_FACE_W ? coachPos(TEAM_SIDE[team]) : null;
+        const targetYaw = facingTarget({
+          phase: gameState.phase,
+          netYaw,
+          blockDuty,
+          x,
+          z,
+          ballX: b.x,
+          ballZ: b.z,
+          ballDx: b.x - b.px,
+          ballDz: b.z - b.pz,
+          simDt: SIM_DT,
+          currentYaw: u.yaw,
+          huddleW: u.huddleW,
+          coachX: cp?.x,
+          coachZ: cp?.z,
+        });
+        u.yaw = approachYaw(u.yaw, targetYaw, dt);
 
         // 4.7 根運動：移動方向相對朝向的橫向分量——沿網橫移＝側併步（見 geoAnimator）
         const lateral = speed > 0.25
@@ -386,13 +388,6 @@ function staminaTagColor(gameState, id) {
   const v = gameState.stamina[id] ?? 1;
   if (v < STAMINA.TIER2_BELOW) return '#ff5b5b';
   return v < STAMINA.TIER1_BELOW ? '#ffd166' : null;
-}
-
-function shortestArc(from, to) {
-  let d = (to - from) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
 }
 
 // ---- 頭上標籤（canvas sprite）----
