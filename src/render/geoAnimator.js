@@ -329,7 +329,6 @@ export function createGeoAnimator(rig) {
       const sideW = Math.min(Math.abs(lateral), 1);
       const legSwing = Math.min(matched, SWING_MAX) * runW * (1 - sideW * 0.85);
       const shuffle = sideW * runW;
-      const shuffleDir = lateral >= 0 ? 1 : -1;
       const armSwing = 0.5 * runW;
       const idleW = 1 - runW;
       const baseSpine = 0.16 * runW + 0.07 * idleW + breath;
@@ -361,11 +360,28 @@ export function createGeoAnimator(rig) {
         // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
         j.rHip.rotation.x = -legSwing * s - crouch * 1.1;
         j.lHip.rotation.x = legSwing * s - crouch * 1.1;
-        // 側併步：兩腿同向開合、相位錯開＝外側腿先跨、內側腿跟上（不是劈腿）
-        j.rHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase)) * shuffleDir;
-        j.lHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase + 1.9)) * shuffleDir;
-        j.rKnee.rotation.x = (0.12 + Math.max(0, -s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
-        j.lKnee.rotation.x = (0.12 + Math.max(0, s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
+        // 側併步（07-28 重做；Sawmah 回報「橫移時雙腿很不自然」）：
+        // 舊版兩髖 z **同號**＝兩條腿一起倒向同一邊，只是幅度輪流大小——那不是併步。
+        // geoCharacter.js:161-162 兩髖同向建立（只差位置 sx*0.095，無鏡像旋轉），
+        // 且繞 z +θ 會把腿往 +X 帶、角色右側在 −X ⇒ **右腿外展＝負、左腿外展＝正**。
+        // 真實併步＝外側腿先跨開 → 內側腿跟上收攏，兩腿**相對開合**、站距一寬一窄。
+        // 用相位差製造先後（trail 落後 1.2 rad），用連續的 f 取代 shuffleDir 的硬翻面
+        // （lateral 過零時不會瞬間交換領跨腿）
+        const openW = 0.5 + 0.5 * Math.sin(phase);
+        const closeW = 0.5 + 0.5 * Math.sin(phase - 1.2);
+        const spread = shuffle * 0.34 * openW;
+        const trail = shuffle * 0.34 * closeW;
+        const f = 0.5 + 0.5 * Math.max(-1, Math.min(1, lateral * 3)); // 0＝右側領跨、1＝左側領跨
+        j.lHip.rotation.z = spread * f + trail * (1 - f);
+        j.rHip.rotation.z = -(spread * (1 - f) + trail * f);
+        // 橫移時膝蓋不該再跑前進步態的交替抬腿（髖在併步、膝在走路＝兩套動作疊著）：
+        // 交替量隨 sideW 收掉，改成併步該有的低姿屈膝
+        const walkKnee = 1 - sideW * 0.85;
+        const shuffleCrouch = sideW * runW * 0.28;
+        j.rKnee.rotation.x = (0.12 + Math.max(0, -s) * 0.95 * walkKnee) * runW
+          + 0.14 * idleW + crouch * 2.2 + shuffleCrouch;
+        j.lKnee.rotation.x = (0.12 + Math.max(0, s) * 0.95 * walkKnee) * runW
+          + 0.14 * idleW + crouch * 2.2 + shuffleCrouch;
       }
 
       // 軀幹/頭（4.7：脊椎兩節＋骨盆獨立轉——髖肩分離與弓身的來源）

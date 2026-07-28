@@ -329,6 +329,51 @@ function hipSwingRange(speed) {
   return hi - lo;
 }
 
+// 07-28 Sawmah 試玩：「人物移動的跳舞，主要是在**橫移**的時候，雙腿的移動變得很不自然」
+// 成因＝舊版兩髖 rotation.z 同號（`* shuffleDir` 且幅度恆正）＝兩腿一起倒向同一邊，
+// 不是併步的開合。geoCharacter.js:161-162 兩髖同向建立、角色右側在 −X ⇒
+// 右腿外展＝負 z、左腿外展＝正 z，站距＝lHip.z − rHip.z。
+test('側併步：兩腿必須相對開合（站距一寬一窄），不得一起倒向同一邊', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  let sameSign = 0;
+  let widthMin = Infinity;
+  let widthMax = -Infinity;
+  for (let i = 0; i < 120; i += 1) {
+    anim.update(1 / 60, 3.5, 1); // 純橫移
+    const r = rig.joints.rHip.rotation.z;
+    const l = rig.joints.lHip.rotation.z;
+    if (i > 30 && Math.abs(r) > 0.01 && Math.abs(l) > 0.01 && Math.sign(r) === Math.sign(l)) sameSign += 1;
+    const width = l - r; // 站距（正＝張開）
+    if (i > 30) { widthMin = Math.min(widthMin, width); widthMax = Math.max(widthMax, width); }
+  }
+  assert.equal(sameSign, 0, `兩腿不得同時倒向同一邊（實測 ${sameSign} 幀同號）`);
+  assert.ok(widthMin >= -0.01, `站距不得為負（腿交叉）：最小 ${widthMin.toFixed(3)}`);
+  assert.ok(widthMax - widthMin > 0.15,
+    `站距要有明顯開合（跨開→收攏）：實測 ${widthMin.toFixed(3)}~${widthMax.toFixed(3)}`);
+});
+
+test('側併步：膝蓋不得同時跑前進步態（髖在併步、膝在走路＝兩套動作疊著）', () => {
+  const sampleKneeAlternation = (lateral) => {
+    const rig = mkRig();
+    const anim = createGeoAnimator(rig);
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < 120; i += 1) {
+      anim.update(1 / 60, 3.5, lateral);
+      if (i > 30) {
+        const d = rig.joints.rKnee.rotation.x - rig.joints.lKnee.rotation.x; // 左右膝差＝交替量
+        lo = Math.min(lo, d); hi = Math.max(hi, d);
+      }
+    }
+    return hi - lo;
+  };
+  const fwd = sampleKneeAlternation(0);
+  const side = sampleKneeAlternation(1);
+  assert.ok(side < fwd * 0.4,
+    `橫移時膝的交替抬腿要明顯收掉（前進 ${fwd.toFixed(3)} vs 橫移 ${side.toFixed(3)}）`);
+});
+
 test('§2 助跑步相：站著不動時不得原地踏步（跳舞 bug 回歸）', () => {
   const still = hipSwingRange(0);
   assert.ok(still < 0.1, `站定時兩腿不得持續擺動（實測擺幅 ${still.toFixed(3)}）`);
