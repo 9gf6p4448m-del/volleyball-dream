@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents, dutyPosition } from '../src/sim/ai.js';
+import { approachStartOf } from '../src/sim/approach.js';
 
 // 構造 rally 中「我方一傳噴掉」的狀態（沿 serve-dive.test 慣例：直接寫 rally/ball/actors）
 function shankRig({ touches = 1, ball, diveRate = null } = {}) {
@@ -86,9 +87,15 @@ test('一氣呵成助跑：球墜到扣球窗還久＝攻擊手留職責位；�
   assert.ok(atk, '前置條件：已選定攻擊手');
   // 二傳出手：高弧 set（上拋 → 墜到扣球窗 2.9 還有很久）、攻擊手已站在職責位（助跑起點）
   Object.assign(g.rally, { touches: 2, lastToucherId: 'A1' });
-  b.x = -2; b.y = 3.0; b.z = 2; b.vx = 0; b.vy = 4.5; b.vz = 0;
+  // vy 4.5→6.0：助跑起點本輪移到離網四步（§2-2），跑程變長＝「還久」的門檻跟著變高。
+  // 原本的 4.5 讓扣球窗只剩 35 tick，已落進「該起跑了」那一側——把高球拋得夠高，
+  // 才真的在測「還久＝按兵不動」這件事（斷言本身未動）
+  b.x = -2; b.y = 3.0; b.z = 2; b.vx = 0; b.vy = 6.0; b.vz = 0;
   g.rally.flightId += 1;
-  const duty = dutyPosition(g, 'A', atk);
+  // Phase 5 W1 §2-2/§2-3：「助跑起點」的定義本輪從全隊共用的職責槽改成
+  // 每條線各自的起點（MB 貼網／兩翼四步／後排最遠）。本測試斷言的行為沒變
+  // ——還久＝按兵不動在助跑起點、進窗＝離開它衝向球——只有起點的座標來源改了
+  const duty = approachStartOf(ai.approach?.routes, atk) ?? dutyPosition(g, 'A', atk);
   g.actors[atk].x = duty.x; g.actors[atk].z = duty.z;
   const ai2 = ai; // 同一 aiState 延續（attackerId 保留）
   aiCollectIntents(g, ai2); // 規劃新 flight（hitPoint 記錄）

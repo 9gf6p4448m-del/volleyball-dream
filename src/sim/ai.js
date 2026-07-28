@@ -11,6 +11,7 @@ import {
 import { standingReach, spikeReach, moveSpeed } from './player.js';
 import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
 import { createIntent } from './intent.js';
+import { approachRoutesFor, approachStartOf } from './approach.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA } from './stamina.js';
@@ -133,6 +134,10 @@ export function createAiState() {
   return {
     flightId: -1, planTick: 0, landing: null, contactPoint: null, landingTeam: null,
     claimId: null, attackerId: null, attackKind: null,
+    // Phase 5 W1 §2-2：本球全部合法攻擊手的助跑起點（{ team, routes:[{pid,kind,start}] }）。
+    // 與 attackerId 同壽命（touches===1 算一次、撐到本波攻擊結束、來球時清空）——
+    // 「事前開多條線」的載體，不是只有被選中那一人才有
+    approach: null,
     backupId: null,    // 第二追球者（接噴救球）：主追者明顯趕不上時加派的備援
     hitPoint: null,    // 第三擊：球墜到扣球窗上緣的時空點（一氣呵成助跑的推遲起跑基準）
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
@@ -197,9 +202,13 @@ function ensureFlightPlan(game, aiState) {
     // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
     const tier = passTierOf(team, landing);
     aiState.passTier = tier; // W3 S 玩法：分配面板讀同一份品質分檔（setOptions 消費）
-    const pick = pickAttackPoint(game, team, aiState.claimId, tier);
+    const points = attackPointsOf(game, team, aiState.claimId, tier);
+    const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
     aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
+    // Transition 拉開（§2-2）：整個池一次算完助跑起點——未被選中者照樣拉開跑假動作，
+    // 攔網手才有多條線可讀。純幾何、零 rng，決定論由 points 的順序保證
+    aiState.approach = { team, routes: approachRoutesFor(team, points) };
     // S 二次球（偶發）：S 前排、一傳完美到位 → 小機率直接處理第二球
     aiState.setterDump =
       !!aiState.claimId &&
@@ -233,6 +242,7 @@ function ensureFlightPlan(game, aiState) {
     }
     aiState.attackerId = null;
     aiState.attackKind = null;
+    aiState.approach = null; // 來球＝上一波的助跑線作廢
   }
 
   // 第二追球者（接噴救球「球不落地不結束」）：限【自家噴球】——我方持球中
@@ -476,8 +486,8 @@ export function setAimFor(game, team, attackerId, kind) {
 
 // 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust）
 // stage 4：有效 trust＝baseline＋場內動態（連得/連失）；floorShare＝保底球權地板
-function pickAttackPoint(game, team, setterId, passTier = 'perfect') {
-  const pts = attackPointsOf(game, team, setterId, passTier);
+function pickAttackPoint(game, team, setterId, passTier = 'perfect', points = null) {
+  const pts = points ?? attackPointsOf(game, team, setterId, passTier);
   if (pts.length === 0) return null;
   const entries = pts.map((pt) => ({
     ...pt,
@@ -600,7 +610,12 @@ function decideOne(game, aiState, playerId) {
       const gap = Math.hypot(aiState.hitPoint.x - actor.x, aiState.hitPoint.z - actor.z);
       const runTicks = Math.max(0, gap - 0.4) / (moveSpeed(player) * SIM_DT);
       if (ticksLeft > runTicks + AI.APPROACH_LEAD) {
-        return moveIntent(playerId, tick, actor, dutyPosition(game, team, playerId));
+        // §2-3 第 3 段「等待姿勢」：在**自己那條線的助跑起點**站定等二傳，
+        // 不是回全隊共用的職責槽（回職責槽＝剛拉開又往網走 0.6m，白跑一趟）
+        const wait = (aiState.approach?.team === team
+          ? approachStartOf(aiState.approach.routes, playerId) : null)
+          ?? dutyPosition(game, team, playerId);
+        return moveIntent(playerId, tick, actor, wait);
       }
     }
     // 攻擊手根運動（07-28 Sawmah 拍板，工單 §1「位移驅動動作 → 動作驅動位移」）：
@@ -715,6 +730,15 @@ function decideOne(game, aiState, playerId) {
     return moveIntent(
       playerId, tick, actor, coverPosition(game, team, playerId, aiState.attackerId),
     );
+  }
+
+  // Transition 拉開（Phase 5 W1 §2-2）：我方一擊完成的瞬間，**每一名**合法攻擊手
+  // 轉身跑向自己那條線的助跑起點（MB 貼網等快攻／兩翼四步外／後排最遠），
+  // 不再全前排擠同一個 lz=3.0 槽位。這就是攔網手要讀的第一組線索。
+  // 只在我方持球且已完成第一擊時生效——接發（touches===0）與防守站位一格不動
+  if (r.possession === team && r.touches >= 1 && aiState.approach?.team === team) {
+    const start = approachStartOf(aiState.approach.routes, playerId);
+    if (start) return moveIntent(playerId, tick, actor, start);
   }
 
   // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位
