@@ -222,6 +222,7 @@ export function createGeoAnimator(rig) {
   let current = null; // { seq, t, w0 }
   let hold = null;
   let runW = 0;
+  let latW = 0;  // 平滑後的橫移分量（見 update 內註解：生的 lateral 會單幀翻號）
   let lastW = 0; // 上一幀的動作層權重——預備段交棒給正式動作時用（見 trigger 的 w0）
   let phase = 0;
   const blended = {};
@@ -326,7 +327,13 @@ export function createGeoAnimator(rig) {
       const halfStep = (speed * Math.PI) / Math.max(strideRate, 1e-3);
       const matched = Math.asin(Math.min(halfStep / (2 * LEG_LEN), 1));
       // 橫移比例越高，前後擺腿越少、側併步越多（斜向自然混合）
-      const sideW = Math.min(Math.abs(lateral), 1);
+      // 07-28：lateral 必須先平滑再用。瀏覽器逐幀實測到兩種單幀跳變——
+      // ①玩家 A↔D 換向時 lateral 由 −1 直接翻到 +1（幅值恆為 1、只有正負號變），
+      //   雙腿單幀鏡像 32°；②sim 的 stop-go 讓 speed 忽快忽零，matchView 的
+      //   `speed > 0.25` 門檻使 lateral 單幀歸零。runW 本來就有 10/s 指數平滑，
+      //   但 sideW 直接吃生的 lateral ⇒ 腿沒有任何過渡。這裡補上同族的平滑
+      latW += (lateral - latW) * (1 - Math.exp(-12 * dt));
+      const sideW = Math.min(Math.abs(latW), 1);
       const legSwing = Math.min(matched, SWING_MAX) * runW * (1 - sideW * 0.85);
       const shuffle = sideW * runW;
       const armSwing = 0.5 * runW;
@@ -371,7 +378,7 @@ export function createGeoAnimator(rig) {
         const closeW = 0.5 + 0.5 * Math.sin(phase - 1.2);
         const spread = shuffle * 0.34 * openW;
         const trail = shuffle * 0.34 * closeW;
-        const f = 0.5 + 0.5 * Math.max(-1, Math.min(1, lateral * 3)); // 0＝右側領跨、1＝左側領跨
+        const f = 0.5 + 0.5 * Math.max(-1, Math.min(1, latW * 3)); // 0＝右側領跨、1＝左側領跨
         j.lHip.rotation.z = spread * f + trail * (1 - f);
         j.rHip.rotation.z = -(spread * (1 - f) + trail * f);
         // 橫移時膝蓋不該再跑前進步態的交替抬腿（髖在併步、膝在走路＝兩套動作疊著）：

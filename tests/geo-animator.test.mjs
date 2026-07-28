@@ -353,6 +353,18 @@ test('側併步：兩腿必須相對開合（站距一寬一窄），不得一�
     `站距要有明顯開合（跨開→收攏）：實測 ${widthMin.toFixed(3)}~${widthMax.toFixed(3)}`);
 });
 
+// 瀏覽器逐幀實測（07-28）：玩家 A↔D 換向時 lateral 由 −1 單幀翻到 +1（幅值恆為 1、
+// 只有正負號變），舊版雙腿因此**單幀鏡像 32°**。lateral 必須先平滑再驅動腿。
+test('側併步：lateral 單幀翻號不得讓雙腿瞬間鏡像（玩家左右換向）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  for (let i = 0; i < 60; i += 1) anim.update(1 / 60, 3.5, -1); // 先穩定在往一邊
+  const before = rig.joints.rHip.rotation.z;
+  anim.update(1 / 60, 3.5, +1);                                 // 單幀翻到另一邊
+  const jump = Math.abs(rig.joints.rHip.rotation.z - before);
+  assert.ok(jump < 0.08, `單幀翻號造成的髖角跳變須受平滑限制（實測 ${jump.toFixed(3)} rad）`);
+});
+
 test('側併步：膝蓋不得同時跑前進步態（髖在併步、膝在走路＝兩套動作疊著）', () => {
   const sampleKneeAlternation = (lateral) => {
     const rig = mkRig();
