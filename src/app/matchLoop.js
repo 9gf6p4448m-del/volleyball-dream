@@ -67,13 +67,19 @@ export function onCourt(game, playerId) {
 // **TAKEOFF 對齊 sim 自己的起跳定義**（TUNING.TAKEOFF_LOOKBACK_TICKS＝24：
 // 後排踏線違例就是用這個回溯窗判起跳腳位置）——動畫與規則同一個時間錨點，
 // 玩家看到的起跳點就是規則認定的起跳點
-const APPROACH_LEAD_TICKS = 40;
+// Phase 5 W1 §2-2/2-4：助跑不再是「兩關鍵幀」而是三步節奏（geoAnimator approach3／
+// approach4），需要更長的可播時間才看得出小步→制動步→併腳。前排 3 步／後排(pipe)
+// 4 步——後排本就退得更遠（setAimFor pipe lz=3.6），給多一步的時間預算。
+// TAKEOFF_LEAD_TICKS（sim 自己的起跳回溯窗）不動；APPROACH_LEAD 只是「幾 tick 前開始
+// 播助跑」，純表現層觸發時機，與 sim 走位/起跳判定完全脫鉤
 // 接球/舉球的預備動作提前量（tick）：略短於各自的預備序列，讓觸球動畫無縫接管
 const RECEIVE_READY_LEAD = 26;
 // 舉球的接觸高度比接發高（二傳在頭上出手），而 contactPoint 是用接發高度算的
 // ——同樣倒數 22 tick，實際只剩 11 tick 可播（探針實測）。差額補進提前量
 const SET_READY_LEAD = 34;
 const TAKEOFF_LEAD_TICKS = TUNING.TAKEOFF_LOOKBACK_TICKS;
+const APPROACH_LEAD_FRONT_TICKS = TAKEOFF_LEAD_TICKS + 45; // 3 步：45 tick＝0.75s（approach3 dur）
+const APPROACH_LEAD_BACK_TICKS = TAKEOFF_LEAD_TICKS + 60;  // 4 步：60 tick＝1.0s（approach4 dur）
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
 const TAPE_TAIL = 240;     // 情蒐錄影帶：尾段 4 秒、略快於一般回放
@@ -220,6 +226,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lastWindupFlight: -1,       // AI 攻擊手起跳動畫：每個 flight 只播一次
     lastApproachFlight: -1,     // 同上，助跑段（零跳躍）獨立旗標
     lastReadyFlight: -1,        // 同上，接球/舉球預備段
+    lastWaitFlight: -1,         // Phase 5 W1 §2-3：等待姿勢（transitionWait），每個 flight 只播一次
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
     shake: 0,
@@ -1394,6 +1401,15 @@ function updateAssistAndPoses(s) {
       );
     }
   }
+  // Phase 5 W1 §2-3 等待姿勢：攻擊手已指定（attackerId，一傳後即定案）但還沒進助跑窗
+  // （§2-2 approach3/4 觸發前）——站定等二傳觸球。`attackerId !== claimId` 排除
+  // 第三擊本人正忙著接/舉球或已在助跑/揮擊的窗口，一個 flight 只觸發一次；
+  // 之後 approach3/4 的 trigger 會自然蓋掉這個 hold（見 update() 的 trigger 邏輯）
+  if (game.phase === 'rally' && aiState.attackerId && aiState.attackerId !== s.controlledId
+    && aiState.attackerId !== aiState.claimId && aiState.flightId !== s.lastWaitFlight) {
+    s.lastWaitFlight = aiState.flightId;
+    stage.matchView.triggerPose(aiState.attackerId, 'transitionWait');
+  }
   // AI 攻擊手「先跳後揮」：第三擊球下墜接近攻擊手時先播起跳引臂（觸球才揮臂）
   if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId &&
       aiState.claimId !== s.controlledId && aiState.flightId !== s.lastWindupFlight) {
@@ -1410,10 +1426,14 @@ function updateAssistAndPoses(s) {
       : null;
     const near = Math.hypot(b.x - atk.x, b.z - atk.z);
     // 兩段：助跑（零跳躍）→ 起跳離地。旗標各自獨立、每 flight 一次
-    if (ticksToHit !== null && ticksToHit <= APPROACH_LEAD_TICKS && near < 4.5
+    // Phase 5 W1 §2-4：後排（pipe）離網最遠＝多一步，approach4／較長提前量
+    const atkTeam = game.players[aiState.claimId].teamId;
+    const back = isBackRow(game.match.rotations[atkTeam], aiState.claimId);
+    const approachLead = back ? APPROACH_LEAD_BACK_TICKS : APPROACH_LEAD_FRONT_TICKS;
+    if (ticksToHit !== null && ticksToHit <= approachLead && near < 4.5
       && aiState.flightId !== s.lastApproachFlight) {
       s.lastApproachFlight = aiState.flightId;
-      stage.matchView.triggerPose(aiState.claimId, 'approach');
+      stage.matchView.triggerPose(aiState.claimId, back ? 'approach4' : 'approach3');
     }
     const timed = ticksToHit !== null && ticksToHit <= TAKEOFF_LEAD_TICKS;
     if (timed || (b.vy < 0 && b.y < 3.6 && near < 2.2)) {

@@ -3,15 +3,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGeoAnimator } from '../src/render/geoAnimator.js';
+import { isLeftHanded } from '../src/render/geoCharacter.js';
 
 // 4.7 動作重製新增三關節：pelvis（骨盆獨立轉）／spineUpper（胸椎）／r-lWrist（壓腕）
 const JOINT_NAMES = ['rHip', 'lHip', 'rKnee', 'lKnee', 'spine', 'spineUpper', 'neck',
   'pelvis', 'rShoulder', 'lShoulder', 'rElbow', 'lElbow', 'rWrist', 'lWrist'];
 
-function mkRig() {
+// handed：Phase 5 W1 §1b 慣用手鏡像測試用——省略＝右手（既有測試零影響）
+function mkRig(handed) {
   const joints = {};
   for (const n of JOINT_NAMES) joints[n] = { rotation: { x: 0, y: 0, z: 0 } };
-  return { joints, root: { rotation: { x: 0, y: 0, z: 0 }, position: { x: 0, y: 0, z: 0 } } };
+  return { joints, handed, root: { rotation: { x: 0, y: 0, z: 0 }, position: { x: 0, y: 0, z: 0 } } };
 }
 
 test('geoAnimator dive：驅動撲救姿勢（雙臂大幅前伸夠球）', () => {
@@ -232,4 +234,73 @@ test('§3 無 sustain 的序列行為完全不變（既有動作零影響）', (
   anim.update(0.5, 0);
   anim.update(0.01, 0);
   assert.ok(anim.isIdle(), 'bump 應仍在 dur 0.5s 後結束（total===dur）');
+});
+
+// Phase 5 W1 §2 助跑三步節奏 ＋ §1b 慣用手（07-28 kickoff：表現層＋步序，戰術層不做）
+// TICK（1/60）沿用檔案前段 §3 測試已宣告的常數
+const APPROACH3_DUR = 0.75;
+
+test('§2-2 助跑三步節奏：三等分時段可見三次明確步相，第二步（制動步）擺幅與下沉都是三步之最', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('approach3');
+  const totalTicks = Math.round(APPROACH3_DUR * 60);
+  const thirds = [[], [], []];
+  for (let i = 0; i < totalTicks; i += 1) {
+    anim.update(TICK, 0);
+    const stride = Math.max(
+      Math.abs(rig.joints.rHip.rotation.x),
+      Math.abs(rig.joints.lHip.rotation.x),
+    );
+    const crouchDepth = Math.max(rig.joints.rKnee.rotation.x, rig.joints.lKnee.rotation.x);
+    const third = Math.min(Math.floor((i / totalTicks) * 3), 2);
+    thirds[third].push({ stride, crouchDepth });
+  }
+  const peakStride = thirds.map((arr) => Math.max(...arr.map((x) => x.stride)));
+  const peakCrouch = thirds.map((arr) => Math.max(...arr.map((x) => x.crouchDepth)));
+  assert.ok(peakStride[1] > peakStride[0] && peakStride[1] > peakStride[2],
+    `第二步（制動步）擺幅應是三步之最：${peakStride.map((v) => v.toFixed(3))}`);
+  assert.ok(peakCrouch[1] > peakCrouch[0] && peakCrouch[1] > peakCrouch[2],
+    `第二步（制動步）下沉應是三步之最（膝角代表壓低）：${peakCrouch.map((v) => v.toFixed(3))}`);
+});
+
+test('§1b 慣用手：左手選手助跑步序鏡像（右手＝左-右-左，左手＝右-左-右）', () => {
+  // 各步窗中點抓一次「哪隻腳擺幅較大」，重建整段步序
+  const leadAt = (handed, midFraction) => {
+    const rig = mkRig(handed);
+    const anim = createGeoAnimator(rig);
+    anim.trigger('approach3');
+    const ticks = Math.round(midFraction * APPROACH3_DUR * 60);
+    for (let i = 0; i < ticks; i += 1) anim.update(TICK, 0);
+    return Math.abs(rig.joints.rHip.rotation.x) > Math.abs(rig.joints.lHip.rotation.x) ? 'r' : 'l';
+  };
+  const midpoints = [1 / 6, 3 / 6, 5 / 6]; // 三步窗（各 1/3）各自的中點
+  const rightOrder = midpoints.map((f) => leadAt('r', f));
+  const leftOrder = midpoints.map((f) => leadAt('l', f));
+  assert.deepEqual(rightOrder, ['l', 'r', 'l'], `右手步序應為左-右-左，實際 ${rightOrder}`);
+  assert.deepEqual(leftOrder, ['r', 'l', 'r'], `左手步序應鏡像為右-左-右，實際 ${leftOrder}`);
+});
+
+test('§1b 慣用手分佈：決定論（同 id 兩次求值相同）＋ 抽樣比例接近 15%（非 Math.random）', () => {
+  let left = 0;
+  const N = 4000;
+  for (let i = 0; i < N; i += 1) {
+    const pid = `w1-handed-sample-${i}`;
+    const first = isLeftHanded(pid);
+    const second = isLeftHanded(pid);
+    assert.equal(first, second, `同一 playerId 兩次求值應相同（${pid}）`);
+    if (first) left += 1;
+  }
+  const ratio = left / N;
+  assert.ok(ratio > 0.1 && ratio < 0.2, `左手比例應接近 15%，實際 ${(ratio * 100).toFixed(1)}%`);
+});
+
+test('§2-3 等待姿勢：transitionWait 明顯不同於單純待命（前傾＋壓低，且可 hold 住）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('transitionWait');
+  anim.update(0.05, 0);
+  assert.ok(rig.joints.spine.rotation.x > 0.1, `應有前傾（${rig.joints.spine.rotation.x.toFixed(2)}）`);
+  anim.update(1.2, 0); // 尚未到 sustain 上限（dur 0.3 + sustain 1.5）
+  assert.ok(!anim.isIdle(), '在 sustain 期間應持續 hold 住等待姿勢');
 });

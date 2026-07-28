@@ -13,6 +13,37 @@ const STRIDE_PER_MS = 2.4;   // 每 m/s 增加的步頻
 const LEG_LEN = 0.86;        // 髖到腳掌的等效長度（m，BASE_H 比例下量得）
 const SWING_MAX = 0.62;      // 擺腿振幅上限（原固定值＝現在的天花板）
 
+// Phase 5 W1 §2-2/§2-4 助跑三步節奏：取代舊版「兩關鍵幀＝走過去然後拔起」。
+// 每步一個時間窗（等寬），窗內用 sin 半波（0→峰值→0）驅動該步的擺腿與下沉深度；
+// 峰值表＝[小步, 制動步, 併腳]——制動步（idx 1）擺幅與下沉都是全段最深，把水平動能
+// 轉垂直的重量感做出來；併腳（idx 2）擺幅收，下沉次深，為雙腳起跳收尾。
+// 4 步（後排/長距離）在前面補一個更小的準備步，尾三步沿用 3 步的形狀。
+const STEP_SWING_SCALE = 0.85; // 擺腿角度縮放（配合既有 SWING_MAX 量級）
+const STEP_AMP_3 = [0.45, 1.0, 0.62];
+const STEP_CROUCH_3 = [0.07, 0.24, 0.15];
+const STEP_AMP_4 = [0.3, 0.45, 1.0, 0.62];
+const STEP_CROUCH_4 = [0.04, 0.08, 0.24, 0.15];
+// 步序（哪隻腳在該窗踩前）：右手＝左-右-左（4 步在前補右）；左手鏡像＝右-左-右（前補左）
+const STEP_ORDER_R3 = ['l', 'r', 'l'];
+const STEP_ORDER_R4 = ['r', 'l', 'r', 'l'];
+const STEP_ORDER_L3 = ['r', 'l', 'r'];
+const STEP_ORDER_L4 = ['l', 'r', 'l', 'r'];
+
+// t：0..1（相對整段 dur）；回傳該瞬間的步相（idx／半波值／擺腿與下沉量／踩前腳）
+function stepPhase(t, order, ampTable, crouchTable) {
+  const n = order.length;
+  const w = 1 / n;
+  let idx = Math.min(Math.floor(t / w), n - 1);
+  const local = Math.min(Math.max((t - idx * w) / w, 0), 1);
+  const hump = Math.sin(local * Math.PI);
+  return {
+    idx,
+    lead: order[idx],
+    swing: STEP_SWING_SCALE * ampTable[idx] * hump,
+    crouch: crouchTable[idx] * hump,
+  };
+}
+
 // 姿勢：rSh/lSh=[肩x, 肩z]、rEl/lEl=肘x、spine/neck=x、crouch=下蹲深度(m)
 const POSES = {
   bumpReady: { rSh: [-0.95, -0.24], lSh: [-0.95, 0.24], rEl: 0, lEl: 0, spine: 0.5, neck: -0.35, crouch: 0.2, spineUp: 0.16 },
@@ -46,6 +77,9 @@ const POSES = {
   // 原本助跑與起跳混在同一個 windup（自帶 jump 0.5m），提前觸發就等於提前浮空
   approachBack: { rSh: [0.75, -0.2], lSh: [0.75, 0.2], rEl: -0.45, lEl: -0.45, spine: 0.2, neck: -0.24, crouch: 0.06 },
   approachDrive: { rSh: [-0.5, -0.22], lSh: [-0.5, 0.22], rEl: -0.9, lEl: -0.9, spine: 0.26, neck: -0.26, crouch: 0.16 },
+  // Phase 5 W1 §2-3 等待姿勢：一擊完成、攻擊手已轉身拉開到職責位（sim 走位負責），
+  // 站定等二傳觸球——重心壓前腳（前傾一點）、視線盯二傳（neck 抬），雙臂放鬆不外張
+  transitionWait: { rSh: [0.05, -0.05], lSh: [0.05, 0.05], rEl: -0.15, lEl: -0.15, spine: 0.14, neck: -0.2, crouch: 0.08 },
   land: { spine: 0.2, crouch: 0.26 },
   // 4.7 §P5 落地緩衝：觸地→吸收到最深→推起回中性。
   // 「落地瞬間回站姿」是工單點名的最廉價破綻
@@ -115,11 +149,18 @@ const SEQUENCES = {
   // 4.5B §8 攔網重量感（僅實際起跳觸發）：蹲（load）→蹬（up）→滯空（punch）→落地；
   // dur 不動（0.7＝實測調參值）
   blockJump: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.22, p: 'blockUp' }, { at: 0.45, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
-  // 4.7 §P0：助跑段——雙臂後擺→前一步壓低（**jump 0＝腳不離地**）；
-  // 時長對齊「助跑起手→sim 認定的起跳點」＝(40-24)/60≈0.27s
-  approach: {
-    dur: 0.28, jump: 0, land: false,
-    keys: [{ at: 0, p: 'approachBack' }, { at: 0.55, p: 'approachBack' }, { at: 1, p: 'approachDrive' }],
+  // Phase 5 W1 §2-2/2-4：助跑三步節奏（雙臂後擺→前一步壓低，**jump 0＝腳不離地**）。
+  // 取代 4.7 的兩關鍵幀版（0.28s／走過去然後拔起）——步相由 update() 的 stepPhase()
+  // 另外驅動腿部（見 STEP_AMP_3/4），這裡的 keys 只管手臂/軀幹的蓄勢→交棒 windup。
+  // dur 對齊「助跑起手→sim 起跳點」的新提前量（matchLoop APPROACH_LEAD_*_TICKS）。
+  approach3: {
+    dur: 0.75, jump: 0, land: false, steps: 3,
+    keys: [{ at: 0, p: 'approachBack' }, { at: 0.7, p: 'approachBack' }, { at: 1, p: 'approachDrive' }],
+  },
+  // 距離長（後排／pipe）：多一步，dur 拉長，尾三步形狀與 approach3 相同（見 STEP_AMP_4）
+  approach4: {
+    dur: 1.0, jump: 0, land: false, steps: 4,
+    keys: [{ at: 0, p: 'approachBack' }, { at: 0.78, p: 'approachBack' }, { at: 1, p: 'approachDrive' }],
   },
   windup: { dur: 0.75, jump: 0.5, land: false, keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }] },
   // 4.5B §8 助跑遲疑：低 trust 快攻的起跳——抬手一半、跳得較矮（與果斷 windup 對照）
@@ -137,6 +178,13 @@ const SEQUENCES = {
   setReady: {
     dur: 0.45, sustain: 0.6, jump: 0, land: false,
     keys: [{ at: 0, p: 'setReach' }, { at: 1, p: 'setReach' }],
+  },
+  // Phase 5 W1 §2-3：等待姿勢——攻擊手轉身拉開到位後、二傳觸球前的站定 hold。
+  // sustain 給寬裕（1.5s）：多數情況會被 approach3/4 的 trigger 提前接手蓋掉；
+  // 真的等滿 sustain（例如攻擊手最終沒被選中）就自然鬆開回跑動/待命，不會卡住
+  transitionWait: {
+    dur: 0.3, sustain: 1.5, jump: 0, land: false,
+    keys: [{ at: 0, p: 'transitionWait' }, { at: 1, p: 'transitionWait' }],
   },
   // §P5：帶 land 的序列播完自動接這段（見 update 尾端）——屈膝吸收 0.25s 再起身
   landSoft: {
@@ -177,6 +225,11 @@ export function createGeoAnimator(rig) {
   let lastW = 0; // 上一幀的動作層權重——預備段交棒給正式動作時用（見 trigger 的 w0）
   let phase = 0;
   const blended = {};
+  // Phase 5 W1 §1b：慣用手只影響助跑步序方向（見檔頭 STEP_ORDER_*）；
+  // 未帶 handed 欄位（例如舊測試手造的 rig）視同右手，外觀零改變
+  const handed = rig.handed === 'l' ? 'l' : 'r';
+  const order3 = handed === 'l' ? STEP_ORDER_L3 : STEP_ORDER_R3;
+  const order4 = handed === 'l' ? STEP_ORDER_L4 : STEP_ORDER_R4;
 
   function blendKeys(seq, t, out) {
     const keys = seq.keys;
@@ -232,6 +285,7 @@ export function createGeoAnimator(rig) {
       let w = 0;
       let jumpY = 0;
       let pose = null;
+      let stepInfo = null; // 助跑三/四步節奏（見 STEP_AMP_3/4）：非 null＝本幀由步相驅動腿部
       if (current) {
         current.t += dt;
         const { seq } = current;
@@ -253,6 +307,8 @@ export function createGeoAnimator(rig) {
             blended.crouch += POSES.land.crouch * lf;
             blended.spine += POSES.land.spine * lf;
           }
+          if (seq.steps === 4) stepInfo = stepPhase(t, order4, STEP_AMP_4, STEP_CROUCH_4);
+          else if (seq.steps === 3) stepInfo = stepPhase(t, order3, STEP_AMP_3, STEP_CROUCH_3);
         }
       }
       if (!pose && hold && SEQUENCES[hold]) {
@@ -277,16 +333,31 @@ export function createGeoAnimator(rig) {
       const armSwing = 0.5 * runW;
       const idleW = 1 - runW;
       const baseSpine = 0.16 * runW + 0.07 * idleW + breath;
-      const crouch = (pose ? blended.crouch * w : 0) + 0.02 * idleW;
+      const crouch = stepInfo
+        ? stepInfo.crouch + 0.02 * idleW
+        : (pose ? blended.crouch * w : 0) + 0.02 * idleW;
 
-      // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
-      j.rHip.rotation.x = -legSwing * s - crouch * 1.1;
-      j.lHip.rotation.x = legSwing * s - crouch * 1.1;
-      // 側併步：兩腿同向開合、相位錯開＝外側腿先跨、內側腿跟上（不是劈腿）
-      j.rHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase)) * shuffleDir;
-      j.lHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase + 1.9)) * shuffleDir;
-      j.rKnee.rotation.x = (0.12 + Math.max(0, -s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
-      j.lKnee.rotation.x = (0.12 + Math.max(0, s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
+      if (stepInfo) {
+        // Phase 5 W1 §2-2：助跑三/四步節奏——踩前腳當幀擺幅最大，另一腳小幅拖後；
+        // 不疊加連續跑步相位（stepPhase 的半波本身就是離散的三/四段步相）
+        const forward = -stepInfo.swing;
+        const trail = stepInfo.swing * 0.3;
+        j.rHip.rotation.x = (stepInfo.lead === 'r' ? forward : trail) - crouch * 1.1;
+        j.lHip.rotation.x = (stepInfo.lead === 'l' ? -forward : -trail) - crouch * 1.1;
+        j.rHip.rotation.z = 0;
+        j.lHip.rotation.z = 0;
+        j.rKnee.rotation.x = 0.12 + crouch * 2.2 + (stepInfo.lead === 'r' ? stepInfo.swing * 0.5 : 0);
+        j.lKnee.rotation.x = 0.12 + crouch * 2.2 + (stepInfo.lead === 'l' ? stepInfo.swing * 0.5 : 0);
+      } else {
+        // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
+        j.rHip.rotation.x = -legSwing * s - crouch * 1.1;
+        j.lHip.rotation.x = legSwing * s - crouch * 1.1;
+        // 側併步：兩腿同向開合、相位錯開＝外側腿先跨、內側腿跟上（不是劈腿）
+        j.rHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase)) * shuffleDir;
+        j.lHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase + 1.9)) * shuffleDir;
+        j.rKnee.rotation.x = (0.12 + Math.max(0, -s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
+        j.lKnee.rotation.x = (0.12 + Math.max(0, s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
+      }
 
       // 軀幹/頭（4.7：脊椎兩節＋骨盆獨立轉——髖肩分離與弓身的來源）
       j.spine.rotation.x = pose ? lerp(baseSpine, blended.spine, w) : baseSpine;

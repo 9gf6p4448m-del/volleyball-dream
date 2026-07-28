@@ -35,6 +35,14 @@ function idHash(id) {
   return h;
 }
 
+// Phase 5 W1 §1b 慣用手（本輪只做視覺層＋步序，戰術層明定不做）：決定論分佈約 15%
+// 左手，綁球員 seed——同一 playerId 恆同結果。用另一段 bit（>>>7）避開膚色／髮色池
+// 已用掉的低位，降低與外觀池的相關性；不得改用 Math.random。
+export function isLeftHanded(playerId) {
+  const h = idHash(playerId);
+  return ((h >>> 7) % 100) < 15;
+}
+
 // 幾何共用（全部球員同一份 geometry，省記憶體；每種幾何各對應一個 InstancedMesh 池）
 let GEO = null;
 function geometries() {
@@ -182,5 +190,8 @@ export function createGeoCharacter(pool, playerId, teamId, height, isLibero = fa
   }
 
   root.scale.setScalar(height / BASE_H);
-  return { root, joints, parts };
+  // 慣用手（視覺層）：決定論、綁 playerId——geoAnimator 只用它鏡像助跑步序方向，
+  // 不影響揮擊臂（壓腕/扣球仍恆用 r 側，戰術層鏡像本輪不做，見 §1b）
+  const handed = isLeftHanded(playerId) ? 'l' : 'r';
+  return { root, joints, parts, handed };
 }
