@@ -61,8 +61,26 @@ async function init() {
 }
 
 // Phase 2 生涯入口；比賽局終回寫結果後以 ?career=resume&slot=N 導回賽程視圖
-function showCareerEntry(ctx) {
+async function showCareerEntry(ctx) {
   ctx.loadingEl.remove();
+  // 4.6 試玩輔助 `?debugVault=1`：記憶體假存檔（三年打完＋典藏牆四槽有料），
+  // **不碰 localStorage 的真實存檔**——進去直接按「▶ 生涯結算」就能驗典藏牆與重演舞台
+  if (ctx.params.get('debugVault') === '1') {
+    const { buildVaultDemoStore } = await import('./app/debugVault.js');
+    const demo = { ...buildVaultDemoStore(), useSlot() {} };
+    const demoScreen = createCareerScreen(demo, {
+      primeSlot: () => {},
+      onQuick: (role = null) => { runMatch(ctx, null, role); },
+      onPlay: ({ career, player, matchEntry, resumeMid = null }) => {
+        runMatch(ctx, {
+          store: demo, career, player, matchEntry, roster: ensureStarterRoster(demo),
+          lineup: demo.loadLineup(), seasonIndex: demo.seasonIndex?.() ?? 1, resumeMid,
+        });
+      },
+    });
+    demoScreen.show('career');
+    return;
+  }
   // W4(P4) 題2 多槽：可切槽代理——選檔頁 useSlot 重綁，careerScreen 內部零改動
   const store = createSlotStoreProxy();
   // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置回填至 open
