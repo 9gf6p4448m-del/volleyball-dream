@@ -181,3 +181,55 @@ test('側併步：橫移時髖關節側開、前後擺腿明顯減弱（沿網�
   assert.ok(fwd.maxZ < 0.01, `純前進不得有側開（實際 ${fwd.maxZ.toFixed(3)}）`);
   assert.ok(side.maxX < fwd.maxX, `橫移的前後擺腿要比前進小（側 ${side.maxX.toFixed(2)} vs 前 ${fwd.maxX.toFixed(2)}）`);
 });
+
+// Phase 5 W1 §3「二傳兩次抬手」回歸（07-28 Sawmah 試玩回報）
+// 成因＝預備序列（setReady）走進自己的 RELEASE 尾段、權重掉到 ~0.25 手臂鬆回大半，
+// 正式動作（overhead）再從 0 漸入抬第二次。修法＝sustain 撐住 ＋ trigger 權重接棒。
+// setReach 姿勢的 rSh[0] = -2.3；完全鬆手的待命臂約 -0.12——中間值即「鬆了一半」
+const TICK = 1 / 60;
+
+test('§3 二傳預備：撐住不自己鬆手（觸球前手臂不得掉權重）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('setReady');
+  // 實測觸發到觸球約 24 tick（matchLoop SET_READY_LEAD=34，球比預測早到）——
+  // 修前此時 setReady 已播完 27 tick 中的 24 tick、權重僅剩 (27-24)/12 ≈ 0.25
+  for (let i = 0; i < 24; i += 1) anim.update(TICK, 0);
+  const arm = rig.joints.rShoulder.rotation.x;
+  assert.ok(arm < -2.2, `觸球前一刻手臂應仍完全舉起（setReach -2.3），實際 ${arm.toFixed(2)}`);
+});
+
+test('§3 二傳交棒：overhead 接手不得掉權重（這就是第二次抬手）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('setReady');
+  for (let i = 0; i < 24; i += 1) anim.update(TICK, 0);
+  const before = rig.joints.rShoulder.rotation.x;
+  // 觸球：正式舉球接手。overhead 的 at:0 就是 setReach＝同一個姿勢，
+  // 接手應無縫；修前這裡會掉到 0 權重再漸入＝畫面上手臂放下又抬起
+  anim.trigger('overhead');
+  let worst = before;
+  for (let i = 0; i < 5; i += 1) { // ATTACK_MS 0.08s ≈ 5 tick＝修前的漸入窗
+    anim.update(TICK, 0);
+    worst = Math.max(worst, rig.joints.rShoulder.rotation.x); // 越接近 0 越是鬆手
+  }
+  assert.ok(worst < -2.2, `交棒期間手臂不得放下，最鬆 ${worst.toFixed(2)}（應保持 ≈-2.3）`);
+});
+
+test('§3 sustain 有界：預備撐完仍會鬆手回待命（不得永遠卡住舉手）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('setReady');
+  anim.update(0.45 + 0.6, 0); // dur + sustain
+  anim.update(0.21, 0); // 再走完 RELEASE_MS
+  assert.ok(anim.isIdle(), '沒等到球的二傳應在撐住期滿後回待命');
+});
+
+test('§3 無 sustain 的序列行為完全不變（既有動作零影響）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('bump'); // dur 0.5、無 sustain
+  anim.update(0.5, 0);
+  anim.update(0.01, 0);
+  assert.ok(anim.isIdle(), 'bump 應仍在 dur 0.5s 後結束（total===dur）');
+});

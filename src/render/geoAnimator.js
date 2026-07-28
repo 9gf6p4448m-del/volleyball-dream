@@ -127,12 +127,15 @@ const SEQUENCES = {
   // 4.7 動作協調性（07-28 Sawmah：「所有動作的流暢度檢查一下」）：接球與舉球
   // 原本都是**球碰到手才播動作**——站著/跑著→突然出手。補預備段：球到之前先
   // 擺好姿勢，觸球時由 bump/overhead 接管（與扣球 approach→windup 同一套修法）
+  // sustain（07-28 §3 修）：預備段擺好後「撐住」不自己鬆手——見 update() 的 total。
+  // 沒有它的話，觸球那一刻預備序列已走進自己的 RELEASE 尾段、權重掉到 0.25，
+  // 手臂鬆回大半，正式動作再從 0 抬一次＝Sawmah 回報的「兩次抬手」
   receiveReady: {
-    dur: 0.5, jump: 0, land: false,
+    dur: 0.5, sustain: 0.6, jump: 0, land: false,
     keys: [{ at: 0, p: 'bumpReady' }, { at: 1, p: 'bumpReady' }],
   },
   setReady: {
-    dur: 0.45, jump: 0, land: false,
+    dur: 0.45, sustain: 0.6, jump: 0, land: false,
     keys: [{ at: 0, p: 'setReach' }, { at: 1, p: 'setReach' }],
   },
   // §P5：帶 land 的序列播完自動接這段（見 update 尾端）——屈膝吸收 0.25s 再起身
@@ -168,9 +171,10 @@ const REST_ARM = [0, 0];
 
 export function createGeoAnimator(rig) {
   const j = rig.joints;
-  let current = null; // { seq, t }
+  let current = null; // { seq, t, w0 }
   let hold = null;
   let runW = 0;
+  let lastW = 0; // 上一幀的動作層權重——預備段交棒給正式動作時用（見 trigger 的 w0）
   let phase = 0;
   const blended = {};
 
@@ -204,7 +208,11 @@ export function createGeoAnimator(rig) {
       const carry = current && current.seq.jump > 0 && seq.jump > 0
         ? Math.min(current.t / current.seq.dur, 0.5) * seq.dur
         : 0;
-      current = { seq, t: carry };
+      // 預備段接續（setReady→overhead、receiveReady→bump）：預備序列撐住的權重
+      // 直接交給正式動作，不從 0 重跑 ATTACK 漸入。兩者的第一個關鍵幀是同一個
+      // 姿勢（setReach／bumpReady），所以滿權重接手不會跳幀，是自然的續演
+      const w0 = current && current.seq.sustain ? lastW : 0;
+      current = { seq, t: carry, w0 };
     },
     setHold(type) { hold = type; },
     isIdle() { return current === null; },
@@ -227,12 +235,16 @@ export function createGeoAnimator(rig) {
       if (current) {
         current.t += dt;
         const { seq } = current;
-        if (current.t >= seq.dur) {
+        // sustain＝末幀「撐住」的秒數（預備姿勢等球用）：撐住期間停在末幀滿權重，
+        // 撐完才走 RELEASE 漸出。沒宣告 sustain 的序列 total===dur＝行為完全不變
+        const total = seq.dur + (seq.sustain ?? 0);
+        if (current.t >= total) {
           // §P5：跳躍類動作落地後自動接緩衝（不得瞬間回站姿）
-          current = seq.land ? { seq: SEQUENCES.landSoft, t: 0 } : null;
+          current = seq.land ? { seq: SEQUENCES.landSoft, t: 0, w0: 0 } : null;
         } else {
-          const t = current.t / seq.dur;
-          w = Math.min(Math.min(current.t / ATTACK_MS, 1), Math.min((seq.dur - current.t) / RELEASE_MS, 1));
+          const t = Math.min(current.t / seq.dur, 1);
+          const attack = current.w0 + (1 - current.w0) * Math.min(current.t / ATTACK_MS, 1);
+          w = Math.min(attack, Math.min((total - current.t) / RELEASE_MS, 1));
           blendKeys(seq, t, blended);
           pose = blended;
           if (seq.jump > 0) jumpY = seq.jump * Math.sin(t * Math.PI);
@@ -248,6 +260,7 @@ export function createGeoAnimator(rig) {
         pose = blended;
         w = 1;
       }
+      lastW = w;
 
       // 底層：待命（微蹲備戰＋呼吸）↔ 跑動（擺腿擺臂＋前傾＋起伏）
       const breath = Math.sin(phase * 0.35) * 0.02;
