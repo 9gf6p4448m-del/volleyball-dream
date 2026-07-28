@@ -14,7 +14,9 @@ import {
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
-import { setPanelTitle, CALL_BALL_AT, SET_HESITANT_BELOW } from '../input/setOptions.js';
+import {
+  setPanelTitle, setPreviewTitle, setStageOf, CALL_BALL_AT, SET_HESITANT_BELOW,
+} from '../input/setOptions.js';
 import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
 import { digReadCorrect, schemeByKey, noteScheme, counterReadOf } from '../input/liberoRead.js';
@@ -708,8 +710,18 @@ function updateDecisions(s, now) {
   const setDeciding =
     !!setZones && setZones.length > 0 &&
     game.ball.vy < 0 && game.ball.y > 1.8 && !controls.setPending();
-  // 4.5B §4：S diegetic 掃場鏡位（分配決策窗＝自 S 視線回望自家半場）；窗外歸位
-  rig.setSetScan(!!stage.diegetic && setDeciding);
+  // 4.6 追修（07-28 試玩）：分配窗兩段式——遠段唯讀（你還在跑）、近段才可下指令。
+  // 距離＝我到「球墜到接球高度的接觸點」（協調層算好的同一份，不另闢真相）
+  const setContact = aiState.contactPoint ?? aiState.landing;
+  const meActorNow = game.actors[s.controlledId];
+  const setDist = setDeciding && setContact && meActorNow
+    ? Math.hypot(setContact.x - meActorNow.x, setContact.z - meActorNow.z)
+    : null;
+  const setReady = !setDeciding || setStageOf(setDist) === 'ready';
+  // 4.5B §4：S diegetic 掃場鏡位（分配決策窗＝自 S 視線回望自家半場）；窗外歸位。
+  // 4.6 追修：**鏡頭跟著操作段走**——遠段維持三人稱（跑位要空間感；掃場鏡位會把
+  // 你自己的走位參考抽走），近段才切掃場。不然兩段式的效果會被鏡頭切換抵銷
+  rig.setSetScan(!!stage.diegetic && setDeciding && setReady);
   if (!setDeciding) s.setWindowSince = -1;
   // ①c MB 攔網讀心（W3）：對手舉球出手（touches===2 起）、我＝前排 MB、尚未選——
   // 線索面板（一傳品質＋助跑動向，誠實非全知）；球墜近對手扣點（y<2.3）＝來不及
@@ -871,7 +883,8 @@ function updateDecisions(s, now) {
         if (loud.pid) stage.matchView.triggerPose(loud.pid, 'wave');
       }
     }
-    if (s.setWindowSince < 0) s.setWindowSince = now;
+    // latency 樣本只從「可下指令那一刻」起算（遠段是唯讀的，不算決策耗時）
+    if (setReady && s.setWindowSince < 0) s.setWindowSince = now;
     // 與舊面板逐字同一條指令路徑（sim 零改動）；耗時樣本＝硬性驗收數據
     const pickSet = (zone) => {
       // 窗外殘留點擊（面板收起後的 stale 按鈕）不記樣本——樣本只認開窗中的決策
@@ -890,7 +903,13 @@ function updateDecisions(s, now) {
       aiState.attackKind = zone.kind;
       if (zone.hesitant) floatText.show(`${zone.name}猶豫了一下…`, '#c8d6eb', 1400);
     };
-    if (stage.diegetic) {
+    if (!setReady) {
+      // 遠段：只給真值（一傳品質＋協調層建議打誰），沒有可點的東西——
+      // 空選項面板＝既有通道的唯讀用法，不新增元件
+      const suggest = setZones.find((z) => z.pid === aiState.attackerId) ?? setZones[0];
+      stage.diegetic?.hide();
+      panel.show(setPreviewTitle(setZones[0].tier, suggest?.label ?? null), [], () => {});
+    } else if (stage.diegetic) {
       panel.hide();
       stage.diegetic.showSet(
         sHotspotItems(setZones), setPanelTitle(setZones[0].tier),
@@ -936,7 +955,7 @@ function updateDecisions(s, now) {
     panel.hide();
   }
   // 4.5B §4：diegetic 介面只活在 S 分配/L 指揮兩個窗——其餘分支（攻擊/MB/發球/無窗）收
-  if (stage.diegetic && !setDeciding && !(digDeciding && !controls.digPending())) {
+  if (stage.diegetic && !(setDeciding && setReady) && !(digDeciding && !controls.digPending())) {
     stage.diegetic.hide();
   }
   return deciding;

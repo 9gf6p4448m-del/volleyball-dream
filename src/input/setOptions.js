@@ -71,3 +71,26 @@ export function setPanelTitle(tier) {
   if (tier === 'ok') return '一傳可用——無快攻';
   return '一傳勉強——兩翼高球';
 }
+
+// 07-28 Sawmah 試玩提問「S 要不要確定走得到才開面板」→ 探針實測
+// （`tools/setter-reach-probe.mjs`，5764 次指派）：走不到根本不是問題（claim 者
+// 99.9% 自己舉到），**問題是開窗當下平均還要跑 2.72m、p90 要跑 5.97m**
+// ——玩家被迫一邊全速跑位一邊挑四個選項。
+// 拍板＝兩段式「資訊早給、操作晚要」：遠段只給真值（一傳品質＋建議打誰，看就好、
+// 不用點），跑進可及範圍才亮可點的熱點。讀的時間不縮短，只把「點」挪到你站定。
+//
+// 門檻定值＝探針 p50（2.72m）稍放寬：約六成的球一開窗就已在近段（行為與改動前
+// 完全一樣），另四成才有明確的「先跑再選」兩段。嫌早嫌晚重跑 probe 改此值。
+export const SET_READY_M = 3.2;
+
+// 距離（m）→ 分配窗階段：'preview'＝還在跑（唯讀）／'ready'＝可下指令
+export function setStageOf(distM) {
+  if (distM === null || distM === undefined) return 'ready'; // 算不出接觸點＝不擋操作
+  return distM <= SET_READY_M ? 'ready' : 'preview';
+}
+
+// 遠段標題：一傳品質＋協調層建議的攻擊點（真值，與近段選項池同源）
+export function setPreviewTitle(tier, suggestLabel) {
+  const base = tier === 'perfect' ? '一傳到位' : tier === 'ok' ? '一傳可用' : '一傳勉強';
+  return suggestLabel ? `${base}　建議：${suggestLabel}——先跑到位` : `${base}——先跑到位`;
+}
