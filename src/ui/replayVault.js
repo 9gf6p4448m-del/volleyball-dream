@@ -104,6 +104,17 @@ export function openReplayViewer({
   overlay.appendChild(el('div', [
     'font-size:13px', 'font-weight:800', `color:${COLOR.gold}`, 'letter-spacing:2px',
   ], `${item.title}・${item.sub}`));
+  // 07-28 試玩（Sawmah：「不夠實境」）：一顆球要有脈絡才有份量——這是幾比幾的球。
+  // 資料就在快照裡（發球前的比分），轉播一定會標。玩家恆 A 隊
+  const sc = tape.snapshot?.match?.score;
+  if (sc && Number.isFinite(sc.A) && Number.isFinite(sc.B)) {
+    overlay.appendChild(el('div', [
+      'font-size:22px', 'font-weight:900', `color:${COLOR.text}`, 'letter-spacing:3px',
+      'font-variant-numeric:tabular-nums',
+    ], `${sc.A} – ${sc.B}`));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:-4px'],
+      item.entry.won ? '這一球拿下了' : '這一球輸掉了'));
+  }
   const body = el('div', ['width:min(640px, 96vw)', 'min-height:60px']);
   overlay.appendChild(body);
   const bar = el('div', ['display:flex', 'gap:8px', 'align-items:center']);
@@ -153,11 +164,18 @@ export function openReplayViewer({
       degrade('（這台裝置的 3D 舞台開不起來——這球的紀錄）');
       return;
     }
-    bar.replaceChildren(playBtn, ctrl('⏭ 跳過', () => stage?.skip()), ctrl('關閉', close));
+    bar.replaceChildren(
+      playBtn,
+      ctrl('⏭ 跳過', () => { stage?.skip(); playBtn.textContent = '↺ 重播'; }),
+      ctrl('關閉', close),
+    );
   })();
 
+  // 07-28 試玩抓到：跳過（或播完）之後點「↺ 重播」沒反應——play() 被 done 擋住。
+  // 播完/跳過＝重來一次整卷；播放中＝暫停；暫停中＝續播
   const playBtn = ctrl('⏸ 暫停', (b) => {
     if (!stage) return;
+    if (stage.done) { stage.restart(); stage.play(); b.textContent = '⏸ 暫停'; return; }
     if (stage.playing) { stage.pause(); b.textContent = '▶ 播放'; }
     else { stage.play(); b.textContent = '⏸ 暫停'; }
   });

@@ -260,6 +260,14 @@ export function createSfx() {
 
   // 比賽事件 → 音色映射（閉眼能分：扣=爆裂、攔/輕吊=悶短、墊/舉=脆彈）
   return {
+    // 4.6：重演舞台是第二個消費者，離開時要能把觀眾底噪一起收掉
+    //（賽中整場都在響，沒有收的需求；回放關掉後還響就是殘留）
+    dispose() {
+      try { ctx?.close(); } catch { /* 已關或不支援＝無事可做 */ }
+      ctx = null;
+      crowdStarted = false;
+      crowdGain = null;
+    },
     whistle,
     setHeartbeat,
     setCrowdLevel,

@@ -22,6 +22,7 @@ import { createCameraRig } from './cameraRig.js';
 import { createRallyPlayer } from '../app/rallyTape.js';
 import { buildDirectorScript, stepAtExact, shotAt } from './replayDirector.js';
 import { createBeatTimeline, driveTimeline } from '../ui/presentation.js';
+import { createSfx } from '../ui/sfx.js';
 
 const MAX_DT = 0.1;
 
@@ -53,7 +54,7 @@ function buildLights(scene) {
 // 回傳 { el, script, play, pause, skip, dispose, stats }；WebGL 失敗＝throw。
 export async function createReplayStage({ tape, width = 640, height = 360, onDone = null } = {}) {
   const script = buildDirectorScript(tape);
-  const player = createRallyPlayer(tape);
+  let player = createRallyPlayer(tape);
   const quality = getQuality();
 
   const wrap = document.createElement('div');
@@ -88,9 +89,15 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
   const heroId = tape.steps?.find((st) => st.c)?.c ?? anchor0;
   const matchView = await createMatchView(scene, quality, player.state, heroId);
   const rig = createCameraRig(camera, anchor0);
+  // 07-28 試玩（Sawmah：「畫面感很好但不夠實境」）：回放原本是**默片**——
+  // 賽中有擊球爆裂/落地悶響/哨音/歡呼/觀眾底噪，重演一聲都沒有，大腦當然覺得
+  // 隔了一層。接既有 sfx（WebAudio 合成、零音檔＝憲法 Q3 不動）
+  const sfx = createSfx();
+  let startFlight = 0;
 
   // 快轉到開場起點（不渲染）：發球前的佈陣等待不是戲（導播腳本 skipTo）
   player.fastForward(script.skipTo);
+  startFlight = player.state.rally.flightId;
 
   let frames = 0;
   let elapsedSec = 0;
@@ -125,6 +132,10 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
       matchView.setTagsVisible(shot.cam.mode !== 'sig');
     }
 
+    // 跳過/快轉一次推很多步：那批事件不送音效（整段的聲音會同時炸開）
+    if (!jumped && frameEvents.length) {
+      sfx.onEvents(frameEvents, { rallyFlights: player.state.rally.flightId - startFlight });
+    }
     const alpha = Math.min(Math.max(exact - target, 0), 1);
     const state = player.state;
     court.update(dt, state.ball); // 觸網漣漪（主賽場同一套；純視覺）
@@ -147,7 +158,7 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
     renderer.render(scene, camera);
   }
 
-  const timeline = createBeatTimeline([{ dur: script.totalMs, apply }]);
+  let timeline = createBeatTimeline([{ dur: script.totalMs, apply }]);
   let drive = null;
   let done = false;
   const finish = () => {
@@ -162,6 +173,7 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
     el: wrap,
     script,
     get playing() { return drive !== null && !done; },
+    get done() { return done; },
     play() {
       if (drive || done) return;
       lastNow = null;
@@ -172,6 +184,23 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
     pause() {
       drive?.stop();
       drive = null;
+    },
+    // 07-28 試玩抓到：跳過之後沒辦法重播（重播鈕變了字但點不動——play() 被 done 擋住）。
+    // 重播＝整卷重來：重建重演器與演出時鐘（tape 不變＝每次重播逐格一致）
+    restart() {
+      drive?.stop();
+      drive = null;
+      done = false;
+      player = createRallyPlayer(tape);
+      player.fastForward(script.skipTo);
+      startFlight = player.state.rally.flightId;
+      curAnchor = anchor0;
+      rig.setPlayerId(anchor0);
+      rig.setSigBeat(null);
+      rig.setSetScan(false);
+      lastNow = null;
+      timeline = createBeatTimeline([{ dur: script.totalMs, apply }]);
+      apply(0);
     },
     // 跳過＝定格終態（與播完逐值一致——演出時鐘契約）
     skip() {
@@ -186,6 +215,7 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
     dispose() {
       drive?.stop();
       drive = null;
+      sfx.dispose(); // 觀眾底噪跟著舞台一起收（離開典藏牆不該還聽得到球場）
       court.dispose?.();
       lights.pool.geometry.dispose();
       lights.pool.material.dispose();

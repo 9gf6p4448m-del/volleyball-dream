@@ -15,13 +15,22 @@ import { createRallyRecorder } from './rallyTape.js';
 
 const SEED = 20260728;
 
-// 一顆真球（全 AI 對打）：走與正賽同一條錄製管線，產 v2 卷
+// 一顆真球（全 AI 對打）：走與正賽同一條錄製管線，產 v2 卷。
+// **先把比分推到賽末再開錄**——典藏的是勝負點，重演標題會顯示發球前比分；
+// 從 0:0 錄第一顆球會標成「0 – 0」，那比沒有脈絡更糟
 function recordDemoRally(seed) {
   const game = createGame({ seed, setTarget: 25 });
   const ai = createAiState();
   const rec = createRallyRecorder();
   let guard = 0;
-  while (guard < 20000) {
+  // 階段一：空跑到有一方進入賽末區（不錄）
+  while (guard < 200000 && game.phase !== 'set_over'
+    && Math.max(game.match.score.A, game.match.score.B) < 23) {
+    guard += 1;
+    stepGame(game, aiCollectIntents(game, ai));
+  }
+  // 階段二：錄下一顆完整的球
+  while (guard < 220000 && game.phase !== 'set_over') {
     guard += 1;
     if (game.phase === 'serve') rec.begin(game, ai);
     rec.step(game, ai, null, []);
@@ -83,7 +92,8 @@ export function buildVaultDemoStore() {
   store.advanceSeason({ invitedId: null });
   playSeason(store, null);               // 第 3 屆：全勝奪冠
 
-  // 典藏牆四槽（真卷、真的能播）
+  // 典藏牆四槽（真卷、真的能播）。這四個 seed 已驗過：錄到的賽末比分方向與下面的
+  // 勝敗劇本一致（勝場領先、敗場落後）——sim 參數若動過導致對不上，換 seed 即可
   const tapes = [11, 23, 37, 51].map((s) => recordDemoRally(s));
   store.recordVaultRally(1, {
     matchId: 'national-final', seasonIndex: 1, opponentId: 'sky-hawk',

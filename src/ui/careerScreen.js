@@ -1861,7 +1861,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
-      'background:rgba(4,6,12,0.94)', 'gap:10px', 'padding:26px 14px',
+      // 07-28 試玩截圖抓到：0.94 讓底下生涯畫面的成長區塊（點數/力量 62+…）透出來，
+      // 跟主角聚光模型疊成一團。結算是「全遊戲唯一上限規格」的儀式——底下的 UI
+      // 一格都不該透出來
+      'background:#04060c', 'gap:10px', 'padding:26px 14px',
     ]);
     overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
       '生涯結算'));
