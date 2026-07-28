@@ -1,7 +1,7 @@
 # Phase 4.6 結案快照 — 回放引擎輪（重演舞台＋典藏牆＋導播）
 
 > 2026-07-28 結案。工單＝`docs/kickoffs/phase4_6-prompt.md`（Claude.ai 規劃會議產出、
-> Sawmah 逐題拍板）。基準 main@45c37d2（574 測綠）→ 結案 **593 測綠（+19、只增不減）**、
+> Sawmah 逐題拍板）。基準 main@45c37d2（574 測綠）→ 結案 **597 測綠（+23、只增不減）**、
 > `vite build` 綠。憲法＝`phase4-decisions-RESOLVED.md` 全程沿用；
 > **sim 純核心整輪零 diff（`git diff 45c37d2..HEAD -- src/sim/` 空）**、零 sim 數值參數改動。
 > 驗證＝node:test 全套＋Playwright 對 dev 實跑（重演舞台三段構圖實渲染、跳過定格、
@@ -24,8 +24,11 @@
 | 8 | §7 準度可讀性半件 | ✅（砍一項，見 §8） | `signatureBeats.timingVerdict`＋matchLoop 字卡 |
 
 新測試檔：`tests/rally-tape.test.mjs`（7）、`tests/replay-director.test.mjs`（6）、
-`tests/replay-vault.test.mjs`（3）；更新：`n2-arc`（+1）、`signature-beats`（+1）、
+`tests/replay-vault.test.mjs`（3）、`tests/set-window.test.mjs`（3，追修）；
+更新：`n2-arc`（+1）、`signature-beats`（+1）、`diegetic-items`（+1，追修）、
 `finale`（典藏 roundtrip 改四槽語意＋舊存檔讀成空牆，+1）。
+
+> **試玩追修見 §12**（07-28 當日八筆，全部零 sim diff）。
 
 ## 1. §3-0 容量探針（硬要求；本輪的轉折點）
 
@@ -169,7 +172,8 @@ tape = { v:2, snapshot, ai, steps:[{ p?:Intent[], c?:controlledId, a?:aiPatch }]
 ## 9. 驗收清單逐條（工單 §9）
 
 1. ✅ **§3-0 探針數據落快照**（§1）；超出預算 → 已依條款停手回報 → Sawmah 裁定改格式。
-2. ✅ `npm test` **593／0 fail**（574＋19、只增不減）；`vite build` 綠。新測項涵蓋：
+2. ✅ `npm test` **597／0 fail**（574＋23、只增不減；含追修 §12 的 +4）；`vite build` 綠。
+   新測項涵蓋：
    重演逐格一致（Intent 流＋事件流＋終態，且同卷兩次一致）、**導播決定論**
    （腳本 `deepEqual`）、四槽讀寫／永不覆寫／空槽行為、入口卡空資料不出現、
    舊存檔讀成空牆、等哨截斷、v2 容量守門（單筆 <200KB）。
@@ -210,6 +214,14 @@ tape = { v:2, snapshot, ai, steps:[{ p?:Intent[], c?:controlledId, a?:aiPatch }]
   > 體感不成立則不動，**治具數字本身不構成校準理由**。
   （現值 29% 決賽帶／5% 奪冠＝兩筆卡死修復後第一次拿到的真實力帶；舊 23% 摻著
   「球員卡死＝表現折損」。）
+- **追修後待驗（07-28 當日）**：
+  - 賽中 🎬 回放與情蒐帶的**回歸試玩**（錄製格式整條換過，本輪風險最高處，尚未真人驗）
+  - 音效版重演的實境感（夠不夠；不夠的下一順位＝commentary 播報，有變吵風險）
+  - 兩段式分配窗：遠段唯讀資訊是幫助還是雜訊（嫌早嫌晚改 `SET_READY_M`）
+  - 金圈改後夠不夠跳（再不夠＝往「動態收束」加，不再往更亮加）
+  - §7 兩張字卡的頻率與措辭（出界那張最沒把握）
+- **第二擊無備援追球者**（第一擊有 `backupId`）：S 真追不到就沒人補球，0.12%——
+  要不要補進 sim 由 Phase 5 一併議（動決策面＝需重跑平衡治具）
 - **本輪新增**：
   - 重演舞台的暗場亮度／鏡頭節奏（12s 一顆球會不會太長）／慢動作倍率體感
   - 典藏牆入口卡的四格版面（手機寬度）與「膠捲標籤」夠不夠像回放入口
@@ -218,20 +230,70 @@ tape = { v:2, snapshot, ai, steps:[{ p?:Intent[], c?:controlledId, a?:aiPatch }]
 - **4.5B 滾動未銷**：S/L diegetic 手感／招牌演出頻率／劇情 beat 舞台／huddle 節奏／
   生涯結算開場序列（仍未經三屆末存檔實跑）／五局體力體感等。
 
-## 12. 檔案清單
+## 12. 試玩追修（07-28 當日回饋）
+
+> 主體交付當日 Sawmah 即試玩，追修八筆全部零 sim diff。格式沿 4.5B §13。
+
+1. **S 分配窗兩段式（Sawmah 提問：「要不要確定走得到才開面板」）**：**先量再改**
+   ——`tools/setter-reach-probe.mjs`（5764 次第二擊指派）翻掉了兩邊的猜測：走不到
+   根本不是問題（claim 者 **99.9%** 自己舉到，沒舉成的只有 7 次）；真正的問題是
+   **開窗當下平均還要跑 2.72m、p90 要跑 5.97m**——玩家被迫一邊全速跑位一邊挑四個
+   選項，4.5B 之後更明顯（熱點錨隊友模型＋sset 掃場鏡位＝跑位的視覺參考被抽走）。
+   拍板 A 案「資訊早給、操作晚要」：遠段（>`SET_READY_M` 3.2m）只給一傳品質＋
+   協調層建議（唯讀、空選項面板＝既有通道的唯讀用法，不新增元件），近段才亮可點
+   熱點；**鏡頭跟著操作段走**（遠段維持三人稱，不然兩段式的效果會被鏡頭切換抵銷）；
+   latency 樣本改從「可下指令那一刻」起算。門檻＝探針 p50 稍放寬＝約六成的球一開窗
+   就在近段（行為與改動前完全一樣）。
+   **順帶查到但不修**：第二擊沒有 `backupId`（第一擊有）——S 真追不到就沒人補球。
+   0.12% 不值得為它動 sim 決策面，入滾動清單。
+2. **舉球員對自己喊「這球給我」還揮手（bug）**：`diegeticItems` 的喊球者判定 4.5B
+   就排除了 dump，**但 matchLoop 那條喊聲字卡＋wave 的路徑漏了**——二次球選項的
+   pid 是舉球員自己、trust 寫死 100，恆居榜首。修法＝抽 `loudCallerOf` 純函式讓
+   兩處共用單一事實源。**教訓（4.5A 同款再現）：同一個判定寫在兩個地方，遲早分岔。**
+3. **金圈不夠明顯（Sawmah：對比色不夠）**：夜賽暖燈＋橘木地板下純金色與背景明度
+   太接近＝糊掉。**先給硬邊界再談發光**——內外各一圈深色描邊把光圈從任何底色切
+   出來、金色提亮一檔（#ffd166→#ffe45c）、圈徑 76→84px；語意色（金＝這球給我）
+   保留不換。Playwright 同畫面前後對照截圖實證（球員身上／橘地板兩種底色）。
+4. **跳過之後不能重播（bug）**：重播鈕會變字但點不動——`play()` 被 `done` 擋住。
+   加 `stage.restart()`＝重建重演器與演出時鐘整卷從頭（tape 不變＝每次重播仍逐格一致）。
+5. **「畫面感很好但不夠實境」**：診斷＝**它是默片**。賽中每球都有擊球爆裂／落地悶響／
+   哨音／歡呼／觀眾底噪，重演一聲都沒有。接既有 `sfx`（WebAudio 合成、零音檔＝憲法
+   Q3 不動）；跳過／快轉那批事件不送音效（整段的聲音會同時炸開）；`sfx` 加 `dispose()`
+   ——觀眾底噪跟著舞台收，離開典藏牆不該還聽得到球場。
+   **判斷入卷：不加對話**——回放是記憶不是過場動畫，配台詞會變成看劇情演出而不是
+   重看自己打的球。若音效版仍嫌空，下一順位是 `commentary` 播報（講場上的事、不講
+   人物心境），但有變吵的風險。
+6. **實境感第二缺口＝沒有脈絡**：一顆球要有「幾比幾」才有份量（轉播一定會標）。
+   資料就在快照裡——重演標題下加發球前比分＋「這一球拿下了／輸掉了」。
+7. **生涯結算 overlay 疊版（4.5B 遺留，本輪順手修）**：背景 `rgba(4,6,12,0.94)` 讓
+   底下生涯畫面的成長區塊（點數／力量 62+…）透出來、與主角聚光模型疊成一團。
+   改純色——結算是「全遊戲唯一上限規格」的儀式，底下的 UI 一格都不該透出來。
+8. **`?debugVault=1` 試玩入口（新增）**：典藏牆要第 3 屆末存檔才進得去，真人玩到
+   第三年之前無法回饋。記憶體假存檔（Map 假體、**完全不碰 localStorage**、關分頁即
+   消失）；劇本＝第 1 屆決賽敗天鷹→第 2 屆準決賽敗→第 3 屆奪冠，四槽勝敗混排；
+   四卷錄的是**賽末球**（先把比分推到 23 分再開錄——從 0:0 錄第一顆球，脈絡列會標
+   「0 – 0」，比沒有脈絡更糟）。
+
+## 13. 檔案清單
 
 - 新增：`src/app/rallyTape.js`、`src/render/replayStage.js`、`src/render/replayDirector.js`、
-  `src/ui/replayVault.js`、`src/ui/chaseDiagram.js`、`tools/replay-size-probe.mjs`；
-  tests：`rally-tape`、`replay-director`、`replay-vault`
+  `src/ui/replayVault.js`、`src/ui/chaseDiagram.js`、`src/app/debugVault.js`（試玩入口）、
+  `tools/replay-size-probe.mjs`、`tools/setter-reach-probe.mjs`；
+  tests：`rally-tape`、`replay-director`、`replay-vault`、`set-window`
 - 修改：`matchLoop.js`（v2 錄製接線／播放路徑／四槽掛點／§7 字卡）、
   `careerStore.js`（`vaultOf`＋四槽 API）、`careerScreen.js`（入口卡＋`diagram` 通道）、
   `matchView.js`（`setTagsVisible`）、`signatureBeats.js`（`timingVerdict`）、
-  `n2Arc.js`（三版 diagram 宣告）；tests：`finale`、`n2-arc`、`signature-beats`
+  `n2Arc.js`（三版 diagram 宣告）、`main.js`（debugVault 入口）、
+  `setOptions.js`（兩段式判定）、`diegeticItems.js`（`loudCallerOf`）、
+  `diegeticUi.js`（金圈對比）、`sfx.js`（`dispose`）；
+  tests：`finale`、`n2-arc`、`signature-beats`、`diegetic-items`
 - **未動**：`src/sim/`（零 diff）、`scoutTape.js`（舊格式卷由重演器相容播放）
 
-## 13. 下一步（Phase 5 kickoff）
+## 14. 下一步（Phase 5 kickoff）
 
-1. **Sawmah 試玩**：典藏牆入口卡→重演舞台全鏈（需三屆末存檔或注入存檔）＋真機 FPS。
+1. **4.6 關卷前的兩件（Sawmah）**：①**賽中回放＋情蒐帶的回歸試玩**——錄製格式整條
+   換過，這是本輪風險最高處，尚未真人驗 ②真機 60 FPS（含重演舞台這個新場景組合）。
+   典藏牆全鏈已於 07-28 當日試玩並追修八筆（§12），入口＝`?debugVault=1`。
 2. **Phase 5 kickoff 討論題**：①攻擊瞄準點／描線機制本體（①區內二段微調／②長按拉條
    ——動 sim 決策面，需重跑平衡治具）②位置開放節奏（Q7 已關卷，轉為手感追修）
    ③多人連線前置——**Intent 唯一輸入＋v2 卷格式已是天然的網路封包雛形**
