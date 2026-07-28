@@ -1,7 +1,7 @@
 // 4.5B §4 diegetic 介面純函式：S 熱點映射／L 手勢映射／決策耗時統計
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sHotspotItems, lSignalItems, createLatencyStats, L_SIGN_GLYPHS } from '../src/ui/diegeticItems.js';
+import { sHotspotItems, lSignalItems, createLatencyStats, L_SIGN_GLYPHS , loudCallerOf } from '../src/ui/diegeticItems.js';
 import { DIG_SCHEMES } from '../src/input/liberoRead.js';
 import { CALL_BALL_AT } from '../src/input/setOptions.js';
 
@@ -51,4 +51,22 @@ test('決策耗時統計：分位置累計、median/mean；無效樣本丟棄', 
   assert.equal(sum.S.median, 600);
   assert.equal(sum.S.mean, 600);
   assert.equal(sum.L.n, 1);
+});
+
+// 07-28 Sawmah 試玩抓到：二次球選項的 pid 是舉球員自己、trust 寫死 100，
+// 不排除就恆居喊球榜首＝自己對自己喊「這球給我」還揮手
+test('loudCallerOf：二次球恆排除，喊球者只認隊友', () => {
+  const zones = [
+    { key: 'dump', pid: 'A2', kind: 'dump', name: '我', trust: 100, label: '🎯二次球' },
+    { key: 'A4-right', pid: 'A4', kind: 'right', name: '小飛', trust: 55, label: '小飛·右翼' },
+    { key: 'A3-quick', pid: 'A3', kind: 'quick', name: '大山', trust: 40, label: '大山·快攻' },
+  ];
+  assert.equal(loudCallerOf(zones)?.pid, 'A4', '最高 trust 的隊友才是喊球者');
+  // 熱點旗標同源
+  const items = sHotspotItems(zones);
+  assert.equal(items.find((i) => i.kind === 'dump').loud, false);
+  assert.equal(items.find((i) => i.pid === 'A4').loud, true);
+  // 全隊 trust 都低於門檻＝沒人喊（不得回退成自己）
+  assert.equal(loudCallerOf(zones.map((z) => (z.kind === 'dump' ? z : { ...z, trust: 5 }))), null);
+  assert.equal(loudCallerOf([]), null);
 });

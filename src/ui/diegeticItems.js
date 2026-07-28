@@ -13,11 +13,19 @@ export const L_SIGN_GLYPHS = {
 
 // S 分配熱點：每個選項錨在隊友（pid）模型上；二次球（dump）錨在自己身上。
 // loud＝高 trust 喊聲者（同一 flight 只有最高者揮手喊球——與既有喊聲字卡同判準）
+// 喊球者（單一事實源）：本波 trust 最高的**隊友**。
+// **二次球（dump）恆排除**——那個選項的 pid 是舉球員自己、trust 寫死 100，
+// 不排除就會恆居榜首：舉球員對自己喊「這球給我」還揮手（07-28 Sawmah 試玩抓到）。
+// matchLoop 的喊聲字卡＋wave 姿勢與本檔熱點共用此函式，判定不得再分岔
+export function loudCallerOf(setZones) {
+  return (setZones ?? [])
+    .filter((z) => z.kind !== 'dump' && z.trust >= CALL_BALL_AT)
+    .sort((a, b) => b.trust - a.trust)[0] ?? null;
+}
+
 export function sHotspotItems(setZones) {
   if (!setZones?.length) return [];
-  const loudPid = setZones
-    .filter((z) => z.kind !== 'dump' && z.trust >= CALL_BALL_AT)
-    .sort((a, b) => b.trust - a.trust)[0]?.pid ?? null;
+  const loudPid = loudCallerOf(setZones)?.pid ?? null;
   return setZones.map((z) => ({
     key: z.key,
     pid: z.pid,

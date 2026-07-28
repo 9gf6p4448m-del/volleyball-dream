@@ -72,23 +72,37 @@ export function createDiegeticUi() {
       b.addEventListener('pointerdown', (e) => { e.stopPropagation(); onPick(item); });
       return b;
     }
-    const ringColor = item.loud ? '#ffd166' : item.hesitant ? '#5a6a8a' : '#6ee7ff';
-    const size = item.loud ? 76 : 58;
+    // 07-28 二輪（Sawmah：「黃圈不夠明顯、對比色不夠」）：夜賽暖燈＋橘木地板下，
+    // 純金色光圈與背景明度太接近＝糊掉。**先給硬邊界再談發光**——內外各一圈深色
+    // 描邊把光圈從任何底色裡切出來，金色本身也提亮一檔（#ffd166→#ffe45c）。
+    // 4.5B 教訓沿用：視覺調參一律截圖實證，數值「該可見」不等於可見
+    const ringColor = item.loud ? '#ffe45c' : item.hesitant ? '#5a6a8a' : '#6ee7ff';
+    const size = item.loud ? 84 : 58;
     if (item.loud) {
       const badge = document.createElement('div');
       badge.style.cssText = [
         'font-size:13px', 'font-weight:900', 'white-space:nowrap', 'color:#0a0c14',
-        'background:#ffd166', 'border-radius:10px', 'padding:2px 10px',
-        'box-shadow:0 0 14px #ffd166aa', 'letter-spacing:1px',
+        'background:#ffe45c', 'border-radius:10px', 'padding:2px 10px',
+        // 深色描邊在前、光暈在後：金底徽章疊在橘地板/暖燈上時，先有硬邊界才談發光
+        'box-shadow:0 0 0 2.5px rgba(4,6,12,0.92), 0 0 16px #ffe45caa',
+        'letter-spacing:1px',
       ].join(';');
       badge.textContent = '🙋 這球給我！';
       b.appendChild(badge);
     }
     const ring = document.createElement('div');
+    const dark = 'rgba(4,6,12,0.9)';
     ring.style.cssText = [
       `width:${size}px`, `height:${size}px`, 'border-radius:50%',
-      `border:${item.loud ? 4 : 3}px solid ${ringColor}`,
-      `box-shadow:0 0 ${item.loud ? 26 : 18}px ${ringColor}${item.loud ? '99' : '66'}, inset 0 0 14px ${ringColor}33`,
+      `border:${item.loud ? 5 : 3}px solid ${ringColor}`,
+      // 疊三層：外深色描邊（切出邊界）→ 外光暈（在暗處也看得到）→ 內深色描邊
+      //（金圈壓在亮色球衣上仍有邊）
+      [
+        `0 0 0 ${item.loud ? 3 : 2}px ${dark}`,
+        `0 0 ${item.loud ? 30 : 18}px ${ringColor}${item.loud ? 'cc' : '66'}`,
+        `inset 0 0 0 ${item.loud ? 2.5 : 1.5}px ${dark}`,
+        `inset 0 0 14px ${ringColor}33`,
+      ].map((v, i) => (i === 0 ? `box-shadow:${v}` : v)).join(', '),
       item.loud ? 'animation:vd-diegetic-pulse 0.9s ease-in-out infinite' : '',
     ].join(';');
     const tag = document.createElement('div');

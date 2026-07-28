@@ -15,7 +15,7 @@ import {
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import {
-  setPanelTitle, setPreviewTitle, setStageOf, CALL_BALL_AT, SET_HESITANT_BELOW,
+  setPanelTitle, setPreviewTitle, setStageOf, SET_HESITANT_BELOW,
 } from '../input/setOptions.js';
 import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
@@ -45,7 +45,9 @@ import {
   loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
 } from '../ui/presentation.js';
 import { easeInOutCubic } from '../render/ritualStage.js';
-import { sHotspotItems, lSignalItems, createLatencyStats } from '../ui/diegeticItems.js';
+import {
+  sHotspotItems, lSignalItems, createLatencyStats, loudCallerOf,
+} from '../ui/diegeticItems.js';
 
 // W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
 // 先用三人稱看全隊聚攏一小段，再切進圈裡，避免自己的身體從鏡頭裡穿過
@@ -876,8 +878,9 @@ function updateDecisions(s, now) {
     // 高 trust 隊友開窗喊聲要球（表現層；每個 flight 一次）＋揮手（wave 姿勢，diegetic 補的肢體）
     if (s.calledBallFlight !== game.rally.flightId) {
       s.calledBallFlight = game.rally.flightId;
-      const loud = setZones.filter((z) => z.trust >= CALL_BALL_AT)
-        .sort((a, b) => b.trust - a.trust)[0];
+      // 喊球者判定＝diegeticItems 的單一事實源（二次球恆排除：那是舉球員自己，
+      // trust 寫死 100 會恆居榜首——自己對自己喊「這球給我」還揮手）
+      const loud = loudCallerOf(setZones);
       if (loud) {
         floatText.show(`${loud.name}：「這球給我！」`, '#7ee787', 1400);
         if (loud.pid) stage.matchView.triggerPose(loud.pid, 'wave');
