@@ -1,16 +1,55 @@
-// Phase 5 W1 §2-2「Transition 拉開」——助跑起點（純函式、決定論、零 rng）
+// Phase 5 W1 §2-2「Transition 拉開」＋§4「A1 節奏三層」
+// ——攻擊線幾何與助跑節奏（純函式、決定論、零 rng 狀態）
 //
 // 真實排球：一擊完成的瞬間，場上每個合法攻擊手都轉身背對網、跑向**自己那條線的
-// 助跑起點**站定等二傳。攔網手要讀的第一組線索就是「誰跑去哪、離網多遠」。
+// 助跑起點**站定等二傳。攔網手要讀的第一組線索就是「誰跑去哪、離網多遠」；
+// 第二組線索是「誰什麼時候起步」——那就是 §4 的節奏三層。
 //
 // 4.7 之前全隊共用 `dutyPosition`（前排一律 lz=3.0、後排一律 lz=7.0），三名前排
 // 站成一直排、後排完全不動（探針實測 Δ=0.00m）＝攔網手看不到任何線索。
 //
-// 本檔只負責「起點在哪」的純幾何：吃 (隊伍, 這球跑哪條線)，吐世界座標。
+// 本檔是「攻擊線幾何」的單一真相：舉球落點（setAimFor）／助跑起點（approachStartFor）
+// ／起跳點（takeoffSpotFor）／節奏與起步 tick（approachRoutesFor）。
 // **刻意不從 ai.js import**——攻擊池（attackPointsOf）由呼叫端供給，
 // 避免 sim 內循環相依，也讓 §4「全員各跑各的線」直接對整個池 map 一次即可。
-import { COURT } from './constants.js';
+// （§4 追記：setAimFor 與 TAKEOFF_* 原本住在 ai.js，本輪上移到此——起跳點是
+//  「舉球落點往後退一段」，助跑 route 要自己算得出來就必須拿到這兩份；ai.js 反向
+//  import 會成環。數值與函式本體逐字未動，ai.js 的 `AI.TAKEOFF_*` 改為指向此處。）
+import { COURT, SIM_DT } from './constants.js';
 import { localToWorld } from './rotation.js';
+import { hash01 } from './rng.js';
+
+// 二傳落點：前後排皆已換位 → 各攻擊點固定（真實排球的進攻座標）
+// 前排 OH 左翼/OPP 右翼高球、MB 面前低弧快攻；
+// 後排 pipe 中路偏左（後中 OH）、D 球右路（右後 OPP）——皆壓攻擊線後（合法起跳）
+const ATTACK_LZ = 1.3; // 舉球目標深度（不在表上的 kind 的保底線）
+export function setAimFor(game, team, attackerId, kind) {
+  if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
+  if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
+  if (kind === 'right') return { lx: 3, lz: 1.3, t: 0.75 };
+  if (kind === 'pipe') return { lx: -1, lz: 3.6, t: 0.75 };
+  if (kind === 'dball') return { lx: 2.6, lz: 3.6, t: 0.75 };
+  return { lx: 2, lz: ATTACK_LZ, t: 0.75 };
+}
+
+// 起跳點＝擊球點往自家後場退多遠（m）——決定「空中前飄」的實際距離。
+// 前排幾乎垂直拔起（真人 0.3-0.5m）；後排在三米線後起跳、往前上方衝進去打，
+// 位移本就較大。SETTLE＝離起跳點多近算「到位」（到位即停止水平移動＝原地拔起）。
+// **4.7 兩次勝率 0% 換來的禁區常數，本輪一格未動**（見 ai.js 起跳點分支的註解）
+export const TAKEOFF = { FRONT: 0.68, BACK: 0.22, SETTLE: 0.25 };
+
+// 後排攻擊線（起跳點退的距離與前排不同）
+const BACK_KINDS = new Set(['pipe', 'dball']);
+
+// 起跳點（世界座標）＝該線的舉球落點往自家後場退 TAKEOFF.FRONT/BACK。
+// 這是「這條線的人最後會停在哪拔起」的名目值——被選中者到了第三擊改吃實測 hitPoint
+// （ai.js 的起跳點分支，禁區不動），未被選中者跑的假動作就以此為終點。
+export function takeoffSpotFor(team, kind) {
+  const aim = setAimFor(null, team, null, kind);
+  const back = BACK_KINDS.has(kind) ? TAKEOFF.BACK : TAKEOFF.FRONT;
+  const w = localToWorld(team, aim.lx, aim.lz + back);
+  return { x: w.x, z: w.z };
+}
 
 // 助跑起點（隊伍視角）：lz＝離網距離、lx＝面向網時的右手向。
 // 對照 setAimFor 的舉球落點：quick(0,1.0) left(-3,1.3) right(3,1.3)
@@ -49,15 +88,112 @@ export function approachStartFor(team, kind) {
   return { x: w.x, z: w.z, lz, steps: a.steps, kind };
 }
 
-// 整個攻擊池的 route（§4 要的「全員各跑各的線」直接吃這個）：
-// points＝attackPointsOf(game, team, setterId, passTier) 的輸出
-export function approachRoutesFor(team, points) {
-  const routes = [];
-  for (const pt of points) {
-    const start = approachStartFor(team, pt.kind);
-    if (start) routes.push({ pid: pt.pid, kind: pt.kind, start });
+// ---- §4 A1 節奏三層 ----
+//
+// | 節奏 | 定義 | 起跳時機（相對「二傳觸球 tick」） |
+// |---|---|---|
+// | 一速 one   | MB A 快／B 快              | 觸球**前**已在空中 |
+// | 二速 two   | 邊攻半快、平拉開            | 觸球前起跳（**本輪停派**，見 TEMPO_TWO_RATE） |
+// | 三速 three | 標準 OH／OPP 高球、pipe/D 球 | 觸球**後**起跳 |
+//
+// 節奏在 sim 裡的唯一體現＝**起步 tick 不同**（不動舉球彈道、不動 trust 權重）。
+// 「不同節奏＝不同起步 tick，那就是攔網要讀的東西本身」（憲法 §三 A1）。
+//
+// takeoffLead＝起跳點比二傳觸球早幾 tick（三速為 0＝起步就踩在觸球那一刻，
+// 對齊憲法的黃金錨點「二傳觸球瞬間 OH 應正踩在助跑第一步上」，起跳自然落在觸球後）。
+// 14 tick＝0.23s：真人快攻手在二傳觸球前約 0.2-0.3s 離地，二傳把球送到他手上。
+export const TEMPO = {
+  one: { takeoffLead: 14 },
+  two: { takeoffLead: 3 },
+  three: { takeoffLead: 0 },
+};
+// 邊攻跑二速的比例——**本輪＝0（二速停派），這不是調參是擋 bug**：
+// 二速的定義是「邊攻**低平球**」，球速與人的起跳時機必須成對。sim 現有的舉球弧
+// 只有兩檔（TUNING.QUICK_APEX 3.4 ／ SET_APEX 5.2，game.js 用 `rawT<0.5` 二選一），
+// 兩檔都配不出邊攻的平拉開，實測（tools/tempo-probe.mjs，40 局）兩條路都是壞的：
+//   ① 維持高球（SET_APEX）：人照二速提早跑到起跳點、球還要飛 1.35s
+//      → 擊球前站著不動 p50=159 tick（2.65s）＝退回 07-23 拍板禁止的網前罰站。
+//   ② 借用快攻的低弧（QUICK_APEX 3.4）：邊攻要橫移 4.2m，球只在弧頂附近高過
+//      扣球窗 2.9m，predictContactPoint 求出的擊球點被拉回中場
+//      → attack-flow-probe ④「離地時離球距離」>3m 從 0% 跳到 9.8%、
+//        ⑤ 前排真空中前飄 p90 0.79→1.29m（攻擊手在空中滑行 1.3m 才碰到球）。
+// 二速要成立得先有**第三檔舉球弧線**（介於 3.4 與 5.2，且橫移 4.2m 仍高過扣球窗），
+// 那是球路設計＝§5 A2 的工作，本輪 §4 只做起步時機、不動彈道。
+// 改回 0.35 之前先把那一檔弧線做出來，否則以上兩個坑會原樣復現。
+export const TEMPO_TWO_RATE = 0;
+// 收勢窗：起跳後多久算「這條假動作跑完了」，之後才落回 cover／職責位。
+// 24＝sim 既有的滯空窗定義（TUNING.TAKEOFF_LOOKBACK_TICKS，判後排踏線違例用的
+// 同一個回溯窗）——動畫與規則共用同一時間錨點，不另立標準（4.7 已建立的原則）
+export const AIR_TICKS = 24;
+// 起步 tick 算不出來（沒有二傳觸球預估）時的回落速度（m/s）：moveSpeed 的中位值
+const NOMINAL_SPEED = 4.0;
+
+const KIND_SALT = { left: 11, right: 23 };
+
+// 這條線跑幾速：快攻恆一速、後排高球恆三速、邊攻由種子決定二速／三速。
+// 純 hash（吃 flightId＋池內序＋線別＋seed）＝同種子同球逐值相同，不耗 game rng
+export function tempoFor(kind, { flightId = 0, seed = 0, index = 0 } = {}) {
+  if (kind === 'quick') return 'one';
+  if (kind === 'left' || kind === 'right') {
+    return hash01(flightId * 419 + index * 37 + KIND_SALT[kind] + seed) < TEMPO_TWO_RATE
+      ? 'two' : 'three';
   }
+  return 'three';
+}
+
+// 一條 route 的三個時間點（純算術，與幾何無關；抽出來是為了三種節奏都能被單測到
+// ——實戰裡哪些節奏會被指派受 TEMPO_TWO_RATE 影響，規格本身不該被那個比例綁住）：
+//   startTick   起步（離開助跑起點）
+//   takeoffTick 起跳（＝抵達起跳點、到位即停）
+//   settleTick  收勢完成（之後才落回 cover／職責位）
+// 一速／二速：先算起跳（早於二傳觸球 takeoffLead 個 tick），再倒推起步。
+// 三速：起步＝二傳觸球那一刻（黃金錨點），起跳自然落在觸球後 runTicks。
+export function routeTicks(tempo, setTick, runTicks) {
+  if (setTick == null) return { startTick: null, takeoffTick: null, settleTick: null };
+  const takeoffTick = tempo === 'three'
+    ? setTick + runTicks
+    : setTick - TEMPO[tempo].takeoffLead;
+  return {
+    startTick: takeoffTick - runTicks,
+    takeoffTick,
+    settleTick: takeoffTick + AIR_TICKS,
+  };
+}
+
+// 整個攻擊池的 route（§4「全員各跑各的線」直接吃這個）：
+// points＝attackPointsOf(game, team, setterId, passTier) 的輸出。
+// opts.setTick＝預估的「二傳觸球 tick」（絕對 tick）——本檔不預測球，由呼叫端
+// 用既有的 contactPoint 錨點供給（同一個錨點也餵表現層的舉球預備動作）。
+// 給不出 setTick 時（預測失效）三個 tick 欄位皆 null＝呼叫端回落「站在起點等」。
+export function approachRoutesFor(team, points, opts = {}) {
+  const {
+    setTick = null, flightId = 0, seed = 0, speedOf = null,
+  } = opts;
+  const routes = [];
+  points.forEach((pt, index) => {
+    const start = approachStartFor(team, pt.kind);
+    if (!start) return;
+    const tempo = tempoFor(pt.kind, { flightId, seed, index });
+    const takeoff = takeoffSpotFor(team, pt.kind);
+    // 助跑段跑完要幾 tick＝距離 ÷ 這個人的步長（決定論：moveSpeed 純吃屬性）。
+    // 疲勞折速不計入——這是規劃期的預估值，估得樂觀＝晚到一點點，不影響到位即停
+    const stepM = ((speedOf ? speedOf(pt.pid) : NOMINAL_SPEED) || NOMINAL_SPEED) * SIM_DT;
+    const runTicks = Math.max(1, Math.round(
+      Math.hypot(takeoff.x - start.x, takeoff.z - start.z) / stepM,
+    ));
+    routes.push({
+      pid: pt.pid, kind: pt.kind, tempo, start, takeoff, runTicks,
+      ...routeTicks(tempo, setTick, runTicks),
+    });
+  });
   return routes;
+}
+
+// 查表：這名球員本球的 route（不是合法攻擊手＝null）
+export function approachRouteOf(routes, playerId) {
+  if (!routes) return null;
+  for (const r of routes) if (r.pid === playerId) return r;
+  return null;
 }
 
 // 查表：這名球員本球的助跑起點（不是合法攻擊手＝null）

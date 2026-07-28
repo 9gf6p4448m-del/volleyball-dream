@@ -11,8 +11,11 @@ import {
 import { standingReach, spikeReach, moveSpeed } from './player.js';
 import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
 import { createIntent } from './intent.js';
-import { approachRoutesFor, approachStartOf } from './approach.js';
+import {
+  approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
+} from './approach.js';
 import { blockLaneRead, digForBlock } from './blockRead.js';
+import { hash01 } from './rng.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA, staminaPerfMul } from './stamina.js';
@@ -40,11 +43,12 @@ export const AI = {
   // 直覺會以為「退得遠＝飄得遠」，實際相反：退得遠＝更早到位＝停得更久＝前飄更小
   // （探針實證：back 0.9 的後排前飄只有 0.21m，前排 0.45 反而 0.71m）。
   // 要後排有「往前衝進去打」的位移，反而要讓他站得靠近一點、晚一點到位
-  TAKEOFF_FRONT_M: 0.68,
-  TAKEOFF_BACK_M: 0.22,
-  TAKEOFF_SETTLE_M: 0.25,  // 離起跳點多近算「到位」（到位即停止水平移動＝原地拔起）
+  // ★數值的單一真相已於 §4 上移到 approach.js 的 TAKEOFF（起跳點是「舉球落點往後
+  // 退一段」，助跑 route 要自己算得出來）；**值一格未動**，此處只是別名
+  TAKEOFF_FRONT_M: TAKEOFF.FRONT,
+  TAKEOFF_BACK_M: TAKEOFF.BACK,
+  TAKEOFF_SETTLE_M: TAKEOFF.SETTLE,  // 離起跳點多近算「到位」（到位即停＝原地拔起）
   SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
-  ATTACK_LZ: 1.3,         // 舉球目標深度
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
   BLOCK_SCHEME_SHIFT: 0.9, // W4 附錄 B-1：L 配套封線站位偏移（封直線往邊線/封斜線往內）
@@ -219,9 +223,23 @@ function ensureFlightPlan(game, aiState) {
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
     aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
-    // Transition 拉開（§2-2）：整個池一次算完助跑起點——未被選中者照樣拉開跑假動作，
-    // 攔網手才有多條線可讀。純幾何、零 rng，決定論由 points 的順序保證
-    aiState.approach = { team, routes: approachRoutesFor(team, points) };
+    // Transition 拉開（§2-2）＋節奏三層（§4 A1）：整個池一次算完助跑起點、節奏與
+    // 起步 tick——未被選中者照樣拉開跑假動作，攔網手才有多條線可讀。
+    // 時間錨點＝contactPoint（球墜到接球高度的 tick）＝二傳觸球的預估時刻，
+    // 與表現層的舉球預備動作共用同一個錨點（4.7 原則：動畫與規則不得各算各的）。
+    // 純幾何＋純 hash、零 game rng；決定論由 points 的順序＋flightId／seed 保證
+    const setTick = aiState.contactPoint?.ticks != null
+      ? game.tick + aiState.contactPoint.ticks : null;
+    aiState.approach = {
+      team,
+      setTick,
+      routes: approachRoutesFor(team, points, {
+        setTick,
+        flightId: game.rally.flightId,
+        seed: game.seed ?? 0,
+        speedOf: (pid) => moveSpeed(game.players[pid]),
+      }),
+    };
     // S 二次球（偶發）：S 前排、一傳完美到位 → 小機率直接處理第二球
     aiState.setterDump =
       !!aiState.claimId &&
@@ -328,14 +346,6 @@ function judgeMargin(game, playerId) {
   const base = 0.55 - p.attributes.reaction * 0.005;
   const jitter = (hash01(game.rally.flightId * 131 + idHash(playerId) + (game.seed ?? 0)) - 0.5) * 0.3;
   return Math.max(0.08, base + jitter);
-}
-
-function hash01(n) {
-  let x = Math.imul(n | 0, 2654435761);
-  x ^= x >>> 16;
-  x = Math.imul(x, 0x45d9f3b);
-  x ^= x >>> 16;
-  return (x >>> 0) / 4294967296;
 }
 
 function idHash(id) {
@@ -513,17 +523,8 @@ export function coverPosition(game, team, playerId, attackerId) {
   return localToWorld(team, lx, Math.min(atkLz + 1.5, 7.5));
 }
 
-// 二傳落點：前後排皆已換位 → 各攻擊點固定（真實排球的進攻座標）
-// 前排 OH 左翼/OPP 右翼高球、MB 面前低弧快攻；
-// 後排 pipe 中路偏左（後中 OH）、D 球右路（右後 OPP）——皆壓攻擊線後（合法起跳）
-export function setAimFor(game, team, attackerId, kind) {
-  if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
-  if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
-  if (kind === 'right') return { lx: 3, lz: 1.3, t: 0.75 };
-  if (kind === 'pipe') return { lx: -1, lz: 3.6, t: 0.75 };
-  if (kind === 'dball') return { lx: 2.6, lz: 3.6, t: 0.75 };
-  return { lx: 2, lz: AI.ATTACK_LZ, t: 0.75 };
-}
+// 二傳落點（攻擊線幾何的單一真相已移到 approach.js；此處轉出維持既有 import 路徑）
+export { setAimFor };
 
 // 依 trust 權重決定論抽選攻擊點（無任何硬寫比例——權重全來自 Player.trust）
 // stage 4：有效 trust＝baseline＋場內動態（連得/連失）；floorShare＝保底球權地板
@@ -645,8 +646,12 @@ function decideOne(game, aiState, playerId) {
     // 選定攻擊手）時，球墜到扣球窗還久（跑得到＋APPROACH_LEAD 餘裕）就留在職責位
     // （助跑起點），進窗才全速衝——助跑→引臂→起跳→揮擊連續。快攻低弧（airtime 短）
     // 與遠距補位（runTicks 大）自然不觸發＝照舊直衝，不影響能不能打到球
+    // §4 A1 例外：一速／二速的人在二傳觸球前就已經跨過起跑點了（見下方助跑分支），
+    // 這時再叫他「等」＝倒著跑回助跑起點。**只跳過「等」這一段**，下面的起跳點
+    // 分支（4.7 兩次勝率 0% 換來的禁區）一個字未動。三速維持原行為
     if (r.touches === 2 && aiState.attackerId === playerId
-      && aiState.hitPoint?.ticks && !inReach) {
+      && aiState.hitPoint?.ticks && !inReach
+      && !approachLaunched(aiState, playerId, tick)) {
       const ticksLeft = aiState.hitPoint.ticks - (tick - aiState.planTick);
       const gap = Math.hypot(aiState.hitPoint.x - actor.x, aiState.hitPoint.z - actor.z);
       const runTicks = Math.max(0, gap - 0.4) / (moveSpeed(player) * SIM_DT);
@@ -767,6 +772,25 @@ function decideOne(game, aiState, playerId) {
     return moveIntent(game, playerId, tick, actor, localToWorld(team, 2.2, 1.2));
   }
 
+  // Transition 拉開（§2-2）＋節奏三層（§4 A1）：我方一擊完成的瞬間，**每一名**
+  // 合法攻擊手轉身跑向自己那條線的助跑起點（MB 貼網等快攻／兩翼四步外／後排最遠），
+  // 然後**各自照自己的節奏起跑**：一速在二傳觸球前就到起跳點、二速幾乎同時、
+  // 三速等二傳觸球才起步。攔網手要讀的就是這組「誰跑哪條線、誰什麼時候起步」。
+  // 未被選中者一樣跑完假動作路線、到位拔起、收勢窗過了才落回 cover／職責位
+  //（全程走 moveIntent＝單 tick 位移受步長上限約束，不可能瞬間切回原位）。
+  // 只在我方持球且已完成第一擊時生效——接發（touches===0）與防守站位一格不動。
+  // **只有「正在跑」這一段排在 cover 之前**：跑到一半被掩護位拉走就是瞬間收勢。
+  // 還沒起步的人維持本輪之前的優先序（cover 優先，見下方等待段）
+  const running = approachRunOf(aiState, playerId, tick, team, r);
+  if (running) {
+    const gap = Math.hypot(running.takeoff.x - actor.x, running.takeoff.z - actor.z);
+    // 到位即停＝原地拔起（與被選中者的起跳停止條件同一把尺，不另立標準）
+    if (gap < AI.TAKEOFF_SETTLE_M) {
+      return moveIntent(game, playerId, tick, actor, { x: actor.x, z: actor.z });
+    }
+    return moveIntent(game, playerId, tick, actor, running.takeoff);
+  }
+
   // Cover（攻擊掩護）：我方攻擊起跳/出手階段，非攻擊手就掩護位——
   // 二傳下墜（攻擊者進入起跳流程）起動、扣球飛行中維持（等攔回彈）
   if (r.possession === team && aiState.attackerId && aiState.attackerId !== playerId &&
@@ -777,17 +801,42 @@ function decideOne(game, aiState, playerId) {
     );
   }
 
-  // Transition 拉開（Phase 5 W1 §2-2）：我方一擊完成的瞬間，**每一名**合法攻擊手
-  // 轉身跑向自己那條線的助跑起點（MB 貼網等快攻／兩翼四步外／後排最遠），
-  // 不再全前排擠同一個 lz=3.0 槽位。這就是攔網手要讀的第一組線索。
-  // 只在我方持球且已完成第一擊時生效——接發（touches===0）與防守站位一格不動
+  // Transition 拉開（Phase 5 W1 §2-2）＋§2-3 等待姿勢：我方一擊完成的瞬間，
+  // **每一名**合法攻擊手轉身跑向自己那條線的助跑起點（MB 貼網等快攻／兩翼四步外／
+  // 後排最遠），不再全前排擠同一個 lz=3.0 槽位。這是攔網手要讀的第一組線索。
+  // §4 之後這一段只服務「還沒到起步 tick」的人——起步後改吃上面的助跑段、
+  // 收勢窗過了則落到下面的職責位（不再倒著跑回起點＝自然收勢）。
+  // startTick 為 null（二傳觸球時刻預測失效）＝退回本輪之前的行為：一路站在起點
   if (r.possession === team && r.touches >= 1 && aiState.approach?.team === team) {
-    const start = approachStartOf(aiState.approach.routes, playerId);
-    if (start) return moveIntent(game, playerId, tick, actor, start);
+    const route = approachRouteOf(aiState.approach.routes, playerId);
+    if (route && (route.startTick == null || tick < route.startTick)) {
+      return moveIntent(game, playerId, tick, actor, route.start);
+    }
   }
 
   // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位
   return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));
+}
+
+// §4 A1：這個人此刻「正在跑自己那條助跑線」嗎？（起步 tick 到了、收勢窗還沒過）
+// 回傳 route（含起跳點）或 null。只在我方持球且已完成第一擊時成立——
+// 接發（touches===0）與防守站位一格不動
+function approachRunOf(aiState, playerId, tick, team, r) {
+  if (r.possession !== team || r.touches < 1 || aiState.approach?.team !== team) return null;
+  const route = approachRouteOf(aiState.approach.routes, playerId);
+  if (!route || route.startTick == null) return null;
+  return tick >= route.startTick && tick < route.settleTick ? route : null;
+}
+
+// §4 A1：這個人「已經在二傳觸球前起跑了」嗎？
+// 只有一速／二速的 route 會在二傳觸球前跨過 startTick——三速的起步 tick 就是二傳
+// 觸球那一刻，起跑與否交給既有的一氣呵成邏輯判（本輪一格不動）。
+// 兩個條件都要成立（tempo 不是三速、且 startTick 真的已經過了），
+// 因為「決策時點後移」不等於「取消一氣呵成」：還沒起跑的人照樣該在起點等
+function approachLaunched(aiState, playerId, tick) {
+  const route = aiState.approach ? approachRouteOf(aiState.approach.routes, playerId) : null;
+  if (!route || route.tempo === 'three' || route.startTick == null) return false;
+  return tick >= route.startTick;
 }
 
 // 觸球選擇：第一擊墊給舉球點、第二擊舉給攻擊手、第三擊前排扣球／其餘送安全球
