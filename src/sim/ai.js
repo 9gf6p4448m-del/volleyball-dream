@@ -6,7 +6,7 @@
 import { BALL, COURT, SIM_DT } from './constants.js';
 import { serverId } from './match.js';
 import {
-  otherTeam, basePosition, localToWorld, isFrontRow, positionOf, TEAM_SIDE,
+  otherTeam, basePosition, localToWorld, isFrontRow, isBackRow, positionOf, TEAM_SIDE,
 } from './rotation.js';
 import { standingReach, spikeReach, moveSpeed } from './player.js';
 import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
@@ -25,6 +25,15 @@ const AI = {
   SPIKE_MIN_Y: COURT.NET_HEIGHT * 0.85, // 球低於此高度就不硬扣、改送安全球
   SPIKE_APPROACH_Y: 2.9,  // 扣球窗上緣（一氣呵成助跑的到位目標：球墜到此高度時人剛到）
   APPROACH_LEAD: 12,      // 助跑提前量（tick）：比精算早到 0.2s＝短暫引臂接起跳，不罰站
+  // 起跳點＝擊球點往自家後場退多遠（m）——決定「空中前飄」的實際距離。
+  // 前排幾乎垂直拔起（真人 0.3-0.5m）；後排在三米線後起跳、往前上方衝進去打，
+  // 位移本就較大。上限受 TUNING.REACH_RADIUS(1.3) 約束——退太遠就打不到球
+  // 直覺會以為「退得遠＝飄得遠」，實際相反：退得遠＝更早到位＝停得更久＝前飄更小
+  // （探針實證：back 0.9 的後排前飄只有 0.21m，前排 0.45 反而 0.71m）。
+  // 要後排有「往前衝進去打」的位移，反而要讓他站得靠近一點、晚一點到位
+  TAKEOFF_FRONT_M: 0.68,
+  TAKEOFF_BACK_M: 0.22,
+  TAKEOFF_SETTLE_M: 0.25,  // 離起跳點多近算「到位」（到位即停止水平移動＝原地拔起）
   SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
   ATTACK_LZ: 1.3,         // 舉球目標深度
   BLOCK_LZ: 0.6,          // 攔網站位深度
@@ -593,6 +602,32 @@ function decideOne(game, aiState, playerId) {
       if (ticksLeft > runTicks + AI.APPROACH_LEAD) {
         return moveIntent(playerId, tick, actor, dutyPosition(game, team, playerId));
       }
+    }
+    // 攻擊手根運動（07-28 Sawmah 拍板，工單 §1「位移驅動動作 → 動作驅動位移」）：
+    // 走位目標＝**起跳點**（擊球點往自家後場退一段），不是擊球點本身；進入滯空窗
+    // （TAKEOFF_LOOKBACK_TICKS＝sim 自己判踏線違例用的同一個回溯窗）後**停止水平
+    // 移動＝原地拔起**。原本是「邊跑邊到擊球點」，起跳那刻人還在 1.89m 外、靠空中
+    // 飄過去（真人前排只有 0.3-0.5m）。
+    // 前後排退不同距離＝真實排球：前排幾乎垂直拔起；後排在三米線後起跳、往前上方
+    // 衝進去打（舉球點本就送到線後——setAimFor pipe lz=3.6 vs 前排 1.0-1.3）
+    if (r.touches === 2 && aiState.attackerId === playerId && aiState.hitPoint) {
+      // 起跳點＝**擊球點**（球墜到扣球窗上緣 SPIKE_APPROACH_Y 的水平位置＝hitPoint）
+      // 往自家後場退一段。不可用 landing——那是球「落地」的點，球飛到那裡時高度
+      // 已近 0、早就扣不了（治具實證：用 landing 當基準＝殺球 1.42→0.19）。
+      // 停止條件用**到位**不用時間：時間條件（ticksToHit≤24）會在人還在半路時就
+      // 叫停，一樣打不到（治具實證：勝率 0%）。到位才停＝原地拔起；沒到位照跑，
+      // 不會比原本更差
+      const back = isBackRow(game.match.rotations[team], playerId)
+        ? AI.TAKEOFF_BACK_M : AI.TAKEOFF_FRONT_M;
+      const spot = {
+        x: aiState.hitPoint.x,
+        z: aiState.hitPoint.z + TEAM_SIDE[team] * back,
+      };
+      const gap = Math.hypot(spot.x - actor.x, spot.z - actor.z);
+      if (gap < AI.TAKEOFF_SETTLE_M) {
+        return moveIntent(playerId, tick, actor, { x: actor.x, z: actor.z }); // 原地拔起
+      }
+      return moveIntent(playerId, tick, actor, spot);
     }
     // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
     // 維持瞄地板落點。下游微偏＝觸球點在身前、面向來球（真實接球站位）

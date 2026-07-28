@@ -13,6 +13,8 @@ const OLD_RULE = process.argv[2] === 'old';
 const windupLead = { front: [], back: [] };
 let noWindup = { front: 0, back: 0 };
 
+const takeoffPos = {}; // pid → 起跳瞬間位置（算真正的空中前飄＝人自己移動了多少）
+const drift = { front: [], back: [] };
 const nearAt = []; // windup 觸發當下，攻擊手離球的水平距離（判斷會不會浮空滑行）
 const recv = { serve: {}, spike: {}, rescue: {} };
 const waits = { front: [], back: [] };
@@ -55,11 +57,23 @@ for (let seed = 1; seed <= 40; seed += 1) {
         ? (b.vy < 0 && b.y < 3.6 && near < 2.2)
         : ((ticksToHit !== null && ticksToHit <= 24)
           || (b.vy < 0 && b.y < 3.6 && near < 2.2));
-      if (hit) { windupAt[ai.claimId] = g.tick; nearAt.push(near); }
+      if (hit) {
+        windupAt[ai.claimId] = g.tick;
+        nearAt.push(near);
+        takeoffPos[ai.claimId] = { x: a.x, z: a.z }; // 起跳瞬間的腳下位置
+      }
     }
     const ev = stepGame(g, aiCollectIntents(g, ai));
     for (const e of ev) {
       // 擊球：從「到位」到「出手」之間站了幾 tick
+      // 真・空中前飄：獨立於「是否到球下」的追蹤（新行為下人不會站到 landing 上）
+      if (e.type === 'TOUCH' && e.kind === 'spike' && takeoffPos[e.playerId]) {
+        const tp0 = takeoffPos[e.playerId];
+        const a3 = g.actors[e.playerId];
+        const isBack = isBackRow(g.match.rotations[g.players[e.playerId].teamId], e.playerId);
+        (isBack ? drift.back : drift.front).push(Math.hypot(a3.x - tp0.x, a3.z - tp0.z));
+        delete takeoffPos[e.playerId];
+      }
       if (e.type === 'TOUCH' && e.kind === 'spike' && atk && e.playerId === atk.pid) {
         (atk.back ? waits.back : waits.front).push(g.tick - atk.arrivedTick);
         const key = atk.back ? 'back' : 'front';
@@ -120,3 +134,10 @@ console.log('');
 console.log('-- 4 **離地起跳**當下離球距離＝空中前飄（真人前排 0.3-0.5m、後排更大）--');
 console.log('n=' + nearAt.length + '：p50=' + q(nearAt, 0.5).toFixed(2) + 'm  p90=' + q(nearAt, 0.9).toFixed(2) + 'm  max=' + Math.max(...nearAt).toFixed(2) + 'm');
 console.log('   超過 3m 的比例：' + ((nearAt.filter((d) => d > 3).length / nearAt.length) * 100).toFixed(1) + '%');
+
+console.log('');
+console.log('-- 5 **真・空中前飄**：起跳瞬間 → 擊球瞬間，人自己移動了多少（工單門檻：前排 ≤0.5m）--');
+for (const [k, arr] of [['前排', drift.front], ['後排(pipe)', drift.back]]) {
+  if (!arr.length) { console.log(k + '：無樣本'); continue; }
+  console.log(k + ' n=' + arr.length + '：p50=' + q(arr, 0.5).toFixed(2) + 'm  p90=' + q(arr, 0.9).toFixed(2) + 'm  max=' + Math.max(...arr).toFixed(2) + 'm');
+}
