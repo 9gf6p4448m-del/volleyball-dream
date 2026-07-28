@@ -333,21 +333,30 @@ export function createGeoAnimator(rig) {
       const armSwing = 0.5 * runW;
       const idleW = 1 - runW;
       const baseSpine = 0.16 * runW + 0.07 * idleW + breath;
+      // ★ 步相權重＝「人是否真的在位移」（runW 已是平滑後的速度權重）。
+      // 沒有這一項的話：4.7 的「到位即停＝原地拔起」會讓人在助跑動畫播完前就
+      // 站住，腿卻照序列時間繼續踩＝**原地左右左右跳舞**（07-28 Sawmah 試玩回報）。
+      // 用 runW 而不是瞬時速度：它有 ~100ms 的指數平滑，減速中的制動步仍看得到，
+      // 但真的站定超過幾幀後腿就收乾淨
+      const stepW = stepInfo ? runW : 0;
+      const poseCrouch = (pose ? blended.crouch * w : 0);
       const crouch = stepInfo
-        ? stepInfo.crouch + 0.02 * idleW
-        : (pose ? blended.crouch * w : 0) + 0.02 * idleW;
+        ? lerp(poseCrouch, stepInfo.crouch, stepW) + 0.02 * idleW
+        : poseCrouch + 0.02 * idleW;
 
       if (stepInfo) {
         // Phase 5 W1 §2-2：助跑三/四步節奏——踩前腳當幀擺幅最大，另一腳小幅拖後；
         // 不疊加連續跑步相位（stepPhase 的半波本身就是離散的三/四段步相）
-        const forward = -stepInfo.swing;
-        const trail = stepInfo.swing * 0.3;
+        const sw = stepInfo.swing * stepW;
+        const forward = -sw;
+        const trail = sw * 0.3;
         j.rHip.rotation.x = (stepInfo.lead === 'r' ? forward : trail) - crouch * 1.1;
         j.lHip.rotation.x = (stepInfo.lead === 'l' ? -forward : -trail) - crouch * 1.1;
         j.rHip.rotation.z = 0;
         j.lHip.rotation.z = 0;
-        j.rKnee.rotation.x = 0.12 + crouch * 2.2 + (stepInfo.lead === 'r' ? stepInfo.swing * 0.5 : 0);
-        j.lKnee.rotation.x = 0.12 + crouch * 2.2 + (stepInfo.lead === 'l' ? stepInfo.swing * 0.5 : 0);
+        // 站定時回到待命屈膝（0.14 * idleW），不是僵直站著
+        j.rKnee.rotation.x = 0.12 + 0.14 * idleW + crouch * 2.2 + (stepInfo.lead === 'r' ? sw * 0.5 : 0);
+        j.lKnee.rotation.x = 0.12 + 0.14 * idleW + crouch * 2.2 + (stepInfo.lead === 'l' ? sw * 0.5 : 0);
       } else {
         // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
         j.rHip.rotation.x = -legSwing * s - crouch * 1.1;

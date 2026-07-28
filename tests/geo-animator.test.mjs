@@ -239,6 +239,10 @@ test('§3 無 sustain 的序列行為完全不變（既有動作零影響）', (
 // Phase 5 W1 §2 助跑三步節奏 ＋ §1b 慣用手（07-28 kickoff：表現層＋步序，戰術層不做）
 // TICK（1/60）沿用檔案前段 §3 測試已宣告的常數
 const APPROACH3_DUR = 0.75;
+// 助跑取樣速度（07-28 修「原地跳舞」後必填）：步相擺幅綁 runW＝位移權重，
+// 餵 speed=0 等於量「站著卻在助跑」——那是 bug 態，不是真實引擎產得出的狀態。
+// 4.2 沿用本檔「步幅匹配」測試的快跑取樣值
+const APPROACH_SPEED = 4.2;
 
 test('§2-2 助跑三步節奏：三等分時段可見三次明確步相，第二步（制動步）擺幅與下沉都是三步之最', () => {
   const rig = mkRig();
@@ -247,7 +251,7 @@ test('§2-2 助跑三步節奏：三等分時段可見三次明確步相，第�
   const totalTicks = Math.round(APPROACH3_DUR * 60);
   const thirds = [[], [], []];
   for (let i = 0; i < totalTicks; i += 1) {
-    anim.update(TICK, 0);
+    anim.update(TICK, APPROACH_SPEED);
     const stride = Math.max(
       Math.abs(rig.joints.rHip.rotation.x),
       Math.abs(rig.joints.lHip.rotation.x),
@@ -271,7 +275,7 @@ test('§1b 慣用手：左手選手助跑步序鏡像（右手＝左-右-左，�
     const anim = createGeoAnimator(rig);
     anim.trigger('approach3');
     const ticks = Math.round(midFraction * APPROACH3_DUR * 60);
-    for (let i = 0; i < ticks; i += 1) anim.update(TICK, 0);
+    for (let i = 0; i < ticks; i += 1) anim.update(TICK, APPROACH_SPEED);
     return Math.abs(rig.joints.rHip.rotation.x) > Math.abs(rig.joints.lHip.rotation.x) ? 'r' : 'l';
   };
   const midpoints = [1 / 6, 3 / 6, 5 / 6]; // 三步窗（各 1/3）各自的中點
@@ -303,4 +307,36 @@ test('§2-3 等待姿勢：transitionWait 明顯不同於單純待命（前傾�
   assert.ok(rig.joints.spine.rotation.x > 0.1, `應有前傾（${rig.joints.spine.rotation.x.toFixed(2)}）`);
   anim.update(1.2, 0); // 尚未到 sustain 上限（dur 0.3 + sustain 1.5）
   assert.ok(!anim.isIdle(), '在 sustain 期間應持續 hold 住等待姿勢');
+});
+
+// 07-28 Sawmah 試玩：「扣球前會左右左右跳動，但其實沒有移動位置，像在跳舞」
+// 成因＝助跑步相照序列時間硬播、不看速度；4.7「到位即停＝原地拔起」讓人在
+// 動畫播完前就站住 → 腿繼續踩。修法＝步相擺幅乘上 runW（平滑後的位移權重）。
+// 量法：同一段助跑動畫，分別餵「有在跑」與「站著不動」，比較大腿擺幅的變化量
+// （變化量而非絕對值——站定時允許有固定的預備屈膝，不允許的是「持續擺動」）
+function hipSwingRange(speed) {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('approach3');
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < 30; i += 1) { // approach3 全長內取樣
+    anim.update(1 / 60, speed);
+    const d = rig.joints.rHip.rotation.x - rig.joints.lHip.rotation.x; // 兩腿相對擺幅
+    lo = Math.min(lo, d);
+    hi = Math.max(hi, d);
+  }
+  return hi - lo;
+}
+
+test('§2 助跑步相：站著不動時不得原地踏步（跳舞 bug 回歸）', () => {
+  const still = hipSwingRange(0);
+  assert.ok(still < 0.1, `站定時兩腿不得持續擺動（實測擺幅 ${still.toFixed(3)}）`);
+});
+
+test('§2 助跑步相：真的在跑時三步節奏仍在（修法不得把助跑一起關掉）', () => {
+  const moving = hipSwingRange(4.2);
+  const still = hipSwingRange(0);
+  assert.ok(moving > 0.5, `助跑中應有明顯步相擺動（實測 ${moving.toFixed(3)}）`);
+  assert.ok(moving > still * 5, `跑動與站定的擺幅要有量級差（跑 ${moving.toFixed(3)} vs 站 ${still.toFixed(3)}）`);
 });
