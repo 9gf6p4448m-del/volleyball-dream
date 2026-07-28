@@ -68,6 +68,11 @@ export function onCourt(game, playerId) {
 // 後排踏線違例就是用這個回溯窗判起跳腳位置）——動畫與規則同一個時間錨點，
 // 玩家看到的起跳點就是規則認定的起跳點
 const APPROACH_LEAD_TICKS = 40;
+// 接球/舉球的預備動作提前量（tick）：略短於各自的預備序列，讓觸球動畫無縫接管
+const RECEIVE_READY_LEAD = 26;
+// 舉球的接觸高度比接發高（二傳在頭上出手），而 contactPoint 是用接發高度算的
+// ——同樣倒數 22 tick，實際只剩 11 tick 可播（探針實測）。差額補進提前量
+const SET_READY_LEAD = 34;
 const TAKEOFF_LEAD_TICKS = TUNING.TAKEOFF_LOOKBACK_TICKS;
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
@@ -214,6 +219,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     switchKey: '',
     lastWindupFlight: -1,       // AI 攻擊手起跳動畫：每個 flight 只播一次
     lastApproachFlight: -1,     // 同上，助跑段（零跳躍）獨立旗標
+    lastReadyFlight: -1,        // 同上，接球/舉球預備段
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
     shake: 0,
@@ -1374,6 +1380,20 @@ function updateAssistAndPoses(s) {
   // 玩家放開起跳／點攔網 → 立即播動作（後續由 sim 事件接手）
   if (stage.controls.consumeJumpSignal()) stage.matchView.triggerPose(s.controlledId, 'windup');
   if (stage.controls.consumeBlockSignal()) stage.matchView.triggerPose(s.controlledId, 'block');
+  // AI 接球/舉球預備（07-28 動作協調性）：claim 者在球到之前先擺好姿勢——
+  // 原本兩者都是「球碰到手才播動作」。用協調層算好的接觸點倒數（同扣球那套）
+  if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.controlledId
+    && aiState.contactPoint?.ticks != null && aiState.flightId !== s.lastReadyFlight) {
+    const toContact = aiState.contactPoint.ticks - (game.tick - aiState.planTick);
+    const lead = game.rally.touches === 1 ? SET_READY_LEAD : RECEIVE_READY_LEAD;
+    if (toContact <= lead && game.rally.touches <= 1) {
+      s.lastReadyFlight = aiState.flightId;
+      stage.matchView.triggerPose(
+        aiState.claimId,
+        game.rally.touches === 1 ? 'setReady' : 'receiveReady',
+      );
+    }
+  }
   // AI 攻擊手「先跳後揮」：第三擊球下墜接近攻擊手時先播起跳引臂（觸球才揮臂）
   if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId &&
       aiState.claimId !== s.controlledId && aiState.flightId !== s.lastWindupFlight) {

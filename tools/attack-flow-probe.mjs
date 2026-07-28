@@ -15,6 +15,7 @@ let noWindup = { front: 0, back: 0 };
 
 const takeoffPos = {}; // pid → 起跳瞬間位置（算真正的空中前飄＝人自己移動了多少）
 const drift = { front: [], back: [] };
+const readyLead = { recv: [], set: [] }; // 預備動作觸發→實際觸球的 tick 數
 const nearAt = []; // windup 觸發當下，攻擊手離球的水平距離（判斷會不會浮空滑行）
 const recv = { serve: {}, spike: {}, rescue: {} };
 const waits = { front: [], back: [] };
@@ -27,10 +28,11 @@ for (let seed = 1; seed <= 40; seed += 1) {
   const ai = createAiState();
   let atk = null; // { pid, arrivedTick, back }
   let windupAt = {}; // pid → 起手 tick（每 flight 重置）
+  let readyAt = {};  // pid → 接球/舉球預備觸發
   let guard = 0;
   while (g.phase !== 'set_over' && guard < 300000) {
     guard += 1;
-    if (g.rally.flightId !== (windupAt.__f ?? -1)) windupAt = { __f: g.rally.flightId };
+    if (g.rally.flightId !== (windupAt.__f ?? -1)) { windupAt = { __f: g.rally.flightId }; readyAt = {}; }
     const profile = g.rally.profile;
     const touches = g.rally.touches;
     const possession = g.rally.possession;
@@ -45,6 +47,13 @@ for (let seed = 1; seed <= 40; seed += 1) {
           back: isBackRow(g.match.rotations[g.players[ai.attackerId].teamId], ai.attackerId),
         };
       }
+    }
+    // 接球/舉球預備條件（matchLoop 同一份判準）
+    if (ai.claimId && ai.contactPoint?.ticks != null && touches <= 1
+      && readyAt[ai.claimId] === undefined) {
+      const toContact = ai.contactPoint.ticks - (g.tick - ai.planTick);
+      const lead = touches === 1 ? 34 : 26;
+      if (toContact <= lead) readyAt[ai.claimId] = { tick: g.tick, kind: touches === 1 ? 'set' : 'recv' };
     }
     // windup 條件（matchLoop:1368）——與「是否已到球下」無關，獨立追蹤
     if (touches === 2 && ai.claimId && windupAt[ai.claimId] === undefined) {
@@ -83,6 +92,12 @@ for (let seed = 1; seed <= 40; seed += 1) {
         atk = null;
       }
       if (e.type === 'DEAD_BALL') atk = null;
+      // 預備動作 → 實際觸球的間隔
+      if (e.type === 'TOUCH' && readyAt[e.playerId]) {
+        const ra = readyAt[e.playerId];
+        readyLead[ra.kind].push(g.tick - ra.tick);
+        delete readyAt[e.playerId];
+      }
       // 第一觸歸屬：接發／接殺／救自家噴球
       if (e.type === 'TOUCH' && e.touches === 1) {
         const role = g.players[e.playerId].currentRole;
@@ -140,4 +155,11 @@ console.log('-- 5 **真・空中前飄**：起跳瞬間 → 擊球瞬間，人�
 for (const [k, arr] of [['前排', drift.front], ['後排(pipe)', drift.back]]) {
   if (!arr.length) { console.log(k + '：無樣本'); continue; }
   console.log(k + ' n=' + arr.length + '：p50=' + q(arr, 0.5).toFixed(2) + 'm  p90=' + q(arr, 0.9).toFixed(2) + 'm  max=' + Math.max(...arr).toFixed(2) + 'm');
+}
+
+console.log('');
+console.log('-- 6 接球/舉球預備動作能播多久（序列：接球 0.5s=30t、舉球 0.45s=27t）--');
+for (const [k, arr] of [['接球', readyLead.recv], ['舉球', readyLead.set]]) {
+  if (!arr.length) { console.log(k + '：無樣本'); continue; }
+  console.log(k + ' n=' + arr.length + '：預備→觸球 p50=' + q(arr, 0.5) + ' tick（' + (q(arr, 0.5) / 60).toFixed(2) + 's）  p90=' + q(arr, 0.9) + ' tick');
 }

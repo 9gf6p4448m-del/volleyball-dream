@@ -120,6 +120,17 @@ const SEQUENCES = {
   windup: { dur: 0.75, jump: 0.5, land: false, keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }] },
   // 4.5B §8 助跑遲疑：低 trust 快攻的起跳——抬手一半、跳得較矮（與果斷 windup 對照）
   windupHesitant: { dur: 0.75, jump: 0.36, land: false, keys: [{ at: 0, p: 'windupHesitant' }, { at: 1, p: 'windupHesitant' }] },
+  // 4.7 動作協調性（07-28 Sawmah：「所有動作的流暢度檢查一下」）：接球與舉球
+  // 原本都是**球碰到手才播動作**——站著/跑著→突然出手。補預備段：球到之前先
+  // 擺好姿勢，觸球時由 bump/overhead 接管（與扣球 approach→windup 同一套修法）
+  receiveReady: {
+    dur: 0.5, jump: 0, land: false,
+    keys: [{ at: 0, p: 'bumpReady' }, { at: 1, p: 'bumpReady' }],
+  },
+  setReady: {
+    dur: 0.45, jump: 0, land: false,
+    keys: [{ at: 0, p: 'setReach' }, { at: 1, p: 'setReach' }],
+  },
   // §P5：帶 land 的序列播完自動接這段（見 update 尾端）——屈膝吸收 0.25s 再起身
   landSoft: {
     dur: 0.26, jump: 0, land: false,
