@@ -17,7 +17,9 @@ import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA } from './stamina.js';
 
-const AI = {
+// export：助跑起點的不變量測試要拿 TAKEOFF_* 算「起跳點在哪」，
+// 常數必須是同一份——測試自己抄一份就會跟本體漂移（07-28）
+export const AI = {
   SERVE_DELAY: 30,        // 可發球後再等的 tick 數（模擬哨音到發球的節奏）
   ARRIVE_EPS: 0.06,       // 到位判定（m），避免抖動
   ATTEMPT_RADIUS: 0.95,   // 觸球嘗試距離（保底寬門檻）＝ REACH_RADIUS × 此係數

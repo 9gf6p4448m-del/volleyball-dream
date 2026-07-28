@@ -11,6 +11,26 @@ import {
   APPROACH, approachStartFor, approachRoutesFor, approachStartOf,
 } from '../src/sim/approach.js';
 import { isFrontRow, isBackRow, TEAM_SIDE } from '../src/sim/rotation.js';
+import { setAimFor, AI } from '../src/sim/ai.js';
+
+// 不變量（07-28 事後補）：助跑起點必須在「起跳點」之外，否則助跑段會被
+// 「到位即停」的半徑吃光，人直接站到球下面等——就是 07-23 拍板禁止的網前罰站。
+//   起跳點 lz ＝ 舉球落點 lz ＋（後排 TAKEOFF_BACK_M／前排 TAKEOFF_FRONT_M）
+// 初版 quick 寫 1.5 時這個值是 −0.43m（起點比起跳點還貼網），實跑罰站率 100%。
+// 這是純算術，動手前三十秒就能驗——比任何實跑測試都早抓到（見 lessons 07-26）。
+test('不變量：每條攻擊線的助跑起點都必須留得下助跑段（負值＝網前罰站）', () => {
+  const BACK = new Set(['pipe', 'dball']);
+  const runway = (kind) => {
+    const aim = setAimFor(null, 'A', null, kind);
+    const takeoffLz = aim.lz + (BACK.has(kind) ? AI.TAKEOFF_BACK_M : AI.TAKEOFF_FRONT_M);
+    return APPROACH[kind].lz - takeoffLz - AI.TAKEOFF_SETTLE_M;
+  };
+  for (const kind of Object.keys(APPROACH)) {
+    const r = runway(kind);
+    // 0.5m＝一步；低於一步就不叫助跑，等於原地拔起
+    assert.ok(r >= 0.5, `${kind} 的可跑助跑段只有 ${r.toFixed(2)}m（須 ≥0.5m＝至少一步）`);
+  }
+});
 
 const lzOf = (start, team) => TEAM_SIDE[team] * start.z;
 
@@ -121,11 +141,20 @@ test('實跑：二傳觸球瞬間 MB 貼網、兩翼四步外、後排最遠（�
   const mq = median(lz.quick);
   const mw = median(lz.wing);
   const mb = median(lz.back);
-  assert.ok(mq < mw - 1, `MB 須明顯比兩翼貼網（quick=${mq.toFixed(2)} wing=${mw.toFixed(2)}）`);
+  // 門檻 1→0.4：07-28 Sawmah 拍板把 quick 起點從 1.5 拉到 3.0（修「100% 罰站
+  // 0.5 秒」的退化，見 approach.js quick 的註解），代價就是與兩翼的區隔從 2.1m
+  // 縮到 0.6m。「MB 最貼網」的規格未變、只是幅度變小，故放寬門檻而非移除斷言
+  assert.ok(mq < mw - 0.4, `MB 須比兩翼貼網（quick=${mq.toFixed(2)} wing=${mw.toFixed(2)}）`);
   assert.ok(mb > mw + 1, `後排須明顯比兩翼遠（back=${mb.toFixed(2)} wing=${mw.toFixed(2)}）`);
   // 拉開要「看得出來」：兩翼站到攻擊線外、MB 站進前區
   assert.ok(mw > 3, `兩翼助跑起點須在攻擊線外（${mw.toFixed(2)}）`);
-  assert.ok(mq < 2, `MB 須進到前區等快攻（${mq.toFixed(2)}）`);
+  // ★§4 待恢復：原斷言是 `mq < 2`（MB 進前區等快攻）。它與「助跑起點必須留得下
+  // 助跑段」的不變量在**現行起跳幾何下數學上互斥**——MB 起跳點固定在 1.68m
+  // （舉球落點 1.0 ＋ TAKEOFF_FRONT_M 0.68，後者是 4.7 禁區常數本輪不得動），
+  // 要留一步助跑起點就得 ≥2.43m，不可能 <2。
+  // 真實排球中 MB 能貼網站是因為**二傳觸球前就起跳了**（一速）＝§4 A1 的定義，
+  // 本輪未做。§4 把 MB 起跳時機提前後，起點才能收回前區，屆時恢復此斷言。
+  assert.ok(mq < 3.2, `MB 起點仍須在兩翼之內（${mq.toFixed(2)}）`);
 });
 
 test('決定論：同 seed 兩次跑，助跑線分配與座標逐值相同', () => {

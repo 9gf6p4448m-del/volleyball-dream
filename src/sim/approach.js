@@ -19,8 +19,14 @@ import { localToWorld } from './rotation.js';
 //
 // steps＝助跑步數（§2-4 位置例外的規格值，供表現層挑步序節奏；sim 不消費）
 export const APPROACH = {
-  // MB 快攻：兩步、甚至無步——**離網最近**，二傳觸球前就要起跳
-  quick: { lx: 0, lz: 1.5, steps: 2 },
+  // MB 快攻：兩步——**離網最近**（3.0 < 兩翼 3.6），二傳觸球前就要起跳。
+  // ★ lz 不得小於「起跳點 lz」＋助跑距離：起跳點＝hitPoint.z + TAKEOFF_FRONT_M
+  // 實測 p50 ≈ 1.99，再扣 TAKEOFF_SETTLE_M 0.25（到位即停）＝可跑的助跑段。
+  // 初版寫 1.5（比起跳點還貼網）→ 助跑被吃光、退回 07-23 拍板禁止的「提早到網前
+  // 罰站」：attack-flow-probe §2 從 0 筆樣本暴增到 537 筆、罰站 p50 31 tick、
+  // 站超過 0.5s 佔 100%。3.0 是改動前 dutyPosition 的等效值（該版罰站 0 筆），
+  // 留約 1m 助跑＝MB 的兩步。（07-28 Sawmah 拍板；§4 A1 把 MB 起跳提前後可再議）
+  quick: { lx: 0, lz: 3.0, steps: 2 },
   // OH 4 號位：約四步距離離網，從邊線外側切進來
   left: { lx: -3.6, lz: 3.6, steps: 4 },
   // OPP 2 號位：沿用 OH 架構鏡像
