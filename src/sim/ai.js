@@ -15,13 +15,18 @@ import { approachRoutesFor, approachStartOf } from './approach.js';
 import { blockLaneRead, digForBlock } from './blockRead.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
-import { STAMINA } from './stamina.js';
+import { STAMINA, staminaPerfMul } from './stamina.js';
 
 // export：助跑起點的不變量測試要拿 TAKEOFF_* 算「起跳點在哪」，
 // 常數必須是同一份——測試自己抄一份就會跟本體漂移（07-28）
 export const AI = {
   SERVE_DELAY: 30,        // 可發球後再等的 tick 數（模擬哨音到發球的節奏）
-  ARRIVE_EPS: 0.06,       // 到位判定（m），避免抖動
+  // 到位判定（m）：小於此距離就完全不動。**必須遠小於單 tick 步長**
+  // （步長＝moveSpeed 2.8–5.2 / 60 ＝ 0.047–0.087 m），否則走位目標每 tick 的微移
+  // 會被死區吃掉、累積到帶外才「一次全速釋放」＝滿速↔靜止的 stop-go 極限環
+  // （07-28 逐幀實測：速度在 4.29 與 0 之間每 3–4 tick 交替＝視覺上的「原地跳舞」）。
+  // 0.004m 的殘差一次釋放＝0.24 m/s，低於表現層的移動門檻 0.25，不會誘發踏步動畫
+  ARRIVE_EPS: 0.004,
   ATTEMPT_RADIUS: 0.95,   // 觸球嘗試距離（保底寬門檻）＝ REACH_RADIUS × 此係數
   RECV_CONTACT_Y: 1.35,   // 接球舒適高度（走位深度：瞄球墜到此高度的水平位置＝接觸點）
   RECV_BAND: 0.3,         // 接球高度帶半寬（球墜進 1.35±0.3 時抓「到位觸球」）
@@ -561,7 +566,7 @@ function decideOne(game, aiState, playerId) {
       }
       return null; // 發球員原地等節奏
     }
-    return moveIntent(playerId, tick, actor, homePosition(game, team, playerId));
+    return moveIntent(game, playerId, tick, actor, homePosition(game, team, playerId));
   }
 
   if (game.phase !== 'rally') return null;
@@ -579,7 +584,7 @@ function decideOne(game, aiState, playerId) {
       const pa = game.actors[aiState.claimId];
       const pd = Math.hypot(ball.x - pa.x, ball.z - pa.z);
       if (pd <= TUNING.REACH_RADIUS * AI.ATTEMPT_RADIUS && tick >= pa.divedUntil) {
-        return moveIntent(playerId, tick, actor, aiState.landing);
+        return moveIntent(game, playerId, tick, actor, aiState.landing);
       }
     }
     // 走位深度（只作用於接對方來球的第一觸 receive/dig，不碰舉球/扣球——那是高點打）：
@@ -651,7 +656,7 @@ function decideOne(game, aiState, playerId) {
         const wait = (aiState.approach?.team === team
           ? approachStartOf(aiState.approach.routes, playerId) : null)
           ?? dutyPosition(game, team, playerId);
-        return moveIntent(playerId, tick, actor, wait);
+        return moveIntent(game, playerId, tick, actor, wait);
       }
     }
     // 攻擊手根運動（07-28 Sawmah 拍板，工單 §1「位移驅動動作 → 動作驅動位移」）：
@@ -676,16 +681,16 @@ function decideOne(game, aiState, playerId) {
       };
       const gap = Math.hypot(spot.x - actor.x, spot.z - actor.z);
       if (gap < AI.TAKEOFF_SETTLE_M) {
-        return moveIntent(playerId, tick, actor, { x: actor.x, z: actor.z }); // 原地拔起
+        return moveIntent(game, playerId, tick, actor, { x: actor.x, z: actor.z }); // 原地拔起
       }
-      return moveIntent(playerId, tick, actor, spot);
+      return moveIntent(game, playerId, tick, actor, spot);
     }
     // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
     // 維持瞄地板落點。下游微偏＝觸球點在身前、面向來球（真實接球站位）
     const target = (receivingIncoming && aiState.contactPoint) ? aiState.contactPoint : aiState.landing;
     const sp = Math.hypot(ball.vx, ball.vz);
     const off = sp > 0.5 ? 0.2 : 0;
-    return moveIntent(playerId, tick, actor, {
+    return moveIntent(game, playerId, tick, actor, {
       x: target.x + (off ? (ball.vx / sp) * off : 0),
       z: target.z + (off ? (ball.vz / sp) * off : 0),
     });
@@ -707,7 +712,7 @@ function decideOne(game, aiState, playerId) {
     // 站線幾何自然改變攔網涵蓋——攔網數值零特例
     const scheme = aiState.digBias?.team === team ? aiState.digBias.block : undefined;
     if (scheme === 'off') {
-      return moveIntent(playerId, tick, actor, {
+      return moveIntent(game, playerId, tick, actor, {
         x: clampCourtX(game.ball.x * 0.4 + laneOff), z: TEAM_SIDE[team] * 2.6,
       });
     }
@@ -715,7 +720,7 @@ function decideOne(game, aiState, playerId) {
     const farWing = lane !== 0 && Math.abs(game.ball.x) > 1.8 &&
       Math.sign(laneOff) !== Math.sign(game.ball.x);
     if (farWing) {
-      return moveIntent(playerId, tick, actor, {
+      return moveIntent(game, playerId, tick, actor, {
         x: laneOff * 2, z: TEAM_SIDE[team] * 2.6,
       });
     }
@@ -738,7 +743,7 @@ function decideOne(game, aiState, playerId) {
     }
     const netSpot = { x: nx, z: TEAM_SIDE[team] * AI.BLOCK_LZ };
     const action = r.profile === 'spike' && aiState.landingTeam === team ? 'block' : null;
-    const it = moveIntent(playerId, tick, actor, netSpot);
+    const it = moveIntent(game, playerId, tick, actor, netSpot);
     if (action) it.action = 'block';
     return it;
   }
@@ -753,13 +758,13 @@ function decideOne(game, aiState, playerId) {
     const explicit = aiState.digBias?.team === team ? aiState.digBias.choice : null;
     const read = aiState.blockRead?.team === team ? aiState.blockRead.dig : null;
     const bias = explicit ?? read;
-    return moveIntent(playerId, tick, actor, digTargetFor(game, team, playerId, bias));
+    return moveIntent(game, playerId, tick, actor, digTargetFor(game, team, playerId, bias));
   }
 
   // 舉球員插上：我方接球階段（來球未觸），S 先跑到網前右側舉球點就位（前後排皆然）
   if (player.currentRole === 'setter' && r.possession !== team &&
       aiState.landingTeam === team && !aiState.letDrop) {
-    return moveIntent(playerId, tick, actor, localToWorld(team, 2.2, 1.2));
+    return moveIntent(game, playerId, tick, actor, localToWorld(team, 2.2, 1.2));
   }
 
   // Cover（攻擊掩護）：我方攻擊起跳/出手階段，非攻擊手就掩護位——
@@ -768,7 +773,7 @@ function decideOne(game, aiState, playerId) {
       ((r.touches === 2 && game.ball.vy < 0) ||
         (r.touches === 3 && r.profile === 'spike'))) {
     return moveIntent(
-      playerId, tick, actor, coverPosition(game, team, playerId, aiState.attackerId),
+      game, playerId, tick, actor, coverPosition(game, team, playerId, aiState.attackerId),
     );
   }
 
@@ -778,11 +783,11 @@ function decideOne(game, aiState, playerId) {
   // 只在我方持球且已完成第一擊時生效——接發（touches===0）與防守站位一格不動
   if (r.possession === team && r.touches >= 1 && aiState.approach?.team === team) {
     const start = approachStartOf(aiState.approach.routes, playerId);
-    if (start) return moveIntent(playerId, tick, actor, start);
+    if (start) return moveIntent(game, playerId, tick, actor, start);
   }
 
   // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位
-  return moveIntent(playerId, tick, actor, dutyPosition(game, team, playerId));
+  return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));
 }
 
 // 觸球選擇：第一擊墊給舉球點、第二擊舉給攻擊手、第三擊前排扣球／其餘送安全球
@@ -883,11 +888,22 @@ function homePosition(game, team, playerId) {
   return basePosition(team, positionOf(rot, playerId));
 }
 
-function moveIntent(playerId, tick, actor, target) {
+// 走位 Intent：方向 × 幅值。**不過衝**——剩餘距離小於一步時，把該 tick 的幅值裁到
+// 「剛好走到」（消費端 game.js applyMove 只在 |move|>1 時正規化，|move|<1 ＝該比例的步長）。
+// 沒有這道裁切時，滿速一步（0.0715m）會跨過目標、下一 tick 落進到位帶完全不動，
+// 目標微移又彈出去＝滿速↔靜止的極限環（07-28 逐幀實測到的「原地跳舞」）
+function moveIntent(game, playerId, tick, actor, target) {
   const dx = target.x - actor.x;
   const dz = target.z - actor.z;
   const len = Math.hypot(dx, dz);
-  const move = len < AI.ARRIVE_EPS ? { x: 0, z: 0 } : { x: dx / len, z: dz / len };
+  let move = { x: 0, z: 0 };
+  if (len >= AI.ARRIVE_EPS) {
+    const player = game.players[playerId];
+    // 與 applyMove 同一份步長公式（含疲勞折速）——兩邊算的是同一個 tick 的同一步
+    const step = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
+    const mag = Math.min(1, len / step);
+    move = { x: (dx / len) * mag, z: (dz / len) * mag };
+  }
   return createIntent({ playerId, tick, move, aim: { x: target.x, z: target.z } });
 }
 
