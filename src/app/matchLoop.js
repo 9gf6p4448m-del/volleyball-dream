@@ -60,6 +60,9 @@ export function onCourt(game, playerId) {
   return game.match.rotations[team].includes(playerId);
 }
 
+// AI 攻擊手引臂起跳的提前量（tick）：略短於 windup 動畫本身（0.75s＝45 tick）
+// ——寧可差一點播完，也不要播完落地再重跳一次（那比現在更糟）
+const WINDUP_LEAD_TICKS = 40;
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
 const TAPE_TAIL = 240;     // 情蒐錄影帶：尾段 4 秒、略快於一般回放
@@ -1369,7 +1372,18 @@ function updateAssistAndPoses(s) {
       aiState.claimId !== s.controlledId && aiState.flightId !== s.lastWindupFlight) {
     const atk = game.actors[aiState.claimId];
     const b = game.ball;
-    if (b.vy < 0 && b.y < 3.6 && Math.hypot(b.x - atk.x, b.z - atk.z) < 2.2) {
+    // 07-28 追修（Sawmah 試玩：「還是會停在球下才攻擊」）：原條件＝球高<3.6m
+    // 且距離<2.2m，兩者同時成立時**離擊球只剩 5-6 tick（0.08s）**——0.75s 的引臂
+    // 動畫 100% 播不完（tools/attack-flow-probe.mjs 實測 n=3099），視覺上就是
+    // 「站著→突然揮擊」。改用**剩餘時間**觸發：協調層算好的 hitPoint（球墜到扣球窗
+    // 上緣的時空點）倒數到動畫長度時起手，助跑→引臂→起跳→揮擊才連得起來。
+    // 距離仍留一道寬鬆閘（遠處的人不該提早浮空）；純表現層、零 sim diff
+    const ticksToHit = aiState.hitPoint?.ticks != null
+      ? aiState.hitPoint.ticks - (game.tick - aiState.planTick)
+      : null;
+    const near = Math.hypot(b.x - atk.x, b.z - atk.z);
+    const timed = ticksToHit !== null && ticksToHit <= WINDUP_LEAD_TICKS && near < 4.5;
+    if (timed || (b.vy < 0 && b.y < 3.6 && near < 2.2)) {
       s.lastWindupFlight = aiState.flightId;
       // 4.5B §8 遲疑/果斷：低 trust 快攻＝抬手一半跳得矮的遲疑版（W3 S 分配的
       // 表現層遺留——「猶豫」從面板標註長到身體語言上；門檻同 setOptions 猶豫線）
