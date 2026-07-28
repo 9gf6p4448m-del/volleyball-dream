@@ -2,7 +2,9 @@
 // geoAnimator 是純函式（rig 注入），node 可測；驗 dive 動作驅動撲救姿勢
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGeoAnimator } from '../src/render/geoAnimator.js';
+import {
+  createGeoAnimator, hitLeadTicks, contactSeqFor, SEQ_HIT,
+} from '../src/render/geoAnimator.js';
 import { isLeftHanded } from '../src/render/geoCharacter.js';
 
 // 4.7 動作重製新增三關節：pelvis（骨盆獨立轉）／spineUpper（胸椎）／r-lWrist（壓腕）
@@ -396,4 +398,99 @@ test('§2 助跑步相：真的在跑時三步節奏仍在（修法不得把助�
   const still = hipSwingRange(0);
   assert.ok(moving > 0.5, `助跑中應有明顯步相擺動（實測 ${moving.toFixed(3)}）`);
   assert.ok(moving > still * 5, `跑動與站定的擺幅要有量級差（跑 ${moving.toFixed(3)} vs 站 ${still.toFixed(3)}）`);
+});
+
+// 07-29 Sawmah 試玩：「舉球跟接球會還沒碰到手上就接起來或舉起來了，扣球也是」
+// 根因＝**觸球那一幀播的是預備姿勢**：原本只在 sim 的 TOUCH 事件當下才 trigger 擊球
+// 動作，擊球關鍵幀（bump 0.45／overhead 0.56／spike 0.42）要 0.2–0.3s 後才到
+// （tools/contact-frame-probe.mjs 修前實測：接球落後 12.5 tick、舉球 17.5 tick）。
+// 修法＝擊球動作也走提前量（matchLoop 依 contactPoint 倒數 hitLeadTicks 個 tick 觸發）。
+// 本節守的是動畫端的三件事：①提前量算得對 ②觸球那一幀確實是擊球姿勢
+// ③預備段的交棒（§3 兩次抬手）在新時序下仍然無縫
+test('§4 提前量：hitLeadTicks＝序列起點到擊球關鍵幀的 tick 數（序列調時長會自動跟著調）', () => {
+  assert.equal(hitLeadTicks('bump'), 14);      // 0.45 × 0.5s × 60
+  assert.equal(hitLeadTicks('overhead'), 18);  // 0.56 × 0.55s × 60
+  assert.equal(hitLeadTicks('spike'), 15);     // 0.42 × 0.6s × 60
+  assert.equal(hitLeadTicks('dive'), 0, '沒有擊球關鍵幀的序列回 0＝不提前觸發');
+  assert.equal(hitLeadTicks('nonexistent'), 0);
+});
+
+test('§4 接球：提前 hitLeadTicks 觸發後，觸球那一幀正好是擊球姿勢（bumpHit）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('receiveReady');
+  for (let i = 0; i < 26 - hitLeadTicks('bump'); i += 1) anim.update(TICK, 0); // 預備段先撐著
+  anim.trigger('bump');
+  for (let i = 0; i < hitLeadTicks('bump'); i += 1) anim.update(TICK, 0);      // 倒數到觸球
+  const p = anim.peek();
+  assert.equal(p.type, 'bump');
+  assert.ok(Math.abs(p.tNorm - SEQ_HIT.bump) < 0.04,
+    `觸球幀應落在擊球關鍵幀 ${SEQ_HIT.bump}，實際 ${p.tNorm.toFixed(3)}`);
+  // 姿勢驗證：bumpHit 的 rSh[0]=-1.2、bumpReady=-0.95——修前觸球幀停在 -0.95
+  assert.ok(rig.joints.rShoulder.rotation.x < -1.15,
+    `觸球幀的手臂應已伸到墊球位（bumpHit -1.2），實際 ${rig.joints.rShoulder.rotation.x.toFixed(2)}`);
+});
+
+test('§4 舉球：提前 hitLeadTicks 觸發後，觸球那一幀正好是推出姿勢（setPush）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('setReady');
+  for (let i = 0; i < 11; i += 1) anim.update(TICK, 0); // 預備段（SET_READY_LEAD 34 → 提前量 29）
+  anim.trigger('overhead');
+  for (let i = 0; i < hitLeadTicks('overhead'); i += 1) anim.update(TICK, 0);
+  const p = anim.peek();
+  assert.ok(Math.abs(p.tNorm - SEQ_HIT.overhead) < 0.04,
+    `觸球幀應落在擊球關鍵幀 ${SEQ_HIT.overhead}，實際 ${p.tNorm.toFixed(3)}`);
+  // setReach 的 wrist=-0.42（後倒等球）、setPush=+0.4（推出去）——正負號就是「有沒有出手」
+  assert.ok(rig.joints.rWrist.rotation.x > 0.25,
+    `觸球幀應已壓腕推出（setPush wrist 0.4），實際 ${rig.joints.rWrist.rotation.x.toFixed(2)}`);
+});
+
+test('§4 交棒不得回退：提前觸發後的新時序下，setReady→overhead 仍然無縫（兩次抬手回歸）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('setReady');
+  for (let i = 0; i < 11; i += 1) anim.update(TICK, 0); // 修後的交棒點比修前早 ~13 tick
+  const before = rig.joints.rShoulder.rotation.x;
+  assert.ok(before < -2.2, `交棒前手臂應完全舉起，實際 ${before.toFixed(2)}`);
+  anim.trigger('overhead');
+  let worst = before;
+  for (let i = 0; i < 5; i += 1) { // ATTACK_MS 0.08s ≈ 5 tick＝沒有交棒時的漸入窗
+    anim.update(TICK, 0);
+    worst = Math.max(worst, rig.joints.rShoulder.rotation.x);
+  }
+  assert.ok(worst < -2.2, `交棒期間手臂不得放下，最鬆 ${worst.toFixed(2)}（應保持 ≈-2.3）`);
+});
+
+test('§4 扣球：windup→spike 的空中接續截在擊球關鍵幀（修前截在 0.5＝已在收臂）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('windup');
+  let bodyY = 0;
+  for (let i = 0; i < 24; i += 1) bodyY = anim.update(TICK, 0); // TAKEOFF_LEAD_TICKS＝24
+  anim.trigger('spike');                                        // TOUCH 事件當下接手
+  const after = anim.update(TICK, 0);
+  const p = anim.peek();
+  assert.ok(p.tNorm >= SEQ_HIT.spike && p.tNorm < 0.5,
+    `接手後應落在擊球關鍵幀 ${SEQ_HIT.spike}（修前 0.528＝已越過），實際 ${p.tNorm.toFixed(3)}`);
+  // 壓腕 snap：spikeHit wrist=+0.55、spikeUnlock=-0.62——正號＝手掌已蓋下去
+  assert.ok(rig.joints.rWrist.rotation.x > 0.4,
+    `觸球幀應正在壓腕擊球，實際 ${rig.joints.rWrist.rotation.x.toFixed(2)}`);
+  assert.ok(Math.abs(after - bodyY) < 0.06,
+    `跳躍弧不得因為接續點改變而跳動（windup ${bodyY.toFixed(3)} → spike ${after.toFixed(3)}）`);
+});
+
+// TOUCH 事件 → 該播哪一支（含「提前觸發已經在播就不重播」）——matchView 的唯一判準
+test('§4 不重播：同一次接觸不得播兩次擊球動畫，型別不同才改播', () => {
+  assert.equal(contactSeqFor('receive', 1.2, 'bump'), null, '已提前播 bump＝不重播');
+  assert.equal(contactSeqFor('set', 2.7, 'overhead'), null, '已提前播 overhead＝不重播');
+  assert.equal(contactSeqFor('spike', 3.1, 'spike'), null);
+  // 事前判低手、實際球高過門檻 ⇒ 當場改播高手（＝修前行為，不會變差）
+  assert.equal(contactSeqFor('receive', 1.9, 'bump'), 'overhead');
+  // 沒有提前觸發（玩家操控、被距離閘擋下、逾時作廢）＝照舊由 TOUCH 播
+  assert.equal(contactSeqFor('receive', 1.2, null), 'bump');
+  assert.equal(contactSeqFor('receive', 1.6, null), 'overhead', '門檻 1.6 含等於');
+  assert.equal(contactSeqFor('set', 2.7, null), 'overhead');
+  assert.equal(contactSeqFor('spike', 3.1, null), 'spike');
+  assert.equal(contactSeqFor('dive', 0.4, null), null, '魚躍觸球由 divedUntil 偵測負責');
 });

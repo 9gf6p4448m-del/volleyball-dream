@@ -6,7 +6,7 @@ import { SIM_DT } from '../sim/constants.js';
 import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
 import { createGeoCharacter, createGeoPool, BASE_H } from './geoCharacter.js';
-import { createGeoAnimator } from './geoAnimator.js';
+import { createGeoAnimator, contactSeqFor } from './geoAnimator.js';
 import { STAMINA, tierOf } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
 import { HUDDLE, huddleSlot, coachPos } from './huddleLayout.js';
@@ -16,7 +16,11 @@ import {
   REACH, reachWindow, reachBias, applyReachBias, localBallOffset, worldReachOffset,
 } from './reachAssist.js';
 
-const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
+// 提前觸發的有效期（秒）：這麼久還沒觸到球就作廢、放行 TOUCH 重播一次——寧可補一次
+// 動作，也不要整拍沒動作。探針實測「提前觸發→實際觸球」最長 41 tick（0.68s，舉球提前量
+// 29 tick ＋ 球最多晚到 12 tick），取 1.0s 留裕度：實跑 2284 次接管中，
+// 「壓住 TOUCH 卻已播完（該拍無動作）」0 次
+const CONTACT_ARM_TTL = 1.0;
 const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
 // 頭上標籤＝排球標準角色縮寫（命名統一：廢除 P1–P6 泛稱）
 const ROLE_TAG = { setter: 'S', outside: 'OH', middle: 'MB', opposite: 'OPP', libero: 'L' };
@@ -72,6 +76,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       tagY: p.height.current + 0.45,
       reachKind: 'both', // 夠球補償的手臂組（見 REACH_KIND；由 setPose 逐次更新）
       reachW: 0,         // 夠球包絡的平滑值（0..1）
+      contactArm: null,  // 擊球動作提前觸發的登記（見 triggerContact／CONTACT_ARM_TTL）
     };
   }
   // 觸發動作＝同時記下這個動作該用哪一組手臂夠球（表格未列＝沿用上次）
@@ -113,10 +118,13 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       }
       else if (e.type === 'BLOCK_TOUCH') setPose(u, 'blockJump'); // 4.5B §8 重量感版（蹲→蹬→滯空→落地）
       else if (e.type === 'TOUCH') {
-        if (e.kind === 'spike') setPose(u, 'spike');
-        else if (e.kind === 'set') setPose(u, 'overhead');
-        // kind==='dive'＝魚躍觸球：動畫由 sync 的 divedUntil 偵測負責（撲到/撲空都演），不走墊球
-        else if (e.kind !== 'dive') setPose(u, e.ballY >= OVERHAND_Y ? 'overhead' : 'bump');
+        // 07-29 提前觸發：這一拍的擊球動畫可能已由 matchLoop 依 contactPoint 倒數起播
+        // （contactArm 記著在播哪一支）。該播什麼／要不要重播的判準全在 contactSeqFor；
+        // 不論用不用得上，觸球即消耗——arm 不得跨拍殘留
+        const armed = u.contactArm;
+        u.contactArm = null;
+        const next = contactSeqFor(e.kind, e.ballY, armed?.type ?? null);
+        if (next) setPose(u, next);
       }
     }
     // 死球落點塵土（e.at＝球落地/犯規點）
@@ -130,6 +138,15 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     triggerPose(playerId, type) {
       const u = units[playerId];
       if (u) setPose(u, type);
+    },
+    // 07-29 擊球動作提前觸發（matchLoop 依 aiState.contactPoint 倒數呼叫）：讓擊球
+    // 關鍵幀落在 sim 的觸球那一 tick，而不是觸球後 0.2–0.3s。與 triggerPose 的差別
+    // 只在**登記 arm**——後續的 TOUCH 事件看到同型別就不重播（見 routeEvents）
+    triggerContact(playerId, type) {
+      const u = units[playerId];
+      if (!u) return;
+      setPose(u, type);
+      u.contactArm = { type, ttl: CONTACT_ARM_TTL };
     },
     setControlled(id) { highlightId = id; },
     setTimeoutHuddle(team) { huddleTeam = team; }, // W7.1 #3A：null＝無人集合
@@ -164,6 +181,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         : null;
       for (const [id, u] of Object.entries(units)) {
         const pTeam = gameState.players[id].teamId;
+        // 提前觸發逾時作廢（預測失準、球改道或這球根本不是他碰）：放行後續 TOUCH 重播
+        if (u.contactArm && (u.contactArm.ttl -= dt) <= 0) u.contactArm = null;
         // 魚躍：偵測新倒地（divedUntil 剛跳到未來）→ 撲救動畫；撲到有 TOUCH、撲空無事件，
         // 都靠這裡演，修「按魚躍站著不動」bug（sim 端已倒地、缺的是視覺）
         const diveActor = gameState.actors[id];

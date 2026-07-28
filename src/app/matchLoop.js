@@ -37,6 +37,7 @@ import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js
 import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
+import { hitLeadTicks } from '../render/geoAnimator.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
   lineKillDistance, SIG_LINE_M, timingVerdict,
@@ -77,6 +78,19 @@ const RECEIVE_READY_LEAD = 26;
 // 舉球的接觸高度比接發高（二傳在頭上出手），而 contactPoint 是用接發高度算的
 // ——同樣倒數 22 tick，實際只剩 11 tick 可播（探針實測）。差額補進提前量
 const SET_READY_LEAD = 34;
+// 07-29 Sawmah 試玩：「舉球跟接球會還沒碰到手上就接起來或舉起來了」。根因＝**觸球那一
+// 幀播的是預備姿勢**：原本只在 TOUCH 事件當下才 trigger 擊球動作，擊球關鍵幀要 0.2–0.3s
+// 後才到（tools/contact-frame-probe.mjs 修前實測：接球落後 12.5 tick、舉球 17.5 tick）。
+// 修法＝同一套提前量範式——擊球動作也倒數觸發，提前量＝該序列從起點到擊球關鍵幀的
+// tick 數（geoAnimator.hitLeadTicks，序列調時長會自動跟著調，不會漂移）＋接觸點偏差。
+// 偏差：contactPoint 是用接發高度 1.35m 算的，但**舉球在頭上出手**（sim 實測 p50 2.69m）
+// ⇒ 球比預測早到 11 tick（探針 p50=11、p10=9、p90=11）。接球不另加偏差：預測誤差
+// p50 僅 1 tick，恰與「觸發那一幀 animator 也會前進 1 tick」抵銷（實測校準後 p50 −0.5 tick）
+const SET_CONTACT_BIAS = 11;
+// 觸發當下人離預測接觸點多遠就不提前播（m）：這球根本不是他碰得到的（隊友先接、
+// 或直接落地失分）＝提前播就是對空氣墊球。探針實測 2.5m 保住 97.2% 的真實觸球、
+// 擋掉 85.2% 的落空；被擋下的那些退回 TOUCH 事件觸發＝與修前完全相同
+const CONTACT_NEAR_MAX = 2.5;
 const TAKEOFF_LEAD_TICKS = TUNING.TAKEOFF_LOOKBACK_TICKS;
 const APPROACH_LEAD_FRONT_TICKS = TAKEOFF_LEAD_TICKS + 45; // 3 步：45 tick＝0.75s（approach3 dur）
 const APPROACH_LEAD_BACK_TICKS = TAKEOFF_LEAD_TICKS + 60;  // 4 步：60 tick＝1.0s（approach4 dur）
@@ -226,6 +240,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lastWindupFlight: -1,       // AI 攻擊手起跳動畫：每個 flight 只播一次
     lastApproachFlight: -1,     // 同上，助跑段（零跳躍）獨立旗標
     lastReadyFlight: -1,        // 同上，接球/舉球預備段
+    lastContactFlight: -1,      // 同上，擊球動作提前觸發（每 flight 一次）
     lastWaitFlight: -1,         // Phase 5 W1 §2-3：等待姿勢（transitionWait），每個 flight 只播一次
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
@@ -1399,6 +1414,29 @@ function updateAssistAndPoses(s) {
         aiState.claimId,
         game.rally.touches === 1 ? 'setReady' : 'receiveReady',
       );
+    }
+  }
+  // 擊球動作提前觸發（07-29；見檔頭 SET_CONTACT_BIAS 註解）：讓擊球關鍵幀落在
+  // sim 的觸球那一 tick。預備段（上一區塊）會被無縫接手——setReady/receiveReady
+  // 有 sustain，geoAnimator.trigger 直接延續其權重（不得再出現「兩次抬手」）。
+  // 型別事前判定：舉球恆高手；接球一律低手平墊——contactPoint 的預測接觸高度 1.35m
+  // 本來就低於高手門檻 1.6m。實測 20.8% 的接球實際觸點在 1.6m 以上（快速下墜球提早
+  // 1–2 tick 觸球，而下墜 1 tick 就是 0.25m ⇒ 事前無法在 tick 粒度上分辨），這部分
+  // 由 TOUCH 事件當場改播 overhead＝與修前完全相同的行為，不會變差
+  if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.controlledId
+    && aiState.contactPoint?.ticks != null && aiState.flightId !== s.lastContactFlight
+    && game.rally.touches <= 1) {
+    const toContact = aiState.contactPoint.ticks - (game.tick - aiState.planTick);
+    const isSet = game.rally.touches === 1;
+    const type = isSet ? 'overhead' : 'bump';
+    const lead = hitLeadTicks(type) + (isSet ? SET_CONTACT_BIAS : 0);
+    const claimer = game.actors[aiState.claimId];
+    const gap = Math.hypot(aiState.contactPoint.x - claimer.x, aiState.contactPoint.z - claimer.z);
+    // toContact < 0＝計畫值已過期（擦網/改道後 flight 沒換、預測不再成立）：
+    // 這時提前觸發等於對空氣揮擊，寧可退回 TOUCH 事件觸發
+    if (toContact >= 0 && toContact <= lead && gap <= CONTACT_NEAR_MAX) {
+      s.lastContactFlight = aiState.flightId;
+      stage.matchView.triggerContact(aiState.claimId, type);
     }
   }
   // Phase 5 W1 §2-3 等待姿勢：攻擊手已指定（attackerId，一傳後即定案）但還沒進助跑窗

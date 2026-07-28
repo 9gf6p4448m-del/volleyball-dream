@@ -114,16 +114,21 @@ const POSES = {
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
+// hit＝**擊球關鍵幀**在本序列的位置（0..1）。07-29 Sawmah 試玩回報「還沒碰到手就
+// 接／舉起來了」的根因就在這裡：原本是 TOUCH 事件當下才 trigger，擊球幀要 0.2–0.3s
+// 後才到＝球轉向的那一幀身體還停在預備姿勢。宣告 hit 之後：
+//   ① matchLoop 用 hitLeadTicks() 提前觸發（讓擊球幀落在 sim 的觸球 tick 上）
+//   ② 空中接續（windup→spike）的 carry 上限改吃 hit（見 trigger）
 const SEQUENCES = {
-  bump: { dur: 0.5, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.45, p: 'bumpHit' }, { at: 1, p: 'bumpReady' }] },
+  bump: { dur: 0.5, jump: 0, land: false, hit: 0.45, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.45, p: 'bumpHit' }, { at: 1, p: 'bumpReady' }] },
   // 4.7 動作協調性：二傳出手是短促的一拍——蓄勢長、推出快、回位
   overhead: {
-    dur: 0.55, jump: 0, land: false,
+    dur: 0.55, jump: 0, land: false, hit: 0.56,
     keys: [{ at: 0, p: 'setReach' }, { at: 0.42, p: 'setReach' }, { at: 0.56, p: 'setPush' }, { at: 1, p: 'setReach' }],
   },
   // 4.7 §P3：鞭打嚴格依序解鎖——肩(0.30)→肘(0.36)→腕(0.42 擊球)，不得同幀一起轉
   spike: {
-    dur: 0.6, jump: 0.55, land: true,
+    dur: 0.6, jump: 0.55, land: true, hit: 0.42,
     keys: [
       { at: 0, p: 'spikeWind' },
       { at: 0.3, p: 'spikeWind' },
@@ -208,6 +213,31 @@ const SEQUENCES = {
   nod: { dur: 0.45, jump: 0, land: false, keys: [{ at: 0, p: 'nodNeutral' }, { at: 0.4, p: 'nodDown' }, { at: 1, p: 'nodNeutral' }] },
 };
 
+// 擊球關鍵幀查表（唯讀導出；matchLoop 的提前量與探針/測試的目標值都吃這一份，
+// 避免「序列調了、提前量沒跟著調」的漂移）
+export const SEQ_HIT = Object.freeze(
+  Object.fromEntries(Object.entries(SEQUENCES).filter(([, s]) => s.hit != null).map(([k, s]) => [k, s.hit])),
+);
+// 從序列起點到擊球關鍵幀的 tick 數（60Hz）＝該動作該提前幾 tick 觸發
+export function hitLeadTicks(type) {
+  const seq = SEQUENCES[type];
+  return seq?.hit != null ? Math.round(seq.hit * seq.dur * 60) : 0;
+}
+
+export const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
+// sim 的 TOUCH 事件 → 該播哪一支擊球動畫；null＝本層不播。
+// armed＝**提前觸發已經在播的那一支**（見 matchLoop 的擊球提前量／matchView.triggerContact）：
+//   同一支＝回 null（不得重播——同一次接觸播兩次就是「手抬兩下」）
+//   不同支＝回正確的那一支（事前判低手、實際球高過門檻走高手 ⇒ 當場改播，同修前行為）
+// kind==='dive'＝魚躍觸球：動畫由 matchView 的 divedUntil 偵測負責（撲到/撲空都演）
+export function contactSeqFor(kind, ballY, armed = null) {
+  const type = kind === 'spike' ? 'spike'
+    : kind === 'set' ? 'overhead'
+      : kind === 'dive' ? null
+        : (ballY >= OVERHAND_Y ? 'overhead' : 'bump');
+  return type === armed ? null : type;
+}
+
 const ATTACK_MS = 0.08;
 const RELEASE_MS = 0.2;
 const LAND_FROM = 0.72;
@@ -258,18 +288,35 @@ export function createGeoAnimator(rig) {
     trigger(type) {
       const seq = SEQUENCES[type];
       if (!seq) return;
-      // 空中接續（windup→spike）：延續跳躍弧、不落地重跳
+      // 空中接續（windup→spike）：延續跳躍弧、不落地重跳。
+      // 07-29：上限由固定 0.5 改吃 **seq.hit**（擊球關鍵幀）。原本 windup 播到 0.53
+      // 就被截到 0.5，spike 一接手 t 就落在 0.5＞擊球幀 0.42 ⇒ **觸球那一幀身體已經
+      // 在收臂**（探針實測 t=0.528、擊球幀比觸球早 3.9 tick）＝Sawmah 回報的「扣球也
+      // 是還沒碰到就…」。截在 hit＝觸球那一幀正好是擊球姿勢；跳躍弧的落差
+      // （windup 0.497m → spike 0.42 處 0.533m）僅 3.5cm，肉眼無感
+      const cap = seq.hit ?? 0.5;
       const carry = current && current.seq.jump > 0 && seq.jump > 0
-        ? Math.min(current.t / current.seq.dur, 0.5) * seq.dur
+        ? Math.min(current.t / current.seq.dur, cap) * seq.dur
         : 0;
       // 預備段接續（setReady→overhead、receiveReady→bump）：預備序列撐住的權重
       // 直接交給正式動作，不從 0 重跑 ATTACK 漸入。兩者的第一個關鍵幀是同一個
       // 姿勢（setReach／bumpReady），所以滿權重接手不會跳幀，是自然的續演
       const w0 = current && current.seq.sustain ? lastW : 0;
-      current = { seq, t: carry, w0 };
+      current = { seq, type, t: carry, w0 };
     },
     setHold(type) { hold = type; },
     isIdle() { return current === null; },
+    // 唯讀窺視（測試與 tools/contact-frame-probe.mjs 量「觸球那一幀播到哪」用）：
+    // 不得回傳可變的內部參考——外部只會讀數字
+    peek() {
+      if (!current) return null;
+      return {
+        type: current.type,
+        t: current.t,
+        dur: current.seq.dur,
+        tNorm: Math.min(current.t / current.seq.dur, 1),
+      };
+    },
 
     // 每幀驅動全部關節；回傳 bodyY（跳躍－下蹲的垂直位移，由呼叫端寫進 root.position.y）。
     // lateral（4.7 根運動）：移動方向相對「朝向」的橫向分量（-1..1）——沿網橫移的
@@ -295,7 +342,7 @@ export function createGeoAnimator(rig) {
         const total = seq.dur + (seq.sustain ?? 0);
         if (current.t >= total) {
           // §P5：跳躍類動作落地後自動接緩衝（不得瞬間回站姿）
-          current = seq.land ? { seq: SEQUENCES.landSoft, t: 0, w0: 0 } : null;
+          current = seq.land ? { seq: SEQUENCES.landSoft, type: 'landSoft', t: 0, w0: 0 } : null;
         } else {
           const t = Math.min(current.t / seq.dur, 1);
           const attack = current.w0 + (1 - current.w0) * Math.min(current.t / ATTACK_MS, 1);
