@@ -1,6 +1,8 @@
 // 幾何關節球員（vow3d 路線：零模型檔、程式拼裝、純色材質、程式化動畫）
 // 剪影貼近真實運動員比例；關節軸向自訂＝動畫層完全掌控（不再猜外部骨架軸向）
-// 模型空間：面向 +Z、+X＝角色右手側；基準身高 BASE_H，實際身高由 root 縮放
+// 模型空間：面向 +Z、頭 +Y。**角色右手側＝-X**（three.js 右手座標系：面向 +Z 站著，
+// 右手在 -X 那邊）——07-28 Sawmah 試玩抓到「怎麼是左手扣球」：原本 r 側掛在 +X，
+// 等於全隊的左右手從建模那一刻就是鏡像的。基準身高 BASE_H，實際身高由 root 縮放
 //
 // 效能：14 名球員（雙方 6+1 自由人）原本每人 16 個獨立 Mesh＝224 draw calls。
 // 改用 InstancedMesh 池——每種幾何一個池（10 池＝10 draw calls），關節階層降級為
@@ -147,7 +149,8 @@ export function createGeoCharacter(pool, playerId, teamId, height, isLibero = fa
   // 能獨立於軀幹轉）——預設 rotation 0＝既有動作外觀一格不變
   const pelvis = joint(root, 'pelvis', 0, 0.96, 0);
   add(pelvis, 'hips', kit.shorts, 0, 0, 0).scale.set(1.05, 0.9, 0.8);
-  for (const [side, sx] of [['r', 1], ['l', -1]]) {
+  // sx：r＝-1（-X 才是角色右側，見檔頭），l＝+1
+  for (const [side, sx] of [['r', -1], ['l', 1]]) {
     const hip = joint(pelvis, `${side}Hip`, sx * 0.095, -0.04, 0);
     add(hip, 'thigh', kit.shorts, 0, 0, 0); // 及膝運動短褲
     const knee = joint(hip, `${side}Knee`, 0, -0.46, 0);
@@ -167,7 +170,7 @@ export function createGeoCharacter(pool, playerId, teamId, height, isLibero = fa
   add(neck, 'head', skin, 0, 0.14, 0);
   // 髮帽：只蓋頭頂與後腦（露臉）——縮扁、上移、後偏
   add(neck, 'hair', hair, 0, 0.195, -0.035).scale.set(0.98, 0.62, 0.95);
-  for (const [side, sx] of [['r', 1], ['l', -1]]) {
+  for (const [side, sx] of [['r', -1], ['l', 1]]) {
     const sh = joint(chest, `${side}Shoulder`, sx * 0.225, 0.12, 0);
     add(sh, 'upperArm', kit.jersey, 0, 0, 0); // 短袖
     const el = joint(sh, `${side}Elbow`, 0, -0.32, 0);
