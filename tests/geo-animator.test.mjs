@@ -161,3 +161,23 @@ test('步幅匹配：擺腿振幅隨移速上升（滑冰的成因是步幅不�
   const fast = sample(4.2);
   assert.ok(fast > slow, `快跑的擺腿幅度要大於慢走（slow=${slow.toFixed(2)} fast=${fast.toFixed(2)}）`);
 });
+
+test('側併步：橫移時髖關節側開、前後擺腿明顯減弱（沿網移動不是前跑）', () => {
+  const sample = (lateral) => {
+    const rig = mkRig();
+    const anim = createGeoAnimator(rig);
+    let maxX = 0;
+    let maxZ = 0;
+    for (let i = 0; i < 120; i += 1) {
+      anim.update(1 / 60, 3.5, lateral);
+      maxX = Math.max(maxX, Math.abs(rig.joints.rHip.rotation.x));
+      maxZ = Math.max(maxZ, Math.abs(rig.joints.rHip.rotation.z));
+    }
+    return { maxX, maxZ };
+  };
+  const fwd = sample(0);
+  const side = sample(1);
+  assert.ok(side.maxZ > 0.1, `純橫移要有側開動作（實際 ${side.maxZ.toFixed(3)}）`);
+  assert.ok(fwd.maxZ < 0.01, `純前進不得有側開（實際 ${fwd.maxZ.toFixed(3)}）`);
+  assert.ok(side.maxX < fwd.maxX, `橫移的前後擺腿要比前進小（側 ${side.maxX.toFixed(2)} vs 前 ${fwd.maxX.toFixed(2)}）`);
+});

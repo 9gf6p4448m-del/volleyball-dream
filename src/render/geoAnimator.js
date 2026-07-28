@@ -15,10 +15,10 @@ const SWING_MAX = 0.62;      // 擺腿振幅上限（原固定值＝現在的天
 
 // 姿勢：rSh/lSh=[肩x, 肩z]、rEl/lEl=肘x、spine/neck=x、crouch=下蹲深度(m)
 const POSES = {
-  bumpReady: { rSh: [-0.95, -0.24], lSh: [-0.95, 0.24], rEl: 0, lEl: 0, spine: 0.5, neck: -0.35, crouch: 0.2 },
-  bumpHit: { rSh: [-1.2, -0.24], lSh: [-1.2, 0.24], rEl: 0, lEl: 0, spine: 0.32, neck: -0.3, crouch: 0.08 },
-  setReach: { rSh: [-2.3, 0.3], lSh: [-2.3, -0.3], rEl: -1.0, lEl: -1.0, spine: -0.04, neck: -0.45, crouch: 0.06 },
-  setPush: { rSh: [-2.72, 0.26], lSh: [-2.72, -0.26], rEl: -0.25, lEl: -0.25, spine: 0, neck: -0.3 },
+  bumpReady: { rSh: [-0.95, -0.24], lSh: [-0.95, 0.24], rEl: 0, lEl: 0, spine: 0.5, neck: -0.35, crouch: 0.2, spineUp: 0.16 },
+  bumpHit: { rSh: [-1.2, -0.24], lSh: [-1.2, 0.24], rEl: 0, lEl: 0, spine: 0.32, neck: -0.3, crouch: 0.08, spineUp: -0.1 },
+  setReach: { rSh: [-2.3, 0.3], lSh: [-2.3, -0.3], rEl: -1.0, lEl: -1.0, spine: -0.04, neck: -0.45, crouch: 0.06, spineUp: -0.18, wrist: -0.42 },
+  setPush: { rSh: [-2.72, 0.26], lSh: [-2.72, -0.26], rEl: -0.25, lEl: -0.25, spine: 0, neck: -0.3, spineUp: 0.1, wrist: 0.4 },
   // 4.7 §P2 上升弓身：胸椎後仰（spineUp 負＝反弓）、骨盆先轉、非慣用手上舉指球
   spikeWind: {
     rSh: [-2.5, -0.38], lSh: [-2.55, 0.1], rEl: -1.9, lEl: -0.25, spine: -0.24, neck: -0.2,
@@ -39,8 +39,8 @@ const POSES = {
     rSh: [-0.6, 0.34], lSh: [-0.45, 0.15], rEl: -0.5, lEl: -0.3, spine: 0.46, neck: 0.1,
     spineUp: 0.12, pelvisY: -0.06, wrist: 0.2,
   },
-  blockUp: { rSh: [-2.95, 0.12], lSh: [-2.95, -0.12], rEl: 0, lEl: 0, spine: 0.04, neck: -0.15 },
-  blockPunch: { rSh: [-2.52, 0.1], lSh: [-2.52, -0.1], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2 },
+  blockUp: { rSh: [-2.95, 0.12], lSh: [-2.95, -0.12], rEl: 0, lEl: 0, spine: 0.04, neck: -0.15, spineUp: -0.08, wrist: -0.45 },
+  blockPunch: { rSh: [-2.52, 0.1], lSh: [-2.52, -0.1], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2, spineUp: 0.14, wrist: -0.7 },
   windup: { rSh: [-2.35, -0.35], lSh: [-2.0, 0.15], rEl: -1.8, lEl: -0.3, spine: -0.2, neck: -0.18 },
   // 4.7 §P0 助跑（Sawmah 07-28）：雙臂後擺蓄勢、軀幹前傾——**零跳躍**。
   // 原本助跑與起跳混在同一個 windup（自帶 jump 0.5m），提前觸發就等於提前浮空
@@ -60,8 +60,8 @@ const POSES = {
   // 發球分式（07-24 Sawmah）：serveReady＝發球前雙手捧球預備（hold，銜接揮擊的連貫前段）；
   // 飄浮＝站立掌根短促推擊（floatWind 後拉小幅→floatPush 直臂前推、瞬間停腕無隨揮）
   serveReady: { rSh: [-1.15, -0.1], lSh: [-1.15, 0.1], rEl: -0.5, lEl: -0.5, spine: 0.12, neck: -0.1, crouch: 0.06 },
-  floatWind: { rSh: [-2.35, -0.15], lSh: [-1.5, 0.15], rEl: -0.55, lEl: -0.25, spine: -0.08, neck: -0.15 },
-  floatPush: { rSh: [-2.6, -0.05], lSh: [-0.9, 0.15], rEl: 0, lEl: -0.3, spine: 0.12, neck: -0.1 },
+  floatWind: { rSh: [-2.35, -0.15], lSh: [-1.5, 0.15], rEl: -0.55, lEl: -0.25, spine: -0.08, neck: -0.15, spineUp: -0.14, wrist: -0.25 },
+  floatPush: { rSh: [-2.6, -0.05], lSh: [-0.9, 0.15], rEl: 0, lEl: -0.3, spine: 0.12, neck: -0.1, spineUp: 0.06, wrist: 0 },
   // W7 A4③：體力喘氣 idle（死球間隙、跌破 50% 的場上球員取代待命姿勢）——
   // 撐膝彎腰：肩前傾下垂＋肘大彎（雙手扶膝）＋軀幹深前傾＋低頭喘氣
   gasp: { rSh: [-0.35, -0.12], lSh: [-0.35, 0.12], rEl: -0.7, lEl: -0.7, spine: 0.85, neck: 0.3, crouch: 0.32 },
@@ -74,7 +74,7 @@ const POSES = {
   nodNeutral: { neck: -0.12 },
   nodDown: { neck: 0.3 },
   // 4.5B §8 攔網重量感：起跳前的蹲載入（蹲→蹬→滯空→落地的第一拍）
-  blockLoad: { rSh: [-0.6, -0.15], lSh: [-0.6, 0.15], rEl: -0.9, lEl: -0.9, spine: 0.35, neck: -0.2, crouch: 0.3 },
+  blockLoad: { rSh: [-0.6, -0.15], lSh: [-0.6, 0.15], rEl: -0.9, lEl: -0.9, spine: 0.35, neck: -0.2, crouch: 0.3, spineUp: 0.12 },
   // 4.5B §8 助跑遲疑（低 trust 快攻的身體語言）：手臂只抬一半、低頭半拍
   windupHesitant: { rSh: [-1.55, -0.3], lSh: [-1.3, 0.12], rEl: -1.3, lEl: -0.4, spine: -0.06, neck: 0.12 },
 };
@@ -82,7 +82,11 @@ const POSES = {
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
 const SEQUENCES = {
   bump: { dur: 0.5, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.45, p: 'bumpHit' }, { at: 1, p: 'bumpReady' }] },
-  overhead: { dur: 0.55, jump: 0, land: false, keys: [{ at: 0, p: 'setReach' }, { at: 0.5, p: 'setPush' }, { at: 1, p: 'setReach' }] },
+  // 4.7 動作協調性：二傳出手是短促的一拍——蓄勢長、推出快、回位
+  overhead: {
+    dur: 0.55, jump: 0, land: false,
+    keys: [{ at: 0, p: 'setReach' }, { at: 0.42, p: 'setReach' }, { at: 0.56, p: 'setPush' }, { at: 1, p: 'setReach' }],
+  },
   // 4.7 §P3：鞭打嚴格依序解鎖——肩(0.30)→肘(0.36)→腕(0.42 擊球)，不得同幀一起轉
   spike: {
     dur: 0.6, jump: 0.55, land: true,
@@ -205,8 +209,11 @@ export function createGeoAnimator(rig) {
     setHold(type) { hold = type; },
     isIdle() { return current === null; },
 
-    // 每幀驅動全部關節；回傳 bodyY（跳躍－下蹲的垂直位移，由呼叫端寫進 root.position.y）
-    update(dt, speed) {
+    // 每幀驅動全部關節；回傳 bodyY（跳躍－下蹲的垂直位移，由呼叫端寫進 root.position.y）。
+    // lateral（4.7 根運動）：移動方向相對「朝向」的橫向分量（-1..1）——沿網橫移的
+    // 攔網手與防守補位是**側併步**（面向網、雙腿開合），不是前跑擺腿。
+    // 由 matchView 逐幀算好傳入（它同時握有速度向量與朝向）
+    update(dt, speed, lateral = 0) {
       // 跑姿權重與步相位（幀率無關的指數收斂）
       const runTarget = Math.min(speed / RUN_FULL_SPEED, 1);
       runW += (runTarget - runW) * (1 - Math.exp(-10 * dt));
@@ -249,7 +256,11 @@ export function createGeoAnimator(rig) {
       const strideRate = STRIDE_BASE + speed * STRIDE_PER_MS;
       const halfStep = (speed * Math.PI) / Math.max(strideRate, 1e-3);
       const matched = Math.asin(Math.min(halfStep / (2 * LEG_LEN), 1));
-      const legSwing = Math.min(matched, SWING_MAX) * runW;
+      // 橫移比例越高，前後擺腿越少、側併步越多（斜向自然混合）
+      const sideW = Math.min(Math.abs(lateral), 1);
+      const legSwing = Math.min(matched, SWING_MAX) * runW * (1 - sideW * 0.85);
+      const shuffle = sideW * runW;
+      const shuffleDir = lateral >= 0 ? 1 : -1;
       const armSwing = 0.5 * runW;
       const idleW = 1 - runW;
       const baseSpine = 0.16 * runW + 0.07 * idleW + breath;
@@ -258,6 +269,9 @@ export function createGeoAnimator(rig) {
       // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
       j.rHip.rotation.x = -legSwing * s - crouch * 1.1;
       j.lHip.rotation.x = legSwing * s - crouch * 1.1;
+      // 側併步：兩腿同向開合、相位錯開＝外側腿先跨、內側腿跟上（不是劈腿）
+      j.rHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase)) * shuffleDir;
+      j.lHip.rotation.z = shuffle * 0.3 * (0.5 + 0.5 * Math.sin(phase + 1.9)) * shuffleDir;
       j.rKnee.rotation.x = (0.12 + Math.max(0, -s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
       j.lKnee.rotation.x = (0.12 + Math.max(0, s) * 0.95) * runW + 0.14 * idleW + crouch * 2.2;
 

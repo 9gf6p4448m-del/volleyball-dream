@@ -274,7 +274,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         }
         u.yaw += shortestArc(u.yaw, targetYaw) * (1 - Math.exp(-TURN_K * dt));
 
-        const bodyY = u.animator.update(dt, speed);
+        // 4.7 根運動：移動方向相對朝向的橫向分量——沿網橫移＝側併步（見 geoAnimator）
+        const lateral = speed > 0.25
+          ? Math.sin(shortestArc(u.yaw, Math.atan2(vx, vz)))
+          : 0;
+        const bodyY = u.animator.update(dt, speed, lateral);
         // 魚躍飛撲（純視覺）：dive 期間沿朝向前撲一段＋微騰空落地＋身體前傾接近水平——
         // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）
         let diveX = 0; let diveZ = 0; let diveTilt = 0; let diveY = 0;
