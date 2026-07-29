@@ -214,6 +214,26 @@ for (const k of ['quick', 'wing', 'back']) {
   const label = { quick: '　└ 面對快攻', wing: '　└ 面對兩翼', back: '　└ 面對後排' }[k];
   if (gapsByKind[k].length) console.log(statLine(label, gapsByKind[k]));
 }
+// ★ 密合率（階段五的關鍵交互作用）★
+// 相鄰兩人的覆蓋要相接，站距必須 <= 2 x 單人半寬。現值半寬 1.1 => 門檻 2.2（幾乎永不開洞）；
+// §5.2 目標半寬 0.5 => 門檻 1.0。站距一旦超過門檻就是實洞，寬度 = 站距 - 2 x 半寬。
+console.log('');
+for (const half of [1.1, 0.5]) {
+  const lim = half * 2;
+  const seal = (a) => (a.length ? `${((a.filter((g) => g <= lim).length / a.length) * 100).toFixed(1)}%` : '-');
+  const hole = (a) => {
+    const h = a.filter((g) => g > lim).map((g) => g - lim);
+    if (!h.length) return '無洞';
+    const sorted = [...h].sort((a, b) => a - b);
+    return `p50 ${sorted[Math.floor(sorted.length / 2)].toFixed(3)}m / max ${Math.max(...h).toFixed(3)}m`;
+  };
+  console.log(`  單人半寬 ${half.toFixed(2)}（密合門檻 ${lim.toFixed(2)}m）`
+    + `  全體 ${seal(gapsAtNet)}`
+    + `｜快攻 ${seal(gapsByKind.quick)}`
+    + `｜兩翼 ${seal(gapsByKind.wing)}`
+    + `｜後排 ${seal(gapsByKind.back)}`);
+  console.log(`      └ 未密合者的洞寬：全體 ${hole(gapsAtNet)}｜快攻 ${hole(gapsByKind.quick)}`);
+}
 console.log(`貼網人數（|z|<=${NET_Z}m）分佈　窗次 n=${windows}　`
   + `0人 / 1人 / 2人 / 3人 ＝ ${pctOf(atNetHist).join(' / ')}　（原始：${atNetHist.join(' / ')}）`);
 console.log('');
