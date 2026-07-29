@@ -8,8 +8,9 @@ import {
   isBackRow, isInFrontZone, landedCourtTeam,
 } from './rotation.js';
 import {
-  createPlayer, standingReach, spikeReach, blockReach, moveSpeed, feintMasteryMul,
+  createPlayer, spikeReach, blockReach, moveSpeed, feintMasteryMul,
 } from './player.js';
+import { reachVolumeFor, ballInReach } from './reach.js';
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rotationRules.js';
@@ -17,6 +18,11 @@ import { applyAttackOutcome } from './trust.js';
 import {
   STAMINA, drainStamina, recoverStamina, staminaPerfMul, staminaRecvMul,
 } from './stamina.js';
+
+// §十-1：可及體的球半徑膨脹量。觸球條件應是「球**面**碰到手」＝可及體長大 BALL.RADIUS，
+// 攔網高度判定（tryBlock）一直是這樣算的，觸球判定卻不是——兩套標準。
+// 階段一先填 0 保住逐值等價，統一為 BALL.RADIUS 是階段一末段**唯一**的行為變更，單獨 hash。
+const REACH_INFLATE = 0;
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
@@ -451,17 +457,21 @@ function tryAction(state, intent, ev) {
     drainStamina(state, player.id, STAMINA.COST_DIVE, ev); // W7 A1：撲空也扣（出手即倒地）
   }
 
-  const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
-  if (dist > TUNING.REACH_RADIUS * (isDive ? TUNING.DIVE_REACH_MUL : 1)) return;
-  // Phase 5 W1 §5 A3 跳舉：**唯一**吃 intent.jump 的地方——跳起來出手＝可及高度
-  // 從站立摸高抬到起跳摸高，於是二傳更早、在更高處接管這顆球。
+  // §十-1：構不構得到由 reach.js 單一決定（改制前是水平圓／舉球上限／扣球上限／
+  // 魚躍四條各自為政的閾值）。Phase 5 W1 §5 A3 跳舉是**唯一**吃 intent.jump 的地方——
+  // 跳起來出手＝可及頂端從站立摸高抬到起跳摸高，於是二傳更早、在更高處接管這顆球。
   // 之後的每一行（目標、散佈、弧頂、力度）都不看 intent.jump ⇒ 球的威力零變化。
-  const maxY = intent.action === 'spike' ? spikeReach(player, staminaPerfMul(state, player))
-    : isDive ? TUNING.DIVE_MAX_Y
-      : (intent.action === 'set' && intent.jump)
-        ? spikeReach(player, staminaPerfMul(state, player))
-        : standingReach(player) + 0.35;
-  if (ball.y > maxY || ball.y < BALL.RADIUS) return;
+  const vol = reachVolumeFor({
+    player,
+    actor,
+    action: intent.action,
+    jump: intent.jump,
+    jumpMul: staminaPerfMul(state, player),
+    tuning: TUNING,
+    inflate: REACH_INFLATE,
+  });
+  const { ok, dist } = ballInReach(ball, vol);
+  if (!ok) return;
 
   executeTouch(state, intent, player, actor, ev, dist);
 }
