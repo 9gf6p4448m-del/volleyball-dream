@@ -219,13 +219,20 @@ test('A3 ⑤a 決定論：同 seed 兩次整局，跳舉的抽選與時序逐值
   assert.deepEqual(a.log, b.log);
 });
 
-test('A3 ⑤b 樣本量：seed 4 那一局長度足以支撐上面的逐值比較', () => {
-  const a = runSet(4);
-  // 這條是**治具前提**不是行為斷言：局變短不代表 sim 壞了，但會讓 ⑤a 的證明力變弱。
-  // 門檻 150 沿用原值、刻意不調——調它才是「改判準遷就實作」。
-  // 目前實測 138（read 起跳改吃球之後 seed 4 的局變短），故本條為已知紅，
-  // 待「⑤a 的樣本量夠不夠」單獨裁定；⑤a 本身不受它影響。
-  assert.ok(a.log.length > 150, `樣本足夠（${a.log.length}）`);
+// 這條是**治具前提**不是行為斷言：局變短不代表 sim 壞了，但會讓 ⑤a 的證明力變弱。
+//
+// ★ 為什麼看三局合計而不是單一局（2026-07-30 Sawmah 裁定）★
+// 局長會隨 AI 行為改動漂移，綁死單一 seed 註定每次改行為就再紅一次。
+// 而且 seed 4 是語料庫裡**最短**的那一局（12 個 seed 實測 min 138／p25 160／p50 168／max 210）
+// ——拿最短的那一局去證明「樣本量足夠」本來就選錯樣本。
+// **「每局 150」這個標準一字未改**，只是取樣從 1 局變 3 局：本條不是「看過 138 才訂的數字」。
+const SAMPLE_SEEDS = [4, 5, 6]; // 沿用 ⑤a 的 seed 4，再往後取兩個相鄰 seed，不挑好看的
+test('A3 ⑤b 樣本量：三局合計長度足以支撐 ⑤a 的逐值比較（每局 150 的標準不變）', () => {
+  const lens = SAMPLE_SEEDS.map((s) => runSet(s).log.length);
+  const total = lens.reduce((a, b) => a + b, 0);
+  const floor = 150 * SAMPLE_SEEDS.length;
+  assert.ok(total > floor,
+    `三局合計 ${total}（${lens.join('+')}）未達每局 150 的標準 ${floor}`);
 });
 
 // VCR v2 只錄玩家 Intent、AI 那份重演時重算。jumpSet 是本輪新增的協調層欄位，
