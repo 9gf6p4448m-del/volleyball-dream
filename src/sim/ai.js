@@ -22,6 +22,7 @@ import {
 } from './blockRead.js';
 import { hash01 } from './rng.js';
 import { TUNING, spikeSpeed } from './game.js';
+import { REACH_ACTION, reachRadiusFor } from './reach.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA, staminaPerfMul } from './stamina.js';
 
@@ -544,10 +545,40 @@ export function attackPointsOf(game, team, setterId, passTier = 'perfect', recei
 }
 
 // 一傳品質分檔：落點距舉球點的距離（真實排球：快攻吃完美一傳、後排攻擊吃像樣一傳）
+// ==== §4 階段四：H 一批——`passTier` 門檻相對化 ====
+//
+// ★ 病（工單 §4.1，本輪實測復現）★
+// 門檻寫死 1.2m，而落點距二傳點的距離 d 結構上到不了：
+//   d ＝ rand() × 該次散佈上界 r（`game.js scatterTarget`），實測 r ∈ [0.460, 0.562]
+//   ⇒ d p10 0.051／p50 0.250／p90 0.450／max 0.562（非爆接）
+//   ⇒ **passTier 實測 perfect 99.9%／poor 0.1%**（那 0.1% 是爆接 `blownTarget`）
+// 一傳品質是死的輸入：攻擊池的三個分支（到位＝全池／可用＝無快攻／勉強＝只剩兩翼高球）
+// 實際上永遠只走第一個。這是本卷「機制存在但輸入是死的」那一類的第四件。
+//
+// ★ 相對化掛在哪（2026-07-30 Sawmah 裁定＝掛「舉球可及半徑」）★
+// perfect 的語意就是「**二傳不用移動就能舉**」⇒ 門檻 ＝ 舉球可及半徑的倍數。
+// 掛 `reachRadiusFor(SET)`（可及的單一真相來源），所以階段五把舉球可及換成 §5.2 的
+// 目標值 0.45 時，門檻**自己跟著縮**：0.923 × 0.45 ＝ 0.415，落在 d 的 p50 0.250 與
+// p90 0.450 之間 ⇒ **收斂後真的會出現分佈**（§4.2 的要求）。
+//
+// ⚠ 已量測排除的替代方案：掛**接球**可及半徑。階段五把它縮到「身高×0.38」（主錨 175
+//   ⇒ ≈0.67）後門檻只縮到 0.614，仍高於 d 的上界 0.562 ⇒ 收斂後照樣全 perfect，滿足不了 §4.2。
+// ⚠ 也排除：用**逐次實現的散佈上界 r** 正規化。因 d ＝ rand()×r，`d/r` 恆為 U(0,1)
+//   ⇒ 每種 control 的 tier 比例完全相同、passTier 與球員技術脫鉤。可證明的錯，不採。
+//
+// ★ 係數的來歷與本批的分寸（協議 6：三件套＋H 一批**一起校準**，不得逐件收斂）★
+// 係數 ＝ 現值比例（1.2÷1.3、3÷1.3），所以**本批行為零漂移、sim-hash 不變**；
+// 真正的數字由階段五連同其他旋鈕一起擰。**本批只交付接縫，不做校準。**
+// `ok` 的係數語意較弱（3m 本來就不是對著可及訂的），階段五可再議——這裡沿用現值比例
+// 是為了不在本批偷偷改動它。
+const PASS_PERFECT_MUL = 1.2 / 1.3;
+const PASS_OK_MUL = 3 / 1.3;
 export function passTierOf(team, landing) {
   const spot = localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
   const d = Math.hypot(landing.x - spot.x, landing.z - spot.z);
-  return d < 1.2 ? 'perfect' : d < 3 ? 'ok' : 'poor';
+  const setReach = reachRadiusFor(REACH_ACTION.SET, TUNING);
+  return d < PASS_PERFECT_MUL * setReach ? 'perfect'
+    : d < PASS_OK_MUL * setReach ? 'ok' : 'poor';
 }
 
 // 站位交換（真實排球：發球觸球後前後排都跑職責位）——

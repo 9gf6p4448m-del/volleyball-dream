@@ -50,12 +50,27 @@ export const SET_CEILING_BONUS = 0.35;
  * @param {object} a.tuning   game.js 的 TUNING（讀 REACH_RADIUS／DIVE_REACH_MUL／DIVE_MAX_Y）
  * @param {number} a.inflate  可及體的整體膨脹量（球半徑；見 ballInReach 的說明）
  */
+/**
+ * 某動作的**水平可及半徑**——單一真相來源。
+ *
+ * 現在四個動作（魚躍除外）退化成同一個 `REACH_RADIUS`，逐值重現階段一之前的行為；
+ * 階段五換上目標值時只改這裡：接球 身高×0.38／**舉球 0.45**／扣球 0.55／魚躍 ≈2.0m。
+ *
+ * ★ 為什麼要單獨抽出來（§4 階段四）★
+ * `passTierOf` 的一傳品質門檻（原本寫死 1.2m）要相對化成「**二傳的可及半徑**」的倍數
+ * ——perfect 的語意就是「二傳不用移動就能舉」。門檻掛在這個函式上，
+ * 階段五把舉球可及縮到 0.45 時，門檻會**自己跟著縮**，不必記得回頭改第二個地方。
+ */
+export function reachRadiusFor(action, tuning) {
+  return tuning.REACH_RADIUS * (action === REACH_ACTION.DIVE ? tuning.DIVE_REACH_MUL : 1);
+}
+
 export function reachVolumeFor({
   player, actor, action, jump = false, jumpMul = 1, tuning, inflate = 0,
 }) {
   const isDive = action === REACH_ACTION.DIVE;
   // 水平半徑：魚躍是一次性大延伸（倍率階段五須重新導出——基底一縮，1.8 會把魚躍砍到 1.28m）
-  const r = tuning.REACH_RADIUS * (isDive ? tuning.DIVE_REACH_MUL : 1) + inflate;
+  const r = reachRadiusFor(action, tuning) + inflate;
   // 垂直頂端：四種動作四個答案（這正是本卷要收掉的不一致，階段一先照抄）
   const top = action === REACH_ACTION.SPIKE
     ? spikeReach(player, jumpMul)
