@@ -1,5 +1,10 @@
 // D1 資料層 v1 — Player 結構與序列化（純函式、零 three.js/DOM 依賴）
 // 身高影響（攔網高度/扣球點/防守範圍）一律由 height.current 即時推導，不存衍生欄位
+//
+// AIR_TICKS＝sim 既有的滯空窗定義（＝ TUNING.TAKEOFF_LOOKBACK_TICKS）。
+// 這裡只讀它、不另立第二個滯空常數（§十 工單 §2.4-c）。approach.js 的相依鏈
+// （constants／rotation／rng／actionPhase）不回頭指向本檔，不會成環。
+import { AIR_TICKS } from './approach.js';
 
 export const ROLES = ['outside', 'setter', 'libero', 'middle', 'opposite'];
 
@@ -98,20 +103,33 @@ export function blockReach(p, jumpMul = 1) {
  * @param {number|null} t  起跳後經過的 tick 數（`state.tick − actor.blockStartTick`）；
  *                         `null` ＝這一刻根本沒在跳
  * @param {number} jumpMul W7 體力劣化乘數
+ * @returns {number} 頂邊的**絕對高度**（公尺），不是任何歸一化乘數
  *
- * ★ §十 階段二 2-B 之前，這是刻意的退化實作：回傳跳躍頂點，完全不看 `t` ★
+ * ★ §十 階段二 2-B：時機從乘數變成幾何 ★
  *
- * 也就是「跳了即等於手在頂點」——這正是十-2 要消滅的假狀態：攔網手起跳再晚，
- * 手也瞬間在最高處，垂直維度在這個模型裡根本不存在，於是 read 人格既能等看清楚
- * 又追得到快攻。2-B 會把本體換成吃跳躍相位（太早已下墜、太晚還在上升）。
+ * 改制前這裡是退化實作——回傳跳躍頂點、完全不看 `t`，也就是「跳了即等於手在頂點」。
+ * 於是攔網手起跳再晚，手也瞬間在最高處，垂直維度在模型裡根本不存在，
+ * read 人格才能既等看清楚又追得到快攻（十-2 的病定義）。
+ * 「時機」被塞在別的地方：一顆叫 `blockTimingMul` 的乘數直接折攔網成功率——
+ * 誠實的補償不是「手臂有 1.3 公尺長」，攔網版即「不是跳起來瞬間手就在頂點」。
  *
- * 現在就把**介面**定出來（頂邊是 t 的函式），讓 sim 與量測探針都改吃它：
- * 2-B 只換這個函式的本體，呼叫端一行都不用動，量測指標也不必中途改定義。
- * 引入這一步刻意保持行為零變化，由 `tools/sim-hash-probe.mjs` 背書。
+ * 現在時機是幾何的：**太早已下墜、太晚還在上升**，兩者都表現為球到的那一刻手不夠高。
+ *
+ * ★ 零新常數（工單 §2.4-c）★ 曲線與窗長都是沿用的，不是為這件事發明的：
+ *   - 形狀＝ `Math.sin(t·π)` 半波，沿用 `src/render/geoAnimator.js` 既有的跳躍動畫曲線
+ *     （同檔 `jumpY = seq.jump * Math.sin(t * Math.PI)`）——畫面上看到的手，
+ *     從此就是 sim 判定用的那隻手，不再是兩套標準
+ *   - 窗長＝ `AIR_TICKS`（24，同 `TUNING.TAKEOFF_LOOKBACK_TICKS`，sim 既有的滯空窗定義）
+ *   - 兩端＝ `standingReach`（腳在地上）與 `blockReach`（跳躍頂點），都是既有推導函式
+ *
+ * 順帶對上既有事實：apex 落在 `AIR_TICKS / 2 = 12`，而被拆掉的 `blockTimingMul`
+ * 的甜蜜值取樣點正好是 12（`blockTimingMul(12) === 1.0`）。曲線不是重新校準出來的。
  */
 export function blockTopEdge(p, t, jumpMul = 1) {
-  void t; // 退化實作：頂邊尚未吃相位（見上方說明）
-  return blockReach(p, jumpMul);
+  const stand = standingReach(p);
+  // 沒在跳、或這次跳躍已經結束＝腳在地上，手就是站立摸高
+  if (t == null || t < 0 || t > AIR_TICKS) return stand;
+  return stand + (blockReach(p, jumpMul) - stand) * Math.sin(Math.PI * (t / AIR_TICKS));
 }
 
 // 防守可及半徑（公尺）：身高越高踏步範圍越大、speed 補正

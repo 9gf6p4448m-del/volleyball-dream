@@ -67,7 +67,19 @@ function sampleAt(game, cross) {
 
   const H = Math.abs(actor.x - cross.x) <= TUNING.BLOCK_REACH_X;
   const V = cross.y <= top + BALL.RADIUS;
-  return { H, V, G: H && V, inWin, topPct: apex > 0 ? top / apex : 0 };
+  return {
+    H,
+    V,
+    G: H && V,
+    inWin,
+    topPct: apex > 0 ? top / apex : 0,
+    // §3.6 診斷：V 若幾乎不動，要能分辨「頂邊沒吃相位」與「指標本來就退化」。
+    // vMargin ＝ 頂邊（含球半徑）− 球心高度：正值＝手在球上面（V 真）。
+    // 它 p50 若遠大於 0，代表球過網時本來就遠低於手，V 對誰都恆真＝指標退化。
+    vMargin: (top + BALL.RADIUS) - cross.y,
+    ballY: cross.y,
+    apexMargin: (apex + BALL.RADIUS) - cross.y, // 同一顆球對「手在頂點」的餘裕
+  };
 }
 
 function runSet(seed, blockPersona) {
@@ -103,6 +115,10 @@ function stat(rows, group) {
   const g = rows.filter((r) => GROUP[r.kind] === group);
   if (!g.length) return { n: 0 };
   const tops = g.map((r) => r.topPct).sort((a, b) => a - b);
+  const q50 = (key) => {
+    const a = g.map((r) => r[key]).sort((x, y) => x - y);
+    return a[Math.floor(a.length / 2)];
+  };
   return {
     n: g.length,
     H: pct(g.filter((r) => r.H).length, g.length),
@@ -110,6 +126,9 @@ function stat(rows, group) {
     G: pct(g.filter((r) => r.G).length, g.length),
     inWin: pct(g.filter((r) => r.inWin).length, g.length),
     topP50: (tops[Math.floor(tops.length / 2)] * 100).toFixed(1),
+    ballYP50: q50('ballY').toFixed(2),
+    vMarginP50: q50('vMargin').toFixed(2),
+    apexMarginP50: q50('apexMargin').toFixed(2),
   };
 }
 
@@ -125,13 +144,15 @@ console.log('量測時點：球心通過網面那一 tick（插值）｜G ＝ H 
 for (const group of ['quick', 'wing', 'back']) {
   const label = { quick: '快攻（一速中路）', wing: '兩翼高球（交叉/邊線）', back: '後排攻擊' }[group];
   console.log(`\n-- 面對 ${label} --`);
-  console.log('人格      樣本      H%      V%    ★G%    inWin%   頂邊完成度p50%');
+  console.log('人格      樣本      H%      V%    ★G%    inWin%   頂邊完成度p50%'
+    + '   過網球心y   V餘裕(頂邊-球)   同球對頂點的餘裕');
   for (const p of ['read', 'commit']) {
     const s = stat(arms[p], group);
     if (!s.n) { console.log(`${p.padEnd(8)}     0`); continue; }
     console.log(
       `${p.padEnd(8)}  ${String(s.n).padStart(4)}  ${s.H.padStart(6)}  ${s.V.padStart(6)}  `
-      + `${s.G.padStart(5)}  ${s.inWin.padStart(8)}  ${s.topP50.padStart(14)}`,
+      + `${s.G.padStart(5)}  ${s.inWin.padStart(8)}  ${s.topP50.padStart(14)}`
+      + `   ${s.ballYP50.padStart(9)}   ${s.vMarginP50.padStart(14)}   ${s.apexMarginP50.padStart(16)}`,
     );
   }
 }
