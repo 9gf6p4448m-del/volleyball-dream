@@ -851,22 +851,58 @@ function decideOne(game, aiState, playerId) {
     // 遠側翼（攻擊點在對側且離中線夠遠）＝不參與攔網、撤退到攻擊線附近補吊球。
     // 讀期 anchorX＝0 ⇒ 三人都先留在牆上，決定之後遠側翼才撤——這正是「判斷發生前
     // 不該知道要往哪邊撤」的誠實形狀
-    const farWing = lane !== 0 && Math.abs(anchorX) > 1.8 &&
-      Math.sign(laneOff) !== Math.sign(anchorX);
-    if (farWing) {
+    if (blockFarWing(game, team, playerId, anchorX)) {
       return moveIntent(game, playerId, tick, actor, {
         x: laneOff * 2, z: TEAM_SIDE[team] * 2.6,
       });
     }
-    // 邊線夾擠防疊（真實合牆：翼守標誌桿、MB 收內側肩並牆）——
-    // 翼吃 clamp 貼邊即可；MB 發現近側翼被邊線壓進間距內時自己往內讓。
-    // 兩人各自從同樣輸入算出一致結論（純函式無共享狀態），且讓位方向恆向內＝永不交叉
-    let nx = clampCourtX(anchorX + laneOff);
-    if (lane === 0) {
-      const bs = Math.sign(anchorX);
-      const nearWingX = clampCourtX(anchorX + bs * AI.BLOCK_SPREAD);
-      if (bs !== 0 && Math.abs(nearWingX - nx) < AI.BLOCK_SPREAD * 0.9) {
-        nx = nearWingX - bs * AI.BLOCK_SPREAD;
+    let nx;
+    if (planX == null) {
+      // 【讀】判定還沒發生 ⇒ 陣型基準位，沿用既有的固定分工間距。
+      // **這一段刻意不合牆**：還不知道要攔誰就先併肩，等於用未來的答案站位。
+      //
+      // 邊線夾擠防疊（真實合牆：翼守標誌桿、MB 收內側肩並牆）——
+      // 翼吃 clamp 貼邊即可；MB 發現近側翼被邊線壓進間距內時自己往內讓。
+      // 兩人各自從同樣輸入算出一致結論（純函式無共享狀態），且讓位方向恆向內＝永不交叉
+      nx = clampCourtX(anchorX + laneOff);
+      if (lane === 0) {
+        const bs = Math.sign(anchorX);
+        const nearWingX = clampCourtX(anchorX + bs * AI.BLOCK_SPREAD);
+        if (bs !== 0 && Math.abs(nearWingX - nx) < AI.BLOCK_SPREAD * 0.9) {
+          nx = nearWingX - bs * AI.BLOCK_SPREAD;
+        }
+      }
+    } else {
+      // 【判／關】§3 階段三：關牆——站距由幾何長出來（見 blockWallSlots 的檔頭說明）
+      const slot = blockWallSlots(game, team, anchorX)?.[playerId];
+      if (!slot) return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));
+      nx = slot.x;
+      // §3.2：close 預算從「只算主攔自己」擴到輔攔與第三人。
+      // **只有第三人（tier 2）趕不到才回落補吊球**；輔攔趕不到就是**留縫**
+      // ——§3.2 明文「趕不到就是留縫，不做寬容補償」，所以不給它退路、也不給容差。
+      if (slot.tier >= 2) {
+        // ★ 算一次就鎖存 ★ 沿用主攔 close 預算既有的 `c.chase === undefined` 快取模式。
+        // 逐 tick 重算會出事：`hit.ticks` 隨球下墜遞減 ⇒ ticksLeft 越來越小 ⇒
+        // **已經站好的人會在最後一刻突然棄牆撤退**。決定要在「判」的時候下，不是一路反覆。
+        const c = aiState.blockPlan;
+        if (c && c.wallBail === undefined) c.wallBail = {};
+        if (c && c.wallBail[playerId] === undefined) {
+          const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
+          const stepM = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
+          c.wallBail[playerId] = !blockCloseBudget({
+            fromX: actor.x,
+            toX: nx,
+            stepM,
+            ticksLeft: hit ? hit.ticks - reactionTicks(player) : null,
+            slack: BLOCK_COMMIT.CLOSE_SLACK,
+          }).canClose;
+        }
+        // 趕不到＝不加入牆，退到攻擊線一帶補吊球；橫向不再追牆（追不到還亂跑最糟）
+        if (c?.wallBail[playerId]) {
+          return moveIntent(game, playerId, tick, actor, {
+            x: clampCourtX(actor.x), z: TEAM_SIDE[team] * 2.6,
+          });
+        }
       }
     }
     // 封線站位（B-1）：封直線＝往邊線側壓（守直線走廊外肩）、封斜線＝往內收（斜線角度）
@@ -1426,6 +1462,69 @@ function moveIntent(game, playerId, tick, actor, target) {
 function clampCourtX(x) {
   const lim = COURT.WIDTH / 2 - 0.4;
   return Math.max(-lim, Math.min(lim, x));
+}
+
+// ==== §3 階段三：關牆行為 ====
+//
+// ★ 改制前的病（工單 §3.1 實測）★
+// 三人以 `AI.BLOCK_SPREAD`（1.5 m）**固定間距整體平移** ⇒ 站距 p50 恰好 1.500 m、
+// min 1.353、僅貼網者 p90 也是 1.500 ⇒ 間距是常數不是行為結果。
+// 套上 1.0 m 單人帶，每對之間**永遠留 0.5 m 縫，牆一次都關不起來**。
+//
+// ★ 現在（工單 §3.2）★
+//   主攔 ＝ 前排參戰者中**離判定出的攻擊點最近者**。
+//          **不寫死角色分工表**——讓它從幾何長出來（§3.2 明文要求）。
+//   其餘人 ＝ 依**當下 x 的排序**填相鄰肩位，偏移 ＝（自己的排名 − 主攔排名）× 肩距。
+//          保序 ⇒ **永不交叉**；且不論主攔在左／中／右，三人恆形成一條**連續**的牆：
+//          主攔在中＝對稱 ±肩距；主攔在邊＝整面牆往同一側疊
+//          ——後者正是真實邊線攔網的形狀，不是退化。
+//
+// ★ 肩距 0.55 m 的來歷（不是對現值反推）★
+// 工單 §3.2 拍板的**人體肩距**。配上階段五的單人半寬 0.5 m，三人帶寬恰為
+// 0.55×2 + 0.5×2 ＝ **2.1 m** ＝ §3.2 寫的值，且相鄰者覆蓋區間相接**無縫**
+// （x−0.55 者蓋到 x−0.05，x 者從 x−0.5 起）。
+//
+// ★ 純函式、零共享狀態 ★ 三人各自呼叫都算出同一份分工（輸入只有前排的 x 與 anchorX），
+// 與既有「兩人各自從同樣輸入算出一致結論」的設計一致。
+//
+// ★ 邊線處理 ★ **整面牆一起平移**回場內，不逐人 clamp——逐人 clamp 會把兩人壓到
+// 同一點而疊人，反而製造出比縫更糟的東西。
+const BLOCK_SHOULDER_M = 0.55;
+
+// 這個前排翼是不是「遠側翼」＝攻擊點在對側且離中線夠遠 ⇒ 不參戰、撤退補吊球。
+// 抽成函式是為了讓「誰在牆上」與「誰站哪一格」吃**同一個判準**——
+// 不一致的話，撤退者仍會被算進肩位排名，留下他本人不在的空格。
+function blockFarWing(game, team, playerId, anchorX) {
+  const role = game.players[playerId].currentRole;
+  const lane = role === 'middle' ? 0 : role === 'outside' ? -1 : 1;
+  const laneOff = TEAM_SIDE[team] * lane * AI.BLOCK_SPREAD;
+  return lane !== 0 && Math.abs(anchorX) > 1.8
+    && Math.sign(laneOff) !== Math.sign(anchorX);
+}
+
+// 回傳 { [playerId]: { x, tier } }；tier 0＝主攔、1＝輔攔、2＝第三人（愈大愈邊緣）。
+// 無人參戰回 null。
+function blockWallSlots(game, team, anchorX) {
+  const rot = game.match.rotations[team];
+  const front = rot
+    .filter((pid) => isFrontRow(rot, pid) && !blockFarWing(game, team, pid, anchorX))
+    .map((pid) => ({ pid, x: game.actors[pid].x }))
+    // 排序鍵帶 pid：同 x 時仍是唯一順序（決定論，不靠陣列原順序）
+    .sort((a, b) => (a.x - b.x) || (a.pid < b.pid ? -1 : 1));
+  if (!front.length) return null;
+  let main = 0;
+  for (let i = 1; i < front.length; i += 1) {
+    const d = Math.abs(front[i].x - anchorX);
+    const best = Math.abs(front[main].x - anchorX);
+    if (d < best || (d === best && front[i].pid < front[main].pid)) main = i;
+  }
+  const xs = front.map((_, i) => anchorX + (i - main) * BLOCK_SHOULDER_M);
+  // 整面牆平移回場內（牆寬遠小於場寬，兩端不可能同時超出）
+  const lim = COURT.WIDTH / 2 - 0.4;
+  const shift = Math.min(0, lim - Math.max(...xs)) + Math.max(0, -lim - Math.min(...xs));
+  const slots = {};
+  front.forEach((f, i) => { slots[f.pid] = { x: xs[i] + shift, tier: Math.abs(i - main) }; });
+  return slots;
 }
 
 // 以輪轉序回傳隊伍名單（顯式順序，不靠 Object.values 插入序）
