@@ -123,8 +123,14 @@ function runSet(seed) {
   return { stalls, log, airborne, judged };
 }
 
+// 07-29（§7 D2 上線後補樣本）：`stalls.length > 100` 是**樣本量守門，不是行為斷言**
+// ——D2 讓被針對的接一傳者掉出攻擊池（實測快攻約一成的球因此不成立），
+// 種子 11 單獨跑只剩 77 筆。**行為門檻（STALL_MAX、p90 ≤ 10）一格未動**，
+// 改成兩顆種子併樣本（同本檔下方那條 07-29 已採用的慣例，涵蓋面只增不減）
 test('一速：到位與起跳之間不得有長靜止（＝「跑完就跳」，不是跑完站著等）', () => {
-  const { stalls } = runSet(11);
+  const a = runSet(11);
+  const b = runSet(13);
+  const stalls = [...a.stalls, ...b.stalls];
   assert.ok(stalls.length > 100, `樣本足夠（${stalls.length}）`);
   const worst = Math.max(...stalls);
   assert.ok(worst < STALL_MAX,

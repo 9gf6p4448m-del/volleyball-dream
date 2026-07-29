@@ -170,9 +170,14 @@ const KIND_SALT = { left: 11, right: 23 };
 
 // 這條線跑幾速：快攻恆一速、後排高球恆三速、邊攻由種子決定二速／三速。
 // 純 hash（吃 flightId＋池內序＋線別＋seed）＝同種子同球逐值相同，不耗 game rng
-export function tempoFor(kind, { flightId = 0, seed = 0, index = 0 } = {}) {
+//
+// passTier 是**這條線自己的檔位**（§7 D2 之後同一顆池裡各線可以不同檔——
+// 接了一傳的那個人吃罰則檔，其餘人維持本球的一傳品質檔）。
+// 'poor' 的規格字面就是「只剩兩翼高球」＝那一檔不得跑二速的平拉開／半快，
+// 沿用同一道三檔階梯、不另立判準。
+export function tempoFor(kind, { flightId = 0, seed = 0, index = 0, passTier = 'perfect' } = {}) {
   if (kind === 'quick') return 'one';
-  if (kind === 'left' || kind === 'right') {
+  if ((kind === 'left' || kind === 'right') && passTier !== 'poor') {
     return hash01(flightId * 419 + index * 37 + KIND_SALT[kind] + seed) < TEMPO_TWO_RATE
       ? 'two' : 'three';
   }
@@ -207,10 +212,12 @@ export function routeKindFor(kind, { flightId = 0, seed = 0, index = 0, passTier
 // 把路線變體套上整個攻擊池——**必須在 pickAttackPoint 之前套**，
 // 否則二傳選中的 kind 與該人實際跑的 route 會是兩條線（舉球落點對不上助跑終點）。
 // 純函式、不改入參（points 由 attackPointsOf 供給，該函式維持原樣＝玩家分配面板
-// src/input/setOptions.js 讀到的池不受影響）
+// src/input/setOptions.js 讀到的池不受影響）。
+// §7 D2：每個 point 可以自帶 `tier`（接一傳者的罰則檔），有就用它、沒有才吃
+// opts.passTier——「同一顆池、各線各自的檔位」，不是另開一條平行分支
 export function applyRouteKinds(points, opts = {}) {
   return points.map((pt, index) => {
-    const kind = routeKindFor(pt.kind, { ...opts, index });
+    const kind = routeKindFor(pt.kind, { ...opts, index, passTier: pt.tier ?? opts.passTier });
     return kind === pt.kind ? pt : { ...pt, kind };
   });
 }
@@ -241,13 +248,14 @@ export function routeTicks(tempo, setTick, runTicks) {
 // 給不出 setTick 時（預測失效）三個 tick 欄位皆 null＝呼叫端回落「站在起點等」。
 export function approachRoutesFor(team, points, opts = {}) {
   const {
-    setTick = null, flightId = 0, seed = 0, speedOf = null,
+    setTick = null, flightId = 0, seed = 0, speedOf = null, passTier = 'perfect',
   } = opts;
   const routes = [];
   points.forEach((pt, index) => {
     const start = approachStartFor(team, pt.kind);
     if (!start) return;
-    const tempo = tempoFor(pt.kind, { flightId, seed, index });
+    // §7 D2：檔位以 point 自帶的為準（接一傳者的罰則檔），沒帶才吃本球的一傳品質
+    const tempo = tempoFor(pt.kind, { flightId, seed, index, passTier: pt.tier ?? passTier });
     const takeoff = takeoffSpotFor(team, pt.kind, tempo);
     // 助跑段跑完要幾 tick＝距離 ÷ 這個人的步長（決定論：moveSpeed 純吃屬性）。
     // 疲勞折速不計入——這是規劃期的預估值，估得樂觀＝晚到一點點，不影響到位即停

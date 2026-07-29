@@ -56,6 +56,9 @@ export const AI = {
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
   BLOCK_SCHEME_SHIFT: 0.9, // W4 附錄 B-1：L 配套封線站位偏移（封直線往邊線/封斜線往內）
+  // §7 D2 針對性發球：多少比例的球指名發給對方後排主攻手（其餘走既有四區循環）。
+  // 0.5＝兩種發球各半，「這球是不是衝著我來的」才讀得出來。設計值，**未依治具校準**
+  SERVE_TARGET_RATE: 0.5,
   TIP_RATE: 0.1,          // AI 第三擊輕吊機率（攻擊分支：不被讀死；重扣為絕對主體）
   DUMP_RATE: 0.07,        // S 前排二次球機率（球到位時偶發）
   JUMP_SET_RATE: 0.35,    // §5 A3 跳舉發生率（理由見 ensureFlightPlan 的抽選處）
@@ -164,6 +167,10 @@ export function createAiState() {
     // 與 attackerId 同壽命（touches===1 算一次、撐到本波攻擊結束、來球時清空）——
     // 「事前開多條線」的載體，不是只有被選中那一人才有
     approach: null,
+    // Phase 5 W1 §7 D2：本波接一傳的人（attackPointsOf 的罰則對象）。
+    // 與 attackerId／passTier 同壽命、同重算範式（純由 rally.lastToucherId 推得）＝
+    // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
+    passReceiverId: null,
     backupId: null,    // 第二追球者（接噴救球）：主追者明顯趕不上時加派的備援
     hitPoint: null,    // 第三擊：球墜到扣球窗上緣的時空點（一氣呵成助跑的推遲起跑基準）
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
@@ -245,10 +252,14 @@ function ensureFlightPlan(game, aiState) {
     // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
     const tier = passTierOf(team, landing);
     aiState.passTier = tier; // W3 S 玩法：分配面板讀同一份品質分檔（setOptions 消費）
+    // §7 D2：本波接一傳的人＝剛剛那一觸的執行者。攻擊池與**玩家的分配面板**
+    // （setOptions）都吃這一份，兩邊看到的是同一顆池（4.5A 的教訓：同一個判定寫
+    // 在兩個地方遲早分岔）
+    aiState.passReceiverId = r.lastToucherId ?? null;
     // §5 A2 路線組合：先決定「每條線往哪跑」（OH 的 left 可能變 cross），**再**選人。
     // 順序不可調換——選完人再改線＝二傳瞄的落點與該人助跑的終點是兩個地方
     const points = applyRouteKinds(
-      attackPointsOf(game, team, aiState.claimId, tier),
+      attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
       { flightId: game.rally.flightId, seed: game.seed ?? 0, passTier: tier },
     );
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
@@ -268,6 +279,7 @@ function ensureFlightPlan(game, aiState) {
         setTick,
         flightId: game.rally.flightId,
         seed: game.seed ?? 0,
+        passTier: tier,
         speedOf: (pid) => moveSpeed(game.players[pid]),
       }),
     };
@@ -321,6 +333,7 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackKind = null;
     aiState.approach = null; // 來球＝上一波的助跑線作廢
     aiState.blockCommit = null; // §6 B1：來球＝沒有攻擊要攔，鎖定作廢
+    aiState.passReceiverId = null; // §7 D2：來球＝這一波還沒有人接一傳
   }
 
   // 第二追球者（接噴救球「球不落地不結束」）：限【自家噴球】——我方持球中
@@ -445,7 +458,25 @@ function arbitrate(game, team, landing, excludeId, formationExempt = false) {
 // 接一傳者【不】排除——一、三擊非連續觸球合法，接完打第三球是真實常態
 // passTier（一傳品質戰術分支）：'perfect'＝全池、'ok'＝無快攻（MB 出池）、
 // 'poor'＝只剩兩翼高球（快攻要完美一傳、後排攻擊要像樣一傳——真實排球鐵律）
-export function attackPointsOf(game, team, setterId, passTier = 'perfect') {
+//
+// receiverId（Phase 5 W1 §7 D2「針對性發球吃 transition」）：本波**接一傳的那個人**。
+// 他剛把球墊出去，沒有時間完成 §2 的 Transition 拉開 ⇒ 他這一球降到罰則檔
+// `D2_PASSER_TIER`。**刻意沿用同一道三檔階梯、不另開平行分支**：
+//   ① 檔位是 per-point 的（`pt.tier`），整顆池仍然只有這一顆——攻擊點的產生規則
+//      一條未改，只是「這個人現在用哪一檔」不同
+//   ② 疊加取**較差**的那一檔（worseTier）＝不重複扣：一傳本來就 'poor' 時
+//      接球者的檔位不會再被扣一次（本來就只剩兩翼高球）
+//   ③ 下游（applyRouteKinds／tempoFor）照 pt.tier 走 ⇒ 他自動失去交叉與二速，
+//      這就是工單說的「只能打降級路線」
+// 真實排球對照：快攻手接了一傳就跑不了快攻、後排攻擊手接了一傳跑不完四步 pipe，
+// 前排兩翼接了一傳仍然打得到高球——這正是「發給對方主攻手」值得做的理由。
+export const D2_PASSER_TIER = 'poor';
+const TIER_ORDER = { perfect: 0, ok: 1, poor: 2 };
+function worseTier(a, b) {
+  return (TIER_ORDER[b] ?? 0) > (TIER_ORDER[a] ?? 0) ? b : a;
+}
+
+export function attackPointsOf(game, team, setterId, passTier = 'perfect', receiverId = null) {
   const rot = game.match.rotations[team];
   const pts = [];
   for (const pid of rot) {
@@ -453,23 +484,25 @@ export function attackPointsOf(game, team, setterId, passTier = 'perfect') {
     const p = game.players[pid];
     const front = isFrontRow(rot, pid);
     const role = p.currentRole;
+    // 這條線自己的檔位（D2：接一傳者吃罰則檔，其餘人＝本球的一傳品質）
+    const tier = pid === receiverId ? worseTier(passTier, D2_PASSER_TIER) : passTier;
     if (front) {
-      if (role === 'outside') pts.push({ pid, kind: 'left', rowFactor: 1 });
-      else if (role === 'middle' && passTier === 'perfect') {
-        pts.push({ pid, kind: 'quick', rowFactor: 1 });
-      } else if (role === 'opposite') pts.push({ pid, kind: 'right', rowFactor: 1 });
+      if (role === 'outside') pts.push({ pid, kind: 'left', rowFactor: 1, tier });
+      else if (role === 'middle' && tier === 'perfect') {
+        pts.push({ pid, kind: 'quick', rowFactor: 1, tier });
+      } else if (role === 'opposite') pts.push({ pid, kind: 'right', rowFactor: 1, tier });
       // S 前排不進池；libero 前排不存在（預留）
-    } else if (passTier !== 'poor') {
+    } else if (tier !== 'poor') {
       // 後排攻擊需會後排攻擊技術（Player.techniques.pipe；預設 1＝AI/快速比賽不變，
       // 生涯新人 0＝二傳不舉給不會後排攻擊的人——否則地板球權會逼出送分自由球）
       const canBackAttack = (p.techniques?.pipe ?? 1) >= 1;
       if (!canBackAttack) continue;
-      if (role === 'outside') pts.push({ pid, kind: 'pipe', rowFactor: 0.5 });
+      if (role === 'outside') pts.push({ pid, kind: 'pipe', rowFactor: 0.5, tier });
       // W3 OPP 微調（工單 §5）「後排 D 球權重提高」：全局 0.65 實測把 175 主錨拖出帶
       // （23%/7%→27%/4%，n=150 對照歸因確鑿）——W2 §5 同款裁定：動分佈＝整組重校準，
       // 不免費。故維持 0.5 保錨點；玩家=OPP 的後排球權已由 trustFloor 0.27＋高 trust
       // 實質保障（相對隊友「權重提高」成立）。全局寫實化＝試玩清單待 Sawmah 裁定
-      else if (role === 'opposite') pts.push({ pid, kind: 'dball', rowFactor: 0.5 });
+      else if (role === 'opposite') pts.push({ pid, kind: 'dball', rowFactor: 0.5, tier });
       // MB/S 後排不進池；libero（Phase 2+）後排替換於此掛鉤
     }
   }
@@ -1041,11 +1074,49 @@ function touchCeiling(player, action, jumpSet = false) {
 const SERVE_ZONES = [
   { lx: 2.5, lz: 7.8 }, { lx: -2.5, lz: 7.8 }, { lx: 0, lz: 8.2 }, { lx: 2, lz: 6.5 },
 ];
+
+// ==== D2-SERVE-BEGIN（工單 §7 D2「針對性發球」；零新 UI——發球選區面板一格未加）====
+// 對手也會這樣打你：AI 發球會**指名**發給對方最該被吃掉 transition 的攻擊手。
+// 他接了一傳 ⇒ attackPointsOf 把他降到 D2_PASSER_TIER（只剩兩翼高球）⇒ 對方本球少一條線。
+//
+// 為什麼只挑**後排**攻擊手：接發仲裁（arbitrate 的 formationExempt）本來就排除 S 與
+// 前排 MB，而前排兩翼的責任區在 lz=3（網前）——瞄他等於發短球，那是工單 §10 明列
+// 不做的 D3。深區發球在幾何上只可能被後排接到，所以「發給對方主攻手」＝發給後排的他。
+// 挑誰：有效 trust 最高者（＝對方最倚賴的那條線；trust 是既有的公開量，不新增屬性），
+// 平手取 id 序＝決定論。
+export function serveTargetPidOf(game, team) {
+  const opp = otherTeam(team);
+  const rot = game.match.rotations[opp] ?? [];
+  const pool = attackPointsOf(game, opp, null, 'perfect');
+  let best = null;
+  for (const pt of pool) {
+    if (!isBackRow(rot, pt.pid)) continue;
+    const trust = effectiveTrust(game, game.players[pt.pid]);
+    if (!best || trust > best.trust + 1e-9
+      || (Math.abs(trust - best.trust) <= 1e-9 && pt.pid < best.pid)) {
+      best = { pid: pt.pid, trust };
+    }
+  }
+  return best?.pid ?? null;
+}
+
 function serveTarget(game, team) {
   const { score } = game.match;
+  // 針對率：一半的球指名、一半維持既有的四區循環——兩種發球都要看得見才叫「戰術」，
+  // 全部指名等於落點恆定（對方每球都知道發給誰）。**未依治具校準**（工單 §11 禁止）
+  const roll = hash01(score.A * 53 + score.B * 149 + 401 + (game.seed ?? 0));
+  if (roll < AI.SERVE_TARGET_RATE) {
+    const pid = serveTargetPidOf(game, team);
+    if (pid) {
+      // 瞄他的接發責任區（基準站位）＝他非接不可；深度由 POSITION_TEMPLATE 供給（lz 7）
+      const opp = otherTeam(team);
+      return basePosition(opp, positionOf(game.match.rotations[opp], pid));
+    }
+  }
   const zone = SERVE_ZONES[(score.A + score.B) % SERVE_ZONES.length];
   return localToWorld(otherTeam(team), zone.lx, zone.lz);
 }
+// ==== D2-SERVE-END ====
 
 // 反應延遲：reaction 0–100 → 24–8 tick（0.4–0.13 秒）才起動
 function reactionTicks(player) {

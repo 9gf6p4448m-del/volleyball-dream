@@ -120,6 +120,12 @@ export function buildDirectorScript(tape) {
 // Exact 版回浮點：整數部分推 sim、小數部分當插值 alpha（慢動作下才不會走成階梯）
 export function stepAtExact(script, t) {
   const clamped = Math.max(0, Math.min(1, t));
+  // t=1 直接回終步：逐段累減 ms 會有浮點殘差（實測某分段 ms=5285.7142857142835 vs
+  // segMs=5285.714285714285，差 −1.8e-12），使最後一段的 `ms >= segMs` 為 false，
+  // 於是走進插值分支回 510.99999999999994 → floor 後少一步。違反本函式上方自己
+  // 寫明的契約「t=1 恆為最後一步＝跳過與播完同終態」（4.6 教訓同源）。
+  // 07-29 D2 輪由測試抓到——分段長度變了才踩得到，屬既有潛伏 bug 非本輪回歸
+  if (clamped >= 1) return script.totalSteps;
   let ms = clamped * script.totalMs;
   for (const s of script.segments) {
     const segMs = ((s.to - s.from) * SIM_DT * 1000) / s.speed;

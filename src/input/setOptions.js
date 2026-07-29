@@ -40,7 +40,10 @@ export function setOptionsFor(game, aiState, setterId) {
       ? (aiState.approach.routes ?? []).find((r) => r.pid === pid)?.kind
       : undefined
   );
-  const options = attackPointsOf(game, team, setterId, tier).map((pt) => {
+  // Phase 5 W1 §7 D2：接一傳的那個人這一球只剩降級路線（甚至掉出池）——面板必須與
+  // AI 舉球讀到**同一顆池**（同源鐵則），否則玩家會看到一個 sim 不承認的選項
+  const receiverId = aiState?.passReceiverId ?? null;
+  const options = attackPointsOf(game, team, setterId, tier, receiverId).map((pt) => {
     const p = game.players[pt.pid];
     const kind = routeKindOf(pt.pid) ?? pt.kind;
     const a = setAimFor(game, team, pt.pid, kind);
