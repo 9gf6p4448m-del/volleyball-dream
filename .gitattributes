@@ -1,0 +1,12 @@
+# 行尾規範：repo 內一律 LF，簽出到工作區也一律 LF。
+#
+# 為什麼要寫死：Git for Windows 的系統預設是 core.autocrlf=true，會把簽出的檔案轉成
+# CRLF。本專案的靜態掃描護欄（tests/block-persona.test.mjs 的 B1-SCAN 剝註解）以及
+# 任何逐行正則比對，在 CRLF 下的行為與 LF 不同——結果是「任何人在 Windows 用預設
+# git 設定 fresh clone 這個 repo，護欄就會紅」，工單 §11「Sawmah 可獨立驗證」失效。
+#
+# eol=lf 的優先序高於 core.autocrlf，所以這一行就是根因解，不需要任何本地 git 設定配合。
+* text=auto eol=lf
+
+*.png binary
+*.glb binary

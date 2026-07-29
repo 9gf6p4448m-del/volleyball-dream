@@ -151,10 +151,21 @@ test('B1：快攻沒來（兩翼高球）時，commit 的中間攔網手到位�
 });
 
 // ---------------- ③ ★不得讀 attackerId ----------------
+// 註解裡寫到「不得讀 attackerId」是允許的，程式碼中出現才算偷讀：
+// 逐行剝掉行註解後再掃（本專案不用區塊註解）。
+//
+// ★先正規化行尾再剝★：JS 正則的 `.` 不匹配 `\r`（它是行終止符）、`$` 也不錨在 `\r` 前面，
+// 所以 `//\s*attackerId...\r` 這種 CRLF 行會整條剝不掉，護欄就會把註解裡的字誤判成偷讀。
+// 這正是 2026-07-29 抓到的 repo 級缺陷（.gitattributes 是根因解，這裡是護欄自身的防線）。
+// 匯出到模組層是為了讓下面那條「護欄的護欄」測試能直接餵 CRLF 樣本驗它。
+export const stripComments = (src) => src
+  .replace(/\r\n?/g, '\n')
+  .split('\n')
+  .map((l) => l.replace(/\/\/.*$/, ''))
+  .join('\n');
+
 test('B1 反作弊：攔網判讀路徑（B1-SCAN 區）零 attackerId', () => {
-  // 註解裡寫到「不得讀 attackerId」是允許的，程式碼中出現才算偷讀：
-  // 逐行剝掉行註解後再掃（本專案不用區塊註解）
-  const stripped = (src) => src.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+  const stripped = stripComments;
   const regions = [];
   for (const f of ['blockRead.js', 'ai.js']) {
     const src = readFileSync(join(SRC, f), 'utf8');
@@ -177,6 +188,33 @@ test('B1 反作弊：攔網判讀路徑（B1-SCAN 區）零 attackerId', () => {
     /export function blockCommitRead\(game, atkTeam, opts = \{\}\)/.test(blockSrc),
     'blockCommitRead 的簽章被改動——反作弊保證線失效',
   );
+});
+
+// ---------------- ③' 護欄的護欄：剝註解不得受行尾影響 ----------------
+// 為什麼要有這條：③ 的護欄在 CRLF 工作區下曾整條失效，而它失效的樣子是「轉紅」，
+// 看起來像有人作弊、實際上是行尾。護欄自己沒有護欄，下一次還會被當成真 bug 追。
+test("B1 護欄的護欄：剝註解對 CRLF／CR／LF 三種行尾結果相同", () => {
+  const lf = [
+    'const x = 1;',
+    '// 這行註解裡寫到 attackerId 是允許的',
+    'const y = 2; // 行尾註解也提到 attackerId',
+    'const z = 3;',
+  ].join('\n');
+  const crlf = lf.replace(/\n/g, '\r\n');
+  const cr = lf.replace(/\n/g, '\r');
+
+  // 三種行尾剝完之後必須逐字相同（也就是行尾不再是變因）
+  const want = stripComments(lf);
+  assert.equal(stripComments(crlf), want, 'CRLF 剝註解結果與 LF 不同');
+  assert.equal(stripComments(cr), want, 'CR 剝註解結果與 LF 不同');
+
+  // 而且真的要剝乾淨——這才是護欄的實質：註解裡的 attackerId 不算偷讀
+  assert.ok(!/attackerId/.test(want), 'LF 樣本沒剝乾淨');
+  assert.ok(!/attackerId/.test(stripComments(crlf)), 'CRLF 樣本沒剝乾淨（就是 07-29 的缺陷）');
+
+  // 反向護欄：程式碼中真的出現才該被抓到，不論行尾
+  const cheat = 'const id = rally.attackerId;\r\n// 註解\r\n';
+  assert.ok(/attackerId/.test(stripComments(cheat)), '剝過頭：真的偷讀也被剝掉了');
 });
 
 // ---------------- ④ B2 不得瞬移 ----------------
