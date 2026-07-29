@@ -1081,14 +1081,20 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
       //   容許他事後跟著人跑＝把 commit 偷偷變成 read，人格差異會被抹平。
       if (persona !== BLOCK_PERSONA.COMMIT || unlocked) return null;
       aiState.blockPlan = {
-        team, x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null, blind: true,
+        team, x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+        blind: true, seen: false,
       };
       return 0;
     }
     const read = { x: aimX };
     // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
     aiState.blockPlan = {
-      team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null, blind: false,
+      team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+      // `seen` 一律起手為偽、由 chase 段逐 tick 自己觀察——**不得在建計畫時預設為真**：
+      // read 的計畫是從**球的拋物線**建的（blockAimX 走 predictContactPoint），
+      // 不是從「看到有人在跑」建的。預設為真會讓 read 在兩翼助跑手還沒進偵測範圍時
+      // 就當場拔起（實測 set+14，球 set+89 才到）。
+      blind: false, seen: false,
     };
     return read.x;
   }
@@ -1120,7 +1126,29 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
     // ✅ 上面那個「59–65% 從來沒發生」的缺口已於 2026-07-29 定位並修復——**成因不是這裡**，
     // 是 commit 根本沒建起計畫（決策窗在第二觸永久關閉、43.5% 的攻擊窗內讀不到人）。
     // 修法＝上方的 `blind` 退路。實測依據見 `tools/phase5-block-plan-lifecycle-probe.mjs`。
-    if (r.touches >= 2 && blockCommitRead(game, atkTeam, opts) == null) {
+    //
+    // ★ 起跳訊號是**下降沿**，不是位準（2026-07-29 Sawmah 簽准修正）★
+    // 原本寫成「`touches >= 2` ∧ 現在沒有人在往網跑」——**位準**。實測全部塌在地板：
+    //   兩翼 read 起跳 set+14、球過網 set+89、過網時滯空 74（AIR_TICKS 只有 24）
+    //   ⇒ 六格的頂邊完成度全部等於地板＝球到的時候沒有一隻手還在空中。
+    // 成因：`blockCommitRead` 只認 `lz <= DEPTH_LZ (2.9)` 的候選，而**兩翼助跑起點
+    // lz 3.58、後排 5.61**（W1 §2 實測）——他們在助跑前半段根本不在偵測範圍內，
+    // 於是「沒有人在往網跑」在他們**起跳之前**就成立了。
+    //
+    // 「他不推進了＝他拔起來了」這句話本來就預設「**他曾經在推進**」。
+    // 把 `seen` 補上，訊號就從位準變成真正的下降沿：看過人在跑、而且他現在不跑了。
+    // 零新常數；沒看過任何人跑的計畫（含 blind）就繼續等，不會在 set+0 當場拔起。
+    // ⚠ 已知未解（2026-07-29 實測，待裁定）：兩翼／後排仍早約 55 tick。
+    // 一次攻擊有**好幾個**下降沿（兩翼：2 個佔 51%、3 個佔 15.7%）——
+    //   第一個 p50 = set+35（中路誘餌拔起），**最後一個 p50 = set+82**（真正的攻擊手起跳，
+    //   擊球 set+81、理想起跳 set+76）。本訊號抓的是第一個 ⇒ 被誘餌帶走。
+    // 試過「下降沿要認人」（只在消失的候選人落在自己瞄準點 REPLANT_JUMP_M 內才起跳）：
+    //   **實測退步**——read 面對快攻變成 100% 不起跳、commit 又回到 set+0，已撤回。
+    // 「該吃第幾個下降沿」實質上就是 read／commit 賭局的定義本身（憲法 §零 領域），
+    // 不由實作端自行決定。詳見 docs/phase5-section10-test-triage.md §五。
+    const liveRead = blockCommitRead(game, atkTeam, opts);
+    if (liveRead) c.seen = true;
+    if (r.touches >= 2 && c.seen && liveRead == null) {
       c.jumpTick = tick; // 本 tick 起算 air
       return c.x;
     }
