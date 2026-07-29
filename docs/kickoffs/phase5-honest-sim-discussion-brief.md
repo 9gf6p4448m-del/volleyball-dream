@@ -232,3 +232,140 @@ passTierOf 實際吃到的距離（n=124，10 seeds）
 `game.js:454-455`：`dist = hypot(ball.x−actor.x, ball.z−actor.z)`，純球心對球心，**不吃 `BALL.RADIUS`**。
 **但攔網高度判定有吃**（`b.y > blockReach(p, ...) + BALL.RADIUS`）
 ⇒ **同一套判定裡兩種標準**，本卷應一併統一。
+
+---
+
+## 五、量測工單三題的結果（2026-07-29 回填；**只有數字，不含結論**）
+
+> 探針**已進 repo**（`tools/phase5-block-width-probe.mjs`／`tools/phase5-attr-height-probe.mjs`，
+> commit `fa7e3f4`），任何人可重跑。`src/**` 與既有測試零改動、750 測綠。
+
+### 第 1 題：攔網手的橫移與牆的實際寬度
+
+**讀碼：有沒有速度上限？**
+**沒有攔網專屬的上限**（無常數、無夾限、無節流）。唯一的位移上限是**全體球員共用的單 tick 步長**
+（`src/sim/game.js:288-303` 的 `applyMove`）：
+
+| 名稱 | 位置 | 值 |
+|---|---|---|
+| `moveSpeed(p)` | `player.js:100-102` | `2.8 + (speed/100)×2.4` ＝ **2.8–5.2 m/s** |
+| 單 tick 上限 | ×`SIM_DT` (1/60) | **0.0467–0.0867 m/tick** |
+| `clampCourtX` | `ai.js:1175-1178` | 走位目標 x 夾在 **±4.1 m** |
+
+驅動橫移的那段＝`ai.js:820`：`let nx = clampCourtX(game.ball.x + laneOff);`
+——**目標 x 每 tick 直接跟著 `game.ball.x` 走，無加速度／無慣性模型**。
+`laneOff` 由角色定線（MB=0／OH=−1／OPP·S=+1）× `AI.BLOCK_SPREAD = 1.5`；`AI.BLOCK_LZ = 0.6`。
+
+**量測**（七隊各 8 局＝56 局／5192 次扣球／**4972 個「二傳觸球→攻擊手擊球」窗口**）
+
+① 窗口內攔網手的橫向位移（n=14916 人次）
+
+| 量 | p50 | p90 | min | max |
+|---|---|---|---|---|
+| \|Δx\| 淨位移 | **1.587 m** | **3.086 m** | 0.000 | **4.864 m** |
+| \|Δx\| 累積路徑 | 1.784 m | 3.358 m | 0.000 | 4.974 m |
+| 窗長 | 80 tick（1.333 s） | 82 | 13 | 100 |
+
+② 擊球瞬間前排相鄰配對的站距
+
+| 量 | n | p50 | p90 | min | max |
+|---|---|---|---|---|---|
+| 全前排三人 | 9944 對 | **1.500 m** | **3.178 m** | **1.351 m** | 5.749 m |
+| 只計貼網者（\|z\|≤1.2m） | 8819 對 | 1.500 m | 2.334 m | 1.351 m | 3.131 m |
+
+擊球瞬間前排「貼網」人數（n=4972）：**0 人 0.0%／1 人 0.0%／2 人 22.6%／3 人 77.4%**
+
+③ 擊球瞬間**處於攔網窗內**（`blockUntil > tick`）的前排人數：**100.0% 為 0 人**（n=4972）
+> 成因是順序而非抽樣：`rally.profile` 在擊球那一 tick 的 `executeTouch` 內才被設成 `'spike'`
+> （`game.js:579`），而攔網 intent 的條件是 `r.profile === 'spike'`（`ai.js:844`）——
+> 該 tick 的 intent 已收集完畢。**故此欄不具代表性，請看下一欄。**
+
+③′ **球過網瞬間**（＝`tryBlock` 真正結算那一刻，`blockUntil >= tick`，`game.js:897`）n=4378
+
+| 0 人 | 1 人 | 2 人 | 3 人 |
+|---|---|---|---|
+| **44.5%** | **3.8%** | **38.3%** | **13.5%** |
+
+第二組獨立樣本（`VD_SEED_BASE=9001`，56 局／4793 窗）逐項一致：
+淨位移 p50 1.585／p90 3.090；站距 p50 1.500／p90 3.251／min 1.351；③′ 43.2／3.4／39.9／13.5%。
+
+---
+
+### 第 2 題：屬性生成器與身高的相關
+
+**讀碼：生成端零讀 `height`。** 四條建人路徑（對手先發／對手板凳／自由人／主角與招募生）
+的屬性一律是 `level + attrBias + roleBias`（＋招募生的 `uplift + jitter(−2..+2)`），
+`height` 只是另一個獨立欄位、僅在消費端進 sim（`player.js:74-97` 的
+`standingReach`／`blockReach`／`defenseRange`）。
+**主角的八屬性是字面常數，與創角 `heightCm` 完全無關**（`careerState.js:172-193`）。
+
+**實際相關係數**（生涯 86 人，走 `careerMatchSetup` 真實建隊路徑；身高 1.72–2.01、均 1.871）
+
+| 屬性 | r（全體 n=86） | r（不含自由人 n=78） | r（隊內去均值 n=86） | r（隊內去均值·不含 L） |
+|---|---|---|---|---|
+| **block** | **+0.799** | +0.646 | +0.776 | +0.348 |
+| **jump** | **+0.710** | +0.565 | +0.697 | +0.209 |
+| **serve** | +0.696 | +0.427 | +0.699 | +0.022 |
+| **power** | +0.639 | +0.508 | +0.637 | +0.096 |
+| stamina | +0.039 | +0.458 | −0.406 | +0.017 |
+| **speed** | **−0.099** | **+0.367** | **−0.562** | −0.008 |
+| **reaction** | **−0.111** | **+0.367** | **−0.572** | +0.013 |
+| control | −0.115 | +0.314 | −0.524 | −0.032 |
+
+耦合管道（讀碼識別）：①角色同時決定 `heights` 槽序與 `roleBias` ②隊伍 `level` 同時抬高八屬性，
+而各隊 `heights` 也隨隊強度變高——**隊際 r(level, 平均身高) = +0.876**（n=7 隊）
+③自由人身高固定 1.72、reaction/speed 走 `level+14` 的另一條公式（分角色均值：
+libero 身高 1.720／reaction 74.9／speed 72.9，middle 身高 1.943／block 62.0）。
+
+---
+
+### 第 3 題：`attackZones` 的選區解析成什麼
+
+**解析成「具體目標地面點 ＋ 由該點解出的彈道」，不是落點分佈。過網 x 可導出，且 repo 內已有現成函式並已被消費。**
+
+**（1）選區＝四個寫死的世界座標點**（`blockRead.js:17-27`，隨攻擊手所在半邊鏡射）：
+```js
+line:   { x: sign * 4.15, z: -side * 5.2 }
+cross:  { x: -sign * 3.9, z: -side * 6.3 }
+middle: { x: 0,           z: -side * 5.0 }
+tip:    { x: -sign * 1.2, z: -side * 1.9 }
+```
+`attackZones.js:22-31` 包成 zones（`tip` 的 `power = 0.25`，其餘 1；吊球僅前排）。
+
+**（2）選區 → intent**：`matchControls.js:509-518` 把 `zone.aim` 放進 `aimWorld`＋`gaze`，
+`:342-344` 註解原文「進攻決策：**直接指定世界落點**（點選攻擊區）」。
+
+**（3）目標點 → 實際目標（唯一的隨機在這裡）**：`game.js:825-833` 的 `scatterTarget`——
+**加在目標點上的圓盤位移**（`TUNING.SCATTER_MAX = 1.7`，spike 的 factor 1.2），
+**選區本身仍是單一確定點**。
+
+**（4）目標點 → 彈道**：`game.js:541-551` → `spikeVelocity`／`velocityForTime`
+（`flight.js:27-52`）解出 `vx = (to.x − from.x)/T`；`ball.js:14-28` 的 `stepBall`
+**水平零阻力**，故 vx/vz 自由飛行中恆定。
+
+**過網 x 的導出函式已存在**——`blockRead.js:30-33`：
+```js
+export function netCrossingX(from, aim) {
+  const t = from.z / (from.z - aim.z);
+  return from.x + (aim.x - from.x) * t;
+}
+```
+現有兩個消費端：`attackZones.js:44-49` 的 `isBlocked()`（`|bx − netX| < BLOCK_COVER_X`）、
+`matchControls.js:661-666` 的 MB 攔網面板（把選區換算成過網 x 給玩家站位）。
+精度註記：`netCrossingX(from, zone.aim)` 是**名目**過網 x；實際是 `netCrossingX(from, target)`，
+`target = aim + scatter`。
+
+---
+
+### 讀碼過程中順帶記錄的事實（只陳述）
+1. `reactionTicks`（`ai.js:1137`）在攔網分支（`ai.js:793-848`）**完全沒被呼叫**，
+   只出現在接球路徑與 `blockCommitTargetX` 的 close 預算（`ai.js:971`）
+2. 本次量測到的攔網行為 **100% 是 read 人格**（`COMMIT_PERSONA_ENABLED = false`），
+   `blockCommitTargetX` 整段在本次樣本中未執行
+3. `tools/balance-sim.mjs` 的 `VD_HEIGHT=150/175/195` 身高錨點臂，**三臂的屬性逐值相同**
+   ——只有身高經 `standingReach`／`blockReach`／`defenseRange` 進 sim
+4. `attackZones.js:7` 的 `BLOCK_COVER_X = 1.1` 與 `game.js:44` 的 `TUNING.BLOCK_REACH_X = 1.1`
+   是**兩份各自寫死的同值常數**（面板的「被封」判定與 sim 的實際攔網涵蓋各持一份）
+5. 攔網手站位目標 `nx` **逐 tick 直接吃 `game.ball.x`**（`ai.js:820`），
+   不吃攻擊手位置、不吃 `spikeAimsFor` 的過網點；只有 L 面板的配套指令
+   （`scheme === 'line'|'cross'`，`ai.js:838-842`）會疊 `AI.BLOCK_SCHEME_SHIFT = 0.9 m`
