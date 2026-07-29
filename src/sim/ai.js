@@ -214,7 +214,20 @@ export function aiCollectIntents(game, aiState, excludeIds = []) {
 // ---- 協調層 ----
 
 function ensureFlightPlan(game, aiState) {
-  if (game.phase !== 'rally') return;
+  if (game.phase !== 'rally') {
+    // 死球／發球階段：上一球的助跑線已經沒有意義了。
+    //
+    // 為什麼要補這一行：清空原本只寫在 rally 內的「來球」分支（下方 `aiState.approach = null`），
+    // 所以只有「球又飛回來」才會清。當一球是在攻擊路線還活著的時候結束的（殺球直接得分），
+    // routes 就會一路殘留到下一球的發球階段。
+    // 消費端目前都掛著 `r.touches >= 1` 之類的守衛，讀不到這份髒狀態（本改動經
+    // `tools/sim-hash-probe.mjs` 證實行為逐值零變化），但**外部觀測者讀得到**：
+    // `tempo.test.mjs` 的瞬移護欄就是拿 `ai.approach.routes` 當「誰在助跑」的名單，
+    // 於是把死球後的歸位站定（一次 0.5m 的瞬間復位）算成了助跑中的瞬移。
+    // 髒狀態沒有讓 sim 說謊，但讓量測說謊——§十 這一卷要的正好是相反的東西。
+    aiState.approach = null;
+    return;
+  }
   if (aiState.flightId === game.rally.flightId) return; // 呼叫鎖定：本 flight 已指派，不重算
 
   aiState.flightId = game.rally.flightId;
