@@ -86,9 +86,32 @@ export function spikeReach(p, jumpMul = 1) {
   return standingReach(p) + jumpHeight(p, jumpMul);
 }
 
-// 攔網高度（攔網跳略保守於扣球跳）
+// 攔網高度（攔網跳略保守於扣球跳）——**這次跳躍的頂點**，與時間無關
 export function blockReach(p, jumpMul = 1) {
   return standingReach(p) + jumpHeight(p, jumpMul) * 0.85;
+}
+
+/**
+ * 攔網頂邊：手在**這一 tick** 實際能碰到的最高點（m）。
+ *
+ * @param {object} p       球員
+ * @param {number|null} t  起跳後經過的 tick 數（`state.tick − actor.blockStartTick`）；
+ *                         `null` ＝這一刻根本沒在跳
+ * @param {number} jumpMul W7 體力劣化乘數
+ *
+ * ★ §十 階段二 2-B 之前，這是刻意的退化實作：回傳跳躍頂點，完全不看 `t` ★
+ *
+ * 也就是「跳了即等於手在頂點」——這正是十-2 要消滅的假狀態：攔網手起跳再晚，
+ * 手也瞬間在最高處，垂直維度在這個模型裡根本不存在，於是 read 人格既能等看清楚
+ * 又追得到快攻。2-B 會把本體換成吃跳躍相位（太早已下墜、太晚還在上升）。
+ *
+ * 現在就把**介面**定出來（頂邊是 t 的函式），讓 sim 與量測探針都改吃它：
+ * 2-B 只換這個函式的本體，呼叫端一行都不用動，量測指標也不必中途改定義。
+ * 引入這一步刻意保持行為零變化，由 `tools/sim-hash-probe.mjs` 背書。
+ */
+export function blockTopEdge(p, t, jumpMul = 1) {
+  void t; // 退化實作：頂邊尚未吃相位（見上方說明）
+  return blockReach(p, jumpMul);
 }
 
 // 防守可及半徑（公尺）：身高越高踏步範圍越大、speed 補正

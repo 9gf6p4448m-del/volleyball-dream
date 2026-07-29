@@ -8,7 +8,7 @@ import {
   isBackRow, isInFrontZone, landedCourtTeam,
 } from './rotation.js';
 import {
-  createPlayer, spikeReach, blockReach, moveSpeed, feintMasteryMul,
+  createPlayer, spikeReach, blockReach, blockTopEdge, moveSpeed, feintMasteryMul,
 } from './player.js';
 import { reachVolumeFor, ballInReach } from './reach.js';
 import {
@@ -914,7 +914,10 @@ function tryBlock(state, toTeam, ev) {
     if (!isFrontRowOf(state, toTeam, p.id)) continue;
     const actor = state.actors[p.id];
     if (actor.blockUntil < state.tick) continue;
-    if (overBlockerHands(b.y, blockReach(p, staminaPerfMul(state, p)))) continue; // W7：累了跳不高
+    // 頂邊吃「起跳後經過幾 tick」（2-B 之前 blockTopEdge 忽略 t＝退化成跳躍頂點，
+    // 行為與改制前逐值相同；換的是介面不是數值）。W7：累了跳不高
+    const airT = state.tick - actor.blockStartTick;
+    if (overBlockerHands(b.y, blockTopEdge(p, airT, staminaPerfMul(state, p)))) continue;
     members.push({ id: p.id, x: actor.x, p, actor });
   }
   const band = buildBand(members, TUNING.BLOCK_REACH_X);
