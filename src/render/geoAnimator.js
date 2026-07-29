@@ -223,6 +223,13 @@ export function hitLeadTicks(type) {
   const seq = SEQUENCES[type];
   return seq?.hit != null ? Math.round(seq.hit * seq.dur * 60) : 0;
 }
+// 序列全長（tick）：把「起手那一幀」對齊到指定的結束 tick 用（matchLoop 讓助跑
+// approach3/4 的最後一步正好踩在 sim 算好的起跳 tick 上）。與 hitLeadTicks 同一個
+// 用意——時長是這裡的單一真相，序列調時長時提前量自動跟著調，不會漂移
+export function seqDurTicks(type) {
+  const seq = SEQUENCES[type];
+  return seq ? Math.round(seq.dur * 60) : 0;
+}
 
 export const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於＝低手墊球（表現層判定）
 // sim 的 TOUCH 事件 → 該播哪一支擊球動畫；null＝本層不播。

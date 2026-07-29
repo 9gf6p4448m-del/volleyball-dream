@@ -37,7 +37,8 @@ import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js
 import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
-import { hitLeadTicks } from '../render/geoAnimator.js';
+import { hitLeadTicks, seqDurTicks } from '../render/geoAnimator.js';
+import { approachRouteOf } from '../sim/approach.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
   lineKillDistance, SIG_LINE_M, timingVerdict,
@@ -94,6 +95,39 @@ const CONTACT_NEAR_MAX = 2.5;
 const TAKEOFF_LEAD_TICKS = TUNING.TAKEOFF_LOOKBACK_TICKS;
 const APPROACH_LEAD_FRONT_TICKS = TAKEOFF_LEAD_TICKS + 45; // 3 步：45 tick＝0.75s（approach3 dur）
 const APPROACH_LEAD_BACK_TICKS = TAKEOFF_LEAD_TICKS + 60;  // 4 步：60 tick＝1.0s（approach4 dur）
+// 07-29 Sawmah 試玩：「快攻看起來會先走到網子前停一下，然後才起跳」。根因＝**畫面上的
+// 起跳沒吃 sim 的起跳時刻**：上面那組提前量全是從 hitPoint（第三擊、二傳觸球之後才算得
+// 出來）倒數的，但一速（MB 快攻）在 sim 裡是**二傳觸球前**就跑完助跑站上起跳點的
+// （approach.js TEMPO.one）——那段等球的時間畫面上就是站著，等到 ticksToHit 進窗才跳。
+// 探針實測（tools/quick-takeoff-probe.mjs，40 局 n=738）：「跑到起跳點站定 → 畫面上
+// 起跳」舊規則 p50=21 p90=26 max=40 tick（0.67s）＝Sawmah 看到的「停一下」；
+// 改吃 takeoffTick 後 p50/p90/max＝2/2/2 tick。sim 一格未動，只換觸發錨點。
+// 修法＝同一套範式，只是錨點換成 sim 自己算好的 `route.takeoffTick`。
+// 逾時作廢窗（tick）：一幀可能推進多個 sim tick（掉幀／時間膨脹），錯過起跳那一 tick
+// 是常態。差距在窗內＝補播；超過就放棄早跳、退回既有的 hitPoint 倒數路徑（fallback）
+const EARLY_TAKEOFF_STALE_TICKS = 12;
+
+// 一速／二速攻擊手「該不該在這一 tick 播助跑或起跳」——純函式，供 tests 直測。
+//   'approach' 助跑起手（讓序列末幀正好踩在起跳 tick 上）／'takeoff' 離地／null 不播
+// 三速（起跳在二傳觸球之後）與算不出起跳 tick 的 route 一律回 null＝走既有路徑。
+export function earlyTakeoffCue(route, tick, approachLeadTicks, staleTicks) {
+  if (!route || route.tempo === 'three' || route.takeoffTick == null) return null;
+  const toTakeoff = route.takeoffTick - tick;
+  if (toTakeoff > 0) return toTakeoff <= approachLeadTicks ? 'approach' : null;
+  return -toTakeoff <= staleTicks ? 'takeoff' : null;
+}
+
+// 本球「被選中的攻擊手」的一速／二速起跳計畫；key＝每個助跑計畫只播一次的識別。
+// 用 approach.setTick（一傳後定案、整個第三擊期間不變）而不是 flightId——二傳觸球
+// 會換 flight，用 flightId 當旗標會讓早跳與既有路徑各播一次＝跳兩下
+function earlyTakeoffOf(aiState) {
+  const app = aiState.approach;
+  if (!app?.routes?.length || app.setTick == null || !aiState.attackerId) return null;
+  const route = approachRouteOf(app.routes, aiState.attackerId);
+  if (!route || route.tempo === 'three' || route.takeoffTick == null) return null;
+  return { route, key: `${app.team}:${app.setTick}:${aiState.attackerId}` };
+}
+
 const REPLAY_TAIL = 180;   // 回放最後 180 tick（3 秒）
 const REPLAY_SPEED = 0.5;  // 半速
 const TAPE_TAIL = 240;     // 情蒐錄影帶：尾段 4 秒、略快於一般回放
@@ -242,6 +276,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lastReadyFlight: -1,        // 同上，接球/舉球預備段
     lastContactFlight: -1,      // 同上，擊球動作提前觸發（每 flight 一次）
     lastWaitFlight: -1,         // Phase 5 W1 §2-3：等待姿勢（transitionWait），每個 flight 只播一次
+    earlyApproachKey: '',       // §4 追修：一速助跑起手已播的助跑計畫（每計畫一次）
+    earlyTakeoffKey: '',        // 同上，離地（吃 sim 的 route.takeoffTick）
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
     shake: 0,
@@ -1448,7 +1484,32 @@ function updateAssistAndPoses(s) {
     s.lastWaitFlight = aiState.flightId;
     stage.matchView.triggerPose(aiState.attackerId, 'transitionWait');
   }
+  // §4 追修（07-29）：一速／二速的起跳吃 sim 的 `route.takeoffTick`（見檔頭
+  // EARLY_TAKEOFF_STALE_TICKS 註解）。sim 裡 MB 是「跑完助跑就停在起跳點」，停的
+  // 那一刻就該離地——底下那組 hitPoint 倒數要等二傳觸球後才算得出來，所以中間那段
+  // （起跳 tick→實際擊球 p50=36 tick）畫面上是站著＝Sawmah 看到的「停一下才跳」。
+  // 助跑起手同步提前：讓 approach3/4 的末幀（交棒 windup 的那一幀）正好踩在起跳 tick。
+  const early = game.phase === 'rally' ? earlyTakeoffOf(aiState) : null;
+  if (early && aiState.attackerId !== s.controlledId && game.players[aiState.attackerId]) {
+    const atkTeam = game.players[aiState.attackerId].teamId;
+    const back = isBackRow(game.match.rotations[atkTeam], aiState.attackerId);
+    const seq = back ? 'approach4' : 'approach3';
+    const cue = earlyTakeoffCue(
+      early.route, game.tick, seqDurTicks(seq), EARLY_TAKEOFF_STALE_TICKS,
+    );
+    if (cue === 'approach' && s.earlyApproachKey !== early.key) {
+      s.earlyApproachKey = early.key;
+      stage.matchView.triggerPose(aiState.attackerId, seq);
+    } else if (cue === 'takeoff' && s.earlyTakeoffKey !== early.key) {
+      s.earlyTakeoffKey = early.key;
+      const attacker = game.players[aiState.attackerId];
+      const hesitant = aiState.attackKind === 'quick'
+        && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
+      stage.matchView.triggerPose(aiState.attackerId, hesitant ? 'windupHesitant' : 'windup');
+    }
+  }
   // AI 攻擊手「先跳後揮」：第三擊球下墜接近攻擊手時先播起跳引臂（觸球才揮臂）
+  const jumpedEarly = !!early && s.earlyTakeoffKey === early.key;
   if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId &&
       aiState.claimId !== s.controlledId && aiState.flightId !== s.lastWindupFlight) {
     const atk = game.actors[aiState.claimId];
@@ -1468,8 +1529,12 @@ function updateAssistAndPoses(s) {
     const atkTeam = game.players[aiState.claimId].teamId;
     const back = isBackRow(game.match.rotations[atkTeam], aiState.claimId);
     const approachLead = back ? APPROACH_LEAD_BACK_TICKS : APPROACH_LEAD_FRONT_TICKS;
+    // 已照 takeoffTick 早跳的那一球**不得再播助跑段**：approach3/4 的 jump＝0，
+    // 在空中重播等於把人一幀拉回地面。windup 那一半照舊放行——它與早跳的 windup
+    // 同族（geoAnimator.trigger 的空中接續會從跳躍弧頂接手），效果是「繼續滯空」，
+    // 正好補上滯空比 windup 序列（0.75s）更久的那 ~5%（探針④ max 54 tick）
     if (ticksToHit !== null && ticksToHit <= approachLead && near < 4.5
-      && aiState.flightId !== s.lastApproachFlight) {
+      && !jumpedEarly && aiState.flightId !== s.lastApproachFlight) {
       s.lastApproachFlight = aiState.flightId;
       stage.matchView.triggerPose(aiState.claimId, back ? 'approach4' : 'approach3');
     }
