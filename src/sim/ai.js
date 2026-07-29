@@ -189,10 +189,15 @@ export function createAiState() {
     // 由 aiCollectIntents 逐 tick 從 excludeIds 重算（零面板、零玩家指令），
     // block 可為 null＝模稜兩可的中性讀（同時是遲滯的記憶槽）
     blockRead: null,
-    // Phase 5 W1 §6 B1：commit 人格的中間攔網手鎖定槽（{ team, x, chase }）——
-    // 與**本波攻擊**同壽命（來球／新的一擊完成都清空），純由可觀察量重算＝
-    // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
-    blockCommit: null,
+    // §十-2 攔網三段狀態機的鎖定槽（{ team, x, enterTick, jumpTick, replantUntil, pendingX }）
+    // ——**兩種人格共用**（read／commit 只差何時允許做決定）。與本波攻擊同壽命
+    //（來球／新的一擊完成都清空），純由可觀察量重算＝VCR v2 重演時跟其餘 AI 狀態
+    // 一起被逐 tick 重建，不需要進錄影白名單
+    blockPlan: null,
+    // §十-2 起算事件：二傳觸球那一 tick（{ team, tick }）——read 人格的反應延遲從這裡起算。
+    // 選二傳觸球而非攻擊手起跳，是因為快攻在二傳觸球前就已離地（W1 實測 100%），
+    // 等起跳就永遠來不及。這是**可觀察量**（球離手看得見），不是未來資訊
+    setTouch: null,
   };
 }
 
@@ -226,12 +231,20 @@ function ensureFlightPlan(game, aiState) {
     // 於是把死球後的歸位站定（一次 0.5m 的瞬間復位）算成了助跑中的瞬移。
     // 髒狀態沒有讓 sim 說謊，但讓量測說謊——§十 這一卷要的正好是相反的東西。
     aiState.approach = null;
+    // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
+    aiState.blockPlan = null;
+    aiState.setTouch = null;
     return;
   }
   if (aiState.flightId === game.rally.flightId) return; // 呼叫鎖定：本 flight 已指派，不重算
 
   aiState.flightId = game.rally.flightId;
   aiState.planTick = game.tick;
+  // §十-2 起算事件：二傳觸球（第二觸完成＝球離手飛向攻擊手）。攔網手的反應延遲從這裡起算。
+  // 純可觀察量——球離開二傳的手，場上每個人都看得見；不是「二傳選了誰」那種未來資訊。
+  if (game.rally.touches === 2 && game.rally.possession) {
+    aiState.setTouch = { team: game.rally.possession, tick: game.tick };
+  }
   const landing = predictLanding(game.ball);
   aiState.landing = landing;
   // 走位深度：接球者瞄「球墜到接球高度時的水平位置」（接觸點）而非地板落點
@@ -250,8 +263,9 @@ function ensureFlightPlan(game, aiState) {
   if (r.possession === team && r.touches >= 3) return;
 
   if (r.possession === team && r.touches === 1) {
-    // §6 B1：新的一擊完成＝新一波攻擊，上一波的 commit 鎖定作廢（重新讀一次）
-    aiState.blockCommit = null;
+    // §十-2：新的一擊完成＝新一波攻擊，上一波的攔網鎖定與起算事件都作廢（重新讀一次）
+    aiState.blockPlan = null;
+    aiState.setTouch = null;
     // 二傳歸屬（職責制）：S 固定執行；S 剛接了一傳→OPP 備援代舉；再不行才仲裁救球
     const roster = teamRoster(game, team);
     const setter = roster.find(
@@ -346,7 +360,13 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackerId = null;
     aiState.attackKind = null;
     aiState.approach = null; // 來球＝上一波的助跑線作廢
-    aiState.blockCommit = null; // §6 B1：來球＝沒有攻擊要攔，鎖定作廢
+    // §十-2：來球＝沒有攻擊要攔，鎖定作廢——但**對方的扣球例外**：那正是要攔的那顆球。
+    // 鎖定現在同時掛著起跳窗（planX 為 null 就不開窗），扣球一出手就清掉的話，
+    // 窗會在球飛向網子、真正該攔的那幾十 tick 裡消失。改制前鎖定只管站位所以無害。
+    if (r.profile !== 'spike') {
+      aiState.blockPlan = null;
+      aiState.setTouch = null;
+    }
     aiState.passReceiverId = null; // §7 D2：來球＝這一波還沒有人接一傳
   }
 
@@ -814,14 +834,25 @@ function decideOne(game, aiState, playerId) {
     // 'off'（攔手讓開・收吊球）＝前排退攻擊線一帶補吊球、不開攔網窗（賭吊球的語意）；
     // 站線幾何自然改變攔網涵蓋——攔網數值零特例
     const scheme = aiState.digBias?.team === team ? aiState.digBias.block : undefined;
+    // ==== B1-SCAN-BEGIN（工單 §6 反作弊掃描區：本區內不得出現 attackerId）====
+    // §十-2 三段狀態機的錨點。**本分支自此以下零 `game.ball.x`**（工單 §11-5 可 grep 驗）：
+    // 改制前這裡是 `clampCourtX(game.ball.x + laneOff)`——攔網手逐 tick 直接追球的 x，
+    // 而球最後會飛到攻擊手手上，等於用未來的答案本身當導航。
+    //   planX == null ＝【讀】還沒被允許做決定 → 錨在場地中軸（陣型基準位）
+    //   planX != null ＝【判／關】已選定攻擊手 → 錨在他身上
+    const planX = blockPlanTargetX(game, aiState, team, player, actor, tick);
+    const anchorX = planX ?? 0;
+    // ==== B1-SCAN-END ====
     if (scheme === 'off') {
       return moveIntent(game, playerId, tick, actor, {
-        x: clampCourtX(game.ball.x * 0.4 + laneOff), z: TEAM_SIDE[team] * 2.6,
+        x: clampCourtX(anchorX * 0.4 + laneOff), z: TEAM_SIDE[team] * 2.6,
       });
     }
-    // 遠側翼（球在對側且離中線夠遠）＝不參與攔網、撤退到攻擊線附近補吊球
-    const farWing = lane !== 0 && Math.abs(game.ball.x) > 1.8 &&
-      Math.sign(laneOff) !== Math.sign(game.ball.x);
+    // 遠側翼（攻擊點在對側且離中線夠遠）＝不參與攔網、撤退到攻擊線附近補吊球。
+    // 讀期 anchorX＝0 ⇒ 三人都先留在牆上，決定之後遠側翼才撤——這正是「判斷發生前
+    // 不該知道要往哪邊撤」的誠實形狀
+    const farWing = lane !== 0 && Math.abs(anchorX) > 1.8 &&
+      Math.sign(laneOff) !== Math.sign(anchorX);
     if (farWing) {
       return moveIntent(game, playerId, tick, actor, {
         x: laneOff * 2, z: TEAM_SIDE[team] * 2.6,
@@ -830,31 +861,35 @@ function decideOne(game, aiState, playerId) {
     // 邊線夾擠防疊（真實合牆：翼守標誌桿、MB 收內側肩並牆）——
     // 翼吃 clamp 貼邊即可；MB 發現近側翼被邊線壓進間距內時自己往內讓。
     // 兩人各自從同樣輸入算出一致結論（純函式無共享狀態），且讓位方向恆向內＝永不交叉
-    let nx = clampCourtX(game.ball.x + laneOff);
+    let nx = clampCourtX(anchorX + laneOff);
     if (lane === 0) {
-      const bs = Math.sign(game.ball.x);
-      const nearWingX = clampCourtX(game.ball.x + bs * AI.BLOCK_SPREAD);
+      const bs = Math.sign(anchorX);
+      const nearWingX = clampCourtX(anchorX + bs * AI.BLOCK_SPREAD);
       if (bs !== 0 && Math.abs(nearWingX - nx) < AI.BLOCK_SPREAD * 0.9) {
         nx = nearWingX - bs * AI.BLOCK_SPREAD;
       }
     }
-    // ==== B1-SCAN-BEGIN（工單 §6 反作弊掃描區：本區內不得出現 attackerId）====
-    // §6 B1／B2：只有 **commit 人格的中間攔網手** 走這一段。
-    // read 人格＝上面那段追球軸（守住位置、等球離手才反應）＝本輪一行未動；
-    // 兩種人格的行為差異**全部**由這裡產生。
-    if (lane === 0) {
-      const commitX = blockCommitTargetX(game, aiState, team, player, actor, tick);
-      if (commitX != null) nx = clampCourtX(commitX);
-    }
-    // ==== B1-SCAN-END ====
     // 封線站位（B-1）：封直線＝往邊線側壓（守直線走廊外肩）、封斜線＝往內收（斜線角度）
+    // 封線偏移的方向同樣錨在判定結果上，不看球現在在哪（讀期 anchorX＝0 ⇒ 退化為 +1 側，
+    // 與改制前球在中線時的行為一致）
     if (scheme === 'line') {
-      nx = clampCourtX(nx + Math.sign(game.ball.x || 1) * AI.BLOCK_SCHEME_SHIFT);
+      nx = clampCourtX(nx + Math.sign(anchorX || 1) * AI.BLOCK_SCHEME_SHIFT);
     } else if (scheme === 'cross') {
-      nx = clampCourtX(nx - Math.sign(game.ball.x || 1) * AI.BLOCK_SCHEME_SHIFT);
+      nx = clampCourtX(nx - Math.sign(anchorX || 1) * AI.BLOCK_SCHEME_SHIFT);
     }
     const netSpot = { x: nx, z: TEAM_SIDE[team] * AI.BLOCK_LZ };
-    const action = r.profile === 'spike' && aiState.landingTeam === team ? 'block' : null;
+    // §十-2【關／踩定】：**決定了才起跳**。改制前起跳只看 `profile === 'spike'`，
+    // 與判斷完全脫鉤——於是 read 明明晚了 10–25 tick 才知道要攔誰，卻照樣準時拔起來，
+    // 兩種人格的代價根本無從體現。現在起跳窗掛在判定上：判得晚就跳得晚，
+    // 球到的時候手還在上升（blockTimingMul 的 BLOCK_LATE_MUL 檔）。
+    // 這就是 read 面對快攻的賭注真正輸掉的地方（憲法 §零：read 難在時間不在資訊）。
+    // §十-2【關／踩定】：**決定了、跟到了、他拔起來了，我才拔**（見 blockPlanAirborne）。
+    // 原本的 `r.profile === 'spike' && aiState.landingTeam === team` 兩個條件都要等
+    // 球已經被打過來才成立＝對扣球事件零延遲反應，那正是十-2 指名的病。兩個一起拆：
+    // 只留 landingTeam 也是同一個時點（球過網那一刻兩者一起翻），拆一個等於沒拆。
+    // 「不會亂跳」由狀態機保證：blockPlan 只在對方持球時才建得起來（見 blockPlanTargetX
+    // 開頭的 `atkTeam === team` 早退），所以自家進攻時窗恆不開。
+    const action = blockPlanAirborne(aiState, team, tick) ? 'block' : null;
     const it = moveIntent(game, playerId, tick, actor, netSpot);
     if (action) it.action = 'block';
     return it;
@@ -927,31 +962,105 @@ function decideOne(game, aiState, playerId) {
 }
 
 // ==== B1-SCAN-BEGIN（工單 §6 反作弊掃描區：本區內不得出現 attackerId）====
-// §6 B1 commit 人格的狀態機（狀態＝aiState.blockCommit，與本波攻擊同壽命）——三段：
-//   ① 跟死：球還沒離二傳的手（touches < 2）就發現有人越過職責線往網跑 → 鎖定，
-//      目標 x 逐 tick 跟著他更新（真的在跟人，不是釘死一個座標）
-//   ② 起來：被跟的人不再往前（＝他到起跳點拔起來了，場上看得見）→ commit 的人
-//      跟著上去。**在空中的這段不能橫移**，長度沿用 sim 既有的一次攔網跳定義
-//      TUNING.BLOCK_WINDOW（48 tick＝0.8s，不另立新常數）
-//   ③ 落地：跑一次 §6 B2 close 時間預算（扣掉自己的反應時間）——
-//      追得到就回落追球軸（回傳 null），追不到就守住中間、不做無效尾隨。
-//      判錯的代價在這裡結算：起步晚了那麼多，邊線就是真的來不及。
-//      決定只做一次（c.chase）＝不在半路來回改主意。
+//
+// §十-2 攔網三段狀態機（狀態＝aiState.blockPlan，與本波攻擊同壽命）。
+//
+// ★ 改制前的病根 ★
+// read 人格根本沒有「決策」這回事：攔網手的目標 x 是 `clampCourtX(ball.x + laneOff)`，
+// 逐 tick 直接吃球的 x——不吃攻擊手、不吃過網點。而球最後**會飛到攻擊手手上**，
+// 所以那等於**用未來的答案本身當導航**。沒有決策，就沒有事件可以起算反應延遲，
+// 於是 reactionTicks 在攔網分支從來沒被呼叫過。
+//
+// ★ 現在的三段 ★
+//   【讀】 陣型基準位（只吃 laneOff，**不吃 ball.x**）——還沒得到允許做決定
+//   【判】 起算事件＝**二傳觸球**（不是攻擊手起跳：快攻在二傳觸球前就已離地，
+//          W1 實測 100%）＋ 反應延遲後選定一名攻擊手，目標 x 由他導出
+//   【關】 移動到該 x、時機到起跳；空中不得橫移；改判要付重新踩定的 tick 代價
+//
+// ★ 兩種人格共用同一條路，只有「何時允許做決定」不同（decisionUnlockedAt）★
+//   read   ＝二傳觸球 ＋ 自己的反應延遲 → 面對快攻必然來不及（這就是它的賭注）
+//   commit ＝二傳觸球**之前**（辨識到助跑就動） → 賭「猜對是誰」，猜錯就在錯的地方
+//   延遲沿用接球手的 `reactionTicks`，**不另立常數**；AI 不額外加罰（工單 §2.4-d）。
+//
 // 位移一律走 moveIntent（單 tick 受步長上限約束）＝結構上不可能瞬移補位。
-// 回傳 null＝這個人本 tick 不受 commit 影響（照既有的追球軸站位）。
-function blockCommitTargetX(game, aiState, team, player, actor, tick) {
-  if (blockPersonaOf(game, team) !== BLOCK_PERSONA.COMMIT) return null;
+// 回傳 null＝本 tick 還沒有決定，呼叫端用陣型基準位。
+
+// 何時允許做決定。回傳 true＝已解鎖（可以呼叫 blockCommitRead 選人）。
+// ★ 這是兩種人格**唯一**的差異點 ★
+function blockDecisionUnlocked(game, aiState, persona, player, tick) {
+  const r = game.rally;
+  if (persona === BLOCK_PERSONA.COMMIT) {
+    // commit：二傳觸球之前就動（球還沒離手＝ touches < 2）
+    return r.touches < 2;
+  }
+  // read：等二傳真的觸到球，再加上自己的反應時間才解鎖
+  const st = aiState.setTouch;
+  if (!st || st.team !== r.possession) return false;
+  return tick >= st.tick + reactionTicks(player);
+}
+
+// 【判】選定的攻擊點在世界 x 的哪裡。**兩種人格看的東西不同，因為時點不同**：
+//
+//   commit 在二傳觸球**之前**決定——球那時還在飛向二傳，球的軌跡對「誰要扣」
+//     一無所知，所以只能從各人的**助跑**猜（blockCommitRead）。猜對就贏，猜錯就在錯的地方。
+//   read 在二傳觸球**之後**決定——球已經離手飛向某個攻擊手，**球自己的拋物線就是答案**。
+//     這正是「read＝看清楚再動」的字面意思：他讀的是球，不是誰站哪。
+//
+// 用 predictContactPoint（球墜到扣球窗上緣的水平位置）而非攻擊手的身體 x，
+// 是因為工單 §2.2 要的是**預測過網點**——身體 x 只是它的粗略代理，而且會被
+// 中路假動作誘餌帶偏（實測：改用身體 x 時 read 面對兩翼的 MB 落差 p50 達 3.39m，
+// 因為誘餌恆是「最接近網、正在推進」的那個，選人規則永遠選他）。
+//
+// ★ 反作弊 ★ 兩條路都拿不到 attackerId：blockCommitRead 的簽章只吃隊伍代號，
+//   predictContactPoint 只吃球的物理量。球的拋物線是場上每個人都看得見的公開資訊。
+function blockAimX(game, aiState, atkTeam, persona, opts) {
+  if (persona === BLOCK_PERSONA.READ) {
+    const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
+    if (hit) return hit.x;
+  }
+  return blockCommitRead(game, atkTeam, opts)?.x ?? null;
+}
+
+/**
+ * 【關】起跳窗開不開——**問狀態機，不問球飛到哪了**。
+ *
+ * ★ 這是「觸發誠實化」的正字標記（§十-2、裁定書 §1.5）★
+ * 改制前是 `r.profile === 'spike' && aiState.landingTeam === team`：
+ * 兩個條件都要等**攻擊手已經把球打出來**才成立，等於攔網手的起跳觸發是
+ * 「對方已經把球擊出」這件事本身——十-2 的原文就是「攔網手**對扣球事件**零延遲反應」。
+ * 於是不管 read 晚了多少 tick 才知道要攔誰，他照樣在球出手後第一格準時拔起來，
+ * 兩種人格的時間代價根本無從體現。
+ *
+ * 現在起跳掛在狀態機的 air 段：進 air 的事件是「被跟的那個攻擊點不再推進＝他拔起來了」
+ * （chase 段裡寫下 jumpTick）。判得晚 → 進 chase 晚 → 拔得晚；
+ * 改判過 → 付了重新踩定的 tick → 更晚。窗長沿用既有的 `TUNING.BLOCK_WINDOW`，不另立常數。
+ */
+function blockPlanAirborne(aiState, team, tick) {
+  const c = aiState.blockPlan;
+  if (!c || c.team !== team || c.jumpTick == null) return false;
+  return actionPhaseAt(tick, {
+    enterTick: c.enterTick, airTick: c.jumpTick, airTicks: TUNING.BLOCK_WINDOW,
+  }) === ACTION_PHASE.AIR;
+}
+
+function blockPlanTargetX(game, aiState, team, player, actor, tick) {
   const r = game.rally;
   const atkTeam = r.possession;
   if (!atkTeam || atkTeam === team) return null;
+  const persona = blockPersonaOf(game, team);
   const opts = { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
-  const c = aiState.blockCommit;
+  const c = aiState.blockPlan;
   if (!c || c.team !== team) {
-    if (r.touches >= 2) return null; // 球已離手才「發現」＝那叫 read，不是 commit
-    const read = blockCommitRead(game, atkTeam, opts);
-    if (!read) return null;
+    // 【讀】還沒被允許做決定＝守在陣型基準位（呼叫端處理）
+    if (!blockDecisionUnlocked(game, aiState, persona, player, tick)) return null;
+    // 【判】選定攻擊點
+    const aimX = blockAimX(game, aiState, atkTeam, persona, opts);
+    if (aimX == null) return null;
+    const read = { x: aimX };
     // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
-    aiState.blockCommit = { team, x: read.x, enterTick: tick, jumpTick: null };
+    aiState.blockPlan = {
+      team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+    };
     return read.x;
   }
   // §9 契約：本狀態機的三段＝chase（跟死）／air（在空中）／release（落地結算）。
@@ -959,14 +1068,46 @@ function blockCommitTargetX(game, aiState, team, player, actor, tick) {
   const phase = actionPhaseAt(tick, {
     enterTick: c.enterTick, airTick: c.jumpTick, airTicks: TUNING.BLOCK_WINDOW,
   });
-  // ① 跟死（被跟的人還在往網走）
+  // ① 跟死（被跟的人還在往網走／球還在飛向他）
   if (phase === ACTION_PHASE.CHASE) {
-    const live = blockCommitRead(game, atkTeam, opts);
-    if (live) {
-      c.x = live.x;
+    // ★ 起跳訊號：**兩種人格共用同一個可觀察事件** ★
+    // ——助跑的人都不再往網推進了（blockCommitRead 回 null）＝他們拔起來了，我跟著上。
+    // 人格差異只在「何時允許做決定」與「決定時看什麼」，**不在起跳訊號**：
+    // 攻擊手離地這件事，read 和 commit 都是用同一雙眼睛看的。
+    //
+    // 為什麼不能讓 read 用自己的瞄準來源（球的拋物線）當起跳訊號：
+    // 球在被扣之前，`predictContactPoint` 一直回得出值 ⇒ read 永遠等不到 null ⇒
+    // **永遠不起跳**（實測：read 的 MB 在球過網那一刻位於攔網窗內的比例 0.0%）。
+    // 那不叫誠實化，那叫把攔網關掉。
+    //
+    // ★ 訊號要成立必須**球已離二傳的手**（`touches >= 2`）★
+    // 「沒有人在往網跑」在助跑**開始之前**也成立——只看這一個條件的話，commit
+    // （在二傳觸球前就解鎖）會在接一傳的階段當場拔起來，48 tick 的窗在球過網前
+    // 老早就過期（實測 commit 的 MB 在球過網那一刻位於窗內的比例只剩 42.9%／26.5%／0.3%）。
+    // 加上「球已離手」之後，這個組合條件才真的等價於「攻擊手已經離地」：
+    //   快攻：MB 在二傳觸球前就離地（W1 實測 100%）⇒ 二傳觸球當下即成立，隨即拔起
+    //   高球：兩翼還在跑 ⇒ 條件不成立，等他們真的拔了才跟上
+    if (r.touches >= 2 && blockCommitRead(game, atkTeam, opts) == null) {
+      c.jumpTick = tick; // 本 tick 起算 air
       return c.x;
     }
-    c.jumpTick = tick; // 他不推進了＝他拔起來了，我跟著上（本 tick 起算 air）
+    const liveX = blockAimX(game, aiState, atkTeam, persona, opts);
+    const live = liveX == null ? null : { x: liveX };
+    if (!live) return c.x; // 這一刻讀不出新的瞄準點：守住既有目標，不亂動
+    // §2.4-e 改判要付重新踩定的代價（**不做加速度／慣性模型**：移動從來不是瓶頸，
+    // 窗長 p50 80 tick × 移速 2.8–5.2 m/s 可跑 3.7–6.9m，而實測最大淨位移僅 4.864m。
+    // 真正該有的代價是「換人跟＝重心已經壓在錯的方向，要停、轉、重新踩地」）。
+    // 怎麼分辨「換了一個人跟」與「同一個人在跑」：跑動的人單 tick 位移 < 0.09m
+    // （moveSpeed × SIM_DT 上限），換人則是好幾公尺——REPLANT_JUMP_M 落在兩者之間。
+    // blockCommitRead 刻意不回傳 playerId（反作弊），所以只能從幾何跳變認人。
+    if (tick < c.replantUntil) return c.x; // 重新踩定中：腳還沒接觸地面，動不了
+    if (c.pendingX != null) { c.x = c.pendingX; c.pendingX = null; }
+    if (Math.abs(live.x - c.x) > BLOCK_COMMIT.REPLANT_JUMP_M) {
+      c.pendingX = live.x;
+      c.replantUntil = tick + BLOCK_COMMIT.REPLANT_TICKS;
+      return c.x; // 這幾 tick 站在原地重新踩定，之後才往新目標移動
+    }
+    c.x = live.x;
     return c.x;
   }
   // ② 在空中：不能橫移
