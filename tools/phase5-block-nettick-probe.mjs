@@ -207,11 +207,15 @@ console.log(`【③ read 會不會抖】errNaive 的 sd 若接近或超過半窗
 //
 // 夾限（honest constraint）：起跳 tick 不可能早於取樣 tick——人不能跳到過去。
 //   `clamp%` ＝ 這個夾限實際生效的比例；生效越多，該前置量越是「算得出但做不到」。
+// `lead: 'reaction'` ＝ 前置量取「該攔網手自己的反應延遲」（逐樣本值，非常數）。
+// 這一檔是第二次 fresh-context 冷讀提出的：§五 明訂「反應延遲沿用既有公式，不得另立常數」
+// ⇒ 拿既有的反應延遲當前置量，字面上**不是新常數**。不掃它就是把選項空間又塌縮一次。
 const LEADS = [
   { lead: 0, note: '零新常數（起跳＝預測擊球 tick）' },
   { lead: HALF_WINDOW, note: `零新常數＝R2 原形式（AIR_TICKS/2＝${HALF_WINDOW}）` },
-  { lead: Math.round(AIR_TICKS / 3), note: '需新導出常數（AIR_TICKS/3），僅供參考' },
-  { lead: Math.round(AIR_TICKS / 4), note: '需新導出常數（AIR_TICKS/4），僅供參考' },
+  { lead: 'reaction', note: '零新常數（前置量＝該攔網手自己的反應延遲，逐樣本 6–24）' },
+  { lead: Math.round(AIR_TICKS / 3), note: '需新導出常數（AIR_TICKS/3）' },
+  { lead: Math.round(AIR_TICKS / 4), note: '需新導出常數（AIR_TICKS/4）' },
 ];
 
 console.log('=== 反事實掃描：起跳 tick ＝ 預測擊球 tick − 前置量，球過網時的頂邊完成度 ===');
@@ -221,14 +225,23 @@ for (const g of ['quick', 'wing', 'back']) {
     && r.crossTick != null && r.topAt);
   if (!rs.length) continue;
   const label = { quick: '快攻', wing: '兩翼', back: '後排' }[g];
+  // ★ 地板是**逐球員**的（＝站立摸高÷跳躍頂點，隨身高／彈跳／體力而異），不是一個常數。
+  // 不印它的分佈，就會讓「完成度 p50 81.4% vs 地板 p50 81.2%」看起來像自相矛盾
+  //（第二次冷讀正是這樣讀的）：其實 79% 的樣本各自貼在**自己**的地板上，
+  // 而那些地板的中位數是 81.4%。「離開地板」一律是**逐樣本與自己的地板比**。
   const floors = rs.map((r) => r.floorPct).filter((v) => v != null);
-  console.log(`-- ${label}（n=${rs.length}）　地板 p50 = ${(q(floors, 0.5) * 100).toFixed(1)}% --`);
+  console.log(`-- ${label}（n=${rs.length}）　地板（逐球員）`
+    + ` p10 ${(q(floors, 0.1) * 100).toFixed(1)}%`
+    + ` p50 ${(q(floors, 0.5) * 100).toFixed(1)}%`
+    + ` p90 ${(q(floors, 0.9) * 100).toFixed(1)}%`
+    + `　相異取值 ${new Set(floors.map((v) => v.toFixed(4))).size} 種 --`);
   for (const { lead, note } of LEADS) {
     const vals = [];
     let clamped = 0;
     let above = 0;
     for (const r of rs) {
-      const hyp = r.predContactAbs - lead;
+      const leadTicks = lead === 'reaction' ? r.sampleTick - r.setTick : lead;
+      const hyp = r.predContactAbs - leadTicks;
       const eff = Math.max(hyp, r.sampleTick);
       if (eff !== hyp) clamped += 1;
       const pct = r.topAt(r.crossTick - eff);
@@ -238,7 +251,7 @@ for (const g of ['quick', 'wing', 'back']) {
       }
     }
     if (!vals.length) continue;
-    console.log(`   前置 ${String(lead).padStart(2)}`
+    console.log(`   前置 ${String(lead).padStart(8)}`
       + `  完成度 p10 ${(q(vals, 0.1) * 100).toFixed(1)}%`
       + `  p50 ${(q(vals, 0.5) * 100).toFixed(1)}%`
       + `  p90 ${(q(vals, 0.9) * 100).toFixed(1)}%`

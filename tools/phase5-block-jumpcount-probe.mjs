@@ -195,10 +195,22 @@ for (const group of ['quick', 'wing', 'back']) {
     const air = col(g, 'airAtCross');
     const top = col(g, 'topPctAtCross');
     const floor = col(g, 'topFloorPct');
+    // ★ 完成度不得只報 p50 ★（第二次 fresh-context 冷讀的要求）
+    // R4 第 3 款要比的是 read×快攻 vs commit×快攻，實測差距只有 2.1pp——
+    // 沒有離散度與「離開地板」比例，2.1pp 到底是訊號還是雜訊無從判斷。
+    // 「離開地板」一律**逐樣本與自己的地板比**（地板是逐球員值，同一組內會有多種取值）。
+    const pf = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1) : '－');
+    const aboveN = g.filter((r) => r.topPctAtCross != null && r.topFloorPct != null
+      && r.topPctAtCross > r.topFloorPct + 1e-9).length;
     console.log(`        過網時滯空 p50=${air.length ? pctl(air, 0.5) : '－'}`
-      + `  ｜頂邊完成度 p50=${top.length ? (pctl(top, 0.5) * 100).toFixed(1) : '－'}%`
-      + `（地板 ${floor.length ? (pctl(floor, 0.5) * 100).toFixed(1) : '－'}%）`
+      + `  ｜頂邊完成度 p10=${pf(pctl(top, 0.1))}% p50=${pf(pctl(top, 0.5))}%`
+      + ` p90=${pf(pctl(top, 0.9))}% mean=${pf(top.reduce((a, b) => a + b, 0) / (top.length || 1))}%`
+      + `（n=${top.length}）`
       + `  ｜過網時窗沒開＝${share(g.length - air.length, g.length)}%`);
+    console.log(`        地板（逐球員）p10=${pf(pctl(floor, 0.1))}% p50=${pf(pctl(floor, 0.5))}%`
+      + ` p90=${pf(pctl(floor, 0.9))}%`
+      + `　相異取值 ${new Set(floor.map((v) => v.toFixed(4))).size} 種`
+      + `  ｜**離開地板 ${share(aboveN, top.length)}%**（${aboveN}/${top.length}）`);
   }
 }
 
