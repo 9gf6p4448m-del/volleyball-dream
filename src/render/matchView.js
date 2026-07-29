@@ -64,7 +64,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
 
   const units = {};
   for (const p of playerList) {
-    const rig = createGeoCharacter(pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero');
+    // p.name＝慣用手的雜湊鍵（見 geoCharacter.isLeftHanded）：id 母體只有十幾個固定
+    // 字面，餵名字才會有真正的左手分佈，且慣用手跟著人不跟著輪轉槽位
+    const rig = createGeoCharacter(
+      pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero', p.name,
+    );
     rig.root.rotation.order = 'YXZ'; // 先朝向(y)再前傾(x)——魚躍飛撲沿朝向前方傾倒才正確
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網
     units[p.id] = {

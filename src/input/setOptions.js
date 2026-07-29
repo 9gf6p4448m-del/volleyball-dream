@@ -17,7 +17,9 @@ export const SET_HESITANT_BELOW = 12;
 // 隊友主動呼叫要球」；初擬值同進試玩清單）
 export const CALL_BALL_AT = 30;
 
-const KIND_LABELS = {
+// 路線標籤的單一真相（07-29：`input/myRoute.js` 亦讀這份——同一條線在分配面板與
+// 受控者自己的線索上不得有兩種叫法）
+export const KIND_LABELS = {
   quick: '快攻', left: '左翼', right: '右翼', pipe: '後排P', dball: 'D球',
   cross: '交叉', // §5 A2（07-29 補）：缺這條的話標籤會 fallback 成英文字串 'cross'
 };

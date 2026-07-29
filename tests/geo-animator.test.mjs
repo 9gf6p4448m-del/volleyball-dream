@@ -6,6 +6,12 @@ import {
   createGeoAnimator, hitLeadTicks, contactSeqFor, SEQ_HIT,
 } from '../src/render/geoAnimator.js';
 import { isLeftHanded } from '../src/render/geoCharacter.js';
+import { createGame } from '../src/sim/game.js';
+import {
+  createCareer, createCareerPlayer, careerMatchSetup,
+} from '../src/career/careerState.js';
+import { buildStarterMembers } from '../src/career/roster.js';
+import { OPPONENTS } from '../src/career/opponents.js';
 
 // 4.7 動作重製新增三關節：pelvis（骨盆獨立轉）／spineUpper（胸椎）／r-lWrist（壓腕）
 const JOINT_NAMES = ['rHip', 'lHip', 'rKnee', 'lKnee', 'spine', 'spineUpper', 'neck',
@@ -299,6 +305,77 @@ test('§1b 慣用手分佈：決定論（同 id 兩次求值相同）＋ 抽樣�
   }
   const ratio = left / N;
   assert.ok(ratio > 0.1 && ratio < 0.2, `左手比例應接近 15%，實際 ${(ratio * 100).toFixed(1)}%`);
+});
+
+// ---- §1b 慣用手：**真實引擎產得出來的球員**（07-29 W1 驗收第 7 項的缺口）----
+// 上面那條用的是合成 id `w1-handed-sample-${i}`——遊戲裡不存在這種 id，
+// 它只證明「這個純函式的值域分佈是 15%」，證明不了「場上看得到左手」。
+// 這一組全部從 createGame()／careerMatchSetup() 實際建出來的球員取樣。
+const handedOf = (p) => (isLeftHanded(p.id, p.name) ? 'l' : 'r');
+
+// 快速比賽的全部球員（createDefaultTeams → createGame）
+function quickPlayers(seed = 1) {
+  return Object.values(createGame({ seed }).players);
+}
+
+// 生涯建隊路徑的全部球員（我方名冊＋自由人＋七隊對手＋各隊板凳）
+function careerPlayers(seed = 7, gameSeed = 3) {
+  const career = createCareer({ seed, playerName: '小夢' });
+  const player = createCareerPlayer('小夢');
+  const roster = { capacity: 12, members: buildStarterMembers() };
+  const out = [];
+  for (const opp of OPPONENTS) {
+    const setup = careerMatchSetup(
+      career, player, { opponentId: opp.id, stage: 'group-1' }, roster, null,
+    );
+    out.push(...Object.values(createGame({ seed: gameSeed, ...setup }).players));
+  }
+  return out;
+}
+
+test('§1b 慣用手（真實球員）：快速比賽的 12 人不得全部同一手', () => {
+  const players = quickPlayers();
+  assert.equal(players.length, 12, '快速比賽應為雙方各六人');
+  const left = players.filter((p) => handedOf(p) === 'l');
+  assert.ok(left.length >= 1,
+    `快速比賽場上必須看得到左手選手（修前是 0/12），實際 ${left.length}/12`);
+  assert.ok(left.length < players.length, '不得全部判成左手');
+});
+
+test('§1b 慣用手（真實球員）：生涯建隊母體的左手比例落在 15% 量級', () => {
+  // 同一個人可能在多場出現，先去重成「人」的母體
+  const byKey = new Map();
+  for (const p of careerPlayers()) byKey.set(`${p.id}|${p.name}`, p);
+  const people = [...byKey.values()];
+  assert.ok(people.length >= 50, `母體太小無法談比例（${people.length}）`);
+  const left = people.filter((p) => handedOf(p) === 'l');
+  const ratio = left.length / people.length;
+  assert.ok(ratio > 0.05 && ratio < 0.3,
+    `生涯球員左手比例應在 15% 量級，實際 ${(ratio * 100).toFixed(1)}%（${left.length}/${people.length}）`);
+});
+
+test('§1b 慣用手（真實球員）：跨場次／跨種子穩定——同一名球員永遠同一手', () => {
+  // ① 快速比賽：換 seed 不換手
+  const base = new Map(quickPlayers(1).map((p) => [p.id, handedOf(p)]));
+  for (const seed of [2, 7, 99, 12345]) {
+    for (const p of quickPlayers(seed)) {
+      assert.equal(handedOf(p), base.get(p.id), `${p.id} 在 seed=${seed} 換了手`);
+    }
+  }
+  // ② 生涯：同一名球員在不同對手場次／不同 game seed 下同一手
+  const seen = new Map();
+  for (const gameSeed of [3, 11, 808]) {
+    for (const p of careerPlayers(7, gameSeed)) {
+      const key = `${p.id}|${p.name}`;
+      const h = handedOf(p);
+      if (seen.has(key)) {
+        assert.equal(h, seen.get(key), `生涯球員 ${key} 在不同場次／種子下換了手`);
+      } else seen.set(key, h);
+    }
+  }
+  assert.ok(seen.size >= 50, `生涯樣本數不足（${seen.size}）`);
+  // ③ 主角本人（生涯路徑的 A2）必須有一隻穩定的手
+  assert.ok(['l', 'r'].includes(seen.get('A2|小夢')), '主角 A2 未取到慣用手');
 });
 
 test('§2-3 等待姿勢：transitionWait 明顯不同於單純待命（前傾＋壓低，且可 hold 住）', () => {
