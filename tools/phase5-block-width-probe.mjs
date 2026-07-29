@@ -50,6 +50,10 @@ const dxNet = [];       // ① 每名前排防守者每個窗口一筆
 const dxPath = [];      // ①附加
 const winTicks = [];    // 窗長
 const gaps = [];        // ② 相鄰站距（每窗 2 筆）
+// ②附加（§3.4 驗收要求「能隨節奏分岔」）：貼網者站距**依攻擊節奏分組**。
+// 光看整體 p50 分不出「常數」與「各節奏各自有值」——§3.4 要的是後者。
+const GROUP_KIND = { quick: 'quick', left: 'wing', right: 'wing', pipe: 'back', dball: 'back' };
+const gapsByKind = { quick: [], wing: [], back: [] };
 const gapsAtNet = [];   // ②附加：只計「兩人都貼網」（|z| <= NET_Z）的相鄰配對
 const atNetHist = [0, 0, 0, 0]; // ②附加：擊球瞬間前排貼網人數（|z| <= NET_Z）
 const NET_Z = 1.2;      // 「貼網」判準（m）：攔網站位深度 AI.BLOCK_LZ=0.6，
@@ -113,7 +117,7 @@ function playOne(seed, opponentId) {
         if (e.kind === 'spike') spikesSeen += 1;
         if (win && e.team === win.atkTeam && e.kind === 'spike') {
           // 窗口正常結束：結算 ①②③
-          closeWindow(g, win);
+          closeWindow(g, win, ai.attackKind);
           win = null;
           continue;
         }
@@ -150,7 +154,7 @@ function playOne(seed, opponentId) {
 // 「上一次的攻擊擊球後、球尚未過網」的旗標：只統計扣球窗之後的第一次過網
 let pendingOverNet = false;
 
-function closeWindow(g, win) {
+function closeWindow(g, win, attackKind) {
   windows += 1;
   winTicks.push(g.tick - win.startTick);
   for (const s of win.blockers) {
@@ -166,7 +170,12 @@ function closeWindow(g, win) {
     .map((s) => g.actors[s.id].x)
     .sort((a, b) => a - b);
   atNetHist[Math.min(3, near.length)] += 1;
-  for (let i = 1; i < near.length; i += 1) gapsAtNet.push(Math.abs(near[i] - near[i - 1]));
+  const bucket = gapsByKind[GROUP_KIND[attackKind]];
+  for (let i = 1; i < near.length; i += 1) {
+    const gap = Math.abs(near[i] - near[i - 1]);
+    gapsAtNet.push(gap);
+    if (bucket) bucket.push(gap);
+  }
   // ③ 擊球瞬間在攔網窗內的人數（工單指定條件：blockUntil > tick）
   let k = 0;
   for (const s of win.blockers) if (g.actors[s.id].blockUntil > g.tick) k += 1;
@@ -201,6 +210,10 @@ console.log('');
 console.log('== ② 擊球瞬間，前排相鄰配對的站距 ==');
 console.log(statLine('相鄰站距（全前排）', gaps));
 console.log(statLine('相鄰站距（僅貼網）', gapsAtNet));
+for (const k of ['quick', 'wing', 'back']) {
+  const label = { quick: '　└ 面對快攻', wing: '　└ 面對兩翼', back: '　└ 面對後排' }[k];
+  if (gapsByKind[k].length) console.log(statLine(label, gapsByKind[k]));
+}
 console.log(`貼網人數（|z|<=${NET_Z}m）分佈　窗次 n=${windows}　`
   + `0人 / 1人 / 2人 / 3人 ＝ ${pctOf(atNetHist).join(' / ')}　（原始：${atNetHist.join(' / ')}）`);
 console.log('');

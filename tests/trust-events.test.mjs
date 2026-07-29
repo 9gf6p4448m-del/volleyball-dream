@@ -71,26 +71,37 @@ test('settlePoint 歸因：殺進 trustDyn＋、打出界 trustDyn−（sim 實�
   assert.equal(g2.trustDyn.A2, TRUST_DYN.ERR);
 });
 
-test('trust 地板整場有效：主角 trust 極低仍分得保底量級的攻擊球權', () => {
-  const player = createCareerPlayer('小夢');
-  player.trust.fromSetter = 5; // 幾乎沒人信任
-  player.techniques.pipe = 1;  // 解鎖後排攻擊——本測純測地板（新人資格另有測試）
-  const g = createGame({ seed: 42, teams: careerTeams(player), setTarget: 15 });
-  const ai = createAiState();
+// ★ 為什麼看三局合計而不是單一局（2026-07-30 Sawmah 裁定，與 jump-set ⑤b 同型）★
+// 原本只跑 seed 42，而單局的 teamPicks 只有 ~20 ⇒ 對一個 0.15 的比例來說樣本嚴重不足：
+// **少一次分配就會翻**（實測 seed 42 在階段三後是 3/22＝0.136，多一次就是 4/22＝0.18）。
+// 於是任何與 trust 無關的行為改動（攔網、走位…）都能讓這條紅。實測 12 個 seed：
+//   改動前 1/12 過不了（seed 5＝0.133）、改動後也是 1/12（seed 42＝0.136）
+//   ⇒ **儀器本來就壞的，不是誰弄壞的**。
+// **門檻 0.15 一字未改**，只是取樣從 1 局變 3 局（沿用原本的 seed 42 再取兩個相鄰）。
+const TRUST_FLOOR_SEEDS = [42, 43, 44];
+test('trust 地板整場有效：主角 trust 極低仍分得保底量級的攻擊球權（三局合計）', () => {
   let myPicks = 0;
   let teamPicks = 0;
-  let lastAttacker = null;
-  while (g.phase !== 'set_over' && g.tick < 400000) {
-    stepGame(g, aiCollectIntents(g, ai));
-    if (ai.attackerId && ai.attackerId !== lastAttacker && ai.landingTeam === 'A') {
-      lastAttacker = ai.attackerId;
-      teamPicks += 1;
-      if (ai.attackerId === 'A2') myPicks += 1;
+  for (const seed of TRUST_FLOOR_SEEDS) {
+    const player = createCareerPlayer('小夢');
+    player.trust.fromSetter = 5; // 幾乎沒人信任
+    player.techniques.pipe = 1;  // 解鎖後排攻擊——本測純測地板（新人資格另有測試）
+    const g = createGame({ seed, teams: careerTeams(player), setTarget: 15 });
+    const ai = createAiState();
+    let lastAttacker = null;
+    while (g.phase !== 'set_over' && g.tick < 400000) {
+      stepGame(g, aiCollectIntents(g, ai));
+      if (ai.attackerId && ai.attackerId !== lastAttacker && ai.landingTeam === 'A') {
+        lastAttacker = ai.attackerId;
+        teamPicks += 1;
+        if (ai.attackerId === 'A2') myPicks += 1;
+      }
     }
   }
-  assert.ok(teamPicks > 10, `樣本要夠（實得 ${teamPicks}）`);
+  assert.ok(teamPicks > 10 * TRUST_FLOOR_SEEDS.length, `樣本要夠（實得 ${teamPicks}）`);
   const share = myPicks / teamPicks;
-  assert.ok(share >= 0.15, `地板 0.27 下實得分配佔比不應崩到觀眾級（實得 ${share.toFixed(2)}）`);
+  assert.ok(share >= 0.15,
+    `地板 0.27 下實得分配佔比不應崩到觀眾級（三局合計 ${myPicks}/${teamPicks}＝${share.toFixed(3)}）`);
 });
 
 test('事件表：宣告式條件觸發、once 不重複、未知條件鍵安全不觸發', () => {
