@@ -1,0 +1,106 @@
+{
+  "note": "Phase 5 §十 階段一：sim 行為逐值雜湊基準。--write 只在拍板允許行為變更時用。",
+  "seedBase": 1,
+  "perOpponent": 2,
+  "total": "058fcc1124695034",
+  "matches": [
+    {
+      "opponent": "north-tech",
+      "seed": 1,
+      "digest": "958c8fddfd2dbdf2",
+      "ticks": 28301,
+      "score": "25-20"
+    },
+    {
+      "opponent": "north-tech",
+      "seed": 102,
+      "digest": "f543d2861b73e82d",
+      "ticks": 27621,
+      "score": "25-22"
+    },
+    {
+      "opponent": "white-wave",
+      "seed": 7920,
+      "digest": "1d9862239a881df5",
+      "ticks": 31883,
+      "score": "25-23"
+    },
+    {
+      "opponent": "white-wave",
+      "seed": 8021,
+      "digest": "ee94c72b170134f1",
+      "ticks": 32339,
+      "score": "25-23"
+    },
+    {
+      "opponent": "obsidian",
+      "seed": 15839,
+      "digest": "dc92a2ec128644ff",
+      "ticks": 29502,
+      "score": "26-24"
+    },
+    {
+      "opponent": "obsidian",
+      "seed": 15940,
+      "digest": "388ade76d0c3ab8e",
+      "ticks": 29663,
+      "score": "23-25"
+    },
+    {
+      "opponent": "gale-shore",
+      "seed": 23758,
+      "digest": "641eb097b6e6ec92",
+      "ticks": 26253,
+      "score": "25-15"
+    },
+    {
+      "opponent": "gale-shore",
+      "seed": 23859,
+      "digest": "cfac0f328f233812",
+      "ticks": 28531,
+      "score": "25-20"
+    },
+    {
+      "opponent": "iron-mist",
+      "seed": 31677,
+      "digest": "982372b61364e9be",
+      "ticks": 31493,
+      "score": "25-27"
+    },
+    {
+      "opponent": "iron-mist",
+      "seed": 31778,
+      "digest": "a3965d95cf67379f",
+      "ticks": 26031,
+      "score": "18-25"
+    },
+    {
+      "opponent": "black-pine",
+      "seed": 39596,
+      "digest": "1d3b2482a154ac4c",
+      "ticks": 28871,
+      "score": "25-23"
+    },
+    {
+      "opponent": "black-pine",
+      "seed": 39697,
+      "digest": "36bcddd0fd5c706b",
+      "ticks": 22600,
+      "score": "13-25"
+    },
+    {
+      "opponent": "sky-hawk",
+      "seed": 47515,
+      "digest": "dce2c3547c3e43fa",
+      "ticks": 28636,
+      "score": "21-25"
+    },
+    {
+      "opponent": "sky-hawk",
+      "seed": 47616,
+      "digest": "aa65d87cc48205a5",
+      "ticks": 31594,
+      "score": "25-22"
+    }
+  ]
+}
