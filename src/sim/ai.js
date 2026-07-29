@@ -1087,6 +1087,12 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
     // 加上「球已離手」之後，這個組合條件才真的等價於「攻擊手已經離地」：
     //   快攻：MB 在二傳觸球前就離地（W1 實測 100%）⇒ 二傳觸球當下即成立，隨即拔起
     //   高球：兩翼還在跑 ⇒ 條件不成立，等他們真的拔了才跟上
+    //
+    // ⚠ 已知缺口（2026-07-29 實測，待裁定）：這個下降沿有 59–65% 的攻擊**從來沒發生**
+    // ——助跑停止的那一刻常常晚於球被擊出，而球一被擊出 `r.possession` 就翻到攔網方，
+    // 本函式開頭的 `atkTeam === team` 早退會讓狀態機再也走不到這裡。
+    // 試過補一條 `r.touches >= 3` 的兜底，量測**逐值零變化**＝那條是死碼（同樣被早退擋掉）。
+    // 詳見 `docs/phase5-section10-test-triage.md` §五「2-A 待裁定題」。
     if (r.touches >= 2 && blockCommitRead(game, atkTeam, opts) == null) {
       c.jumpTick = tick; // 本 tick 起算 air
       return c.x;
