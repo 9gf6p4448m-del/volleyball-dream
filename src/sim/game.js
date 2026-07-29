@@ -22,10 +22,12 @@ import {
   STAMINA, drainStamina, recoverStamina, staminaPerfMul, staminaRecvMul,
 } from './stamina.js';
 
-// §十-1：可及體的球半徑膨脹量。觸球條件應是「球**面**碰到手」＝可及體長大 BALL.RADIUS，
-// 攔網高度判定（tryBlock）一直是這樣算的，觸球判定卻不是——兩套標準。
-// 階段一先填 0 保住逐值等價，統一為 BALL.RADIUS 是階段一末段**唯一**的行為變更，單獨 hash。
-const REACH_INFLATE = 0;
+// §十-1 末段：可及體的球半徑膨脹量——**階段一唯一的行為變更**。
+// 觸球條件是「球**面**碰到手」不是「球**心**碰到手」，所以可及體要長大一個球半徑。
+// 攔網高度判定（`overBlockerHands`：`b.y > blockReach + BALL.RADIUS`）一直是這樣算的，
+// 觸球判定卻是純球心對球心——同一個 sim 裡兩套球半徑標準，⑤ 的不一致由此而來。
+// 統一為都吃。效果：可及體各方向長 10.5cm，觸球略容易（下一階段收斂會把總量調回來）。
+const REACH_INFLATE = BALL.RADIUS;
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
