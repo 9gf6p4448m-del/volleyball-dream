@@ -26,6 +26,14 @@
 //   title＝升格新 ace 時的稱號（僅指定接班人有，＝隊內 drop 最小者；接班人基準
 //   年級一律 1——保證三屆生涯內不二次畢業）。applyPoaching／applySeasonRoster
 //   （careerState）消費同一批，消耗後剩餘者＝該場對手板凳。
+// Phase 5 W1 §6 B1 攔網人格（2026-07-29；憲法 §三 B 「強隊 read、弱隊 commit」）：
+// ai.blockPersona＝'read'｜'commit'——**難度與隊伍個性從數值變成行為**的那一條。
+//   read   ＝守住追球軸、等球離手才反應（＝本輪之前所有隊伍的既有行為，一行未動）
+//   commit ＝不等二傳出手就跟死快攻；讀對＝中路封死，判錯＝晚一整段反應時間才動身、
+//            邊線變單人攔網（交叉／兩翼就是解法）
+// 分級以 level 為主軸（≥64 read／<64 commit），曜石體中是刻意的個性例外：
+// level 60 卻 commit——「這隊 MB 攔網極快、中路是他們的天下」的 trait 本來就是
+// 「賭中間」的打法，玩家該學會的是拿交叉去懲罰它，而不是硬扣中路。
 export const OPPONENTS = [
   {
     id: 'north-tech',
@@ -49,7 +57,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 0, name: '杜品澄', title: '節拍器' }, // S・隊長——一傳一舉把亂流理成直線
     scoutRead: 0,
-    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03 }, // 控制系：飄浮發球、防守韌性低（少魚躍）
+    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03, blockPersona: 'commit' }, // 控制系：飄浮發球、防守韌性低（少魚躍）
   },
   {
     id: 'white-wave',
@@ -73,7 +81,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 'L', name: '蔡沐恩', title: '不沉之浪' }, // 自由人＝隊魂——球不落地是他唯一的信仰
     scoutRead: 0.25,
-    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15 }, // 防守隊招牌：拚命魚躍、球不落地不放棄
+    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15, blockPersona: 'commit' }, // 防守隊招牌：拚命魚躍、球不落地不放棄
   },
   {
     id: 'obsidian',
@@ -97,7 +105,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 2, name: '詹子曜', title: '黑曜箭' }, // MB・阿曜——起跳永遠快你半拍
     scoutRead: 0.7,
-    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08 },
+    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: 'commit' }, // §6 B1 個性例外：中路是他們的天下＝賭中間
   },
   // W6 A1 新隊①（level 55，北原↔白浪空檔）：變化球隊——身材矮、火力弱，
   // 靠球路變化（吊球/二次球/飄浮球）打亂節奏；攔網差＝扣過去很痛快
@@ -123,7 +131,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 0, name: '簡子嵐', title: '颱風眼' }, // S・小嵐——亂流的正中央永遠是靜的
     scoutRead: 0.15,
-    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1 },
+    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1, blockPersona: 'commit' },
   },
   {
     id: 'iron-mist',
@@ -147,7 +155,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 3, name: '劉振鎧', title: '鐵彈道' }, // OPP・阿鐵——王牌發球手，發球跟扣球一樣往死裡打
     scoutRead: 0.5,
-    ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2, diveRate: 0.08 }, // 發球輪就是得分輪
+    ai: { tipRate: 0.08, dumpRate: 0.06, jumpServeRate: 0.45, floatServeRate: 0.2, diveRate: 0.08, blockPersona: 'read' }, // 發球輪就是得分輪
   },
   // W6 A1 新隊②（level 67，鐵霧↔天鷹空檔）：高牆型——攔網手一排比一排高，
   // 正面硬扣會被一路蓋回來；腳步偏慢＝吊球與快節奏是解法
@@ -173,7 +181,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 2, name: '曾家松', title: '最後的牆' }, // MB・老松——三年級最後一屆，牆不想再輸
     scoutRead: 0.6,
-    ai: { tipRate: 0.06, dumpRate: 0.05, jumpServeRate: 0.15, floatServeRate: 0.1, diveRate: 0.07 },
+    ai: { tipRate: 0.06, dumpRate: 0.05, jumpServeRate: 0.15, floatServeRate: 0.1, diveRate: 0.07, blockPersona: 'read' }, // 高牆型＝不賭、等你出手
   },
   {
     id: 'sky-hawk',
@@ -208,7 +216,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 1, name: '莊敬嶺', title: '攀天者', rival: true }, // 宿敵——把牆砌得更高的人
     scoutRead: 0.9,
-    ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1, diveRate: 0.13 }, // 強隊全能：積極魚躍
+    ai: { tipRate: 0.1, dumpRate: 0.08, jumpServeRate: 0.25, floatServeRate: 0.1, diveRate: 0.13, blockPersona: 'read' }, // 強隊全能：積極魚躍
   },
 ];
 

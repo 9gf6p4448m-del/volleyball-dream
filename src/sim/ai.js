@@ -14,7 +14,10 @@ import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
 } from './approach.js';
-import { blockLaneRead, digForBlock } from './blockRead.js';
+import {
+  blockLaneRead, digForBlock, blockCommitRead, blockCloseBudget,
+  BLOCK_PERSONA, BLOCK_COMMIT,
+} from './blockRead.js';
 import { hash01 } from './rng.js';
 import { TUNING, spikeSpeed } from './game.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
@@ -141,6 +144,15 @@ export function aiProfileOf(game, team) {
   };
 }
 
+// Phase 5 W1 §6 B1 攔網人格（隊伍參數，opponents.js 的 ai.blockPersona 分級）。
+// **刻意不併進 aiProfileOf**：那裡回的是一組「機率」，人格是離散行為模式，語意不同；
+// 併進去也會改動 aiProfileOf 的回傳形狀（既有測試對它做 deepEqual，不得為實作改測試）。
+// 未注入＝'read'＝**本輪之前的既有攔網行為**（追球軸）——我方與快速比賽零變化
+export function blockPersonaOf(game, team) {
+  return game.aiProfiles?.[team]?.blockPersona === BLOCK_PERSONA.COMMIT
+    ? BLOCK_PERSONA.COMMIT : BLOCK_PERSONA.READ;
+}
+
 // AI 協調層狀態：每個 flight 算一次、鎖定到 flight 結束（呼叫鎖定的實作）
 export function createAiState() {
   return {
@@ -161,6 +173,10 @@ export function createAiState() {
     // 由 aiCollectIntents 逐 tick 從 excludeIds 重算（零面板、零玩家指令），
     // block 可為 null＝模稜兩可的中性讀（同時是遲滯的記憶槽）
     blockRead: null,
+    // Phase 5 W1 §6 B1：commit 人格的中間攔網手鎖定槽（{ team, x, chase }）——
+    // 與**本波攻擊**同壽命（來球／新的一擊完成都清空），純由可觀察量重算＝
+    // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
+    blockCommit: null,
   };
 }
 
@@ -205,6 +221,8 @@ function ensureFlightPlan(game, aiState) {
   if (r.possession === team && r.touches >= 3) return;
 
   if (r.possession === team && r.touches === 1) {
+    // §6 B1：新的一擊完成＝新一波攻擊，上一波的 commit 鎖定作廢（重新讀一次）
+    aiState.blockCommit = null;
     // 二傳歸屬（職責制）：S 固定執行；S 剛接了一傳→OPP 備援代舉；再不行才仲裁救球
     const roster = teamRoster(game, team);
     const setter = roster.find(
@@ -274,6 +292,7 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackerId = null;
     aiState.attackKind = null;
     aiState.approach = null; // 來球＝上一波的助跑線作廢
+    aiState.blockCommit = null; // §6 B1：來球＝沒有攻擊要攔，鎖定作廢
   }
 
   // 第二追球者（接噴救球「球不落地不結束」）：限【自家噴球】——我方持球中
@@ -740,6 +759,15 @@ function decideOne(game, aiState, playerId) {
         nx = nearWingX - bs * AI.BLOCK_SPREAD;
       }
     }
+    // ==== B1-SCAN-BEGIN（工單 §6 反作弊掃描區：本區內不得出現 attackerId）====
+    // §6 B1／B2：只有 **commit 人格的中間攔網手** 走這一段。
+    // read 人格＝上面那段追球軸（守住位置、等球離手才反應）＝本輪一行未動；
+    // 兩種人格的行為差異**全部**由這裡產生。
+    if (lane === 0) {
+      const commitX = blockCommitTargetX(game, aiState, team, player, actor, tick);
+      if (commitX != null) nx = clampCourtX(commitX);
+    }
+    // ==== B1-SCAN-END ====
     // 封線站位（B-1）：封直線＝往邊線側壓（守直線走廊外肩）、封斜線＝往內收（斜線角度）
     if (scheme === 'line') {
       nx = clampCourtX(nx + Math.sign(game.ball.x || 1) * AI.BLOCK_SCHEME_SHIFT);
@@ -817,6 +845,62 @@ function decideOne(game, aiState, playerId) {
   // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位
   return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));
 }
+
+// ==== B1-SCAN-BEGIN（工單 §6 反作弊掃描區：本區內不得出現 attackerId）====
+// §6 B1 commit 人格的狀態機（狀態＝aiState.blockCommit，與本波攻擊同壽命）——三段：
+//   ① 跟死：球還沒離二傳的手（touches < 2）就發現有人越過職責線往網跑 → 鎖定，
+//      目標 x 逐 tick 跟著他更新（真的在跟人，不是釘死一個座標）
+//   ② 起來：被跟的人不再往前（＝他到起跳點拔起來了，場上看得見）→ commit 的人
+//      跟著上去。**在空中的這段不能橫移**，長度沿用 sim 既有的一次攔網跳定義
+//      TUNING.BLOCK_WINDOW（48 tick＝0.8s，不另立新常數）
+//   ③ 落地：跑一次 §6 B2 close 時間預算（扣掉自己的反應時間）——
+//      追得到就回落追球軸（回傳 null），追不到就守住中間、不做無效尾隨。
+//      判錯的代價在這裡結算：起步晚了那麼多，邊線就是真的來不及。
+//      決定只做一次（c.chase）＝不在半路來回改主意。
+// 位移一律走 moveIntent（單 tick 受步長上限約束）＝結構上不可能瞬移補位。
+// 回傳 null＝這個人本 tick 不受 commit 影響（照既有的追球軸站位）。
+function blockCommitTargetX(game, aiState, team, player, actor, tick) {
+  if (blockPersonaOf(game, team) !== BLOCK_PERSONA.COMMIT) return null;
+  const r = game.rally;
+  const atkTeam = r.possession;
+  if (!atkTeam || atkTeam === team) return null;
+  const opts = { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
+  const c = aiState.blockCommit;
+  if (!c || c.team !== team) {
+    if (r.touches >= 2) return null; // 球已離手才「發現」＝那叫 read，不是 commit
+    const read = blockCommitRead(game, atkTeam, opts);
+    if (!read) return null;
+    aiState.blockCommit = { team, x: read.x, jumpTick: null };
+    return read.x;
+  }
+  // ① 跟死（被跟的人還在往網走）
+  if (c.jumpTick == null) {
+    const live = blockCommitRead(game, atkTeam, opts);
+    if (live) {
+      c.x = live.x;
+      return c.x;
+    }
+    c.jumpTick = tick; // 他不推進了＝他拔起來了，我跟著上
+  }
+  // ② 在空中：不能橫移
+  if (tick < c.jumpTick + TUNING.BLOCK_WINDOW) return c.x;
+  // ③ 落地後的 close 預算
+  if (c.chase === undefined) {
+    // 球自己的軌跡（人人看得見的物理）＝要追的人在哪、還剩多少時間；
+    // 目標取**擊球點**不是過網點——落地那刻誰也不知道他會把球打去哪條線
+    const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
+    const stepM = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
+    c.chase = blockCloseBudget({
+      fromX: actor.x,
+      toX: hit?.x ?? game.ball.x,
+      stepM,
+      ticksLeft: hit ? hit.ticks - reactionTicks(player) : null,
+      slack: BLOCK_COMMIT.CLOSE_SLACK,
+    }).canClose;
+  }
+  return c.chase ? null : actor.x;
+}
+// ==== B1-SCAN-END ====
 
 // §4 A1：這個人此刻「正在跑自己那條助跑線」嗎？（起步 tick 到了、收勢窗還沒過）
 // 回傳 route（含起跳點）或 null。只在我方持球且已完成第一擊時成立——
