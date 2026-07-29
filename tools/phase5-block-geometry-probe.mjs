@@ -24,11 +24,33 @@
 //     **2-B 之前這個數恆為 100.0%**——因為 blockTopEdge 還不吃相位，
 //     跳了即等於手在頂點。那個 100.0% 本身就是十-2 的量化證明。
 //
+// ★ v2 裁定書 §一.5：`inWin%` 與 `inAirWin%` 雙報（2026-07-29 新增）★
+// `actor.blockUntil` 在**每個** emit `block` 的 tick 被續期 `TUNING.BLOCK_WINDOW`（48），
+// 所以 AI 停止要求攔網之後，sim 側的窗還會再開 48 tick ⇒ `inWin%` 有一大部分量到的
+// 其實是**窗延遲**，不是手真的在上面。裁定「不得在本卷縮短 48」（憲法：AI 不得額外
+// 加罰，48 是既有拍板），**改探針不改 sim**：
+//
+//   inWin%     `actor.blockUntil >= tick`（sim 窗，現有欄位，**保留**）
+//   inAirWin%  **AI 這一 tick 還在不在 emit `block` Intent**（新增）
+//
+// 為什麼 `inAirWin` 用「還在不在 emit」而不是讀某個 air 狀態欄位：
+//   `aiState.blockCommit` 的 `ACTION_PHASE.AIR` **只有 commit 人格有**
+//   （`ai.js:929-976`，read 人格走的是追球軸、一行狀態機都沒有），
+//   拿它當欄位會讓 read 臂恆為 0＝兩臂不可比。
+//   「本 tick 是否仍要求攔網」是**對兩種人格都成立**的唯一 AI 側訊號，
+//   而且它精確地把那條 48 tick 的尾巴切掉——這正是本欄要解決的失真。
+//   零新常數、零 sim 改動、行為零變化（由 `tools/sim-hash-probe.mjs` 背書）。
+//
+// ★ v2 裁定書 §八-2：頂邊完成度的**地板不是 0%** ★
+// 落地者的完成度 ＝ 站立摸高 ÷ 跳躍頂點（本卷測試球員約 80.4%），
+// 不印出來會讓「92.7%」被誤讀成「只差 7.3%」（實際只走完約 64% 的跳躍行程）。
+// 故完成度欄一律附印地板值：`頂邊完成度p50%（地板）`。
+//
 // 跑法：node tools/phase5-block-geometry-probe.mjs [局數=40]
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { isFrontRow } from '../src/sim/rotation.js';
-import { blockReach, blockTopEdge } from '../src/sim/player.js';
+import { blockReach, blockTopEdge, standingReach } from '../src/sim/player.js';
 import { staminaPerfMul } from '../src/sim/stamina.js';
 import { BALL } from '../src/sim/constants.js';
 
@@ -51,7 +73,7 @@ function crossingPoint(before, after) {
   return { x: before.x + (after.x - before.x) * f, y: before.y + (after.y - before.y) * f };
 }
 
-function sampleAt(game, cross) {
+function sampleAt(game, cross, inAirWin) {
   const mb = mbOf(game, 'B');
   if (!mb) return null;
   const p = game.players[mb];
@@ -72,7 +94,11 @@ function sampleAt(game, cross) {
     V,
     G: H && V,
     inWin,
+    inAirWin,
     topPct: apex > 0 ? top / apex : 0,
+    // §八-2：完成度的**地板不是 0%**——站立摸高 ÷ 跳躍頂點。落地者的完成度就是這個值，
+    // 不印出來會讓「92.7%」被讀成「只差 7.3%」（實際只走完約 64% 的跳躍行程）
+    topFloorPct: apex > 0 ? standingReach(p) / apex : 0,
     // §3.6 診斷：V 若幾乎不動，要能分辨「頂邊沒吃相位」與「指標本來就退化」。
     // vMargin ＝ 頂邊（含球半徑）− 球心高度：正值＝手在球上面（V 真）。
     // 它 p50 若遠大於 0，代表球過網時本來就遠低於手，V 對誰都恆真＝指標退化。
@@ -95,10 +121,18 @@ function runSet(seed, blockPersona) {
       && r.touches === 3 && r.profile === 'spike';
     if (spiking && !pending && ai.attackKind) pending = { kind: ai.attackKind };
     const before = { x: game.ball.x, y: game.ball.y, z: game.ball.z };
-    stepGame(game, aiCollectIntents(game, ai, []));
+    // §一.5：`inAirWin` 要量的是 **AI 這一 tick 還在不在要求攔網**，所以必須在
+    // Intent 被 sim 消費**之前**攔下來看。拆成兩句只是為了讀 intents，
+    // 餵給 stepGame 的東西逐值不變（行為零變化由 sim-hash 背書）。
+    const intents = aiCollectIntents(game, ai, []);
+    const mbNow = mbOf(game, 'B');
+    const inAirWin = intents.some(
+      (it) => it.playerId === mbNow && it.action === 'block' && it.tick === game.tick,
+    );
+    stepGame(game, intents);
     if (pending && pending.G === undefined && before.z > 0 && game.ball.z <= 0) {
       const after = { x: game.ball.x, y: game.ball.y, z: game.ball.z };
-      const s = sampleAt(game, crossingPoint(before, after));
+      const s = sampleAt(game, crossingPoint(before, after), inAirWin);
       if (s) Object.assign(pending, s);
     }
     if (pending && (r.possession !== 'A' || r.profile !== 'spike')) {
@@ -125,7 +159,9 @@ function stat(rows, group) {
     V: pct(g.filter((r) => r.V).length, g.length),
     G: pct(g.filter((r) => r.G).length, g.length),
     inWin: pct(g.filter((r) => r.inWin).length, g.length),
+    inAirWin: pct(g.filter((r) => r.inAirWin).length, g.length),
     topP50: (tops[Math.floor(tops.length / 2)] * 100).toFixed(1),
+    topFloorP50: (q50('topFloorPct') * 100).toFixed(1),
     ballYP50: q50('ballY').toFixed(2),
     vMarginP50: q50('vMargin').toFixed(2),
     apexMarginP50: q50('apexMargin').toFixed(2),
@@ -144,14 +180,15 @@ console.log('量測時點：球心通過網面那一 tick（插值）｜G ＝ H 
 for (const group of ['quick', 'wing', 'back']) {
   const label = { quick: '快攻（一速中路）', wing: '兩翼高球（交叉/邊線）', back: '後排攻擊' }[group];
   console.log(`\n-- 面對 ${label} --`);
-  console.log('人格      樣本      H%      V%    ★G%    inWin%   頂邊完成度p50%'
-    + '   過網球心y   V餘裕(頂邊-球)   同球對頂點的餘裕');
+  console.log('人格      樣本      H%      V%    ★G%    inWin%  inAirWin%   頂邊完成度p50%'
+    + '（地板）   過網球心y   V餘裕(頂邊-球)   同球對頂點的餘裕');
   for (const p of ['read', 'commit']) {
     const s = stat(arms[p], group);
     if (!s.n) { console.log(`${p.padEnd(8)}     0`); continue; }
     console.log(
       `${p.padEnd(8)}  ${String(s.n).padStart(4)}  ${s.H.padStart(6)}  ${s.V.padStart(6)}  `
-      + `${s.G.padStart(5)}  ${s.inWin.padStart(8)}  ${s.topP50.padStart(14)}`
+      + `${s.G.padStart(5)}  ${s.inWin.padStart(8)}  ${s.inAirWin.padStart(9)}  `
+      + `${s.topP50.padStart(14)}（${s.topFloorP50}）`
       + `   ${s.ballYP50.padStart(9)}   ${s.vMarginP50.padStart(14)}   ${s.apexMarginP50.padStart(16)}`,
     );
   }

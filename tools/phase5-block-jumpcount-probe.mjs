@@ -4,7 +4,8 @@
 // v2 裁定書 §一.7 指出兩份既有量測互相矛盾：
 //   §三 時序表（`phase5-block-timing-probe.mjs`）說 read 面對兩翼在 `set+14` 起跳；
 //   §二 E 表（`phase5-block-geometry-probe.mjs`）說球在 `set+88` 過網那一刻，
-//   該攔網手的頂邊完成度是 94.6%（地板＝站立摸高÷頂點＝80.4%，不是 0%）。
+//   該攔網手的頂邊完成度是 94.6%（地板＝站立摸高÷頂點，**不是 0%**；裁定書算的
+//   單一球員值是 80.4%，本探針實測 p50 為 81.2–81.4%——地板隨球員身高／彈跳而異）。
 // 若只跳一次、窗長 AIR_TICKS=24，`set+14` 起跳者在 `set+38` 就該回到站立
 //   ⇒ `set+88` 的完成度應**恰為地板**。實測遠高於地板 ⇒ 他當時在空中。
 // 只有兩種可能：
@@ -46,7 +47,7 @@
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { isFrontRow } from '../src/sim/rotation.js';
-import { blockReach, blockTopEdge } from '../src/sim/player.js';
+import { blockReach, blockTopEdge, standingReach } from '../src/sim/player.js';
 import { staminaPerfMul } from '../src/sim/stamina.js';
 import { AIR_TICKS } from '../src/sim/approach.js';
 
@@ -108,6 +109,7 @@ function runSet(seed, blockPersona) {
             crossLag: cur.crossTick - cur.setTick,
             airAtCross: cur.airAtCross,
             topPctAtCross: cur.topPctAtCross,
+            topFloorPct: cur.topFloorPct,
           });
         }
         cur = null;
@@ -138,6 +140,8 @@ function runSet(seed, blockPersona) {
       cur.airAtCross = t;
       const apex = blockReach(p, jumpMul);
       cur.topPctAtCross = apex > 0 ? blockTopEdge(p, t, jumpMul) / apex : null;
+      // §八-2：完成度的地板＝站立摸高 ÷ 頂點，不是 0%。不附印會被誤讀成「只差幾 %」
+      cur.topFloorPct = apex > 0 ? standingReach(p) / apex : null;
     }
   }
   return rows;
@@ -190,8 +194,10 @@ for (const group of ['quick', 'wing', 'back']) {
       + `  ｜球過網 p50=set+${pctl(col(g, 'crossLag'), 0.5)}`);
     const air = col(g, 'airAtCross');
     const top = col(g, 'topPctAtCross');
+    const floor = col(g, 'topFloorPct');
     console.log(`        過網時滯空 p50=${air.length ? pctl(air, 0.5) : '－'}`
       + `  ｜頂邊完成度 p50=${top.length ? (pctl(top, 0.5) * 100).toFixed(1) : '－'}%`
+      + `（地板 ${floor.length ? (pctl(floor, 0.5) * 100).toFixed(1) : '－'}%）`
       + `  ｜過網時窗沒開＝${share(g.length - air.length, g.length)}%`);
   }
 }
