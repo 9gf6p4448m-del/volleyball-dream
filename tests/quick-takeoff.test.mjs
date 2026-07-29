@@ -135,19 +135,33 @@ test('一速：到位與起跳之間不得有長靜止（＝「跑完就跳」�
   assert.ok(p90 <= 10, `到位→起跳的靜止 p90 應在幾 tick 內（實得 ${p90}）`);
 });
 
+// 07-29（§5 A2／A3 上線後補樣本）：`judged > 100` 是樣本量守門，不是行為斷言
+// ——新戰術讓同一顆種子跑出的回合數改變，種子 11 單獨跑只剩 87 筆。
+// **比例門檻 0.95 一格未動**，改成兩顆種子併樣本（涵蓋面只增不減）。
 test('一速定義不得破壞：二傳觸球時 MB 已在起跳點站定（＝已離地）', () => {
-  const { airborne, judged } = runSet(11);
+  const a = runSet(11);
+  const b = runSet(13);
+  const airborne = a.airborne + b.airborne;
+  const judged = a.judged + b.judged;
   assert.ok(judged > 100, `樣本足夠（${judged}）`);
   assert.ok(airborne / judged > 0.95,
     `二傳觸球前已離地的比例須維持（實得 ${((airborne / judged) * 100).toFixed(1)}%）`);
 });
 
+// 07-29（§5 A2 交叉上線後補樣本）：`log.length > 100` 是「這局到底有沒有打出一速」
+// 的樣本量守門，不是行為斷言。交叉讓整局的攻擊分佈改變＝同一顆種子跑出的回合數不同，
+// 種子 5 單獨跑只剩 81 筆。**門檻與逐值比對一格未動**，改成兩顆種子各跑一局湊樣本
+// （每顆種子仍各自「同 seed 兩次逐值相同」，涵蓋面只增不減）。
 test('決定論：同 seed 兩次整局，一速的起跳 tick 與到位靜止逐值相同', () => {
-  const a = runSet(5);
-  const b = runSet(5);
-  assert.ok(a.log.length > 100, `樣本足夠（${a.log.length}）`);
-  assert.equal(a.log.length, b.log.length);
-  for (let i = 0; i < a.log.length; i += 1) {
-    assert.equal(a.log[i], b.log[i], `第 ${i} 筆起跳時序不一致`);
+  const total = [];
+  for (const seed of [5, 9]) {
+    const a = runSet(seed);
+    const b = runSet(seed);
+    assert.equal(a.log.length, b.log.length);
+    for (let i = 0; i < a.log.length; i += 1) {
+      assert.equal(a.log[i], b.log[i], `種子 ${seed} 第 ${i} 筆起跳時序不一致`);
+    }
+    total.push(...a.log);
   }
+  assert.ok(total.length > 100, `樣本足夠（${total.length}）`);
 });

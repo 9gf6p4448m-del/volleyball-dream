@@ -13,6 +13,7 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
+  applyRouteKinds,
 } from './approach.js';
 import {
   blockLaneRead, digForBlock, blockCommitRead, blockCloseBudget,
@@ -57,6 +58,7 @@ export const AI = {
   BLOCK_SCHEME_SHIFT: 0.9, // W4 附錄 B-1：L 配套封線站位偏移（封直線往邊線/封斜線往內）
   TIP_RATE: 0.1,          // AI 第三擊輕吊機率（攻擊分支：不被讀死；重扣為絕對主體）
   DUMP_RATE: 0.07,        // S 前排二次球機率（球到位時偶發）
+  JUMP_SET_RATE: 0.35,    // §5 A3 跳舉發生率（理由見 ensureFlightPlan 的抽選處）
   DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
   DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
   //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
@@ -165,6 +167,12 @@ export function createAiState() {
     backupId: null,    // 第二追球者（接噴救球）：主追者明顯趕不上時加派的備援
     hitPoint: null,    // 第三擊：球墜到扣球窗上緣的時空點（一氣呵成助跑的推遲起跑基準）
     setterDump: false, // S 前排二次球（本 flight 決定論抽選）
+    // §5 A3 跳舉（純資訊武器）：本波二傳是否跳起出手。**唯一的作用是把「可以觸球
+    // 的高度上緣」從站立可及抬到起跳可及**——球的目標、弧頂、散佈、扣球的速度與
+    // 落點散佈**一格未動**（見 touchCeiling()／tests/jump-set.test.mjs）。
+    // 與 setterDump 同壽命、同抽選範式（touches===1 算一次、純 hash 決定論）＝
+    // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
+    jumpSet: false,
     letDrop: false,    // 判斷來球出界 → 全隊放球（讓它落地得分）
     // W4(P4) 附錄 B-4 ace 反讀：{ pid, openLine }——宿敵 ace 且玩家配套被讀死時
     // 由呼叫端（matchLoop/治具）注入；chooseTouch 第三擊消費＝改打讓開的線
@@ -237,10 +245,15 @@ function ensureFlightPlan(game, aiState) {
     // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
     const tier = passTierOf(team, landing);
     aiState.passTier = tier; // W3 S 玩法：分配面板讀同一份品質分檔（setOptions 消費）
-    const points = attackPointsOf(game, team, aiState.claimId, tier);
+    // §5 A2 路線組合：先決定「每條線往哪跑」（OH 的 left 可能變 cross），**再**選人。
+    // 順序不可調換——選完人再改線＝二傳瞄的落點與該人助跑的終點是兩個地方
+    const points = applyRouteKinds(
+      attackPointsOf(game, team, aiState.claimId, tier),
+      { flightId: game.rally.flightId, seed: game.seed ?? 0, passTier: tier },
+    );
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
-    aiState.attackKind = pick?.kind ?? null; // 'left'|'quick'|'right'|'pipe'|'dball'
+    aiState.attackKind = pick?.kind ?? null; // 'left'|'cross'|'quick'|'right'|'pipe'|'dball'
     // Transition 拉開（§2-2）＋節奏三層（§4 A1）：整個池一次算完助跑起點、節奏與
     // 起步 tick——未被選中者照樣拉開跑假動作，攔網手才有多條線可讀。
     // 時間錨點＝contactPoint（球墜到接球高度的 tick）＝二傳觸球的預估時刻，
@@ -258,6 +271,17 @@ function ensureFlightPlan(game, aiState) {
         speedOf: (pid) => moveSpeed(game.players[pid]),
       }),
     };
+    // §5 A3 跳舉：一傳到位（憲法 §三 A3「一傳到位時的既有分支下」）＋真的是 S 在舉
+    // （備援代舉／救球仲裁者不跳舉——那種球本來就是勉強處理）＋種子決定論。
+    // ★ 觸發率的取捨（實測背景）：一傳品質目前恆為 'perfect'（W2 簡報 D-3），
+    //   所以「到位」這個條件**每球都成立**，真實世界的 60–80% 在這裡等於「每球都跳」
+    //   ＝攔網手讀不到差別、資訊武器自我歸零。0.35 ≒ 每三球出現一次，
+    //   與 §4 原定的二速比例同量級，讓「這球被壓縮了沒」保持可讀
+    aiState.jumpSet =
+      !!aiState.claimId &&
+      game.players[aiState.claimId].currentRole === 'setter' &&
+      tier === 'perfect' &&
+      hash01(game.rally.flightId * 811 + 29 + (game.seed ?? 0)) < AI.JUMP_SET_RATE;
     // S 二次球（偶發）：S 前排、一傳完美到位 → 小機率直接處理第二球
     aiState.setterDump =
       !!aiState.claimId &&
@@ -624,7 +648,11 @@ function decideOne(game, aiState, playerId) {
     }
     if (inReach) {
       const [action, aim, tOverride] = chooseTouch(game, aiState, player, actor);
-      if (action && ball.y <= touchCeiling(player, action)) {
+      // §5 A3：跳舉只抬高「這一觸的高度上緣」（jumpSet 由 ensureFlightPlan 決定論抽選）。
+      // AI 這一側的門檻與 sim 的 game.js:maxY 必須是同一個值，否則 AI 會送出
+      // sim 當場駁回的 Intent（一次白等、下一 tick 才補上）——兩處各留註解互指
+      const jumpSet = action === 'set' && !!aiState.jumpSet;
+      if (action && ball.y <= touchCeiling(player, action, jumpSet)) {
         // AI 觸球品質基準 0.75（玩家 Perfect＝1.0 才有超越空間）；快攻舉球帶 t<0.5（低弧）
         let timing = tOverride ?? (action === 'spike' ? 1 : 0.75);
         // W3 L（附錄 A1）：收縮指令讀對且球到 L 手上＝Perfect 窗——機制屬於指令本身，
@@ -633,7 +661,7 @@ function decideOne(game, aiState, playerId) {
           && digBiasCorrectFor(game, aiState, team)) {
           timing = 1.0;
         }
-        return createIntent({ playerId, tick, action, aim, timing });
+        return createIntent({ playerId, tick, action, aim, timing, jump: jumpSet });
       }
     }
     // AI 魚躍救球（接噴救球／方案A 全隊 AI 魚躍）：正常站立搆不到、但魚躍可及範圍內
@@ -986,9 +1014,22 @@ function spikeClearsNet(game, player, target) {
   return yNet !== null && yNet >= COURT.NET_HEIGHT + BALL.RADIUS + 0.1;
 }
 
-function touchCeiling(player, action) {
-  return action === 'spike' ? spikeReach(player) : standingReach(player) + 0.35;
+// ==== A3-SCAN-BEGIN（工單 §5 純資訊武器掃描區：jumpSet 只准出現在本區與抽選處）====
+// §5 A3 跳舉——**sim 裡唯一的效果就是這一行的高度上緣**。
+// 站舉：等球墜到站立可及＋0.35m 才出手；跳舉：跳起來在扣球可及高度接管它。
+// 於是二傳**更早**觸球、球從**更高**處出發（弧頂 TUNING.SET_APEX 不變 ⇒ 上升段更短），
+// 攔網手從「球離手」到「球被扣」之間可用的 tick 就少了——那正是判讀時間窗。
+//
+// 沒有動、也不准動的東西（憲法「不增加球威力」的落地判準）：
+//   ① 舉球的目標點（setAimFor）與散佈（scatterTarget 的每一個入參）
+//   ② 舉球弧頂（game.js 的 SET_APEX／QUICK_APEX 二選一分支）
+//   ③ 扣球的速度（spikeSpeed × timing）與落點散佈——jumpSet 不出現在任何扣球路徑上
+function touchCeiling(player, action, jumpSet = false) {
+  if (action === 'spike') return spikeReach(player);
+  if (action === 'set' && jumpSet) return spikeReach(player);
+  return standingReach(player) + 0.35;
 }
+// ==== A3-SCAN-END ====
 
 // 發球目標：受球方深區，依總得分循環（決定論的落點變化）
 const SERVE_ZONES = [

@@ -115,8 +115,12 @@ function runSet(seed) {
           if (r.kind === 'quick') {
             assert.ok(isFrontRow(rot, r.pid), '快攻線只給前排 MB');
             lz.quick.push(d);
-          } else if (r.kind === 'left' || r.kind === 'right') lz.wing.push(d);
-          else {
+          } else if (r.kind === 'left' || r.kind === 'right' || r.kind === 'cross') {
+            // §5 A2：cross（交叉）也是前排 OH 的線，離網深度與 left 同一檔
+            // ——分類補齊，斷言不放寬（反而多了一條「必須是前排」）
+            assert.ok(isFrontRow(rot, r.pid), '交叉線只給前排邊攻');
+            lz.wing.push(d);
+          } else {
             assert.ok(isBackRow(rot, r.pid), '後排攻擊線只給後排');
             lz.back.push(d);
           }

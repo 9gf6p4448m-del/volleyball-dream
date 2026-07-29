@@ -452,9 +452,14 @@ function tryAction(state, intent, ev) {
 
   const dist = Math.hypot(ball.x - actor.x, ball.z - actor.z);
   if (dist > TUNING.REACH_RADIUS * (isDive ? TUNING.DIVE_REACH_MUL : 1)) return;
+  // Phase 5 W1 §5 A3 跳舉：**唯一**吃 intent.jump 的地方——跳起來出手＝可及高度
+  // 從站立摸高抬到起跳摸高，於是二傳更早、在更高處接管這顆球。
+  // 之後的每一行（目標、散佈、弧頂、力度）都不看 intent.jump ⇒ 球的威力零變化。
   const maxY = intent.action === 'spike' ? spikeReach(player, staminaPerfMul(state, player))
     : isDive ? TUNING.DIVE_MAX_Y
-      : standingReach(player) + 0.35;
+      : (intent.action === 'set' && intent.jump)
+        ? spikeReach(player, staminaPerfMul(state, player))
+        : standingReach(player) + 0.35;
   if (ball.y > maxY || ball.y < BALL.RADIUS) return;
 
   executeTouch(state, intent, player, actor, ev, dist);
@@ -581,6 +586,9 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     power: Math.round(timing * 100) / 100, // 蓄力品質：表現層分輕吊/重扣音效用
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
     ...(blown ? { blown: true } : {}), // 爆接標記（播報/探針用）
+    // §5 A3 跳舉標記（表現層/播報/探針用；不參與任何判定）——攔網手要讀的線索
+    // 「二傳是否跳舉」在事件流裡就看得到，不必去翻協調層狀態
+    ...(intent.action === 'set' && intent.jump ? { jumpSet: true } : {}),
   });
 
   // W7 A1 消耗（本次觸球的品質判定用的是觸球前體力——疲勞在動作之後才上身）：

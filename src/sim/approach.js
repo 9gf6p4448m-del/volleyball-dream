@@ -26,6 +26,10 @@ const ATTACK_LZ = 1.3; // 舉球目標深度（不在表上的 kind 的保底線
 export function setAimFor(game, team, attackerId, kind) {
   if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
   if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
+  // §5 A2 交叉：OH 從外側切進中間（真實排球的 X 戰術）——落點在快攻點的左肩、
+  // 離快攻點 1.3m ＞ TUNING.BLOCK_REACH_X（1.1m）＝跟死快攻的中間攔網手**構造上
+  // 搆不到這一球**。這個「搆不到」就是交叉存在的理由，不靠任何機率加成。
+  if (kind === 'cross') return { lx: -1.3, lz: 1.3, t: 0.75 };
   if (kind === 'right') return { lx: 3, lz: 1.3, t: 0.75 };
   if (kind === 'pipe') return { lx: -1, lz: 3.6, t: 0.75 };
   if (kind === 'dball') return { lx: 2.6, lz: 3.6, t: 0.75 };
@@ -68,6 +72,10 @@ export const APPROACH = {
   quick: { lx: 0, lz: 3.0, steps: 2 },
   // OH 4 號位：約四步距離離網，從邊線外側切進來
   left: { lx: -3.6, lz: 3.6, steps: 4 },
+  // §5 A2 交叉：**同一個 OH**，起點更貼邊線（-4.1＝場內夾制上限）、終點在中間，
+  // 助跑因此是一條橫越 2.8m 的斜線（直線攻擊只橫移 0.6m）——「切進中間」在幾何上
+  // 就是這條線與 left 的差，攔網手看得到的也正是這個差
+  cross: { lx: -4.1, lz: 3.6, steps: 4 },
   // OPP 2 號位：沿用 OH 架構鏡像
   right: { lx: 3.6, lz: 3.6, steps: 4 },
   // 後排 pipe：四步、**離網最遠**（4.7 量到的 0.86m 空中前飄即此成因，屬正確行為）
@@ -139,6 +147,42 @@ export function tempoFor(kind, { flightId = 0, seed = 0, index = 0 } = {}) {
       ? 'two' : 'three';
   }
   return 'three';
+}
+
+// ---- §5 A2 路線組合 ----
+//
+// 節奏（tempo）決定「什麼時候起步」，路線（kind）決定「往哪裡跑」——兩者正交，
+// 合起來才是一條完整的 route。本輪新增的路線只有一條：**交叉**（OH 切進中間）。
+//   pipe：後排中央高球，早在 §2 就進了 APPROACH／setAimFor，本輪只是被 route
+//         系統一視同仁地涵蓋（見 tests/attack-routes.test.mjs 的 pipe 條款）。
+//   slide（單腳背快）：本輪**未做**，工單 §5 明列為唯一可砍項——理由見結案快照。
+//
+// 交叉只掛在 OH 的 left 線上（OPP 的 right 線不做鏡像版）：交叉的戰術意義是
+// 「繞過**中間**攔網手」，而 sim 的快攻點固定在 lx=0，從左側切進去才會經過它；
+// 右側鏡像是另一組幾何（前後夾），屬 A2 未做的部分，不在本輪硬性項內。
+export const CROSS_RATE = 0.3;
+const CROSS_SALT = 57;
+
+// 這名攻擊手本球跑哪條線（純 hash：吃 flightId＋池內序＋seed，不耗 game rng）。
+// 非 OH 前排（kind !== 'left'）一律原樣回傳＝其餘線本輪零變化。
+// **passTier 必須是 perfect**：交叉是跑戰術，它的全部價值來自「快攻先把中間攔網手
+// 帶走」——快攻不在池裡（ok／poor 檔）就沒有東西可繞，那只是繞遠路的高球。
+// 這條也讓既有的一傳品質分支規格維持原樣：勉強一傳仍然只剩兩翼高球
+export function routeKindFor(kind, { flightId = 0, seed = 0, index = 0, passTier = 'perfect' } = {}) {
+  if (kind !== 'left' || passTier !== 'perfect') return kind;
+  return hash01(flightId * 733 + index * 53 + CROSS_SALT + seed) < CROSS_RATE
+    ? 'cross' : 'left';
+}
+
+// 把路線變體套上整個攻擊池——**必須在 pickAttackPoint 之前套**，
+// 否則二傳選中的 kind 與該人實際跑的 route 會是兩條線（舉球落點對不上助跑終點）。
+// 純函式、不改入參（points 由 attackPointsOf 供給，該函式維持原樣＝玩家分配面板
+// src/input/setOptions.js 讀到的池不受影響）
+export function applyRouteKinds(points, opts = {}) {
+  return points.map((pt, index) => {
+    const kind = routeKindFor(pt.kind, { ...opts, index });
+    return kind === pt.kind ? pt : { ...pt, kind };
+  });
 }
 
 // 一條 route 的三個時間點（純算術，與幾何無關；抽出來是為了三種節奏都能被單測到
