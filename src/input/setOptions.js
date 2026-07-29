@@ -19,6 +19,7 @@ export const CALL_BALL_AT = 30;
 
 const KIND_LABELS = {
   quick: '快攻', left: '左翼', right: '右翼', pipe: '後排P', dball: 'D球',
+  cross: '交叉', // §5 A2（07-29 補）：缺這條的話標籤會 fallback 成英文字串 'cross'
 };
 
 // 選項：{ key, pid, name, kind, label, aim(世界座標), t(舉球弧線＝sim timing),
@@ -28,20 +29,32 @@ export function setOptionsFor(game, aiState, setterId) {
   if (!me) return [];
   const team = me.teamId;
   const tier = aiState?.passTier ?? 'perfect';
+  // §5 A2（07-29 修）：路線種類的**唯一真相是協調層已定案的 route**，不是 attackPointsOf
+  // 的預設值。`ai.js:250` 先跑 applyRouteKinds 才選人（OH 的 left 可能變 cross），
+  // 而本函式原本只呼叫 attackPointsOf ⇒ ①玩家永遠看不到交叉 ②面板顯示「左翼」瞄 lx −3、
+  // 該 OH 實際跑 cross 的 lx −1.3＝**球與人差 1.7m**（實測 B2：面板 left／實際 cross）。
+  // ai.js:249 的註解本來就警告過「選完人再改線＝二傳瞄的落點與助跑終點是兩個地方」，
+  // 只是當時只修了 AI 那條路徑。
+  const routeKindOf = (pid) => (
+    aiState?.approach?.team === team
+      ? (aiState.approach.routes ?? []).find((r) => r.pid === pid)?.kind
+      : undefined
+  );
   const options = attackPointsOf(game, team, setterId, tier).map((pt) => {
     const p = game.players[pt.pid];
-    const a = setAimFor(game, team, pt.pid, pt.kind);
+    const kind = routeKindOf(pt.pid) ?? pt.kind;
+    const a = setAimFor(game, team, pt.pid, kind);
     const trust = effectiveTrust(game, p);
     return {
-      key: `${pt.pid}-${pt.kind}`,
+      key: `${pt.pid}-${kind}`,
       pid: pt.pid,
       name: p.name,
-      kind: pt.kind,
-      label: `${p.name}·${KIND_LABELS[pt.kind] ?? pt.kind}`,
+      kind,
+      label: `${p.name}·${KIND_LABELS[kind] ?? kind}`,
       aim: localToWorld(team, a.lx, a.lz),
       t: a.t,
       trust,
-      hesitant: pt.kind === 'quick' && trust < SET_HESITANT_BELOW,
+      hesitant: kind === 'quick' && trust < SET_HESITANT_BELOW,
       tier,
     };
   });
