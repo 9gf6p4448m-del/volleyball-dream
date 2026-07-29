@@ -1051,15 +1051,44 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
   const opts = { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
   const c = aiState.blockPlan;
   if (!c || c.team !== team) {
-    // 【讀】還沒被允許做決定＝守在陣型基準位（呼叫端處理）
-    if (!blockDecisionUnlocked(game, aiState, persona, player, tick)) return null;
+    const unlocked = blockDecisionUnlocked(game, aiState, persona, player, tick);
     // 【判】選定攻擊點
-    const aimX = blockAimX(game, aiState, atkTeam, persona, opts);
-    if (aimX == null) return null;
+    const aimX = unlocked ? blockAimX(game, aiState, atkTeam, persona, opts) : null;
+    if (aimX == null) {
+      // ★ commit 的「賭輸了也要站上場」退路（2026-07-29 Sawmah 簽准；v2 裁定書題 2 的實測修正）★
+      //
+      // 病灶不是裁定書 §一.4 指的 `atkTeam === team` 早退——實測那條在飛行段一次都沒觸發
+      //（飛行段 possession 翻到攔網方 0.0%、攔網分支活著 100.0%，見
+      // `tools/phase5-block-plan-lifecycle-probe.mjs`）。真正的缺口在**這裡**：
+      //
+      //   commit 的決策窗 ＝ `touches < 2`，且必須「當下 blockCommitRead 回得出值」才建得起計畫。
+      //   實測（299 次攻擊）：窗長 p50 172 tick、分支活著 p50 138 tick、**分支從未活過 0.0%**，
+      //   但 **43.5% 的攻擊整段窗內讀不到任何人在往網跑**。
+      //   讀不到 ⇒ 計畫沒建起來 ⇒ 窗在第二觸永久關閉 ⇒ 這一波**從頭到尾不起跳**（59–65%）。
+      //
+      // 「什麼都不做、整球不攔」不是任何人拍板過的行為，是規格漏洞：A 案定義了
+      // 「commit 決定早」與「起算事件＝二傳觸球」，**沒有定義「截止了還沒讀到人怎麼辦」**。
+      // 現實裡沒有攔網手因為讀不到快攻就整球不起跳。
+      //
+      // 授權範圍（不得擴張解讀）：只補這一條退路。**不動** commit 何時開始讀、
+      // 不動起算事件、不動 read 的解鎖規則、不動起跳訊號。**零新常數。**
+      //
+      // 退路的語意＝「我賭快攻，但沒看到人；我還是守中路、跟著跳」：
+      //   目標 x ＝ 0 ＝ 呼叫端 `planX ?? 0` 本來就在用的中軸錨點
+      //   ⇒ **站位逐值不變**，唯一的行為差異是「這一波會起跳」。
+      //   `blind` ＝ 這份計畫沒有鎖定任何人 ⇒ chase 段不得改瞄（見下方 ①）。
+      //   不改瞄才是誠實的：他賭了中路卻沒賭中，代價就該由他自己付（兩翼來就守不到），
+      //   容許他事後跟著人跑＝把 commit 偷偷變成 read，人格差異會被抹平。
+      if (persona !== BLOCK_PERSONA.COMMIT || unlocked) return null;
+      aiState.blockPlan = {
+        team, x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null, blind: true,
+      };
+      return 0;
+    }
     const read = { x: aimX };
     // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
     aiState.blockPlan = {
-      team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+      team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null, blind: false,
     };
     return read.x;
   }
@@ -1088,15 +1117,16 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
     //   快攻：MB 在二傳觸球前就離地（W1 實測 100%）⇒ 二傳觸球當下即成立，隨即拔起
     //   高球：兩翼還在跑 ⇒ 條件不成立，等他們真的拔了才跟上
     //
-    // ⚠ 已知缺口（2026-07-29 實測，待裁定）：這個下降沿有 59–65% 的攻擊**從來沒發生**
-    // ——助跑停止的那一刻常常晚於球被擊出，而球一被擊出 `r.possession` 就翻到攔網方，
-    // 本函式開頭的 `atkTeam === team` 早退會讓狀態機再也走不到這裡。
-    // 試過補一條 `r.touches >= 3` 的兜底，量測**逐值零變化**＝那條是死碼（同樣被早退擋掉）。
-    // 詳見 `docs/phase5-section10-test-triage.md` §五「2-A 待裁定題」。
+    // ✅ 上面那個「59–65% 從來沒發生」的缺口已於 2026-07-29 定位並修復——**成因不是這裡**，
+    // 是 commit 根本沒建起計畫（決策窗在第二觸永久關閉、43.5% 的攻擊窗內讀不到人）。
+    // 修法＝上方的 `blind` 退路。實測依據見 `tools/phase5-block-plan-lifecycle-probe.mjs`。
     if (r.touches >= 2 && blockCommitRead(game, atkTeam, opts) == null) {
       c.jumpTick = tick; // 本 tick 起算 air
       return c.x;
     }
+    // `blind` ＝ 沒鎖定任何人的退路計畫：**不得改瞄**。
+    // 他賭了中路卻沒賭中，代價就該由他自己付；容許事後跟著人跑＝把 commit 偷偷變成 read。
+    if (c.blind) return c.x;
     const liveX = blockAimX(game, aiState, atkTeam, persona, opts);
     const live = liveX == null ? null : { x: liveX };
     if (!live) return c.x; // 這一刻讀不出新的瞄準點：守住既有目標，不亂動
