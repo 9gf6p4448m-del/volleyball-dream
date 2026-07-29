@@ -34,6 +34,20 @@
 // 分級以 level 為主軸（≥64 read／<64 commit），曜石體中是刻意的個性例外：
 // level 60 卻 commit——「這隊 MB 攔網極快、中路是他們的天下」的 trait 本來就是
 // 「賭中間」的打法，玩家該學會的是拿交叉去懲罰它，而不是硬扣中路。
+// ★ 2026-07-29 Sawmah 拍板：**commit 暫停派任**（改回 true 即恢復下方各隊的原定人格）。
+// 理由：commit 的「強項」在下列兩件事修好之前，結構上做不出來——
+//   ① 攔網結算只認一個人（`game.js:882-893` 取 dx 最小者結算，雙人／三人牆的攔網率
+//      與單人完全相同）⇒ commit 就算讓 MB 跟死快攻，結算也只算一個人
+//   ② 攔網手零反應延遲（接球手有 reactionTicks、攔網手沒有）⇒ read 既能等看清楚、
+//      又追得到快攻，commit 沒有可賭贏的空間
+// 實測後果：commit 只有代價沒有好處（面對快攻 100%→93.7%、兩翼高球到位率 96.0%→84.7%），
+// 開著會讓弱隊單向變差、難度往玩家偏 3pp，且玩家感受到的是**假的**行為差異。
+// 兩件都要動平衡命脈，已合併為憲法 §十「讓 sim 誠實」卷；該卷落地後把此旗標打開。
+// 程式碼（`blockPersonaOf`／`blockCommitRead`）與 8 條測試全部保留，測試直接注入 profile
+// 故不受此旗標影響。
+const COMMIT_PERSONA_ENABLED = false;
+const persona = (p) => (COMMIT_PERSONA_ENABLED ? p : 'read');
+
 export const OPPONENTS = [
   {
     id: 'north-tech',
@@ -57,7 +71,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 0, name: '杜品澄', title: '節拍器' }, // S・隊長——一傳一舉把亂流理成直線
     scoutRead: 0,
-    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03, blockPersona: 'commit' }, // 控制系：飄浮發球、防守韌性低（少魚躍）
+    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03, blockPersona: persona('commit') }, // 控制系：飄浮發球、防守韌性低（少魚躍）
   },
   {
     id: 'white-wave',
@@ -81,7 +95,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 'L', name: '蔡沐恩', title: '不沉之浪' }, // 自由人＝隊魂——球不落地是他唯一的信仰
     scoutRead: 0.25,
-    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15, blockPersona: 'commit' }, // 防守隊招牌：拚命魚躍、球不落地不放棄
+    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15, blockPersona: persona('commit') }, // 防守隊招牌：拚命魚躍、球不落地不放棄
   },
   {
     id: 'obsidian',
@@ -105,7 +119,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 2, name: '詹子曜', title: '黑曜箭' }, // MB・阿曜——起跳永遠快你半拍
     scoutRead: 0.7,
-    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: 'commit' }, // §6 B1 個性例外：中路是他們的天下＝賭中間
+    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: persona('commit') }, // §6 B1 個性例外：中路是他們的天下＝賭中間
   },
   // W6 A1 新隊①（level 55，北原↔白浪空檔）：變化球隊——身材矮、火力弱，
   // 靠球路變化（吊球/二次球/飄浮球）打亂節奏；攔網差＝扣過去很痛快
@@ -131,7 +145,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 0, name: '簡子嵐', title: '颱風眼' }, // S・小嵐——亂流的正中央永遠是靜的
     scoutRead: 0.15,
-    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1, blockPersona: 'commit' },
+    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1, blockPersona: persona('commit') },
   },
   {
     id: 'iron-mist',
