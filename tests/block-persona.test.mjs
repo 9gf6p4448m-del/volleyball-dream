@@ -288,3 +288,52 @@ test('blockCloseBudget：追得到／追不到由時間預算決定，且不預�
   assert.equal(blockCloseBudget({ fromX: 0, toX: 3, stepM, ticksLeft: null }).canClose, true);
   assert.equal(blockCloseBudget({ fromX: 0, toX: 3, stepM: 0, ticksLeft: 99 }).canClose, false);
 });
+
+// ---------------- 回歸閘：read 對快攻的「預測偏晚」不得消失 ----------------
+//
+// ★ 為什麼要這條（v4 裁定書主題「甲」的附帶工作項，2026-07-30 Sawmah 拍板）★
+// read 的起跳時鐘改吃球的預測擊球 tick（前置量 0）之後，R4 第 3 款
+//（read×快攻 的頂邊完成度明顯低於 commit×快攻＝賭局存在的證明）**是靠一個偏誤撐著的**：
+//   `predictContactPoint` 對快攻有系統性偏晚（實測 +7～+9 tick，sd 0.76），
+//   而快攻「擊球→過網」的飛行段只有 6 tick 左右（實測 p50 6）。
+//   偏晚 > 飛行段 ⇒ read 在球過網之後才離地 ⇒ 對快攻來不及 ⇒ 款 3 成立。
+// ⇒ **任何日後改善擊球點預測精度的改動，都會打穿款 3**，而那不會讓任何現有測試轉紅。
+//   這條就是那個警報器：偏晚掉到快攻飛行段（≈6 tick）以下就轉紅，強迫重看款 3。
+//
+// 量法：直接讀 sim 自己鎖存的那個值——`aiState.blockPlan.jumpAt` ＝ read 在
+// 「二傳觸球＋反應延遲」那一刻算出並鎖存的預測擊球 tick（前置量 0 ⇒ 兩者相等）。
+// 不重算、不另外呼叫 predictContactPoint，量的就是 sim 真的拿去用的數字。
+test('B1 回歸閘：read 對快攻的預測擊球 tick 仍偏晚（款 3 的載體不得消失）', () => {
+  const lateness = [];
+  for (let seed = 101; seed <= 303; seed += 101) {
+    const game = createGame({ seed, setTarget: 25, aiProfiles: { B: { blockPersona: 'read' } } });
+    const ai = createAiState();
+    let cur = null;
+    let guard = 0;
+    while (game.phase !== 'set_over' && guard < 400000) {
+      guard += 1;
+      const intents = aiCollectIntents(game, ai, []);
+      const plan = ai.blockPlan;
+      if (cur && plan && plan.team === 'B' && plan.jumpAt != null
+        && plan.enterTick === game.tick) cur.jumpAt = plan.jumpAt;
+      for (const e of stepGame(game, intents)) {
+        if (e.type === 'TOUCH' && e.kind === 'set' && e.team === 'A' && e.touches === 2) {
+          cur = { jumpAt: null };
+        }
+        if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === 'A' && cur) {
+          if (cur.jumpAt != null && ai.attackKind === 'quick') {
+            lateness.push(cur.jumpAt - game.tick);
+          }
+          cur = null;
+        }
+        if (e.type === 'DEAD_BALL') cur = null;
+      }
+    }
+  }
+  assert.ok(lateness.length >= 20, `樣本足夠（${lateness.length}）`);
+  const med = [...lateness].sort((a, b) => a - b)[Math.floor(lateness.length / 2)];
+  // 門檻 6 ＝ 快攻「擊球→過網」飛行段的實測中位數（tools/phase5-block-nettick-probe.mjs）。
+  // 偏晚一旦低於它，read 就會在球過網前離地 ⇒ 款 3 翻轉。實測中位數為 8，餘裕 2 tick。
+  assert.ok(med >= 6, `read 對快攻的預測偏晚中位數＝${med} tick，低於快攻飛行段 6 tick`
+    + '＝款 3（read×快攻 明顯低於 commit×快攻）的載體已消失，必須回頭重看 R4 第 3 款');
+});

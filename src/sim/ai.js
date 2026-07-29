@@ -1013,12 +1013,17 @@ function blockDecisionUnlocked(game, aiState, persona, player, tick) {
 //
 // ★ 反作弊 ★ 兩條路都拿不到 attackerId：blockCommitRead 的簽章只吃隊伍代號，
 //   predictContactPoint 只吃球的物理量。球的拋物線是場上每個人都看得見的公開資訊。
+// 回傳 `{ x, contactTicks }`，或 null（這一刻讀不出瞄準點）。
+// `contactTicks` ＝ 距「球墜到扣球窗上緣」還有幾 tick，**只有 read 有值**——
+// commit 猜的是人，`blockCommitRead` 結構上只給位置不給時間。
+// read 的起跳時鐘就吃這個值（v4 裁定書主題「甲」，見 blockPlanTargetX 的建計畫段）。
 function blockAimX(game, aiState, atkTeam, persona, opts) {
   if (persona === BLOCK_PERSONA.READ) {
     const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
-    if (hit) return hit.x;
+    if (hit) return { x: hit.x, contactTicks: hit.ticks };
   }
-  return blockCommitRead(game, atkTeam, opts)?.x ?? null;
+  const x = blockCommitRead(game, atkTeam, opts)?.x ?? null;
+  return x == null ? null : { x, contactTicks: null };
 }
 
 /**
@@ -1053,8 +1058,8 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
   if (!c || c.team !== team) {
     const unlocked = blockDecisionUnlocked(game, aiState, persona, player, tick);
     // 【判】選定攻擊點
-    const aimX = unlocked ? blockAimX(game, aiState, atkTeam, persona, opts) : null;
-    if (aimX == null) {
+    const aim = unlocked ? blockAimX(game, aiState, atkTeam, persona, opts) : null;
+    if (aim == null) {
       // ★ commit 的「賭輸了也要站上場」退路（2026-07-29 Sawmah 簽准；v2 裁定書題 2 的實測修正）★
       //
       // 病灶不是裁定書 §一.4 指的 `atkTeam === team` 早退——實測那條在飛行段一次都沒觸發
@@ -1082,14 +1087,27 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
       if (persona !== BLOCK_PERSONA.COMMIT || unlocked) return null;
       aiState.blockPlan = {
         team, x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
-        blind: true, seen: false,
+        blind: true, seen: false, jumpAt: null,
       };
       return 0;
     }
-    const read = { x: aimX };
+    // ★ read 的起跳時鐘：在**這一 tick 取樣並鎖存**，之後不重算（v4 裁定書 R1）★
+    // 取樣時點 ＝ 建計畫這一 tick ＝ `blockDecisionUnlocked` 剛放行的那一刻
+    //          ＝ 二傳觸球 ＋ 該員反應延遲。**結構上不可能更早**。
+    // 前置量 ＝ 0：起跳就在預測擊球 tick（v4 裁定書主題「甲」，2026-07-30 Sawmah 拍板）。
+    //   為什麼不是「預測過網 tick − 跳躍窗長/2」（v3 裁定書 R2 的原形式）：
+    //   **過網 tick 在這一刻不可導**——取樣時球還在二傳的球路上，那組速度描述的是
+    //   「二傳的球慢慢飄過網」，球會先被扣走、換一組全新速度才真的過網。
+    //   實測誤差 p50 117／280 tick，後排 0/57 連正解都沒有（`phase5-block-nettick-probe.mjs`）。
+    //   擊球 tick 則是 sd 0.48–0.76 tick、全距 ≤3 ⇒ 錨點存在，只是不在網面。
+    //   前置量掃過五個候選（0／12／＝反應延遲／8／6），**只有 0 讓 R4 三款同時成立**。
+    // ⚠ 鎖存只鎖**起跳時鐘**；瞄準 x 仍逐 tick 重算（既有行為，改判要付重新踩定代價）。
+    const jumpAt = aim.contactTicks == null ? null : tick + aim.contactTicks;
+    const read = { x: aim.x };
     // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
     aiState.blockPlan = {
       team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+      jumpAt,
       // `seen` 一律起手為偽、由 chase 段逐 tick 自己觀察——**不得在建計畫時預設為真**：
       // read 的計畫是從**球的拋物線**建的（blockAimX 走 predictContactPoint），
       // 不是從「看到有人在跑」建的。預設為真會讓 read 在兩翼助跑手還沒進偵測範圍時
@@ -1146,17 +1164,32 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
     //   **實測退步**——read 面對快攻變成 100% 不起跳、commit 又回到 set+0，已撤回。
     // 「該吃第幾個下降沿」實質上就是 read／commit 賭局的定義本身（憲法 §零 領域），
     // 不由實作端自行決定。詳見 docs/phase5-section10-test-triage.md §五。
-    const liveRead = blockCommitRead(game, atkTeam, opts);
-    if (liveRead) c.seen = true;
-    if (r.touches >= 2 && c.seen && liveRead == null) {
-      c.jumpTick = tick; // 本 tick 起算 air
-      return c.x;
+    // ★★ 2026-07-30 起，兩種人格**不再共用起跳訊號**（v4 裁定書主題「甲」）★★
+    // 上面那整段註解記錄的是舊制與它為什麼行不通，保留當歷史；現行分工是：
+    //   read  ＝ 建計畫時鎖存的 `jumpAt`（球的預測擊球 tick，前置量 0）
+    //   commit＝ 助跑下降沿（原封不動，v3 裁定書 R3「commit 本輪不動」）
+    // read 改吃球的理由：起跳訊號的**來源不同就是人格差異**——read 讀球（等球出手看清楚，
+    // 準但晚）、commit 賭中路（早，但可能賭錯）。原本要求兩者共用同一個可觀察事件，
+    // 而實測證明**不存在**一個對兩人格都成立且指得對的事件（快攻沒有屬於真攻擊手的下降沿，
+    // 兩翼的第一個下降沿指著中路誘餌）。
+    if (c.jumpAt != null) {
+      if (tick >= c.jumpAt) {
+        c.jumpTick = tick; // 本 tick 起算 air
+        return c.x;
+      }
+    } else {
+      // commit（含 blind 退路），以及 read 在 predictContactPoint 罕見回不出值時的退路
+      const liveRead = blockCommitRead(game, atkTeam, opts);
+      if (liveRead) c.seen = true;
+      if (r.touches >= 2 && c.seen && liveRead == null) {
+        c.jumpTick = tick;
+        return c.x;
+      }
     }
     // `blind` ＝ 沒鎖定任何人的退路計畫：**不得改瞄**。
     // 他賭了中路卻沒賭中，代價就該由他自己付；容許事後跟著人跑＝把 commit 偷偷變成 read。
     if (c.blind) return c.x;
-    const liveX = blockAimX(game, aiState, atkTeam, persona, opts);
-    const live = liveX == null ? null : { x: liveX };
+    const live = blockAimX(game, aiState, atkTeam, persona, opts);
     if (!live) return c.x; // 這一刻讀不出新的瞄準點：守住既有目標，不亂動
     // §2.4-e 改判要付重新踩定的代價（**不做加速度／慣性模型**：移動從來不是瓶頸，
     // 窗長 p50 80 tick × 移速 2.8–5.2 m/s 可跑 3.7–6.9m，而實測最大淨位移僅 4.864m。
