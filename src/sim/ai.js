@@ -13,8 +13,9 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
-  applyRouteKinds,
+  applyRouteKinds, routePhaseAt,
 } from './approach.js';
+import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
   blockLaneRead, digForBlock, blockCommitRead, blockCloseBudget,
   BLOCK_PERSONA, BLOCK_COMMIT,
@@ -902,7 +903,8 @@ function decideOne(game, aiState, playerId) {
   // startTick 為 null（二傳觸球時刻預測失效）＝退回本輪之前的行為：一路站在起點
   if (r.possession === team && r.touches >= 1 && aiState.approach?.team === team) {
     const route = approachRouteOf(aiState.approach.routes, playerId);
-    if (route && (route.startTick == null || tick < route.startTick)) {
+    // §9 契約的 wait 段（含 startTick 為 null＝錨點算不出來 ⇒ 停在第一段）
+    if (route && routePhaseAt(route, tick) === ACTION_PHASE.WAIT) {
       return moveIntent(game, playerId, tick, actor, route.start);
     }
   }
@@ -935,20 +937,27 @@ function blockCommitTargetX(game, aiState, team, player, actor, tick) {
     if (r.touches >= 2) return null; // 球已離手才「發現」＝那叫 read，不是 commit
     const read = blockCommitRead(game, atkTeam, opts);
     if (!read) return null;
-    aiState.blockCommit = { team, x: read.x, jumpTick: null };
+    // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
+    aiState.blockCommit = { team, x: read.x, enterTick: tick, jumpTick: null };
     return read.x;
   }
+  // §9 契約：本狀態機的三段＝chase（跟死）／air（在空中）／release（落地結算）。
+  // 進 air 的錨點是事件寫下的 jumpTick、窗長沿用既有的 TUNING.BLOCK_WINDOW
+  const phase = actionPhaseAt(tick, {
+    enterTick: c.enterTick, airTick: c.jumpTick, airTicks: TUNING.BLOCK_WINDOW,
+  });
   // ① 跟死（被跟的人還在往網走）
-  if (c.jumpTick == null) {
+  if (phase === ACTION_PHASE.CHASE) {
     const live = blockCommitRead(game, atkTeam, opts);
     if (live) {
       c.x = live.x;
       return c.x;
     }
-    c.jumpTick = tick; // 他不推進了＝他拔起來了，我跟著上
+    c.jumpTick = tick; // 他不推進了＝他拔起來了，我跟著上（本 tick 起算 air）
+    return c.x;
   }
   // ② 在空中：不能橫移
-  if (tick < c.jumpTick + TUNING.BLOCK_WINDOW) return c.x;
+  if (phase === ACTION_PHASE.AIR) return c.x;
   // ③ 落地後的 close 預算
   if (c.chase === undefined) {
     // 球自己的軌跡（人人看得見的物理）＝要追的人在哪、還剩多少時間；
@@ -973,8 +982,12 @@ function blockCommitTargetX(game, aiState, team, player, actor, tick) {
 function approachRunOf(aiState, playerId, tick, team, r) {
   if (r.possession !== team || r.touches < 1 || aiState.approach?.team !== team) return null;
   const route = approachRouteOf(aiState.approach.routes, playerId);
-  if (!route || route.startTick == null) return null;
-  return tick >= route.startTick && tick < route.settleTick ? route : null;
+  if (!route) return null;
+  // §9 契約：「正在跑」＝ chase（跑向起跳點）或 air（到位拔起後的收勢窗）——
+  // 兩段的走位目標都是起跳點，實際的「停」由下方到位判定（gap < SETTLE）給，
+  // 不由 tick 給（§2-6 兩次勝率 0% 換來的：停止條件用時間會在半路就叫停）
+  const phase = routePhaseAt(route, tick);
+  return phase === ACTION_PHASE.CHASE || phase === ACTION_PHASE.AIR ? route : null;
 }
 
 // §4 A1：這個人「已經在二傳觸球前起跑了」嗎？
@@ -984,8 +997,9 @@ function approachRunOf(aiState, playerId, tick, team, r) {
 // 因為「決策時點後移」不等於「取消一氣呵成」：還沒起跑的人照樣該在起點等
 function approachLaunched(aiState, playerId, tick) {
   const route = aiState.approach ? approachRouteOf(aiState.approach.routes, playerId) : null;
-  if (!route || route.tempo === 'three' || route.startTick == null) return false;
-  return tick >= route.startTick;
+  if (!route || route.tempo === 'three') return false;
+  // §9 契約：離開 wait ＝已經起跑（含收勢後的 release——起跑過就是起跑過）
+  return routePhaseAt(route, tick) !== ACTION_PHASE.WAIT;
 }
 
 // 觸球選擇：第一擊墊給舉球點、第二擊舉給攻擊手、第三擊前排扣球／其餘送安全球

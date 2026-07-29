@@ -18,6 +18,7 @@
 import { COURT, SIM_DT } from './constants.js';
 import { localToWorld } from './rotation.js';
 import { hash01 } from './rng.js';
+import { actionPhaseAt } from './actionPhase.js';
 
 // 二傳落點：前後排皆已換位 → 各攻擊點固定（真實排球的進攻座標）
 // 前排 OH 左翼/OPP 右翼高球、MB 面前低弧快攻；
@@ -269,6 +270,22 @@ export function approachRoutesFor(team, points, opts = {}) {
     });
   });
   return routes;
+}
+
+// §9 `ActionPhaseContract` 的案例 A 接口：這條 route 在這一 tick 走到哪一段。
+//   wait    還沒到起步 tick（或 setTick 預測失效＝三個 tick 欄位皆 null）＝站在起點等
+//   chase   起步了、還沒到起跳 tick＝跑向起跳點（實際的「停」由到位判定給，見 ai.js）
+//   air     滯空收勢窗（窗長＝本檔 AIR_TICKS，契約不另立標準）
+//   release 收勢完成＝落回 cover／職責位
+// 三個 tick 欄位（startTick／takeoffTick／settleTick）本身仍由 routeTicks 排定，
+// 此處只是把「tick → 相位」的判讀交給契約，數值與邊界一格未動
+// （settleTick === takeoffTick + AIR_TICKS，見 routeTicks）。
+export function routePhaseAt(route, tick) {
+  return actionPhaseAt(tick, {
+    enterTick: route?.startTick ?? null,
+    airTick: route?.takeoffTick ?? null,
+    airTicks: AIR_TICKS,
+  });
 }
 
 // 查表：這名球員本球的 route（不是合法攻擊手＝null）
