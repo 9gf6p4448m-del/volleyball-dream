@@ -23,7 +23,19 @@ import { hash01 } from './rng.js';
 // 前排 OH 左翼/OPP 右翼高球、MB 面前低弧快攻；
 // 後排 pipe 中路偏左（後中 OH）、D 球右路（右後 OPP）——皆壓攻擊線後（合法起跳）
 const ATTACK_LZ = 1.3; // 舉球目標深度（不在表上的 kind 的保底線）
-export function setAimFor(game, team, attackerId, kind) {
+// 第三檔弧線（§4 遺留的阻塞項）：二速的平拉開／半快。
+// t 落在 [0.5,0.65) ⇒ game.js 取 TUNING.SHOOT_APEX（4.2，介於快攻 3.4 與高球 5.2）。
+// 落點刻意推到 ±4.4（近標誌桿）：弧越低，「球墜到扣球窗上緣」的位置就越往二傳側縮，
+// 落點不外推的話擊球點會被拉回中場（§4 借快攻低弧那次的失敗成因）。
+// 實測（tools/… 的彈道試算）：apex 4.2＋落點 -4.4 → 擊球點 lx -2.87、飛行 64 tick，
+// 對照高球（apex 5.2＋落點 -3）的 -2.15／83 tick——更外側、快 19 tick。
+const SHOOT = { left: -4.4, right: 4.4 };
+// 二速的名目擊球點（takeoffSpotFor 用）：不是落點本身，是上面試算出來的擊球點
+const SHOOT_HIT = { left: -2.9, right: 2.9 };
+export function setAimFor(game, team, attackerId, kind, tempo = 'three') {
+  if (tempo === 'two' && SHOOT[kind] !== undefined) {
+    return { lx: SHOOT[kind], lz: 1.3, t: 0.55 };
+  }
   if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
   if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
   // §5 A2 交叉：OH 從外側切進中間（真實排球的 X 戰術）——落點在快攻點的左肩、
@@ -48,10 +60,12 @@ const BACK_KINDS = new Set(['pipe', 'dball']);
 // 起跳點（世界座標）＝該線的舉球落點往自家後場退 TAKEOFF.FRONT/BACK。
 // 這是「這條線的人最後會停在哪拔起」的名目值——被選中者到了第三擊改吃實測 hitPoint
 // （ai.js 的起跳點分支，禁區不動），未被選中者跑的假動作就以此為終點。
-export function takeoffSpotFor(team, kind) {
-  const aim = setAimFor(null, team, null, kind);
+export function takeoffSpotFor(team, kind, tempo = 'three') {
+  const aim = setAimFor(null, team, null, kind, tempo);
+  // 二速：落點被外推到標誌桿，實際擊球點在 SHOOT_HIT（見上方彈道試算）
+  const lx = (tempo === 'two' && SHOOT_HIT[kind] !== undefined) ? SHOOT_HIT[kind] : aim.lx;
   const back = BACK_KINDS.has(kind) ? TAKEOFF.BACK : TAKEOFF.FRONT;
-  const w = localToWorld(team, aim.lx, aim.lz + back);
+  const w = localToWorld(team, lx, aim.lz + back);
   return { x: w.x, z: w.z };
 }
 
@@ -115,19 +129,35 @@ export const TEMPO = {
   two: { takeoffLead: 3 },
   three: { takeoffLead: 0 },
 };
-// 邊攻跑二速的比例——**本輪＝0（二速停派），這不是調參是擋 bug**：
-// 二速的定義是「邊攻**低平球**」，球速與人的起跳時機必須成對。sim 現有的舉球弧
-// 只有兩檔（TUNING.QUICK_APEX 3.4 ／ SET_APEX 5.2，game.js 用 `rawT<0.5` 二選一），
-// 兩檔都配不出邊攻的平拉開，實測（tools/tempo-probe.mjs，40 局）兩條路都是壞的：
-//   ① 維持高球（SET_APEX）：人照二速提早跑到起跳點、球還要飛 1.35s
-//      → 擊球前站著不動 p50=159 tick（2.65s）＝退回 07-23 拍板禁止的網前罰站。
-//   ② 借用快攻的低弧（QUICK_APEX 3.4）：邊攻要橫移 4.2m，球只在弧頂附近高過
-//      扣球窗 2.9m，predictContactPoint 求出的擊球點被拉回中場
-//      → attack-flow-probe ④「離地時離球距離」>3m 從 0% 跳到 9.8%、
-//        ⑤ 前排真空中前飄 p90 0.79→1.29m（攻擊手在空中滑行 1.3m 才碰到球）。
-// 二速要成立得先有**第三檔舉球弧線**（介於 3.4 與 5.2，且橫移 4.2m 仍高過扣球窗），
-// 那是球路設計＝§5 A2 的工作，本輪 §4 只做起步時機、不動彈道。
-// 改回 0.35 之前先把那一檔弧線做出來，否則以上兩個坑會原樣復現。
+// 邊攻跑二速的比例——**本輪仍為 0（二速繼續停派），這不是調參是擋 bug**。
+//
+// §4 當時的判定是「缺一檔舉球弧線」；§5 已經把那一檔做出來了
+// （TUNING.SHOOT_APEX 4.2 ＋ 落點外推到標誌桿，見本檔上方 SHOOT／SHOOT_HIT），
+// 並依工單把 TEMPO_TWO_RATE 開回 0.35 實測。結論：**修好一半，另一半修不好**。
+//
+// 開到 0.35 的實測（node tools/tempo-probe.mjs，40 局）：
+//   ✅ ② 擊球點被拉回中場（借快攻低弧那次的坑）＝**解決**
+//      attack-flow-probe ④「離地時離球 >3m」9.8% → 0.1%（基準 0.0%）、
+//      ⑤ 前排真空中前飄 p90 1.29m → 0.71m（基準 0.57m）
+//      舉球飛行 tick 三檔終於分得開：一速 32／二速 60／三速 81
+//   ❌ ① 網前罰站＝**未解決**（07-23 Sawmah 拍板的 0.5s 硬線）
+//      二速擊球前連續站著不動 p50 159 tick（2.65s）→ **42 tick（0.70s）**，
+//      改善 74%，但「站超過 0.5s 的比例」仍是 99.7%（left）／98.6%（right）。
+//
+// 為什麼第三檔補不完：sim 的擊球判定是「球下墜穿過扣球窗上緣 SPIKE_APPROACH_Y
+// ＝2.9m 的那一刻」。球必須先升過 2.9m 再墜回來，這段來回在弧頂 3.4m（已是低弧
+// 下限，再低擊球點就退回二傳身邊）時就要 41 tick；而二速的定義是「二傳觸球前
+// 起跳」（TEMPO.two.takeoffLead＝3），滯空窗只有 AIR_TICKS＝24 tick。
+// **41 > 3+24：任何弧頂都不可能讓人在空中等到球。** 這不是弧線的問題，
+// 是「擊球＝球墜到 2.9m」這個接觸模型的問題——那是憲法 §十「讓 sim 誠實」
+// 十-1（觸球判定幾何）那一卷的東西，本輪明令不得動。
+//
+// 兩條可能的出路（都需要 Sawmah 拍板，本輪不自行發揮）：
+//   A. 改 §十 的擊球窗模型（擊球窗改成帶狀／可在上升段擊球）——本輪禁區
+//   B. 改 A1 對二速的定義（takeoffLead 由「觸球前 3 tick」改成「跑到位就跳、
+//      只是比三速早」）——那是憲法 §三 A1 的規格，不是實作細節
+// 在其中一條落地之前，二速維持停派；第三檔弧線的程式與測試全部保留，
+// 屆時只要把這個常數改回 0.35。
 export const TEMPO_TWO_RATE = 0;
 // 收勢窗：起跳後多久算「這條假動作跑完了」，之後才落回 cover／職責位。
 // 24＝sim 既有的滯空窗定義（TUNING.TAKEOFF_LOOKBACK_TICKS，判後排踏線違例用的
@@ -218,7 +248,7 @@ export function approachRoutesFor(team, points, opts = {}) {
     const start = approachStartFor(team, pt.kind);
     if (!start) return;
     const tempo = tempoFor(pt.kind, { flightId, seed, index });
-    const takeoff = takeoffSpotFor(team, pt.kind);
+    const takeoff = takeoffSpotFor(team, pt.kind, tempo);
     // 助跑段跑完要幾 tick＝距離 ÷ 這個人的步長（決定論：moveSpeed 純吃屬性）。
     // 疲勞折速不計入——這是規劃期的預估值，估得樂觀＝晚到一點點，不影響到位即停
     const stepM = ((speedOf ? speedOf(pt.pid) : NOMINAL_SPEED) || NOMINAL_SPEED) * SIM_DT;

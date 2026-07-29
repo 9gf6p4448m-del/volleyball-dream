@@ -159,7 +159,7 @@ export function blockPersonaOf(game, team) {
 export function createAiState() {
   return {
     flightId: -1, planTick: 0, landing: null, contactPoint: null, landingTeam: null,
-    claimId: null, attackerId: null, attackKind: null,
+    claimId: null, attackerId: null, attackKind: null, attackTempo: 'three',
     // Phase 5 W1 §2-2：本球全部合法攻擊手的助跑起點（{ team, routes:[{pid,kind,start}] }）。
     // 與 attackerId 同壽命（touches===1 算一次、撐到本波攻擊結束、來球時清空）——
     // 「事前開多條線」的載體，不是只有被選中那一人才有
@@ -282,6 +282,10 @@ function ensureFlightPlan(game, aiState) {
       game.players[aiState.claimId].currentRole === 'setter' &&
       tier === 'perfect' &&
       hash01(game.rally.flightId * 811 + 29 + (game.seed ?? 0)) < AI.JUMP_SET_RATE;
+    // §5 第三檔弧線：被選中那條線跑幾速（routes 是節奏的單一真相）——
+    // 二速要吃平拉開的低弧（setAimFor 的 tempo 分支），三速維持高球
+    aiState.attackTempo =
+      approachRouteOf(aiState.approach.routes, aiState.attackerId)?.tempo ?? 'three';
     // S 二次球（偶發）：S 前排、一傳完美到位 → 小機率直接處理第二球
     aiState.setterDump =
       !!aiState.claimId &&
@@ -963,7 +967,9 @@ function chooseTouch(game, aiState, player, actor) {
       // S 二次球：輕推對方淺區（前排第二擊過網合法；讓對手不敢放掉第二球）
       return ['spike', localToWorld(otherTeam(team), 1.5, 2.6), 0.3];
     }
-    const a2 = setAimFor(game, team, aiState.attackerId, aiState.attackKind);
+    const a2 = setAimFor(
+      game, team, aiState.attackerId, aiState.attackKind, aiState.attackTempo,
+    );
     return ['set', localToWorld(team, a2.lx, a2.lz), a2.t];
   }
   // 第三擊：前排——或後排但站在攻擊線後（後排攻擊合法）——球夠高且能過網才扣

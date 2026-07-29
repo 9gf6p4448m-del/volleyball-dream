@@ -14,9 +14,11 @@ import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents, attackPointsOf } from '../src/sim/ai.js';
 import {
   APPROACH, approachStartFor, takeoffSpotFor, approachRoutesFor, applyRouteKinds,
-  routeKindFor, tempoFor, CROSS_RATE, TAKEOFF,
+  routeKindFor, tempoFor, CROSS_RATE, TAKEOFF, TEMPO_TWO_RATE, setAimFor,
 } from '../src/sim/approach.js';
-import { TEAM_SIDE, isFrontRow, isBackRow } from '../src/sim/rotation.js';
+import { TEAM_SIDE, isFrontRow, isBackRow, localToWorld } from '../src/sim/rotation.js';
+import { velocityForApex, predictContactPoint } from '../src/sim/flight.js';
+import { AI } from '../src/sim/ai.js';
 
 const lat = (kind, team = 'A') => {
   const s = approachStartFor(team, kind);
@@ -208,5 +210,56 @@ test('決定論：同 seed 兩次整局，路線分配（含交叉）逐值相�
   assert.equal(a.log.length, b.log.length);
   for (let i = 0; i < a.log.length; i += 1) {
     assert.equal(a.log[i], b.log[i], `第 ${i} 筆路線分配不一致`);
+  }
+});
+
+// ---------------- 第三檔舉球弧線（§4 遺留的阻塞項；二速仍停派） ----------------
+//
+// §4 把二速停派的理由是「缺一檔介於快攻 3.4 與高球 5.2 之間的舉球弧」。
+// 本輪把那一檔做出來了（TUNING.SHOOT_APEX ＋ 落點外推），但實測顯示它只解決了
+// 兩個失敗模式中的一個（詳見 approach.js 的 TEMPO_TWO_RATE 註解），故維持停派。
+// 這組測試把「那一檔真的存在且校準過」釘住——它不是死碼，是等一個拍板的功能。
+
+test('第三檔弧線：apex 介於快攻與高球之間，且由 set 的 timing 帶分檔', () => {
+  assert.ok(TUNING.QUICK_APEX < TUNING.SHOOT_APEX && TUNING.SHOOT_APEX < TUNING.SET_APEX,
+    `SHOOT_APEX ${TUNING.SHOOT_APEX} 必須落在 ${TUNING.QUICK_APEX}～${TUNING.SET_APEX} 之間`);
+  const twoAim = setAimFor(null, 'A', null, 'left', 'two');
+  const threeAim = setAimFor(null, 'A', null, 'left', 'three');
+  assert.ok(twoAim.t >= 0.5 && twoAim.t < 0.65, `二速的 t=${twoAim.t} 未落在第三檔帶內`);
+  assert.ok(threeAim.t >= 0.65, '三速仍走高球檔');
+  assert.equal(setAimFor(null, 'A', null, 'quick', 'one').t, 0.4, '一速仍走快攻低弧檔');
+  // 落點外推：二速的落點比三速更靠標誌桿（弧越低，擊球點越往二傳側縮，要用落點補）
+  assert.ok(twoAim.lx < threeAim.lx, '二速的落點須比三速更外側');
+});
+
+test('第三檔弧線：實際彈道確認——二速的球墜到扣球窗上緣時人在標誌桿側，且比高球早到', () => {
+  const from = { x: 1.2, y: 2.69, z: 1.2 }; // 二傳名目站位＋站舉觸球高度（實測 p50）
+  const shot = (tempo) => {
+    const aim = setAimFor(null, 'A', null, 'left', tempo);
+    const apex = aim.t < 0.5 ? TUNING.QUICK_APEX
+      : aim.t < 0.65 ? TUNING.SHOOT_APEX : TUNING.SET_APEX;
+    const to = localToWorld('A', aim.lx, aim.lz);
+    const v = velocityForApex(from, { x: to.x, y: 0.105, z: to.z }, apex);
+    return predictContactPoint({ ...from, vx: v.vx, vy: v.vy, vz: v.vz }, AI.SPIKE_APPROACH_Y);
+  };
+  const two = shot('two');
+  const three = shot('three');
+  assert.ok(two.ticks < three.ticks - 10,
+    `二速的球沒有比高球明顯快到（${two.ticks} vs ${three.ticks} tick）`);
+  // 擊球點不得被拉回中場——這正是 §4「借快攻低弧」那次的失敗模式
+  assert.ok(two.x < three.x, `二速的擊球點 ${two.x.toFixed(2)} 比高球 ${three.x.toFixed(2)} 更靠中場`);
+  // 名目擊球點（route 用的 takeoffSpotFor）要對得上實際彈道，誤差在一步以內
+  const nominal = takeoffSpotFor('A', 'left', 'two');
+  assert.ok(Math.abs(nominal.x - two.x) < 0.5,
+    `二速的名目擊球點 ${nominal.x.toFixed(2)} 與實際彈道 ${two.x.toFixed(2)} 差太多`);
+});
+
+test('第三檔弧線：二速本輪仍停派——TEMPO_TWO_RATE=0 時 tempoFor 永不回二速', () => {
+  assert.equal(TEMPO_TWO_RATE, 0,
+    '二速已被開啟：請先確認 approach.js TEMPO_TWO_RATE 註解裡的網前罰站量測已過關');
+  for (let f = 0; f < 500; f += 1) {
+    for (const k of ['left', 'right']) {
+      assert.notEqual(tempoFor(k, { flightId: f, seed: 5, index: 1 }), 'two');
+    }
   }
 });

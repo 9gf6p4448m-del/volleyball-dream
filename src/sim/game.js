@@ -57,6 +57,7 @@ export const TUNING = {
   RECEIVE_APEX: 4.8,
   SET_APEX: 5.2,
   QUICK_APEX: 3.4,        // 快攻低弧（set 且 timing<0.5 時採用——MB 簡版快攻）
+  SHOOT_APEX: 4.2,        // §5 第三檔：平拉開／半快（0.5 ≤ timing < 0.65）
   SPIKE_SPEED_BASE: 9,    // 扣球速度 = BASE + power × PER（m/s）
   SPIKE_SPEED_PER: 0.17,
   SPIKE_MIN_TIME: 0.18,   // 扣球最短飛行時間（避免零距離除法）
@@ -551,7 +552,8 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   } else {
     const apex = blown ? TUNING.BLOWN_APEX
       : intent.action === 'set'
-        ? (rawT < 0.5 ? TUNING.QUICK_APEX : TUNING.SET_APEX)
+        ? (rawT < 0.5 ? TUNING.QUICK_APEX
+          : rawT < 0.65 ? TUNING.SHOOT_APEX : TUNING.SET_APEX)
         : TUNING.RECEIVE_APEX;
     v = velocityForApex(from, { x: target.x, y: BALL.RADIUS, z: target.z }, apex);
   }
