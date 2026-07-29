@@ -135,7 +135,8 @@ for (const r of results) total.update(`${r.opponent}:${r.seed}:${r.digest}:${r.t
 const totalDigest = total.digest('hex').slice(0, 16);
 
 const snapshot = {
-  note: 'Phase 5 §十 階段一：sim 行為逐值雜湊基準。--write 只在拍板允許行為變更時用。',
+  note: 'Phase 5 §十 階段二：sim 行為逐值雜湊基準（2-B timing 幾何化併入後重立）。'
+    + '--write 只在拍板允許行為變更時用。',
   seedBase: SEED_BASE,
   perOpponent: PER_OPPONENT,
   total: totalDigest,
