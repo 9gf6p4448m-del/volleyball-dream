@@ -103,12 +103,11 @@ export const TUNING = {
   BLOWN_APEX: 1.9,          // 噴射球弧頂（低平＝滯空短、追起來像救火）
   // 擦手（one-touch，07-23 拍板）：攔網三態的中間態——沒攔死但指尖擦到，
   // 球改向擦進攔網方半場（不計觸球數；「touch！快救！」的真實攔網日常）
-  BLOCK_GRAZE_CHANCE: 0.22, // 擦手帶寬（攔死判定之後的第二段；同吃時機檔、不吃情蒐）
+  BLOCK_GRAZE_CHANCE: 0.22, // 擦手帶寬（攔死判定之後的第二段；不吃情蒐）
   BLOCK_GRAZE_SLOW: 0.45,   // 擦手後穿越速度保留比（減速但仍常飛向深區/界外）
-  // 攔網時機判定：起跳到球過網的滯空 tick 數
-  BLOCK_SWEET_MIN: 4, BLOCK_SWEET_MAX: 26,
-  BLOCK_LATE_MUL: 0.6,    // 起跳太晚（手還沒到頂）
-  BLOCK_EARLY_MUL: 0.55,  // 起跳太早（已在下墜）
+  // §十 階段二 2-B：攔網時機不再是乘數。BLOCK_SWEET_MIN/MAX 與 LATE/EARLY_MUL
+  // 四個常數連同 blockTimingMul() 一起拆掉——時機現在是幾何的（player.js
+  // blockTopEdge：太早已下墜、太晚還在上升，兩者都表現為球到那一刻手不夠高）。
   // H3 視線欺敵曲線（騙敵線性、失誤平方；試玩調參用，結構不變）
   THETA_MAX_DEG: 45,      // 視線與實際擊球方向的最大有效夾角
   DECEIVE_GAIN: 0.7,      // 騙過攔網機率 = min(θ/θmax,1) × 此值（線性）
@@ -812,12 +811,9 @@ export function receivePerfectMul(t) {
   return t >= 0.95 ? TUNING.PERFECT_RECV_ACC : 1;
 }
 
-// 攔網時機（純函式）：起跳後滯空 tick 數 → 攔網成功率乘數
-export function blockTimingMul(airTicks) {
-  if (airTicks < TUNING.BLOCK_SWEET_MIN) return TUNING.BLOCK_LATE_MUL;
-  if (airTicks > TUNING.BLOCK_SWEET_MAX) return TUNING.BLOCK_EARLY_MUL;
-  return 1.0;
-}
+// §十 階段二 2-B：`blockTimingMul` 已拆除。時機改由幾何承載——
+// 見 `player.js` 的 `blockTopEdge(p, t, jumpMul)`（頂邊隨跳躍相位升降）。
+// 攔網結算區不得再出現任何乘數式的時機修正（`tests/mechanics.test.mjs` 有靜態掃描護欄）。
 
 // 接球品質（純函式，07-23 改版）：主軸＝接球技術（control 手穩＋reaction 判斷到位），
 // 自由人最高＝接球最好；次要＝到位程度（走到球正下方微獎、勉強搆微罰）。取代舊「觸球
@@ -936,23 +932,23 @@ function tryBlock(state, toTeam, ev) {
     return false;
   }
 
-  // 時機判定：起跳太晚（手沒到頂）或太早（下墜中）攔網率打折
-  const airTicks = state.tick - best.actor.blockStartTick;
-  const timingMul = blockTimingMul(airTicks);
+  // §十 階段二 2-B：**這裡不再有時機乘數**。
+  // 起跳太晚（手還沒到頂）與太早（已在下墜）都已經在上面的幾何閘門結算掉了——
+  // 頂邊 `blockTopEdge(p, airT, ...)` 隨跳躍相位升降，手不夠高就直接 `continue`，
+  // 根本走不到這裡。時機打折率＝把同一件事再算一次，那是兩套標準。
   // 【第三層】屬性擲骰：`block` 屬性**只**決定碰到之後的結果分佈，不決定有沒有碰到
   //（那是第一層幾何的事）。stage 5 情蒐讀取＝對被讀者的慣用線收攏
   //（假動作的 deceive 骰在上方——騙贏免讀）
-  const chance = (0.12 + best.p.attributes.block * 0.004) * timingMul *
-    scoutBlockMul(state, toTeam);
+  const chance = (0.12 + best.p.attributes.block * 0.004) * scoutBlockMul(state, toTeam);
   // 【第二層】邊緣區：碰到的是不是邊緣＝擦手。**階段一是退化實例化**——
   // 改制前的擦手不吃幾何，是同一個 roll 上切出來的機率帶，這裡照抄以保逐值等價；
   // 階段五換成「落在帶的邊緣」的真幾何（見 blockBand.js blockOutcome 的說明）。
-  // 擦手帶寬只吃時機檔（碰到比攔死容易，不吃情蒐）。
+  // 擦手帶寬不吃時機（2-B 起時機是幾何的）、不吃情蒐。
   // 單一 roll 依序切三段：rand 呼叫數恆一次，rng 流與二態時代同節奏。
   const outcome = blockOutcome({
     roll: rand(state),
     chance,
-    edgeWidth: TUNING.BLOCK_GRAZE_CHANCE * timingMul,
+    edgeWidth: TUNING.BLOCK_GRAZE_CHANCE,
   });
   if (outcome !== 'solid') {
     // 擦手（one-touch）：沒攔死但指尖擦到——BLOCK_TOUCH 一樣不計 3 次觸球，

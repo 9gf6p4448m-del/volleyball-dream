@@ -17,9 +17,10 @@
 //   planLag     ＝二傳觸球 → 攔網鎖定成立 的 tick 數（實際的判斷延遲）
 //   winOpen     ＝二傳觸球 → 攔網窗開啟 的 tick 數
 //   airAtCross  ＝球過網瞬間的滯空 tick（= tick − blockStartTick）
-//                 ——blockTimingMul 吃的就是它：太小＝手還在上升（BLOCK_LATE_MUL）、
-//                 12 附近＝甜蜜區、太大＝已下墜（BLOCK_EARLY_MUL）
-import { createGame, stepGame, TUNING, blockTimingMul } from '../src/sim/game.js';
+//                 ——blockTopEdge 吃的就是它：太小＝手還在上升、AIR_TICKS/2 附近＝頂點、
+//                 太大＝已下墜或已落地（§十 階段二 2-B：時機是幾何不是乘數）
+import { createGame, stepGame, TUNING } from '../src/sim/game.js';
+import { blockTopEdge } from '../src/sim/player.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { isFrontRow } from '../src/sim/rotation.js';
 
@@ -101,8 +102,8 @@ const fmt = (arr) => (arr.length
 
 console.log(`=== §十-2 攔網時間預算探針（${SETS} 局／人格＝${PERSONA}）===`);
 console.log(`B 隊 MB 視角；單位 tick（60Hz，60 tick ＝ 1.0s）　樣本 ${rows.length} 次攻擊`);
-console.log(`blockTimingMul 檔位：晚(1)=${blockTimingMul(1)}　甜蜜(12)=${blockTimingMul(12)}　`
-  + `早(40)=${blockTimingMul(40)}　攔網窗長=${TUNING.BLOCK_WINDOW}`);
+console.log(`時機模型：幾何（player.js blockTopEdge，頂邊隨跳躍相位升降）　`
+  + `攔網窗長=${TUNING.BLOCK_WINDOW}`);
 for (const group of ['quick', 'wing', 'back']) {
   const g = rows.filter((r) => GROUP[r.kind] === group);
   if (!g.length) continue;
@@ -112,7 +113,7 @@ for (const group of ['quick', 'wing', 'back']) {
   console.log(`  delay     反應延遲            ${fmt(col(g, 'delay'))}   ← 佔預算的比例決定痛不痛`);
   console.log(`  planLag   →鎖定成立          ${fmt(col(g, 'planLag'))}`);
   console.log(`  winOpen   →攔網窗開啟        ${fmt(col(g, 'winOpen'))}`);
-  console.log(`  airAtCross 球過網時的滯空     ${fmt(col(g, 'airAtCross'))}   ← blockTimingMul 吃這個`);
+  console.log(`  airAtCross 球過網時的滯空     ${fmt(col(g, 'airAtCross'))}   ← blockTopEdge 吃這個`);
   const air = col(g, 'airAtCross');
   const noJump = col(g, 'noJump').length;
   console.log(`  球過網時窗沒開（根本沒跳）   ${(noJump / g.length * 100).toFixed(1)}%  (${noJump}/${g.length})`);
