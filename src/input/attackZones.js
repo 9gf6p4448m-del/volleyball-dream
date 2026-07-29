@@ -3,8 +3,11 @@
 import { COURT } from '../sim/constants.js';
 import { otherTeam, isFrontRow } from '../sim/rotation.js';
 import { spikeAimsFor, netCrossingX } from '../sim/blockRead.js';
-
-const BLOCK_COVER_X = 1.1; // 攔網手涵蓋的水平半徑（m）——落在此範圍內＝被封
+// 攔網手涵蓋的水平半徑（m）——落在此範圍內＝被封。
+// 陷阱 1（§十 憲法 §八-1）：這裡改制前自己寫死一份 1.1，與 sim 的 TUNING.BLOCK_REACH_X
+// 各持一份。面板的「被封」提示與 sim 的實際涵蓋一旦分岔，面板就是在對玩家說謊
+// （違反顯示哲學「狀態誠實呈現」）。現在兩邊同吃 blockBand.js 這一份。
+import { BLOCK_HALF_WIDTH } from '../sim/blockBand.js';
 
 // 回傳 [{ key, label, aim:{x,z}, power, blocked }]（team 視角固定為玩家隊）
 export function attackZonesFor(game, attackerId) {
@@ -45,5 +48,5 @@ function isBlocked(from, aim, blockerXs, key) {
   if (key === 'tip') return false;
   const netX = crossingXOf(from, aim);
   if (Math.abs(netX) > COURT.WIDTH / 2 + 0.3) return false; // 打邊線外側攔不到
-  return blockerXs.some((bx) => Math.abs(bx - netX) < BLOCK_COVER_X);
+  return blockerXs.some((bx) => Math.abs(bx - netX) < BLOCK_HALF_WIDTH);
 }

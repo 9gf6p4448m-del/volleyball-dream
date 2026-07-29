@@ -11,6 +11,9 @@ import {
   createPlayer, spikeReach, blockReach, moveSpeed, feintMasteryMul,
 } from './player.js';
 import { reachVolumeFor, ballInReach } from './reach.js';
+import {
+  BLOCK_HALF_WIDTH, buildBand, bandContact, overBlockerHands, blockOutcome,
+} from './blockBand.js';
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rotationRules.js';
@@ -47,7 +50,9 @@ export const TUNING = {
   TOUCH_COOLDOWN: 15,     // 同一人再次觸球的最短 tick 間隔（物理防抖）TODO Phase 2：完整雙擊判定
   SCATTER_MAX: 1.7,       // 精度屬性=0 時的落點散佈半徑（m）
   BLOCK_WINDOW: 48,       // block intent 的有效 tick 窗口（0.8s，手機反應時間友善）
-  BLOCK_REACH_X: 1.1,     // 攔網水平涵蓋半徑（m）
+  // 攔網水平涵蓋半徑（m）——真相在 blockBand.js（陷阱 1：改制前 attackZones.js 的
+  // BLOCK_COVER_X 與這裡各寫死一份 1.1，漏改任一份面板就會對玩家說謊）
+  BLOCK_REACH_X: BLOCK_HALF_WIDTH,
   SERVE_APEX: 4.6,        // 各球路弧頂高度（m）
   POWER_SERVE_APEX: 3.5,  // 跳躍發球低平弧（timing>1.1；力量換準度）
   POWER_SERVE_SCATTER: 1.45, // 跳躍發球散佈放大倍率
@@ -899,18 +904,21 @@ function tryBlock(state, toTeam, ev) {
   const b = state.ball;
   // 手在網上緣附近才攔得到：低於網的球（含網下穿越）一律不可攔
   if (b.y < COURT.NET_HEIGHT - 0.15) return false;
-  let best = null;
+  // 【第一層】幾何閘門：在窗內、手構得到的人組成牆；帶＝各人區間的聯集，
+  // 球的過網 x 落在帶內才算碰到手。多人加成由此湧現，不靠任何加成係數。
+  const members = [];
   for (const p of Object.values(state.players)) {
     if (p.teamId !== toTeam) continue;
     if (!isFrontRowOf(state, toTeam, p.id)) continue;
     const actor = state.actors[p.id];
     if (actor.blockUntil < state.tick) continue;
-    const dx = Math.abs(actor.x - b.x);
-    if (dx > TUNING.BLOCK_REACH_X) continue;
-    if (b.y > blockReach(p, staminaPerfMul(state, p)) + BALL.RADIUS) continue; // 球高過手（W7：累了跳不高）
-    if (!best || dx < best.dx || (dx === best.dx && p.id < best.p.id)) best = { p, actor, dx };
+    if (overBlockerHands(b.y, blockReach(p, staminaPerfMul(state, p)))) continue; // W7：累了跳不高
+    members.push({ id: p.id, x: actor.x, p, actor });
   }
-  if (!best) return false;
+  const band = buildBand(members, TUNING.BLOCK_REACH_X);
+  const { inside, contact } = bandContact(band, b.x);
+  if (!inside) return false;
+  const best = contact;
 
   // H3：攔網手被扣球者的視線騙過 → 整手撲空（機率＝欺敵線性項）。
   // BLOCK_DECEIVED 事件（07-24 Sawmah）：假動作成效從此看得見——表現層彈
@@ -926,17 +934,26 @@ function tryBlock(state, toTeam, ev) {
   // 時機判定：起跳太晚（手沒到頂）或太早（下墜中）攔網率打折
   const airTicks = state.tick - best.actor.blockStartTick;
   const timingMul = blockTimingMul(airTicks);
-  // stage 5 情蒐讀取：對被讀者的慣用線收攏（假動作的 deceive 骰在上方——騙贏免讀）
+  // 【第三層】屬性擲骰：`block` 屬性**只**決定碰到之後的結果分佈，不決定有沒有碰到
+  //（那是第一層幾何的事）。stage 5 情蒐讀取＝對被讀者的慣用線收攏
+  //（假動作的 deceive 骰在上方——騙贏免讀）
   const chance = (0.12 + best.p.attributes.block * 0.004) * timingMul *
     scoutBlockMul(state, toTeam);
-  // 三態攔網（Sawmah 07-23 拍板補擦手）：單一 roll 依序判攔死→擦手→乾淨過網
-  //（rand 呼叫數恆一次——rng 流與二態時代同節奏）
-  const roll = rand(state);
-  if (roll >= chance) {
+  // 【第二層】邊緣區：碰到的是不是邊緣＝擦手。**階段一是退化實例化**——
+  // 改制前的擦手不吃幾何，是同一個 roll 上切出來的機率帶，這裡照抄以保逐值等價；
+  // 階段五換成「落在帶的邊緣」的真幾何（見 blockBand.js blockOutcome 的說明）。
+  // 擦手帶寬只吃時機檔（碰到比攔死容易，不吃情蒐）。
+  // 單一 roll 依序切三段：rand 呼叫數恆一次，rng 流與二態時代同節奏。
+  const outcome = blockOutcome({
+    roll: rand(state),
+    chance,
+    edgeWidth: TUNING.BLOCK_GRAZE_CHANCE * timingMul,
+  });
+  if (outcome !== 'solid') {
     // 擦手（one-touch）：沒攔死但指尖擦到——BLOCK_TOUCH 一樣不計 3 次觸球，
     // 球減速＋上挑＋橫偏、續入攔網方半場（隊友三次觸球去救；常飛深區/出界＝
-    // 追出自由區救球的戲）。擦手帶寬只吃時機檔（碰到比攔死容易，不吃情蒐）
-    if (roll >= chance + TUNING.BLOCK_GRAZE_CHANCE * timingMul) return false; // 完全沒碰，乾淨過網
+    // 追出自由區救球的戲）
+    if (outcome === 'clean') return false; // 完全沒碰，乾淨過網
     b.vz *= TUNING.BLOCK_GRAZE_SLOW;
     b.vx = b.vx * 0.5 + (blownHash(state, `${best.p.id}:gx`) - 0.5) * 3;
     b.vy = 1.6 + blownHash(state, `${best.p.id}:gy`) * 1.2;
