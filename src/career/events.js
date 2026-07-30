@@ -3,6 +3,7 @@
 // when 條件全宣告式；effect.trust 經 sim trust.js updateTrust 調整持久 baseline
 import { nextMatch } from './careerState.js';
 import { opponentById } from './opponents.js';
+import { HEIGHT_HONESTY_THRESHOLD_CM } from './heightGrowth.js';
 
 // 命名工程定案（07-25）：speaker 具名——我方隊長＝大山（MB）、二傳＝阿哲；
 // 各校角色對應 opponents.js squad 具名（王牌稱號偶爾入台詞，不逐句喊）
@@ -270,6 +271,39 @@ export function oldTeamPreEvents(career, roster) {
       ],
     }))
     .filter((e) => !triggered.includes(e.id));
+}
+
+// ---- B-3 身高誠實化：教練轉位引導（docs/kickoffs/height-honesty-case.md §五；
+// 2026-07-30 Sawmah 裁定「引導不補償」）----
+// 觸發＝生涯開場（第 1 屆開幕，出戰 group-1 賽前）＋創角身高 < 門檻＋現任主攻
+// （憲法 Q7＝一律 OH 出道，此刻 currentRole 恆為 outside；仍顯式判斷以求函式自證、
+// 也涵蓋「已轉位」防重複觸發的邊界）。只給資訊、零機制改動——不動轉位 gate、
+// 不動任何平衡值、不動 sim。門檻常數單一真相在 heightGrowth.js
+// （HEIGHT_HONESTY_THRESHOLD_CM），本檔只 import，測試亦不得另立第二份 168。
+// 每個生涯只播一次：入帳走 career.events（與其餘劇情事件同管道——advanceSeason
+// 只濾轉位旗標，本 id 跨屆保留、不會重播；career.events 本身即去重，免另掛
+// ONCE_EVENT_IDS）。呼叫端（careerScreen）直接消費本函式回傳的事件物件。
+export const HEIGHT_GUIDANCE_EVENT_ID = 'coach-height-guidance';
+
+// 語氣鐵則（案卷裁定回填）：點破辛苦、不判死刑——留「你還在長」的口子（憲法承諾
+// 「以真實的自己追排球夢」；路不只一條，不是你不行）。教練聲線：短句、務實、不煽情。
+export const HEIGHT_GUIDANCE_LINES = [
+  { speaker: '教練', text: '……過來一下，新人。' },
+  { speaker: '教練', text: '你這個身高打主攻，以後每一球都是硬仗——網子對面，比你高一顆頭的人多得是。' },
+  { speaker: '教練', text: '但這支隊，位置不是判死刑。舉球員、自由人——矮個子一樣能站在場中央，而且站得比誰都穩。門，我一直開著。' },
+  { speaker: '教練', text: '當然，你還在長。先把眼前這球打好，路——之後再看。' },
+];
+
+// 純函式：career＋player → 事件物件或 null。
+// null 情境：已播過（career.events 含此 id）／無 player／身高 ≥ 門檻／currentRole
+// 已非 outside（已轉位）。
+export function heightGuidanceEventFor(career, player) {
+  if ((career?.events ?? []).includes(HEIGHT_GUIDANCE_EVENT_ID)) return null;
+  if (!player) return null;
+  const cm = Math.round((player.height?.current ?? 0) * 100);
+  if (!cm || cm >= HEIGHT_HONESTY_THRESHOLD_CM) return null;
+  if ((player.currentRole ?? 'outside') !== 'outside') return null;
+  return { id: HEIGHT_GUIDANCE_EVENT_ID, lines: HEIGHT_GUIDANCE_LINES };
 }
 
 // ---- W1(P4) 畢業儀式（憲法 Q1/Q3/Q4；儀式規格對標來投開箱）----

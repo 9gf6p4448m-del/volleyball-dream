@@ -13,6 +13,12 @@ export const HEIGHT_MIN_CM = 140;
 export const HEIGHT_MAX_CM = 220;
 export const DEFAULT_HEIGHT_CM = 188; // 未走創角流程（測試/舊路徑）沿用 Phase 1 基準
 
+// B-3 身高誠實化案（docs/kickoffs/height-honesty-case.md §五，2026-07-30 Sawmah
+// 裁定「引導不補償」）：OH 出道創角身高門檻——實測懸崖上緣（案卷 §三之二 OH 位全曲線：
+// 168 各站已站回 175 主錨水準<2SE、160 仍 −16～−43pp 全顯著落後）。單一真相——
+// 教練轉位引導對話（career/events.js heightGuidanceEventFor）從此匯入，不得另立第二份。
+export const HEIGHT_HONESTY_THRESHOLD_CM = 168;
+
 // UI 輸入夾限（憲法 W2 驗收條：超界軟提示後 clamp、不 crash）
 export function clampHeightCm(v) {
   const n = Math.round(Number(v));

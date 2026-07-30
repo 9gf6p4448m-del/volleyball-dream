@@ -21,7 +21,7 @@ import {
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
   graduationCeremonySegments, freshmenIntroLines, walkOnIntroLines,
-  resolveEventsForRoster, isOnceEvent,
+  resolveEventsForRoster, isOnceEvent, heightGuidanceEventFor,
 } from '../career/events.js';
 import { aceGrowthAt } from '../career/aceGrowth.js';
 import { clampHeightCm } from '../career/heightGrowth.js';
@@ -1830,7 +1830,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         // W2(P4) canon 年級守衛：大山已畢業＝teach-jump/rematch 改播轉授版
         // 4.5A：宿敵三幕賽前版（幕一首遇/幕二牆邊/幕三對峙；鏡子/牆分版）收尾合流
         const rosterNow = store.loadRoster?.() ?? null;
+        // B-3 身高誠實化：生涯開場（第 1 屆開幕，group-1 賽前）教練轉位引導——
+        // 限定第一場觸發點；已播過/不合條件時 heightGuidanceEventFor 回 null（events.js）
+        const heightEv = next.id === 'group-1' ? heightGuidanceEventFor(career, player) : null;
         const preEvs = [
+          ...(heightEv ? [heightEv] : []),
           ...filterPlayedOnce(resolveEventsForRoster(dueEvents(career, 'pre'), rosterNow?.members ?? null)),
           ...oldTeamPreEvents(career, rosterNow),
           ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
