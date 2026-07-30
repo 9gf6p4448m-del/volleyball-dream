@@ -302,6 +302,14 @@ const perSeason = Array.from({ length: SEASONS }, () => ({
 const byTitles = new Map(); // 屆初 titles → { seasons, wins:{matchId:勝}, champions }
 const joinStats = {}; // recruitKey → { joined, seasonSum }
 let rosterEndSizeSum = 0;
+// ★ 配對同種子模式（階段五裁定書 v3 §4.3／§六）★
+// 停手判準**必須是配對同種子的差值**，不得用未配對絕對值——理由：n=40 時奪冠率 15%
+// 的 SE ≈ 5.6pp，「掉出 5–25%」＝±1.8 SE，雜訊自己就能越線。配對之後 career 之間的
+// 變異被抽掉，同一條生涯前後相減，剩下的才是改動造成的。
+//   VD_PAIRED=<檔案>  檔案不存在 ⇒ 寫入本次逐 seed 結果當基準
+//                     檔案存在   ⇒ 載入並逐 seed 相減，報 Δ 與配對 SE
+const PAIRED_FILE = process.env.VD_PAIRED ?? null;
+const perRun = []; // { seed, wins:{matchId:0|1}, champion:0|1 }
 
 for (let run = 0; run < RUNS; run += 1) {
   let career = createCareer({ seed: 100000 + run * 7919, playerName: '治具' });
@@ -451,6 +459,18 @@ for (let run = 0; run < RUNS; run += 1) {
     joinStats[j.key].joined += 1;
     joinStats[j.key].seasonSum += j.season;
   }
+  if (PAIRED_FILE) {
+    // 第 1 屆語義（與 wins/champions 一致）：逐場勝負 ＋ 是否奪冠
+    const first = career.results.slice(0, matchIds.length);
+    perRun.push({
+      seed: career.seed,
+      wins: Object.fromEntries(matchIds.map((id) => {
+        const r = first.find((x) => x.matchId === id);
+        return [id, r ? (r.won ? 1 : 0) : null];
+      })),
+      champion: first.slice(3).filter((r) => r.won).length === 3 ? 1 : 0,
+    });
+  }
   rosterEndSizeSum += roster.members.length + 1; // ＋玩家 1 席（rosterCount 語義）
 }
 
@@ -520,5 +540,54 @@ if (SEASONS > 1) {
       console.log(`${key.padEnd(16)} 入隊率 ${rate.padStart(4)}  平均入隊屆 ${meanSeason}`);
     }
     console.log(`名冊終量平均 ${(rosterEndSizeSum / RUNS).toFixed(1)}/12（含玩家）`);
+  }
+}
+
+// ★ 配對同種子輸出（裁定書 §4.3 的形式要求）★
+if (PAIRED_FILE) {
+  const { existsSync, readFileSync, writeFileSync } = await import('node:fs');
+  const label = `${armName}｜RUNS=${RUNS}｜VD_HEIGHT=${HEIGHT_CM ?? '基準'}｜VD_ROLE=${PLAYER_ROLE}`;
+  if (!existsSync(PAIRED_FILE)) {
+    writeFileSync(PAIRED_FILE, `${JSON.stringify({ label, matchIds, perRun }, null, 2)}
+`);
+    console.log(`
+=== 配對基準已寫入 ${PAIRED_FILE} ===`);
+    console.log(`   ${label}｜逐 seed 樣本 ${perRun.length} 條`);
+    console.log('   再跑一次同一條指令即會輸出逐 seed 差值（未改 src ⇒ 全 0 可驗）');
+  } else {
+    const base = JSON.parse(readFileSync(PAIRED_FILE, 'utf8'));
+    const byS = new Map(base.perRun.map((r) => [r.seed, r]));
+    const paired = perRun.filter((r) => byS.has(r.seed));
+    console.log(`
+=== 配對同種子差值（基準 ${PAIRED_FILE}）===`);
+    console.log(`   基準：${base.label}`);
+    console.log(`   本次：${label}`);
+    console.log(`   配對成功 ${paired.length}/${perRun.length} 條`
+      + (paired.length === perRun.length ? '' : ' ⚠ 有 seed 對不上，基準與本次的 RUNS 不同？'));
+    if (!paired.length) {
+      console.log('   🔴 零配對 ⇒ 無法比較');
+    } else {
+      // 配對差值的 SE ＝ SD(逐條差值) / sqrt(n)。這才是裁定書要的量。
+      const stat = (get) => {
+        const d = paired.map((r) => get(r) - get(byS.get(r.seed)));
+        const m = d.reduce((a, b) => a + b, 0) / d.length;
+        const sd = d.length > 1
+          ? Math.sqrt(d.reduce((a, v) => a + (v - m) ** 2, 0) / (d.length - 1)) : 0;
+        return { m, se: d.length ? sd / Math.sqrt(d.length) : NaN, changed: d.filter((v) => v !== 0).length };
+      };
+      const fmt = (x) => `${(x.m * 100 >= 0 ? '+' : '')}${(x.m * 100).toFixed(1)}pp ± ${(x.se * 100).toFixed(1)}`;
+      for (const id of matchIds) {
+        const x = stat((r) => r.wins[id] ?? 0);
+        console.log(`   Δ${String(id).padEnd(15)} ${fmt(x).padStart(18)}`
+          + `　（逐條有變的 ${x.changed}/${paired.length}）`);
+      }
+      const ch = stat((r) => r.champion);
+      console.log(`   **Δ奪冠率        ${fmt(ch).padStart(18)}**　（逐條有變的 ${ch.changed}/${paired.length}）`);
+      const allZero = matchIds.every((id) => stat((r) => r.wins[id] ?? 0).changed === 0)
+        && ch.changed === 0;
+      console.log(allZero
+        ? '   ✅ 逐 seed 全等（未改 src 時應為此結果＝配對模式自驗通過）'
+        : '   ⚠ 有差異——若本次未改 src，配對模式本身有問題');
+    }
   }
 }
