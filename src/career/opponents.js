@@ -37,19 +37,23 @@
 // 分級以 level 為主軸（≥64 read／<64 commit），曜石體中是刻意的個性例外：
 // level 60 卻 commit——「這隊 MB 攔網極快、中路是他們的天下」的 trait 本來就是
 // 「賭中間」的打法，玩家該學會的是拿交叉去懲罰它，而不是硬扣中路。
-// ★ 2026-07-29 Sawmah 拍板：**commit 暫停派任**（改回 true 即恢復下方各隊的原定人格）。
-// 理由：commit 的「強項」在下列兩件事修好之前，結構上做不出來——
-//   ① 攔網結算只認一個人（`game.js:882-893` 取 dx 最小者結算，雙人／三人牆的攔網率
-//      與單人完全相同）⇒ commit 就算讓 MB 跟死快攻，結算也只算一個人
-//   ② 攔網手零反應延遲（接球手有 reactionTicks、攔網手沒有）⇒ read 既能等看清楚、
-//      又追得到快攻，commit 沒有可賭贏的空間
-// 實測後果：commit 只有代價沒有好處（面對快攻 100%→93.7%、兩翼高球到位率 96.0%→84.7%），
-// 開著會讓弱隊單向變差、難度往玩家偏 3pp，且玩家感受到的是**假的**行為差異。
-// 兩件都要動平衡命脈，已合併為憲法 §十「讓 sim 誠實」卷；該卷落地後把此旗標打開。
-// 程式碼（`blockPersonaOf`／`blockCommitRead`）與 8 條測試全部保留，測試直接注入 profile
-// 故不受此旗標影響。
+// ★ 2026-07-29 Sawmah 拍板：commit 暫停派任；**開啟條件＝憲法 §十「讓 sim 誠實」落地**。
+// 當時列的兩個結構障礙：
+//   ① 攔網結算只認一個人 ⇒ §十-3 帶模型已修（牆＝區間聯集，多人涵蓋由幾何湧現）
+//   ② 攔網手零反應延遲 ⇒ §十-2 已修（read 解鎖＝二傳觸球＋reactionTicks）
+// ★ 2026-07-31 §十全卷（含十-4/十-4b）落地後試開實測：commit 的賭局已成立
+//（P4 快攻列 commit 攔到 42.2% vs read 14.2%），但**全面開啟炸熔斷**——配對 Δ
+//（基準檔 tools/balance-paired-baseline-commitflag.json）：Δgroup-3 −45.0±9.4、
+// Δsf −30.0、Δg2 −25.0（單輪熔斷線 25pp 多輪突破）。原因＝§三 B「弱隊 commit」
+// 的前提「commit＝只有代價的可懲罰個性」已被 §十 反轉成真武器，小組賽弱隊
+// 全員升級。
+// ★ 2026-07-31 Sawmah 裁定丙＝**曜石單隊先行**：只開憲法指定的個性例外（曜石體中，
+// 「中路是他們的天下」trait 本來就是賭中間的打法，交叉/兩翼是解法——commit 對兩翼
+// 只攔 2.6%），其餘維持 read；全面派任留給未來難度重校卷（重校 §三 B 分級表時
+// 把 COMMIT_PERSONA_ENABLED 改回 true 並刪白名單）。
 const COMMIT_PERSONA_ENABLED = false;
-const persona = (p) => (COMMIT_PERSONA_ENABLED ? p : 'read');
+const COMMIT_ALLOWLIST = new Set(['obsidian']);
+const persona = (p, id) => (COMMIT_PERSONA_ENABLED || COMMIT_ALLOWLIST.has(id) ? p : 'read');
 
 export const OPPONENTS = [
   {
@@ -122,7 +126,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 2, name: '詹子曜', title: '黑曜箭' }, // MB・阿曜——起跳永遠快你半拍
     scoutRead: 0.7,
-    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: persona('commit') }, // §6 B1 個性例外：中路是他們的天下＝賭中間
+    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: persona('commit', 'obsidian') }, // §6 B1 個性例外：中路是他們的天下＝賭中間（裁定丙唯一現役 commit）
   },
   // W6 A1 新隊①（level 55，北原↔白浪空檔）：變化球隊——身材矮、火力弱，
   // 靠球路變化（吊球/二次球/飄浮球）打亂節奏；攔網差＝扣過去很痛快
