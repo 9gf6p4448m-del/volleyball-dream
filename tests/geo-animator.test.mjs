@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGeoAnimator, hitLeadTicks, contactSeqFor, SEQ_HIT,
+  createGeoAnimator, hitLeadTicks, seqDurTicks, contactSeqFor, SEQ_HIT,
 } from '../src/render/geoAnimator.js';
 import { isLeftHanded } from '../src/render/geoCharacter.js';
 import { createGame } from '../src/sim/game.js';
@@ -112,14 +112,26 @@ test('geoAnimator：未知動作不崩（trigger 防呆）', () => {
 });
 
 // 4.7 動作重製（工單 §7「動作正確性」）：鞭打順序與落地緩衝
+// Phase 5 W2 核心-1（三段式）更新：**改走真實的三段鏈**（windup 起跳 → spikeHold
+// 滯空 hold → spike 擊球弧），不再從閒置直接 trigger('spike')。理由＝冷觸發時
+// ATTACK_MS 的 0→1 漸入本身會讓三個關節同時大幅移動（權重乘上去的假位移），量到的
+// 峰值是漸入不是鞭打；遊戲裡扣球一律經由三段鏈接手（滿權重交棒、無漸入），
+// 這裡量的必須是玩家真的會看到的那條路徑。
+// 量測窗＝**引臂→擊球幀**（POSES 的契約原文寫的是「§P3 鞭打中段：肩已解鎖、肘開始
+// 伸、腕仍後倒，三者不得同幀一起轉」——講的是解鎖段）。舊版量到序列末尾，把
+// spikeHit→spikeFollow 的**收臂**也算進去；收臂時肩要跨體收回 2.2 rad，擊球弧縮短後
+// 那一段的肩角速度反而蓋過解鎖段的肩＝量到的是收臂不是鞭打。窗吃 hitLeadTicks
+// 單一真相，序列調時長會自動跟著調
 test('鞭打順序：肩→肘→腕的角速度峰值嚴格遞增（不得同幀一起轉）', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);
-  anim.trigger('spike');
   const dt = 1 / 60;
+  anim.trigger('windup');                       // 段①起跳
+  for (let i = 0; i < 12; i += 1) anim.update(dt, 0); // 段②hold 自動接手
+  anim.trigger('spike');                        // 段③擊球弧
   const prev = { sh: 0, el: 0, wr: 0 };
   const peak = { sh: { v: -1, t: -1 }, el: { v: -1, t: -1 }, wr: { v: -1, t: -1 } };
-  for (let i = 0; i < 40; i += 1) {
+  for (let i = 0; i < hitLeadTicks('spike'); i += 1) { // 上界不含擊球幀＝收臂不入窗
     anim.update(dt, 0);
     const cur = {
       sh: rig.joints.rShoulder.rotation.x,
@@ -145,13 +157,16 @@ test('落地緩衝：扣球落地後膝角持續低於站立值（不得瞬間�
   anim.update(dt, 0);
   const standKnee = rig.joints.rKnee.rotation.x;
   anim.trigger('spike');
+  // 取樣長度吃 seqDurTicks 單一真相（W2 核心-1 把擊球弧時長從 0.6 改成 0.45，
+  // 寫死 48 tick 會在調時長後靜默失準）
+  const total = seqDurTicks('spike') + seqDurTicks('landSoft');
   const knees = [];
-  for (let i = 0; i < 48; i += 1) { // spike 0.6s ＋ 自動接的落地緩衝 0.26s
+  for (let i = 0; i < total; i += 1) {
     anim.update(dt, 0);
     knees.push(rig.joints.rKnee.rotation.x);
   }
   // 落地段（spike 尾 + landSoft）：屈膝吸收＝膝角明顯大於站立，且持續 ≥10 tick
-  const tail = knees.slice(36, 48);
+  const tail = knees.slice(total - 12, total);
   assert.ok(tail.filter((k) => k > standKnee + 0.05).length >= 10,
     `落地段應有連續屈膝吸收（實際 ${tail.map((k) => k.toFixed(2)).join(',')}）`);
 });
@@ -487,7 +502,7 @@ test('§2 助跑步相：真的在跑時三步節奏仍在（修法不得把助�
 test('§4 提前量：hitLeadTicks＝序列起點到擊球關鍵幀的 tick 數（序列調時長會自動跟著調）', () => {
   assert.equal(hitLeadTicks('bump'), 14);      // 0.45 × 0.5s × 60
   assert.equal(hitLeadTicks('overhead'), 18);  // 0.56 × 0.55s × 60
-  assert.equal(hitLeadTicks('spike'), 15);     // 0.42 × 0.6s × 60
+  assert.equal(hitLeadTicks('spike'), 11);     // 0.40 × 0.45s × 60（W2 核心-1 擊球弧）
   assert.equal(hitLeadTicks('dive'), 0, '沒有擊球關鍵幀的序列回 0＝不提前觸發');
   assert.equal(hitLeadTicks('nonexistent'), 0);
 });
@@ -539,22 +554,139 @@ test('§4 交棒不得回退：提前觸發後的新時序下，setReady→overh
   assert.ok(worst < -2.2, `交棒期間手臂不得放下，最鬆 ${worst.toFixed(2)}（應保持 ≈-2.3）`);
 });
 
-test('§4 扣球：windup→spike 的空中接續截在擊球關鍵幀（修前截在 0.5＝已在收臂）', () => {
+// ---- Phase 5 W2 核心-1：完整鞭打三段式切分（07-30 Sawmah 裁定方向①）----
+// 舊測試「§4 扣球：windup→spike 的空中接續截在擊球關鍵幀」守的是**兩段式**的契約
+// （spike 在 TOUCH 當下才觸發、播放進度 carry 到擊球幀）——那個 carry 正是三個解鎖幀
+// 被跳過的病灶，三段式把它拆掉了，該測試的契約隨之作廢，由下面這組取代。
+// 新契約：① 段①→段②→段③自動串起來 ② 擊球弧從頭播＝三個解鎖幀都看得到
+// ③ 觸球那一幀仍然是壓腕擊球姿勢（不得退回 07-29 修掉的病）④ 跳躍弧全程連續
+const SPIKE_LEAD = hitLeadTicks('spike');
+
+// 助跑→起跳→滯空→擊球的完整鏈；airTicks＝起跳到觸球的滯空長度（tick）
+function spikeChain(airTicks, opts = null) {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  const bodyY = [];
+  const phases = [];
+  anim.trigger('windup'); // 段①起跳
+  const swingAt = Math.max(airTicks - SPIKE_LEAD, 0);
+  for (let i = 0; i < airTicks; i += 1) {
+    if (i === swingAt) anim.trigger('spike', opts); // 段③擊球弧（提前量＝hitLeadTicks）
+    bodyY.push(anim.update(TICK, 0));
+    const p = anim.peek();
+    phases.push({ type: p?.type ?? null, tNorm: p?.tNorm ?? null, wrist: rig.joints.rWrist.rotation.x });
+  }
+  return { rig, anim, bodyY, phases };
+}
+
+test('W2-1 三段式：段①windup 播完自動接段②滯空 hold（引臂撐住等擊球）', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);
   anim.trigger('windup');
-  let bodyY = 0;
-  for (let i = 0; i < 24; i += 1) bodyY = anim.update(TICK, 0); // TAKEOFF_LEAD_TICKS＝24
-  anim.trigger('spike');                                        // TOUCH 事件當下接手
-  const after = anim.update(TICK, 0);
-  const p = anim.peek();
-  assert.ok(p.tNorm >= SEQ_HIT.spike && p.tNorm < 0.5,
-    `接手後應落在擊球關鍵幀 ${SEQ_HIT.spike}（修前 0.528＝已越過），實際 ${p.tNorm.toFixed(3)}`);
-  // 壓腕 snap：spikeHit wrist=+0.55、spikeUnlock=-0.62——正號＝手掌已蓋下去
-  assert.ok(rig.joints.rWrist.rotation.x > 0.4,
-    `觸球幀應正在壓腕擊球，實際 ${rig.joints.rWrist.rotation.x.toFixed(2)}`);
-  assert.ok(Math.abs(after - bodyY) < 0.06,
-    `跳躍弧不得因為接續點改變而跳動（windup ${bodyY.toFixed(3)} → spike ${after.toFixed(3)}）`);
+  assert.equal(anim.peek().type, 'windup');
+  for (let i = 0; i < 8; i += 1) anim.update(TICK, 0); // windup dur 0.1s＝6 tick
+  assert.equal(anim.peek().type, 'spikeHold', '段①播完應自動接段②，不得回站姿');
+  // 段②撐住的是弓身引臂：spikeWind 的 rSh[0]=-2.5、wrist=-0.5（後倒蓄勢）
+  assert.ok(rig.joints.rShoulder.rotation.x < -2.3,
+    `滯空段手臂應維持引臂高舉，實際 ${rig.joints.rShoulder.rotation.x.toFixed(2)}`);
+  assert.ok(rig.joints.rWrist.rotation.x < -0.3, '滯空段腕應仍後倒蓄勢（還沒 snap）');
+});
+
+test('W2-1 三段式：滯空多久 hold 多久——段②撐到落地才鬆手，不會自己提早結束', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('windup');
+  // windup 的跳躍弧全長 0.75s（airDur）：整段滯空期間都不得回到閒置
+  for (let i = 0; i < 42; i += 1) anim.update(TICK, 0);
+  assert.ok(!anim.isIdle(), '滯空期間不得回站姿（誘餌的假動作也吃這條）');
+  assert.equal(anim.peek().type, 'spikeHold');
+  for (let i = 0; i < 20; i += 1) anim.update(TICK, 0); // 過了落地時刻＋RELEASE
+  assert.ok(anim.isIdle(), '落地後應自然鬆手回待命（不得卡在空中引臂）');
+});
+
+test('W2-1 三段式：一般高球扣——三個解鎖幀在觸球前全部播到（本項是本輪的核心債務）', () => {
+  // 滯空 23 tick＝matchLoop 實測的一般扣球（windup 觸發→觸球 p50 23 tick）
+  const { phases } = spikeChain(23);
+  const swing = phases.filter((p) => p.type === 'spike').map((p) => p.tNorm);
+  assert.ok(swing.length >= SPIKE_LEAD, `擊球弧應播滿提前量 ${SPIKE_LEAD} tick，實際 ${swing.length}`);
+  assert.ok(swing[0] < 0.1, `擊球弧必須**從頭播**（修前 carry 直接跳到擊球幀 ${SEQ_HIT.spike}），實際起點 ${swing[0].toFixed(3)}`);
+  // 三個解鎖幀在擊球弧的位置：0.14 引臂末→0.27 肩/肘解鎖→0.40 壓腕擊球
+  assert.ok(swing.some((t) => t >= 0.14 && t < 0.27), `引臂段應被播到：${swing.map((t) => t.toFixed(2))}`);
+  assert.ok(swing.some((t) => t >= 0.27 && t < 0.4), `解鎖幀（spikeUnlock）應被播到：${swing.map((t) => t.toFixed(2))}`);
+  assert.ok(swing[swing.length - 1] >= SEQ_HIT.spike - 0.02,
+    `觸球那一幀應正好走到擊球幀 ${SEQ_HIT.spike}，實際 ${swing[swing.length - 1].toFixed(3)}`);
+});
+
+test('W2-1 三段式：觸球那一幀仍是壓腕擊球姿勢（07-29「還沒碰到就收臂」不得復發）', () => {
+  const { phases } = spikeChain(23);
+  const atContact = phases[phases.length - 1];
+  // spikeHit wrist=+0.55、spikeUnlock=-0.62——正號＝手掌已蓋下去
+  assert.ok(atContact.wrist > 0.4, `觸球幀應正在壓腕擊球，實際 ${atContact.wrist.toFixed(2)}`);
+});
+
+test('W2-1 三段式：跳躍弧跨三段連續（段落換手不得讓身體高度跳動）', () => {
+  const { bodyY } = spikeChain(23);
+  let worst = 0;
+  for (let i = 1; i < bodyY.length; i += 1) worst = Math.max(worst, Math.abs(bodyY[i] - bodyY[i - 1]));
+  // 一條 0.5m/0.75s 的 sin 弧單幀最大變化約 0.035m；接手處若重開弧會出現數倍跳變
+  // （修前 windup→spike 換弧就有 3.5cm 的段差，剛好卡在門檻邊緣）
+  assert.ok(worst < 0.04, `跳躍弧單幀變化過大＝段落換手時重開了弧（最大 ${worst.toFixed(4)}m）`);
+});
+
+test('W2-1 三段式：短滯空退化＝擊球弧壓縮，不得跳過解鎖幀（快攻）', () => {
+  // 滯空只剩 6 tick（<擊球弧提前量 11）：呼叫端把剩餘 tick 餵進來，擊球弧自己壓縮
+  const airTicks = 6;
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('windup');
+  anim.trigger('spike', { hitInTicks: airTicks });
+  const seen = [];
+  for (let i = 0; i < airTicks; i += 1) {
+    anim.update(TICK, 0);
+    seen.push(anim.peek().tNorm);
+  }
+  assert.ok(seen.some((t) => t >= 0.14 && t < 0.27), `壓縮後引臂段仍要看得到：${seen.map((t) => t.toFixed(2))}`);
+  assert.ok(seen.some((t) => t >= 0.27 && t < 0.4), `壓縮後解鎖幀仍要看得到（不得跳幀）：${seen.map((t) => t.toFixed(2))}`);
+  assert.ok(seen[seen.length - 1] >= SEQ_HIT.spike - 0.02,
+    `壓縮後擊球幀仍要準時到（${SEQ_HIT.spike}），實際 ${seen[seen.length - 1].toFixed(3)}`);
+});
+
+test('W2-1 三段式：catchUpToHit 只前進不回退（預測偏晚時的收尾保險）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('windup');
+  anim.trigger('spike');
+  anim.update(TICK, 0); // 才播 1 tick 球就到了
+  const skipped = anim.catchUpToHit();
+  assert.ok(skipped > 0, '落後時應追上去');
+  assert.ok(Math.abs(anim.peek().tNorm - SEQ_HIT.spike) < 1e-6, '追到擊球關鍵幀為止');
+  const again = anim.catchUpToHit();
+  assert.equal(again, 0, '已經到位（或已越過）就不得再動＝不會回退');
+});
+
+test('W2-1 三段式：沒有起跳段的冷觸發仍自帶跳躍（退路不得被拆掉）', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  anim.trigger('spike'); // 沒有 windup 的弧可沿用
+  let peak = 0;
+  for (let i = 0; i < seqDurTicks('spike'); i += 1) peak = Math.max(peak, anim.update(TICK, 0));
+  assert.ok(peak > 0.3, `冷觸發的扣球仍應騰空（實際峰值 ${peak.toFixed(2)}）`);
+});
+
+test('W2-1 三段式：既有跳躍序列的弧逐值不變（block/serveJump/overheadJump 零影響）', () => {
+  // 跳躍弧改成獨立狀態後，非 airborne 的序列必須逐值等於「jump·sin(π·t/dur)」原式
+  for (const [type, jump, dur] of [['blockJump', 0.34, 0.7], ['serveJump', 0.55, 0.85], ['overheadJump', 0.32, 0.62]]) {
+    const anim = createGeoAnimator(mkRig());
+    anim.trigger(type);
+    const n = Math.round(dur * 60);
+    for (let i = 1; i <= n; i += 1) {
+      const y = anim.update(TICK, 0);
+      const t = Math.min((i * TICK) / dur, 1);
+      const want = jump * Math.sin(t * Math.PI);
+      // 動作層的 crouch 也會扣一點高度，這裡只比對「跳躍分量」的上界差
+      assert.ok(y <= want + 1e-9, `${type} 第 ${i} tick 的跳躍分量不得高於原式（${y.toFixed(4)} vs ${want.toFixed(4)}）`);
+    }
+  }
 });
 
 // TOUCH 事件 → 該播哪一支（含「提前觸發已經在播就不重播」）——matchView 的唯一判準

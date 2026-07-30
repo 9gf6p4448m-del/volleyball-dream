@@ -27,7 +27,8 @@ const OVERHAND_Y = 1.6; // 同 matchView：擊球點高於此＝高手動作，�
 const BUMP = { ready: 'receiveReady', readyT: 26 / 60, pose: 'bump', kind: 'both' };
 const OVER_RECV = { ready: 'receiveReady', readyT: 26 / 60, pose: 'overhead', kind: 'both' };
 const SET = { ready: 'setReady', readyT: 34 / 60, pose: 'overhead', kind: 'both' };
-const SPIKE = { ready: 'windup', readyT: 24 / 60, pose: 'spike', kind: 'dominant' };
+// hitFrame＝取樣點推到擊球關鍵幀（三段式的擊球弧從頭播，見 measure() 內註解）
+const SPIKE = { ready: 'windup', readyT: 24 / 60, pose: 'spike', kind: 'dominant', hitFrame: true };
 const contactSpec = (kind, ballY) => (kind === 'spike' ? SPIKE
   : kind === 'set' ? SET
     : ballY >= OVERHAND_Y ? OVER_RECV : BUMP);
@@ -93,6 +94,18 @@ function measure(s) {
   for (let t = 0; t < spec.readyT; t += DT) bodyY = anim.update(DT, 0, 0);
   anim.trigger(spec.pose);                                    // TOUCH 當下才接正式動作
   bodyY = anim.update(DT, 0, 0);                              // ＝觸球那一幀
+  // Phase 5 W2 核心-1（三段式）追修：扣球的擊球弧改成**提前觸發、從頭播**，所以
+  // trigger 之後那一幀是引臂（spikeWind、手還在後面）而不是擊球姿勢。要量的一直是
+  // 「觸球那一幀的手在哪」＝擊球關鍵幀 ⇒ 推到 hit 再取樣（沿用 animator 自己的
+  // catchUpToHit，不在探針重算一份擊球幀位置）。
+  // ★ 只改扣球那一列 ★：receive/set 這裡沿用「trigger 後第一幀」是 07-29 提前量上線
+  // **之前**的模型（檔頭註解仍是舊的），實際上它們也早就在觸球幀播到擊球關鍵幀
+  // （contact-frame-probe 實測 bump t=0.500 vs hit 0.45）——那是本輪之前就存在的
+  // 量測偏差，且 reachAssist 校準（W2 裁定 1）正拿這兩列的數字在談，不在本輪順手改。
+  if (spec.hitFrame) {
+    anim.catchUpToHit();
+    bodyY = anim.update(DT, 0, 0);
+  }
   const yaw = Math.atan2(s.ball.x - s.ax, s.ball.z - s.az); // 觸球幀的 matchView 目標角
   rig.root.scale.setScalar(s.height / BASE_H);
   rig.root.rotation.set(0, yaw, 0);

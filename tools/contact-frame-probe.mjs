@@ -28,6 +28,8 @@ const APPROACH_LEAD_FRONT_TICKS = TAKEOFF_LEAD_TICKS + 45;
 const APPROACH_LEAD_BACK_TICKS = TAKEOFF_LEAD_TICKS + 60;
 // 舉球的實際接觸點比 contactPoint（用接發高度 1.35m 算）早到——同 SET_READY_LEAD 的偏差
 const SET_CONTACT_BIAS = 11;
+// 三段式段③（擊球弧）的提前量偏差：三速/後排不另加，一速另計（同 matchLoop 同名常數）
+const SPIKE_CONTACT_BIAS_QUICK = 7;
 // 觸發當下人離預測接觸點的上限（m）——超過就不提前播（見 matchLoop 同名常數）
 const CONTACT_NEAR_MAX = 2.5;
 const CONTACT_ARM_TTL = 1.0; // 秒；提前觸發後這段時間內的 TOUCH 不重播（見 matchView）
@@ -41,6 +43,9 @@ function mkRig() {
 }
 
 const rows = { receive: [], set: [], spike: [] };
+// W2 核心-1 三段式：擊球弧的相位軌跡與追趕量（⑤ 驗收＋退化路徑可視化）
+const swingRows = [];        // { kind, ts:[逐 tick tNorm], skipTicks }
+const catchUp = {};          // 觸球那一拍被 catchUpToHit 追掉的 tick 數，依 kind 分組
 const armStats = { fired: 0, consumed: 0, expired: 0, mismatched: 0, leadErr: [], gapHit: [], gapMiss: [] };
 let starved = 0; // 提前觸發已播完卻仍壓住 TOUCH ⇒ 觸球那一拍沒有任何擊球動作
 const early = { receive: [], set: [] }; // 預測接觸 tick − 實際觸球 tick（＋＝球比預測早到）
@@ -51,6 +56,7 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
   const ai = createAiState();
   const anim = {};
   const arm = {};   // pid → { type, ttl, tick }（提前觸發已接手）
+  const swingTrace = {}; // pid → { kind, ts }（擊球弧觸發後的逐 tick 相位）
   const pred = {};  // pid → 事前判定的觸球型別（診斷用；ADVANCE 關掉也算）
   const last = {};  // pid → { dived, blocked }
   for (const id of Object.keys(g.players)) {
@@ -116,6 +122,17 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
         fired.windup = true;
         anim[ai.claimId].trigger('windup');
       }
+      // 三段式段③（W2 核心-1）：擊球弧提前觸發，同 matchLoop 同名區段
+      const bias = ai.attackKind === 'quick' ? SPIKE_CONTACT_BIAS_QUICK : 0;
+      const swingLead = hitLeadTicks('spike') + bias;
+      if (!fired.swing && ticksToHit !== null && ticksToHit >= 0
+        && ticksToHit <= swingLead && near < 4.5) {
+        fired.swing = true;
+        armStats.fired += 1;
+        anim[ai.claimId].trigger('spike', { hitInTicks: ticksToHit - bias });
+        arm[ai.claimId] = { type: 'spike', ttl: CONTACT_ARM_TTL, tick: g.tick, lead: swingLead, gap: near };
+        swingTrace[ai.claimId] = { kind: ai.attackKind ?? '?', ts: [] };
+      }
     }
 
     // --- matchView.routeEvents（TOUCH → 擊球動畫；提前觸發過就不重播） ---
@@ -137,6 +154,21 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
         }
         const next = contactSeqFor(e.kind, e.ballY, a && a.ttl > 0 ? a.type : null);
         if (next) anim[e.playerId].trigger(next);
+        // 同 matchView.routeEvents：提前觸發的那一支還沒到擊球幀就觸球 ⇒ 追上去
+        else if (a && a.ttl > 0) {
+          const skipped = anim[e.playerId].catchUpToHit();
+          if (e.kind === 'spike') {
+            const tr = swingTrace[e.playerId];
+            swingRows.push({
+              kind: tr?.kind ?? '?',
+              ts: tr?.ts ?? [],
+              skipTicks: skipped * 60,
+            });
+          }
+          catchUp[e.kind] = catchUp[e.kind] ?? [];
+          catchUp[e.kind].push(skipped * 60);
+        }
+        delete swingTrace[e.playerId];
         // 壓住 TOUCH 卻已經播完＝這一拍完全沒有擊球動作（比重播還糟，必須是 0）
         if (!next && anim[e.playerId].peek()?.type !== type) starved += 1;
         if (['receive', 'set', 'spike'].includes(e.kind)) {
@@ -165,6 +197,11 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
         if (arm[id].ttl <= 0) { armStats.expired += 1; armStats.gapMiss.push(arm[id].gap); arm[id] = null; }
       }
       anim[id].update(DT, 0, 0);
+    }
+    // 擊球弧的逐 tick 相位軌跡（⑤ 驗收證據：三個解鎖幀有沒有被播到）
+    for (const [pid, tr] of Object.entries(swingTrace)) {
+      const p = anim[pid]?.peek();
+      if (p && p.type === 'spike') tr.ts.push(Number(p.tNorm.toFixed(3)));
     }
 
     // --- 量測：觸球那一幀，擊球動畫播到哪 ---
@@ -207,6 +244,38 @@ for (const [kind, list] of Object.entries(rows)) {
       + `${f(q(tN, 0.5))}/${f(q(tN, 0.9))}       ${f(q(err, 0.5), 1)}/${f(q(err, 0.9), 1)}`
       + (onSeq.length < rs.length ? `　（${rs.length - onSeq.length} 次沒播到該序列）` : ''),
     );
+  }
+}
+// ---- W2 核心-1 三段式：解鎖幀播放率（⑤ 驗收） ----
+// 擊球弧 spike 的關鍵幀位置：0.14 引臂末 → 0.27 spikeUnlock（肩解鎖/肘伸）
+// → 0.40 spikeHit（壓腕擊球）。「播到」＝觸球前的相位軌跡有走到該位置
+const KEY_WIND = 0.14;
+const KEY_UNLOCK = 0.27;
+const KEY_HIT = 0.4;
+if (ADVANCE && swingRows.length) {
+  console.log('');
+  console.log('【三段式：擊球弧的三個解鎖幀有沒有在觸球前播到】（n＝提前觸發的扣球）');
+  const grp = { all: swingRows };
+  for (const r of swingRows) (grp[r.kind] ??= []).push(r);
+  // 前兩欄要高（解鎖幀必須在觸球前播到）；第三欄「擊球幀提早到」要低——
+  // 擊球幀本來就該落在觸球那一 tick，觸球前就播過＝人比球快
+  console.log('節奏      n     引臂末0.14  解鎖0.27   擊球幀提早  觸球前播了幾 tick p50/p10  追趕 tick p50/p90');
+  for (const [k, rs] of Object.entries(grp)) {
+    const reach = (th) => rs.filter((r) => r.ts.some((t) => t >= th)).length / rs.length * 100;
+    const played = rs.map((r) => r.ts.length);
+    const skip = rs.map((r) => r.skipTicks);
+    console.log(`${k.padEnd(9)} ${String(rs.length).padEnd(5)} ${reach(KEY_WIND).toFixed(1).padStart(6)}%    `
+      + `${reach(KEY_UNLOCK).toFixed(1).padStart(6)}%   ${reach(KEY_HIT).toFixed(1).padStart(6)}%     `
+      + `${q(played, 0.5)}/${q(played, 0.1)}              ${f(q(skip, 0.5), 1)}/${f(q(skip, 0.9), 1)}`);
+  }
+  const ex = (kind) => swingRows.find((r) => r.kind === kind && r.ts.length >= 4);
+  for (const kind of Object.keys(grp).filter((k) => k !== 'all')) {
+    const e = ex(kind);
+    if (e) console.log(`  範例（${kind}）相位軌跡 t=${e.ts.join(' → ')}　觸球時追趕 ${e.skipTicks.toFixed(1)} tick`);
+  }
+  console.log('  追趕＝預測比實際晚時，觸球那一幀把進度推到擊球幀（只前進；0＝原速剛好到位）');
+  for (const [k, a] of Object.entries(catchUp)) {
+    console.log(`  追趕分佈 ${k}：n=${a.length} 0tick 佔 ${(a.filter((x) => x === 0).length / a.length * 100).toFixed(1)}% p90=${f(q(a, 0.9), 1)} max=${f(Math.max(...a), 1)}`);
   }
 }
 console.log('');

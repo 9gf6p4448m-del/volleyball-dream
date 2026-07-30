@@ -98,8 +98,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     };
   }
   // 觸發動作＝同時記下這個動作該用哪一組手臂夠球、以及該用哪個可及半徑（表格未列＝沿用上次）
-  function setPose(u, type) {
-    u.animator.trigger(type);
+  function setPose(u, type, opts = null) {
+    u.animator.trigger(type, opts);
     const kind = REACH_KIND[type];
     if (kind) u.reachKind = kind;
     const action = REACH_KIND_ACTION[type];
@@ -145,6 +145,12 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         u.contactArm = null;
         const next = contactSeqFor(e.kind, e.ballY, armed?.type ?? null, e.jumpSet);
         if (next) setPose(u, next);
+        // 提前觸發的那一支還沒播到擊球關鍵幀就觸球了（預測比實際晚 1–9 tick）⇒ 追上去。
+        // 只前進不回退，最壞情況＝改制前的「觸球當下才擺出擊球姿勢」，不會更差。
+        // 三段式（W2 核心-1）的擊球弧特別依賴這道保險：它是預測觸發的，沒有它，
+        // 預測偏晚的那些拍會在球飛走之後才壓腕
+        // （魚躍除外：那一拍的動畫由 divedUntil 偵測負責，提前登記的墊球不該被推快）
+        else if (armed && e.kind !== 'dive') u.animator.catchUpToHit();
       }
     }
     // 死球落點塵土（e.at＝球落地/犯規點）
@@ -162,10 +168,12 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // 07-29 擊球動作提前觸發（matchLoop 依 aiState.contactPoint 倒數呼叫）：讓擊球
     // 關鍵幀落在 sim 的觸球那一 tick，而不是觸球後 0.2–0.3s。與 triggerPose 的差別
     // 只在**登記 arm**——後續的 TOUCH 事件看到同型別就不重播（見 routeEvents）
-    triggerContact(playerId, type) {
+    // hitInTicks＝呼叫端預估「還有幾 tick 觸球」（可省略）：擊球弧用它做短滯空壓縮
+    // （見 geoAnimator startSeq；三段式 W2 核心-1）
+    triggerContact(playerId, type, hitInTicks = null) {
       const u = units[playerId];
       if (!u) return;
-      setPose(u, type);
+      setPose(u, type, hitInTicks != null ? { hitInTicks } : null);
       u.contactArm = { type, ttl: CONTACT_ARM_TTL };
     },
     setControlled(id) { highlightId = id; },

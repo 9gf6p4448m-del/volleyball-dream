@@ -143,14 +143,45 @@ const SEQUENCES = {
     dur: 0.62, jump: 0.32, land: true, hit: 0.56,
     keys: [{ at: 0, p: 'setReach' }, { at: 0.42, p: 'setReach' }, { at: 0.56, p: 'setPush' }, { at: 1, p: 'setReach' }],
   },
-  // 4.7 §P3：鞭打嚴格依序解鎖——肩(0.30)→肘(0.36)→腕(0.42 擊球)，不得同幀一起轉
+  // ★ Phase 5 W2 核心-1：完整鞭打**三段式切分**（07-30 Sawmah 裁定方向①）★
+  // 病灶：舊版是兩段（起跳 windup → 擊球 spike），spike 在 sim 的 TOUCH 事件當下才
+  // 觸發，而空中接續的播放進度 carry 上限＝seq.hit ⇒ spike 一接手 t 就直接落在擊球幀，
+  // 4.7 §P3 排好的肩(0.30)→肘(0.36)→腕(0.42) 三個解鎖幀**整段被跳過**——完整鞭打
+  // 玩家從沒看過。W1 已證「windup/spike 兩弧直接對相位」會破壞跳躍連續性，是死路。
+  // 三段式：
+  //   段① windup     助跑弧／起跳：把人送上去（跳躍弧的來源），末幀已擺成引臂
+  //   段② spikeHold  滯空 hold：可變長度（滯空多久 hold 多久），等擊球時刻
+  //   段③ spike      擊球弧：固定短時長，引臂→解鎖→擊球→收臂，三幀保證播全
+  // 段③由 matchLoop 依 hitPoint 倒數 hitLeadTicks('spike') **提前觸發**（同接球/舉球
+  // 那一套提前量機制），所以解鎖幀落在觸球之前；觸球那一幀正好是擊球幀。
+  // 跳躍弧不再綁在序列上（見 createGeoAnimator 的 air）——段落換手時身體高度連續。
+  //
+  // 段①：dur 只涵蓋「蹬伸離地→擺成引臂」這一拍；跳躍弧另由 airDur 宣告＝0.75s
+  // （改制前 windup 的整段弧，逐值不變，誘餌與早跳路徑的滯空長度不受影響）。
+  // 播完自動接段②（chain，同 land→landSoft 的自動接續機制）。
+  windup: {
+    dur: 0.1, jump: 0.5, airDur: 0.75, land: false, chain: 'spikeHold',
+    keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'spikeWind' }],
+  },
+  // 段②：滯空引臂 hold。sustain:'air'＝觸發當下由 air 算出的**剩餘滯空時間**——
+  // 滯空多久就 hold 多久，落地那一刻自然鬆手；被段③接手時提前結束。
+  // 沒有攻擊接手的誘餌（W2-2 假動作全員演出）就一路 hold 到落地＝改制前 windup 的
+  // 行為，差別只在姿勢換成 4.7 的弓身引臂 spikeWind（誘餌看起來也像要扣球）。
+  spikeHold: {
+    dur: 0.08, sustain: 'air', jump: 0, airborne: true, land: false,
+    keys: [{ at: 0, p: 'spikeWind' }, { at: 1, p: 'spikeWind' }],
+  },
+  // 段③：擊球弧。0→0.14 引臂（接段②的姿勢，也讓冷觸發時的 ATTACK 漸入在此走完）、
+  // 0.14→0.27 肩解鎖、0.27→0.40 肘伸＋壓腕 snap（擊球幀）、0.40→1 收臂。
+  // jump 0.55＝**冷觸發時才用得到的退路**（沒有段①的弧可沿用時自己開一條，例如
+  // 玩家沒起跳就出手）；正常三段鏈裡跳躍弧一律沿用段①的 air，這個值不參與。
   spike: {
-    dur: 0.6, jump: 0.55, land: true, hit: 0.42,
+    dur: 0.45, jump: 0.55, airborne: true, land: true, hit: 0.4,
     keys: [
       { at: 0, p: 'spikeWind' },
-      { at: 0.3, p: 'spikeWind' },
-      { at: 0.36, p: 'spikeUnlock' },
-      { at: 0.42, p: 'spikeHit' },
+      { at: 0.14, p: 'spikeWind' },
+      { at: 0.27, p: 'spikeUnlock' },
+      { at: 0.4, p: 'spikeHit' },
       { at: 1, p: 'spikeFollow' },
     ],
   },
@@ -186,8 +217,9 @@ const SEQUENCES = {
     dur: 1.0, jump: 0, land: false, steps: 4,
     keys: [{ at: 0, p: 'approachBack' }, { at: 0.78, p: 'approachBack' }, { at: 1, p: 'approachDrive' }],
   },
-  windup: { dur: 0.75, jump: 0.5, land: false, keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'windup' }] },
-  // 4.5B §8 助跑遲疑：低 trust 快攻的起跳——抬手一半、跳得較矮（與果斷 windup 對照）
+  // 4.5B §8 助跑遲疑：低 trust 快攻的起跳——抬手一半、跳得較矮（與果斷 windup 對照）。
+  // **刻意不接三段式的引臂 hold**：遲疑的人本來就沒把手臂拉滿，接 spikeHold 會把
+  // 「抬手一半」抹掉＝低 trust 的身體語言讀不出來（4.5B §8 的整個用意）
   windupHesitant: { dur: 0.75, jump: 0.36, land: false, keys: [{ at: 0, p: 'windupHesitant' }, { at: 1, p: 'windupHesitant' }] },
   // 4.7 動作協調性（07-28 Sawmah：「所有動作的流暢度檢查一下」）：接球與舉球
   // 原本都是**球碰到手才播動作**——站著/跑著→突然出手。補預備段：球到之前先
@@ -286,8 +318,14 @@ const REST_ARM = [0, 0];
 
 export function createGeoAnimator(rig) {
   const j = rig.joints;
-  let current = null; // { seq, t, w0 }
+  let current = null; // { seq, type, t, w0, sustain, rate }
   let hold = null;
+  // 跳躍弧（Phase 5 W2 核心-1 三段式）：**與動作序列解耦**的一條 sin 弧
+  // { jump 峰高, dur 全長, t 已飛行秒數 }。解耦的理由＝可變長度的滯空 hold（段②）
+  // 待在空中時，序列自己的 t 早就走完了，綁在序列上的舊算法會讓人瞬間落地。
+  // 非 airborne 的序列照舊由自己的 jump/dur 開一條新弧（airDur 可覆寫全長），
+  // 逐值與改制前相同——block/serveJump/overheadJump/cheer 行為零改變
+  let air = null;
   let runW = 0;
   let latW = 0;  // 平滑後的橫移分量（見 update 內註解：生的 lateral 會單幀翻號）
   let lastW = 0; // 上一幀的動作層權重——預備段交棒給正式動作時用（見 trigger 的 w0）
@@ -321,25 +359,67 @@ export function createGeoAnimator(rig) {
     }
   }
 
+  // 起一段新序列（trigger 與段落自動接續 chain／landSoft 共用同一條路）
+  function startSeq(seq, type, { t = 0, w0 = 0, hitInTicks = null } = {}) {
+    // sustain:'air'＝剩餘滯空時間（見 SEQUENCES.spikeHold）；數字＝固定秒數（既有語意）
+    const sustain = seq.sustain === 'air'
+      ? Math.max(0, (air ? air.dur - air.t : 0) - seq.dur)
+      : (seq.sustain ?? 0);
+    const cur = { seq, type, t, w0, sustain, rate: 1 };
+    // 短滯空退化路徑（三段式；工單「快攻滯空不夠播全三幀時怎麼辦」）：擊球弧觸發時
+    // 若剩餘時間不足以照原速播到擊球幀，就把「到擊球幀」那一段**等比壓縮**進剩餘
+    // 時間——解鎖幀被壓扁但仍然播得到，不回到舊版「跳過解鎖幀」的老路。
+    // 上限 3 倍：再快就是瞬切，那一段交給 catchUpToHit 收尾（並在探針裡看得見）
+    if (hitInTicks != null && seq.hit != null) {
+      const need = seq.hit * seq.dur - t;
+      const have = hitInTicks / 60;
+      if (need > 0 && have > 0) cur.rate = Math.min(Math.max(need / have, 1), 3);
+    }
+    current = cur;
+  }
+
   return {
-    trigger(type) {
+    // opts.hitInTicks＝呼叫端預估的「還有幾 tick 觸球」（只有擊球弧用得到，見 startSeq）
+    trigger(type, opts = null) {
       const seq = SEQUENCES[type];
       if (!seq) return;
-      // 空中接續（windup→spike）：延續跳躍弧、不落地重跳。
-      // 07-29：上限由固定 0.5 改吃 **seq.hit**（擊球關鍵幀）。原本 windup 播到 0.53
-      // 就被截到 0.5，spike 一接手 t 就落在 0.5＞擊球幀 0.42 ⇒ **觸球那一幀身體已經
-      // 在收臂**（探針實測 t=0.528、擊球幀比觸球早 3.9 tick）＝Sawmah 回報的「扣球也
-      // 是還沒碰到就…」。截在 hit＝觸球那一幀正好是擊球姿勢；跳躍弧的落差
-      // （windup 0.497m → spike 0.42 處 0.533m）僅 3.5cm，肉眼無感
+      // 跳躍弧的接手（空中接續）：上限＝擊球關鍵幀 seq.hit（07-29 既有規則，沿用），
+      // 但進度改從 air 算——三段式把姿勢序列切碎後 current.t 不再等於弧的進度。
+      // ★ airborne 的段落不重開弧、也不 carry 播放進度 ★：舊版那個 carry 正是三個
+      // 解鎖幀被跳過的病灶，三段式改由 air 保證高度連續、序列一律從頭播
       const cap = seq.hit ?? 0.5;
-      const carry = current && current.seq.jump > 0 && seq.jump > 0
+      const airProg = air ? Math.min(air.t / air.dur, 1) : null;
+      if (seq.airborne) {
+        // 冷觸發退路：沒有前一段的弧可沿用（玩家沒起跳就出手／段①已落地）才自己開一條
+        if (!air) air = { jump: seq.jump, dur: seq.airDur ?? seq.dur, t: 0 };
+      } else if (seq.jump > 0) {
+        const airDur = seq.airDur ?? seq.dur;
+        air = { jump: seq.jump, dur: airDur, t: airProg != null ? Math.min(airProg, cap) * airDur : 0 };
+      } else {
+        air = null; // 落地/非跳躍動作接手＝弧結束（改制前「jump 0 的序列 jumpY=0」同義）
+      }
+      const carry = !seq.airborne && current && current.seq.jump > 0 && seq.jump > 0
         ? Math.min(current.t / current.seq.dur, cap) * seq.dur
         : 0;
-      // 預備段接續（setReady→overhead、receiveReady→bump）：預備序列撐住的權重
-      // 直接交給正式動作，不從 0 重跑 ATTACK 漸入。兩者的第一個關鍵幀是同一個
-      // 姿勢（setReach／bumpReady），所以滿權重接手不會跳幀，是自然的續演
-      const w0 = current && current.seq.sustain ? lastW : 0;
-      current = { seq, type, t: carry, w0 };
+      // 段落交棒（預備段與三段式共用）：預備序列撐住的權重直接交給正式動作，不從 0
+      // 重跑 ATTACK 漸入。接縫的姿勢刻意設計成同一個（setReach／bumpReady；三段式則是
+      // windup 末幀＝spikeWind＝spikeHold＝擊球弧首幀），所以滿權重接手不會跳幀
+      const w0 = current && (current.seq.sustain
+        || ((current.seq.chain || current.seq.airborne) && seq.airborne)) ? lastW : 0;
+      startSeq(seq, type, { t: carry, w0, hitInTicks: opts?.hitInTicks ?? null });
+    },
+    // 追趕到擊球關鍵幀（**只前進、不回退**；回傳被追掉的秒數，0＝本來就到位）。
+    // 擊球弧是照 hitPoint 預測提前觸發的，而 sim 的實際觸球比預測早 1–9 tick
+    // （p50＝1；tools/contact-frame-probe.mjs 實測），落在後段那些拍若不追，擊球幀
+    // 會落在球已經飛走之後——那正是 07-29 修掉的病，不得復發。
+    // 只在「已經落後」時動作 ⇒ 最壞情況等於改制前的行為，不會比舊版差
+    catchUpToHit() {
+      if (!current || current.seq.hit == null) return 0;
+      const target = current.seq.hit * current.seq.dur;
+      if (current.t >= target) return 0;
+      const skipped = target - current.t;
+      current.t = target;
+      return skipped;
     },
     setHold(type) { hold = type; },
     isIdle() { return current === null; },
@@ -374,22 +454,34 @@ export function createGeoAnimator(rig) {
       let jumpY = 0;
       let pose = null;
       let stepInfo = null; // 助跑三/四步節奏（見 STEP_AMP_3/4）：非 null＝本幀由步相驅動腿部
+      // 跳躍弧獨立推進（見宣告處註解）：段落換手不重置，飛完自然歸零
+      if (air) {
+        air.t += dt;
+        if (air.t >= air.dur) air = null;
+        else jumpY = air.jump * Math.sin((air.t / air.dur) * Math.PI) * staminaMul;
+      }
       if (current) {
-        current.t += dt;
         const { seq } = current;
+        // rate＝擊球弧的壓縮倍率（見 startSeq）：只作用在「還沒到擊球幀」那一段，
+        // 過了擊球幀就回到原速播收臂。沒設 rate 的序列恆 1＝行為完全不變
+        const hitT = seq.hit != null ? seq.hit * seq.dur : Infinity;
+        current.t += dt * (current.t < hitT ? current.rate : 1);
         // sustain＝末幀「撐住」的秒數（預備姿勢等球用）：撐住期間停在末幀滿權重，
         // 撐完才走 RELEASE 漸出。沒宣告 sustain 的序列 total===dur＝行為完全不變
-        const total = seq.dur + (seq.sustain ?? 0);
+        const total = seq.dur + current.sustain;
         if (current.t >= total) {
           // §P5：跳躍類動作落地後自動接緩衝（不得瞬間回站姿）
-          current = seq.land ? { seq: SEQUENCES.landSoft, type: 'landSoft', t: 0, w0: 0 } : null;
+          // chain＝三段式的段落自動接續（段①→段②）：滿權重交棒、不重跑漸入
+          if (seq.land) { air = null; startSeq(SEQUENCES.landSoft, 'landSoft', {}); }
+          else if (seq.chain) startSeq(SEQUENCES[seq.chain], seq.chain, { w0: lastW });
+          else current = null;
         } else {
           const t = Math.min(current.t / seq.dur, 1);
           const attack = current.w0 + (1 - current.w0) * Math.min(current.t / ATTACK_MS, 1);
-          w = Math.min(attack, Math.min((total - current.t) / RELEASE_MS, 1));
+          // 會自動接續下一段的序列不走 RELEASE 漸出（接棒的那一段會滿權重接手）
+          w = Math.min(attack, seq.chain ? 1 : Math.min((total - current.t) / RELEASE_MS, 1));
           blendKeys(seq, t, blended);
           pose = blended;
-          if (seq.jump > 0) jumpY = seq.jump * Math.sin(t * Math.PI) * staminaMul;
           if (seq.land && t > LAND_FROM) {
             const lf = (t - LAND_FROM) / (1 - LAND_FROM);
             blended.crouch += POSES.land.crouch * lf;

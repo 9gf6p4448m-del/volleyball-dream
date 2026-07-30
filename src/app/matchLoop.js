@@ -88,6 +88,14 @@ const SET_READY_LEAD = 34;
 // ⇒ 球比預測早到 11 tick（探針 p50=11、p10=9、p90=11）。接球不另加偏差：預測誤差
 // p50 僅 1 tick，恰與「觸發那一幀 animator 也會前進 1 tick」抵銷（實測校準後 p50 −0.5 tick）
 const SET_CONTACT_BIAS = 11;
+// 扣球擊球弧（Phase 5 W2 核心-1 三段式的段③）的提前量偏差。三速／後排**不另加**
+// ——實測 hitPoint 比實際 TOUCH 只晚 1–2 tick，恰與「觸發那一幀 animator 也會前進
+// 1 tick」抵銷（同上面接球那段的理由；校準後觸球幀落在擊球幀後 1.0 tick）。
+// 一速（快攻）另計：球在上升段就被打掉，實際 TOUCH 比 hitPoint 早 7–9 tick
+// （tools/contact-frame-probe 分節奏實測：三速/後排全是 1–2，quick 是 7/8/9 的
+// p10/p50/p90）。不分開的話快攻只播得到 4 tick＝解鎖幀看不到，正是工單點名
+// 「不得回到跳過解鎖幀的老路」
+const SPIKE_CONTACT_BIAS_QUICK = 7;
 // 觸發當下人離預測接觸點多遠就不提前播（m）：這球根本不是他碰得到的（隊友先接、
 // 或直接落地失分）＝提前播就是對空氣墊球。探針實測 2.5m 保住 97.2% 的真實觸球、
 // 擋掉 85.2% 的落空；被擋下的那些退回 TOUCH 事件觸發＝與修前完全相同
@@ -292,6 +300,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lastApproachFlight: -1,     // 同上，助跑段（零跳躍）獨立旗標
     lastReadyFlight: -1,        // 同上，接球/舉球預備段
     lastContactFlight: -1,      // 同上，擊球動作提前觸發（每 flight 一次）
+    lastSwingFlight: -1,        // 同上，扣球擊球弧（三段式段③，每 flight 一次）
     lastWaitFlight: -1,         // Phase 5 W1 §2-3：等待姿勢（transitionWait），每個 flight 只播一次
     earlyApproachKey: '',       // §4 追修：一速助跑起手已播的助跑計畫（每計畫一次）
     earlyTakeoffKey: '',        // 同上，離地（吃 sim 的 route.takeoffTick）
@@ -1615,6 +1624,28 @@ function updateAssistAndPoses(s) {
       const hesitant = aiState.attackKind === 'quick'
         && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
       stage.matchView.triggerPose(aiState.claimId, hesitant ? 'windupHesitant' : 'windup');
+    }
+  }
+  // Phase 5 W2 核心-1 段③：**扣球擊球弧提前觸發**（三段式的最後一段，機制詳見
+  // geoAnimator.js SEQUENCES 的三段式註解）。段①windup 起跳、段②spikeHold 撐住滯空
+  // （滯空多久 hold 多久），這裡依 hitPoint 倒數 hitLeadTicks('spike') 起播擊球弧，
+  // 讓肩→肘→腕三個解鎖幀落在**觸球之前**。改制前 spike 只在 TOUCH 事件當下才觸發、
+  // 又被空中接續的 carry 推到擊球幀 ⇒ 三個解鎖幀整段沒人看過。
+  // 提前量走 hitLeadTicks 單一真相（序列調時長自動跟著調）＋SPIKE_CONTACT_BIAS；
+  // 旗標與上面的起跳段分開（起跳段觸發後整塊就不再進來，不能寄生在裡面）
+  if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId
+    && aiState.claimId !== s.controlledId && aiState.flightId !== s.lastSwingFlight
+    && game.players[aiState.claimId] && aiState.hitPoint?.ticks != null) {
+    const atk = game.actors[aiState.claimId];
+    const b = game.ball;
+    const ticksToHit = aiState.hitPoint.ticks - (game.tick - aiState.planTick);
+    const near = Math.hypot(b.x - atk.x, b.z - atk.z);
+    const bias = aiState.attackKind === 'quick' ? SPIKE_CONTACT_BIAS_QUICK : 0;
+    const swingLead = hitLeadTicks('spike') + bias;
+    if (ticksToHit >= 0 && ticksToHit <= swingLead && near < 4.5) {
+      s.lastSwingFlight = aiState.flightId;
+      // 餵預估剩餘 tick：滯空不夠時擊球弧會自己壓縮（不跳幀，見 geoAnimator startSeq）
+      stage.matchView.triggerContact(aiState.claimId, 'spike', ticksToHit - bias);
     }
   }
   return myBall;
