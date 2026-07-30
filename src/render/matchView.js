@@ -136,7 +136,10 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const style = gameState.rally.serveStyle;
         setPose(u, style === 'power' ? 'serveJump' : style === 'float' ? 'serveFloat' : 'serve');
       }
-      else if (e.type === 'BLOCK_TOUCH') setPose(u, 'blockJump'); // 4.5B §8 重量感版（蹲→蹬→滯空→落地）
+      // 4.5B §8 重量感版（蹲→蹬→滯空→落地）；W2 補課④：graze（擦手）另播較保守的
+      // blockJumpGraze（見 geoAnimator POSES.blockTouch 註解）——solid 與 graze 從此
+      // 畫面不同，clean（乾淨過網）沒有 BLOCK_TOUCH 事件，不受影響
+      else if (e.type === 'BLOCK_TOUCH') setPose(u, e.graze ? 'blockJumpGraze' : 'blockJump');
       else if (e.type === 'TOUCH') {
         // 07-29 提前觸發：這一拍的擊球動畫可能已由 matchLoop 依 contactPoint 倒數起播
         // （contactArm 記著在播哪一支）。該播什麼／要不要重播的判準全在 contactSeqFor；

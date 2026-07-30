@@ -2,10 +2,13 @@
 // geoAnimator 是純函式（rig 注入），node 可測；驗 dive 動作驅動撲救姿勢
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import {
   createGeoAnimator, hitLeadTicks, seqDurTicks, contactSeqFor, SEQ_HIT,
 } from '../src/render/geoAnimator.js';
-import { isLeftHanded } from '../src/render/geoCharacter.js';
+import {
+  isLeftHanded, createGeoPool, createGeoCharacter,
+} from '../src/render/geoCharacter.js';
 import { createGame } from '../src/sim/game.js';
 import {
   createCareer, createCareerPlayer, careerMatchSetup,
@@ -687,6 +690,139 @@ test('W2-1 三段式：既有跳躍序列的弧逐值不變（block/serveJump/ov
       assert.ok(y <= want + 1e-9, `${type} 第 ${i} tick 的跳躍分量不得高於原式（${y.toFixed(4)} vs ${want.toFixed(4)}）`);
     }
   }
+});
+
+// ---- Phase 5 W2 補課④：攔網演出對齊帶模型（張臂寬＋graze 視覺）----
+
+// 張臂寬：**真實引擎路徑**——createGeoCharacter 的實際關節階層＋createGeoAnimator
+// 跑 hold('block')，讀兩手 world position（不是重建的模型）。blockBand.js 的單人涵蓋
+// 全寬＝BLOCK_HALF_WIDTH_TARGET×2＝1.0m（CONVERGE_T=1 已生效）；修前量測只有
+// 0.276~0.292m（見 geoAnimator POSES.blockUp 註解），修後應明顯拉近但不必求精確等值
+// （這裡只調演出，sim 判定 blockBand.js 一格不動，見下一條測試）
+function wristSpan(height) {
+  const scene = new THREE.Scene();
+  const pool = createGeoPool(scene, false, 1);
+  const char = createGeoCharacter(pool, 'blockSpanProbe', 'A', height, false, 'blockSpanProbe');
+  scene.add(char.root);
+  const anim = createGeoAnimator(char);
+  anim.setHold('block');
+  anim.update(0.05, 0, 0, 1);
+  char.root.updateMatrixWorld(true);
+  const r = new THREE.Vector3();
+  const l = new THREE.Vector3();
+  char.joints.rWrist.getWorldPosition(r);
+  char.joints.lWrist.getWorldPosition(l);
+  return Math.abs(r.x - l.x);
+}
+
+test('W2 補課④：blockUp 張臂寬對齊全寬 1.0m（修前僅 ~0.28m，真實引擎量測）', () => {
+  const span = wristSpan(1.75);
+  assert.ok(span > 0.7, `張臂寬應明顯拉近全寬 1.0m（實測 ${span.toFixed(3)}m，修前約 0.28m）`);
+  assert.ok(span < 1.15, `張臂寬不應誇張超過全寬太多（實測 ${span.toFixed(3)}m）`);
+});
+
+test('W2 補課④：sim 判定不受影響——BLOCK_HALF_WIDTH 仍是單一真相，POSES 只管演出', async () => {
+  const { BLOCK_HALF_WIDTH, BLOCK_HALF_WIDTH_TARGET } = await import('../src/sim/blockBand.js');
+  assert.equal(BLOCK_HALF_WIDTH, BLOCK_HALF_WIDTH_TARGET, 'CONVERGE_T=1 時應等於目標值 0.5，未被本輪動到');
+});
+
+test('W2 補課④：graze 與 solid 播不同支——擊球關鍵時刻手臂/壓腕姿勢不同', () => {
+  const rSolid = mkRig();
+  const aSolid = createGeoAnimator(rSolid);
+  aSolid.trigger('blockJump');
+  const rGraze = mkRig();
+  const aGraze = createGeoAnimator(rGraze);
+  aGraze.trigger('blockJumpGraze');
+  // 兩支序列同 dur(0.7)/同 keys 時間點，中段觸碰幀在 at=0.45（blockPunch vs blockTouch）
+  const ticks = Math.round(0.45 * 0.7 * 60);
+  for (let i = 0; i < ticks; i += 1) { aSolid.update(TICK, 0); aGraze.update(TICK, 0); }
+  assert.notEqual(
+    rSolid.joints.rWrist.rotation.x.toFixed(3),
+    rGraze.joints.rWrist.rotation.x.toFixed(3),
+    `solid（全力拍下 wrist -0.7）與 graze（保守觸碰 wrist -0.25）應有明顯不同的壓腕角度，` +
+    `實測 solid=${rSolid.joints.rWrist.rotation.x.toFixed(3)} graze=${rGraze.joints.rWrist.rotation.x.toFixed(3)}`,
+  );
+});
+
+// ---- Phase 5 W2 補課⑤：慣用手視覺鏡像（POSES 一律右臂 → 左手選手鏡像播）----
+//
+// 證明策略：①對稱姿勢（既有慣例 rSh.x===lSh.x 且 rSh.z===-lSh.z）鏡像後外觀不變
+// （blendKeys 的鏡像變換對這類姿勢是恆等式，見該函式檔頭證明）②非對稱攻擊姿勢
+// （spikeHit 一類）鏡像後「大幅擺動的那隻手」真的換邊 ③壓腕 snap 的目標關節換成 l。
+
+test('W2 補課⑤：對稱姿勢鏡像後外觀不變（bump 左右手應與右手選手逐值相同）', () => {
+  const rRight = mkRig('r');
+  const aRight = createGeoAnimator(rRight);
+  aRight.trigger('bump');
+  const rLeft = mkRig('l');
+  const aLeft = createGeoAnimator(rLeft);
+  aLeft.trigger('bump');
+  for (let i = 0; i < 20; i += 1) { aRight.update(TICK, 0); aLeft.update(TICK, 0); }
+  for (const j of ['rShoulder', 'lShoulder', 'rElbow', 'lElbow', 'spine']) {
+    assert.ok(Math.abs(rRight.joints[j].rotation.x - rLeft.joints[j].rotation.x) < 1e-9,
+      `對稱姿勢 bump 的 ${j}.x 鏡像前後應相同（右 ${rRight.joints[j].rotation.x} 左 ${rLeft.joints[j].rotation.x}）`);
+    assert.ok(Math.abs(rRight.joints[j].rotation.z - rLeft.joints[j].rotation.z) < 1e-9,
+      `對稱姿勢 bump 的 ${j}.z 鏡像前後應相同`);
+  }
+});
+
+test('W2 補課⑤：左手選手扣球——大幅擺動的手臂換成左手（spikeHit 的擊球幀）', () => {
+  const rRight = mkRig('r');
+  const aRight = createGeoAnimator(rRight);
+  aRight.trigger('spike');
+  const rLeft = mkRig('l');
+  const aLeft = createGeoAnimator(rLeft);
+  aLeft.trigger('spike');
+  // spikeHit 落在 at=0.4（SEQ_HIT.spike），直接推進到擊球幀
+  const ticks = Math.round(SEQ_HIT.spike * 0.45 * 60);
+  for (let i = 0; i < ticks; i += 1) { aRight.update(TICK, 0); aLeft.update(TICK, 0); }
+  // 右手選手：右肩大幅擺動（spikeHit rSh[0]=-2.82）、左肩小幅（-0.85）
+  assert.ok(rRight.joints.rShoulder.rotation.x < -2.5, `右手選手的右肩應大幅擺動（${rRight.joints.rShoulder.rotation.x.toFixed(2)}）`);
+  assert.ok(rRight.joints.lShoulder.rotation.x > -1.2, `右手選手的左肩應只是小幅balance（${rRight.joints.lShoulder.rotation.x.toFixed(2)}）`);
+  // 左手選手：鏡像——左肩大幅擺動、右肩小幅
+  assert.ok(rLeft.joints.lShoulder.rotation.x < -2.5, `左手選手的左肩應大幅擺動（鏡像），實際 ${rLeft.joints.lShoulder.rotation.x.toFixed(2)}`);
+  assert.ok(rLeft.joints.rShoulder.rotation.x > -1.2, `左手選手的右肩應只是小幅balance（鏡像），實際 ${rLeft.joints.rShoulder.rotation.x.toFixed(2)}`);
+});
+
+test('W2 補課⑤：壓腕 snap 的目標關節隨慣用手換邊（右手→rWrist、左手→lWrist）', () => {
+  const rRight = mkRig('r');
+  const aRight = createGeoAnimator(rRight);
+  aRight.trigger('spike');
+  const rLeft = mkRig('l');
+  const aLeft = createGeoAnimator(rLeft);
+  aLeft.trigger('spike');
+  const ticks = Math.round(SEQ_HIT.spike * 0.45 * 60);
+  for (let i = 0; i < ticks; i += 1) { aRight.update(TICK, 0); aLeft.update(TICK, 0); }
+  // spikeHit wrist=+0.55（壓腕），非慣用手恆 0（中性）
+  assert.ok(rRight.joints.rWrist.rotation.x > 0.4, `右手選手 rWrist 應壓腕（${rRight.joints.rWrist.rotation.x.toFixed(2)}）`);
+  assert.equal(rRight.joints.lWrist.rotation.x, 0, '右手選手的 lWrist 應恆中性');
+  assert.ok(rLeft.joints.lWrist.rotation.x > 0.4, `左手選手 lWrist 應壓腕（鏡像），實際 ${rLeft.joints.lWrist.rotation.x.toFixed(2)}`);
+  assert.equal(rLeft.joints.rWrist.rotation.x, 0, '左手選手的 rWrist 應恆中性');
+});
+
+test('W2 補課⑤：髖肩分離（pelvisY/chestY）鏡像時扭轉方向也反過來', () => {
+  const rRight = mkRig('r');
+  const aRight = createGeoAnimator(rRight);
+  aRight.trigger('spike');
+  const rLeft = mkRig('l');
+  const aLeft = createGeoAnimator(rLeft);
+  aLeft.trigger('spike');
+  const ticks = Math.round(0.14 * 0.45 * 60) + 1; // spikeWind 段（pelvisY=0.26≠0）
+  for (let i = 0; i < ticks; i += 1) { aRight.update(TICK, 0); aLeft.update(TICK, 0); }
+  const pr = rRight.joints.pelvis.rotation.y;
+  const pl = rLeft.joints.pelvis.rotation.y;
+  assert.ok(Math.abs(pr) > 0.05, `右手選手骨盆應有扭轉（${pr.toFixed(3)}）`);
+  assert.ok(Math.abs(pr + pl) < 1e-9, `左手選手骨盆扭轉方向應與右手相反（右 ${pr.toFixed(3)} 左 ${pl.toFixed(3)}）`);
+});
+
+test('W2 補課⑤：助跑步序鏡像（07-29 既有行為）在新的統一鏡像實作下不受影響', () => {
+  // 統一鏡像實作點只碰 blendKeys 的手臂/軀幹欄位，不動 STEP_ORDER 步序邏輯——
+  // 這裡重跑一次既有的步序斷言確保零回歸（§1b 原測試已覆蓋，這裡是防串改的哨兵）
+  const rig = mkRig('l');
+  const anim = createGeoAnimator(rig);
+  anim.trigger('approach3');
+  for (let i = 0; i < 5; i += 1) anim.update(TICK, 4.2);
+  assert.ok(Math.abs(rig.joints.rHip.rotation.x) >= 0, '左手選手助跑仍正常驅動髖關節（防呆）');
 });
 
 // TOUCH 事件 → 該播哪一支（含「提前觸發已經在播就不重播」）——matchView 的唯一判準

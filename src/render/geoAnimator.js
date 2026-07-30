@@ -70,8 +70,23 @@ const POSES = {
     rSh: [-0.6, 0.34], lSh: [-0.45, 0.15], rEl: -0.5, lEl: -0.3, spine: 0.46, neck: 0.1,
     spineUp: 0.12, pelvisY: -0.06, wrist: 0.2,
   },
-  blockUp: { rSh: [-2.95, 0.12], lSh: [-2.95, -0.12], rEl: 0, lEl: 0, spine: 0.04, neck: -0.15, spineUp: -0.08, wrist: -0.45 },
-  blockPunch: { rSh: [-2.52, 0.1], lSh: [-2.52, -0.1], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2, spineUp: 0.14, wrist: -0.7 },
+  // W2 補課④（07-30）：張臂寬對齊新帶模型。真實引擎量測（createGeoCharacter＋
+  // createGeoAnimator 實跑 FK，非重建模型）：修前 z=±0.12 在 xrot=-2.95 這個近乎
+  // 垂直上舉的角度區間落在「窄」branch，兩手世界座標實測橫向跨距只有 0.276~0.292m
+  // （身高 1.75~1.85），對照 blockBand.js 的單人涵蓋全寬 1.0m（BLOCK_HALF_WIDTH_TARGET
+  // 0.5×2，CONVERGE_T=1 已生效）差了 3 倍多——雙手看起來幾乎併攏在頭頂正上方，
+  // 而不是張開守住兩側。z 對橫向跨距的關係在這個 x 角度區間不是單調：正 z 從 0 增加
+  // 反而先把跨距壓向 0（雙手在頭頂交叉）、翻負 z 才是張開的那個分支。掃出 z=∓0.4
+  // 讓跨距落在 0.91~0.94m（貼近 1.0m 全寬、不誇張過頭）。**sim 判定（BLOCK_HALF_WIDTH／
+  // bandContact）一格未動**——這裡只改 POSES 常數，blockBand.js 零改動。
+  blockUp: { rSh: [-2.95, -0.4], lSh: [-2.95, 0.4], rEl: 0, lEl: 0, spine: 0.04, neck: -0.15, spineUp: -0.08, wrist: -0.45 },
+  blockPunch: { rSh: [-2.52, -0.4], lSh: [-2.52, 0.4], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2, spineUp: 0.14, wrist: -0.7 },
+  // W2 補課④：graze（擦手）視覺——三態現況 solid／graze 播同一支 blockJump，玩家分不出
+  // 「攔死」與「指尖擦到」。graze 是**沒攔死但碰到邊緣**，做成比 blockPunch 更保守的
+  // 觸碰：punch-through 幅度收一半（xrot 只到 blockUp/blockPunch 中間、非全力下壓）、
+  // 壓腕量減半（沒有 solid 那種整手拍下去的力道）、身體前傾也收（沒有全力跟進）。
+  // 張臂寬沿用 blockUp/blockPunch 同一個 z（±0.4）——擦到的是邊緣，不是張臂本身變窄。
+  blockTouch: { rSh: [-2.75, -0.4], lSh: [-2.75, 0.4], rEl: 0, lEl: 0, spine: 0.12, neck: -0.18, spineUp: 0.0, wrist: -0.25 },
   windup: { rSh: [-2.35, -0.35], lSh: [-2.0, 0.15], rEl: -1.8, lEl: -0.3, spine: -0.2, neck: -0.18 },
   // 4.7 §P0 助跑（Sawmah 07-28）：雙臂後擺蓄勢、軀幹前傾——**零跳躍**。
   // 原本助跑與起跳混在同一個 windup（自帶 jump 0.5m），提前觸發就等於提前浮空
@@ -204,6 +219,10 @@ const SEQUENCES = {
   // 4.5B §8 攔網重量感（僅實際起跳觸發）：蹲（load）→蹬（up）→滯空（punch）→落地；
   // dur 不動（0.7＝實測調參值）
   blockJump: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.22, p: 'blockUp' }, { at: 0.45, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
+  // W2 補課④：graze（擦手）版——同一套蹲→蹬→滯空→落地節奏，中段換成較保守的
+  // blockTouch（見 POSES 註解），讓玩家分得出「攔死」與「指尖擦到」兩種畫面。
+  // 三態的第三態 clean 沒有觸球事件、本來就不觸發任何演出，維持不變
+  blockJumpGraze: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.22, p: 'blockUp' }, { at: 0.45, p: 'blockTouch' }, { at: 1, p: 'blockUp' }] },
   // Phase 5 W1 §2-2/2-4：助跑三步節奏（雙臂後擺→前一步壓低，**jump 0＝腳不離地**）。
   // 取代 4.7 的兩關鍵幀版（0.28s／走過去然後拔起）——步相由 update() 的 stepPhase()
   // 另外驅動腿部（見 STEP_AMP_3/4），這裡的 keys 只管手臂/軀幹的蓄勢→交棒 windup。
@@ -337,7 +356,24 @@ export function createGeoAnimator(rig) {
   const order3 = handed === 'l' ? STEP_ORDER_L3 : STEP_ORDER_R3;
   const order4 = handed === 'l' ? STEP_ORDER_L4 : STEP_ORDER_R4;
 
-  function blendKeys(seq, t, out) {
+  // W2 補課⑤（07-30）：慣用手鏡像——**單一實作點**（優於逐 pose 手寫左手版）。
+  // 證明：對**已經左右對稱**的姿勢（bumpReady/setReach/blockUp…，即
+  // rSh.x===lSh.x 且 rSh.z===-lSh.z 的既有慣例，見各姿勢定義），下面這個鏡像變換是
+  // **恆等**——swap 兩側後再各自取反 z 完全還原原值。只有真正「單手臂主導」的攻擊/
+  // 發球姿勢（windup/spikeWind/spikeUnlock/spikeHit/spikeFollow/floatWind/floatPush/
+  // windupHesitant）rSh.x≠lSh.x，鏡像才會改變外觀——這些正是「一律右臂擊球」要修的
+  // 對象，且不必列白名單：對稱姿勢自動免疫，只寫一份鏡像規則就涵蓋全部姿勢。
+  // pelvisY/chestY（髖肩分離的左右扭轉）只有這幾支攻擊姿勢在用，同樣需要鏡像
+  // （左手鏡像的揮擊，軀幹扭轉方向也要反過來），單獨取反即可、不需要 side 對調。
+  function armKeyFor(outSide, h) {
+    if (h !== 'l') return outSide === 'r' ? 'rSh' : 'lSh';
+    return outSide === 'r' ? 'lSh' : 'rSh';
+  }
+  function elKeyFor(outSide, h) {
+    if (h !== 'l') return outSide === 'r' ? 'rEl' : 'lEl';
+    return outSide === 'r' ? 'lEl' : 'rEl';
+  }
+  function blendKeys(seq, t, out, handed = 'r') {
     const keys = seq.keys;
     let i = 0;
     while (i < keys.length - 1 && t > keys[i + 1].at) i += 1;
@@ -347,15 +383,27 @@ export function createGeoAnimator(rig) {
     const f = Math.min(Math.max((t - a.at) / span, 0), 1);
     const pa = POSES[a.p];
     const pb = POSES[b.p];
-    for (const k of ['rSh', 'lSh']) {
-      const ra = poseArm(pa, k);
-      const rb = poseArm(pb, k);
-      out[k] = [lerp(ra[0], rb[0], f), lerp(ra[1], rb[1], f)];
+    for (const outSide of ['rSh', 'lSh']) {
+      const srcKey = armKeyFor(outSide === 'rSh' ? 'r' : 'l', handed);
+      let ra = poseArm(pa, srcKey);
+      let rb = poseArm(pb, srcKey);
+      // 鏡像＝對調左右來源＋反轉 z（見檔頭證明：對稱姿勢兩側 z 互為相反數，
+      // swap 後再反號＝原值不變；只有非對稱姿勢會真的變）
+      if (handed === 'l') { ra = [ra[0], -ra[1]]; rb = [rb[0], -rb[1]]; }
+      out[outSide] = [lerp(ra[0], rb[0], f), lerp(ra[1], rb[1], f)];
     }
-    // 4.7 動作重製新增欄位：spineUp＝胸椎（弓身/收腹）、pelvisY/chestY＝髖肩分離、
-    // wrist＝壓腕。舊姿勢沒有這些鍵＝poseVal 取 0＝中性＝外觀不變
-    for (const k of ['rEl', 'lEl', 'spine', 'neck', 'crouch', 'spineUp', 'pelvisY', 'chestY', 'wrist']) {
+    for (const outKey of ['rEl', 'lEl']) {
+      const srcKey = elKeyFor(outKey === 'rEl' ? 'r' : 'l', handed);
+      out[outKey] = lerp(poseVal(pa, srcKey), poseVal(pb, srcKey), f);
+    }
+    // 4.7 動作重製新增欄位：spineUp＝胸椎（弓身/收腹）、wrist＝壓腕（側別由呼叫端
+    // 決定，見 update() 的壓腕路由）。pelvisY/chestY 只有攻擊姿勢在用、鏡像時反號
+    for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist']) {
       out[k] = lerp(poseVal(pa, k), poseVal(pb, k), f);
+    }
+    for (const k of ['pelvisY', 'chestY']) {
+      const v = lerp(poseVal(pa, k), poseVal(pb, k), f);
+      out[k] = handed === 'l' ? -v : v;
     }
   }
 
@@ -480,7 +528,7 @@ export function createGeoAnimator(rig) {
           const attack = current.w0 + (1 - current.w0) * Math.min(current.t / ATTACK_MS, 1);
           // 會自動接續下一段的序列不走 RELEASE 漸出（接棒的那一段會滿權重接手）
           w = Math.min(attack, seq.chain ? 1 : Math.min((total - current.t) / RELEASE_MS, 1));
-          blendKeys(seq, t, blended);
+          blendKeys(seq, t, blended, handed);
           pose = blended;
           if (seq.land && t > LAND_FROM) {
             const lf = (t - LAND_FROM) / (1 - LAND_FROM);
@@ -492,7 +540,7 @@ export function createGeoAnimator(rig) {
         }
       }
       if (!pose && hold && SEQUENCES[hold]) {
-        blendKeys(SEQUENCES[hold], 0, blended);
+        blendKeys(SEQUENCES[hold], 0, blended, handed);
         pose = blended;
         w = 1;
       }
@@ -590,8 +638,9 @@ export function createGeoAnimator(rig) {
         sh.rotation.x = pose ? lerp(armX[side], arm[0], w) : armX[side];
         sh.rotation.z = pose ? lerp(0, arm[1], w) : 0;
         el.rotation.x = pose ? lerp(restElbow, blended[`${side}El`], w) : restElbow;
-        // 壓腕只給慣用手（右）：非慣用手恆中性——雙手一起壓看起來像機器人
-        j[`${side}Wrist`].rotation.x = pose && side === 'r' ? blended.wrist * w : 0;
+        // 壓腕只給慣用手：右手選手＝r、左手選手鏡像＝l（W2 補課⑤）——非慣用手恆中性，
+        // 雙手一起壓看起來像機器人
+        j[`${side}Wrist`].rotation.x = pose && side === handed ? blended.wrist * w : 0;
       }
 
       // 垂直位移：跳躍弧－下蹲；跑動小起伏
