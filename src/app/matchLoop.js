@@ -107,14 +107,31 @@ const APPROACH_LEAD_BACK_TICKS = TAKEOFF_LEAD_TICKS + 60;  // 4 步：60 tick＝
 // 是常態。差距在窗內＝補播；超過就放棄早跳、退回既有的 hitPoint 倒數路徑（fallback）
 const EARLY_TAKEOFF_STALE_TICKS = 12;
 
-// 一速／二速攻擊手「該不該在這一 tick 播助跑或起跳」——純函式，供 tests 直測。
+// 這一 tick 該不該播助跑或起跳——純算術核心（供下面兩支導出函式共用）。
 //   'approach' 助跑起手（讓序列末幀正好踩在起跳 tick 上）／'takeoff' 離地／null 不播
-// 三速（起跳在二傳觸球之後）與算不出起跳 tick 的 route 一律回 null＝走既有路徑。
-export function earlyTakeoffCue(route, tick, approachLeadTicks, staleTicks) {
-  if (!route || route.tempo === 'three' || route.takeoffTick == null) return null;
+// 算不出起跳 tick 的 route 一律回 null＝走既有路徑（呼叫端自行 fallback）。
+function takeoffCueCore(route, tick, approachLeadTicks, staleTicks) {
+  if (!route || route.takeoffTick == null) return null;
   const toTakeoff = route.takeoffTick - tick;
   if (toTakeoff > 0) return toTakeoff <= approachLeadTicks ? 'approach' : null;
   return -toTakeoff <= staleTicks ? 'takeoff' : null;
+}
+
+// 一速／二速攻擊手「該不該在這一 tick 播助跑或起跳」——純函式，供 tests 直測。
+// 三速（起跳在二傳觸球之後）排除：**被選中的**三速攻擊手走下面的 hitPoint 倒數
+// 路徑（真實球的預測接觸點，比 route.takeoffTick 這個規劃期估計值精準）。
+export function earlyTakeoffCue(route, tick, approachLeadTicks, staleTicks) {
+  if (route?.tempo === 'three') return null;
+  return takeoffCueCore(route, tick, approachLeadTicks, staleTicks);
+}
+
+// Phase 5 W2 核心-2（假動作全員演出）：**未被選中的**攻擊手（誘餌）沒有真正的
+// hitPoint——沒有球會真的送到他們手上，二傳觸球後也不會有人替他們預測接觸點。
+// 他們唯一能用的時間錨點就是 sim 規劃期就排定好的 route.takeoffTick 本身，
+// 所以三速也吃這條路徑（＝earlyTakeoffCue 拿掉三速排除）。這正是「三速等二傳
+// 觸球才起步」這個節奏差異，在誘餌身上唯一能被畫面呈現出來的地方。
+export function decoyApproachCue(route, tick, approachLeadTicks, staleTicks) {
+  return takeoffCueCore(route, tick, approachLeadTicks, staleTicks);
 }
 
 // 本球「被選中的攻擊手」的一速／二速起跳計畫；key＝每個助跑計畫只播一次的識別。
@@ -278,6 +295,11 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lastWaitFlight: -1,         // Phase 5 W1 §2-3：等待姿勢（transitionWait），每個 flight 只播一次
     earlyApproachKey: '',       // §4 追修：一速助跑起手已播的助跑計畫（每計畫一次）
     earlyTakeoffKey: '',        // 同上，離地（吃 sim 的 route.takeoffTick）
+    // Phase 5 W2 核心-2：誘餌（未被選中的攻擊手）逐人旗標——單人字串不夠用，
+    // 全員都要各自的「這個計畫播過沒」記憶。key 同 earlyApproachKey 的格式
+    // （team:setTick:pid），value 是最後一次觸發的 key（比對用，不是布林）
+    decoyApproachKeys: new Map(), // 助跑起手（approach3/4）
+    decoyTakeoffKeys: new Map(),  // 起跳（windup；收勢取捨見 updateAssistAndPoses 註解）
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
     shake: 0,
@@ -1512,6 +1534,46 @@ function updateAssistAndPoses(s) {
       const hesitant = aiState.attackKind === 'quick'
         && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
       stage.matchView.triggerPose(aiState.attackerId, hesitant ? 'windupHesitant' : 'windup');
+    }
+  }
+  // Phase 5 W2 核心-2（假動作全員演出，B-2＋B-3）：aiState.approach.routes 是
+  // sim 的單一真相——每一名合法攻擊手（含未被選中的誘餌）各自一條 route。
+  // 被選中的攻擊手已經由上面（一/二速）或下面 hitPoint 倒數（三速）接管；這裡只補
+  // 「其餘人」——攔網手要讀的正是這組線索，改制前他們在畫面上只是普通跑步，
+  // 欺敵武器零演出。逐 pid 記旗標（不是單一字串）＝多人同時各自的助跑/起跳進度
+  // 互不覆蓋。
+  //
+  // 收勢（B-3，二選一取捨）：**選「直接讓 run 姿勢自然接手」，不另組 landSoft 短序列**。
+  // 原因：windup 的跳躍弧（jump 0.5、dur 45 tick）與 sim 官方的滯空收勢窗
+  // （AIR_TICKS＝24 tick）長度不同——route 進 release 段那一刻，windup 自己的
+  // t/dur ≈ 24/45 ≈ 0.53，jumpY＝0.5·sin(0.53π) ≈ 0.497（幾乎是跳躍弧頂峰，
+  // 不是快落地）。若在這一刻強制切 landSoft（jump=0），身體會從半空瞬間落回地面
+  // ——比不處理更像瞬切，是新 bug 不是修復。windup 本身在 t=dur（45 tick）時
+  // jumpY 自然回到 0（sin(π)=0），且最後 0.2s（RELEASE_MS）動作權重本就淡回跑動
+  // 姿勢——這與正式攻擊手 windup→spike→landSoft 走到序列尾聲的收勢曲線同一套
+  // 機制（見 geoAnimator.js update() 的 RELEASE_MS 淡出，spike/block 皆共用）。
+  // 讓誘餌的 windup 照自己的節奏播完，本身就是「不瞬切」的過渡，不需另外接手。
+  if (game.phase === 'rally' && aiState.approach?.team) {
+    const { team, setTick } = aiState.approach;
+    for (const route of aiState.approach.routes) {
+      const { pid } = route;
+      // 攻擊手另有精準路徑（見上／下）；`claimId` 多排一道是防呆——正常情況
+      // claimId===attackerId，只有 attackerId 失效走 arbitrate 補位那個罕見分支
+      // 才會不同，那個人本來就會走下面 hitPoint 倒數，這裡不得重複代播。
+      // 玩家自己操作的角色不由 AI 代播姿勢
+      if (pid === aiState.attackerId || pid === aiState.claimId
+        || pid === s.controlledId || !game.players[pid]) continue;
+      const key = `${team}:${setTick}:${pid}`;
+      const back = isBackRow(game.match.rotations[team], pid);
+      const seq = back ? 'approach4' : 'approach3';
+      const cue = decoyApproachCue(route, game.tick, seqDurTicks(seq), EARLY_TAKEOFF_STALE_TICKS);
+      if (cue === 'approach' && s.decoyApproachKeys.get(pid) !== key) {
+        s.decoyApproachKeys.set(pid, key);
+        stage.matchView.triggerPose(pid, seq);
+      } else if (cue === 'takeoff' && s.decoyTakeoffKeys.get(pid) !== key) {
+        s.decoyTakeoffKeys.set(pid, key);
+        stage.matchView.triggerPose(pid, 'windup');
+      }
     }
   }
   // AI 攻擊手「先跳後揮」：第三擊球下墜接近攻擊手時先播起跳引臂（觸球才揮臂）
