@@ -49,7 +49,8 @@ export function createBoxScorePanel() {
 
   return {
     // data＝{ title, scoreLine, rows[], playerPid, oppAce|null, extras[]（位置差異行） }
-    show(data) {
+    // onClose：U1 拍板——關閉鈕觸發的回呼（不再支援點任意處關閉）
+    show(data, onClose) {
       root.replaceChildren();
       root.appendChild(el('div', [
         'font-size:15px', 'color:#9fb0cc', 'letter-spacing:4px', 'margin-top:4px',
@@ -90,8 +91,19 @@ export function createBoxScorePanel() {
           'width:min(360px, 96vw)', 'text-align:left', 'line-height:1.5',
         ], line));
       }
-      root.appendChild(el('div', ['font-size:13px', 'color:#9fb0cc', 'margin-top:6px'],
-        '點擊任意處返回生涯'));
+      // U1（07-30 拍板）：誤觸關掉面板最重的一支——移除「點任意處關閉」，
+      // 一律靠這顆「關閉」鈕觸發 onClose（由 matchLoop 傳入，導回生涯/返回流程）
+      const closeBtn = el('button', [
+        'height:40px', 'padding:0 20px', 'border-radius:20px', 'border:1px solid #2c3a58',
+        'background:transparent', 'color:#9fb0cc', 'font-size:14px', 'font-weight:700',
+        'cursor:pointer', 'touch-action:manipulation', 'margin-top:6px',
+        'font-family:system-ui,sans-serif',
+      ], '關閉');
+      closeBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        onClose?.();
+      });
+      root.appendChild(closeBtn);
       root.style.display = 'flex';
     },
     hide() {

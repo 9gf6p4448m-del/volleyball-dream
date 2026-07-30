@@ -238,7 +238,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // W4 Q9 L 改判記帳（box score 第四欄；表現層 tally，同 feints 續玩接回）
     lOverrideTally: careerCtx?.resumeMid?.lOverrides ?? { n: 0, ok: 0 },
     digReadWasOverride: false,
-    boxShown: false, // 局終兩段式：第一次點＝單場結算頁、第二次點＝返回生涯
+    boxShown: false, // 局終兩段式：第一次點＝單場結算頁；返回生涯改走面板內「關閉」鈕（U1）
     // W4 附錄 B：L 2.0 配套統計（ace 反讀的資料底；scoutTally 鏡像決定論）＋宿敵 ace
     schemeTally: { total: 0, counts: {} },
     rivalAcePid: null,       // 宿敵 ace 的 pid（rival 隊限定；startMatchLoop 解析）
@@ -539,7 +539,8 @@ function checkRecruitFeats(s, cards) {
 // 輸入/導航事件绑定：局終點擊、回放（R/🎬）、魚躍（L/Space/鈕）、情蒐跳過
 function bindInputHandlers(s) {
   const { stage, config } = s;
-  // 局終點擊 → 生涯：第一次點＝單場結算頁（W4 Q9）、第二次點＝返回（結果已落檔）；
+  // 局終點擊 → 生涯：第一次點＝單場結算頁（W4 Q9）；返回生涯改走面板內「關閉」鈕
+  // （U1 07-30 拍板：誤觸關掉面板最重的一支，第二次「點任意處」的返回路徑已移除）。
   // 快速比賽：換種子再開一局
   window.addEventListener('pointerdown', () => {
     if (s.game.phase !== 'set_over') return;
@@ -547,13 +548,13 @@ function bindInputHandlers(s) {
       if (!s.boxShown) {
         s.boxShown = true;
         s.stage.setOverOverlay.hide();
-        s.stage.boxScorePanel?.show(buildBoxPanelData(s));
-        return;
+        s.stage.boxScorePanel?.show(buildBoxPanelData(s), () => {
+          window.location.assign(careerReturnUrl(
+            s.ctx.params, window.location.pathname, s.careerCtx.store?.activeSlot?.() ?? null,
+          ));
+        });
       }
-      window.location.assign(careerReturnUrl(
-        s.ctx.params, window.location.pathname, s.careerCtx.store?.activeSlot?.() ?? null,
-      ));
-      return;
+      return; // boxShown 已 true：面板顯示中，任意處點擊不再有作用
     }
     s.seed += 1;
     s.game = createGame({

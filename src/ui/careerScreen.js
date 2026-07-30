@@ -447,27 +447,23 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     'overflow-y:auto',
     'padding:calc(env(safe-area-inset-top, 0px) + 24px) 16px 40px',
   ]);
-  cardOverlay.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    if (e.target === cardOverlay) hideCard();
-  });
+  // U1（07-30 拍板）：點背景關閉已移除——只留卡片內「關閉」鈕（見 smallButton('關閉', hideCard)）
+  cardOverlay.addEventListener('pointerdown', (e) => e.stopPropagation());
   document.body.appendChild(cardOverlay);
   function hideCard() {
     cardOverlay.style.display = 'none';
     cardOverlay.replaceChildren();
   }
 
-  // ---- W3 先發編排器 → W8 對陣畫面共用 overlay（出戰必經；點外側＝返回不出戰）----
+  // ---- W3 先發編排器 → W8 對陣畫面共用 overlay（出戰必經；U1 07-30 拍板改「返回」鈕不出戰）----
   const lineupOverlay = el('div', [
     'position:fixed', 'inset:0', 'z-index:37', 'display:none',
     'background:rgba(4,6,12,0.72)', 'align-items:flex-start', 'justify-content:center',
     'overflow-y:auto',
     'padding:calc(env(safe-area-inset-top, 0px) + 24px) 16px 40px',
   ]);
-  lineupOverlay.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    if (e.target === lineupOverlay) closeLineup(); // 點外側＝取消編排（不出戰）
-  });
+  // U1（07-30 拍板）：點外側取消已移除——改用面板內「返回（不出戰）」鈕（見 showMatchupScreen tools 列）
+  lineupOverlay.addEventListener('pointerdown', (e) => e.stopPropagation());
   document.body.appendChild(lineupOverlay);
   function closeLineup() {
     lineupOverlay.style.display = 'none';
@@ -619,7 +615,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   // 俯視球場、對面六人具名釘在站位上（王牌帶稱號發光）、我方半場 tap 互換/板凳替換/
   // 自由人輪替/首發球位（改球位＝我方名牌在場上實際轉動）；合法性即時驗（沿用
   // lineup.js 全套規則）。挖角語意與開賽一致（applyPoaching：被挖走的人原隊換遞補、
-  // 王牌被挖不亮相）。確認＝saveLineup＋onConfirm；點外側＝返回（不出戰）
+  // 王牌被挖不亮相）。確認＝saveLineup＋onConfirm；返回（不出戰）改走「返回（不出戰）」鈕（U1）
   function showMatchupScreen(career, player, next, onConfirm) {
     const baseDef = opponentById(next.opponentId);
     const roster = ensureStarterRoster(store);
@@ -983,6 +979,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         paint();
       }));
       tools.appendChild(smallButton('沿用上次', () => { working = structuredClone(saved); selected = null; notice = null; paint(); }));
+      // U1（07-30 拍板）：原「點外側＝返回不出戰」改為明鈕，語意不變（不儲存、不出戰）
+      tools.appendChild(smallButton('返回（不出戰）', () => closeLineup()));
       card.appendChild(tools);
 
       const confirm = button('✓ 確認出戰', legal, () => {
@@ -1817,7 +1815,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         else go();
       };
       // W8 對陣畫面（07-26 拍板）：出戰必經——對面具名亮相＋球場對位排陣；
-      // 點外側＝返回不出戰（取代舊 ⚙ 先發編排 opt-in 面板與敵情一行字）
+      // 「返回（不出戰）」鈕可退出（取代舊 ⚙ 先發編排 opt-in 面板與敵情一行字；U1 07-30 改鈕不點外側）
       root.appendChild(button(`▶ 出戰 ${opponentName(next.opponentId)}`, true,
         () => showMatchupScreen(career, player, next, startMatch)));
     }
@@ -2019,7 +2017,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
-      'background:rgba(4,6,12,0.88)', 'gap:10px', 'padding:24px 14px', 'cursor:pointer',
+      'background:rgba(4,6,12,0.88)', 'gap:10px', 'padding:24px 14px',
     ]);
     overlay.appendChild(el('div', [
       'font-size:15px', `color:${COLOR.dim}`, 'letter-spacing:4px',
@@ -2073,8 +2071,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     sumCard.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.text}`, 'line-height:1.5'],
       totalLine(sum)));
     overlay.appendChild(sumCard);
-    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], '點擊任意處關閉'));
-    overlay.addEventListener('pointerdown', () => overlay.remove());
+    // U1（07-30 拍板）：移除「點擊任意處關閉」，改明鈕（stopPropagation 防止背景點擊誤關）
+    overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+    const closeBtn = smallButton('關閉', () => overlay.remove());
+    closeBtn.style.alignSelf = 'center';
+    overlay.appendChild(closeBtn);
     document.body.appendChild(overlay);
   }
 

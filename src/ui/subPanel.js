@@ -211,9 +211,8 @@ export function createSubPanel({ game, playerId, handlers, floatText }) {
     }
     api.openPanel();
   });
-  overlay.addEventListener('pointerdown', (e) => {
-    if (e.target === overlay) { e.stopPropagation(); api.close(); }
-  });
+  // U1（07-30 拍板）：點背景關閉已移除——只留「完成」鈕（見 paint() 內 done 按鈕）
+  overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
 
   const api = {
     el: btn,

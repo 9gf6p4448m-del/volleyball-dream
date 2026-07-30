@@ -245,7 +245,7 @@ function createLeaveButton(params, game) {
   const close = (e) => { e.stopPropagation(); overlay.style.display = 'none'; };
   btn.addEventListener('pointerdown', openDialog);
   cancelBtn.addEventListener('pointerdown', close);
-  overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) close(e); });
+  // U1（07-30 拍板）：點背景關閉已移除——確認框本身靠「確定離開／繼續比賽」兩鈕即已合規
   confirmBtn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     // 已在自訂框確認過＝先卸 beforeunload，避免導航時又跳一次通用框
