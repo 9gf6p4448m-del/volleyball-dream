@@ -99,6 +99,12 @@ const POSES = {
   // W7 A4③：體力喘氣 idle（死球間隙、跌破 50% 的場上球員取代待命姿勢）——
   // 撐膝彎腰：肩前傾下垂＋肘大彎（雙手扶膝）＋軀幹深前傾＋低頭喘氣
   gasp: { rSh: [-0.35, -0.12], lSh: [-0.35, 0.12], rEl: -0.7, lEl: -0.7, spine: 0.85, neck: 0.3, crouch: 0.32 },
+  // N1（2026-07-30 疲勞可視化，重度檔 <25% 專用）：同款撐膝彎腰再加深——
+  // 蹲更深、軀幹前傾更多、頭垂更低，與 gasp（<50%）拉出可讀的兩段落差
+  gaspHeavy: {
+    rSh: [-0.42, -0.14], lSh: [-0.42, 0.14], rEl: -0.85, lEl: -0.85,
+    spine: 1.05, neck: 0.42, crouch: 0.42,
+  },
   // W7 B4④：氣勢極端不利（−3）idle——垂肩低頭，手臂鬆垮下垂、無下蹲（走位回位、非喘氣）
   dejected: { rSh: [0.08, -0.04], lSh: [0.08, 0.04], rEl: -0.15, lEl: -0.15, spine: 0.32, neck: 0.32, crouch: 0.03 },
   // 4.5B §4：S diegetic——高 trust 隊友揮手喊球（右臂高舉左右擺；左臂自然）
@@ -145,6 +151,8 @@ const SEQUENCES = {
   serveReady: { dur: 1, jump: 0, land: false, keys: [{ at: 0, p: 'serveReady' }, { at: 1, p: 'serveReady' }] },
   // W7 A4③：喘氣 hold（死球間隙持續姿勢，matchView 依 stamina 檔位切換 setHold）
   gasp: { dur: 1, jump: 0, land: false, keys: [{ at: 0, p: 'gasp' }, { at: 1, p: 'gasp' }] },
+  // N1：重度檔（<25%）喘氣 hold（matchView tierOf>=2 時切換到這支）
+  gaspHeavy: { dur: 1, jump: 0, land: false, keys: [{ at: 0, p: 'gaspHeavy' }, { at: 1, p: 'gaspHeavy' }] },
   // W7 B4④：氣勢極端不利 idle hold（死球間隙低頭慢走回位；喘氣優先於此，見 matchView 判斷序）
   dejected: { dur: 1, jump: 0, land: false, keys: [{ at: 0, p: 'dejected' }, { at: 1, p: 'dejected' }] },
   // block＝攔網待命牆姿的 hold 源（matchView setHold 播 t=0 幀）——**t=0 必須是
@@ -329,7 +337,10 @@ export function createGeoAnimator(rig) {
     // lateral（4.7 根運動）：移動方向相對「朝向」的橫向分量（-1..1）——沿網橫移的
     // 攔網手與防守補位是**側併步**（面向網、雙腿開合），不是前跑擺腿。
     // 由 matchView 逐幀算好傳入（它同時握有速度向量與朝向）
-    update(dt, speed, lateral = 0) {
+    // staminaMul（N1 疲勞可視化，2026-07-30）：matchView 傳入的 staminaPerfMul(state, player)——
+    // 與 sim 彈跳折損同一個數字，這裡只拿來縮小跳躍弧與助跑步幅，未啟用體力系統時恆 1、
+    // 行為零改變（沿用既有呼叫端零副作用範式，見檔內舊測試皆不帶第 4 參）
+    update(dt, speed, lateral = 0, staminaMul = 1) {
       // 跑姿權重與步相位（幀率無關的指數收斂）
       const runTarget = Math.min(speed / RUN_FULL_SPEED, 1);
       runW += (runTarget - runW) * (1 - Math.exp(-10 * dt));
@@ -356,7 +367,7 @@ export function createGeoAnimator(rig) {
           w = Math.min(attack, Math.min((total - current.t) / RELEASE_MS, 1));
           blendKeys(seq, t, blended);
           pose = blended;
-          if (seq.jump > 0) jumpY = seq.jump * Math.sin(t * Math.PI);
+          if (seq.jump > 0) jumpY = seq.jump * Math.sin(t * Math.PI) * staminaMul;
           if (seq.land && t > LAND_FROM) {
             const lf = (t - LAND_FROM) / (1 - LAND_FROM);
             blended.crouch += POSES.land.crouch * lf;
@@ -406,8 +417,10 @@ export function createGeoAnimator(rig) {
 
       if (stepInfo) {
         // Phase 5 W1 §2-2：助跑三/四步節奏——踩前腳當幀擺幅最大，另一腳小幅拖後；
-        // 不疊加連續跑步相位（stepPhase 的半波本身就是離散的三/四段步相）
-        const sw = stepInfo.swing * stepW;
+        // 不疊加連續跑步相位（stepPhase 的半波本身就是離散的三/四段步相）。
+        // N1：staminaMul 縮小步幅＝「助跑演出變短」——只改物理跨距不改時長，
+        // 不動 matchLoop 依 seqDurTicks 算好的起跳提前量對齊
+        const sw = stepInfo.swing * stepW * staminaMul;
         const forward = -sw;
         const trail = sw * 0.3;
         j.rHip.rotation.x = (stepInfo.lead === 'r' ? forward : trail) - crouch * 1.1;

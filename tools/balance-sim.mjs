@@ -47,7 +47,8 @@ const USE_FULL_ROSTER = process.env.VD_FULL_ROSTER === '1';
 const SEASONS = Math.max(1, Number.parseInt(process.env.VD_SEASONS ?? '1', 10));
 // W7 E1 雙臂：VD_STAMINA=1＝「無管理」臂（體力開、AI 不換人＝下緣基準）；
 // VD_MANAGE=1＝「自動管理」臂（<25% 換人；被連 4 分喊暫停待 B3 sim 上線後補）。
-// 體力設定鏡像生涯（A4 拍板：對手 costMul 0.6 慢耗＋豁免重度門檻）
+// 體力設定鏡像生涯（A4 拍板：對手 costMul 0.6 慢耗；P1 2026-07-30 移除 heavyExempt
+// 豁免後同步鏡像——不然本治具驗不到拿掉豁免對難度曲線的真實影響）
 const USE_MANAGE = process.env.VD_MANAGE === '1';
 const USE_STAMINA = process.env.VD_STAMINA === '1' || USE_MANAGE;
 // VD_MOMENTUM=1＝團隊氣勢臂（B1；可與體力臂疊加）。任一 W7 系統開＝對手 B 的
@@ -136,7 +137,11 @@ function playMatch(setup, entry = null) {
     liberos: setup.liberos,
     ...(bestOf > 1 ? { series: { bestOf } } : {}),
     ...(setup.scoutRead ? { scoutRead: setup.scoutRead } : {}),
-    ...(USE_STAMINA ? { stamina: { A: {}, B: { costMul: 0.6, heavyExempt: true } } } : {}),
+    // VD_B_COSTMUL＝對手耗速掃描旋鈕（P1 驗證 07-30 用它掃出 0.6 下豁免從未咬合
+    // ⇒ 改 1.0 對稱）；未給＝鏡像生涯現值 1.0（matchConfig.js 同步）
+    ...(USE_STAMINA
+      ? { stamina: { A: {}, B: { costMul: Number(process.env.VD_B_COSTMUL ?? 1.0) } } }
+      : {}),
     ...(USE_MOMENTUM ? { momentum: true } : {}),
     // 板凳只在管理臂帶入（帶而不換＝零擾動已有測試背書；不帶＝基準臂逐位不變）。
     // W1(P4)：對手板凳鏡像生涯——體力臂即帶（對手疲勞換人只在體力開時有意義）
@@ -281,6 +286,9 @@ let deficit5 = 0;
 let comeback5 = 0;
 let stamSum = 0;
 let stamMin = 1;
+let stamSumB = 0;
+let stamMinB = 1;
+let heavyGamesB = 0; // 終場任一 B 場上球員 <25%（重度檔）的場數
 let stamGames = 0;
 let subsUsed = 0;
 let oppSubsUsed = 0; // W2(P4)：B 隊實際換人人次（樣本量測）
@@ -391,6 +399,12 @@ for (let run = 0; run < RUNS; run += 1) {
         const onCourt = g.match.rotations.A.map((id) => g.stamina[id] ?? 1);
         stamSum += onCourt.reduce((sum, v) => sum + v, 0) / onCourt.length;
         stamMin = Math.min(stamMin, ...onCourt);
+        // P1 驗證需求（07-30）：B 隊同款診斷——「對手有沒有真的掉進重度檔」
+        // 是移除 heavyExempt 有無行為效果的判準（costMul 0.6 下可能構造上到不了 25%）
+        const onCourtB = g.match.rotations.B.map((id) => g.stamina[id] ?? 1);
+        stamSumB += onCourtB.reduce((sum, v) => sum + v, 0) / onCourtB.length;
+        stamMinB = Math.min(stamMinB, ...onCourtB);
+        if (Math.min(...onCourtB) < 0.25) heavyGamesB += 1;
         stamGames += 1;
         subsUsed += TUNING.SUBS_PER_SET - g.subs.A.remaining;
         // W2(P4) 對手換人樣本量測（拍板：閾值不調只量測，數據留 W4 多局制再判）
@@ -507,6 +521,8 @@ if (USE_STAMINA) {
     + `單場最低 ${stamMin.toFixed(2)}、場均換人 ${(subsUsed / stamGames).toFixed(2)} 人次`);
   console.log(`對手換人樣本（W2 量測）：全 ${stamGames} 場共 ${oppSubsUsed} 人次、`
     + `有換人場數 ${oppSubGames}（${stamGames > 0 ? Math.round((oppSubGames / stamGames) * 100) : 0}%）`);
+  console.log(`體力診斷（B 隊）：終場場上均值 ${(stamSumB / stamGames).toFixed(2)}、`
+    + `單場最低 ${stamMinB.toFixed(2)}、終場有人 <25% 的場數 ${heavyGamesB}/${stamGames}`);
 }
 // W4 題7 體力曲線（bo>1＋體力臂）：各局開局的 A 隊場上均值——校準目標＝
 // 決勝局開局帶明顯低於首局、但高於裸延續（VD_NO_BREAK_RECOV=1 對照）

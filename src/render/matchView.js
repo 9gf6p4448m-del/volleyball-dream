@@ -7,7 +7,7 @@ import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
 import { createGeoCharacter, createGeoPool, BASE_H } from './geoCharacter.js';
 import { createGeoAnimator, contactSeqFor } from './geoAnimator.js';
-import { STAMINA, tierOf } from '../sim/stamina.js';
+import { STAMINA, tierOf, staminaPerfMul } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
 import { HUDDLE, huddleSlot, coachPos } from './huddleLayout.js';
 import { createHuddleProps } from './huddleProps.js';
@@ -207,8 +207,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         let blockDuty = false;
         const onCourt = gameState.match.rotations[pTeam].includes(id);
         // W7 A4③：喘氣 idle——場上（雙方）跌破 50% 者，死球間隙以撐膝彎腰取代待命姿勢
-        // （原始檔位、不吃 heavyExempt——這是可讀訊號不是效果；發球員例外，見下方 else if 先攔）
-        const tired = gameState.stamina && onCourt && tierOf(gameState.stamina[id] ?? 1) >= 1;
+        // （原始檔位——這是可讀訊號不是效果；發球員例外，見下方 else if 先攔）
+        // N1（2026-07-30 疲勞可視化）：重度檔（<25%）撐膝彎腰演出加深——單一真相仍是
+        // tierOf/staminaPerfMul（src/sim/stamina.js），這裡只挑選演出姿勢，不算第二份數值
+        const staminaTierVal = gameState.stamina && onCourt ? tierOf(gameState.stamina[id] ?? 1) : 0;
+        const tired = staminaTierVal >= 1;
         if (forcePose) {
           u.animator.setHold(forcePose);
         } else if (gameState.phase === 'serve' && serverId(gameState.match) === id
@@ -217,8 +220,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
           // 發球瞬間直接銜接分式揮擊，不再「罰站→憑空揮手」
           u.animator.setHold('serveReady');
         } else if (gameState.phase === 'serve' && tired) {
-          // 體力喘氣優先於氣勢低落（拍板：兩者相撞時喘氣贏）
-          u.animator.setHold('gasp');
+          // 體力喘氣優先於氣勢低落（拍板：兩者相撞時喘氣贏）；重度檔換更深的撐膝彎腰
+          u.animator.setHold(staminaTierVal >= 2 ? 'gaspHeavy' : 'gasp');
         } else if (gameState.phase === 'serve' && onCourt && pTeam === dejectedTeam) {
           u.animator.setHold('dejected');
         } else {
@@ -324,7 +327,11 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         const lateral = speed > 0.25
           ? Math.sin(shortestArc(u.yaw, Math.atan2(vx, vz)))
           : 0;
-        const bodyY = u.animator.update(dt, speed, lateral);
+        // N1 疲勞可視化：助跑/起跳幅度吃 staminaPerfMul——與 sim 的彈跳折損（jumpMul，
+        // game.js:479）同一個函式、同一組數字，演出只是把既有的 sim 事實做到看得見，
+        // 未啟用體力系統時 staminaPerfMul 恆回 1（零副作用，行為不變）
+        const staminaMul = staminaPerfMul(gameState, gameState.players[id]);
+        const bodyY = u.animator.update(dt, speed, lateral, staminaMul);
         // 魚躍飛撲（純視覺）：dive 期間沿朝向前撲一段＋微騰空落地＋身體前傾接近水平——
         // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）
         let diveX = 0; let diveZ = 0; let diveTilt = 0; let diveY = 0;

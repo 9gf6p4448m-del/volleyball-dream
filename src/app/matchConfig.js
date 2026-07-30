@@ -102,10 +102,14 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     A: quick?.liberoA ?? buildLibero('A', 'A隊自由人'),
     B: buildLibero('B', 'B隊自由人'),
   };
-  // W7 A1-A5 體力（雙方啟用）：生涯對手吃 A4 拍板（costMul 0.6 慢耗＋豁免重度門檻
-  // ——「他們有輪換調度、鏡頭外處理」的敘事）；快速比賽雙方對稱（同無板凳＝公平）
+  // W7 A1-A5 體力（雙方啟用）：P1（2026-07-30）移除 heavyExempt 後實測發現
+  // costMul 0.6 下對手全 240 場體力最低 0.74＝連喘氣帶都碰不到、豁免從未咬合
+  // ⇒ 改 1.0 對稱（Sawmah 詢問「要真實建議哪個」後採實作端建議）：同一套生理
+  // 規則不分敵我；「鏡頭外調度」敘事改口「調度得好但人終究是人」（批 4 persona 重寫）。
+  // 掃描數據（tools/balance-sim VD_B_COSTMUL）：1.0 下決賽 5→10%、決賽帶 20→28%、
+  // B 深局最低 0.27＝疲勞可視化（N1）在對手身上真的看得到。快速比賽本就對稱。
   const stamina = careerSetup
-    ? { A: {}, B: { costMul: 0.6, heavyExempt: true } }
+    ? { A: {}, B: { costMul: 1.0 } }
     : { A: {}, B: {} };
   // W4(P4) Q8 分級賽制：生涯場由賽程項推導（決賽 bo5／準決賽・宿敵場 bo3／其餘 bo1）；
   // ?bo= 測試覆寫（3/5；快速比賽驗多局用）；bestOf 1＝series 不進 gameOptions＝零擾動
