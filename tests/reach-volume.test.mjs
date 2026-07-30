@@ -18,7 +18,7 @@ import {
 } from '../src/sim/reach.js';
 import {
   BLOCK_HALF_WIDTH, blockerInterval, buildBand, bandSpan, bandContact,
-  overBlockerHands, blockOutcome,
+  overBlockerHands, classifyBlockContact,
 } from '../src/sim/blockBand.js';
 
 const P = createPlayer({ id: 'T1', name: '測', teamId: 'A', height: 1.85 });
@@ -232,29 +232,61 @@ test('高度閘：頂邊吃球半徑——球面碰到手就算（與觸球判�
   assert.equal(overBlockerHands(2.5 + BALL.RADIUS + 1e-9, 2.5), true, '再高就過去了');
 });
 
-test('三態分類：攔死／擦手／乾淨過網依單一 roll 切三段（rand 恆消耗一次）', () => {
-  const args = { chance: 0.3, edgeWidth: 0.22 };
-  assert.equal(blockOutcome({ roll: 0, ...args }), 'solid');
-  assert.equal(blockOutcome({ roll: 0.29, ...args }), 'solid');
-  assert.equal(blockOutcome({ roll: 0.3, ...args }), 'graze', '攔死帶上邊界＝進擦手帶');
-  assert.equal(blockOutcome({ roll: 0.51, ...args }), 'graze');
-  assert.equal(blockOutcome({ roll: 0.52, ...args }), 'clean', '擦手帶上邊界＝乾淨過網');
-  assert.equal(blockOutcome({ roll: 0.99, ...args }), 'clean');
+// §十-4b 債清償（2026-07-31）：blockOutcome（單一 roll 三段切的機率帶）退役，
+// 換成 classifyBlockContact（真幾何：dx／ballY 決定 top/side/body）。
+// 以下改測新函式——語意已反轉：舊版「拿不到位置資訊、只吃屬性」，
+// 新版**只吃位置資訊、不吃屬性**（屬性擲骰下放到 tryBlock 呼叫端的第三層）。
+
+test('classifyBlockContact：body 區——中心低球，top／side 兩判準都不成立', () => {
+  const args = { dx: 0, halfWidth: 1.1, ballY: 2.0, handTop: 2.5, edgeFrac: 0.15, topBand: 0.12 };
+  assert.equal(classifyBlockContact(args), 'body');
 });
 
-test('三態分類：邊緣區寬度為 0＝只剩攔死與乾淨過網（擦手可被關掉）', () => {
-  const args = { chance: 0.3, edgeWidth: 0 };
-  assert.equal(blockOutcome({ roll: 0.29, ...args }), 'solid');
-  assert.equal(blockOutcome({ roll: 0.3, ...args }), 'clean');
+test('classifyBlockContact：top 優先於 side——同時滿足兩判準時回 top（指尖是手的最邊緣）', () => {
+  const args = {
+    dx: 1.0, // > 1.1×0.85=0.935 側緣門檻＝滿足 side
+    halfWidth: 1.1, edgeFrac: 0.15,
+    ballY: 2.5 + BALL.RADIUS, // 貼手頂（門檻 2.485）＝滿足 top
+    handTop: 2.5, topBand: 0.12,
+  };
+  assert.equal(classifyBlockContact(args), 'top', 'top 優先於 side——兩者都成立時 top 贏');
 });
 
-test('屬性語意：block 屬性只搬動攔死／擦手的分界，搬不動「有沒有碰到手」', () => {
-  // 有沒有碰到手是第一層幾何的事——blockOutcome 根本拿不到位置資訊，
-  // 這條測試靠簽章本身把語意釘住（憲法 §三.1 的核心）
-  const weak = blockOutcome({ roll: 0.4, chance: 0.2, edgeWidth: 0.22 });
-  const strong = blockOutcome({ roll: 0.4, chance: 0.5, edgeWidth: 0.22 });
-  assert.equal(weak, 'graze', '弱攔網手：碰到了，但只擦到');
-  assert.equal(strong, 'solid', '強攔網手：同一顆球攔死');
-  // 兩者都「碰到了」——屬性沒有把球變成乾淨過網的能力
-  assert.ok(weak !== 'clean' && strong !== 'clean');
+test('classifyBlockContact：top 不吃 dx——dx=0（帶正中心）貼手頂的球一樣擦頂', () => {
+  const args = {
+    dx: 0, halfWidth: 1.1, edgeFrac: 0.15,
+    ballY: 2.5 + BALL.RADIUS, handTop: 2.5, topBand: 0.12,
+  };
+  assert.equal(classifyBlockContact(args), 'top', 'top 判準不看 dx——低 dx 也能擦頂');
+});
+
+test('classifyBlockContact：side 邊界——dx 恰在 halfWidth×(1−edgeFrac) 為 body，略大為 side', () => {
+  const base = { halfWidth: 1.1, edgeFrac: 0.15, ballY: 2.0, handTop: 2.5, topBand: 0.12 };
+  const boundary = 1.1 * (1 - 0.15); // 0.935
+  assert.equal(classifyBlockContact({ ...base, dx: boundary }), 'body', '恰等於門檻＝body（判準用 >）');
+  assert.equal(classifyBlockContact({ ...base, dx: boundary + 1e-9 }), 'side', '略大於門檻＝side');
+});
+
+test('classifyBlockContact：top 邊界——ballY 恰在門檻為 body，略大為 top', () => {
+  const base = { dx: 0, halfWidth: 1.1, edgeFrac: 0.15, handTop: 2.5, topBand: 0.12 };
+  const boundary = 2.5 + BALL.RADIUS - 0.12; // handTop + BALL.RADIUS − topBand
+  assert.equal(classifyBlockContact({ ...base, ballY: boundary }), 'body', '恰等於門檻＝body（判準用 >）');
+  assert.equal(classifyBlockContact({ ...base, ballY: boundary + 1e-9 }), 'top', '略大於門檻＝top');
+});
+
+test('classifyBlockContact：邊緣區寬度為 0＝side 判準恆不成立（帶外緣退化掉，只剩 top／body）', () => {
+  const base = { dx: 1.1, halfWidth: 1.1, edgeFrac: 0, ballY: 2.0, handTop: 2.5, topBand: 0.12 };
+  // dx 恰等於 halfWidth（帶內最外緣，bandContact 仍判定碰到手）：edgeFrac=0 時門檻＝halfWidth，
+  // `dx > halfWidth` 恆假，於是即使貼著帶邊緣也分類為 body。
+  assert.equal(classifyBlockContact(base), 'body', 'edgeFrac=0 關掉 side 區');
+});
+
+test('屬性語意反轉：classifyBlockContact 只吃位置資訊，餵進屬性也不影響分區（憲法 §三.1 核心）', () => {
+  // 有沒有碰到手／擦到哪裡是第一層幾何的事——屬性擲骰下放到 tryBlock 第三層（body 區才走到）。
+  // 這裡刻意塞進 block/chance 這類屬性欄位，證明函式對它們視而不見。
+  const geom = { dx: 0, halfWidth: 1.1, ballY: 2.0, handTop: 2.5, edgeFrac: 0.15, topBand: 0.12 };
+  const weak = classifyBlockContact({ ...geom, block: 20, chance: 0.2 });
+  const strong = classifyBlockContact({ ...geom, block: 100, chance: 0.9 });
+  assert.equal(weak, 'body');
+  assert.equal(strong, 'body', '同一顆球、不同攔網屬性——分區結果相同，屬性管不到有沒有碰到/擦到哪裡');
 });

@@ -58,7 +58,10 @@ test('一般一傳不發卡：同路徑 timing=0.6 → 無 PERFECT（門檻把�
 });
 
 // 情境治具：對方扣球正要過網、主角在網前開著攔網窗（tryBlock 真實擲骰）
-function setupIncomingSpike(g) {
+// bx：球過網 x——真跑 sim 掃描證實（見 block-graze.test.mjs 的 blockRig 同款關係）
+// dx=0（bx 預設 0）落在 body 區＝攔死/乾淨過網由屬性擲骰決定；
+// dx∈[0.43,0.5]（帶半寬 0.5、側緣 15%）幾何上恆為 side 擦手——兩者搭配才能湊出兩態。
+function setupIncomingSpike(g, bx = 0) {
   const rot = g.match.rotations.A;
   const idx = rot.indexOf(ME);
   if (idx < 1 || idx > 3) { // 確保主角在前排（2/3/4 號位）
@@ -76,12 +79,13 @@ function setupIncomingSpike(g) {
   a.blockUntil = g.tick + 48;
   a.blockStartTick = g.tick - 10; // 滯空落在甜蜜帶（4-26 tick）
   // y 要高過網頂＋球半徑（否則 collideNet 先把球彈回、根本不過網），且低於攔網手可及
-  Object.assign(g.ball, { x: 0, y: 2.75, z: -0.1, vx: 0, vy: 0, vz: 8 });
+  Object.assign(g.ball, { x: bx, y: 2.75, z: -0.1, vx: 0, vy: 0, vz: 8 });
 }
 
 test('攔網碰球（真 sim tryBlock）：主角攔到 → 🧱／👆 卡（分色分文案、兩態都出現過）', () => {
   const seen = new Set();
-  for (let seed = 1; seed <= 60 && seen.size < 2; seed += 1) {
+  // 組一：dx=0（body 區）——掃種子找攔死（屬性擲骰命中率已拉滿，掃描很快收斂）
+  for (let seed = 1; seed <= 60 && !seen.has('🧱 攔網拍回！'); seed += 1) {
     const g = createGame({ seed, setTarget: 25 });
     g.players[ME].attributes.block = 100; // 提高命中率＝縮短掃描；判定路徑不變
     setupIncomingSpike(g);
@@ -95,7 +99,22 @@ test('攔網碰球（真 sim tryBlock）：主角攔到 → 🧱／👆 卡（�
     assert.equal(!!blockEvent.graze, card.text.startsWith('👆'));
     seen.add(card.text);
   }
-  assert.equal(seen.size, 2, `60 種子內應涵蓋攔死＋擦手兩態（實際 ${[...seen].join('、')}）`);
+  // 組二：dx=0.45（side 區）——幾何上必為擦手，body 區的掃描湊不出這態（見治具註解）
+  const g = createGame({ seed: 1, setTarget: 25 });
+  g.players[ME].attributes.block = 100;
+  setupIncomingSpike(g, 0.45);
+  const events = stepGame(g, []);
+  const card = cardsFrom(events, g).find((c) => /攔網拍回|擦到了/.test(c.text));
+  assert.ok(card, 'dx=0.45 應觸發擦手字卡');
+  const blockEvent = events.find((e) => e.type === 'BLOCK_TOUCH');
+  assert.equal(blockEvent.playerId, ME);
+  assert.equal(blockEvent.zone, 'side');
+  assert.ok(blockEvent.graze);
+  assert.equal(card.text, '👆 擦到了——快補！');
+  assert.equal(card.dur, 2200);
+  assert.equal(card.color, '#6ee7ff');
+  seen.add(card.text);
+  assert.equal(seen.size, 2, `應涵蓋攔死＋擦手兩態（實際 ${[...seen].join('、')}）`);
 });
 
 test('回歸建功（真 sim）：換下→換回→首顆殺球定勝負 → ⚡ 卡帶主角名', () => {

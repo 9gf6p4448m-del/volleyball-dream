@@ -108,31 +108,32 @@ export function overBlockerHands(ballY, blockerReach) {
 }
 
 /**
- * 邊緣區 ＋ 屬性擲骰的結果分類。
+ * §十-4 第二階段：幾何擦手分區——接觸點落在帶（手）的哪個區？
  *
- * ⚠ **階段一是退化實例化**：真正的模型（憲法 §三.1）是「落在帶的**邊緣**＝擦手」，
- * 也就是 `edge` 應該由 `contact.dx` 相對於 `halfWidth` 的位置決定——**幾何的**。
- * 但改制前的擦手完全不吃幾何：它是同一個 `roll` 上切出來的一段機率帶
- * （`roll >= chance` 且 `roll < chance + 0.22×timingMul`），跟 dx 一點關係都沒有。
- * 為了讓階段一逐值等價，這裡**照抄那個機率帶**，只是給了它名字。
+ * 憲法 §三.1 的真模型「落在帶的邊緣＝擦手」在此落地，取代改制前照抄的機率帶
+ * （舊 `blockOutcome`：單一 roll 三段切，擦手與 dx 一點關係都沒有——§十 階段一的
+ * 退化實例化，債登記於 `phase5-section10-test-triage.md` §四，2026-07-31 清償）。
  *
- * 階段五把 `edgeWidth` 換成幾何邊緣區時，會有一個必然的連帶效應：
- * **站在帶正中心（dx=0）將永不擦手**——三支既有治具正好都站在 dx=0
- * （`block-graze.test.mjs:19,111`／`hero-cards.test.mjs:79`），屆時必須改治具。
- * 已登記於 `docs/phase5-section10-test-triage.md` §四。
+ * 兩個幾何量、三個區（top 優先於 side——指尖是手的最邊緣）：
+ *   - **top**（擦頂）：球在「手頂邊＋球半徑」往下 `topBand` 的窄條內＝勉強構到的
+ *     指尖帶。呼叫端閘門（`overBlockerHands`）保證 ballY ≤ handTop＋半徑，
+ *     所以這條窄條就是可觸範圍的最上緣。
+ *   - **side**（擦側）：`dx` 落在帶半寬最外 `edgeFrac` 比例的側緣。
+ *   - **body**（手身）：其餘——攔死與否交給屬性擲骰（第三層分工不變）。
  *
- * 單一 `roll` 依序切三段是刻意的：rand 呼叫數恆為一次，rng 流與二態時代同節奏。
+ * 必然連帶（債註記言中）：站在帶正中心（dx=0）**低球**永不擦手——但貼手頂的球
+ * 在任何 dx 都可能擦頂（top 區不吃 dx）。
  *
- * @param {number} roll      一次 rand()（0..1）
- * @param {number} chance    solid 機率（屬性 × 時機 × 情蒐）。⚠ 7.2 查證（07-30）：
- *                            solid ≠ 攔死得分——它是把球軟彈回攻方上空（game.js tryBlock
- *                            的 vz×0.35＋vy=2.2），實測僅 ~25% 最終成為得分；
- *                            「攔網得分」由 growth.js blockPoints 依 SCORE 歸因另計
- * @param {number} edgeWidth 擦手帶寬（現＝ BLOCK_GRAZE_CHANCE × timingMul）
- * @returns {'solid'|'graze'|'clean'}
+ * @param {number} dx        球過網 x 與接觸者手中心的距離（`bandContact` 給的）
+ * @param {number} halfWidth 帶半寬
+ * @param {number} ballY     球過網瞬間高度
+ * @param {number} handTop   接觸者當下手頂邊（`blockTopEdge`，不含球半徑）
+ * @param {number} edgeFrac  側緣區佔半寬比例（TUNING.BLOCK_EDGE_FRAC）
+ * @param {number} topBand   擦頂窄條厚度 m（TUNING.BLOCK_TOP_BAND）
+ * @returns {'top'|'side'|'body'}
  */
-export function blockOutcome({ roll, chance, edgeWidth }) {
-  if (roll < chance) return 'solid';
-  if (roll < chance + edgeWidth) return 'graze';
-  return 'clean';
+export function classifyBlockContact({ dx, halfWidth, ballY, handTop, edgeFrac, topBand }) {
+  if (ballY > handTop + BALL.RADIUS - topBand) return 'top';
+  if (dx > halfWidth * (1 - edgeFrac)) return 'side';
+  return 'body';
 }

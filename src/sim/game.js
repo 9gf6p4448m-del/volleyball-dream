@@ -12,7 +12,7 @@ import {
 } from './player.js';
 import { reachVolumeFor, ballInReach } from './reach.js';
 import {
-  BLOCK_HALF_WIDTH, buildBand, bandContact, overBlockerHands, blockOutcome,
+  BLOCK_HALF_WIDTH, buildBand, bandContact, overBlockerHands, classifyBlockContact,
 } from './blockBand.js';
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
@@ -115,10 +115,13 @@ export const TUNING = {
   BLOWN_CHANCE_MAX: 0.35,   // 機率上限（最惡劣品質）
   BLOWN_SPIKE_PRESSURE: 1.2, // 重扣壓迫：dig 的爆接判定品質加乘（只影響爆接、不動散佈）
   BLOWN_APEX: 1.9,          // 噴射球弧頂（低平＝滯空短、追起來像救火）
-  // 擦手（one-touch，07-23 拍板）：攔網三態的中間態——沒攔死但指尖擦到，
-  // 球改向擦進攔網方半場（不計觸球數；「touch！快救！」的真實攔網日常）
-  BLOCK_GRAZE_CHANCE: 0.22, // 擦手帶寬（攔死判定之後的第二段；不吃情蒐）
-  BLOCK_GRAZE_SLOW: 0.45,   // 擦手後穿越速度保留比（減速但仍常飛向深區/界外）
+  // 擦手（one-touch）：§十-4b 起改幾何分區（blockBand.js classifyBlockContact），
+  // 舊 BLOCK_GRAZE_CHANCE 機率帶退役。初值錨定＝總 graze 率≈改制前（每局 ~10.95 次，
+  // t10-4b 探針 M1 基準；Q4 裁定＝調參項不進驗收閘）
+  BLOCK_EDGE_FRAC: 0.15,    // 側緣區佔帶半寬比例（dx 落最外 15% ＝擦側）
+  BLOCK_TOP_BAND: 0.14,     // 擦頂窄條厚度 m（手頂邊＋球半徑往下算；0.15/0.14 掃描定＝graze 率 10.68/局 距錨 −2.5%）
+  BLOCK_GRAZE_SLOW: 0.45,   // 擦側後穿越速度保留比（減速但仍常飛向深區/界外）
+  BLOCK_GRAZE_TOP_SLOW: 0.75, // 擦頂後速度保留比（指尖擦過＝球保留大半前速衝深區/底線外）
   // §十 階段二 2-B：攔網時機不再是乘數。BLOCK_SWEET_MIN/MAX 與 LATE/EARLY_MUL
   // 四個常數連同 blockTimingMul() 一起拆掉——時機現在是幾何的（player.js
   // blockTopEdge：太早已下墜、太晚還在上升，兩者都表現為球到那一刻手不夠高）。
@@ -958,8 +961,9 @@ function tryBlock(state, toTeam, ev) {
     // 頂邊吃「起跳後經過幾 tick」（2-B 之前 blockTopEdge 忽略 t＝退化成跳躍頂點，
     // 行為與改制前逐值相同；換的是介面不是數值）。W7：累了跳不高
     const airT = state.tick - actor.blockStartTick;
-    if (overBlockerHands(b.y, blockTopEdge(p, airT, staminaPerfMul(state, p)))) continue;
-    members.push({ id: p.id, x: actor.x, p, actor });
+    const top = blockTopEdge(p, airT, staminaPerfMul(state, p));
+    if (overBlockerHands(b.y, top)) continue;
+    members.push({ id: p.id, x: actor.x, top, p, actor });
   }
   const band = buildBand(members, TUNING.BLOCK_REACH_X);
   const { inside, contact } = bandContact(band, b.x);
@@ -981,28 +985,30 @@ function tryBlock(state, toTeam, ev) {
   // 起跳太晚（手還沒到頂）與太早（已在下墜）都已經在上面的幾何閘門結算掉了——
   // 頂邊 `blockTopEdge(p, airT, ...)` 隨跳躍相位升降，手不夠高就直接 `continue`，
   // 根本走不到這裡。時機打折率＝把同一件事再算一次，那是兩套標準。
-  // 【第三層】屬性擲骰：`block` 屬性**只**決定碰到之後的結果分佈，不決定有沒有碰到
-  //（那是第一層幾何的事）。stage 5 情蒐讀取＝對被讀者的慣用線收攏
-  //（假動作的 deceive 骰在上方——騙贏免讀）
-  const chance = (0.12 + best.p.attributes.block * 0.004) * scoutBlockMul(state, toTeam);
-  // 【第二層】邊緣區：碰到的是不是邊緣＝擦手。**階段一是退化實例化**——
-  // 改制前的擦手不吃幾何，是同一個 roll 上切出來的機率帶，這裡照抄以保逐值等價；
-  // 階段五換成「落在帶的邊緣」的真幾何（見 blockBand.js blockOutcome 的說明）。
-  // 擦手帶寬不吃時機（2-B 起時機是幾何的）、不吃情蒐。
-  // 單一 roll 依序切三段：rand 呼叫數恆一次，rng 流與二態時代同節奏。
-  const outcome = blockOutcome({
-    roll: rand(state),
-    chance,
-    edgeWidth: TUNING.BLOCK_GRAZE_CHANCE,
+  // 【第二層】邊緣區（§十-4b 起真幾何）：擦到的是不是手的邊緣，由接觸點位置決定，
+  // 不再擲骰（blockBand.js classifyBlockContact；債清償——改制前是 roll 三段切
+  // 的機率帶，擦手與 dx 無關）。邊緣接觸只會擦、不會攔死。
+  const zone = classifyBlockContact({
+    dx: best.dx, halfWidth: band.halfWidth, ballY: b.y, handTop: best.top,
+    edgeFrac: TUNING.BLOCK_EDGE_FRAC, topBand: TUNING.BLOCK_TOP_BAND,
   });
-  if (outcome !== 'solid') {
-    // 擦手（one-touch）：沒攔死但指尖擦到——BLOCK_TOUCH 一樣不計 3 次觸球，
-    // 球減速＋上挑＋橫偏、續入攔網方半場（隊友三次觸球去救；常飛深區/出界＝
-    // 追出自由區救球的戲）
-    if (outcome === 'clean') return false; // 完全沒碰，乾淨過網
-    b.vz *= TUNING.BLOCK_GRAZE_SLOW;
-    b.vx = b.vx * 0.5 + (blownHash(state, `${best.p.id}:gx`) - 0.5) * 3;
-    b.vy = 1.6 + blownHash(state, `${best.p.id}:gy`) * 1.2;
+  if (zone !== 'body') {
+    // 擦手（one-touch）：沒攔死但擦到手的邊緣——BLOCK_TOUCH 一樣不計 3 次觸球。
+    // 方向性偏折（§十-4b）：擦到哪裡決定飛去哪裡——「打手出界」的物理成因在此。
+    if (zone === 'top') {
+      // 擦頂＝指尖帶：球保留大半前速衝攔網方深區／底線外，微上挑
+      b.vz *= TUNING.BLOCK_GRAZE_TOP_SLOW;
+      b.vx = b.vx * 0.9 + (blownHash(state, `${best.p.id}:gx`) - 0.5) * 1.0;
+      b.vy = 0.9 + blownHash(state, `${best.p.id}:gy`) * 0.8;
+    } else {
+      // 擦側＝帶外緣：球被向外側撥（撥向球相對手中心的那一側）——改變救球幾何，
+      // 多數仍留場內可救（探針實測未觸出界僅 ~6%）；出側線屬長尾
+      const dir = Math.sign(b.x - best.x)
+        || (blownHash(state, `${best.p.id}:gd`) < 0.5 ? -1 : 1);
+      b.vz *= TUNING.BLOCK_GRAZE_SLOW;
+      b.vx = dir * (1.2 + blownHash(state, `${best.p.id}:gx`) * 2.0);
+      b.vy = 1.2 + blownHash(state, `${best.p.id}:gy`) * 1.0;
+    }
     const r = state.rally;
     r.touches = 0;
     r.lastTouchTeam = toTeam;
@@ -1010,9 +1016,17 @@ function tryBlock(state, toTeam, ev) {
     r.deceiveP = 0;
     r.profile = 'arc';
     r.flightId += 1;
-    ev.push({ type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id, graze: true });
+    ev.push({
+      type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id,
+      graze: true, zone,
+    });
     return true;
   }
+  // 【第三層】屬性擲骰（手身區才走到這）：`block` 屬性**只**決定碰到之後的結果分佈，
+  // 不決定有沒有碰到（那是第一層幾何的事）。stage 5 情蒐讀取＝對被讀者的慣用線收攏
+  //（假動作的 deceive 骰在上方——騙贏免讀）
+  const chance = (0.12 + best.p.attributes.block * 0.004) * scoutBlockMul(state, toTeam);
+  if (rand(state) >= chance) return false; // 手身也沒成形（手型/時差）＝乾淨過網
 
   // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零
   b.vz = -b.vz * 0.35;

@@ -8,14 +8,19 @@ import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { reachVolumeFor, ballInReach, REACH_ACTION } from '../src/sim/reach.js';
 
 // B 隊扣球即將過網、A3（前排）已起跳開攔網窗
-function blockRig(seed) {
+// §十-4b 幾何擦手治具修（2026-07-31）：新模型下 dx＝|actor.x − ball.x| 決定碰到的是不是
+// 帶邊緣（classifyBlockContact 的 side 判準）。A3 固定站 x=0，實測（真跑 sim 掃描）：
+//   dx=0（bx 預設）→ 恆落在 body 區，攔死／乾淨過網由屬性擲骰決定（沿用舊行為）
+//   dx∈[0.43,0.5]（帶半寬 0.5、側緣 15% ⇒ 門檻 0.425）→ 恆落在 side 區＝必為擦手
+// 帶 bx 參數就是拿這條幾何關係換出三態，取代退役的機率帶（blockOutcome）。
+function blockRig(seed, bx = 0) {
   const g = createGame({ seed });
   g.phase = 'rally';
   Object.assign(g.rally, {
     profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
   });
   const b = g.ball;
-  b.x = 0; b.y = 2.75; b.z = -0.35; b.vx = 0; b.vy = -1.5; b.vz = 9; // 衝向 A 半場
+  b.x = bx; b.y = 2.75; b.z = -0.35; b.vx = 0; b.vy = -1.5; b.vz = 9; // 衝向 A 半場
   b.px = b.x; b.py = b.y; b.pz = b.z;
   g.actors.A3.x = 0; g.actors.A3.z = 0.5; // 網前對位
   // 先開攔網窗（blockStartTick），再逐 tick 推進到過網
@@ -31,6 +36,13 @@ test('三態攔網：掃種子應同時出現攔死（彈回攻方）、擦手�
   let solid = 0;
   let graze = 0;
   let clean = 0;
+  const assertGrazeShape = (g, bt) => {
+    assert.equal(g.rally.touches, 0, '擦手不計觸球數（touches 歸零）');
+    assert.equal(g.rally.lastTouchTeam, 'A', '擦手記攔網方最後觸球');
+    assert.ok(g.ball.vz > 0, '擦手球續入攔網方（A）半場，非彈回');
+    assert.ok(g.ball.vy > 0, '擦手球上挑（可救的弧）');
+  };
+  // 組一：dx=0（帶正中心）＝body 區——攔死／乾淨過網由屬性擲骰決定（沿用舊掃描）
   for (let seed = 1; seed <= 120; seed += 1) {
     const g = blockRig(seed);
     const bt = g.events.find((e) => e.type === 'BLOCK_TOUCH');
@@ -38,14 +50,19 @@ test('三態攔網：掃種子應同時出現攔死（彈回攻方）、擦手�
       clean += 1;
     } else if (bt.graze) {
       graze += 1;
-      assert.equal(g.rally.touches, 0, '擦手不計觸球數（touches 歸零）');
-      assert.equal(g.rally.lastTouchTeam, 'A', '擦手記攔網方最後觸球');
-      assert.ok(g.ball.vz > 0, '擦手球續入攔網方（A）半場，非彈回');
-      assert.ok(g.ball.vy > 0, '擦手球上挑（可救的弧）');
+      assertGrazeShape(g, bt);
     } else {
       solid += 1;
       assert.ok(g.ball.vz < 0, '攔死球彈回攻方（B）半場');
     }
+  }
+  // 組二：dx∈[0.43,0.5]＝side 區——幾何上必為擦手（body 區永遠不會自己冒出擦手，見治具註解）
+  for (let seed = 1; seed <= 20; seed += 1) {
+    const g = blockRig(seed, 0.45);
+    const bt = g.events.find((e) => e.type === 'BLOCK_TOUCH');
+    assert.ok(bt && bt.graze && bt.zone === 'side', `dx=0.45 應必為擦側（種子 ${seed}）`);
+    graze += 1;
+    assertGrazeShape(g, bt);
   }
   assert.ok(solid >= 5, `攔死應出現（實得 ${solid}）`);
   assert.ok(graze >= 5, `擦手應出現（實得 ${graze}）`);
@@ -99,14 +116,18 @@ test('BLOCK_DECEIVED 事件：假動作騙過攔網手＝發觀測事件（帶 b
 // ---- 主角（A2）攔防雙路驗證（07-24 Sawmah：確認主角攔網真的碰得到球）----
 
 // B 隊扣球衝向 A2 防區；byPlayer 控制 A2 要攔網（開窗）還是退下防守（無攔網 intent）
-function playerRig(seed, { block }) {
+// bx：球過網 x（決定 dx＝|actor.x−ball.x|，見上方 blockRig 註解同一組幾何關係）——
+// 本測要 touched（碰到手）與 clean（乾淨過網）都出現，真跑 sim 掃描顯示 A2 這個站位
+// 貼中心（dx=0）幾乎恆落在 top 擦頂帶（必碰）、拉到帶外（dx>0.5）則幾何上必穿過去，
+// 兩者交替餵才能同時湊出「碰得到」與「也會漏」兩態（單一 dx 值掃種子湊不出來）。
+function playerRig(seed, { block, bx = 0 }) {
   const g = createGame({ seed });
   g.phase = 'rally';
   Object.assign(g.rally, {
     profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
   });
   const b = g.ball;
-  b.x = 0; b.y = 2.75; b.z = -0.35; b.vx = 0; b.vy = -1.5; b.vz = 9;
+  b.x = bx; b.y = 2.75; b.z = -0.35; b.vx = 0; b.vy = -1.5; b.vz = 9;
   b.px = b.x; b.py = b.y; b.pz = b.z;
   if (block) {
     g.actors.A2.x = 0; g.actors.A2.z = 0.5; // 網前對位（第一視角攔網模式的站位）
@@ -122,7 +143,10 @@ test('主角攔網生效：A2 開窗對位＝與 AI 同一條 tryBlock 路——
   let touched = 0;
   let clean = 0;
   for (let seed = 1; seed <= 120; seed += 1) {
-    const g = playerRig(seed, { block: true });
+    // 奇數種子貼中心（dx=0，幾何上必碰到手）、偶數種子拉出帶外（dx=0.6＞半寬 0.5，
+    // 幾何上必穿過去）——交替就能同時驗到「碰得到」與「也會漏」兩態。
+    const bx = seed % 2 === 0 ? 0.6 : 0;
+    const g = playerRig(seed, { block: true, bx });
     stepGame(g, [createIntent({ playerId: 'A2', tick: g.tick, action: 'block' })]);
     for (let i = 0; i < 20 && g.phase === 'rally' && g.ball.z < 1.5 && g.ball.vz > 0; i += 1) {
       stepGame(g, [createIntent({ playerId: 'A2', tick: g.tick, action: 'block' })]);
@@ -135,9 +159,9 @@ test('主角攔網生效：A2 開窗對位＝與 AI 同一條 tryBlock 路——
       clean += 1;
     }
   }
-  // 攔死+擦手合計應在合理帶（chance~0.35+graze~0.2×時機檔）——「根本碰不到球」＝不成立
+  // 奇偶各 60 球，幾何上分別必中／必空——「根本碰不到球」與「攔網等於必中」兩者都不成立
   assert.ok(touched >= 25, `120 球主角應碰到相當比例（實得 ${touched}）`);
-  assert.ok(clean >= 25, `也有乾淨過網（機率制非必中，實得 ${clean}）`);
+  assert.ok(clean >= 25, `也有乾淨過網（幾何上有寬有窄，非必中，實得 ${clean}）`);
 });
 
 test('主角退下防守：不按攔網＝零幻影攔網觸球，球過網後 A2 正常接第一觸', () => {
@@ -164,13 +188,16 @@ test('主角退下防守：不按攔網＝零幻影攔網觸球，球過網後 A
 });
 
 test('擦手決定論：同種子重跑逐值一致', () => {
+  // dx=0.45（side 區）幾何上必為擦手（見 blockRig 註解）——不必再靠 dx=0 掃到才驗證，
+  // 兩次重跑逐值一致這件事本身才是本測要釘的行為。
   for (let seed = 1; seed <= 120; seed += 1) {
-    const a = blockRig(seed);
+    const a = blockRig(seed, 0.45);
     const bt = a.events.find((e) => e.type === 'BLOCK_TOUCH');
     if (bt?.graze) {
-      const b = blockRig(seed);
+      const b = blockRig(seed, 0.45);
       const bt2 = b.events.find((e) => e.type === 'BLOCK_TOUCH');
       assert.equal(bt2?.graze, true);
+      assert.equal(bt2?.zone, bt.zone);
       assert.equal(a.ball.vx, b.ball.vx);
       assert.equal(a.ball.vy, b.ball.vy);
       return;

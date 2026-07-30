@@ -7,7 +7,9 @@
 // 刻意不套用 tryBlock 內的 `overBlockerHands` continue：那道閘正是我們要量的
 // margin 本身，套用了就會把「手不夠高」的樣本先過濾掉，M2 就量不到真正的分佈。
 //
-// 跑法：node tools/t10-4b-blockout-probe.mjs [局數=40]
+// 跑法：node tools/t10-4b-blockout-probe.mjs [局數=40] [edgeFrac] [topBand]
+//   後兩參數（選填）＝Q4 錨定掃描用，in-process 覆寫 TUNING.BLOCK_EDGE_FRAC /
+//   BLOCK_TOP_BAND（同 t10-4-jumpcount-frozen 的 TUNING patch 法，src/ 零改動）
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { blockTopEdge } from '../src/sim/player.js';
@@ -16,6 +18,8 @@ import { otherTeam } from '../src/sim/rotation.js';
 import { BALL, COURT } from '../src/sim/constants.js';
 
 const SETS = Number(process.argv[2] ?? 40);
+if (process.argv[3] != null) TUNING.BLOCK_EDGE_FRAC = Number(process.argv[3]);
+if (process.argv[4] != null) TUNING.BLOCK_TOP_BAND = Number(process.argv[4]);
 
 // 扣球型態分組：quick 保留；left/cross/right 併為兩翼；pipe/dball 併為後排。
 // 'tip' 另外用出手品質（timing<=0.45）判定，同 classifySpikeZone 的吊球門檻
@@ -92,7 +96,7 @@ function runSet(seed, out) {
         }
       }
       if (e.type === 'BLOCK_TOUCH' && e.graze) {
-        openGrazes.push({ tick: e.tick, team: e.team, ticksToNext: null, untouched: null });
+        openGrazes.push({ tick: e.tick, team: e.team, zone: e.zone ?? null, ticksToNext: null, untouched: null });
         grazeCountThisSet += 1;
       }
 
@@ -122,9 +126,12 @@ function runSet(seed, out) {
         }
         for (const g of openGrazes) {
           if (g.ticksToNext == null) { g.ticksToNext = e.tick - g.tick; g.untouched = true; }
+          // 出界方向分類（Q3① 驗收證據）：側線＝|x|>半場寬、否則深區/底線
+          const outKind = e.reason !== 'OUT' ? null
+            : (Math.abs(game.ball.x) > COURT.WIDTH / 2 ? 'sideline' : 'deep');
           out.grazeRecords.push({
             reason: e.reason, winner, winnerIsAttacker: winner === otherTeam(g.team),
-            ticksToNext: g.ticksToNext, untouched: g.untouched,
+            zone: g.zone, outKind, ticksToNext: g.ticksToNext, untouched: g.untouched,
           });
         }
         openGrazes = [];
@@ -164,6 +171,20 @@ if (grazes.length) {
   for (const g of grazes) reasons[g.reason] = (reasons[g.reason] ?? 0) + 1;
   console.log('死球原因分布：', Object.entries(reasons)
     .map(([r, n]) => `${r}=${n}(${pctStr(n, grazes.length)})`).join('  '));
+  const zones = {};
+  for (const g of grazes) zones[g.zone ?? 'n/a'] = (zones[g.zone ?? 'n/a'] ?? 0) + 1;
+  console.log('zone 分佈：', Object.entries(zones)
+    .map(([z, n]) => `${z}=${n}(${pctStr(n, grazes.length)})`).join('  '));
+  for (const zk of ['top', 'side']) {
+    const zg = grazes.filter((g) => g.zone === zk);
+    if (!zg.length) continue;
+    const zUntouchedOut = zg.filter((g) => g.untouched && g.reason === 'OUT');
+    const zAtkWin = zg.filter((g) => g.winnerIsAttacker).length;
+    const deep = zUntouchedOut.filter((g) => g.outKind === 'deep').length;
+    const sideL = zUntouchedOut.filter((g) => g.outKind === 'sideline').length;
+    console.log(`  ${zk}：攻方勝 ${pctStr(zAtkWin, zg.length)}　未觸即 OUT ${pctStr(zUntouchedOut.length, zg.length)}`
+      + `（深區/底線 ${deep}　側線 ${sideL}）`);
+  }
   const untouched = grazes.filter((g) => g.untouched);
   const untouchedOut = untouched.filter((g) => g.reason === 'OUT').length;
   const untouchedIn = untouched.filter((g) => g.reason === 'BALL_IN').length;
@@ -215,13 +236,12 @@ zLine('扣球觸球瞬間扣球者 |z| ', out.m3SpikerZ);
 console.log('\n--- M4 常數與掛點盤點 ---');
 console.log(`TUNING.BLOCK_REACH_X (=BLOCK_HALF_WIDTH) = ${TUNING.BLOCK_REACH_X}   （src/sim/game.js:61，真相在 src/sim/blockBand.js:37-42）`);
 console.log(`TUNING.BLOCK_WINDOW              = ${TUNING.BLOCK_WINDOW}   （src/sim/game.js:56）`);
-console.log(`TUNING.BLOCK_GRAZE_CHANCE        = ${TUNING.BLOCK_GRAZE_CHANCE}   （src/sim/game.js:120）`);
-console.log(`TUNING.BLOCK_GRAZE_SLOW          = ${TUNING.BLOCK_GRAZE_SLOW}   （src/sim/game.js:121）`);
-console.log(`solid 機率公式 chance = 0.12 + block×0.004（×scoutBlockMul）   （src/sim/game.js:987）`);
-console.log(`blockOutcome 機率帶（roll<chance→solid／roll<chance+edgeWidth→graze／else clean）`
-  + `   （src/sim/blockBand.js:134-138）`);
-console.log(`擦手偏折公式（vz×=BLOCK_GRAZE_SLOW；vx=vx×0.5+hash偏移；vy=1.6+hash×1.2）`
-  + `   （src/sim/game.js:1003-1005）`);
+console.log(`TUNING.BLOCK_EDGE_FRAC           = ${TUNING.BLOCK_EDGE_FRAC}   （§十-4b 側緣區佔半寬比例）`);
+console.log(`TUNING.BLOCK_TOP_BAND            = ${TUNING.BLOCK_TOP_BAND}   （§十-4b 擦頂窄條厚度 m）`);
+console.log(`TUNING.BLOCK_GRAZE_SLOW          = ${TUNING.BLOCK_GRAZE_SLOW}   擦側速度保留比`);
+console.log(`TUNING.BLOCK_GRAZE_TOP_SLOW      = ${TUNING.BLOCK_GRAZE_TOP_SLOW}   擦頂速度保留比`);
+console.log(`solid 機率公式 chance = 0.12 + block×0.004（×scoutBlockMul，手身區才擲）`);
+console.log(`幾何擦手分區 classifyBlockContact（top/side/body）   （src/sim/blockBand.js 尾部）`);
 console.log(`isFrontRowOf（2/3/4 號位前排判定，未 export）   （src/sim/game.js:1032-1036）`);
 console.log(`tryBlock 幾何閘門＋blockTopEdge 高度閘（overBlockerHands continue）`
   + `   （src/sim/game.js:946-1030，閘門在 953-964）`);
