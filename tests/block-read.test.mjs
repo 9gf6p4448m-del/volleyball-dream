@@ -9,6 +9,7 @@ import {
 } from '../src/sim/blockRead.js';
 import { attackZonesFor } from '../src/input/attackZones.js';
 import { isFrontRow } from '../src/sim/rotation.js';
+import { COURT } from '../src/sim/constants.js';
 
 // 佈景：B 隊持球佈陣中、球高飛不落地 → A 隊前排貼網攔網、後排走 dig 收縮
 // （與 tests/l2-scheme.test.mjs「blockScheme 站位幾何」同一組）
@@ -137,17 +138,24 @@ test('§12-10 連動：玩家封直線 → 後排陣型可見偏斜線（實跑�
   assert.equal(line.reads.at(-1), 'line');
   assert.equal(cross.reads.at(-1), 'cross');
   // 球在 x=+2.5（＝攻擊手的直線側），故封直線＝後排讓開直線、整體往 −x（斜線側）收
+  //
+  // D-1（Phase 5 W2 掃尾-11，07-30）：digTargetFor 現在會把收縮目標夾在場地內
+  // （clampCourtX；修前 A1 在本情境會被叫到 x≈5.2，出界）。貼邊球員（如 A1）被夾住後，
+  // 移動量會小於未夾限時的量——只要目標真的已經頂到邊界，視為「已盡力收到底」也算過，
+  // 不強求跨過場地邊界的位移量
+  const lim = COURT.WIDTH / 2 - 0.4;
+  const atLim = (x) => Math.abs(Math.abs(x) - lim) < 1e-6;
   for (let i = 0; i < none.back.length; i += 1) {
     const n = none.back[i];
     const l = line.back[i];
     const c = cross.back[i];
     assert.equal(n.id, l.id);
-    assert.ok(l.x < n.x - 1.0,
-      `${n.id} 封直線時後排應往斜線側收（${l.x.toFixed(2)} vs 基準 ${n.x.toFixed(2)}）`);
-    assert.ok(c.x > n.x + 1.0,
-      `${n.id} 封斜線時後排應往直線側收（${c.x.toFixed(2)} vs 基準 ${n.x.toFixed(2)}）`);
-    assert.ok(c.x - l.x > 2.0,
-      `${n.id} 兩情境的實際座標差應肉眼可見（Δx=${(c.x - l.x).toFixed(2)}m）`);
+    assert.ok(l.x < n.x - 1.0 || atLim(l.x),
+      `${n.id} 封直線時後排應往斜線側收，或已頂到場地邊界（${l.x.toFixed(2)} vs 基準 ${n.x.toFixed(2)}）`);
+    assert.ok(c.x > n.x + 1.0 || atLim(c.x),
+      `${n.id} 封斜線時後排應往直線側收，或已頂到場地邊界（${c.x.toFixed(2)} vs 基準 ${n.x.toFixed(2)}）`);
+    assert.ok(c.x - l.x > 2.0 || atLim(l.x) || atLim(c.x),
+      `${n.id} 兩情境的實際座標差應肉眼可見，或至少一側已頂到場地邊界（Δx=${(c.x - l.x).toFixed(2)}m）`);
   }
 });
 

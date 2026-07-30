@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../src/sim/game.js';
 import { digTargetFor } from '../src/sim/ai.js';
+import { COURT } from '../src/sim/constants.js';
 import {
   spikeBiasOf, digSuggestionFor, digReadCorrect, MARK_MIN_SPIKES,
 } from '../src/input/liberoRead.js';
@@ -24,6 +25,31 @@ test('digTargetFor：null＝現行收縮；line/cross 沿球側走廊加/反移�
   assert.ok(tip.z < base.z, '守吊球應前壓');
   assert.equal(tip.x, base.x);
   assert.deepEqual(digTargetFor(game, 'A', 'A5', 'line'), line); // 決定論
+});
+
+// D-1（Phase 5 W2 掃尾-11）：digTargetFor 回傳 d.x + shift 無場地夾限——對照攔網手
+// 一律 clampCourtX（ai.js:1578-1580）才寫回世界座標。後排偏好槽在 ±3（DUTY_SLOTS），
+// 'line'/'cross' bias 額外再收 ±2.2，球側全滿時 3 + 2.2 = 5.2 > COURT.WIDTH/2-0.4=4.1
+// ⇒ 收縮指令會把人叫到界外。掃過全員×全 bias×球在兩側極端，驗「目標必落在場內」
+test('D-1：digTargetFor 回傳必須夾在場地內（同 clampCourtX 語意），收縮指令不得叫人出界', () => {
+  const game = createGame({ seed: 2 });
+  const lim = COURT.WIDTH / 2 - 0.4;
+  const biases = [null, 'line', 'cross', 'tip'];
+  const ballXs = [-9, -4.5, -2.5, 0, 2.5, 4.5, 9];
+  for (const team of ['A', 'B']) {
+    for (const playerId of game.match.rotations[team]) {
+      for (const bx of ballXs) {
+        game.ball.x = bx;
+        for (const bias of biases) {
+          const t = digTargetFor(game, team, playerId, bias);
+          assert.ok(
+            t.x >= -lim - 1e-9 && t.x <= lim + 1e-9,
+            `team=${team} player=${playerId} ball.x=${bx} bias=${bias}：目標 x=${t.x.toFixed(2)} 出界（限 ±${lim}）`,
+          );
+        }
+      }
+    }
+  }
 });
 
 test('習慣標記：樣本門檻與佔比門檻、無標記建議守斜線、標記優先', () => {

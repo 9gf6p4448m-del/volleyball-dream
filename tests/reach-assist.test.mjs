@@ -1,6 +1,7 @@
-// 夠球視覺補償 — 純函式驗收（07-29）
+// 夠球視覺補償 — 純函式驗收（07-29；07-30 補窗門動作別校準）
 // 起因：Sawmah 試玩「舉球跟接球現在會還沒碰到手上就接起來，扣球也是」。
-// sim 判定半徑 REACH_RADIUS=1.3m 不動（平衡命脈），改在表現層讓人去夠球。
+// sim 觸球判定半徑不由本層校準（平衡命脈），改在表現層讓人去夠球；07-30 起
+// 窗門全開半徑改吃 reachRadiusFor（依動作別＋當前身高），不再是脫鉤的flat 常數。
 // 驗收五件事：①單調 ②有上限 ③球就在手上時零偏置 ④左右對稱 ⑤時間包絡連續且窗外為 0，
 // 外加骨架估算（handPos）與座標轉換的回歸——手的位置估錯過一次（忽略肘彎高估 0.26m，
 // 導致接球被誤判成「手已經到球了」而完全不補償），故單獨立測。
@@ -11,6 +12,8 @@ import {
   REACH, reachBias, reachWindow, applyReachBias, handPos, armAimX,
   localBallOffset, worldReachOffset,
 } from '../src/render/reachAssist.js';
+import { reachRadiusFor, REACH_ACTION } from '../src/sim/reach.js';
+import { TUNING } from '../src/sim/game.js';
 
 const H = 1.85; // 基準身高
 // 「手臂完全垂下、軀幹直立」的基準姿勢——手正好在身體中線上，fwd 直接就是手到球的落差，
@@ -236,9 +239,12 @@ test('高度閘：球高過手時前傾收掉（不然只會讓落差更大）�
 // ---- ⑤ 時間包絡 ----
 
 test('包絡：窗內為 1、窗外為 0、中間單調下降', () => {
+  // 07-30：水平全開半徑改吃 reachRadiusFor（動作別＋當前身高）單一真相，不再是
+  // REACH.WINDOW_FULL 這種脫鉤常數——這裡用同一份函式重算期望值，而非另立magic number
+  const full = reachRadiusFor(REACH_ACTION.SPIKE, TUNING, H); // reachWindow 預設動作＝SPIKE
   assert.equal(reachWindow(0, 1.2, H), 1, '球在身上＝窗全開');
-  assert.equal(reachWindow(REACH.WINDOW_FULL, 1.2, H), 1, '判定半徑處仍全開');
-  assert.equal(reachWindow(REACH.WINDOW_FADE, 1.2, H), 0, '淡出距離外＝關閉');
+  assert.equal(reachWindow(full, 1.2, H), 1, '可及半徑處仍全開');
+  assert.equal(reachWindow(full + REACH.WINDOW_FADE_PAD, 1.2, H), 0, '淡出距離外＝關閉');
   assert.equal(reachWindow(50, 1.2, H), 0);
   let prev = 1.0000001;
   for (let d = 0; d <= 3; d += 0.05) {
@@ -247,6 +253,23 @@ test('包絡：窗內為 1、窗外為 0、中間單調下降', () => {
     assert.ok(w >= 0 && w <= 1);
     prev = w;
   }
+});
+
+test('包絡：全開半徑依動作別而不同（接 0.38H ＜ 舉 0.45H ＜ 扣 0.55H），且隨身高縮放', () => {
+  const fullRecv = reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, H);
+  const fullSet = reachRadiusFor(REACH_ACTION.SET, TUNING, H);
+  const fullSpike = reachRadiusFor(REACH_ACTION.SPIKE, TUNING, H);
+  assert.ok(fullRecv < fullSet && fullSet < fullSpike, '三動作可及半徑應嚴格遞增');
+  // 剛好卡在 receive 全開半徑之外、但仍在 spike 全開半徑內的距離：
+  // 用 receive 動作呼叫應已開始淡出，用 spike 動作呼叫仍應全開
+  const d = (fullRecv + fullSpike) / 2;
+  assert.ok(d > fullRecv && d < fullSpike, '測試點應介於兩個半徑之間（前提自查）');
+  assert.ok(reachWindow(d, 1.2, H, REACH_ACTION.RECEIVE) < 1, 'receive 半徑較窄，這裡不該仍全開');
+  assert.equal(reachWindow(d, 1.2, H, REACH_ACTION.SPIKE), 1, 'spike 半徑夠寬，這裡仍應全開');
+  // 未指定動作＝預設 SPIKE（三動作中最寬，寧可窗開早也不要漏接）
+  assert.equal(reachWindow(d, 1.2, H), reachWindow(d, 1.2, H, REACH_ACTION.SPIKE));
+  // 隨身高縮放：高個子的全開半徑不應更小
+  assert.ok(reachRadiusFor(REACH_ACTION.SPIKE, TUNING, 1.95) >= reachRadiusFor(REACH_ACTION.SPIKE, TUNING, 1.7));
 });
 
 test('包絡：距離掃描無跳變（相鄰 1cm 的變化量 < 0.05）', () => {

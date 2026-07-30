@@ -1,10 +1,18 @@
 // 夠球視覺補償（表現層純函式；零 three.js／DOM 依賴，node 可直測）
 //
-// 為什麼有這一層（07-28 Sawmah 試玩：「舉球跟接球會還沒碰到手上就接起來，扣球也是」）：
-// sim 的觸球判定半徑 TUNING.REACH_RADIUS = 1.3m 很寬鬆——實測觸球瞬間球離球員中心的
-// 水平距離 receive p50 0.59m／set p50 0.95m／spike p50 1.05m，球在快一公尺外就轉向，
-// 看起來就是「沒碰到就接起來」。判定半徑是平衡命脈（本輪明令不校準），所以走表現層：
-// **讓人去夠球**——軀幹傾／轉＋手臂朝球延伸＋小幅根位移，三者疊加把手與球的落差縮小。
+// 為什麼還留著（07-30 kickoff-v2 §三之二 裁定 1：退場案被否決）：
+// sim 觸球判定收斂為「手點球體」（reach.js `reachRadiusFor`，t=1：接 0.38H／舉 0.45H／
+// 扣 0.55H）之後，貼邊率已全 0——但那是 sim 殼層座標的事。reach-probe 實測**手到
+// 球心**（表現層真正在乎的量）仍有落差：修前 p50 receive 0.75m／set 0.89m／
+// spike 0.78m，垂直分量主導（手比球低 0.57–0.76m，是動作編排的事，本層補不到）。
+// 本層把水平落差縮短後，修後 p50 receive 0.62m／set 0.74m／spike 0.63m
+// （各縮約 0.13–0.15m，−17~−19%；07-30 校準後 reach-probe n=7270 重測）
+// ——每球仍在實際幹活，不是化妝。
+// 憲法 §一.2 曾預告「收斂後這層不需要」，那是拿 sim 殼層的貼邊率（已全 0）
+// 誤推到表現層座標（A-8 跨座標誤推）——兩者不是同一個量，此節重測後以
+// kickoff-v2 §三之二為準：保留＋對齊校準（常數改吃 `reachRadiusFor` 單一真相，
+// 不再各自維護一份會過期的複製常數）。
+// 手段：**讓人去夠球**——軀幹傾／轉＋手臂朝球延伸＋小幅根位移，三者疊加把手與球的落差縮小。
 // 範式沿用魚躍飛撲（matchView 的 DIVE_LUNGE：sim 只有原地觸球，撲出去的距離全在表現層
 // 補、不寫回 sim）。魚躍本身已有自己的位移，不套本層（matchView 端以 divedUntil 擋掉）。
 //
@@ -12,11 +20,15 @@
 // 本檔對外一律講「本地偏移」：right＝球在角色右手側為正、fwd＝球在角色正前方為正。
 // 輸出則一律講「關節軸」：欄位名就是要寫進哪個關節的哪一軸（applyReachBias 直接套）。
 import { smoothstep } from './facing.js';
+import { reachRadiusFor, REACH_ACTION } from '../sim/reach.js';
+import { TUNING } from '../sim/game.js';
 
 export const REACH = {
   // ---- 時間包絡（用「球離球員多遠」當時鐘：球飛近→漸入、觸球後球飛離→漸出）----
-  WINDOW_FULL: 1.3,   // 這距離內＝窗全開（＝sim TUNING.REACH_RADIUS：判定半徑改了要同步）
-  WINDOW_FADE: 1.9,   // 這距離外＝完全關閉（中間 smoothstep 連續，無硬門檻）
+  // 水平全開半徑不再是這裡的常數——改吃 reachRadiusFor（sim/reach.js）單一真相，
+  // 在 reachWindow() 內依「動作別＋當前身高」即時算（見該函式）。這裡只留「全開
+  // 半徑之外再淡出多遠」這個口味值：淡出頻寬本身不是 sim 量，維持修前手感不動
+  WINDOW_FADE_PAD: 0.6,   // 全開半徑之外再多遠才完全關閉（中間 smoothstep 連續，無硬門檻）
   // 高度閘只為了濾掉「明顯不干我事」的高球（例如頭上 4m 飛過的傳球）——**不是**在模擬
   // 可及高度。它必須寬過 sim 真正會判觸球的高度（spike 的 maxY＝跳躍摸高，實測擊球點
   // p50 3.09m），否則正在扣的球會被自己的閘門關掉補償
@@ -28,8 +40,9 @@ export const REACH = {
   // ---- 手段一：小幅根位移（標籤／影子／鏡頭都吃 sim 位置，位移只給身體，故上限最緊）----
   ROOT_GAIN: 0.42,
   ROOT_MAX: 0.28,     // m（工單上限 0.35；取 0.28 留餘裕，屬可調口味值）
-  // 垂直伸展（＝root 位移的 y 分量）：實測觸球瞬間球心高出手掌 set 0.80m／spike 0.73m，
-  // 這一段任何「傾／轉／伸手」都補不到（前傾反而把手往下帶）。唯一的手段是整個人往上
+  // 垂直伸展（＝root 位移的 y 分量）：reach-probe 實測觸球瞬間球心高出手掌
+  // set p50 0.76m／spike p50 0.57m（07-30 手點收斂 t=1 後重測），這一段任何
+  // 「傾／轉／伸手」都補不到（前傾反而把手往下帶）。唯一的手段是整個人往上
   // 伸——真實排球本來就有 jump set／墊步伸展。只在「球高過手」時開，低手接球恆 0。
   // ★ 這是口味值：0＝完全關閉（只留水平補償）／0.30＝明顯踮腳伸展。見報告的取捨說明
   LIFT_GAIN: 0.42,
@@ -89,12 +102,20 @@ export function worldReachOffset(right, fwd, yaw) {
 /**
  * 時間包絡（0..1）：球在觸球窗內才夠球。距離用 smoothstep 淡入淡出＝沒有硬門檻，
  * 且球飛近時單調上升、觸球後球飛離時單調下降——peak 自然落在觸球那一瞬間。
+ *
+ * 水平全開半徑＝該動作在當前身高下的真實可及半徑（`reachRadiusFor` 單一真相，
+ * 07-30 校準）：這樣「窗全開」的邊界與 sim 真正判定觸球的邊界對齊，不再是脫鉤的
+ * 常數（舊版 1.3m 是已退場的 t=0 圓柱基底，幾何換了之後這個數字沒人維護就會飄）。
  * @param {number} dist 球到球員的水平距離（m）
  * @param {number} up 球心相對腳底的高度（m）——含跳躍（腳底＝root.position.y）
- * @param {number} height 球員身高（m）
+ * @param {number} height 球員身高（m）——已知即真實身高（時變屬性，逐次呼叫算，不快取）
+ * @param {string} [action] REACH_ACTION 之一（見 sim/reach.js）；呼叫端拿不到精確
+ *   動作別時預設 SPIKE——三動作中可及半徑最寬，寧可窗開得早一點，也不要讓真正
+ *   需要補償的動作被過窄的窗關掉
  */
-export function reachWindow(dist, up, height) {
-  const wDist = 1 - smoothstep(REACH.WINDOW_FULL, REACH.WINDOW_FADE, dist);
+export function reachWindow(dist, up, height, action = REACH_ACTION.SPIKE) {
+  const full = reachRadiusFor(action, TUNING, height);
+  const wDist = 1 - smoothstep(full, full + REACH.WINDOW_FADE_PAD, dist);
   const top = height * REACH.TOP_MUL;
   const wUp = 1 - smoothstep(top, top + REACH.TOP_FADE, up);
   return wDist * wUp;

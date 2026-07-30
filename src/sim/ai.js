@@ -705,8 +705,12 @@ export function digTargetFor(game, team, playerId, bias = null) {
   } else if (bias === 'tip') {
     forward = 2.2; // 前壓短區（吊球斷點）
   }
+  // D-1（Phase 5 W2 掃尾-11，07-30）：收縮 shift 上限 ±2.2 是「相對偏好槽」的量，
+  // 偏好槽本身已在 ±3（DUTY_SLOTS）——兩者相加會出界（3+2.2=5.2 > 半場內界 4.1），
+  // 修前無場地夾限。比照攔網手同一份 clampCourtX（ai.js 下方），只夾 x（z 的前壓
+  // 不在本題範圍內，未一併處理）
   return {
-    x: d.x + TEAM_SIDE[team] * shift,
+    x: clampCourtX(d.x + TEAM_SIDE[team] * shift),
     z: d.z - TEAM_SIDE[team] * forward,
   };
 }
