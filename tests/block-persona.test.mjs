@@ -17,7 +17,8 @@ import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { blockCommitRead, blockCloseBudget, BLOCK_PERSONA } from '../src/sim/blockRead.js';
 import { isFrontRow } from '../src/sim/rotation.js';
-import { moveSpeed } from '../src/sim/player.js';
+import { moveSpeed, blockReach, blockTopEdge, standingReach } from '../src/sim/player.js';
+import { staminaPerfMul } from '../src/sim/stamina.js';
 import { SIM_DT } from '../src/sim/constants.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'sim');
@@ -307,6 +308,80 @@ test('blockCloseBudget：追得到／追不到由時間預算決定，且不預�
 // 量法：直接讀 sim 自己鎖存的那個值——`aiState.blockPlan.jumpAt` ＝ read 在
 // 「二傳觸球＋反應延遲」那一刻算出並鎖存的預測擊球 tick（前置量 0 ⇒ 兩者相等）。
 // 不重算、不另外呼叫 predictContactPoint，量的就是 sim 真的拿去用的數字。
+// ==== §十-4 收卷追加（07-31）：款 3 的**離地率**警報器 ====
+// 教訓：下面那條 B1 回歸閘守的是時序鏈（預測偏晚>飛行段），§十-4 驗收時它全程綠、
+// 表 E 的快攻 G% margin 卻「翻轉」了——後經 160 局重測證明 G% margin 在基準版只有
+// +0.5±2.1pp＝**空載體**（該指標已退役，紀錄見 kickoff §六.6）。款 3 的真載體是
+// 「read 不對快攻賭」＝離地率 gap：read 快攻離地率 ≪ commit（40 局實測 19.8% vs
+// 32.4%）。本閘直接守它：口徑抄自 tools/phase5-block-jumpcount-probe.mjs:64-148
+//（離開地板＝球過網 tick 時頂邊完成度 > 自身站立地板），固定 seeds 決定論不 flaky。
+// 注意取樣語意（與探針嚴格一致，實測對照過）：row 在 DEAD_BALL 才落帳，途中被防起
+// 再組織的攻擊會被下一次 set 觸球覆蓋 ⇒ 每個 rally 只記「最後一次攻擊」。改成
+// 每次過網都記會混入不同母體（差 +19pp，07-31 對照實測）。
+function quickAirShare(persona, sets) {
+  let above = 0;
+  let total = 0;
+  for (let s = 1; s <= sets; s += 1) {
+    const game = createGame({ seed: s * 101, setTarget: 25, aiProfiles: { B: { blockPersona: persona } } });
+    const ai = createAiState();
+    let cur = null;
+    let guard = 0;
+    const settle = () => {
+      if (cur && cur.kind === 'quick' && cur.crossTick != null) {
+        total += 1;
+        if (cur.topPct != null && cur.floorPct != null && cur.topPct > cur.floorPct) above += 1;
+      }
+    };
+    while (game.phase !== 'set_over' && guard < 400000) {
+      guard += 1;
+      const zBefore = game.ball.z;
+      const ev = stepGame(game, aiCollectIntents(game, ai, []));
+      for (const e of ev) {
+        if (e.type === 'TOUCH' && e.kind === 'set' && e.team === 'A' && e.touches === 2) {
+          const rot = game.match.rotations.B;
+          const mb = rot.find((id) => isFrontRow(rot, id)
+            && game.players[id].currentRole === 'middle') ?? null;
+          cur = mb ? { mb, kind: null, crossTick: null, topPct: null, floorPct: null } : null;
+        }
+        if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === 'A' && cur && cur.kind == null) {
+          cur.kind = ai.attackKind;
+        }
+        if (e.type === 'DEAD_BALL') {
+          settle();
+          cur = null;
+        }
+      }
+      if (!cur) continue;
+      if (cur.crossTick == null && zBefore > 0 && game.ball.z <= 0) {
+        cur.crossTick = game.tick;
+        const a = game.actors[cur.mb];
+        const p = game.players[cur.mb];
+        const jumpMul = staminaPerfMul(game, p);
+        const inWin = a.blockUntil >= game.tick;
+        const t = inWin ? game.tick - a.blockStartTick : null;
+        const apex = blockReach(p, jumpMul);
+        cur.topPct = apex > 0 && t != null ? blockTopEdge(p, t, jumpMul) / apex : null;
+        cur.floorPct = apex > 0 ? standingReach(p) / apex : null;
+      }
+    }
+  }
+  return { share: total ? (above / total) * 100 : NaN, n: total };
+}
+
+test('款3 離地率警報器：read 對快攻的離地率須明顯低於 commit（真載體）', () => {
+  const SETS = 8;
+  const read = quickAirShare('read', SETS);
+  const commit = quickAirShare('commit', SETS);
+  assert.ok(read.n >= 30 && commit.n >= 30,
+    `樣本足夠（read n=${read.n} / commit n=${commit.n}，門檻各 30）`);
+  const gap = commit.share - read.share;
+  // 門檻 +5pp：40 局實測 gap ≈ +12.6pp（凍結版）/+14.4pp（基準）；固定 seeds 決定論，
+  // 跌破 5pp＝read 開始對快攻賭＝款 3 行為載體弱化，必須回頭重看 R4 款 3
+  assert.ok(gap >= 5,
+    `commit 離地率 ${commit.share.toFixed(1)}% − read ${read.share.toFixed(1)}% = ${gap.toFixed(1)}pp < 5pp`
+    + '＝「read 不對快攻賭」的行為載體弱化，回頭重看 R4 款 3');
+});
+
 test('B1 回歸閘：read 對快攻的預測擊球 tick 仍偏晚（款 3 的載體不得消失）', () => {
   // 取樣到量（07-30 補償階段，同段 1 裁定 ④／jump-set 先例）：S1 後快攻只活在
   // perfect 檔（87%），3 局語料的快攻樣本掉到 16<20 ⇒ seed 依 k×101 順延、收滿
