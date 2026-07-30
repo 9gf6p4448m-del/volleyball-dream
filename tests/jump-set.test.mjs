@@ -169,6 +169,14 @@ function runSet(seed) {
 }
 
 const runs = [1, 2, 3, 4, 5, 6].map(runSet);
+// 取樣到量（07-30 段 4；先例＝段 2' ⑤b／attack-routes）：跳舉執行率隨收斂下滑是觀測量，
+// 樣本門檻 60 不動 ⇒ 加種子到量；種子上限 40 防跑飛——到上限仍不足＝真實訊號，讓測試紅
+{
+  const jumpN = (sel) => runs.reduce((s, r) => s + sel(r).jump.length, 0);
+  for (let seed = 7; seed <= 40 && (jumpN((r) => r.setY) <= 60 || jumpN((r) => r.win) <= 60); seed += 1) {
+    runs.push(runSet(seed));
+  }
+}
 const pool = (sel) => {
   const out = { jump: [], stand: [] };
   for (const r of runs) for (const b of ['jump', 'stand']) out[b].push(...sel(r)[b]);

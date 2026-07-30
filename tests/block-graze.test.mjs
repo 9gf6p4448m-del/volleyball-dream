@@ -2,9 +2,10 @@
 // 擦手不計觸球數且球續入攔網方半場、自家擦過的出界球不得放（letDrop 防呆）、決定論
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, stepGame } from '../src/sim/game.js';
+import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createIntent } from '../src/sim/intent.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import { reachVolumeFor, ballInReach, REACH_ACTION } from '../src/sim/reach.js';
 
 // B 隊扣球即將過網、A3（前排）已起跳開攔網窗
 function blockRig(seed) {
@@ -110,7 +111,9 @@ function playerRig(seed, { block }) {
   if (block) {
     g.actors.A2.x = 0; g.actors.A2.z = 0.5; // 網前對位（第一視角攔網模式的站位）
   } else {
-    g.actors.A2.x = 0; g.actors.A2.z = 5.5; // 退下防守
+    // 退下防守——站位對齊本 rig 球軌的落點（z≈5.0）：舊可及 ~1.1m 蓋得住 0.5m 站位差，
+    // 收斂後 0.38H 蓋不住（07-30 段 4 治具修；球軌與站位都是治具自有常數）
+    g.actors.A2.x = 0; g.actors.A2.z = 5.0;
   }
   return g;
 }
@@ -142,8 +145,12 @@ test('主角退下防守：不按攔網＝零幻影攔網觸球，球過網後 A
   // 球飛越網、無人攔（A2 沒開窗）
   for (let i = 0; i < 200 && g.phase === 'rally'; i += 1) {
     const b = g.ball;
-    const dist = Math.hypot(b.x - g.actors.A2.x, b.z - g.actors.A2.z);
-    const reachable = dist < 0.9 && b.vy < 0 && b.y < 2.2;
+    // 可構判定吃真實可及體——0.9m/2.2m 是圓柱時代的絕對值，會被收斂旋鈕移過可及
+    // （A-9；07-30 段 4 治具修）
+    const vol = reachVolumeFor({
+      player: g.players.A2, actor: g.actors.A2, action: REACH_ACTION.RECEIVE, tuning: TUNING,
+    });
+    const reachable = b.vy < 0 && ballInReach(b, vol).ok;
     stepGame(g, reachable
       ? [createIntent({ playerId: 'A2', tick: g.tick, action: 'receive', aim: { x: 1.2, z: 1.2 } })]
       : []);

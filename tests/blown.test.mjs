@@ -4,8 +4,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createIntent } from '../src/sim/intent.js';
+import { reachVolumeFor, REACH_ACTION } from '../src/sim/reach.js';
 
-// 強發壓迫下的勉強接發：receiver 技術可調、站位勉強（dist~0.8）
+// 強發壓迫下的勉強接發：receiver 技術可調、站位勉強（0.9× 當前幾何可構上限）
 function rig(flightId, { control = 50, reaction = 50 } = {}) {
   const g = createGame({ seed: 5 });
   g.phase = 'rally';
@@ -18,7 +19,14 @@ function rig(flightId, { control = 50, reaction = 50 } = {}) {
   b.px = b.x; b.py = b.y; b.pz = b.z;
   g.players.A5.attributes.control = control;
   g.players.A5.attributes.reaction = reaction;
-  g.actors.A5.x = 0.8; g.actors.A5.z = 5.2; // 距球 0.8m＝勉強搆
+  // 勉強搆＝球起點高度上可構水平距離的 0.9 倍——絕對距離會被收斂旋鈕與手點裁定移過
+  // 可及（A-9：治具不得硬編碼會動的量；07-30 段 4 治具修，原值 0.8m）
+  const vol = reachVolumeFor({
+    player: g.players.A5, actor: { x: 0, z: 5.2 }, action: REACH_ACTION.RECEIVE, tuning: TUNING,
+  });
+  const dy = b.y - vol.cy;
+  g.actors.A5.x = 0.9 * Math.sqrt(Math.max(0, vol.r * vol.r - dy * dy));
+  g.actors.A5.z = 5.2;
   return g;
 }
 
