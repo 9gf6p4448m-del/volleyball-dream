@@ -124,7 +124,10 @@ export function overBlockerHands(ballY, blockerReach) {
  * 單一 `roll` 依序切三段是刻意的：rand 呼叫數恆為一次，rng 流與二態時代同節奏。
  *
  * @param {number} roll      一次 rand()（0..1）
- * @param {number} chance    攔死機率（屬性 × 時機 × 情蒐）
+ * @param {number} chance    solid 機率（屬性 × 時機 × 情蒐）。⚠ 7.2 查證（07-30）：
+ *                            solid ≠ 攔死得分——它是把球軟彈回攻方上空（game.js tryBlock
+ *                            的 vz×0.35＋vy=2.2），實測僅 ~25% 最終成為得分；
+ *                            「攔網得分」由 growth.js blockPoints 依 SCORE 歸因另計
  * @param {number} edgeWidth 擦手帶寬（現＝ BLOCK_GRAZE_CHANCE × timingMul）
  * @returns {'solid'|'graze'|'clean'}
  */

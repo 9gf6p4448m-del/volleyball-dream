@@ -132,7 +132,12 @@ export function blockTopEdge(p, t, jumpMul = 1) {
   return stand + (blockReach(p, jumpMul) - stand) * Math.sin(Math.PI * (t / AIR_TICKS));
 }
 
-// 防守可及半徑（公尺）：身高越高踏步範圍越大、speed 補正
+// 防守可及半徑（公尺）：身高越高踏步範圍越大、speed 補正。
+// ⚠ B-2 裁定回報（2026-07-30，表 D）＝選「改文件」不接線：本函式自 Phase 1 定義
+// 以來無任何消費者（speed 屬性未兌現於防守範圍——convergence §5.12 難度曲線候選
+// 機制 7 已登記）；補償階段剛以 ±15 雙主判收單且 R4 款 3 快攻 margin 僅 1.9pp，
+// 此時接線＝對已驗證平衡的重擾動。接線與否併入「身高的誠實化」獨立卷（B-3，
+// docs/kickoffs/height-honesty-case.md）一起評估；函式保留供案卷引用。
 export function defenseRange(p) {
   return p.height.current * 0.55 + (p.attributes.speed / 100) * 0.8;
 }

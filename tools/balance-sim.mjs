@@ -505,7 +505,9 @@ for (const id of matchIds) {
   console.log(`${id.padEnd(16)} 勝率 ${pct(wins[id]).padStart(4)}  平均分差 ${avg(margins[id])}`);
 }
 console.log(`A2 場均（身高體感代理）：殺球 ${(a2.kills / a2.games).toFixed(2)}｜吊球 ${(a2.tips / a2.games).toFixed(2)}`
-  + `｜ACE ${(a2.aces / a2.games).toFixed(2)}｜攔網得分 ${(a2.blocks / a2.games).toFixed(2)}`);
+  + `｜ACE ${(a2.aces / a2.games).toFixed(2)}｜攔網得分 ${(a2.blocks / a2.games).toFixed(2)}`
+  + `（A2 個人／每局——非全隊值；7.2 查證 07-30：全隊每局 ≈2.17 在真實帶 1.5–2.5 內，`
+  + `勿再拿本欄與全隊對照值比，A-8）`);
 if (PLAYER_ROLE === 'libero') {
   console.log(`A2 L 三欄場均（契約=boxScoreL）：起球 ${(lBox.digs / a2.games).toFixed(2)}`
     + `｜助攻一傳 ${(lBox.assistDigs / a2.games).toFixed(2)}`
