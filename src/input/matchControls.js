@@ -24,6 +24,24 @@ function onCourt(game, playerId) {
 
 const CHARGE_MS = 600;       // 蓄力到滿的毫秒數（timing 品質曲線，H1 可調）
 const JOYSTICK_RADIUS = 64;  // 虛擬搖桿最大半徑（px）
+// 攔網帶半深（|z| < 此值＝貼網可攔）：contextAction／自動跳攔／MB 讀心共用的單一真相。
+// 帶寬理由與實測（tools/block-defend-probe.mjs）見 contextAction 內註解。
+export const NEAR_NET_Z = 2.2;
+
+// MB 攔網讀心時刻（W3 MB 玩法：玩家＝前排 MB、對手舉球出手瞬間）。
+// 抽成純函式＝node 測試可紅綠（createMatchControls 綁 DOM 建不起來）；
+// 方法 isMbMoment 委派此函式，行為單一真相在這裡。
+export function mbMomentFor(game, playerId) {
+  const me = game.players[playerId];
+  const r = game.rally;
+  if (game.phase !== 'rally' || !r.possession || r.possession === me.teamId) return false;
+  if (r.touches !== 2) return false;
+  if (me.currentRole !== 'middle') return false;
+  if (!isFrontRow(game.match.rotations[me.teamId], playerId)) return false;
+  // B2 修復（試玩回饋 0730 #3）：玩家選擇退防（|z| ≥ 攔網帶）＝不彈攔網賭局——
+  // 「攔網站位全交玩家」的拍板下，站位就是退防意圖的唯一可讀訊號（顯式選單已收）
+  return Math.abs(game.actors[playerId].z) < NEAR_NET_Z;
+}
 const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
@@ -223,7 +241,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     // ——手動點按開出一個必定攔不到的窗（球在別處過網），還把該有的接球意圖吃掉。
     // 實測（tools/block-defend-probe.mjs）：退到 z=3 時第一觸 54 次全是接球，
     // 攔網窗 0 次＝那個帶本來就不該算攔網區
-    const nearNet = Math.abs(a.z) < 2.2;
+    const nearNet = Math.abs(a.z) < NEAR_NET_Z;
     if (r.possession && r.possession !== me.teamId &&
         isFrontRow(game.match.rotations[me.teamId], playerId) && nearNet) {
       return 'block';
@@ -389,7 +407,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         // ＝攔網的球不是墊球的球；輕吊/漏球墜到 2.15 以下照常自動救
         const spikeAtNet = r.profile === 'spike' && r.lastTouchTeam !== me.teamId &&
           isFrontRow(game.match.rotations[me.teamId], playerId) &&
-          Math.abs(a.z) < 2.2 && b.y > 2.15;
+          Math.abs(a.z) < NEAR_NET_Z && b.y > 2.15;
         if (canTouch && reachable && r.touches === 0 && !spikeAtNet) {
           // 到位自動接（一傳是反射不是瞄準）；品質 0.6——主動抓 Perfect 才有更準的一傳
           action = 'receive';
@@ -438,7 +456,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           }
         } else if (simpleMode && contextAction(game) === 'block' &&
             r.profile === 'spike' && aiState?.landingTeam === me.teamId &&
-            Math.abs(a.z) < 2.2) {
+            Math.abs(a.z) < NEAR_NET_Z) {
           // 自動跳攔（07-24 Sawmah：原設計的攔網決策自動跳攔早成死碼被清、玩家不知
           // 攔網變全手動）：前排網前＋對方扣球出手飛向我方＝自動開攔網窗——
           // 時機取球出手瞬間（airTicks 落甜蜜帶）；點螢幕/K 仍可手動提前跳；
@@ -562,14 +580,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     // 本次舉球是否已分配（main 用來停止彈面板）
     setPending() { return setChosen; },
 
-    // ---- MB 攔網讀心（W3 MB 玩法：玩家＝前排 MB、對手舉球出手瞬間）----
+    // ---- MB 攔網讀心（委派模組層純函式 mbMomentFor，單一真相在彼）----
     isMbMoment(game) {
-      const me = game.players[playerId];
-      const r = game.rally;
-      if (game.phase !== 'rally' || !r.possession || r.possession === me.teamId) return false;
-      if (r.touches !== 2) return false;
-      if (me.currentRole !== 'middle') return false;
-      return isFrontRow(game.match.rotations[me.teamId], playerId);
+      return mbMomentFor(game, playerId);
     },
     // 讀取面板資料（誠實線索：一傳品質＋助跑動向）；非讀舉球時刻回傳 null
     mbOptions(game, aiState) {

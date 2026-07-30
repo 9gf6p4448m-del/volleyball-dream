@@ -6,6 +6,7 @@ import {
   transferCandidates, transferAskLines, transferTalkFor, seasonTransferState,
   interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV, TRANSFER_MIN_MATCHES,
 } from '../src/career/positionEvents.js';
+import { createCareer, recordResult, advanceSeason } from '../src/career/careerState.js';
 
 const FLAGS_ALL_OPEN = { setter: 'open', middle: 'open', opposite: 'open', libero: 'open' };
 const PLAYER = { currentRole: 'outside', aspiration: 'libero' };
@@ -68,4 +69,24 @@ test('決定論＋台詞分版：同輸入同輸出；表現/志願各自分版'
   assert.ok(non.offerLines.some((l) => l.text.includes('不是非走不可')));
   assert.ok(non.acceptLines.length > 0, '接受＝縫隙 1 被取代者劇情沿現制');
   assert.deepEqual(asp.declineLines, transferTalkFor({ role: 'libero', player: PLAYER, members: [] }).declineLines);
+});
+
+// B1 迴歸（試玩回饋 0730 #2）：旗標註解承諾「events 逐屆重置」，但 advanceSeason
+// 的 ...base 把舊 events 原封帶進下一屆——第一屆用掉轉位後，第 2、3 屆入口永久鎖死。
+test('B1：advanceSeason 清除當屆轉位旗標、非轉位事件保留——「每屆一次」的屆界要真的存在', () => {
+  let c = createCareer({ seed: 5, playerName: '測' });
+  c = { ...c, events: [...(c.events ?? []), TRANSFER_ASKED_EV, TRANSFER_USED_EV, 'story-anchor'] };
+  // 打完一屆（小組全勝＋八強敗＝止步，可進 advanceSeason）
+  for (const m of c.schedule) {
+    if (m.stage === 'group') c = recordResult(c, { matchId: m.id, won: true, scoreFor: 25, scoreAgainst: 10 });
+  }
+  const qf = c.schedule.find((m) => m.id === 'national-qf');
+  c = recordResult(c, { matchId: qf.id, won: false, scoreFor: 20, scoreAgainst: 25 });
+  const next = advanceSeason(c);
+  // 行為斷言（修復前紅在這裡）：新屆入口不得被上屆旗標鎖死
+  assert.deepEqual(seasonTransferState(next), { asked: false, used: false },
+    '上屆轉位旗標帶進新屆＝第 2、3 屆請調入口全鎖死（回饋 #2 的現象）');
+  assert.equal(interSeasonTalkAllowed(next), true, '屆間教練談話也被上屆 used 鎖死');
+  // 範圍檢查：只清轉位旗標，劇情類事件跨屆有效
+  assert.ok((next.events ?? []).includes('story-anchor'), '非轉位事件不得被誤刪');
 });

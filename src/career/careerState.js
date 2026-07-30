@@ -8,6 +8,7 @@ import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 import { buildSchedule } from './schedule.js';
+import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 import { initialHeightState } from './heightGrowth.js';
 
 // v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
@@ -98,6 +99,11 @@ export function advanceSeason(career, { invitedId = null, seasonIndex = null } =
   const { pendingMatch, ...base } = career;
   return {
     ...base,
+    // B1 修復（試玩回饋 0730 #2）：轉位旗標「逐屆重置」（positionEvents.js 註解的承諾）
+    // 在這裡兌現——只濾兩個當屆旗標，其餘 events（劇情錨點等）跨屆有效照舊帶入
+    events: (base.events ?? []).filter(
+      (e) => e !== TRANSFER_ASKED_EV && e !== TRANSFER_USED_EV,
+    ),
     seed,
     schedule: buildSchedule({
       seed,
