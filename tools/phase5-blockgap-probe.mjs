@@ -21,13 +21,17 @@
 //   ② 12 個 seed 照抄，一個未換（測試檔 §102-110 的註解說明過為什麼是 12 個）。
 //   ③ 統計量 p75 照抄。
 //
-// 跑法：node tools/phase5-blockgap-probe.mjs
+// 跑法：node tools/phase5-blockgap-probe.mjs [局數=12]
+//   無參數＝12 seeds（與測試逐字同源的對照版，勿改）；
+//   E-1 反解版＝傳 40（E-2 條文「n 先訂 40 局」；前 12 個 seed 與對照版完全相同，
+//   之後依同一構造式 k×101 順延——不動預設就不破壞與測試的同源性）。
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { BLOCK_PERSONA } from '../src/sim/blockRead.js';
 import { isFrontRow } from '../src/sim/rotation.js';
 
-const SEEDS = [101, 202, 303, 404, 505, 606, 707, 808, 909, 1010, 1111, 1212];
+const N_SETS = Number(process.argv[2] ?? 12);
+const SEEDS = Array.from({ length: N_SETS }, (_, i) => (i + 1) * 101);
 const WING = new Set(['left', 'right']);
 
 function mbOf(game, team) {
@@ -94,7 +98,7 @@ function report(label, all) {
 }
 
 console.log('=== commitGap／readGap 收斂前對照（裁定書 v3 §六）===');
-console.log(`12 seeds、兩翼攻擊（left／right）、球過網那一 tick 的 |MB.x − ball.x|`
+console.log(`${N_SETS} seeds、兩翼攻擊（left／right）、球過網那一 tick 的 |MB.x − ball.x|`
   + `｜攔網單人半寬現值 ${f(TUNING.BLOCK_REACH_X)}\n`);
 const R = report('read', armRead);
 const C = report('commit', armCommit);

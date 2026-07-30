@@ -161,7 +161,10 @@ function runSet(seed) {
     const ev = stepGame(g, aiCollectIntents(g, ai));
     for (const e of ev) {
       if (e.type === 'TOUCH' && e.kind === 'spike' && e.touches === 3 && ai.attackKind) {
-        kinds.push({ kind: ai.attackKind, pid: e.playerId,
+        // tier＝交叉資格的過濾鍵（S1 後 passTier 不再恆 perfect，routeKindFor 只在
+        // perfect 檔擲交叉骰——approach.js:207）。用 ai.passTier 近似；§7 D2 的
+        // point 級 tier（接一傳者罰則檔）可能更嚴，殘餘稀釋量小、帶寬 ±12 吸收。
+        kinds.push({ kind: ai.attackKind, pid: e.playerId, tier: ai.passTier,
           front: isFrontRow(g.match.rotations[e.team], e.playerId) });
       }
       if (e.type === 'DEAD_BALL') started = {};
@@ -197,7 +200,11 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 
 test('實跑：交叉真的被打出來，且只給前排邊攻', () => {
   const cross = allKinds.filter((k) => k.kind === 'cross');
-  const left = allKinds.filter((k) => k.kind === 'left');
+  // 分母限定交叉**有資格**的樣本（07-30 補償階段治具前提修）：S1 讓 ok／poor 檔
+  // 真實出現後，非 perfect 的 left 構造上擲不到交叉骰（approach.js「passTier 必須是
+  // perfect」），混進分母＝把名目 30% 稀釋成 30%×perfect 佔比——量的不再是骰子。
+  // cross 樣本構造上全為 perfect，不需濾。名目 CROSS_RATE 與帶寬 ±0.12 一格未動。
+  const left = allKinds.filter((k) => k.kind === 'left' && k.tier === 'perfect');
   assert.ok(cross.length > 20, `交叉樣本不足（${cross.length}）`);
   for (const c of cross) assert.ok(c.front, '交叉只給前排邊攻');
   const share = cross.length / (cross.length + left.length);

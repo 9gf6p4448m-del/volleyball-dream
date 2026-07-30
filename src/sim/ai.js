@@ -22,7 +22,7 @@ import {
 } from './blockRead.js';
 import { hash01 } from './rng.js';
 import { TUNING, spikeSpeed } from './game.js';
-import { REACH_ACTION, reachRadiusFor } from './reach.js';
+import { REACH_ACTION, reachRadiusFor, SET_HANDPOINT_H_RATIO } from './reach.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA, staminaPerfMul } from './stamina.js';
 
@@ -253,6 +253,7 @@ function ensureFlightPlan(game, aiState) {
   aiState.landing = landing;
   // 走位深度：接球者瞄「球墜到接球高度時的水平位置」（接觸點）而非地板落點
   aiState.contactPoint = predictContactPoint(game.ball, AI.RECV_CONTACT_Y);
+  aiState.setContactPoint = null; // P1-B：僅第二觸窗計算（見下）
   aiState.landingTeam = landing ? (landing.z >= 0 ? 'A' : 'B') : null;
   aiState.claimId = null;
   aiState.backupId = null;
@@ -287,6 +288,15 @@ function ensureFlightPlan(game, aiState) {
     );
     aiState.claimId = setter?.id ?? backup?.id
       ?? arbitrate(game, team, landing, r.lastToucherId);
+    // P1-B（2026-07-30 補償階段拍板「二傳走位包」，convergence §5.12）：二傳追第二觸
+    // 瞄「球墜到自己站舉手點高度（SET_HANDPOINT_H_RATIO×H，reach.js 單一真相）時的
+    // 水平位置」——與接球者 contactPoint 同構的走位深度；瞄地板落點＝墜落段人永遠
+    // 追在球後面。低平弧（不高於手點）predictContactPoint 自動回退地板落點。
+    // 只在規劃層算一次（predictContactPoint 是整段 rollout，不得逐 tick 呼叫）。
+    const setterH = game.players[aiState.claimId]?.height?.current;
+    aiState.setContactPoint = Number.isFinite(setterH)
+      ? predictContactPoint(game.ball, SET_HANDPOINT_H_RATIO * setterH)
+      : null;
     // 攻擊分配：一傳品質決定戰術分支（到位＝全池/可用＝無快攻/勉強＝只剩兩翼高球）
     // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
     const tier = passTierOf(team, landing, game.players[aiState.claimId] ?? null);
@@ -436,15 +446,26 @@ function updateBlockRead(game, aiState, excludeIds) {
   }
 }
 
+// P0 對齊修（2026-07-30 補償階段拍板，convergence §5.12）：AI 對「自己構不構得到」
+// 的估算向 sim 判定的單一真相 reachRadiusFor 取值（A-9 同族——TUNING.REACH_RADIUS
+// =1.3 只是 t=0 基底，收斂後 sim 已按動作縮到 0.38H–0.55H，AI 還照 1.3 估＝以為
+// 構得到而停步空揮、備援永不加派）。動作由 touches 推（0＝接、1＝舉、≥2＝扣，
+// 與 chooseTouch 的分派一致）；t=0 時 reachRadiusFor 早退回 1.3 ⇒ 本修在 t=0 逐值無效。
+function aiReachFor(player, touches) {
+  const action = touches === 0 ? REACH_ACTION.RECEIVE
+    : touches === 1 ? REACH_ACTION.SET : REACH_ACTION.SPIKE;
+  return reachRadiusFor(action, TUNING, player?.height?.current ?? null);
+}
+
 // 可及性預估：含反應延遲，從當前位置起跑能否在球落地前趕到落點可及圈。
-// 寬鬆估（扣 REACH_RADIUS 緩衝）：估錯寧可「以為趕得上」——備援只在明顯來不及時
-// 加派。planTick＝本 flight 起算點（landing.ticks 同一基準）
+// 寬鬆估（扣可及半徑緩衝，P0 起按動作向 reachRadiusFor 取）：估錯寧可「以為趕得上」
+// ——備援只在明顯來不及時加派。planTick＝本 flight 起算點（landing.ticks 同一基準）
 function canReachLanding(game, aiState, playerId) {
   const { landing } = aiState;
   if (!landing?.ticks) return true;
   const p = game.players[playerId];
   const a = game.actors[playerId];
-  const gap = Math.hypot(a.x - landing.x, a.z - landing.z) - TUNING.REACH_RADIUS;
+  const gap = Math.hypot(a.x - landing.x, a.z - landing.z) - aiReachFor(p, game.rally.touches);
   if (gap <= 0) return true;
   const runTicks = gap / (moveSpeed(p) * SIM_DT);
   return reactionTicks(p) + runTicks <= landing.ticks;
@@ -598,8 +619,19 @@ export function attackPointsOf(game, team, setterId, passTier = 'perfect', recei
 // 真正的數字由階段五連同其他旋鈕一起擰。**本批只交付接縫，不做校準。**
 // `ok` 的係數語意較弱（3m 本來就不是對著可及訂的），階段五可再議——這裡沿用現值比例
 // 是為了不在本批偷偷改動它。
-const PASS_PERFECT_MUL = 1.2 / 1.3;
-const PASS_OK_MUL = 3 / 1.3;
+// ★ S1 聯合反解落地（2026-07-30，補償階段 convergence §5.12；ruling-v3 §三 S1 預授權
+//   「t=1 收斂完成後以實測 d 分佈聯合反解，約束＝poor 5%／ok ≥8% 地板，全由量測定、不手挑」）★
+// 反解輸入＝t=1 實測 d 分佈（40 局 n=2549，phase5-passtier-probe）：
+//   PASS_PERFECT_MUL ＝ d p87 ÷ 舉球可及 p50 ＝ 0.426 ÷ 0.824（⇒ ok 恰為 8% 地板——閉式解）
+//   PASS_OK_MUL      ＝ d p95 ÷ 舉球可及 p50 ＝ 0.467 ÷ 0.824（⇒ poor 5%，爆接計入 poor）
+// A-7 申報：語意＝門檻對舉球可及的現值比例（與 0.923 同座標系）；單位＝無因次；原點＝
+//   d 從二傳站位點（身體軸）、可及半徑以手點為原點——跨原點知情登記沿用（0.923 三要素申報）。
+// 套回驗證 perfect 87.0／ok 8.0／poor 4.9%（§4.2「收斂後不得恆為 perfect」自此成立）。
+// ⚠ 係數不隨 t 內插 ⇒ t=0 行為也會動（爆接一傳從 ok/perfect 改判 poor）——此效應屬
+//   §5.8② 「S1 做完後的玩家實際體驗版 vs A''」要量的總 Δ 的一部分，不重定基準。
+// export＝治具向真相來源取值用（A-9；tests/roles-trust 曾寫死 1.2/1.3 快照，S1 後漂移）
+export const PASS_PERFECT_MUL = 0.426 / 0.824;
+export const PASS_OK_MUL = 0.467 / 0.824;
 export function passTierOf(team, landing, setter = null) {
   const spot = localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
   const d = Math.hypot(landing.x - spot.x, landing.z - spot.z);
@@ -760,7 +792,9 @@ function decideOne(game, aiState, playerId) {
     if (aiState.backupId === playerId && aiState.claimId) {
       const pa = game.actors[aiState.claimId];
       const pd = Math.hypot(ball.x - pa.x, ball.z - pa.z);
-      if (pd <= TUNING.REACH_RADIUS * AI.ATTEMPT_RADIUS && tick >= pa.divedUntil) {
+      // P0：主追構得到與否按主追者的收斂後可及估（aiReachFor），不再用 1.3 基底
+      if (pd <= aiReachFor(game.players[aiState.claimId], r.touches) * AI.ATTEMPT_RADIUS
+        && tick >= pa.divedUntil) {
         return moveIntent(game, playerId, tick, actor, aiState.landing);
       }
     }
@@ -774,10 +808,13 @@ function decideOne(game, aiState, playerId) {
       // 好一傳）；墜破帶下緣＝來不及，寬門檻保底勉強接（沒到位＝接噴，散佈大）
       const inBand = ball.y <= AI.RECV_CONTACT_Y + AI.RECV_BAND;
       const belowBand = ball.y < AI.RECV_CONTACT_Y - AI.RECV_BAND;
-      const radius = belowBand ? AI.ATTEMPT_RADIUS : AI.CLOSE_RADIUS;
-      inReach = inBand && dist <= TUNING.REACH_RADIUS * radius && ball.vy < 0;
+      // P0：寬門檻（勉強接保底）基底改吃 aiReachFor——寬過真實可及＝停步空揮；
+      // 嚴門檻（CLOSE 0.585）本就窄於收斂後接球可及，維持原樣＝逼到位的語意不動
+      inReach = inBand && ball.vy < 0 && (belowBand
+        ? dist <= aiReachFor(player, r.touches) * AI.ATTEMPT_RADIUS
+        : dist <= TUNING.REACH_RADIUS * AI.CLOSE_RADIUS);
     } else {
-      inReach = dist <= TUNING.REACH_RADIUS * AI.ATTEMPT_RADIUS && ball.vy < 0;
+      inReach = dist <= aiReachFor(player, r.touches) * AI.ATTEMPT_RADIUS && ball.vy < 0;
     }
     if (inReach) {
       const [action, aim, tOverride] = chooseTouch(game, aiState, player, actor);
@@ -876,9 +913,12 @@ function decideOne(game, aiState, playerId) {
       }
       return moveIntent(game, playerId, tick, actor, spot);
     }
-    // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；舉球/扣球
-    // 維持瞄地板落點。下游微偏＝觸球點在身前、面向來球（真實接球站位）
-    const target = (receivingIncoming && aiState.contactPoint) ? aiState.contactPoint : aiState.landing;
+    // 站位：接來球瞄接觸點（球會被接到的水平位置＝人站球正下方，走位深度）；第二觸
+    // （二傳）P1-B 起瞄站舉手點高度的接觸點；扣球維持瞄地板落點。
+    // 下游微偏＝觸球點在身前、面向來球（真實接球站位）
+    const target = (receivingIncoming && aiState.contactPoint) ? aiState.contactPoint
+      : (r.touches === 1 && aiState.setContactPoint) ? aiState.setContactPoint
+        : aiState.landing;
     const sp = Math.hypot(ball.vx, ball.vz);
     const off = sp > 0.5 ? 0.2 : 0;
     return moveIntent(game, playerId, tick, actor, {
@@ -1012,10 +1052,14 @@ function decideOne(game, aiState, playerId) {
     return moveIntent(game, playerId, tick, actor, digTargetFor(game, team, playerId, bias));
   }
 
-  // 舉球員插上：我方接球階段（來球未觸），S 先跑到網前右側舉球點就位（前後排皆然）
+  // 舉球員插上：我方接球階段（來球未觸），S 先跑到網前右側舉球點就位（前後排皆然）。
+  // P1-A（2026-07-30 補償階段拍板）：插上點對齊一傳名目落點 AI.SETTER_SPOT——
+  // 原 lx=2.2 與一傳瞄的 1.2 差 1.0m＝每球先欠 12–21 tick 的走位債（跳舉退站舉主因）；
+  // 「perfect＝二傳不用移動就能舉」的語意自此在站位上成立
   if (player.currentRole === 'setter' && r.possession !== team &&
       aiState.landingTeam === team && !aiState.letDrop) {
-    return moveIntent(game, playerId, tick, actor, localToWorld(team, 2.2, 1.2));
+    return moveIntent(game, playerId, tick, actor,
+      localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz));
   }
 
   // Transition 拉開（§2-2）＋節奏三層（§4 A1）：我方一擊完成的瞬間，**每一名**
@@ -1487,9 +1531,13 @@ function serveTarget(game, team) {
 }
 // ==== D2-SERVE-END ====
 
-// 反應延遲：reaction 0–100 → 24–8 tick（0.4–0.13 秒）才起動
+// 反應延遲：reaction 0–100 → 21–6 tick（0.35–0.1 秒）才起動。
+// P2-a（2026-07-30 補償階段，§5.3 白名單「反應延遲公式係數」；convergence §5.12）：
+// 基數 24 → 21（全員均等早 3 tick＝0.05s 起動；斜率 0.16 與地板 6 不動＝屬性差異
+// 保留，實務屬性帶 reaction 50–75 不觸地板）。均等 buff 的兌現偏向「構不到的球
+// 較多」的一方＝可及收斂下的弱側——P0＋P1 後 Δ決賽 −17.5 差 2.5pp 進帶的收口手段。
 function reactionTicks(player) {
-  return Math.max(6, Math.round(24 - player.attributes.reaction * 0.16));
+  return Math.max(6, Math.round(21 - player.attributes.reaction * 0.16));
 }
 
 // 扣球目標：瞄防守站位的縫隙（邊線帶/位置間縫/短球），依比分+flightId 循環

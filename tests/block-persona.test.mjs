@@ -143,8 +143,12 @@ test('B1：快攻沒來（兩翼高球）時，commit 的中間攔網手到位�
     `commit 的邊線到位率沒有明顯較差：read ${(readIn * 100).toFixed(1)}% vs `
     + `commit ${(commitIn * 100).toFixed(1)}%`,
   );
+  // E-1 補回（2026-07-30 補償階段拍板＝構造乙 p75 座標；convergence §5.12）：
+  // k ＝ (commit p75 2.051 − 2×合併SD 0.465) ÷ read p75 0.659 ＝ 1.701，
+  // 用收斂後 40 局實測反解（E-2 條文 n=40；分離 2.374 SD ≥2 ⇒ 可補回）。
+  // 取代 v2 的 ×1.5（對壞現值反推，裁定書 §五 判 (d) 廢止、E-1 為出場條件）。
   assert.ok(
-    commitGap > readGap * 1.5,
+    commitGap > readGap * 1.701,
     `commit 的中間攔網手離球距離（p75）沒有明顯較遠：read ${readGap.toFixed(2)}m vs `
     + `commit ${commitGap.toFixed(2)}m`,
   );
@@ -304,8 +308,12 @@ test('blockCloseBudget：追得到／追不到由時間預算決定，且不預�
 // 「二傳觸球＋反應延遲」那一刻算出並鎖存的預測擊球 tick（前置量 0 ⇒ 兩者相等）。
 // 不重算、不另外呼叫 predictContactPoint，量的就是 sim 真的拿去用的數字。
 test('B1 回歸閘：read 對快攻的預測擊球 tick 仍偏晚（款 3 的載體不得消失）', () => {
+  // 取樣到量（07-30 補償階段，同段 1 裁定 ④／jump-set 先例）：S1 後快攻只活在
+  // perfect 檔（87%），3 局語料的快攻樣本掉到 16<20 ⇒ seed 依 k×101 順延、收滿
+  // 20 為止、安全上限 8 局；樣本門檻 20 與中位數門檻 6 tick 一格未動。
   const lateness = [];
-  for (let seed = 101; seed <= 303; seed += 101) {
+  for (let k = 1; k <= 8 && lateness.length < 20; k += 1) {
+    const seed = k * 101;
     const game = createGame({ seed, setTarget: 25, aiProfiles: { B: { blockPersona: 'read' } } });
     const ai = createAiState();
     let cur = null;

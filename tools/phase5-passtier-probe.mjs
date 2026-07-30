@@ -114,6 +114,40 @@ console.log(`   （排除爆接後 max ${f(Math.max(...nonBlown))}——爆接�
   }
 }
 
+// ==== S1 聯合反解（t=1 收斂完成後執行；ruling-v3 §三 S1 補裁，2026-07-30 Sawmah）====
+// 條文：「t=1 收斂完成後以實測 d 分佈做 perfect／poor 係數聯合反解
+// （約束＝poor 5%、ok ≥8% 地板，全由量測定、不手挑）」。
+// 閉式解（兩約束、兩未知）：poor 門檻＝d p95（⇒ poor 5%，爆接計入 poor——爆接本就是壞一傳）；
+// perfect 門檻＝d p87（⇒ ok 恰為 8% 地板；取更低是手挑、取更高踩破地板）。
+// 係數＝門檻 ÷ 舉球可及 p50（與 ai.js 現行 0.923 同座標系：sim 逐觸球用 MUL × reachRadiusFor('set')；
+// A-8 隨行申報：d 從二傳站位點（身體軸）量、可及半徑以手點為原點——跨原點事實沿
+// convergence.md「0.923 三要素申報」的知情登記，本反解不改變該座標關係）。
+// 佔比驗證＝把反解係數逐觸球套回（d < MUL × 當觸球實際 rSet），不引用分位數自證。
+if ((TUNING.CONVERGE_T ?? 0) >= 1) {
+  const dP87 = q(ds, 0.87);
+  const dP95 = q(ds, 0.95);
+  const perfC = dP87 / rSetMed;
+  const poorC = dP95 / rSetMed;
+  let pf = 0; let ok = 0; let po = 0;
+  for (const r of rows) {
+    if (!Number.isFinite(r.d) || !Number.isFinite(r.rSet)) continue;
+    if (r.d < perfC * r.rSet) pf += 1;
+    else if (r.d < poorC * r.rSet) ok += 1;
+    else po += 1;
+  }
+  const n = pf + ok + po;
+  const blown = ds.filter((d) => d >= 2).length;
+  console.log(`\n=== S1 聯合反解（t=${TUNING.CONVERGE_T}，n=${n}）===`);
+  console.log(`   d p87 ＝ ${f(dP87)}／d p95 ＝ ${f(dP95)}／舉球可及 p50 ＝ ${f(rSetMed)}`);
+  console.log(`   反解係數：PASS_PERFECT_MUL ＝ p87÷可及 ＝ ${f(perfC)}｜PASS_OK_MUL ＝ p95÷可及 ＝ ${f(poorC)}`);
+  console.log(`   套回實測（逐觸球 × 實際可及）：perfect ${((pf / n) * 100).toFixed(1)}% / `
+    + `ok ${((ok / n) * 100).toFixed(1)}% / poor ${((po / n) * 100).toFixed(1)}%`
+    + `（poor 內含爆接 ${((blown / n) * 100).toFixed(1)}%）`);
+  const okPct = ok / n;
+  console.log(`   C-2 檢查：ok ${(okPct * 100).toFixed(1)}%（地板 8%）`
+    + `${okPct < 0.08 ? '　🔴 跌破地板 ⇒ 停手回報重裁（C-2）' : '　✅'}`);
+}
+
 // 反事實：門檻 ＝ 係數 × 舉球可及半徑
 const PM = 1.2 / 1.3;
 const OM = 3 / 1.3;

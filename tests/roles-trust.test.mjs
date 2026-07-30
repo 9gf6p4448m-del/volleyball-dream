@@ -10,6 +10,7 @@ import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { REACH_ACTION, reachRadiusFor } from '../src/sim/reach.js';
 import {
   createAiState, aiCollectIntents, attackPointsOf, setAimFor, dutyPosition, passTierOf,
+  PASS_PERFECT_MUL, PASS_OK_MUL,
 } from '../src/sim/ai.js';
 import { rotateLineup } from '../src/sim/rotation.js';
 import { trustToWeights, pickByWeights, updateTrust } from '../src/sim/trust.js';
@@ -211,8 +212,10 @@ test('一傳品質戰術分支：到位=全池、可用=無快攻、勉強=只�
   const setReach = reachRadiusFor(REACH_ACTION.SET, TUNING, setter.height.current);
   const spot = { x: 1.2, z: 1.2 };
   const at = (d) => ({ x: spot.x, z: spot.z + d });
-  const perfectMax = (1.2 / 1.3) * setReach; // 階段四的係數（現值比例），非新常數
-  const okMax = (3 / 1.3) * setReach;
+  // 係數向 ai.js 取（A-9）：S1 聯合反解（補償階段）後係數已非 1.2/1.3 快照，
+  // 寫死會在每次校準時漂移；本測試要驗的是「三區間各對一 tier＋池收縮」，與係數值無關。
+  const perfectMax = PASS_PERFECT_MUL * setReach;
+  const okMax = PASS_OK_MUL * setReach;
   assert.equal(passTierOf('A', at(perfectMax * 0.5), setter), 'perfect');
   assert.equal(passTierOf('A', at((perfectMax + okMax) / 2), setter), 'ok');
   assert.equal(passTierOf('A', at(okMax * 1.5), setter), 'poor');
