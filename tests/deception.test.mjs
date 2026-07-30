@@ -4,6 +4,11 @@ import assert from 'node:assert/strict';
 import { createGame, stepGame, computeDeception, TUNING } from '../src/sim/game.js';
 import { createIntent } from '../src/sim/intent.js';
 
+// §十-4b：本檔量的是**欺敵機制的隔離效果**。tool 路線（被封強攻改瞄手頂帶）只在
+// deceiveP=0 時觸發，會單邊稀釋「直視對照組」的 BLOCK_TOUCH 率、壓縮對照比值——
+// 這裡釘死關閉，量測目標不變（測試檔各自獨立 process，不外漏）
+TUNING.TOOL_CHANCE = 0;
+
 test('computeDeception 曲線形狀：騙敵線性、失誤平方、θmax 封頂', () => {
   const from = { x: 0, y: 3, z: 1 };
   const aimF = { x: 0, z: -7 }; // 正前方

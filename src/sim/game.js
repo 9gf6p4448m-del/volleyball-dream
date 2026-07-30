@@ -122,6 +122,15 @@ export const TUNING = {
   BLOCK_TOP_BAND: 0.14,     // 擦頂窄條厚度 m（手頂邊＋球半徑往下算；0.15/0.14 掃描定＝graze 率 10.68/局 距錨 −2.5%）
   BLOCK_GRAZE_SLOW: 0.45,   // 擦側後穿越速度保留比（減速但仍常飛向深區/界外）
   BLOCK_GRAZE_TOP_SLOW: 0.75, // 擦頂後速度保留比（指尖擦過＝球保留大半前速衝深區/底線外）
+  // §十-4b 意圖層：tool 路線（打手出界的攻擊端）。被牆蓋住的強攻有機率改瞄
+  // 「牆手頂帶＋出界深區」——擦到手＝攔網方失分，沒擦到＝自打出界（真實 tool 的賭局）
+  TOOL_CHANCE: 0,           // ⚠ 出廠關閉（2026-07-31 Sawmah 裁定乙）：tool 意圖對現行
+                            // 攔網時序連結率 <10%（三瞄法×兩牆判實測，kickoff 十-4b §七.5）。
+                            // 機制與測試保留；重開條件＝未來「攔網時序卷」讓牆能回應
+                            // 非常規球路後，再調此值 >0
+  TOOL_OUT_DEPTH: 0.9,      // 出界保證量：沒擦到時落點須超出邊線至少此距離 m
+  TOOL_SEE_DEPTH: 1.2,      // 「看得見的牆」門檻：對面前排 |z| 在此內＝貼網 block-ready
+  TOOL_TARGET_Z: 5.0,       // wipe 目標深度 m（落點 z；x 由「過網恰在牆外側緣」反解）
   // §十 階段二 2-B：攔網時機不再是乘數。BLOCK_SWEET_MIN/MAX 與 LATE/EARLY_MUL
   // 四個常數連同 blockTimingMul() 一起拆掉——時機現在是幾何的（player.js
   // blockTopEdge：太早已下墜、太晚還在上升，兩者都表現為球到那一刻手不夠高）。
@@ -167,7 +176,7 @@ export function createGame({
       players[p.id] = p;
       actors[p.id] = {
         x: 0, z: 0, px: 0, pz: 0,
-        blockUntil: -1, blockStartTick: -9999, lastTouchTick: -9999,
+        blockUntil: -1, blockStartTick: -9999, blockHand: 'vertical', lastTouchTick: -9999,
         divedUntil: -1, // 魚躍倒地恢復期（此前不得移動/觸球）
         zHistory: [], // 每 tick 推入舊 z（見 takeoffZ）；固定長度＝回溯窗
       };
@@ -452,6 +461,9 @@ function tryAction(state, intent, ev) {
     // 起跳時刻只在新窗開啟時記錄（連續 intent 延長窗但不重置起跳）——時機判定用
     if (actor.blockUntil < state.tick) {
       actor.blockStartTick = state.tick;
+      // §十-4b 手態三檔（press/vertical/retract）：AI blockPlan 決定、隨 intent 帶入，
+      // 一窗一態（窗開時定格；玩家手動攔網無 hand 欄位＝vertical，範圍⑤不在本卷）
+      actor.blockHand = intent.hand ?? 'vertical';
       drainStamina(state, intent.playerId, STAMINA.COST_JUMP_BLOCK, ev); // W7 A1：一新窗＝一跳
     }
     actor.blockUntil = state.tick + TUNING.BLOCK_WINDOW;
@@ -575,18 +587,44 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   // 力度：封頂 1；超蓄（放太晚）力度也掉——手型跑掉了
   const timing = rawT > TUNING.OVERCHARGE_T ? Math.min(clamp01(rawT), 0.85) : clamp01(rawT);
   let v;
+  let toolSpike = false;
   if (intent.action === 'spike') {
     // 蓄力輕重：timing 短＝輕吊（慢、弧墜）、蓄滿＝重扣（全速）
     // W7 A2：疲勞折力量（AI 預判 spikeClearsNet 用全值＝不自知累了——W8 才考慮行為差異）
     const speed = spikeSpeed(player) * staminaPerfMul(state, player)
       * (TUNING.TIP_SPEED_MIN + (1 - TUNING.TIP_SPEED_MIN) * timing);
     // §十-4 彈道自由度：過網高度隨攻擊型態（route 帶）×出手品質（帶內位置）分岔
+    let aimT = target;
+    let clearance = spikeClearanceFor(spikeRouteAt(state, team, actor.z, timing), timing);
+    // §十-4b tool 路線（打手出界的意圖半邊）＝**側緣 wipe**：非輕吊、無假動作、
+    // 原目標被牆蓋住時，有機率改打「牆外側手的側緣帶→邊線外」。
+    // 為什麼是側緣不是頂帶：側緣是確定性擦手區（不吃跳躍相位），過網高度維持
+    // route 帶＝牆構得到；頂帶 tool 實測連結率 7-10% 且對瞄準高度不敏感＝結構性
+    // 連不上（掃描紀錄見 kickoff 十-4b §七.5）。與 deceive 同層擇一（裁定 Q1 乙）。
+    // 賭局：牆跳準＝擦側緣、球被向外撥出邊線帶（攔網方失分）；牆沒跳/跳晚/縮手
+    // ＝球沿原線飛出邊線（自打出界）——出界保證量閘先驗過才敢打
+    if (timing > 0.45 && dec.deceiveP === 0
+      && blownHash(state, `${player.id}:tool`) < TUNING.TOOL_CHANCE) {
+      const ref = toolBlockerFor(state, team, from, target);
+      if (ref) {
+        const dirOut = ref.x >= 0 ? 1 : -1; // 朝較近邊線那側的外側手
+        const xEdge = ref.x + dirOut * TUNING.BLOCK_REACH_X * (1 - TUNING.BLOCK_EDGE_FRAC / 2);
+        const zMid = -Math.sign(from.z) * TUNING.TOOL_TARGET_Z;
+        const tNet = from.z / (from.z - zMid); // from→目標直線過網（z=0）的比例
+        const xLand = from.x + (xEdge - from.x) / tNet; // 過網恰在 xEdge 時的落點 x
+        // 出界保證量閘：沒擦到時球要真的出邊線；角度拉不出去（正對牆心）就不 wipe
+        if (Math.abs(xLand) >= COURT.WIDTH / 2 + TUNING.TOOL_OUT_DEPTH) {
+          aimT = { x: xLand, z: zMid };
+          toolSpike = true;
+        }
+      }
+    }
     v = spikeVelocity(
       from,
-      { x: target.x, y: BALL.RADIUS, z: target.z },
+      { x: aimT.x, y: BALL.RADIUS, z: aimT.z },
       speed,
       TUNING.SPIKE_MIN_TIME,
-      spikeClearanceFor(spikeRouteAt(state, team, actor.z, timing), timing),
+      clearance,
     );
   } else {
     let apex = TUNING.RECEIVE_APEX;
@@ -627,6 +665,7 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   ev.push({
     type: 'TOUCH', tick: state.tick, team, playerId: player.id,
     kind: intent.action, touches: newCount,
+    ...(toolSpike ? { tool: true } : {}), // §十-4b：這一扣走了 tool 路線（觀測用）
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
     power: Math.round(timing * 100) / 100, // 蓄力品質：表現層分輕吊/重扣音效用
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
@@ -958,6 +997,9 @@ function tryBlock(state, toTeam, ev) {
     if (!isFrontRowOf(state, toTeam, p.id)) continue;
     const actor = state.actors[p.id];
     if (actor.blockUntil < state.tick) continue;
+    // §十-4b retract（縮手）：手收回不過網＝帶寬歸零，絕不被 tool——
+    // 代價是這面牆對這一球完全不存在（賭對手自打出界）
+    if (actor.blockHand === 'retract') continue;
     // 頂邊吃「起跳後經過幾 tick」（2-B 之前 blockTopEdge 忽略 t＝退化成跳躍頂點，
     // 行為與改制前逐值相同；換的是介面不是數值）。W7：累了跳不高
     const airT = state.tick - actor.blockStartTick;
@@ -993,6 +1035,26 @@ function tryBlock(state, toTeam, ev) {
     edgeFrac: TUNING.BLOCK_EDGE_FRAC, topBand: TUNING.BLOCK_TOP_BAND,
   });
   if (zone !== 'body') {
+    // §十-4b press（壓網手）擦頂＝壓球：手伸過網面蓋著，頂帶的球不往後飛、
+    // 被拍回攻方場內快速下墜——tool 的反制（z 深度檔位語意：手在網的另一側）。
+    // 歸因同攔死（lastTouch=攔網方、球回攻方半場）
+    if (zone === 'top' && best.actor.blockHand === 'press') {
+      b.vz = -b.vz * 0.3;
+      b.vx *= 0.5;
+      b.vy = -1.2;
+      const r = state.rally;
+      r.touches = 0;
+      r.lastTouchTeam = toTeam;
+      r.lastToucherId = best.p.id;
+      r.deceiveP = 0;
+      r.profile = 'arc';
+      r.flightId += 1;
+      ev.push({
+        type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id,
+        zone, pressed: true,
+      });
+      return true;
+    }
     // 擦手（one-touch）：沒攔死但擦到手的邊緣——BLOCK_TOUCH 一樣不計 3 次觸球。
     // 方向性偏折（§十-4b）：擦到哪裡決定飛去哪裡——「打手出界」的物理成因在此。
     if (zone === 'top') {
@@ -1047,6 +1109,36 @@ function isFrontRowOf(state, team, playerId) {
   const rot = state.match.rotations[team];
   const idx = rot.indexOf(playerId);
   return idx === 1 || idx === 2 || idx === 3; // 2/3/4 號位
+}
+
+// §十-4b tool 路線的目標牆手：對手前排、貼網 block-ready、站位蓋住這一球
+// **原目標**的過網 x——回傳最近的那面「看得見的牆」。
+// ⚠ 讀站位不讀窗：實測攔網窗在扣球後 3-4 tick 才開（tools/ 下 debug 實測），
+// 出手瞬間讀窗＝永遠看不到牆。攻擊手看得見的是「誰站在我的線上準備跳」；
+// 他會不會準時跳、跳了縮不縮手，出手時**看不見**——這正是 tool 的賭局本體：
+// 跳準了＝擦頂打手出界（攔網方失分），跳晚／縮手＝整球飛出底線（自付）。
+// 反作弊：只讀前排站位（x/z 公開資訊），不讀 blockPlan/blockHand。
+function toolBlockerFor(state, team, from, target) {
+  const opp = otherTeam(team);
+  const tN = from.z / (from.z - target.z);
+  if (!(tN > 0 && tN < 1)) return null;
+  const crossX = from.x + (target.x - from.x) * tN;
+  let ref = null;
+  for (const p of Object.values(state.players)) {
+    if (p.teamId !== opp) continue;
+    if (!isFrontRowOf(state, opp, p.id)) continue;
+    const a = state.actors[p.id];
+    // 窗開＝出手瞬間**已經跳在空中**的牆才 tool 得到。read 晚跳（等球出手才拔）
+    // ＝天然免疫 tool；commit 早跳（賭在先）＝把手亮給了攻擊手——persona 的代價結構。
+    // 實測（kickoff 十-4b §七.5）：讀站位不讀窗時 read 牆連結率 <10%（時序永遠對不上），
+    // tool 的有效域就是「看得見的窗」
+    if (a.blockUntil < state.tick) continue;
+    if (Math.abs(a.z) > TUNING.TOOL_SEE_DEPTH) continue;
+    const dx = Math.abs(a.x - crossX);
+    if (dx > TUNING.BLOCK_REACH_X) continue;
+    if (!ref || dx < ref.dx || (dx === ref.dx && p.id < ref.p.id)) ref = { x: a.x, dx, p };
+  }
+  return ref;
 }
 
 // 一分結算：把 match 事件補上 tick 收進事件流，接著佈置下一球或收局

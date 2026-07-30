@@ -30,6 +30,12 @@ import { STAMINA, staminaPerfMul } from './stamina.js';
 // 常數必須是同一份——測試自己抄一份就會跟本體漂移（07-28）
 export const AI = {
   SERVE_DELAY: 30,        // 可發球後再等的 tick 數（模擬哨音到發球的節奏）
+  // §十-4b 縮手線索：read 預測的擊球點 |x| 超過此值＝對手被擠到邊線外帶勉強打，
+  // 高機率是出界球或 tool——縮手不給打（天線在 ±4.5，留 0.3 的邊帶）
+  BLOCK_RETRACT_WIDE_X: 4.2,
+  // §十-4b 縮手線索②開關：一傳 poor 也縮（「別攔爛球」）。掛常數是給驗收探針
+  // in-process 消融用（對照臂＝兩線索齊關量「沒有縮手時被 tool 失分率」）
+  BLOCK_RETRACT_ON_POOR: 1,
   // 到位判定（m）：小於此距離就完全不動。**必須遠小於單 tick 步長**
   // （步長＝moveSpeed 2.8–5.2 / 60 ＝ 0.047–0.087 m），否則走位目標每 tick 的微移
   // 會被死區吃掉、累積到帶外才「一次全速釋放」＝滿速↔靜止的 stop-go 極限環
@@ -1039,7 +1045,12 @@ function decideOne(game, aiState, playerId) {
     // 開頭的 `atkTeam === team` 早退），所以自家進攻時窗恆不開。
     const action = blockPlanAirborne(aiState, team, tick) ? 'block' : null;
     const it = moveIntent(game, playerId, tick, actor, netSpot);
-    if (action) it.action = 'block';
+    if (action) {
+      it.action = 'block';
+      // §十-4b：手態隨 intent 帶進 sim（game.js 窗開時定格到 actor.blockHand）
+      const c = aiState.blockPlan;
+      it.hand = (c && c.team === team ? c.hand : null) ?? 'vertical';
+    }
     return it;
   }
 
@@ -1240,6 +1251,7 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
       aiState.blockPlan = {
         team, x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
         blind: true, seen: false, jumpAt: null,
+        hand: 'press', // §十-4b：盲跳也是 commit 的計畫——commit 不縮（Q1 乙裁定書性格表達）
       };
       return 0;
     }
@@ -1256,10 +1268,20 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
     // ⚠ 鎖存只鎖**起跳時鐘**；瞄準 x 仍逐 tick 重算（既有行為，改判要付重新踩定代價）。
     const jumpAt = aim.contactTicks == null ? null : tick + aim.contactTicks;
     const read = { x: aim.x };
+    // §十-4b 手態三檔（Q2 裁定＝離散；z 深度是檔位屬性不是座標軸）：
+    //   commit＝press（賭了就全押：手伸過網壓球，擦頂帶的球被拍回攻方場內）
+    //   read ＝預設 vertical；讀到「對手被迫勉強打」——一傳 poor 或預測擊球點被擠到
+    //          邊線外帶（BLOCK_RETRACT_WIDE_X）——時 retract（縮手＝寬度歸零絕不被
+    //          tool，賭對方自打出界；「別攔爛球」的真實攔網紀律）
+    // 兩個線索都是公開資訊（一傳品質＝球的飛行品質、擊球點＝球的拋物線），反作弊成立
+    const hand = persona === BLOCK_PERSONA.COMMIT ? 'press'
+      : ((AI.BLOCK_RETRACT_ON_POOR && opts.passTier === 'poor')
+        || Math.abs(read.x) > AI.BLOCK_RETRACT_WIDE_X)
+        ? 'retract' : 'vertical';
     // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
     aiState.blockPlan = {
       team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
-      jumpAt,
+      jumpAt, hand,
       // `seen` 一律起手為偽、由 chase 段逐 tick 自己觀察——**不得在建計畫時預設為真**：
       // read 的計畫是從**球的拋物線**建的（blockAimX 走 predictContactPoint），
       // 不是從「看到有人在跑」建的。預設為真會讓 read 在兩翼助跑手還沒進偵測範圍時

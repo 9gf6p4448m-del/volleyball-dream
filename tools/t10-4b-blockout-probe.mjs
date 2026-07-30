@@ -11,7 +11,7 @@
 //   後兩參數（選填）＝Q4 錨定掃描用，in-process 覆寫 TUNING.BLOCK_EDGE_FRAC /
 //   BLOCK_TOP_BAND（同 t10-4-jumpcount-frozen 的 TUNING patch 法，src/ 零改動）
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import { createAiState, aiCollectIntents, AI } from '../src/sim/ai.js';
 import { blockTopEdge } from '../src/sim/player.js';
 import { staminaPerfMul } from '../src/sim/stamina.js';
 import { otherTeam } from '../src/sim/rotation.js';
@@ -20,6 +20,10 @@ import { BALL, COURT } from '../src/sim/constants.js';
 const SETS = Number(process.argv[2] ?? 40);
 if (process.argv[3] != null) TUNING.BLOCK_EDGE_FRAC = Number(process.argv[3]);
 if (process.argv[4] != null) TUNING.BLOCK_TOP_BAND = Number(process.argv[4]);
+if (process.argv[5] != null) TUNING.TOOL_CHANCE = Number(process.argv[5]);
+// §十-4b 驗收③對照臂：VD_T104B_ARM=noretract 關掉縮手兩線索（量「沒有縮手」的世界）
+const ARM = process.env.VD_T104B_ARM ?? 'all';
+if (ARM === 'noretract') { AI.BLOCK_RETRACT_ON_POOR = 0; AI.BLOCK_RETRACT_WIDE_X = 999; }
 
 // 扣球型態分組：quick 保留；left/cross/right 併為兩翼；pipe/dball 併為後排。
 // 'tip' 另外用出手品質（timing<=0.45）判定，同 classifySpikeZone 的吊球門檻
@@ -58,6 +62,7 @@ function runSet(seed, out) {
   const pendingAttack = { A: null, B: null }; // { kind, power } 記錄最近一次扣球觸球資訊
   let openGrazes = []; // 本 rally 內尚未結算的 graze 記錄
   let grazeCountThisSet = 0;
+  let openTool = null; // M5：本 rally 內尚未結算的 tool 扣球
 
   let guard = 0;
   while (game.phase !== 'set_over' && game.phase !== 'set_break' && guard < 400000) {
@@ -67,11 +72,13 @@ function runSet(seed, out) {
     const ev = stepGame(game, intents);
 
     // ---- M3a：攔網起跳 tick 的 actor.z（比對 blockStartTick 是否本 tick 剛設定）----
+    // ---- M5b：同一時點統計手態分佈（一窗一態，窗開時定格）----
     for (const id of Object.keys(game.actors)) {
       const a = game.actors[id];
       if (a.blockStartTick === tickNow && prevBlockStartTick[id] !== tickNow) {
         // |z|＝離網深度：A/B 兩隊 z 正負相反，原始值合併會產生假雙峰，改記距離
         out.m3BlockerZ.push(Math.abs(a.z));
+        out.handTally[a.blockHand ?? 'vertical'] = (out.handTally[a.blockHand ?? 'vertical'] ?? 0) + 1;
       }
       prevBlockStartTick[id] = a.blockStartTick;
     }
@@ -98,6 +105,13 @@ function runSet(seed, out) {
       if (e.type === 'BLOCK_TOUCH' && e.graze) {
         openGrazes.push({ tick: e.tick, team: e.team, zone: e.zone ?? null, ticksToNext: null, untouched: null });
         grazeCountThisSet += 1;
+      }
+      // ---- M5：tool 扣球追蹤（TOUCH tool:true → 到 rally 結束看被誰觸、誰得分）----
+      if (e.type === 'TOUCH' && e.kind === 'spike' && e.tool) {
+        openTool = { team: e.team, blockTouched: false, pressed: false };
+      } else if (openTool && e.type === 'BLOCK_TOUCH') {
+        openTool.blockTouched = true;
+        if (e.pressed) openTool.pressed = true;
       }
 
       // ---- M2：扣球過網瞬間（BALL_OVER_NET 或 BLOCK_TOUCH 皆為過網事件）----
@@ -135,6 +149,13 @@ function runSet(seed, out) {
           });
         }
         openGrazes = [];
+        if (openTool) {
+          out.toolRecords.push({
+            ...openTool, reason: e.reason,
+            attackerWon: winner === openTool.team,
+          });
+          openTool = null;
+        }
         pendingAttack.A = null;
         pendingAttack.B = null;
       }
@@ -143,7 +164,10 @@ function runSet(seed, out) {
   out.grazePerSet.push(grazeCountThisSet);
 }
 
-const out = { grazeRecords: [], grazePerSet: [], m2Rows: [], m3BlockerZ: [], m3SpikerZ: [] };
+const out = {
+  grazeRecords: [], grazePerSet: [], m2Rows: [], m3BlockerZ: [], m3SpikerZ: [],
+  toolRecords: [], handTally: {},
+};
 for (let s = 1; s <= SETS; s += 1) runSet(s * 101, out);
 
 // ---- 統計工具 ----
@@ -231,6 +255,21 @@ function zLine(label, arr) {
 }
 zLine('攔網起跳 tick 攔網者 |z|', out.m3BlockerZ);
 zLine('扣球觸球瞬間扣球者 |z| ', out.m3SpikerZ);
+
+// ==== M5（§十-4b 驗收②③）====
+console.log(`\n--- M5 意圖層（消融臂 ${ARM}）---`);
+const tools = out.toolRecords;
+console.log(`tool 扣球：${tools.length}（每局 ${fmt(tools.length / SETS, 2)}）`);
+if (tools.length) {
+  const touched = tools.filter((t) => t.blockTouched);
+  const untouched = tools.filter((t) => !t.blockTouched);
+  const tw = (arr) => `${arr.length} 筆、攻方勝 ${pctStr(arr.filter((t) => t.attackerWon).length, arr.length)}`;
+  console.log(`  被攔網手觸到（打手成立）：${tw(touched)}（其中 pressed=${touched.filter((t) => t.pressed).length}）`);
+  console.log(`  無人觸到（賭輸自打出界帶）：${tw(untouched)}　OUT 占 ${pctStr(untouched.filter((t) => t.reason === 'OUT').length, untouched.length)}`);
+}
+console.log('手態分佈（窗開時定格）：', Object.entries(out.handTally)
+  .map(([h, n]) => `${h}=${n}`).join('  '));
+console.log(`（驗收③口徑：對照臂 VD_T104B_ARM=noretract 比較 tool 扣球數與攔網方在 tool 球上的失分）`);
 
 // ==== M4 ====
 console.log('\n--- M4 常數與掛點盤點 ---');

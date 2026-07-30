@@ -369,13 +369,17 @@ function quickAirShare(persona, sets) {
 }
 
 test('款3 離地率警報器：read 對快攻的離地率須明顯低於 commit（真載體）', () => {
-  const SETS = 8;
+  // §十-4b（07-31）工作點註記：意圖層（tool/retract/press）把 gap 從 ~+14.4 收窄到
+  // +8.5pp@40局（歸因消融 tools/t10-4b-alarm-ablation.mjs：tool 壓縮 commit −9pp、
+  // retract 反向 +4.5pp；40/20/12 局＝8.5/7.8/6.0 全過門檻＝載體活著非翻轉）。
+  // 原 8 局在新工作點的 gap 量測是 −1.7pp＝樣本解析力不足（02 §6.1 條5），
+  // 樣本加大到 40 局（~14s）讓警報器量得動自己的門檻；門檻 5pp 一格未動。
+  const SETS = 40;
   const read = quickAirShare('read', SETS);
   const commit = quickAirShare('commit', SETS);
   assert.ok(read.n >= 30 && commit.n >= 30,
     `樣本足夠（read n=${read.n} / commit n=${commit.n}，門檻各 30）`);
   const gap = commit.share - read.share;
-  // 門檻 +5pp：40 局實測 gap ≈ +12.6pp（凍結版）/+14.4pp（基準）；固定 seeds 決定論，
   // 跌破 5pp＝read 開始對快攻賭＝款 3 行為載體弱化，必須回頭重看 R4 款 3
   assert.ok(gap >= 5,
     `commit 離地率 ${commit.share.toFixed(1)}% − read ${read.share.toFixed(1)}% = ${gap.toFixed(1)}pp < 5pp`
