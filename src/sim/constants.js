@@ -38,4 +38,4 @@ export const SERVE_PERIOD = 6;
 // 而 blockBand 不能 import game.js（game.js 反過來 import blockBand ⇒ 循環）。
 // 攔網半寬必須維持**單一真相**——sim 的 TUNING 與玩家面板（`input/attackZones.js`）
 // 共用同一把尺，那是既有設計，有測試守著（`reach-volume.test.mjs` 的「陷阱 1」）。
-export const CONVERGE_T = 0.50;
+export const CONVERGE_T = 0.375;

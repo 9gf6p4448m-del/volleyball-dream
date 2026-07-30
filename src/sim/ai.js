@@ -235,6 +235,9 @@ function ensureFlightPlan(game, aiState) {
     // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
     aiState.blockPlan = null;
     aiState.setTouch = null;
+    // S2 鎖存（見下方跳舉抽選處）：死球＝第二觸窗結束，清鎖存
+    aiState.jumpSetRoll = null;
+    aiState.jumpSet = false;
     return;
   }
   if (aiState.flightId === game.rally.flightId) return; // 呼叫鎖定：本 flight 已指派，不重算
@@ -259,6 +262,13 @@ function ensureFlightPlan(game, aiState) {
   if (!landing || !aiState.landingTeam) return;
   const team = aiState.landingTeam;
   const r = game.rally;
+
+  // S2 鎖存的窗界：本次規劃不在「第二觸窗」（落點方持球且 touches===1）＝窗已結束，
+  // 清鎖存——確保下一個第二觸窗一定重新抽選（見下方跳舉抽選處的鎖存語意）
+  if (!(r.possession === team && r.touches === 1)) {
+    aiState.jumpSetRoll = null;
+    aiState.jumpSet = false;
+  }
 
   // 落點方已用完三次觸球（如扣球掛網彈回本側）→ 依規則不得再觸，全隊放球讓它落地
   if (r.possession === team && r.touches >= 3) return;
@@ -318,11 +328,24 @@ function ensureFlightPlan(game, aiState) {
     //   所以「到位」這個條件**每球都成立**，真實世界的 60–80% 在這裡等於「每球都跳」
     //   ＝攔網手讀不到差別、資訊武器自我歸零。0.35 ≒ 每三球出現一次，
     //   與 §4 原定的二速比例同量級，讓「這球被壓縮了沒」保持可讀
+    // ★ S2 鎖存（2026-07-30 Sawmah 拍板；同 read 起跳「取樣一次並鎖存」先例）★
+    // 骰的鍵是 flightId，而 flightId 可能因非觸球事件在同一個第二觸窗內遞增
+    // ⇒ 原寫法在那種情況下等於同一顆球重骰。鎖存語意＝**骰與資格分離**：
+    // 骰每個第二觸窗（possession＋touches===1 連續區間）取樣一次並鎖存（窗內首次
+    // 規劃的 flightId，決定論）；資格（主追＝二傳、tier）逐次規劃即時評估。
+    // 窗界清除在上方兩處（死球分支＋窗外規劃）。
+    // ⚠ 段 2 語料實測本鎖存為行為 no-op（該語料窗內 churn 未發生）——留著是正確性
+    // 加固，不是段 2 紅的成因；紅的真因與修復見下方 decideOne 的「S2 退路」（球墜入
+    // 站舉可及即退站舉；修前抽中跳舉的窗 47.7% 整窗無舉球、~12 分/局落地失分）。
+    if (aiState.jumpSetRoll == null) {
+      aiState.jumpSetRoll =
+        hash01(game.rally.flightId * 811 + 29 + (game.seed ?? 0)) < AI.JUMP_SET_RATE;
+    }
     aiState.jumpSet =
       !!aiState.claimId &&
       game.players[aiState.claimId].currentRole === 'setter' &&
       tier === 'perfect' &&
-      hash01(game.rally.flightId * 811 + 29 + (game.seed ?? 0)) < AI.JUMP_SET_RATE;
+      aiState.jumpSetRoll;
     // §5 第三檔弧線：被選中那條線跑幾速（routes 是節奏的單一真相）——
     // 二速要吃平拉開的低弧（setAimFor 的 tempo 分支），三速維持高球
     aiState.attackTempo =
@@ -761,7 +784,13 @@ function decideOne(game, aiState, playerId) {
       // §5 A3：跳舉只抬高「這一觸的高度上緣」（jumpSet 由 ensureFlightPlan 決定論抽選）。
       // AI 這一側的門檻與 sim 的 game.js:maxY 必須是同一個值，否則 AI 會送出
       // sim 當場駁回的 Intent（一次白等、下一 tick 才補上）——兩處各留註解互指
-      const jumpSet = action === 'set' && !!aiState.jumpSet;
+      // ★ S2 退路（2026-07-30 Sawmah 拍板，零新常數）：跳舉的意義＝比站舉更早更高觸球；
+      // 球一旦墜入站舉可及上緣（touchCeiling 站舉值＝standingReach+0.35，既有量）之下，
+      // 跳舉買不到任何東西，真實二傳會直接站舉處理。修前實測（t=0.5，6 局）：抽中跳舉
+      // 的窗 47.7% 整窗無舉球、~72 顆球在二傳腳邊落地失分——高手點（spikeReach）＋縮小
+      // 的可及對低球永遠構不到，而 AI 沒有退路、對著下墜的球逐 tick 送跳舉意圖到死。
+      const jumpSet = action === 'set' && !!aiState.jumpSet
+        && ball.y > touchCeiling(player, 'set', false);
       if (action && ball.y <= touchCeiling(player, action, jumpSet)) {
         // AI 觸球品質基準 0.75（玩家 Perfect＝1.0 才有超越空間）；快攻舉球帶 t<0.5（低弧）
         let timing = tOverride ?? (action === 'spike' ? 1 : 0.75);

@@ -128,10 +128,24 @@ function runSet(seed) {
   let bucket = null;
   let setTotal = 0;
   let setJump = 0;
+  let winN = 0;    // 第二觸窗數（抽選器的真實分母；07-30 ④ 改窗層級驗骰）
+  let winRoll = 0; // 其中骰為真的窗數
+  let inWin = false;
   let guard = 0;
   while (g.phase !== 'set_over' && guard < 300000) {
     guard += 1;
-    const ev = stepGame(g, aiCollectIntents(g, ai));
+    const intents = aiCollectIntents(g, ai);
+    // 窗偵測放在 collect（規劃、骰鎖存）之後、step 之前：ai.jumpSetRoll 是窗內鎖存的骰
+    if (g.phase === 'rally' && g.rally.touches === 1 && ai.jumpSetRoll != null) {
+      if (!inWin) {
+        inWin = true;
+        winN += 1;
+        if (ai.jumpSetRoll) winRoll += 1;
+      }
+    } else {
+      inWin = false;
+    }
+    const ev = stepGame(g, intents);
     for (const e of ev) {
       if (e.type === 'TOUCH' && e.touches === 1) recvTick = g.tick;
       if (e.type === 'TOUCH' && e.kind === 'set') {
@@ -151,7 +165,7 @@ function runSet(seed) {
       if (e.type === 'DEAD_BALL') { setTick = null; recvTick = null; }
     }
   }
-  return { win, setY, recvToHit, log, setTotal, setJump };
+  return { win, setY, recvToHit, log, setTotal, setJump, winN, winRoll };
 }
 
 const runs = [1, 2, 3, 4, 5, 6].map(runSet);
@@ -163,19 +177,19 @@ const pool = (sel) => {
 const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
-// ★ 07-30（§十 階段五 段 2，t=0.50）已知紅、送裁中——不得為轉綠改判準 ★
-// 實測 22.1%（名目 35%±8pp）。偵錯已定位（convergence §5.6）：骰子沒壞（抽選照名目）、
-// 閘沒破（退回站舉的 93/94 觸球者是二傳本人、tier 仍 perfect）——是**抽中跳舉的 flight
-// 過半在飛行中因重規劃把旗標重算成 false**，二傳趕到後只站舉（79 跳 vs 94 退回）。
-// 這是「收斂的真實行為後果 vs 重規劃不該丟旗標的實作瑕疵」的判定題＝裁定權，
-// 不下放治具（§2.6-d）；處置同段 1 的 ⑤b：留紅＋登記＋送裁。
-test('A3 ④ 觸發率：跳舉真的會發生，且比例貼近名目（一傳恆到位＝條件恆成立）', () => {
-  const total = runs.reduce((s, r) => s + r.setTotal, 0);
-  const jump = runs.reduce((s, r) => s + r.setJump, 0);
-  assert.ok(total > 200, `舉球樣本不足（${total}）`);
-  const rate = jump / total;
+// ★ 07-30 段 2 重定義（Sawmah 拍板；經兩輪偵錯＋一次儀器勘誤，全紀錄 convergence §5.6）★
+// 原斷言拿「跳舉觸／全部舉球觸」對名目 35%——那把「抽選」與「執行」混在同一個數字裡。
+// 收斂之後執行率是**觀測量**不是不變量（S2 退路：球墜入站舉可及即退站舉，二傳趕不上
+// 高點的比例隨可及縮小而升，任何固定帶寬都會逐段再紅）⇒ 本測改驗**抽選器本體**：
+// 窗層級骰率 ≈ 名目。**名目 0.35、帶寬 ±8pp、樣本門檻 200 一格未動**，分母換成骰的
+// 真實母體（第二觸窗）。執行率（跳舉觸／舉球觸）進面板觀察項，段段登記。
+test('A3 ④ 抽選器：跳舉抽選在第二觸窗層級照名目（分母＝窗數；名目與帶寬不動）', () => {
+  const total = runs.reduce((s, r) => s + r.winN, 0);
+  const roll = runs.reduce((s, r) => s + r.winRoll, 0);
+  assert.ok(total > 200, `窗樣本不足（${total}）`);
+  const rate = roll / total;
   assert.ok(Math.abs(rate - AI.JUMP_SET_RATE) < 0.08,
-    `跳舉觸發率 ${(rate * 100).toFixed(1)}%（名目 ${AI.JUMP_SET_RATE * 100}%）`);
+    `跳舉抽中率 ${(rate * 100).toFixed(1)}%（名目 ${AI.JUMP_SET_RATE * 100}%）`);
 });
 
 test('A3 ④ 跳舉的二傳觸球點確實更高（這是壓縮的來源，不是威力）', () => {
@@ -275,11 +289,14 @@ function playOneRally(seed) {
 }
 
 test('A3 ⑤ VCR v2 重演相容：jumpSet 純由種子重算，不必進錄影白名單', () => {
-  // 掃到一顆「這一波真的跳舉了」的球，否則測不到東西
+  // 掃到一顆「這一波真的跳舉了」的球，否則測不到東西。
+  // 07-30 S2 退路修復後：「旗標為真」不再保證「跳舉意圖真的送出」（球墜入站舉可及
+  // 即退站舉、intent.jump=false）⇒ 找球條件改認 'J'（意圖真的送出）——重演相等斷言
+  // 與末端守門（truthTail 須含 'J'）一字未動，只是把樣本挑對。
   let found = null;
   for (let seed = 1; seed <= 40 && !found; seed += 1) {
     const r = playOneRally(seed);
-    if (r.truth.some((t) => t.startsWith('1'))) found = r;
+    if (r.truth.some((t) => t.endsWith('J'))) found = r;
   }
   assert.ok(found, '40 顆球內找不到跳舉樣本');
   assert.equal(found.tape.v, TAPE_VERSION);
