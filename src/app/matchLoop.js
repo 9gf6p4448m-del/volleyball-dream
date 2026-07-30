@@ -1457,15 +1457,20 @@ function updateAssistAndPoses(s) {
   // sim 的觸球那一 tick。預備段（上一區塊）會被無縫接手——setReady/receiveReady
   // 有 sustain，geoAnimator.trigger 直接延續其權重（不得再出現「兩次抬手」）。
   // 型別事前判定：舉球恆高手；接球一律低手平墊——contactPoint 的預測接觸高度 1.35m
-  // 本來就低於高手門檻 1.6m。實測 20.8% 的接球實際觸點在 1.6m 以上（快速下墜球提早
-  // 1–2 tick 觸球，而下墜 1 tick 就是 0.25m ⇒ 事前無法在 tick 粒度上分辨），這部分
-  // 由 TOUCH 事件當場改播 overhead＝與修前完全相同的行為，不會變差
+  // 本來就低於高手門檻 1.6m。手點收斂 t=1 後接球可及球體上緣只剩 0.81H+0.105
+  // （H=1.75 時 1.52m，構造上摸不到 1.6m 門檻——見 geoAnimator.contactSeqFor 的
+  // C-3 死碼註解），contact-frame-probe 07-30 重測：高手接球實際觸點占比僅 2.0%
+  // （07-29 舊數據 20.8% 是收斂前的量，已隨手點幾何一起緊縮，非本層改動所致）。
+  // 這極少數殘留由 TOUCH 事件當場改播 overhead＝與修前完全相同的行為，不會變差
   if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.controlledId
     && aiState.contactPoint?.ticks != null && aiState.flightId !== s.lastContactFlight
     && game.rally.touches <= 1) {
     const toContact = aiState.contactPoint.ticks - (game.tick - aiState.planTick);
     const isSet = game.rally.touches === 1;
-    const type = isSet ? 'overhead' : 'bump';
+    // 跳舉表現層（W2 核心-3）：aiState.jumpSet 是 ensureFlightPlan 本 flight 已經決定論
+    // 抽選鎖存好的事實（ai.js:354-358），與 TOUCH 事件的 e.jumpSet 同一個來源——這裡
+    // 直接讀現成狀態，不重算。非二傳觸窗（isSet===false）恆讀不到 true，行為不變
+    const type = isSet ? (aiState.jumpSet ? 'overheadJump' : 'overhead') : 'bump';
     const lead = hitLeadTicks(type) + (isSet ? SET_CONTACT_BIAS : 0);
     const claimer = game.actors[aiState.claimId];
     const gap = Math.hypot(aiState.contactPoint.x - claimer.x, aiState.contactPoint.z - claimer.z);

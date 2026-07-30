@@ -132,6 +132,17 @@ const SEQUENCES = {
     dur: 0.55, jump: 0, land: false, hit: 0.56,
     keys: [{ at: 0, p: 'setReach' }, { at: 0.42, p: 'setReach' }, { at: 0.56, p: 'setPush' }, { at: 1, p: 'setReach' }],
   },
+  // Phase 5 W2 核心-3（跳舉表現層，07-30）：二傳跳起舉球——ai.js 的 jumpSet 純資訊
+  // 武器只把「可觸球高度上緣」抬高，動作姿勢沿用 overhead 原班人馬（setReach/setPush，
+  // 未加新 pose）；差別只在加了 jump 弧＋落地（land:true 會自動接 landSoft 緩衝）。
+  // dur 比 overhead 拉長一截給跳躍留空氣感，hit 維持同一個 keys 形狀與相近分數，
+  // 提前量（hitLeadTicks）吃這份 dur/hit 自動重算，不必在 matchLoop 另外調參。
+  // jump 高度取 0.32——低於全力扣球起跳（spike/serveJump 0.55）、貼近攔網起跳
+  // （block 0.34）量級，因為二傳跳舉是就地小跳非助跑爆發，純表現取捨非 sim 數值。
+  overheadJump: {
+    dur: 0.62, jump: 0.32, land: true, hit: 0.56,
+    keys: [{ at: 0, p: 'setReach' }, { at: 0.42, p: 'setReach' }, { at: 0.56, p: 'setPush' }, { at: 1, p: 'setReach' }],
+  },
   // 4.7 §P3：鞭打嚴格依序解鎖——肩(0.30)→肘(0.36)→腕(0.42 擊球)，不得同幀一起轉
   spike: {
     dur: 0.6, jump: 0.55, land: true, hit: 0.42,
@@ -245,9 +256,20 @@ export const OVERHAND_Y = 1.6; // 擊球高度高於此＝高手動作，低於�
 //   同一支＝回 null（不得重播——同一次接觸播兩次就是「手抬兩下」）
 //   不同支＝回正確的那一支（事前判低手、實際球高過門檻走高手 ⇒ 當場改播，同修前行為）
 // kind==='dive'＝魚躍觸球：動畫由 matchView 的 divedUntil 偵測負責（撲到/撲空都演）
-export function contactSeqFor(kind, ballY, armed = null) {
+// jumpSet＝sim TOUCH 事件已帶的事實（game.js:613 `intent.jump` 直接抄過來，非本層
+// 重算）——kind==='set' 且該球是跳舉觸成就改播 overheadJump，其餘 kind 不受影響。
+//
+// ★ 07-30 已知死碼（C-3，Phase 5 W2 掃尾-10；刻意保留，不刪）★
+// 最後一支三元：kind 為 receive 時若 ballY ≥ OVERHAND_Y 才會走到 'overhead'（高手接球）。
+// 手點收斂 t=1 後，接球可及球體上緣＝(RECEIVE_HANDPOINT_H_RATIO + RECEIVE_REACH_H_RATIO)
+// × H + BALL.RADIUS＝0.81H + 0.105——H=1.75 時只有 1.52m，構造上摸不到 OVERHAND_Y=1.6m，
+// 這支分支對主錨身高的球員幾何上打不到（contact-frame-probe 實測高手接球僅 2.0%，
+// 非 0——身高 ≥1.85 的球員 0.81×1.85+0.105=1.605m 才勉強夠得到 1.6m 門檻，仍會觸發）。
+// 不刪的原因：①仍有極少數高個子球員會走到這裡（真死碼會是「永遠 0%」，這裡不是）
+// ②刪掉要連帶清 tests/geoAnimator 對這支分支的既有測試，動測試不是本項範圍。
+export function contactSeqFor(kind, ballY, armed = null, jumpSet = false) {
   const type = kind === 'spike' ? 'spike'
-    : kind === 'set' ? 'overhead'
+    : kind === 'set' ? (jumpSet ? 'overheadJump' : 'overhead')
       : kind === 'dive' ? null
         : (ballY >= OVERHAND_Y ? 'overhead' : 'bump');
   return type === armed ? null : type;

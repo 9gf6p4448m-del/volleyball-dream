@@ -15,6 +15,7 @@ import { FACING, facingTarget, approachYaw, shortestArc } from './facing.js';
 import {
   REACH, reachWindow, reachBias, applyReachBias, localBallOffset, worldReachOffset,
 } from './reachAssist.js';
+import { REACH_ACTION } from '../sim/reach.js';
 
 // 提前觸發的有效期（秒）：這麼久還沒觸到球就作廢、放行 TOUCH 重播一次——寧可補一次
 // 動作，也不要整拍沒動作。探針實測「提前觸發→實際觸球」最長 41 tick（0.68s，舉球提前量
@@ -43,6 +44,18 @@ const REACH_KIND = {
   spike: 'dominant', windup: 'dominant', windupHesitant: 'dominant',
   approach3: 'dominant', approach4: 'dominant',
   serve: 'dominant', serveJump: 'dominant', serveFloat: 'dominant',
+};
+// 07-30：reachWindow 的水平全開半徑改吃 reachRadiusFor（單一真相），依「動作別」
+// 而不只是「雙手/慣用手」——三動作可及半徑不同（接 0.38H＜舉 0.45H＜扣 0.55H）。
+// 這張表跟上面 REACH_KIND 分開維護，因為粒度不同：'overhead' 同時是舉球正式動作、
+// 也是（罕見）高手接球的死碼分支（見 geoAnimator.contactSeqFor），這裡近似算 SET——
+// 半徑比接球寬，寧可窗開早一點也不要把該補的接球關掉。未列出的動作
+// （windup/approach/serve…非「碰別人來的球」）沿用最後一次登記值，初始值 SPIKE
+// （見 units 初始化）——三動作中最寬，同一份保守預設
+const REACH_KIND_ACTION = {
+  bump: REACH_ACTION.RECEIVE, receiveReady: REACH_ACTION.RECEIVE,
+  overhead: REACH_ACTION.SET, setReady: REACH_ACTION.SET,
+  spike: REACH_ACTION.SPIKE, dive: REACH_ACTION.DIVE,
 };
 
 export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null) {
@@ -79,15 +92,18 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       tagText: '',
       tagY: p.height.current + 0.45,
       reachKind: 'both', // 夠球補償的手臂組（見 REACH_KIND；由 setPose 逐次更新）
+      reachAction: REACH_ACTION.SPIKE, // reachWindow 的動作別（見 REACH_KIND_ACTION）
       reachW: 0,         // 夠球包絡的平滑值（0..1）
       contactArm: null,  // 擊球動作提前觸發的登記（見 triggerContact／CONTACT_ARM_TTL）
     };
   }
-  // 觸發動作＝同時記下這個動作該用哪一組手臂夠球（表格未列＝沿用上次）
+  // 觸發動作＝同時記下這個動作該用哪一組手臂夠球、以及該用哪個可及半徑（表格未列＝沿用上次）
   function setPose(u, type) {
     u.animator.trigger(type);
     const kind = REACH_KIND[type];
     if (kind) u.reachKind = kind;
+    const action = REACH_KIND_ACTION[type];
+    if (action) u.reachAction = action;
   }
   pool.finishColors();
 
@@ -127,7 +143,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         // 不論用不用得上，觸球即消耗——arm 不得跨拍殘留
         const armed = u.contactArm;
         u.contactArm = null;
-        const next = contactSeqFor(e.kind, e.ballY, armed?.type ?? null);
+        const next = contactSeqFor(e.kind, e.ballY, armed?.type ?? null, e.jumpSet);
         if (next) setPose(u, next);
       }
     }
@@ -361,16 +377,18 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         if ((u.lastBodyY ?? 0) > 0.18 && totalY <= 0.03) dust.burst(x + diveX, z + diveZ, 8, 0.7);
         u.lastBodyY = totalY;
 
-        // 夠球視覺補償（純表現，見 reachAssist.js）：sim 的 REACH_RADIUS 1.3m 很寬鬆，
-        // 球在快一公尺外就被觸到＝「沒碰到手就接起來」。判定半徑不動（平衡命脈），
-        // 改讓人去夠球——軀幹傾／轉＋手臂延伸＋小幅根位移。閘門：只在 rally、
-        // 魚躍（自己有撲出位移）／攔網（合攔的牆不該歪）／圍圈一律關閉
+        // 夠球視覺補償（純表現，見 reachAssist.js）：sim 觸球判定已收斂成手點球體
+        // （reach.js，t=1：接 0.38H／舉 0.45H／扣 0.55H），但 reach-probe 實測手到
+        // 球心仍有落差（07-30 重測 p50 receive 0.62m／set 0.74m／spike 0.63m，
+        // 垂直分量主導）——改讓人去夠球——軀幹傾／轉＋手臂延伸＋小幅根位移。
+        // 閘門：只在 rally、魚躍（自己有撲出位移）／攔網（合攔的牆不該歪）／圍圈一律關閉
         const assistOff = gameState.phase !== 'rally'
           || a.divedUntil > gameState.tick
           || blockDuty || a.blockUntil >= gameState.tick
           || (u.huddleW ?? 0) > 0.05;
         const wTarget = assistOff ? 0 : reachWindow(
           Math.hypot(b.x - x, b.z - z), b.y - totalY, gameState.players[id].height.current,
+          u.reachAction,
         );
         // 包絡另加時間平滑：閘門翻面／sim 逐幀跳動不得讓身體瞬間彈一下
         u.reachW += (wTarget - u.reachW) * (1 - Math.exp(-REACH.SMOOTH_K * dt));
