@@ -129,7 +129,15 @@ function runSet(seed) {
   while (g.phase !== 'set_over' && guard < 300000) {
     guard += 1;
     const app = ai.approach;
-    if (app?.routes?.length) {
+    // ★ 只取樣 rally 中的位移（2026-07-30 補這道閘）★
+    // 死球後的輪轉歸位是既有的「瞬移回位不做插值拖影」（game.js:1395），與助跑走位無關。
+    // 少了這道閘，跨越死球那一 tick 會把歸位記成單 tick 位移（實測 A5 6.24m，
+    // 現場 phase rally→serve、possession A→null、flightId 換號）。
+    // 同一道閘在 `block-persona.test.mjs` 與 `tools/phase5-block-width-probe.mjs` 早已存在
+    // （後者的註解逐字寫明這件事）——**本檔少它才是異常**。
+    // **斷言一字未動**，只縮取樣窗到它本來就該量的範圍。
+    const inRally = g.phase === 'rally';
+    if (app?.routes?.length && inRally) {
       log.push(`${g.tick}:${app.team}:${app.setTick}:` + app.routes
         .map((r) => `${r.pid}/${r.kind}/${r.tempo}/${r.startTick}/${r.takeoffTick}/${r.settleTick}`)
         .join('|'));
@@ -150,7 +158,7 @@ function runSet(seed) {
       runningHist.push(running);
       for (const r of app.routes) prev[r.pid] = { x: g.actors[r.pid].x, z: g.actors[r.pid].z };
     } else {
-      prev = {};
+      prev = {}; // 含「非 rally」的 tick：清掉基準，避免下一次 rally 的第一筆跨越歸位
     }
     stepGame(g, aiCollectIntents(g, ai));
   }
