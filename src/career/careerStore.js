@@ -8,7 +8,10 @@ import { advanceSeason, PLAYER_TRUST_FLOOR } from './careerState.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
-import { canExpel, EXPEL_TRUST_PENALTY } from './recruitment.js';
+import {
+  canExpel, EXPEL_TRUST_PENALTY, RECRUIT_TRUST, buildRecruitMember, nextRecruitId,
+  pendingWaiting, recruitTargetGone, waitingOf,
+} from './recruitment.js';
 import { positionFlagsOf, markPositionReady, approvePositionOpen } from './positionFlags.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
@@ -167,11 +170,39 @@ export function createCareerStore(storage, slot = 1) {
         // W3(P4) 建隊鏈參數化：換血缺額與預設陣一律吃玩家現任位置（轉位後 OH 洞由
         // 補位員補、預設陣把玩家排進新槽——見 tests/position-change）
         const playerRole = prev.player?.currentRole ?? 'outside';
+        const endingSeason = prev.season.index ?? 1;
+        const nextIdx = endingSeason + 1;
+        const rec = prev.recruitment ?? { progress: {}, recruited: [] };
+        // P2②：等候名單的當屆有效順位（已入隊/目標已畢業者出列——D1 ace 降年級後
+        // 作廢時點跟著變，判準只有 recruitTargetGone 一份）
+        const waiting = pendingWaiting(rec, nextIdx);
+        // P2①：本屆有無招募入隊——成員的 joinedSeason 是唯一判準（含當屆被逐出者，
+        // 否則「招到就逐出」可以無限換來投）
+        const joinedThisSeason = prev.roster.members.some((m) => m.joinedSeason === endingSeason)
+          || (rec.expelled ?? []).some((e) => e.member?.joinedSeason === endingSeason);
         turnover = applySeasonTurnover({
           roster: prev.roster,
-          seasonIndex: prev.season.index ?? 1,
+          seasonIndex: endingSeason,
           seed: next.seed,
           playerRole,
+          waiting,
+          // 等候者生成器：id 掃現役∪校友∪逐出（R id 不回收）、屆數＝入隊當屆、
+          // 名冊當下水位補正（W6 入隊補正——晚一屆入隊的人跟上隊伍成長）
+          buildWaitingMember: (key, members, alumni) => (
+            recruitTargetGone(key, nextIdx)
+              ? null
+              : buildRecruitMember(
+                key,
+                prev.season.seed ?? 1,
+                nextRecruitId(
+                  [...members, ...(alumni ?? []).map((a) => a.member)],
+                  rec.expelled ?? [],
+                ),
+                members,
+                nextIdx,
+              )
+          ),
+          walkOn: !joinedThisSeason,
         });
         // 預設陣重排：畢業者不可留在 starters；trust 跟人——倖存者沿用舊值、
         // 畢業者鍵自然消失、新生顯式寫入（勿依賴缺鍵回退——W3 §6b）。
@@ -184,7 +215,13 @@ export function createCareerStore(storage, slot = 1) {
         for (const f of turnover.freshmen) {
           if (lineup.trust[f.id] !== undefined) lineup.trust[f.id] = FRESHMAN_TRUST;
         }
-        const nextIndex = (prev.season.index ?? 1) + 1;
+        // P2①②：來投者＝新血同級（10）；等候名單遞補者＝招募生初值（RECRUIT_TRUST）
+        for (const m of [...(turnover.admitted ?? []), ...(turnover.walkOn ? [turnover.walkOn] : [])]) {
+          if (lineup.trust[m.id] !== undefined) {
+            lineup.trust[m.id] = m.origin === 'walkon' ? FRESHMAN_TRUST : RECRUIT_TRUST;
+          }
+        }
+        const nextIndex = nextIdx;
         // W2(P4) 身高揭曉：曲線創角時已預生成（player.height.plan），此處只揭曉
         // 下一屆值並 push timeline（同一次 RMW——儀式演出由 UI 吃回傳 heightReveal）
         const revealed = revealHeightForSeason(prev.player, nextIndex);
@@ -195,11 +232,23 @@ export function createCareerStore(storage, slot = 1) {
           ...(prev.career.seasons ?? []),
           archiveSeasonSummary(prev.season),
         ];
+        // P2②：遞補入隊者記進 recruited（＝挖角成功，只是慢了一屆）、出等候名單；
+        // 目標已畢業而作廢者一併出列（同一次 RMW——不留「在名冊又在等候」的中間態）
+        const admittedKeys = turnover.admittedKeys ?? [];
+        const restWaiting = waitingOf(rec).filter(
+          (k) => !admittedKeys.includes(k) && !recruitTargetGone(k, nextIdx),
+        );
+        const recruitment = {
+          ...rec,
+          recruited: [...(rec.recruited ?? []), ...admittedKeys],
+          ...(restWaiting.length || rec.waiting ? { waiting: restWaiting } : {}),
+        };
         return {
           ...prev,
           player: revealed.player,
           roster: turnover.roster,
           lineup,
+          recruitment,
           career: { ...prev.career, seasons },
           season: {
             ...seasonFromCareer(next, prev),
@@ -208,7 +257,15 @@ export function createCareerStore(storage, slot = 1) {
         };
       });
       if (!ok) return false;
-      return { ok: true, graduates: turnover.graduates, freshmen: turnover.freshmen, heightReveal };
+      return {
+        ok: true,
+        graduates: turnover.graduates,
+        freshmen: turnover.freshmen,
+        // P2②遞補入隊者（招募儀式演出）／P2①來投者（來投見面台詞）
+        admitted: turnover.admitted ?? [],
+        walkOn: turnover.walkOn ?? null,
+        heightReveal,
+      };
     },
     // 現在第幾屆（UI 顯示用）
     seasonIndex() {
@@ -238,6 +295,10 @@ export function createCareerStore(storage, slot = 1) {
           recruitment: {
             ...next.recruitment,
             recruited: [...next.recruitment.recruited, opponentId],
+            // P2②：等候中的人入隊即出隊列（同一次 RMW，不留「在名冊又在等候」的中間態）
+            ...(next.recruitment.waiting
+              ? { waiting: next.recruitment.waiting.filter((k) => k !== opponentId) }
+              : {}),
           },
         };
       });

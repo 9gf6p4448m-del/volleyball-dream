@@ -3,6 +3,9 @@
 // 流程掛點：careerStore.advanceSeason（單次 RMW：畢業→年級推進→新生入學→重排預設陣）；
 // 儀式/播報的台詞層在 events.js（graduationCeremonyLines / freshmenIntroLines）。
 // 決定論：新生名字與屬性由「下一屆種子 × 固定字串」FNV-1a 導出——同存檔重演逐值一致。
+// 2026-07-30 試玩回饋 P2：屆末換血鏈擴為「畢業 → 等候名單遞補（P2②）→ 來投保底（P2①）
+// → 新生入學」；等候者與來投者的屬性水位補正沿用招募生同一條公式（rosterUplift）。
+import { rosterUplift } from './recruitment.js';
 
 // ---- 年級推進與畢業判定 ----
 
@@ -192,7 +195,74 @@ export function buildDeficitFillIns({ seed, members, usedNames, alumni = [], pla
   return generateFillIns({ seed, wanted, members, alumni, used });
 }
 
-// ---- 賽季換血（畢業 → 年級推進 → 新生入學；單一純函式供 store RMW 消費）----
+// ---- P2① 來投保底（試玩回饋 0730 §三 P2 二次拍板）----
+// 本屆零招募入隊＝屆末補一名「主動來投」的球員。敘事口徑＝**看了你們的比賽慕名而來**，
+// 不是挖角成功——挖角條件表與勝場門檻一行未動（沒達標就是沒挖到，誠實維持）。
+// 素材沿用本檔既有的新生生成管線（同名池、同屬性模板、同 hash 決定論），差異三處：
+//   ①origin='walkon'（隊友卡與台詞層可辨；不進 recruitment.recruited）
+//   ②位置＝名冊最薄的一格（來投者補你最缺的洞——第三屆板凳歸零的病根，見 P1）
+//   ③屬性以「隊伍平均」為底線（uplift 只補不砍，沿用招募生入隊補正 W6 同一條公式）
+//     ——否則第 3 屆來投的人一進來就是棄子，保底變安慰獎
+export const WALKON_PERSONA = '看了你們的比賽自己找上門的——把袋子放下就問「還缺人嗎」';
+
+// 名冊最薄的一格：以 FIELD_NEED 為基準取 (have − need) 最小者；同值取 FIELD_NEED
+// 表序（決定論）。自由人不列入（自由人體系走 lineup.libero，來投補場上位置）
+export function thinnestRole(members, playerRole = 'outside') {
+  const have = { setter: 0, outside: 0, middle: 0, opposite: 0, libero: 0 };
+  if (have[playerRole] !== undefined) have[playerRole] += 1;
+  for (const m of members ?? []) if (have[m.role] !== undefined) have[m.role] += 1;
+  let best = null;
+  for (const [role, need] of Object.entries(FIELD_NEED)) {
+    if (role === 'libero') continue;
+    const slack = have[role] - need;
+    if (best === null || slack < best.slack) best = { role, slack };
+  }
+  return best?.role ?? 'outside';
+}
+
+// W 前綴 id（比照 nextRecruitId／nextFreshmanId：掃現役∪校友最大號＋1，id 不回收）
+function nextWalkOnId(members, alumni) {
+  const ids = [
+    ...(members ?? []).map((m) => m.id),
+    ...(alumni ?? []).map((a) => a.member?.id),
+  ];
+  let max = 0;
+  for (const id of ids) {
+    const m = /^W(\d+)$/.exec(id ?? '');
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `W${max + 1}`;
+}
+
+// 生成來投者（決定論：同種子＋同名冊＝同一個人）
+export function buildWalkOn({
+  seed, members, usedNames, alumni = [], playerRole = 'outside',
+}) {
+  const used = new Set(usedNames ?? []);
+  const role = thinnestRole(members, playerRole);
+  const id = nextWalkOnId(members, alumni);
+  const fullName = drawName(seed + hash32(seed, `walkon:${id}`) % 97, used, id);
+  const base = FRESHMAN_ATTRS[role] ?? FRESHMAN_ATTRS.outside;
+  const uplift = rosterUplift(members, base); // 只補不砍（W6 招募入隊補正同一條公式）
+  const attributes = {};
+  for (const [k, v] of Object.entries(base)) {
+    attributes[k] = v + uplift + jitter(seed, `walkon:${id}:${k}`);
+  }
+  return {
+    id,
+    name: `小${fullName.at(-1)}`,
+    fullName,
+    origin: 'walkon',
+    role,
+    height: (FRESHMAN_HEIGHTS[role] ?? 1.84) + jitter(seed, `walkon:${id}:h`) / 100,
+    attributes,
+    growth: { grade: 1, xp: {}, log: [] },
+    dna: { teamId: 'A', style: 'balanced', tag: '來投' },
+    persona: WALKON_PERSONA,
+  };
+}
+
+// ---- 賽季換血（畢業 → 等候遞補 → 來投保底 → 年級推進 → 新生入學；單一純函式供 store RMW 消費）----
 
 // seasonIndex＝剛結束的屆；seed＝下一屆種子（advanceSeason 已決定論衍生）。
 // 校友（alumni）：畢業者完整快照＋屆數——①擋還魂（careerMatchSetup 除名清單）
@@ -208,28 +278,77 @@ function ensureCaptain(members) {
   return members.map((m) => (m.id === heirId ? { ...m, captain: true } : m));
 }
 
-export function applySeasonTurnover({ roster, seasonIndex, seed, playerRole = 'outside' }) {
+// waiting／buildWaitingMember（P2②）：等候名單鍵序＋逐鍵生成器（由 store 注入——
+//   本檔不 import store 也不碰 recruitKey 語意）；回 null＝該線已作廢（目標畢業）。
+// walkOn（P2①）：本屆零招募入隊＝true，屆末補一名來投者；**等候名單這次有人遞補
+//   進來就不補**（挖角的人到了，只是慢了一屆——保底是「一個都沒來」的兜底）。
+// 順序拍板（等候者在新生之前）：畢業騰出的空位先給達標的等候者，補位新生按「剩餘缺額」
+//   生成——反過來的話程序新血會先把空位吃掉、等候者又被擠到下一屆（P2② 修的正是這件事）。
+//   手寫新生（故事角色）另留一席，不被等候者/來投者擠掉。
+export function applySeasonTurnover({
+  roster, seasonIndex, seed, playerRole = 'outside',
+  waiting = [], buildWaitingMember = null, walkOn = false,
+}) {
   const { graduates, remaining } = splitGraduates(roster.members);
   const promoted = promoteMembers(remaining);
   const alumni = [
     ...(roster.alumni ?? []),
     ...graduates.map((member) => ({ member, seasonIndex })),
   ];
+  const nextIndex = seasonIndex + 1;
+  const capacity = roster.capacity ?? 12;
+  const hand = FRESHMAN_HANDWRITTEN[nextIndex];
+  const handTaken = !!hand && [...promoted, ...alumni.map((a) => a.member)]
+    .some((m) => m?.id === hand.id);
+  const reserved = hand && !handTaken ? 1 : 0; // 手寫新生保留席
+  const members = [...promoted];
+  // 名冊現員＝members＋玩家 1 席（roster.rosterCount 同語意；本檔不 import roster 避免循環）
+  const freeSlots = () => capacity - (members.length + 1) - reserved;
+  // ① 等候名單遞補（優先於新生）
+  const admitted = [];
+  const admittedKeys = [];
+  if (buildWaitingMember) {
+    for (const key of waiting) {
+      if (freeSlots() <= 0) break;
+      const m = buildWaitingMember(key, members, alumni);
+      if (!m) continue; // 目標已畢業＝這條線關閉（作廢時點由呼叫端的 recruitTargetGone 判）
+      members.push(m);
+      admitted.push(m);
+      admittedKeys.push(key);
+    }
+  }
+  // ② 來投保底（零招募且無人遞補時）
+  let walkOnMember = null;
+  if (walkOn && admitted.length === 0 && freeSlots() > 0) {
+    walkOnMember = buildWalkOn({
+      seed,
+      members,
+      usedNames: [...members, ...alumni.map((a) => a.member)]
+        .map((m) => m?.fullName).filter(Boolean),
+      alumni,
+      playerRole,
+    });
+    members.push(walkOnMember);
+  }
+  // ③ 新生入學（缺額由 ①② 之後的名冊重算——等候者補上的洞不會再生一個補位員）
   const usedNames = [
-    ...promoted.map((m) => m.fullName),
+    ...members.map((m) => m.fullName),
     ...alumni.map((a) => a.member?.fullName),
   ].filter(Boolean);
   const freshmen = buildFreshmen({
-    seasonIndex: seasonIndex + 1,
+    seasonIndex: nextIndex,
     seed,
-    members: promoted,
+    members,
     usedNames,
     alumni,
     playerRole,
   });
   return {
-    roster: { ...roster, members: ensureCaptain([...promoted, ...freshmen]), alumni },
+    roster: { ...roster, members: ensureCaptain([...members, ...freshmen]), alumni },
     graduates,
     freshmen,
+    admitted,
+    admittedKeys,
+    walkOn: walkOnMember,
   };
 }

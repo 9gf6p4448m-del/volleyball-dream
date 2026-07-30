@@ -16,7 +16,10 @@
 // Phase 4 W1 年級系統（憲法 Q1/Q3/Q4；2026-07-26 拍板）：
 // grades＝六先發「第 1 屆基準年級」（槽序同 squad）、liberoGrade＝自由人年級；
 // 現行年級＝基準 + (屆數−1)，賽季推進不改本檔（純參數檔，屆數換算在 careerState）。
-// 三年級 ace 拍板名單＝詹子曜/王勝翔/簡子嵐/曾家松（第 1 屆末畢業→遞補換臉）；
+// 三年級 ace 名單（2026-07-30 試玩回饋 D1 修訂）＝詹子曜（第 1 屆末畢業→遞補換臉）；
+//   青嵐簡子嵐／黑松曾家松原為三年級「登場即畢業」，回饋 #5「畢業無感」拍板降為
+//   1 年級＝與玩家同期成長、第二三屆再戰（ace.grows＝跨屆吃成長曲線，見 aceGrowth.js）；
+//   王勝翔讓位宿敵後降為 2 年級（W4 題6）。
 // 資料不變式（tests/grades 把關）：非 ace 的 squad/libero/reserves 基準年級一律 ≤2
 //   ——擋「畢業了卻因無 49 人輪替而繼續出賽」的還魂矛盾；招募目標年級由本檔導出
 //   （recruitment.recruitGradeOf），條件越苛者年級越低（Q3）。
@@ -134,7 +137,10 @@ export const OPPONENTS = [
     trustBias: { setter: 6 },
     heights: [1.79, 1.83, 1.89, 1.84, 1.82, 1.87],
     squad: ['簡子嵐', '藍浚廷', '翁品澔', '柯宇昊', '余承汐', '郭家澎'],
-    grades: [3, 2, 2, 1, 1, 2], // 簡子嵐=3（拍板：不在第 1 屆賽程＝玩家零投資，換臉敘事優先）
+    // 簡子嵐=1（2026-07-30 D1 拍板，原 3）：他不在第 1 屆賽程，玩家第 2 屆才第一次
+    // 碰到他——那時他二年級、正在變強，第 3 屆再碰是三年級的完成版。同期成長線取代
+    // 「登場即三年級」的換臉敘事（回饋 #5：畢業無感）
+    grades: [1, 2, 2, 1, 1, 2],
     libero: '阮信帆',
     liberoGrade: 1,
     reserves: [
@@ -143,7 +149,8 @@ export const OPPONENTS = [
       { name: '龔明澔', role: 'outside', grade: 1, drop: 9 },
       { name: '苗浚澎', role: 'opposite', grade: 2, drop: 11 },
     ],
-    ace: { slot: 0, name: '簡子嵐', title: '颱風眼' }, // S・小嵐——亂流的正中央永遠是靜的
+    // S・小嵐——亂流的正中央永遠是靜的；grows（N2）＝跨屆吃身高與能力曲線
+    ace: { slot: 0, name: '簡子嵐', title: '颱風眼', grows: true },
     scoutRead: 0.15,
     ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1, blockPersona: persona('commit') },
   },
@@ -184,7 +191,9 @@ export const OPPONENTS = [
     trustBias: { middle: 10 },
     heights: [1.86, 1.93, 2.01, 1.95, 1.91, 1.99],
     squad: ['呂宗楠', '蕭宇樺', '曾家松', '戴柏毅', '范育楷', '廖振森'],
-    grades: [2, 1, 3, 2, 2, 1], // 曾家松=3（persona 本就寫「三年級最後一屆」——拍板成真）
+    // 曾家松=1（2026-07-30 D1 拍板，原 3）：牆還沒砌完——第 2 屆碰到的是二年級的他、
+    // 第 3 屆是三年級的他，一屆比一屆高。原「三年級最後一屆」悲壯設定廢止（回饋 #5）
+    grades: [2, 1, 1, 2, 2, 1],
     libero: '朱以杉',
     liberoGrade: 2,
     reserves: [
@@ -193,7 +202,8 @@ export const OPPONENTS = [
       { name: '崔家楠', role: 'opposite', grade: 1, drop: 7 },
       { name: '巫宗森', role: 'setter', grade: 2, drop: 7 },
     ],
-    ace: { slot: 2, name: '曾家松', title: '最後的牆' }, // MB・老松——三年級最後一屆，牆不想再輸
+    // MB・老松——牆還在往上砌，一屆比一屆難翻過去；grows（N2）＝跨屆吃身高與能力曲線
+    ace: { slot: 2, name: '曾家松', title: '未完成的牆', grows: true },
     scoutRead: 0.6,
     ai: { tipRate: 0.06, dumpRate: 0.05, jumpServeRate: 0.15, floatServeRate: 0.1, diveRate: 0.07, blockPersona: 'read' }, // 高牆型＝不賭、等你出手
   },

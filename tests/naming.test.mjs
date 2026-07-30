@@ -127,9 +127,10 @@ test('naming：grades 不變式——非 ace 基準年級 ≤2、三年級 ace �
       assert.equal(heir.grade, 1, `${o.id} 接班人 ${heir.name} 年級須 1`);
     }
   }
-  // 拍板名單（2026-07-26 曜/鷹/嵐/松 → 07-27 宿敵拍板修訂：天鷹 ace 換莊敬嶺
-  // grade 1＋rival 豁免、王勝翔降格 grade 2 讓位）＝三年級 ace 三人
-  assert.deepEqual(gradeThreeAces.sort(), ['曾家松', '簡子嵐', '詹子曜'].sort());
+  // 拍板名單（2026-07-26 曜/鷹/嵐/松 → 07-27 宿敵拍板：天鷹 ace 換莊敬嶺 grade 1＋
+  // rival 豁免、王勝翔降 grade 2 → 07-30 D1：黑松曾家松/青嵐簡子嵐降 grade 1＝與玩家
+  // 同期成長、第二三屆再戰）＝三年級 ace 只剩詹子曜（第 1 屆末畢業→換臉仍在）
+  assert.deepEqual(gradeThreeAces, ['詹子曜']);
   // 宿敵 ace 不變式：rival 旗標＋與玩家同屆（grade 1）＝第 3 屆同屆畢業自然收束
   const hawk = OPPONENTS.find((o) => o.id === 'sky-hawk');
   assert.equal(hawk.ace.rival, true);

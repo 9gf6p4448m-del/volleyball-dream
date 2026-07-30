@@ -16,12 +16,14 @@ import {
 } from '../career/lineup.js';
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
-  recruitCurrentGrade, recruitTargetGone,
+  recruitCurrentGrade, recruitTargetGone, waitingOf,
 } from '../career/recruitment.js';
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
-  graduationCeremonySegments, freshmenIntroLines, resolveEventsForRoster, isOnceEvent,
+  graduationCeremonySegments, freshmenIntroLines, walkOnIntroLines,
+  resolveEventsForRoster, isOnceEvent,
 } from '../career/events.js';
+import { aceGrowthAt } from '../career/aceGrowth.js';
 import { clampHeightCm } from '../career/heightGrowth.js';
 import {
   adviceFor, coachAdviceLines, aspirationReplyLines, bandShiftLines, roleLabel,
@@ -737,9 +739,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       const g = def.grades?.[i];
       return g ? (GRADE_LABEL[Math.min(3, currentGrade(g, seasonN))] ?? '') : '';
     };
+    // N2（07-30）情蒐讀當屆值：成長型 ace 的身高走跨屆曲線（applySeasonRoster 掛的
+    // aceHeight），不是建檔常數——「情蒐錄影帶數據跨屆真實變化」的顯示端
+    const oppHeight = (i) => (def.ace?.slot === i && def.aceHeight)
+      ? def.aceHeight
+      : (def.heights?.[i] ?? 1.85);
     const oppChip = (i) => chipEl({
       name: def.squad?.[i] ?? `${def.name}${i + 1}號`,
-      sub: [OPP_ROLE[i], oppGradeLabel(i), `${(def.heights?.[i] ?? 1.85).toFixed(2)}m`]
+      sub: [OPP_ROLE[i], oppGradeLabel(i), `${oppHeight(i).toFixed(2)}m`]
         .filter(Boolean).join('・'),
       tone: 'enemy',
       isAce: def.ace?.slot === i,
@@ -786,6 +793,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
           `王牌 ${def.ace.name}（${aceRole}）——「${def.ace.title}」`));
         // W4(P4) Q9：對手 ace 對戰數據餵情蒐（宿敵感數據面——「上次交手他扣了 18 分」）
         const aceRec = store.loadAceBook?.()?.[next.opponentId];
+        // N2：宿敵成長的情蒐一行字（他這屆長高了／能力上修——資訊落在要用的前一刻）
+        const grew = def.aceHeight ? aceGrowthAt(baseDef, seasonN) : null;
+        if (grew && grew.grewCm > 0) {
+          intel.appendChild(el('div', ['font-size:11.5px', 'color:#ffb454'],
+            `📈 情蒐：他還在長——上屆 ${grew.fromCm}cm → 本屆 ${grew.heightCm}cm，`
+            + `能力全面上修（＋${grew.attrBonus}）`));
+        }
         if (aceRec?.last && aceRec.name === def.ace.name) {
           const bits = [`扣了 ${aceRec.last.kills} 分`];
           if (aceRec.last.aces > 0) bits.push(`ACE ${aceRec.last.aces}`);
@@ -1261,6 +1275,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     // （W6 前入隊的舊成員缺欄＝回退 origin，該世代 recruitKey 恆等 origin）
     const memberOf = (key) => roster.members.find((x) => (x.recruitKey ?? x.origin) === key);
     const seasonN = store.seasonIndex?.() ?? 1; // W1(P4)：目標年級/畢業下架顯示
+    const waiting = waitingOf(rec); // P2②：等候名單（滿編達標者）
     for (const [key, cond] of Object.entries(RECRUIT_CONDS)) {
       const def = opponentById(cond.opponentId);
       const p = progressOf(rec, key);
@@ -1299,8 +1314,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             `✗ ${gone?.name ?? ''} 已離隊`));
         }
       } else if (met && slots <= 0) {
-        top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.red}`],
-          '⚠ 名冊已滿'));
+        // P2②（07-30）：達標但滿編不再是黑洞——排隊等下屆畢業潮騰位（優先於新生）
+        top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.gold}`],
+          waiting.includes(key) ? '🕒 等候名單・下屆優先' : '🕒 名冊已滿・將入等候'));
       } else if (met) {
         top.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.gold}`],
           '條件達成'));
@@ -1711,6 +1727,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             }
             const intro = freshmenIntroLines(adv.freshmen ?? []);
             if (intro.length) seqs.push({ lines: intro });
+            // P2①（07-30）來投保底：本屆零招募＝屆末一名主動來投者（慕名而來，
+            // 非挖角成功）——接在新生入學之後、開幕台詞之前
+            const walkOnLines = walkOnIntroLines(adv.walkOn ?? null);
+            if (walkOnLines.length) seqs.push({ lines: walkOnLines });
             // 4.5A 小白事件一・入學宣言（第 3 屆開幕限定；轉 L 玩家＝前輩自由人追加）
             const n2Intro = n2OpeningLines({ freshmen: adv.freshmen ?? [], player: freshPlayer });
             if (n2Intro.length) seqs.push({ lines: n2Intro });
@@ -1718,9 +1738,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             if (opener.length) seqs.push({ lines: opener });
             // W3(P4)：屆間鏈尾端接轉位教練談話（旗標 open 才觸發，無談話＝直接回賽程）
             // W4 題1：賽季中請調已用掉＝當屆屆間不談（talkAllowed 於換屆前捕捉）
-            const finish = () => (talkAllowed
+            const afterTalk = () => (talkAllowed
               ? maybePositionTalk(() => renderCareer())
               : renderCareer());
+            // P2②：等候名單遞補入隊＝走既有招募儀式（他真的是挖角來的，只是慢了一屆）
+            const finish = () => ((adv.admitted ?? []).length
+              ? showRecruitCeremony(adv.admitted, afterTalk)
+              : afterTalk());
             if (seqs.length) dialogPlay(seqs, finish);
             else finish();
           };

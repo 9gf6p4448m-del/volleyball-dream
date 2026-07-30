@@ -23,7 +23,8 @@ export function createSaveV2({ career = null, player = null, prev = null } = {})
     //   capacity 12（W5，10→12）：玩家 1＋自由人 1＋隊友 10（現員 7→招募空位 5＝全招募池）
     roster: prev?.roster ?? { capacity: 12, members: [] },
     // 招募（W4 填入）：progress[opponentId]＝條件進度（跨賽季累積——拍板結論）；
-    //   recruited[]＝已達成入隊的球員 id；expelled[]（W5）＝已逐出者條目
+    //   recruited[]＝已達成入隊的球員 id；waiting[]（P2② 07-30）＝達標但滿編的等候序
+    //   （可選鍵，舊檔無＝空）；expelled[]（W5）＝已逐出者條目
     //   { member(完整快照), seasonIndex, titlesAtExpel }（不可逆、防重招、id 不回收）
     recruitment: prev?.recruitment ?? { progress: {}, recruited: [], expelled: [] },
     // 先發編排（W3 填入，啟用 FIVB 7.7 驗證器）：starters＝6 人輪轉序（null＝未排，
@@ -182,8 +183,11 @@ export function deserializeSave(json) {
     || !Array.isArray(raw.recruitment.recruited)
     // W5 expelled：舊檔可無此鍵（讀取端 ?? [] 容錯，冪等升級不 brick）；若存在必為陣列
     || (raw.recruitment.expelled !== undefined && !Array.isArray(raw.recruitment.expelled))
+    // P2②（07-30）waiting＝等候名單（達標但滿編者的 recruitKey 序）：同 expelled 慣例
+    // ——可選鍵、零遷移（舊檔讀成空陣列），若存在必為陣列
+    || (raw.recruitment.waiting !== undefined && !Array.isArray(raw.recruitment.waiting))
   ) {
-    throw new Error('recruitment 結構不合法（需 progress:object 與 recruited:array；expelled 若存在須為 array）');
+    throw new Error('recruitment 結構不合法（需 progress:object 與 recruited:array；expelled/waiting 若存在須為 array）');
   }
   // W3 先發編排驗證（starters 非 null＝已排；null＝建檔中間態，容許不驗內容）：
   // 長度 6/無重複/id 合法/自由人不入先發/rotationStart 0-5

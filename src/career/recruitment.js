@@ -5,6 +5,7 @@
 // 壯舉統計一律從賽末 state.events 掃描——sim 執行碼零改動、零新事件型別（硬性約束）。
 import { opponentById } from './opponents.js';
 import { buildLibero } from './careerState.js';
+import { aceGrowthAt } from './aceGrowth.js';
 import { matchStatsFor } from './growth.js';
 import { openSlots } from './roster.js';
 import { ATTRIBUTE_KEYS } from '../sim/player.js';
@@ -92,9 +93,10 @@ const RECRUIT_DEFS = {
   'obsidian-2': { name: '小磐', fullName: '許嘉碩', persona: '曜石的第二座山——不如阿曜快，但攔下來的球一顆都不還' },
   'iron-mist-2': { name: '阿霜', fullName: '徐世銘', persona: '鐵霧的左翼冷刃——安靜，準，出手不帶感情' },
   'sky-hawk-2': { name: '大隼', fullName: '李振騰', persona: '天鷹的右翼重錘——王牌的影子，也想當一次主角' },
-  'gale-shore': { name: '小嵐', fullName: '簡子嵐', persona: '青嵐的球路設計師——每一顆二次球都是預謀' },
+  // D1 成長線 persona（2026-07-30 拍板：ace 降 1 年級，登場即三年級的悲壯設定廢止）
+  'gale-shore': { name: '小嵐', fullName: '簡子嵐', persona: '青嵐的球路設計師——跟你同一屆。上次那套球路他已經拆過了，這次換新的' },
   'gale-shore-2': { name: '阿汐', fullName: '余承汐', persona: '青嵐的斜線快手——潮水退了才知道他打的是哪條線' },
-  'black-pine': { name: '老松', fullName: '曾家松', persona: '黑松高牆的基石——三年級最後一屆，牆不想再輸' },
+  'black-pine': { name: '老松', fullName: '曾家松', persona: '黑松高牆的基石——跟你同一屆，牆一年砌高一次。他等的不是最後一戰，是下一戰' },
   'black-pine-2': { name: '大柏', fullName: '戴柏毅', persona: '黑松的右翼砲台——牆後面，藏著一門重砲' },
 };
 
@@ -252,7 +254,8 @@ const clampAttr = (v) => Math.max(ATTR_MIN, Math.min(ATTR_MAX, Math.round(v)));
 // 貶值」（隊友成長到 80+ 時，新人還從來源隊出廠值起跳＝進來就是棄子）。
 // 只補不砍：來源隊公式值已高於隊伍水位＝照舊（早期招強隊招牌仍然是即戰力）；
 // 由入隊當下名冊決定論導出（成員屬性是存檔狀態，同存檔重演一致）
-function rosterUplift(members, baseAttrs) {
+// export（07-30）：來投保底（graduation.buildWalkOn）吃同一條公式——單一真相
+export function rosterUplift(members, baseAttrs) {
   if (!members?.length) return 0;
   const avgOf = (attrs) => ATTRIBUTE_KEYS
     .reduce((s, k) => s + (attrs[k] ?? 0), 0) / ATTRIBUTE_KEYS.length;
@@ -262,6 +265,12 @@ function rosterUplift(members, baseAttrs) {
 
 // 屬性槽位身高（opponents.js heights 槽序＝S/OH/MB/OPP/OH/MB）
 const ROLE_HEIGHT_SLOT = { setter: 0, outside: 1, middle: 2, opposite: 3 };
+
+// N2：招募目標本人就是該隊成長型 ace 時的當屆身高（否則 null＝走建檔常數）
+function aceHeightForRecruit(def, meta, seasonIndex) {
+  if (def?.ace?.name !== meta?.fullName) return null;
+  return aceGrowthAt(def, seasonIndex)?.heightM ?? null;
+}
 
 // 依來源隊 level＋attrBias（＋該角色 roleBias）決定論生成成員；每屬性帶 −2..+2
 // 決定論抖動（hash(careerSeed, recruitKey:attr)）讓同角色轉學生不是複製人。
@@ -301,10 +310,18 @@ export function buildRecruitMember(recruitKey, careerSeed, id, rosterMembers = n
     origin: def.id, // schema：origin＝來源隊 id（starter 以外皆招募生）
     recruitKey, // W6：招募槽對映（同隊多人時 origin 不再唯一）
     role,
-    height: role === 'libero' ? 1.72 : (def.heights?.[ROLE_HEIGHT_SLOT[role]] ?? 1.86),
+    // N2（07-30）：挖到的是成長型 ace＝身高取**入隊當屆**值，不是建檔常數——
+    // 否則情蒐畫面說 2.03m、入隊後隊友卡變回 2.01m（同一個人兩個身高）
+    height: role === 'libero'
+      ? 1.72
+      : (aceHeightForRecruit(def, meta, seasonIndex)
+        ?? def.heights?.[ROLE_HEIGHT_SLOT[role]] ?? 1.86),
     attributes,
     // W1(P4)：真實年級（夾限 3——理論上 settleRecruitJoins 已擋畢業者）
     growth: { grade: Math.min(3, recruitGradeOf(recruitKey) + (seasonIndex - 1)), xp: {}, log: [] },
+    // P2①（07-30）：入隊屆數——「本屆有無招募入隊」的單一判準（來投保底的觸發條件）；
+    // 舊存檔成員無此欄＝該屆視為無招募（保底寧可多給一名，不會少給）
+    joinedSeason: seasonIndex,
     dna: { teamId: def.id, style: def.style, tag: def.name },
     persona: meta.persona,
   };
@@ -331,13 +348,16 @@ export function nextRecruitId(members, expelled = []) {
 // 條件達成→入隊：逐招募槽檢查（表序），滿足且有空位＝生成成員、單次 RMW 原子寫入
 // 三處（roster.members push＋lineup.trust 顯式 10＋recruitment.recruited push——
 // store.applyRecruit 一筆寫完，不留「入了名冊沒記 recruited」的中間態）。
-// 無空位：不入隊、條件保持已達成、progress 不清——W6 池 12 vs slots 5 起這是常態：
-// 逐出騰位後下次結算自動入隊（「組建你的五人」的取捨迴圈）。
+// 無空位（P2② 2026-07-30 拍板修正「達標但滿編＝永遠不入隊」）：達標者進**等候名單**
+// （recruitment.waiting，表序即等候序）——逐出騰位後下次結算自動入隊，或下屆畢業潮
+// 騰位時由 advanceSeason 優先遞補（careerStore；優先於新生保底）。
+// progress 一律不清（條件保持已達成）。
 // 冪等：recruited 已含該槽＝跳過；重複呼叫返回空陣列。
 // W6：recruited 存 recruitKey（既有 5 隊鍵值＝opponentId，舊存檔零遷移）；
 // applyRecruit 的 opponentId 參數自 W6 起承載 recruitKey（store 只作 recruited push 用）
 export function settleRecruitJoins(store, careerSeed) {
   const joined = [];
+  const waitlisted = []; // P2②：本次達標但滿編者（入等候名單，下屆優先）
   const seasonIndex = store.seasonIndex?.() ?? 1; // W1(P4)：真實年級與畢業下架
   for (const recruitKey of Object.keys(RECRUIT_CONDS)) {
     const rec = store.loadRecruitment();
@@ -347,14 +367,55 @@ export function settleRecruitJoins(store, careerSeed) {
     if (!rec || !roster || roster.members.length === 0) return joined;
     if (rec.recruited.includes(recruitKey) || !conditionMet(rec, recruitKey)) continue;
     if (recruitTargetGone(recruitKey, seasonIndex)) continue; // 已畢業＝條件達成也不入隊
-    if (openSlots(roster) <= 0) continue;
+    if (openSlots(roster) <= 0) {
+      waitlisted.push(recruitKey); // P2②：不再是黑洞——排隊等下屆騰位
+      continue;
+    }
     const id = nextRecruitId(roster.members, rec.expelled ?? []); // 含 expelled：id 不回收
     // W6：傳現役名冊＝入隊補正生效（晚招的人跟上隊伍成長水位）
     const member = buildRecruitMember(recruitKey, careerSeed, id, roster.members, seasonIndex);
     if (!store.applyRecruit({ member, opponentId: recruitKey, trust: RECRUIT_TRUST })) return joined;
     joined.push(member);
   }
+  if (waitlisted.length) {
+    const rec = store.loadRecruitment();
+    if (rec) {
+      const next = mergeWaiting(rec, waitlisted);
+      if (next !== rec) store.saveRecruitment(next);
+    }
+  }
   return joined;
+}
+
+// ---- P2② 等候名單（recruitment.waiting；純函式層）----
+// schema：可選鍵（比照 roster.alumni／recruitment.expelled 慣例）——舊存檔無此鍵＝
+// 讀取端 ?? [] 容錯，零遷移。內容＝recruitKey 陣列，**表序即等候序**（先達標先入隊）。
+
+export function waitingOf(recruitment) {
+  return [...(recruitment?.waiting ?? [])];
+}
+
+// 併入等候者（去重、保序）；無變化＝原物件返回（呼叫端可據此省一次寫檔）
+export function mergeWaiting(recruitment, keys) {
+  const waiting = waitingOf(recruitment);
+  let changed = false;
+  for (const k of keys ?? []) {
+    if (!waiting.includes(k)) {
+      waiting.push(k);
+      changed = true;
+    }
+  }
+  return changed ? { ...recruitment, waiting } : recruitment;
+}
+
+// 等候名單的當屆有效順位（advanceSeason 消費）：已入隊者與**目標已畢業**者出列
+// ——D1 ace 降年級後，畢業作廢時點跟著變（recruitTargetGone 是唯一判準，不另抄一份）
+export function pendingWaiting(recruitment, seasonIndex) {
+  return waitingOf(recruitment).filter(
+    (k) => RECRUIT_CONDS[k]
+      && !(recruitment?.recruited ?? []).includes(k)
+      && !recruitTargetGone(k, seasonIndex),
+  );
 }
 
 // ---- W5 逐出資格判定（純函式：UI 閘門與 store 最後防線共用同一套規則）----

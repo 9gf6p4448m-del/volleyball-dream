@@ -10,6 +10,7 @@ import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lin
 import { buildSchedule } from './schedule.js';
 import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 import { initialHeightState } from './heightGrowth.js';
+import { withAceGrowth } from './aceGrowth.js';
 
 // v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
 export const CAREER_VERSION = 3;
@@ -213,9 +214,14 @@ const FALLBACK_HEIGHTS = [1.83, 1.88, 1.96, 1.9, 1.86, 1.94];
 
 export function buildOpponentTeam(def) {
   return ROLE_ORDER.map((role, i) => {
+    // N2 宿敵成長：成長型 ace 的當屆增幅（applySeasonRoster 掛的 aceAttrBonus／
+    // aceHeight；無欄位＝零加成＝第 1 屆與非成長型隊伍逐值不變）
+    const isAce = def.ace?.slot === i;
+    const aceBonus = isAce ? (def.aceAttrBonus ?? 0) : 0;
     const attrs = {};
     for (const k of ATTRIBUTE_KEYS) {
-      attrs[k] = def.level + (def.attrBias?.[k] ?? 0) + (def.roleBias?.[role]?.[k] ?? 0);
+      attrs[k] = def.level + aceBonus
+        + (def.attrBias?.[k] ?? 0) + (def.roleBias?.[role]?.[k] ?? 0);
     }
     return createPlayer({
       id: `B${i + 1}`,
@@ -225,7 +231,7 @@ export function buildOpponentTeam(def) {
       teamId: 'B',
       naturalRole: role,
       currentRole: role,
-      height: def.heights?.[i] ?? FALLBACK_HEIGHTS[i],
+      height: (isAce ? def.aceHeight : null) ?? def.heights?.[i] ?? FALLBACK_HEIGHTS[i],
       trust: BASE_TRUST[i] + (def.trustBias?.[role] ?? 0),
       attributes: attrs,
     });
@@ -289,7 +295,11 @@ export function applySeasonRoster(def, seasonIndex = 1) {
   // 無差別滾掉；與玩家同屆（grade 1 特設）＝第 3 屆末同屆畢業、資料語意自然收束
   if (def.ace.rival) return def;
   const aceGrade = def.ace.slot === 'L' ? def.liberoGrade : def.grades[def.ace.slot];
-  if (aceGrade == null || currentGrade(aceGrade, seasonIndex) <= 3) return def; // 尚未畢業
+  // 尚未畢業＝原班 ace 續戰；N2（07-30）成長型 ace 在此掛當屆身高／能力
+  // （非成長型隊伍 withAceGrowth 回原物件＝第 2 屆恆等的既有測試不動）
+  if (aceGrade == null || currentGrade(aceGrade, seasonIndex) <= 3) {
+    return withAceGrowth(def, seasonIndex);
+  }
   const reserves = [...(def.reserves ?? [])];
   let best = -1;
   for (let i = 0; i < reserves.length; i += 1) {

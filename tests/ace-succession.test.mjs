@@ -9,14 +9,12 @@ import { OPPONENTS } from '../src/career/opponents.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { buildRecruitMember } from '../src/career/recruitment.js';
 
-test('applySeasonRoster：第 1 屆恆等；第 2 屆三名三年級 ace 換臉（07-27 宿敵拍板：天鷹豁免）', () => {
+test('applySeasonRoster：第 1 屆恆等；第 2 屆三年級 ace 換臉（07-30 D1：嵐/松降年級後只剩曜石）', () => {
   for (const o of OPPONENTS) {
     assert.equal(applySeasonRoster(o, 1), o, `${o.id} 第 1 屆不得變`);
   }
   const cases = [
     ['obsidian', '古承岳', '第二支箭'],
-    ['gale-shore', '侯俊帆', '起風點'],
-    ['black-pine', '姚松霖', '下一堵牆'],
   ];
   for (const [id, heir, title] of cases) {
     const base = opponentById(id);
@@ -47,9 +45,9 @@ test('applySeasonRoster：第 3 屆——鐵霧（基準 2 的劉振鎧）換臉
   assert.equal(obsidian.ace.name, '古承岳'); // 接班人基準 1＝第 3 屆恰三年級，仍在任
 });
 
-test('graduatingAces：第 1 屆末＝三人（07-27 宿敵拍板：天鷹豁免）；第 2 屆末＝劉振鎧', () => {
+test('graduatingAces：第 1 屆末＝詹子曜一人（07-30 D1 降年級後）；第 2 屆末＝劉振鎧', () => {
   const s1 = graduatingAces(1);
-  assert.deepEqual(s1.map((a) => a.name).sort(), ['曾家松', '簡子嵐', '詹子曜'].sort());
+  assert.deepEqual(s1.map((a) => a.name), ['詹子曜']);
   for (const a of s1) assert.ok(a.heir?.name && a.heir?.title, `${a.name} 缺接班人資訊`);
   const s2 = graduatingAces(2);
   assert.deepEqual(s2.map((a) => a.name), ['劉振鎧']);
