@@ -2,105 +2,105 @@
   "note": "Phase 5 §十 階段二：sim 行為逐值雜湊基準（2-B timing 幾何化併入後重立）。--write 只在拍板允許行為變更時用。",
   "seedBase": 1,
   "perOpponent": 2,
-  "total": "05384976bf4dd961",
+  "total": "69df111f7159d086",
   "matches": [
     {
       "opponent": "north-tech",
       "seed": 1,
-      "digest": "d2c057e4bc3afea3",
-      "ticks": 25759,
-      "score": "25-20"
+      "digest": "b80b29e877388d23",
+      "ticks": 26956,
+      "score": "25-23"
     },
     {
       "opponent": "north-tech",
       "seed": 102,
-      "digest": "1f71ad5e1b8e6ea3",
-      "ticks": 25033,
+      "digest": "e09f568446af7f86",
+      "ticks": 23104,
       "score": "25-19"
     },
     {
       "opponent": "white-wave",
       "seed": 7920,
-      "digest": "6223599ec71b060d",
-      "ticks": 25015,
-      "score": "25-23"
+      "digest": "8316849d8c625dac",
+      "ticks": 26667,
+      "score": "23-25"
     },
     {
       "opponent": "white-wave",
       "seed": 8021,
-      "digest": "10c88c442cb64c8e",
-      "ticks": 28280,
-      "score": "21-25"
+      "digest": "f7f03563b200148e",
+      "ticks": 25227,
+      "score": "25-21"
     },
     {
       "opponent": "obsidian",
       "seed": 15839,
-      "digest": "39a8f6bafbbcd3f0",
-      "ticks": 25813,
-      "score": "17-25"
+      "digest": "2502b54c4898e032",
+      "ticks": 23094,
+      "score": "25-23"
     },
     {
       "opponent": "obsidian",
       "seed": 15940,
-      "digest": "a440478b336ff9cb",
-      "ticks": 23116,
-      "score": "25-20"
+      "digest": "9ec42c6a875ee845",
+      "ticks": 18571,
+      "score": "25-14"
     },
     {
       "opponent": "gale-shore",
       "seed": 23758,
-      "digest": "169c526b98991c55",
-      "ticks": 27847,
-      "score": "25-22"
+      "digest": "5147e7ecb132b004",
+      "ticks": 22881,
+      "score": "20-25"
     },
     {
       "opponent": "gale-shore",
       "seed": 23859,
-      "digest": "15b284c970dc2f14",
-      "ticks": 29501,
-      "score": "26-24"
+      "digest": "47ecd3301c55e0fb",
+      "ticks": 23405,
+      "score": "25-17"
     },
     {
       "opponent": "iron-mist",
       "seed": 31677,
-      "digest": "b470b6ac71bc3198",
-      "ticks": 27754,
-      "score": "28-26"
+      "digest": "8552454c8b923e3a",
+      "ticks": 21036,
+      "score": "25-16"
     },
     {
       "opponent": "iron-mist",
       "seed": 31778,
-      "digest": "a8c8e908cc8cf1e9",
-      "ticks": 25450,
-      "score": "21-25"
+      "digest": "760ee5506b688580",
+      "ticks": 21683,
+      "score": "25-21"
     },
     {
       "opponent": "black-pine",
       "seed": 39596,
-      "digest": "2600dde66f67039f",
-      "ticks": 23466,
-      "score": "18-25"
+      "digest": "0a32ce57e149b0c0",
+      "ticks": 24248,
+      "score": "22-25"
     },
     {
       "opponent": "black-pine",
       "seed": 39697,
-      "digest": "37423d508a09cdfb",
-      "ticks": 23729,
-      "score": "21-25"
+      "digest": "af68d073a3388d0c",
+      "ticks": 18275,
+      "score": "25-16"
     },
     {
       "opponent": "sky-hawk",
       "seed": 47515,
-      "digest": "e0fda3ee7b7c4994",
-      "ticks": 24828,
-      "score": "22-25"
+      "digest": "30e58b9a5f5b63fc",
+      "ticks": 22203,
+      "score": "25-21"
     },
     {
       "opponent": "sky-hawk",
       "seed": 47616,
-      "digest": "b147fabae309e173",
-      "ticks": 23746,
-      "score": "21-25"
+      "digest": "217c205870d12bcc",
+      "ticks": 19623,
+      "score": "14-25"
     }
   ]
 }

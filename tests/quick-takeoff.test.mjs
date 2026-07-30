@@ -144,12 +144,20 @@ test('一速：到位與起跳之間不得有長靜止（＝「跑完就跳」�
 // 07-29（§5 A2／A3 上線後補樣本）：`judged > 100` 是樣本量守門，不是行為斷言
 // ——新戰術讓同一顆種子跑出的回合數改變，種子 11 單獨跑只剩 87 筆。
 // **比例門檻 0.95 一格未動**，改成兩顆種子併樣本（涵蓋面只增不減）。
+// 07-30（§十 階段五 段 2，t=0.50）：兩顆種子併樣本只剩 89 筆——收斂讓 rally 變短、
+// 一速成立的回合變少（P1(b) 正式觀測項）。依段 1 裁定 ④ 的「取樣到量」同型處置：
+// 自 seed 11 起連續取局收滿樣本門檻為止、安全上限 6 局；**門檻 100 與 0.95 一格未動**。
 test('一速定義不得破壞：二傳觸球時 MB 已在起跳點站定（＝已離地）', () => {
-  const a = runSet(11);
-  const b = runSet(13);
-  const airborne = a.airborne + b.airborne;
-  const judged = a.judged + b.judged;
-  assert.ok(judged > 100, `樣本足夠（${judged}）`);
+  let airborne = 0;
+  let judged = 0;
+  const used = [];
+  for (let seed = 11; seed < 11 + 6 && judged <= 100; seed += 1) {
+    const r = runSet(seed);
+    airborne += r.airborne;
+    judged += r.judged;
+    used.push(seed);
+  }
+  assert.ok(judged > 100, `樣本足夠（${judged}，取樣 seeds ${used.join(',')}，上限 6 局）`);
   assert.ok(airborne / judged > 0.95,
     `二傳觸球前已離地的比例須維持（實得 ${((airborne / judged) * 100).toFixed(1)}%）`);
 });

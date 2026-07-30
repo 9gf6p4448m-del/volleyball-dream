@@ -237,8 +237,15 @@ console.log('=== P1(b) 每持球回合觸球次數（分母＝我方持球回合
       }
     }
   }
+  // 段 1 裁定 ④（2026-07-30）：rally 長度升格**正式觀測項**（P1(b)）——段段報絕對值
+  // 與相對基準 A 的 %。490.3 是基準 A 的凍結歷史量測值（convergence 表 A，07-30），
+  // 不是旋鈕量（A-9 的「向真相來源取」不適用於凍結基準，但語意在此交代）。
+  const BASELINE_A_RALLY_TICK = 490.3;
+  const avgRally = rallies ? rallyTickSum / rallies : NaN;
   console.log(`   我方持球回合總數 n=${possessions}　rally 數 ${rallies}`
-    + `　平均 rally 長度 ${rallies ? (rallyTickSum / rallies).toFixed(1) : '－'} tick`);
+    + `　平均 rally 長度 ${Number.isFinite(avgRally) ? avgRally.toFixed(1) : '－'} tick`
+    + `【正式觀測項】vs 基準 A ${BASELINE_A_RALLY_TICK} ⇒ `
+    + `${Number.isFinite(avgRally) ? `${(((avgRally - BASELINE_A_RALLY_TICK) / BASELINE_A_RALLY_TICK) * 100).toFixed(1)}%` : '－'}`);
   console.log('   （平均 rally 長度用來分辨「觸球數掉」是可及壞了還是 rally 變短了）');
   for (const kind of ['receive', 'dig', 'set', 'spike', 'dive']) {
     if (!byKind[kind]) continue;

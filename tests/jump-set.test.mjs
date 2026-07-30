@@ -163,6 +163,12 @@ const pool = (sel) => {
 const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
+// ★ 07-30（§十 階段五 段 2，t=0.50）已知紅、送裁中——不得為轉綠改判準 ★
+// 實測 22.1%（名目 35%±8pp）。偵錯已定位（convergence §5.6）：骰子沒壞（抽選照名目）、
+// 閘沒破（退回站舉的 93/94 觸球者是二傳本人、tier 仍 perfect）——是**抽中跳舉的 flight
+// 過半在飛行中因重規劃把旗標重算成 false**，二傳趕到後只站舉（79 跳 vs 94 退回）。
+// 這是「收斂的真實行為後果 vs 重規劃不該丟旗標的實作瑕疵」的判定題＝裁定權，
+// 不下放治具（§2.6-d）；處置同段 1 的 ⑤b：留紅＋登記＋送裁。
 test('A3 ④ 觸發率：跳舉真的會發生，且比例貼近名目（一傳恆到位＝條件恆成立）', () => {
   const total = runs.reduce((s, r) => s + r.setTotal, 0);
   const jump = runs.reduce((s, r) => s + r.setJump, 0);
@@ -221,18 +227,31 @@ test('A3 ⑤a 決定論：同 seed 兩次整局，跳舉的抽選與時序逐值
 
 // 這條是**治具前提**不是行為斷言：局變短不代表 sim 壞了，但會讓 ⑤a 的證明力變弱。
 //
-// ★ 為什麼看三局合計而不是單一局（2026-07-30 Sawmah 裁定）★
+// ★ 為什麼看合計而不是單一局（2026-07-30 Sawmah 裁定）★
 // 局長會隨 AI 行為改動漂移，綁死單一 seed 註定每次改行為就再紅一次。
 // 而且 seed 4 是語料庫裡**最短**的那一局（12 個 seed 實測 min 138／p25 160／p50 168／max 210）
 // ——拿最短的那一局去證明「樣本量足夠」本來就選錯樣本。
 // **「每局 150」這個標準一字未改**，只是取樣從 1 局變 3 局：本條不是「看過 138 才訂的數字」。
-const SAMPLE_SEEDS = [4, 5, 6]; // 沿用 ⑤a 的 seed 4，再往後取兩個相鄰 seed，不挑好看的
-test('A3 ⑤b 樣本量：三局合計長度足以支撐 ⑤a 的逐值比較（每局 150 的標準不變）', () => {
-  const lens = SAMPLE_SEEDS.map((s) => runSet(s).log.length);
-  const total = lens.reduce((a, b) => a + b, 0);
-  const floor = 150 * SAMPLE_SEEDS.length;
-  assert.ok(total > floor,
-    `三局合計 ${total}（${lens.join('+')}）未達每局 150 的標準 ${floor}`);
+//
+// ★ 取樣到量（2026-07-30 段 1 裁定 ④，Sawmah）★
+// 「固定 3 局」把「rally 長度不變」當成了隱含假設（A-9 同源）——rally 長度會隨收斂
+// 真實變短（段 1 −10.7%），治具因此在段 1 破（442 vs 450）。改為**收滿門檻為止**：
+// 自 seed 4 起連續取局（不挑好看的），收滿 450 個 jump-set 事件即停；安全上限 10 局，
+// 達上限仍未滿 ⇒ 以「未達量」失敗並印出實收數（防死循環）。
+// **門檻 450（＝每局 150 × 原 3 局）一個不動**——本條不是第三次調門檻。
+// rally 長度本身升格為正式觀測項（P1(b)，convergence 表 A 段段登記）。
+const QUOTA = 150 * 3; // 每局 150 的標準 × 原取樣局數——數字不動
+const SAMPLE_CAP = 10; // 安全上限（局）
+test('A3 ⑤b 樣本量：取樣到量——收滿 450 個 jump-set 事件（門檻 450 不動；上限 10 局）', () => {
+  const lens = [];
+  let total = 0;
+  for (let s = 4; s < 4 + SAMPLE_CAP && total <= QUOTA; s += 1) {
+    const len = runSet(s).log.length;
+    lens.push(len);
+    total += len;
+  }
+  assert.ok(total > QUOTA,
+    `取樣 ${lens.length} 局（上限 ${SAMPLE_CAP}）合計 ${total}（${lens.join('+')}）未達量 ${QUOTA}`);
 });
 
 // VCR v2 只錄玩家 Intent、AI 那份重演時重算。jumpSet 是本輪新增的協調層欄位，

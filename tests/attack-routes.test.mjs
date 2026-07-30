@@ -170,7 +170,24 @@ function runSet(seed) {
   return { kinds, runLat, log };
 }
 
-const runs = [11, 12, 13].map(runSet);
+// 07-30（§十 階段五 段 2，t=0.50）：三局語料的交叉樣本掉到剛好 20（貼線紅）——
+// 收斂讓 rally 變短、第三擊成立的回合變少（P1(b) 正式觀測項）。依段 1 裁定 ④ 的
+// 「取樣到量」同型處置：自 seed 11 起連續取局，收滿各樣本門檻（>20）為止、
+// 安全上限 8 局；**樣本門檻 20 與行為帶寬（±0.12、三倍、0.3m）一格未動**。
+const runs = [];
+{
+  const enough = () => {
+    const kinds = runs.flatMap((r) => r.kinds);
+    const lat = {};
+    for (const r of runs) {
+      for (const k of Object.keys(r.runLat)) (lat[k] ??= []).push(...r.runLat[k]);
+    }
+    return kinds.filter((k) => k.kind === 'cross').length > 20
+      && kinds.filter((k) => k.kind === 'pipe').length > 20
+      && (lat.cross?.length ?? 0) > 20 && (lat.left?.length ?? 0) > 20;
+  };
+  for (let seed = 11; seed < 11 + 8 && !enough(); seed += 1) runs.push(runSet(seed));
+}
 const allKinds = runs.flatMap((r) => r.kinds);
 const allLat = {};
 for (const r of runs) {

@@ -57,6 +57,14 @@ test('局間收束/重置語意逐項：氣勢歸零、體力延續＋局間恢�
   g.momentum.value = 2;
   g.subs.A.remaining = 1;
   g.timeouts.B.remaining = 0;
+  // 自然消耗的存在性前提（不因下方造髒而失守）
+  assert.ok(Object.values(g.stamina).some((v) => v < 0.95), '打完一局應有人體力下降（前提檢查）');
+  // 07-30（§十 階段五 段 2，t=0.50）：收斂讓 rally 變短、單局自然消耗變淺（實測最累
+  // 僅 0.904，t=0.25 前尚能自然達標）——「深度疲勞」前提改與上方同手法**人為造髒**補足，
+  // 讓「恢復後不得回滿」的延續語意仍在深疲勞輸入下被驗到。
+  // **前提門檻 0.75 與所有行為斷言一格未動**；登記於 convergence §5.6。
+  const deepestId = Object.keys(g.stamina).sort((a, b) => g.stamina[a] - g.stamina[b])[0];
+  g.stamina[deepestId] = Math.min(g.stamina[deepestId], 0.6);
   const staminaBefore = { ...g.stamina };
   const lowIds = Object.keys(staminaBefore).filter((id) => staminaBefore[id] < 0.95);
   assert.ok(lowIds.length > 0, '打完一局應有人體力下降（前提檢查）');
