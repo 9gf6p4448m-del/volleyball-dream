@@ -37,6 +37,9 @@
 // 跑法：node tools/phase5-reach-shrink-probe.mjs [局數=10]
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import { BALL } from '../src/sim/constants.js';
+
+const BALL_RADIUS = BALL.RADIUS;
 
 const SETS = Number(process.argv[2] ?? 10);
 // §5.2 目標值（接球是身高係數，其餘是絕對公尺）
@@ -131,31 +134,116 @@ if (dive.length) {
 // ⚠ 只有「接球」這一環的分母抓得乾淨。**舉球／扣球／攔網的「機會」語意不唯一**
 //   （第一觸若直接過網或出界，本來就不該有第二觸）⇒ 依本檔登記的 G1 處置，
 //   **回報重議 P1 對這三項的定義，不自行換量**。本段只出接球。
+// ============================================================================
+// ★★ P1（面板項，裁定書 v3 附錄 §一.4 全文）★★
+//   (a) 各動作的「觸球歸一化距離分佈」 d̂ = dist ÷ 該動作在該段的可及上限
+//   (b) 每持球回合觸球次數（分母沿用嘗試③已除錯的生命週期）
+//   (c) 衍生視圖：每 rally 觸球鏈長度分佈（不佔面板項）
+//
+// ★ (a) 的「可及上限」取的是什麼（附錄要求：`inReach` 閘**實際使用**的包絡）★
+//   `game.js:471-480` 建 `vol = reachVolumeFor({...inflate: REACH_INFLATE})`，
+//   而 `ballInReach` 測的就是 `dist <= vol.r`；`reach.js:64` 的
+//   `reachRadiusFor(action, tuning)` ＋ `REACH_INFLATE (= BALL.RADIUS)` 就是那個 `vol.r`。
+//   ⇒ **每動作單一純量、已暴露** ⇒ 不觸發附錄 §一.4(a) 的「回報」條款。
+//   ⚠ 注意 `ai.js:716-718` 的 AI 出手閘用的是**另一個**包絡
+//     （`REACH_RADIUS × ATTEMPT_RADIUS/CLOSE_RADIUS`）——那不是產生本檔 `dist` 的那一個，
+//     所以不拿它當分母。
+//
+// ★ 攔網不在 (a)(b) 內（如實登記，非遺漏）★
+//   攔網是隔網結算（`blockBand.js`），**不發 `TOUCH` 事件**、沒有 `dist`
+//   ⇒ 結構上量不到。它的對應量是面板 P3 的密合率／洞寬。
+// ============================================================================
+const REACH_INFLATE = BALL_RADIUS;
+const ACT_LABEL = {
+  receive: '接球', dig: '救球dig', set: '舉球', spike: '扣球', dive: '魚躍', serve: '發球',
+};
+function envelopeOf(kind) {
+  // 與 reach.js:64 同式；serve 不走 reachVolumeFor 的四動作分類，回 null 不歸一化
+  if (kind === 'serve') return null;
+  const isDive = kind === 'dive';
+  return TUNING.REACH_RADIUS * (isDive ? TUNING.DIVE_REACH_MUL : 1) + REACH_INFLATE;
+}
+
 console.log('');
-console.log('=== 🔴 P1「觸球成功率」：分母在事件流裡取不到（三次嘗試的結論）===');
+console.log('=== P1(a) 觸球歸一化距離 d̂ = dist ÷ 可及上限（t=0，圓柱模型）===');
+console.log(`   可及上限 ＝ reachRadiusFor(action) + BALL.RADIUS ＝ vol.r（ballInReach 實際用的那個）`);
+for (const kind of ['receive', 'dig', 'set', 'spike', 'dive']) {
+  const rs = rows.filter((r) => r.kind === kind);
+  if (!rs.length) continue;
+  const env = envelopeOf(kind);
+  const dh = rs.map((r) => r.dist / env);
+  const hist = new Array(10).fill(0);
+  for (const v of dh) hist[Math.min(9, Math.max(0, Math.floor(v * 10)))] += 1;
+  const edge = hist[9] / dh.length;
+  console.log(`-- ${ACT_LABEL[kind]}（n=${rs.length}）　上限 ${env.toFixed(3)} m　t=0 --`);
+  console.log(`   d̂  p50 ${f(q(dh, 0.5))}  p90 ${f(q(dh, 0.9))}  p99 ${f(q(dh, 0.99))}`);
+  console.log(`   十等分 ${hist.map((n) => String(Math.round((n / dh.length) * 100)).padStart(3)).join('|')}`
+    + `  (%，左=0.0-0.1 右=0.9-1.0)`);
+  console.log(`   **貼邊率（d̂ ∈ [0.9,1.0]）＝ ${(edge * 100).toFixed(1)}%**`
+    + '　← 預告下一段會轉成漏接的那批球');
+}
+console.log('   ⚠ 攔網未列：隔網結算不發 TOUCH、無 dist ⇒ 結構上量不到，其對應量是 P3 密合率／洞寬');
+
+console.log('');
+console.log('=== P1(b) 每持球回合觸球次數（分母＝我方持球回合，沿用嘗試③的生命週期）===');
 {
-  // 嘗試史（留在這裡，因為它是「為什麼 P1 需要重議」的證據，不是失敗的殘骸）：
-  //   ① 分母＝「出手但沒觸到」 ⇒ 恆為 0。AI 自己有 inReach 閘（ai.js:716-718），
-  //      它認為構不到就不出手 ⇒ 這個分母在架構上不存在。
-  //   ② 分母＝「球過網進我方半場、最終 BALL_IN」，每次過網重設 ⇒ 實測 0.0%。
-  //      錯在只量到「結束這一分的那顆球」，而那顆球本來就是沒人碰到的 ⇒ 結構上恆 0。
-  //   ③ 修成「過網開啟／下次過網或死球關閉」＋只算 rally 中的過網
-  //      （死球歸位也會跨 z=0，不擋會製造假機會）⇒ 41.3% → 51.4%。
-  //
-  // ★ 但 51.4% 不是「觸球成功率」★
-  // 那 48.6% 的「漏接」約等於「這次過網就結束了這一分」——**對方成功的扣球全被算進去**。
-  // 那不是可及失敗，那是排球得分的正常方式；防守者可能離球很遠而且**判斷正確**。
-  //
-  // ⇒ 事件流分不出「該接而沒接到」與「對方打了一顆好球」。要分就得引入
-  //   「有沒有人被指派、距離多近才算該接」——那是**發明一個定義**。
-  //   依 docs/phase5-section10-convergence.md §1.1 登記的 G1 處置：
-  //   **回報重議 P1 的定義，不自行換量。**
-  console.log('   ① 分母＝「出手但沒觸到」→ 恆 0（AI 的 inReach 閘讓它在架構上不存在）');
-  console.log('   ② 分母＝「過網進我方半場且 BALL_IN」，每次過網重設 → 0.0%（只量到結束分的那顆球）');
-  console.log('   ③ ② 修好生命週期＋只算 rally 中過網 → 51.4%');
-  console.log('   ⇒ 但 ③ 的 48.6%「漏接」約等於「對方這球得分了」，不是可及失敗');
-  console.log('   ⇒ **P1 的定義需要裁定端重議；本探針不自行換量**（G1 處置）');
-  console.log('   目前可提供的替代量（無爭議、已在上表）：各動作觸球時的 dist 分佈');
+  const byKind = {};
+  let possessions = 0;
+  let rallies = 0;
+  let rallyTickSum = 0;
+  const chainHist = new Map(); // 觸球鏈長度 → 次數（(c) 衍生視圖）
+  for (let s2 = 1; s2 <= SETS; s2 += 1) {
+    const g = createGame({ seed: s2 * 101, setTarget: 25 });
+    const ai2 = createAiState();
+    let guard2 = 0;
+    let cur = null;      // { team, counts:{kind:n}, chain:n }
+    let rallyStart = null;
+    const close = () => {
+      if (!cur) return;
+      possessions += 1;
+      for (const [k, n] of Object.entries(cur.counts)) byKind[k] = (byKind[k] ?? 0) + n;
+      chainHist.set(cur.chain, (chainHist.get(cur.chain) ?? 0) + 1);
+      cur = null;
+    };
+    while (g.phase !== 'set_over' && guard2 < 400000) {
+      guard2 += 1;
+      const zBefore = g.ball.z;
+      const phaseBefore = g.phase;
+      if (phaseBefore === 'rally' && rallyStart == null) rallyStart = g.tick;
+      const ev = stepGame(g, aiCollectIntents(g, ai2, []));
+      // 過網 ⇒ 關上一個持球回合、開新的（只算 rally 中；死球歸位也會跨 z=0）
+      if (phaseBefore === 'rally' && g.phase === 'rally'
+        && zBefore !== 0 && (zBefore > 0) !== (g.ball.z > 0)) {
+        close();
+        cur = { team: g.rally.possession, counts: {}, chain: 0 };
+      }
+      for (const e of ev) {
+        if (e.type === 'TOUCH' && cur && e.team === cur.team) {
+          cur.counts[e.kind] = (cur.counts[e.kind] ?? 0) + 1;
+          cur.chain += 1;
+        }
+        if (e.type === 'DEAD_BALL') {
+          close();
+          if (rallyStart != null) { rallies += 1; rallyTickSum += g.tick - rallyStart; rallyStart = null; }
+        }
+      }
+    }
+  }
+  console.log(`   我方持球回合總數 n=${possessions}　rally 數 ${rallies}`
+    + `　平均 rally 長度 ${rallies ? (rallyTickSum / rallies).toFixed(1) : '－'} tick`);
+  console.log('   （平均 rally 長度用來分辨「觸球數掉」是可及壞了還是 rally 變短了）');
+  for (const kind of ['receive', 'dig', 'set', 'spike', 'dive']) {
+    if (!byKind[kind]) continue;
+    console.log(`   ${ACT_LABEL[kind].padEnd(7)} 每持球回合均值 ${f(byKind[kind] / possessions)}`
+      + `（總 ${byKind[kind]}）`);
+  }
+  console.log('');
+  console.log('=== P1(c) 衍生視圖：觸球鏈長度分佈（不佔面板項）===');
+  const tot = [...chainHist.values()].reduce((a2, b2) => a2 + b2, 0);
+  const keys = [...chainHist.keys()].sort((a2, b2) => a2 - b2);
+  console.log('   ' + keys.map((k) => `${k} 觸 ${((chainHist.get(k) / tot) * 100).toFixed(1)}%`).join('　'));
+  console.log('   ★ 功能性歸零（裁定書 §4.2④ 唯一例外）在 (b) 表現為某動作均值趨近 0、');
+  console.log('     在 (c) 表現為 2 觸鏈佔比塌陷——兩層互為佐證。');
 }
 
 console.log('');
