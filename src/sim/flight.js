@@ -33,18 +33,20 @@ export function velocityForTime(from, to, T) {
   };
 }
 
-// 扣球球路：速度標量 → 初速向量；跨網時帶「網口淨空約束」——
-// 直線彈道從攻擊線後（pipe/D 球）或近網輕吊都過不了網，需要時自動拉長
-// 飛行時間讓球帶弧越網（真實 pipe/吊球本來就是弧線）。前排全力扣的直線
-// 本就淨空 → T 不變、速度不受影響。
+// 扣球球路：速度標量 → 初速向量；跨網時帶「網口通過高度目標」——
+// clearance＝這一球要以多高（球心）通過網面：自然彈道低於目標時拉長飛行時間
+// 讓球帶弧越網（真實 pipe/吊球本來就是弧線）；自然彈道已高於目標（高手點貼網
+// 直線）→ T 不變、速度不受影響（目標是下限語意，壓不下去是幾何事實）。
+// §十-4 彈道自由度：clearance 由攻擊型態×出手品質決定（game.js spikeClearanceFor），
+// 未傳＝沿用歷史常數（探針/舊呼叫相容）。
 // AI 的過網預判與 sim 的實際擊球共用此函式（單一公式來源，不得各自手刻）
-const NET_CLEARANCE = COURT.NET_HEIGHT + BALL.RADIUS + 0.12; // 網口最低通過高度
-export function spikeVelocity(from, to, speed, minTime) {
+const NET_CLEARANCE = COURT.NET_HEIGHT + BALL.RADIUS + 0.12; // 預設網口通過高度
+export function spikeVelocity(from, to, speed, minTime, clearance = NET_CLEARANCE) {
   const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
   let T = Math.max(d / speed, minTime);
   if ((from.z > 0) !== (to.z > 0)) {
     const f = from.z / (from.z - to.z); // 網面（z=0）落在全程的比例位置
-    const need = NET_CLEARANCE - from.y - f * (to.y - from.y);
+    const need = clearance - from.y - f * (to.y - from.y);
     const denom = 0.5 * G * f * (1 - f);
     if (need > 0 && denom > 1e-9) T = Math.max(T, Math.sqrt(need / denom));
   }

@@ -79,6 +79,13 @@ export const TUNING = {
   SPIKE_SPEED_PER: 0.17,
   SPIKE_MIN_TIME: 0.18,   // 扣球最短飛行時間（避免零距離除法）
   TIP_SPEED_MIN: 0.55,    // 輕吊速度下限＝全力的 55%（timing=0 時）
+  // §十-4 彈道自由度：各攻擊型態的目標過網高度帶 [timing 好→下緣, 差→上緣]（球心）。
+  // 初始值＝憲法參照帶 ∩ 幾何可行域（kickoff §六.5 Q4：驗收只驗相對序，絕對值為調參項）；
+  // 硬地板＝NET_HEIGHT+BALL.RADIUS＝2.535，帶下緣至少留 0.04 淨空否則擦網
+  TIP_CLEAR_T: 0.45,      // timing ≤ 此值＝輕吊帶（檔位邊界，與 set 三檔同款慣例）
+  SPIKE_CLEARANCE: {
+    tip: [2.575, 2.62], quick: [2.6, 2.7], wing: [2.65, 2.85], back: [2.75, 2.95],
+  },
   // 出手品質（2K 式甜蜜區）：蓄力進度落在甜蜜區＝準、超蓄＝飄
   SWEET_LO: 0.7, SWEET_HI: 1.05, OVERCHARGE_T: 1.15,
   // W4(P4) 題5 OPP 要球（初擬值、治具驗）：品質提升＝甜蜜區時機窗微放寬（非傷害加成）；
@@ -256,6 +263,7 @@ export function createGame({
       lastToucherId: null,
       deceiveP: 0,       // H3：當前扣球夾帶的騙敵機率（攔網結算用）
       lastSpikeZone: null, // 本波扣球的線路分類（line/cross/middle/tip；情蒐讀取用）
+      lastSetKind: null,   // §十-4：最後一次舉球檔位 {team, kind:'quick'|'shoot'|'high'}（快攻分類資料底）
       serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
       callPid: null,     // W4 題5 OPP 要球：本波要球者（trust 2×/甜蜜區放寬的資料底）
@@ -489,6 +497,9 @@ function tryAction(state, intent, ev) {
 function executeTouch(state, intent, player, actor, ev, dist = 0) {
   const { rally, ball } = state;
   const team = player.teamId;
+  // §十-4：換方持球＝上一拍舉球檔位失效（快攻分類只認同一波持球內的舉球，
+  // 防跨波/跨 possession 殘留把普通扣球誤分成快攻）
+  if (team !== rally.possession) rally.lastSetKind = null;
   // 觸球數屬於持球方：非持球方的觸球（如攔網回彈落在對側）從 1 起算，
   // 不得繼承前一隊的計數——共用計數器曾把防守方第一觸誤記成第 4 擊
   const newCount = team === rally.possession ? rally.touches + 1 : 1;
@@ -563,18 +574,24 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     // W7 A2：疲勞折力量（AI 預判 spikeClearsNet 用全值＝不自知累了——W8 才考慮行為差異）
     const speed = spikeSpeed(player) * staminaPerfMul(state, player)
       * (TUNING.TIP_SPEED_MIN + (1 - TUNING.TIP_SPEED_MIN) * timing);
+    // §十-4 彈道自由度：過網高度隨攻擊型態（route 帶）×出手品質（帶內位置）分岔
     v = spikeVelocity(
       from,
       { x: target.x, y: BALL.RADIUS, z: target.z },
       speed,
       TUNING.SPIKE_MIN_TIME,
+      spikeClearanceFor(spikeRouteAt(state, team, actor.z, timing), timing),
     );
   } else {
-    const apex = blown ? TUNING.BLOWN_APEX
-      : intent.action === 'set'
-        ? (rawT < 0.5 ? TUNING.QUICK_APEX
-          : rawT < 0.65 ? TUNING.SHOOT_APEX : TUNING.SET_APEX)
-        : TUNING.RECEIVE_APEX;
+    let apex = TUNING.RECEIVE_APEX;
+    if (blown) {
+      apex = TUNING.BLOWN_APEX;
+    } else if (intent.action === 'set') {
+      const kind = rawT < 0.5 ? 'quick' : rawT < 0.65 ? 'shoot' : 'high';
+      rally.lastSetKind = { team, kind }; // §十-4：下一拍扣球的快攻分類資料底
+      apex = kind === 'quick' ? TUNING.QUICK_APEX
+        : kind === 'shoot' ? TUNING.SHOOT_APEX : TUNING.SET_APEX;
+    }
     v = velocityForApex(from, { x: target.x, y: BALL.RADIUS, z: target.z }, apex);
   }
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
@@ -760,6 +777,27 @@ function performServe(state, intent, ev) {
 // 扣球速度：power 屬性推導；AI 過網預判（ai.js spikeClearsNet）用同一函式
 export function spikeSpeed(player) {
   return TUNING.SPIKE_SPEED_BASE + player.attributes.power * TUNING.SPIKE_SPEED_PER;
+}
+
+// §十-4 彈道自由度：擊球當下的攻擊型態分類（sim 實際擊球與 AI 預判共用，不得各自手刻）。
+// tip＝輕蓄力；back＝攻擊線後起扣；quick＝我方上一拍是快攻檔舉球；其餘＝兩翼強攻
+export function spikeRouteAt(state, team, actorZ, timing) {
+  if (timing <= TUNING.TIP_CLEAR_T) return 'tip';
+  if (Math.abs(actorZ) > COURT.ATTACK_LINE) return 'back';
+  const ls = state.rally.lastSetKind;
+  if (ls && ls.team === team && ls.kind === 'quick') return 'quick';
+  return 'wing';
+}
+
+// §十-4：型態帶 × 出手品質 → 這一球的目標過網高度。timing 好→帶下緣（貼網敢壓）、
+// 差→帶上緣（被推高）；輕吊帶內反向同理（蓄越接近檔位上限＝越貼下緣的尖銳吊）
+export function spikeClearanceFor(route, timing) {
+  const [lo, hi] = TUNING.SPIKE_CLEARANCE[route];
+  const t = TUNING.TIP_CLEAR_T;
+  const qn = route === 'tip'
+    ? clamp01(timing / t)
+    : clamp01((timing - t) / (1 - t));
+  return hi - qn * (hi - lo);
 }
 
 // W7 B1 氣勢散佈乘數（純讀取）：該隊氣勢滿檔 ×(1−CAP)＝出手穩、

@@ -21,7 +21,7 @@ import {
   BLOCK_PERSONA, BLOCK_COMMIT,
 } from './blockRead.js';
 import { hash01 } from './rng.js';
-import { TUNING, spikeSpeed } from './game.js';
+import { TUNING, spikeSpeed, spikeRouteAt, spikeClearanceFor } from './game.js';
 import { REACH_ACTION, reachRadiusFor, SET_HANDPOINT_H_RATIO } from './reach.js';
 import { trustToWeights, pickByWeights, effectiveTrust, applyFloorShare } from './trust.js';
 import { STAMINA, staminaPerfMul } from './stamina.js';
@@ -1460,14 +1460,19 @@ function spikeClearsNet(game, player, target) {
   const b = game.ball;
   if ((b.z > 0) === (target.z > 0)) return false; // 目標須在對面
   const from = { x: b.x, y: b.y, z: b.z };
+  // §十-4：預判用「全力揮擊」的目標過網高度（timing=1 ⇒ 帶下緣；與 sim 實擊同一分類/映射）
   const v = spikeVelocity(
     from,
     { x: target.x, y: BALL.RADIUS, z: target.z },
     spikeSpeed(player),
     TUNING.SPIKE_MIN_TIME,
+    spikeClearanceFor(spikeRouteAt(game, player.teamId, game.actors[player.id].z, 1), 1),
   );
   const yNet = heightAtNet(from, v);
-  return yNet !== null && yNet >= COURT.NET_HEIGHT + BALL.RADIUS + 0.1;
+  // 門檻＝帶模型硬地板（NET+RADIUS+0.04，同 game.js SPIKE_CLEARANCE 註記）。
+  // 舊值 +0.1（2.635）與快攻帶下緣 2.60 矛盾——滿蓄快攻恰達目標會被誤判非法，
+  // 快攻整route 被壓熄（B1 回歸閘取樣餓死就是這樣抓到的）
+  return yNet !== null && yNet >= COURT.NET_HEIGHT + BALL.RADIUS + 0.04;
 }
 
 // ==== A3-SCAN-BEGIN（工單 §5 純資訊武器掃描區：jumpSet 只准出現在本區與抽選處）====
