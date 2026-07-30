@@ -108,7 +108,9 @@ test('ballInReach：回傳**水平**距離供品質計算（本輪不動品質�
   assert.equal(onPoint.dist, 0, '球在手點正上下方＝零水平落差');
   const stretched = ballInReach({ x: 2 + 0.6, y: v.cy, z: -1 + 0.8 }, v);
   assert.ok(Math.abs(stretched.dist - 1.0) < 1e-12, '3-4-5 直角三角形（水平分量）');
-  assert.ok(stretched.ok, '球與手點同高、水平 1.0m < 半徑 ⇒ 構得到');
+  // ok 斷言不得用絕對公尺——1.0m 會被收斂旋鈕移過半徑（A-9：治具硬編碼會動的量）
+  const inside = ballInReach({ x: 2 + v.r * 0.54, y: v.cy, z: -1 + v.r * 0.72 }, v);
+  assert.ok(inside.ok, '球與手點同高、水平 0.9r < 半徑 ⇒ 構得到');
 });
 
 test('ballInReach：球體是**單一**判定——垂直與水平互相吃（圓柱時代的兩條閘已收掉）', () => {
