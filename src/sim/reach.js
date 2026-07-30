@@ -38,8 +38,20 @@ export const SET_CEILING_BONUS = 0.35;
 /**
  * 某球員在此刻的可及體。
  *
- * 回傳的是**退化圓柱**：`{ cx, cz }` 為軸心（腳下），`r` 為水平半徑，
- * `[yMin, yMax]` 為垂直帶。階段五換成球體時 `kind` 改 'sphere'、改用 `cy` ＋ 單一 `r`。
+ * ★★ 2026-07-30 階段五：**已由退化圓柱遷移為球體** ★★
+ * 授權＝`docs/kickoffs/phase5-section10-stage5-handpoint-ruling.md`（採選項乙）
+ * ＋裁定書 v3 §一 白名單補列三項（`volume.kind`／`cy` 啟用／手點 y 相位化）。
+ *
+ * 現在回傳**球體**：`{ cx, cy, cz }` 為**手點**、`r` 為可及半徑（已含球半徑膨脹）。
+ *   觸球成立 ⟺ `|球心 − 手點| ≤ 該動作可及半徑 + BALL.RADIUS`（憲法補充 §1.2 原文）
+ *
+ * **手點 y 由動作相位決定；x/z 維持 `actor.x`／`actor.z`。**
+ * 白名單第 3 項原寫「手點 x/z 由動作相位決定」，經手點裁定**回正為 y**——
+ * 依據是憲法補充 §1.2 的自帶註解本身就只講垂直（「起跳中的手點隨跳躍曲線上移」），
+ * v3 補列時寫成 x/z 屬擴寫。**文字校正，非實質翻案。**
+ * 水平手點若日後要做，是未來裁定書的新白名單項，走完整週期，**不視為本輪遺留**。
+ *
+ * **零新常數**：手點 y 的三個取值就是遷移前圓柱天花板 `top` 的同一組式子，逐值沿用。
  *
  * @param {object} a
  * @param {object} a.player   球員（吃 height／jump 屬性）
@@ -69,10 +81,12 @@ export function reachVolumeFor({
   player, actor, action, jump = false, jumpMul = 1, tuning, inflate = 0,
 }) {
   const isDive = action === REACH_ACTION.DIVE;
-  // 水平半徑：魚躍是一次性大延伸（倍率階段五須重新導出——基底一縮，1.8 會把魚躍砍到 1.28m）
+  // 可及半徑：魚躍是一次性大延伸（倍率階段五須重新導出——基底一縮，1.8 會把魚躍砍到 1.28m）
   const r = reachRadiusFor(action, tuning) + inflate;
-  // 垂直頂端：四種動作四個答案（這正是本卷要收掉的不一致，階段一先照抄）
-  const top = action === REACH_ACTION.SPIKE
+  // ★ 手點 y（＝球心的垂直位置）：四種動作四個答案。
+  // 這三個式子就是遷移前圓柱的天花板 `top`，**逐值沿用、零新常數**——
+  // 差別只在它從「垂直帶的上緣」變成「球心的高度」。
+  const handY = action === REACH_ACTION.SPIKE
     ? spikeReach(player, jumpMul)
     : isDive
       ? tuning.DIVE_MAX_Y
@@ -80,29 +94,35 @@ export function reachVolumeFor({
         ? spikeReach(player, jumpMul)
         : standingReach(player) + SET_CEILING_BONUS;
   return {
-    kind: 'cylinder',
+    kind: 'sphere',
     cx: actor.x,
+    cy: handY, // ★ `cy` 啟用（白名單第 2 項）：垂直軸心從此有意義
     cz: actor.z,
     r,
-    yMin: BALL.RADIUS, // 地板閘：球心低於半徑＝球已在地上，不是「構不到」
-    yMax: top + inflate,
+    yMin: BALL.RADIUS, // 地板閘：球心低於球半徑＝球已在地上，與可及無關（非圓柱殘留）
   };
 }
 
 /**
  * 球在不在可及體內。
  *
- * `dist` 一併回傳——下游的 `receiveQualityMul` 要用它算到位程度
- * （走到球正下方＝穩、勉強搆＝飄），不能只回布林。
+ * **球體判定**：`|球心 − 手點| ≤ r`（`r` 已含 `inflate` ＝ 球半徑膨脹）。
+ * 圓柱時代的「水平 ≤ r **且** 垂直 ≤ 天花板」是兩條各自為政的閘；
+ * 球體只有一條，而且**垂直與水平會互相吃**——離手點越高，水平能構的就越少。
+ * 那正是這次遷移要拿回來的東西。
  *
- * `inflate`（＝ BALL.RADIUS）的位置在 `reachVolumeFor`，不在這裡：
- * 觸球條件是「球**面**碰到手」而非「球**心**碰到手」，所以是可及體長大，
- * 不是距離變短——這兩種寫法在圓柱上等價，換成球體後只有前者還對。
+ * `inflate` 的位置在 `reachVolumeFor` 不在這裡：觸球條件是「球**面**碰到手」
+ * 而非球心碰到手 ⇒ 是可及體長大，不是距離變短。
+ * 這兩種寫法在圓柱上等價，**換成球體後只有前者還對**（階段一的註解已預告）。
  *
- * @returns {{ ok: boolean, dist: number }} dist ＝水平距離（未膨脹，供品質計算用）
+ * `dist` 回傳的仍是**水平**距離——下游 `receiveQualityMul` 用它算到位程度
+ * （走到球正下方＝穩、勉強搆＝飄）。**本輪不動品質模型**，故不改成 3D 距離。
+ *
+ * @returns {{ ok: boolean, dist: number }} dist ＝**水平**距離（未膨脹，供品質計算用）
  */
 export function ballInReach(ball, vol) {
   const dist = Math.hypot(ball.x - vol.cx, ball.z - vol.cz);
-  const ok = dist <= vol.r && ball.y <= vol.yMax && ball.y >= vol.yMin;
+  const toHand = Math.hypot(dist, ball.y - vol.cy); // 球心到手點的 3D 距離
+  const ok = toHand <= vol.r && ball.y >= vol.yMin;
   return { ok, dist };
 }
