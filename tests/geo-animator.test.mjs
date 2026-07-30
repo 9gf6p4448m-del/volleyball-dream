@@ -692,13 +692,19 @@ test('W2-1 三段式：既有跳躍序列的弧逐值不變（block/serveJump/ov
   }
 });
 
-// ---- Phase 5 W2 補課④：攔網演出對齊帶模型（張臂寬＋graze 視覺）----
+// ---- Phase 5 W2-6：攔網演出姿勢鏈重做（張臂寬回窄＋揮臂式節奏＋graze 視覺）----
+//
+// W2-5 曾把張臂 z 改成 ∓0.4 對齊 sim 帶寬 1.0m（跨距 0.28→0.92m）——**Sawmah 試玩
+// 裁定：原本較好看，寬臂案否決**。`docs/blocking-reference.md` §5 佐證：真實攔網手型是
+// 「肩膀鎖緊上聳、手臂打直、虎口對齊肩寬」，帶寬是判定量（身體移動＋穿越覆蓋），
+// 不是張手張出來的姿勢量。W2-6 回退張臂，斷言改成「落在肩寬帶」而非「明顯拉近全寬」。
 
 // 張臂寬：**真實引擎路徑**——createGeoCharacter 的實際關節階層＋createGeoAnimator
-// 跑 hold('block')，讀兩手 world position（不是重建的模型）。blockBand.js 的單人涵蓋
-// 全寬＝BLOCK_HALF_WIDTH_TARGET×2＝1.0m（CONVERGE_T=1 已生效）；修前量測只有
-// 0.276~0.292m（見 geoAnimator POSES.blockUp 註解），修後應明顯拉近但不必求精確等值
-// （這裡只調演出，sim 判定 blockBand.js 一格不動，見下一條測試）
+// 跑 hold('block')，讀兩手 world position（不是重建的模型）。肩寬帶取樣自角色幾何
+// 本身的肩關節左右間距（z=0 時跨距只由肩關節間距決定，與 xrot 無關，見 geoAnimator
+// POSES.blockUp 註解）：身高 1.75 實測 0.426m，落在 0.35~0.55m 這個「雙手直接抬在
+// 肩關節正上方」的合理帶寬——W2-5 之前的窄手型（z=∓0.12）反而更窄（0.276~0.292m，
+// 手在頭頂交叉到快併攏），W2-6 沒有逐值抄那版，見上方 POSES 註解的取捨說明。
 function wristSpan(height) {
   const scene = new THREE.Scene();
   const pool = createGeoPool(scene, false, 1);
@@ -715,10 +721,10 @@ function wristSpan(height) {
   return Math.abs(r.x - l.x);
 }
 
-test('W2 補課④：blockUp 張臂寬對齊全寬 1.0m（修前僅 ~0.28m，真實引擎量測）', () => {
+test('W2-6：blockUp 張臂寬回窄——落在肩寬帶 0.35~0.55m（W2-5 寬臂案 0.92m 已被裁定否決）', () => {
   const span = wristSpan(1.75);
-  assert.ok(span > 0.7, `張臂寬應明顯拉近全寬 1.0m（實測 ${span.toFixed(3)}m，修前約 0.28m）`);
-  assert.ok(span < 1.15, `張臂寬不應誇張超過全寬太多（實測 ${span.toFixed(3)}m）`);
+  assert.ok(span >= 0.35, `張臂寬不得窄於肩寬帶下緣（實測 ${span.toFixed(3)}m）`);
+  assert.ok(span <= 0.55, `張臂寬不得寬於肩寬帶上緣——W2-5 的 0.92m 寬臂案已被 Sawmah 否決（實測 ${span.toFixed(3)}m）`);
 });
 
 test('W2 補課④：sim 判定不受影響——BLOCK_HALF_WIDTH 仍是單一真相，POSES 只管演出', async () => {

@@ -70,23 +70,29 @@ const POSES = {
     rSh: [-0.6, 0.34], lSh: [-0.45, 0.15], rEl: -0.5, lEl: -0.3, spine: 0.46, neck: 0.1,
     spineUp: 0.12, pelvisY: -0.06, wrist: 0.2,
   },
-  // W2 補課④（07-30）：張臂寬對齊新帶模型。真實引擎量測（createGeoCharacter＋
-  // createGeoAnimator 實跑 FK，非重建模型）：修前 z=±0.12 在 xrot=-2.95 這個近乎
-  // 垂直上舉的角度區間落在「窄」branch，兩手世界座標實測橫向跨距只有 0.276~0.292m
-  // （身高 1.75~1.85），對照 blockBand.js 的單人涵蓋全寬 1.0m（BLOCK_HALF_WIDTH_TARGET
-  // 0.5×2，CONVERGE_T=1 已生效）差了 3 倍多——雙手看起來幾乎併攏在頭頂正上方，
-  // 而不是張開守住兩側。z 對橫向跨距的關係在這個 x 角度區間不是單調：正 z 從 0 增加
-  // 反而先把跨距壓向 0（雙手在頭頂交叉）、翻負 z 才是張開的那個分支。掃出 z=∓0.4
-  // 讓跨距落在 0.91~0.94m（貼近 1.0m 全寬、不誇張過頭）。**sim 判定（BLOCK_HALF_WIDTH／
-  // bandContact）一格未動**——這裡只改 POSES 常數，blockBand.js 零改動。
-  blockUp: { rSh: [-2.95, -0.4], lSh: [-2.95, 0.4], rEl: 0, lEl: 0, spine: 0.04, neck: -0.15, spineUp: -0.08, wrist: -0.45 },
-  blockPunch: { rSh: [-2.52, -0.4], lSh: [-2.52, 0.4], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2, spineUp: 0.14, wrist: -0.7 },
-  // W2 補課④：graze（擦手）視覺——三態現況 solid／graze 播同一支 blockJump，玩家分不出
+  // W2-5（07-30）曾把張臂 z 改成 ∓0.4 對齊 sim 帶寬 1.0m（跨距 0.28→0.92m）——
+  // **Sawmah 試玩裁定：原本較好看，寬臂案否決**（`docs/blocking-reference.md` §5 佐證：
+  // 真實攔網手型是「肩膀鎖緊上聳、手臂打直、手掌張開虎口對齊肩寬」——帶寬是判定量
+  // （身體移動＋穿越覆蓋），不是張手張出來的姿勢量）。
+  // W2-6（本輪）回退張臂，但不是逐值抄舊 commit：z=0（雙手直接抬在肩關節正上方、
+  // 不再左右外張／內夾）才是「虎口對齊肩寬」的字面意思——真實引擎量測（createGeoCharacter
+  // ＋createGeoAnimator 實跑 FK，非重建模型）：z=0 時跨距只由肩關節本身的左右間距決定
+  // （與 xrot 無關，兩手在肩正上方的鉛直面內擺動不會再左右移動），身高 1.75 量得
+  // 0.426m，落在肩寬帶 0.35~0.55m 內；z 偏離 0 一律讓跨距變窄（正 z）或變寬（負 z）
+  // 且非線性（z=∓0.4 才會到 0.92m），比 5fe33a7 之前的 z=∓0.12（0.276m，手在頭頂交叉
+  // 到快併攏）更貼近文獻描述、又遠低於否決案的寬臂。sim 判定（BLOCK_HALF_WIDTH／
+  // bandContact）從頭到尾沒被這兩輪動過——這裡只改 POSES 常數。
+  blockUp: { rSh: [-2.95, 0], lSh: [-2.95, 0], rEl: 0, lEl: 0, spine: 0.04, neck: -0.15, spineUp: -0.08, wrist: -0.45 },
+  // punch-through（跳過網不是跳高，見底稿§5）沿用既有機制：spine 比 blockUp 更前傾
+  // （0.04→0.3）＝軀幹隨手臂一起向網面前送，肘仍是 0＝手臂全程打直，不需要新欄位
+  blockPunch: { rSh: [-2.52, 0], lSh: [-2.52, 0], rEl: 0, lEl: 0, spine: 0.3, neck: -0.2, spineUp: 0.14, wrist: -0.7 },
+  // graze（擦手）視覺——三態現況 solid／graze 播同一支 blockJump，玩家分不出
   // 「攔死」與「指尖擦到」。graze 是**沒攔死但碰到邊緣**，做成比 blockPunch 更保守的
   // 觸碰：punch-through 幅度收一半（xrot 只到 blockUp/blockPunch 中間、非全力下壓）、
   // 壓腕量減半（沒有 solid 那種整手拍下去的力道）、身體前傾也收（沒有全力跟進）。
-  // 張臂寬沿用 blockUp/blockPunch 同一個 z（±0.4）——擦到的是邊緣，不是張臂本身變窄。
-  blockTouch: { rSh: [-2.75, -0.4], lSh: [-2.75, 0.4], rEl: 0, lEl: 0, spine: 0.12, neck: -0.18, spineUp: 0.0, wrist: -0.25 },
+  // W2-6：張臂寬隨 blockUp/blockPunch 一起回窄——z 同樣取 0（擦到的是邊緣、不是張臂
+  // 本身變窄，跟寬臂版當時「沿用同一個 z」是同一個邏輯，只是那個 z 現在是 0）。
+  blockTouch: { rSh: [-2.75, 0], lSh: [-2.75, 0], rEl: 0, lEl: 0, spine: 0.12, neck: -0.18, spineUp: 0.0, wrist: -0.25 },
   windup: { rSh: [-2.35, -0.35], lSh: [-2.0, 0.15], rEl: -1.8, lEl: -0.3, spine: -0.2, neck: -0.18 },
   // 4.7 §P0 助跑（Sawmah 07-28）：雙臂後擺蓄勢、軀幹前傾——**零跳躍**。
   // 原本助跑與起跳混在同一個 windup（自帶 jump 0.5m），提前觸發就等於提前浮空
@@ -128,7 +134,10 @@ const POSES = {
   // 4.5B §4：L 暗號——攔網手偷瞄點頭確認（頸部小幅點放）
   nodNeutral: { neck: -0.12 },
   nodDown: { neck: 0.3 },
-  // 4.5B §8 攔網重量感：起跳前的蹲載入（蹲→蹬→滯空→落地的第一拍）
+  // 4.5B §8 攔網重量感：起跳前的蹲載入（蹲→蹬→滯空→落地的第一拍）。
+  // W2-6：對應底稿 §3C 揮臂式攔網的 LOAD 節點（雙臂下擺至腰際蓄力＋蹲）——FK 量測
+  // （直接評估此姿勢、非經 blendKeys 淡入汙染）身高 1.75 時手腕落在 y=1.15m
+  // （骨盆 y=0.91m 之上、肩 y=1.40m 之下）＝軀幹下半段＝腰際區間，不需要再調參數。
   blockLoad: { rSh: [-0.6, -0.15], lSh: [-0.6, 0.15], rEl: -0.9, lEl: -0.9, spine: 0.35, neck: -0.2, crouch: 0.3, spineUp: 0.12 },
   // 4.5B §8 助跑遲疑（低 trust 快攻的身體語言）：手臂只抬一半、低頭半拍
   windupHesitant: { rSh: [-1.55, -0.3], lSh: [-1.3, 0.12], rEl: -1.3, lEl: -0.4, spine: -0.06, neck: 0.12 },
@@ -214,10 +223,18 @@ const SEQUENCES = {
   dejected: { dur: 1, jump: 0, land: false, keys: [{ at: 0, p: 'dejected' }, { at: 1, p: 'dejected' }] },
   // block＝攔網待命牆姿的 hold 源（matchView setHold 播 t=0 幀）——**t=0 必須是
   // 舉手 blockUp**：07-27 試玩追修——曾把蹲載入插在 t=0，整排待命攔網手變蹲姿
-  // ＝「單人攔網感」（合攔的牆看不見了）。真正起跳的重量感拆到 blockJump
+  // ＝「單人攔網感」（合攔的牆看不見了）。真正起跳的重量感拆到 blockJump。
+  // 對應底稿 §80-89 狀態機的 READY 節點（雙手前舉預備）——本輪 W2-6 維持 hold 不動。
   block: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockUp' }, { at: 0.4, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
   // 4.5B §8 攔網重量感（僅實際起跳觸發）：蹲（load）→蹬（up）→滯空（punch）→落地；
-  // dur 不動（0.7＝實測調參值）
+  // dur 不動（0.7＝實測調參值，sim 的 blockUntil/jumpAt 時間戳照舊照播、不重算時機）。
+  // W2-6：四關鍵幀對應底稿 §3C／§80-89 揮臂式攔網的四個節點——
+  //   0    blockLoad  ：LOAD（雙臂下擺至腰際蓄力＋蹲，見 POSES.blockLoad 註解）
+  //   0.22 blockUp    ：JUMP（短蓄力蹲跳的上升段，雙臂由腰際同步上擺，非長助跑式）
+  //   0.45 blockPunch ：ARM_EXTEND（雙臂鎖肩打直穿越網面，punch-through 前傾收尾）
+  //   1    blockUp    ：落地前收回待命牆姿
+  // 上擺幅度沿用既有 blendKeys 線性插值（LOAD→JUMP 之間是連續漸變，不是瞬間甩臂）＝
+  // 底稿 §49-51 警告的「有控制的擺臂」而非亂甩；四幀時間點與時長本身不動，只調過 POSES。
   blockJump: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.22, p: 'blockUp' }, { at: 0.45, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
   // W2 補課④：graze（擦手）版——同一套蹲→蹬→滯空→落地節奏，中段換成較保守的
   // blockTouch（見 POSES 註解），讓玩家分得出「攔死」與「指尖擦到」兩種畫面。
