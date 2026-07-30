@@ -374,7 +374,11 @@ for (let run = 0; run < RUNS; run += 1) {
     for (let mi = 0; mi < matchIds.length; mi += 1) {
       if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
       const entry = career.schedule[mi];
-      const setup = careerMatchSetup(career, player, entry, USE_ROSTER ? roster : null, lineup);
+      // seasonIndex 補接（07-30 批4 送裁項 2）：漏傳＝VD_SEASONS 跨屆臂永遠打第 1 屆
+      // 對手（量不到 ace 成長／畢業換臉）；單屆預設 season=1 行為逐值不變
+      const setup = careerMatchSetup(
+        career, player, entry, USE_ROSTER ? roster : null, lineup, season,
+      );
       const { g, maxDeficit, setStartStamina } = playMatch(setup, entry);
       // W4 Q8：多局系列＝勝負吃 series、分差記局差；bo1 照舊
       const won = (g.series?.winner ?? g.match.winner) === 'A';
