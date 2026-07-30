@@ -895,6 +895,13 @@ commit＋push＋deploy:pages。
 | 3 | 小組輪蹺蹺板（補償終態 Δg1 −20.0／g2 −15.0／g3 −17.5；P0＋P1 時 −7.5～−10） | §5.12 ⑦⑨ | 雙主判過後的單輪殘留；SE ~10pp 下續調＝擬合雜訊，收單裁定留觀察 |
 | 4 | **R4 款 3 快攻 margin 僅 1.9pp**（read G 43.3 vs commit 45.2；段 4' 10.5） | §5.12 ⑧ P4 | **再一個同向（加快 AI 判斷）的 buff 就翻**；警報器＝`block-persona` B1 回歸閘＋E 表驗收 ①，動 AI 時序前先重跑 P4 快攻列 |
 
+> **【07-31 §十-4 追記：本列指標已退役】** 160 局重測證明快攻 G% margin 在本卷結案
+> 當時就只有 **+0.5±2.1pp**——上表的 +1.9pp 是 40 局噪音，「commit 明顯優於 read」
+> 從未統計成立（承諾帶 ~2pp < 量測 SE ±4.5pp，不能當閘）。款 3 的真載體＝**離地率
+> gap**（read 快攻離地 ≪ commit，jumpcount 探針口徑）＋**時序鏈**（B1 閘）；新警報器
+> ＝`block-persona.test.mjs` 款3 離地率閘（gap ≥5pp）。G% margin 降為觀察值。
+> 全記錄見 `docs/kickoffs/phase5-section10-4-discussion-brief.md` §六.6。
+
 ---
 
 ## 六、開工前檢查表（裁定書 §九，實作端自填後由 Sawmah 覆驗 diff）
