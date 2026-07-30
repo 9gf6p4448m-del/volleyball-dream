@@ -1,6 +1,6 @@
 // Phase 1 比賽模擬組裝層 — 模擬核心唯一入口（純 JS、零 three.js/DOM）
 // 鐵律：stepGame 只吃 Intent（玩家/AI/網路同型，不知來源）；固定步長；隨機只走種子 PRNG
-import { SIM_DT, COURT, BALL } from './constants.js';
+import { SIM_DT, COURT, BALL, CONVERGE_T } from './constants.js';
 import { createBall, stepBall } from './ball.js';
 import { createMatch, serverId, pointTo, isFourHits } from './match.js';
 import {
@@ -31,6 +31,8 @@ const REACH_INFLATE = BALL.RADIUS;
 
 // 遊戲層調參常數（骨架版；H 區手感層只調數值、不動結構）
 export const TUNING = {
+  // 基準 B 的收斂進度（單一真相在 constants.js；t=0 逐值重現基準 A）
+  CONVERGE_T,
   SERVE_DEAD_TICKS: 110,  // 死球哨音到可發球的間隔（1.8s：慶祝/喘息的比賽節拍）
   SUBS_PER_SET: 6,        // W6 賽中換人：每局每隊人次上限（簡化版拍板；自由人不計次）
   TIMEOUTS_PER_SET: 2,    // W7 B3 暫停：每場每隊 2 次（FIVB；單局制＝每場）
@@ -54,6 +56,8 @@ export const TUNING = {
   BLOCK_WINDOW: 48,       // block intent 的有效 tick 窗口（0.8s，手機反應時間友善）
   // 攔網水平涵蓋半徑（m）——真相在 blockBand.js（陷阱 1：改制前 attackZones.js 的
   // BLOCK_COVER_X 與這裡各寫死一份 1.1，漏改任一份面板就會對玩家說謊）
+  // 攔網單人半寬：**單一真相在 blockBand.js**（基準 B 的收斂已在那裡算完），
+  // sim 與玩家面板（input/attackZones.js）吃同一個值 ⇒ t 一動兩邊同時動
   BLOCK_REACH_X: BLOCK_HALF_WIDTH,
   SERVE_APEX: 4.6,        // 各球路弧頂高度（m）
   POWER_SERVE_APEX: 3.5,  // 跳躍發球低平弧（timing>1.1；力量換準度）

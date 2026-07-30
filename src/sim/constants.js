@@ -31,3 +31,11 @@ export const BALL = {
 
 // 發球循環：每 SERVE_PERIOD 秒重置一次，變化全部由 cycle 序號決定（決定論）
 export const SERVE_PERIOD = 6;
+
+// ==== §十 階段五 基準 B：旋鈕收斂進度 ====
+// t ＝ 0 為基準 A 現值、1 為 §1.3 目標值；裁定書 §4.2①：每段 +0.25、共四段、**所有旋鈕同步**。
+// **住在 constants.js 的理由**：`blockBand.js` 需要它算收斂後的單人半寬，
+// 而 blockBand 不能 import game.js（game.js 反過來 import blockBand ⇒ 循環）。
+// 攔網半寬必須維持**單一真相**——sim 的 TUNING 與玩家面板（`input/attackZones.js`）
+// 共用同一把尺，那是既有設計，有測試守著（`reach-volume.test.mjs` 的「陷阱 1」）。
+export const CONVERGE_T = 0.25;

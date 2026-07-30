@@ -37,7 +37,7 @@ import { createCareer, createCareerPlayer, careerMatchSetup } from '../src/caree
 import { buildStarterMembers } from '../src/career/roster.js';
 import { defaultLineup } from '../src/career/lineup.js';
 import { OPPONENTS } from '../src/career/opponents.js';
-import { createGame, stepGame } from '../src/sim/game.js';
+import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { isFrontRow, otherTeam } from '../src/sim/rotation.js';
 
@@ -218,7 +218,12 @@ for (const k of ['quick', 'wing', 'back']) {
 // 相鄰兩人的覆蓋要相接，站距必須 <= 2 x 單人半寬。現值半寬 1.1 => 門檻 2.2（幾乎永不開洞）；
 // §5.2 目標半寬 0.5 => 門檻 1.0。站距一旦超過門檻就是實洞，寬度 = 站距 - 2 x 半寬。
 console.log('');
-for (const half of [1.1, 0.5]) {
+// ★ 半寬必須吃**實際值**，不得硬編碼 ★
+// 基準 B 之後 `TUNING.BLOCK_REACH_X` 會隨 CONVERGE_T 收斂（單一真相在 blockBand.js）。
+// 本檔一度寫死 [1.1, 0.5]，那會漏掉「當段實際的密合率」——與 P1(a) 分母取錯同一類錯。
+// 現在列出：**當段實際半寬** ＋ 目標半寬 0.5（收斂終點的預告）。
+const HALVES = [...new Set([TUNING.BLOCK_REACH_X, 0.5])];
+for (const half of HALVES) {
   const lim = half * 2;
   const seal = (a) => (a.length ? `${((a.filter((g) => g <= lim).length / a.length) * 100).toFixed(1)}%` : '-');
   const hole = (a) => {
@@ -227,7 +232,7 @@ for (const half of [1.1, 0.5]) {
     const sorted = [...h].sort((a, b) => a - b);
     return `p50 ${sorted[Math.floor(sorted.length / 2)].toFixed(3)}m / max ${Math.max(...h).toFixed(3)}m`;
   };
-  console.log(`  單人半寬 ${half.toFixed(2)}（密合門檻 ${lim.toFixed(2)}m）`
+  console.log(`  單人半寬 ${half.toFixed(3)}${Math.abs(half - TUNING.BLOCK_REACH_X) < 1e-12 ? '（當段實際）' : '（收斂終點）'}（密合門檻 ${lim.toFixed(2)}m）`
     + `  全體 ${seal(gapsAtNet)}`
     + `｜快攻 ${seal(gapsByKind.quick)}`
     + `｜兩翼 ${seal(gapsByKind.wing)}`

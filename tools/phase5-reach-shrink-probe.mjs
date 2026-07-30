@@ -38,6 +38,7 @@
 import { createGame, stepGame, TUNING } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { BALL } from '../src/sim/constants.js';
+import { reachRadiusFor } from '../src/sim/reach.js';
 
 const BALL_RADIUS = BALL.RADIUS;
 
@@ -157,25 +158,32 @@ const REACH_INFLATE = BALL_RADIUS;
 const ACT_LABEL = {
   receive: '接球', dig: '救球dig', set: '舉球', spike: '扣球', dive: '魚躍', serve: '發球',
 };
-function envelopeOf(kind) {
-  // 與 reach.js:64 同式；serve 不走 reachVolumeFor 的四動作分類，回 null 不歸一化
-  if (kind === 'serve') return null;
-  const isDive = kind === 'dive';
-  return TUNING.REACH_RADIUS * (isDive ? TUNING.DIVE_REACH_MUL : 1) + REACH_INFLATE;
+// ★ 包絡必須向 `reachRadiusFor` 要，不得自己重算 ★
+// 基準 B（`TUNING.CONVERGE_T > 0`）之後，前三個動作的可及半徑吃**該球員的身高**
+// ⇒ 包絡是**逐球員、逐段**的。本檔一度自己用 t=0 的式子重算，那會讓 d̂ 的分母取錯
+// （正是閘門第 3 條要抓的「歸一化分母取錯」）。現在直接呼叫 sim 的單一真相來源。
+function envelopeOf(kind, heightM) {
+  if (kind === 'serve') return null; // serve 在 game.js:412 早退，不走可及判定
+  const act = kind === 'dig' ? 'receive' : kind;
+  return reachRadiusFor(act, TUNING, heightM) + REACH_INFLATE;
 }
 
 console.log('');
-console.log('=== P1(a) 觸球歸一化距離 d̂ = dist ÷ 可及上限（t=0，圓柱模型）===');
+console.log(`=== P1(a) 觸球歸一化距離 d̂ = dist ÷ 可及上限（t=${TUNING.CONVERGE_T ?? 0}）===`);
 console.log(`   可及上限 ＝ reachRadiusFor(action) + BALL.RADIUS ＝ vol.r（ballInReach 實際用的那個）`);
 for (const kind of ['receive', 'dig', 'set', 'spike', 'dive']) {
   const rs = rows.filter((r) => r.kind === kind);
   if (!rs.length) continue;
-  const env = envelopeOf(kind);
-  const dh = rs.map((r) => r.dist / env);
+  const envs = rs.map((r) => envelopeOf(kind, r.h));
+  const dh = rs.map((r, i) => r.dist / envs[i]);
   const hist = new Array(10).fill(0);
   for (const v of dh) hist[Math.min(9, Math.max(0, Math.floor(v * 10)))] += 1;
   const edge = hist[9] / dh.length;
-  console.log(`-- ${ACT_LABEL[kind]}（n=${rs.length}）　上限 ${env.toFixed(3)} m　t=0 --`);
+  const envLo = Math.min(...envs);
+  const envHi = Math.max(...envs);
+  console.log(`-- ${ACT_LABEL[kind]}（n=${rs.length}）`
+    + `　上限 ${envLo === envHi ? envLo.toFixed(3) : `${envLo.toFixed(3)}–${envHi.toFixed(3)}`} m`
+    + `（逐球員）　t=${TUNING.CONVERGE_T ?? 0} --`);
   console.log(`   d̂  p50 ${f(q(dh, 0.5))}  p90 ${f(q(dh, 0.9))}  p99 ${f(q(dh, 0.99))}`);
   console.log(`   十等分 ${hist.map((n) => String(Math.round((n / dh.length) * 100)).padStart(3)).join('|')}`
     + `  (%，左=0.0-0.1 右=0.9-1.0)`);

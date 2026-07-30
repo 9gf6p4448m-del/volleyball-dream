@@ -279,7 +279,7 @@ function ensureFlightPlan(game, aiState) {
       ?? arbitrate(game, team, landing, r.lastToucherId);
     // 攻擊分配：一傳品質決定戰術分支（到位＝全池/可用＝無快攻/勉強＝只剩兩翼高球）
     // × 站位合法池（AND）× trust 權重（傾向），決定論抽選
-    const tier = passTierOf(team, landing);
+    const tier = passTierOf(team, landing, game.players[aiState.claimId] ?? null);
     aiState.passTier = tier; // W3 S 玩法：分配面板讀同一份品質分檔（setOptions 消費）
     // §7 D2：本波接一傳的人＝剛剛那一觸的執行者。攻擊池與**玩家的分配面板**
     // （setOptions）都吃這一份，兩邊看到的是同一顆池（4.5A 的教訓：同一個判定寫
@@ -573,10 +573,14 @@ export function attackPointsOf(game, team, setterId, passTier = 'perfect', recei
 // 是為了不在本批偷偷改動它。
 const PASS_PERFECT_MUL = 1.2 / 1.3;
 const PASS_OK_MUL = 3 / 1.3;
-export function passTierOf(team, landing) {
+export function passTierOf(team, landing, setter = null) {
   const spot = localToWorld(team, AI.SETTER_SPOT.lx, AI.SETTER_SPOT.lz);
   const d = Math.hypot(landing.x - spot.x, landing.z - spot.z);
-  const setReach = reachRadiusFor(REACH_ACTION.SET, TUNING);
+  // 基準 B：舉球可及在 t>0 之後吃**身高**（§1.3 目標值是身高比例）
+  // ⇒ 門檻也跟著變成逐二傳。二傳＝`aiState.claimId`；取不到時退回無身高呼叫
+  //（t=0 時 reachRadiusFor 不需要身高，見其早退）。
+  const setterH = setter?.height?.current ?? null;
+  const setReach = reachRadiusFor(REACH_ACTION.SET, TUNING, setterH);
   return d < PASS_PERFECT_MUL * setReach ? 'perfect'
     : d < PASS_OK_MUL * setReach ? 'ok' : 'poor';
 }

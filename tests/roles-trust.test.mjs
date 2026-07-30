@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { createGame, stepGame } from '../src/sim/game.js';
+import { createGame, stepGame, TUNING } from '../src/sim/game.js';
+import { REACH_ACTION, reachRadiusFor } from '../src/sim/reach.js';
 import {
   createAiState, aiCollectIntents, attackPointsOf, setAimFor, dutyPosition, passTierOf,
 } from '../src/sim/ai.js';
@@ -198,10 +199,23 @@ test('後排攻擊點固定（換位制）：pipe 中路偏左、D 球右路，�
 
 test('一傳品質戰術分支：到位=全池、可用=無快攻、勉強=只剩兩翼高球', () => {
   const g = createGame({ seed: 21 });
-  // 分檔函式本體（距舉球點 (1.2,1.2) 的距離）
-  assert.equal(passTierOf('A', { x: 1.2, z: 1.2 }), 'perfect');
-  assert.equal(passTierOf('A', { x: 1.2, z: 3.6 }), 'ok');     // 2.4m
-  assert.equal(passTierOf('A', { x: -1.5, z: 4.5 }), 'poor');  // >3m
+  // 分檔函式本體（距舉球點 (1.2, 1.2) 的距離）
+  //
+  // ★ 取樣點由門檻**導出**，不寫死公尺數（2026-07-30）★
+  // 階段四把門檻相對化成「係數 × 舉球可及半徑」、階段五的基準 B 又讓舉球可及隨
+  // `TUNING.CONVERGE_T` 與**二傳身高**收斂 ⇒ 寫死 2.4m／3m 的取樣點是門檻的**數值快照**，
+  // t 一動就漂移，而這條測試要驗的是「三個區間各對一個 tier」與「池隨分檔收縮」。
+  // 故改為：從實際門檻取三個代表點（區間內側），意圖與斷言結構一字未改。
+  // 同時補上二傳（`passTierOf` 的第三參數）——t>0 時舉球可及需要身高，缺了會 throw。
+  const setter = g.players.A1;
+  const setReach = reachRadiusFor(REACH_ACTION.SET, TUNING, setter.height.current);
+  const spot = { x: 1.2, z: 1.2 };
+  const at = (d) => ({ x: spot.x, z: spot.z + d });
+  const perfectMax = (1.2 / 1.3) * setReach; // 階段四的係數（現值比例），非新常數
+  const okMax = (3 / 1.3) * setReach;
+  assert.equal(passTierOf('A', at(perfectMax * 0.5), setter), 'perfect');
+  assert.equal(passTierOf('A', at((perfectMax + okMax) / 2), setter), 'ok');
+  assert.equal(passTierOf('A', at(okMax * 1.5), setter), 'poor');
   // 池組成隨分檔收縮
   const kinds = (tier) => attackPointsOf(g, 'A', 'A1', tier).map((p) => p.kind).sort();
   assert.deepEqual(kinds('perfect'), ['left', 'pipe', 'quick', 'right']);

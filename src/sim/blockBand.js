@@ -25,7 +25,7 @@
 //   - **邊緣區仍是機率帶不是幾何**（見 blockOutcome 的說明）
 //
 // 階段三「關牆行為」要靠 bandSpan() 才量得出縫；階段五才把邊緣區換成真幾何。
-import { BALL } from './constants.js';
+import { BALL, CONVERGE_T } from './constants.js';
 
 // 單人攔網的水平涵蓋半寬（m）——**單一真相來源**。
 // 陷阱 1（憲法 §八-1）：這個值改制前有兩份各自寫死的 1.1——`attackZones.js` 的
@@ -33,7 +33,13 @@ import { BALL } from './constants.js';
 // 漏改任一份，面板就會對玩家說謊，直接違反顯示哲學「狀態誠實呈現」。
 // 兩邊現在都 import 這裡，改一個地方就好。
 // 階段五目標值：0.5（全寬 1.0；雙人 closed 1.55；三人 2.1）。
-export const BLOCK_HALF_WIDTH = 1.1;
+// 目標值（§1.3；語意＝半寬、原點＝攔網手 x、單位＝公尺絕對值）
+const BLOCK_HALF_WIDTH_BASE = 1.1;
+export const BLOCK_HALF_WIDTH_TARGET = 0.5;
+// 基準 B 收斂後的實際半寬——**單一真相**：sim 的 TUNING.BLOCK_REACH_X 與玩家面板
+// （input/attackZones.js）都吃這一個，t 一動兩邊同時動，不會分岔。
+export const BLOCK_HALF_WIDTH = (1 - CONVERGE_T) * BLOCK_HALF_WIDTH_BASE
+  + CONVERGE_T * BLOCK_HALF_WIDTH_TARGET;
 
 /** 一名攔網手的涵蓋區間 [lo, hi]。 */
 export function blockerInterval(x, halfWidth = BLOCK_HALF_WIDTH) {

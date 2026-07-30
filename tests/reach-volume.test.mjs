@@ -13,7 +13,7 @@ import { TUNING } from '../src/sim/game.js';
 import { createPlayer, standingReach, spikeReach } from '../src/sim/player.js';
 import { BALL } from '../src/sim/constants.js';
 import {
-  reachVolumeFor, ballInReach, REACH_ACTION,
+  reachVolumeFor, ballInReach, REACH_ACTION, reachRadiusFor,
   RECEIVE_HANDPOINT_H_RATIO, SET_HANDPOINT_H_RATIO,
 } from '../src/sim/reach.js';
 import {
@@ -75,12 +75,17 @@ test('可及體：手點高度隨**當前身高**即時變動，不得快取（�
     `比例關係成立：Δ手點 ${after - before} vs 0.48×0.10`);
 });
 
-test('可及體：魚躍水平延伸吃 DIVE_REACH_MUL，其餘動作不吃', () => {
+test('可及體：魚躍的可及半徑遠大於其餘動作（一次性大延伸），且與 reachRadiusFor 同源', () => {
   const normal = volFor(REACH_ACTION.RECEIVE).r;
   const dive = volFor(REACH_ACTION.DIVE).r;
-  assert.equal(normal, TUNING.REACH_RADIUS);
-  assert.equal(dive, TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL);
-  assert.ok(dive > normal, '魚躍是一次性大延伸');
+  // ★ 不再斷言 t=0 的字面式子（`REACH_RADIUS`／`×DIVE_REACH_MUL`）——
+  // 基準 B 的收斂進度 `TUNING.CONVERGE_T` 會把兩者都往 §1.3 目標值移動。
+  // 改為斷言**結構**：可及體的 r 與 `reachRadiusFor` 逐值同源，且魚躍恆大於一般動作。
+  assert.equal(normal, reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, P.height.current),
+    '一般動作：vol.r 與 reachRadiusFor 同源（未膨脹時逐值相等）');
+  assert.equal(dive, reachRadiusFor(REACH_ACTION.DIVE, TUNING, P.height.current),
+    '魚躍：同源');
+  assert.ok(dive > normal, '魚躍是一次性大延伸（t 全程成立）');
 });
 
 test('可及體：體力折損讓扣球**手點**下降（W7 累了跳不高，經 jumpMul 進來）', () => {
@@ -108,9 +113,10 @@ test('ballInReach：回傳**水平**距離供品質計算（本輪不動品質�
 
 test('ballInReach：球體是**單一**判定——垂直與水平互相吃（圓柱時代的兩條閘已收掉）', () => {
   const v = volFor(REACH_ACTION.RECEIVE);
-  // 同高度：水平邊界含入／超出即不成立（與圓柱時代同）
-  assert.equal(ballInReach({ x: 2 + v.r, y: v.cy, z: -1 }, v).ok, true, '水平邊界含入');
-  assert.equal(ballInReach({ x: 2 + v.r + 1e-9, y: v.cy, z: -1 }, v).ok, false, '水平超出');
+  // 同高度：略內側成立、略外側不成立
+  // （不踩「恰等於半徑」：`2 + r − 2` 與 `r` 差 1 ULP，踩邊界的測試會隨數值改變而閃爍）
+  assert.equal(ballInReach({ x: 2 + v.r * (1 - 1e-9), y: v.cy, z: -1 }, v).ok, true, '水平略內側');
+  assert.equal(ballInReach({ x: 2 + v.r * (1 + 1e-9), y: v.cy, z: -1 }, v).ok, false, '水平略外側');
   // ★ 球體的正字標記：水平 0.8r ＋ 垂直 0.8r 的球，圓柱時代兩條閘都過，球體不過
   const diagH = v.r * 0.8;
   const diag = { x: 2 + diagH, y: v.cy + v.r * 0.8, z: -1 };
@@ -122,9 +128,9 @@ test('ballInReach：球體是**單一**判定——垂直與水平互相吃（�
 test('ballInReach：離手點越高，水平能構的越少（球體的必然推論）', () => {
   const v = volFor(REACH_ACTION.RECEIVE);
   const reachAt = (dy) => {
-    // 該垂直落差下仍構得到的最大水平距離
+    // 該垂直落差下仍構得到的最大水平距離（同樣不踩精確邊界，見上一條的理由）
     const max = Math.sqrt(Math.max(0, v.r * v.r - dy * dy));
-    assert.equal(ballInReach({ x: 2 + max, y: v.cy + dy, z: -1 }, v).ok, true);
+    assert.equal(ballInReach({ x: 2 + max * (1 - 1e-9), y: v.cy + dy, z: -1 }, v).ok, true);
     assert.equal(ballInReach({ x: 2 + max + 1e-6, y: v.cy + dy, z: -1 }, v).ok, false);
     return max;
   };

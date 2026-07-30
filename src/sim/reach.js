@@ -102,8 +102,54 @@ export const SET_HANDPOINT_H_RATIO = 1.03;
  * ——perfect 的語意就是「二傳不用移動就能舉」。門檻掛在這個函式上，
  * 階段五把舉球可及縮到 0.45 時，門檻會**自己跟著縮**，不必記得回頭改第二個地方。
  */
-export function reachRadiusFor(action, tuning) {
-  return tuning.REACH_RADIUS * (action === REACH_ACTION.DIVE ? tuning.DIVE_REACH_MUL : 1);
+// ==== 基準 B（旋鈕收斂）的目標值 —— §1.3／v4 拍板 1 ====
+//
+// ★ A-7 申報三要素 ★
+//   RECEIVE/SET/SPIKE_REACH_H_RATIO
+//     語意：**可及半徑**（以手點為球心）｜原點：**手點**｜單位：**身高比例**（無因次）
+//   DIVE_REACH_TARGET_M
+//     語意：**可及半徑**｜原點：**手點**｜單位：**公尺絕對值**
+//     ——v4 拍板 1：魚躍是全表唯一**不隨身高縮放**的量（作比例＝3.5 m，超過人體撲救伸展）
+export const RECEIVE_REACH_H_RATIO = 0.38;
+export const SET_REACH_H_RATIO = 0.45;
+export const SPIKE_REACH_H_RATIO = 0.55;
+export const DIVE_REACH_TARGET_M = 2.0;
+
+/**
+ * 某動作的**可及半徑**——單一真相來源，並承載基準 B 的收斂進度 `t`。
+ *
+ * `t = tuning.CONVERGE_T`（0 ＝ 基準 A 現值，1 ＝ §1.3 目標值），每段 +0.25。
+ *
+ * ★ 內插在哪個空間做（這是實作端必須交代的選擇，A-7 的精神）★
+ * 前三個動作的 **t=0 是絕對公尺（1.30）、t=1 是身高比例** —— 兩端單位不同。
+ * **唯一兩端都有定義的空間是「絕對公尺、逐球員」**，故：
+ *   `r(t) = (1−t) × REACH_RADIUS + t × (比例 × H)`
+ * 魚躍的 t=1 是**公尺絕對值**（v4 拍板 1）⇒
+ *   `r(t) = (1−t) × (REACH_RADIUS × DIVE_REACH_MUL) + t × 2.0`
+ * ⇒ **`DIVE_REACH_MUL` 在 t=1 自然退場**（魚躍不再是乘法量）。
+ *
+ * ★ t=0 必須逐值重現基準 A ★ 下面第一行的早退就是那個保證：
+ * `t=0` 時完全不走內插路徑，回傳與遷移前同一個式子。
+ *
+ * @param {string} action REACH_ACTION 之一
+ * @param {object} tuning game.js 的 TUNING
+ * @param {number|null} heightM 該球員當前身高（公尺）。**t>0 且非魚躍時必填**——
+ *   身高比例目標沒有身高就算不出來；傳 null 會 throw 而不是悄悄退回舊值。
+ */
+export function reachRadiusFor(action, tuning, heightM = null) {
+  const t = tuning.CONVERGE_T ?? 0;
+  const base = tuning.REACH_RADIUS * (action === REACH_ACTION.DIVE ? tuning.DIVE_REACH_MUL : 1);
+  if (t <= 0) return base; // 基準 A 逐值重現的保證
+  if (action === REACH_ACTION.DIVE) {
+    return (1 - t) * base + t * DIVE_REACH_TARGET_M;
+  }
+  const ratio = action === REACH_ACTION.SET ? SET_REACH_H_RATIO
+    : action === REACH_ACTION.SPIKE ? SPIKE_REACH_H_RATIO
+      : RECEIVE_REACH_H_RATIO;
+  if (!Number.isFinite(heightM)) {
+    throw new Error(`reachRadiusFor: t=${t} 需要 heightM（${action}），不得省略`);
+  }
+  return (1 - t) * base + t * (ratio * heightM);
 }
 
 export function reachVolumeFor({
@@ -111,7 +157,7 @@ export function reachVolumeFor({
 }) {
   const isDive = action === REACH_ACTION.DIVE;
   // 水平半徑：魚躍是一次性大延伸（倍率階段五須重新導出——基底一縮，1.8 會把魚躍砍到 1.28m）
-  const r = reachRadiusFor(action, tuning) + inflate;
+  const r = reachRadiusFor(action, tuning, player.height.current) + inflate;
   // ★ 手點 y ＝ 球心的垂直位置（手點裁定 v4 §二 的表，逐列對應）★
   // **原點一律為地面。** 每次呼叫即時由當前身高算，**不快取**（v4 §2.1）。
   //   扣球／跳舉 → `spikeReach`（語意本來就是**擊球點**、非上界 ⇒ 沿用成立）
