@@ -290,6 +290,23 @@ const KIND_SALT = { left: 11, right: 23 };
 // 沿用同一道三檔階梯、不另立判準。
 export function tempoFor(kind, { flightId = 0, seed = 0, index = 0, passTier = 'perfect' } = {}) {
   if (kind === 'quick') return 'one';
+  // ---- 段 C：夾塞的節奏＝二速（把段 A 留下的「弧線是半快、節奏是三速」不一致收掉）----
+  //
+  // 段 A 給 tandem 的舉球落點是 `t = 0.55`＝game.js 的 SHOOT_APEX 4.2 檔（半快弧），
+  // 理由是「夾塞的球必須比高球平，否則攔網手有時間從快攻收回來」；但當時 tempoFor
+  // 未動，於是這條線的**弧線是半快、節奏標籤卻是三速**。段 A 的結案訊息把它列為
+  // 「留給段 C 的已知不一致」。
+  //
+  // 為什麼是改標籤而不是改弧線：`tempo` 在 sim 裡的唯一體現是**起跳時機**（見上表），
+  // 而 SHOOT 弧的 set→擊球 實測 61 tick（tools/combo-probe.mjs ⑤ 換算，見 SET_TO_HIT_TICKS）。
+  //   三速：takeoffTick ＝ set + runTicks（跑得快的人**更早**到＝更早起跳＝罰站更久）
+  //   二速：takeoffTick ＝ set + 40（TEMPO.two.takeoffLead ＝ −40，錨在二傳觸球上）
+  // tandem 的助跑段 (2.6,4.2)→(0.3,2.68) 長 2.757m，以 NOMINAL_SPEED 4.0 需 41 tick
+  // ⇒ 兩者算出來的起跳只差 1 tick（41 vs 40）＝**改標籤幾乎不改行為**，但它把
+  // 「起跳時機由誰決定」從「這名球員跑多快」換成「二傳幾時觸球」——後者才是節奏的定義，
+  // 也讓罰站變成常數 61 − 40 ＝ 21 tick（0.35s，07-23 硬線 0.5s 之內）而不隨屬性漂移。
+  // ★ 沒有動任何弧線常數、沒有動 TEMPO 表 ★ 只是讓標籤說出這條線本來就在做的事。
+  if (kind === 'tandem') return 'two';
   if ((kind === 'left' || kind === 'right') && passTier !== 'poor') {
     return hash01(flightId * 419 + index * 37 + KIND_SALT[kind] + seed) < TEMPO_TWO_RATE
       ? 'two' : 'three';
@@ -422,8 +439,119 @@ const CROSS_PLAY_SALT = 91;
 // ★★ 值 30 ＝實作端提案，**待 Sawmah 裁定**（同 CROSS_PLAY_RATE 0.25 的處置）★★
 export const CROSS_TEMPO_GAP = 30;
 
-// 組合型別 → 配合者必須跑的線（藍圖 §四 交叉條件 1）
-const COMBO_PARTNER_KIND = { cross: 'quick' };
+// ════════════════════════════════════════════════════════════════
+// 段 C（2026-07-31）：夾塞 tandem ＋ 他人時間差 delay
+// ════════════════════════════════════════════════════════════════
+//
+// ★ 兩個「物理 tick」常數表——本段所有時序判準的單一真相 ★
+//
+// 護欄 3：所有時序斷言一律用**物理 tick**（人真的離地的那一刻／球真的被打到的那一刻），
+// 不是 `routeTicks` 的計畫 tick——兩者一速差 8 tick、三速差 14 tick，攔網手讀得到的
+// 只有物理值（`blockRead.js` 明文不讀 route 表）。計畫值寫判準＝量錯位置。
+//
+// 兩張表都是**實測值**，不是推導值，各有一支獨立探針；
+// `tests/combo-play.test.mjs` 有一條「重新量一次並比對」的防過期測試
+// （改弧線／改 TEMPO 表卻沒改這裡 ⇒ 該測試轉紅），因為它們是本段判準的地基。
+//
+// PHYS_TAKEOFF_TICKS＝各節奏的物理起跳（相對二傳實際觸球 tick）
+//   量法：離開助跑起點 → 走到自己起跳點 1.0m 內 → 單 tick 位移 < 0.005m 的那一格
+//   來源：tools/combo-probe.mjs ③「口徑校準」，24 局 p50（一速 −6／二速 44／三速 68）
+export const PHYS_TAKEOFF_TICKS = { one: -6, two: 44, three: 68 };
+// SET_TO_HIT_TICKS＝二傳實際觸球 → 該節奏的攻擊手擊球，＝**這一檔弧線的飛行時間**
+//   來源：tools/tempo-probe.mjs ④（一速 33／二速 61／三速 82），
+//   與 tools/combo-probe.mjs ⑤ 反算逐值吻合（二速 61、三速 81）
+export const SET_TO_HIT_TICKS = { one: 33, two: 61, three: 82 };
+
+// ---- 夾塞（tandem）----
+//
+// 幾何早在段 A 就放好了（起點 (2.6,4.2) → 起跳 (0.3,2.68)，符號驗算見 APPROACH 表註解）。
+// 本段接上抽籤，主攻者＝**跑 right 的 OPP**（前排），配合者＝跑 quick 的 MB。
+//   為什麼是 right 而不是 left：tandem 的助跑起點 lx ＝ +2.6 在右半場，
+//   由 OH 從左邊線跑過來要橫越 6m＝那是另一條線（而且 left 已經被交叉佔著）。
+//   為什麼不能是 pipe／dball：tandem 的起跳點 lz ＝ 2.68 **在攻擊線（3.0）內**，
+//   後排球員在那裡起跳＝踏線違例。`attackPointsOf` 只在前排才產出 'right' ⇒ 天然安全。
+//
+// ★★ TANDEM_PLAY_RATE 初值 0.25 ＝實作端提案，**待 Sawmah 裁定** ★★
+// 依據（兩個上下界夾出來）：
+//   ① 上界＝與裁定 C 同一條紀律「直線仍要是該線的多數」。right 線沒有內切那種同族變體
+//      ⇒ P(直線) ＝ 1 − p ⇒ **p < 0.5**。實際取值遠低於此。
+//   ② 下界＝可讀性，與 CROSS_RATE 0.30／TEMPO_TWO_RATE 0.35 同量級帶。
+//   ③ 取「與 CROSS_PLAY_RATE 相同的 0.25」而不是「與交叉的**實效**佔比 17.5% 對齊
+//      （＝0.175）」：本卷下一段（段 D 攔網分歧量測）要在**每一型**上各取樣本，
+//      同權重的骰子讓兩型的樣本數同量級，是段 D 的前提。
+//      ⇒ 實效佔比：交叉 ＝ OH 左線的 17.5%（先被 CROSS_RATE 切掉 30%），
+//                 夾塞 ＝ OPP 右線的 25.0%（沒有同族變體先切）。
+//        要讓兩型實效佔比相等，值應改 0.175 ——這是 Sawmah 的選擇題，不是實作的。
+export const TANDEM_PLAY_RATE = 0.25;
+const TANDEM_PLAY_SALT = 137;
+// 夾塞條件 3「節奏錯開」的門檻（tick）。取 AI.APPROACH_LEAD ＝ 12
+// （ai.js:51 原文「比精算早到 0.2s＝短暫引臂接起跳」）＝ sim 自己定義的
+// 「這點時間差還算同一拍」的預算；差得比它多才算真的錯開。與 CROSS_TEMPO_GAP
+// 用同一個錨（不另立標準）。
+export const TANDEM_STAGGER_TICKS = 12;
+
+// ---- 他人時間差（delay）----
+//
+// 語意（真實排球）：MB 跑一個**不會來球的快攻**，攔網手跟著他起跳；等他落地時，
+// 邊攻才把球打下去——攔網手在下降段，牆等於不存在。
+// 「他人」＝誘餌是別人（對照「自我時間差」：同一個人先假跳再真跳）。
+//
+// ★ 這一型在 sim 裡改的是什麼 ★
+// 誘餌是**湧現**的（池內每個 point 都拿到完整 route，MB 每一波本來就在跑假快攻），
+// 所以「有沒有誘餌」不是變數。真正的變數是**主攻者的節奏**：
+//   三速（高球弧 t=0.75）：誘餌落地後還要等 63 tick（1.05s）才擊球 ⇒ 牆早就落地重整
+//   二速（半快弧 t=0.55）：誘餌落地後 43 tick（0.72s）擊球 ⇒ 才construct得上「時間差」
+// ⇒ **delay ＝ 把主攻者的節奏從三速改成二速**（`combo.mainTempo`），
+//   不改線、不改弧線常數、不動誘餌（partner 的 route 一格未動＝湧現式不破）。
+//
+// ★★ DELAY_WINDOW ＝ 51，**先量再定**（裁定 D 丙），下面是實測分佈 ★★
+// 量法：offset ＝ main 擊球（第三擊 TOUCH 的絕對 tick）− partner 落地
+//      （partner 物理起跳 + AIR_TICKS），**兩端皆物理 tick**。
+// tools/combo-probe.mjs ⑤，24 局：
+//   main tempo=two    n=174   min 33／p10 34／**p50 43**／p90 45／max 48
+//   main tempo=three  n=1007  min 54／p10 56／**p50 63**／p90 66／max 71
+//   兩個分佈之間有一條**空帶 (48, 54)**，51 ＝ 空帶中點（兩側各 3 tick 餘裕）。
+// ⇒ 二速 100% 落在窗內、三速 0%。
+//
+// ⚠⚠ 藍圖 §四 的試算「差 16 tick，窗取 ±8 恆假、取 ±20 幾乎恆真」**與實測不符** ⚠⚠
+//   實測 43，不是 16。兩端都錯：藍圖用 §〇.2 的「一速物理起跳 +15」，而段 B2 修好
+//   量測口徑（加位置閘）後實測是 **−6**（差 21 tick）；main 側藍圖用 55、實測 61。
+//   ⇒ **照藍圖寫 ±20 的話，delay 是恆假的**（|43| > 20，一顆都不會成立）。
+//   這是本專案抓到的第五個恆假，而且又一次出現在「驗收要用的門檻」上。
+// ★★ 值 51 ＝實作端提案，待 Sawmah 裁定（同 CROSS_PLAY_RATE／CROSS_TEMPO_GAP 的處置）★★
+export const DELAY_WINDOW = 51;
+// 時間差成立時，主攻者被指派的節奏（＝上面推導出「落在窗內」的那一檔）
+export const DELAY_TEMPO = 'two';
+// ★★ DELAY_PLAY_RATE 初值 0.20 ＝實作端提案，**待 Sawmah 裁定** ★★
+// 依據：delay 動的是**節奏軸**（不是路線軸），所以上下界要在節奏的分佈上推：
+//   ① 上界＝「三速高球仍是邊攻的多數」（它是這個遊戲的基準攻擊，不該被戰術擠成少數）。
+//      邊攻走三速的比例 ＝ (1 − TEMPO_TWO_RATE) × (1 − d) ＝ 0.65 × (1 − d) > 0.5
+//      ⇒ **d < 0.231**。
+//   ② 下界＝可讀性：delay 佔邊攻 ＝ 0.65 × d ≥ 10% ⇒ **d ≥ 0.154**。
+//   ③ 取 0.20 ⇒ delay 佔邊攻 13.0%、三速仍佔 52.0%。
+//   ④ 注意這是**名目**：delay 排在交叉／夾塞之後評估，被前兩型拿走的波不再進入。
+export const DELAY_PLAY_RATE = 0.20;
+const DELAY_PLAY_SALT = 173;
+
+// 三型的規格表（放同一處＝新增一型只改這裡，不必到處找散落的 if）
+// 順序即**評估順序**，先成立者勝 ⇒ 三型天然互斥（藍圖 §四 夾塞條件 4）
+export const COMBO_TYPES = ['cross', 'tandem', 'delay'];
+// 主攻者本來要跑哪條線才有資格升級成這一型
+const COMBO_MAIN_KINDS = { cross: ['left'], tandem: ['right'], delay: ['left', 'right'] };
+// 組合型別 → 配合者必須跑的線（藍圖 §四 交叉條件 1；三型的誘餌都是 MB 快攻）
+const COMBO_PARTNER_KIND = { cross: 'quick', tandem: 'quick', delay: 'quick' };
+// 主攻者被改成哪條線；null＝**維持原線**（delay 只動節奏不動路線）
+const COMBO_LINE = { cross: 'cross', tandem: 'tandem', delay: null };
+// 主攻者被指派的節奏；null＝照 tempoFor（cross 走三速高球、tandem 由 tempoFor 給二速）
+const COMBO_TEMPO = { cross: null, tandem: null, delay: DELAY_TEMPO };
+// 主攻者的起步偏移（段 B2 的 tempoGap）
+const COMBO_LEAD = { cross: CROSS_TEMPO_GAP, tandem: 0, delay: 0 };
+const COMBO_RATE = {
+  cross: CROSS_PLAY_RATE, tandem: TANDEM_PLAY_RATE, delay: DELAY_PLAY_RATE,
+};
+const COMBO_SALT = {
+  cross: CROSS_PLAY_SALT, tandem: TANDEM_PLAY_SALT, delay: DELAY_PLAY_SALT,
+};
 
 // 交叉的三條幾何條件（藍圖 §四 條件 2／3／5）——只吃兩條線的 kind，純幾何、可單測。
 // **回傳逐條結果而不是一個 boolean**：驗收 ② 要看得出「是哪一條在擋」，
@@ -455,13 +583,85 @@ export function crossGeometryOf(team, mainKind = 'cross', partnerKind = 'quick')
   };
 }
 
+// 這條線的名目助跑 tick（決定論：吃 NOMINAL_SPEED，不吃個人屬性）——
+// 只在**規劃期的節奏判準**用（三速的起跳 tick ＝ set + runTicks，需要它才算得出來）。
+// 實跑時 approachRoutesFor 用的是該球員自己的 moveSpeed，兩者可能差幾 tick；
+// 判準吃名目值＝「這條線的節奏」是線的屬性，不隨跑者快慢改變（否則同一型組合會
+// 因為換人上場而時成立時不成立）。
+function nominalRunTicks(team, kind, tempo) {
+  const s = approachStartFor(team, kind);
+  const t = takeoffSpotFor(team, kind, tempo);
+  if (!s || !t) return 1;
+  return Math.max(1, Math.round(
+    Math.hypot(t.x - s.x, t.z - s.z) / (NOMINAL_SPEED * SIM_DT),
+  ));
+}
+
+// 這條線的**計畫**起跳（相對二傳觸球）——與 routeTicks 同一條算式，不重刻。
+// （夾塞條件 3 只能吃計畫值：它是規劃期的判準，物理值要跑完才知道。
+//   物理面的驗證交給 tools/combo-probe.mjs ③ 的前後腳分佈，兩邊都要看。）
+function plannedTakeoffOffset(team, kind) {
+  const tempo = tempoFor(kind);
+  return tempo === 'three' ? nominalRunTicks(team, kind, tempo) : -TEMPO[tempo].takeoffLead;
+}
+
+// 夾塞的四條判定（藍圖 §四 夾塞條件 1／2／3／4）——同樣**逐條回傳**，理由同 crossGeometryOf。
+//   1 同線     |Δlx| ≤ TANDEM_LANE_M
+//   2 前後疊   Δlz ≥ TANDEM_DEPTH_M（硬下界 SEP_RADIUS 0.55，見常數註解）
+//   3 節奏錯開 計畫起跳 tick 差 ≥ TANDEM_STAGGER_TICKS
+//   4 兩型互斥 不得同時滿足交叉的穿越條件（否則同一波被雙重計數）
+export function tandemGeometryOf(team, mainKind = 'tandem', partnerKind = 'quick') {
+  const nil = {
+    lane: false, depth: false, stagger: false, notCrossing: false, ok: false,
+    laneGap: null, depthGap: null, staggerTicks: null,
+  };
+  if (!APPROACH[mainKind] || !APPROACH[partnerKind]) return nil;
+  const side = TEAM_SIDE[team];
+  const m = takeoffSpotFor(team, mainKind, tempoFor(mainKind));
+  const p = takeoffSpotFor(team, partnerKind, tempoFor(partnerKind));
+  const laneGap = Math.abs(side * m.x - side * p.x);
+  const depthGap = side * m.z - side * p.z;
+  const staggerTicks = plannedTakeoffOffset(team, mainKind)
+    - plannedTakeoffOffset(team, partnerKind);
+  const lane = laneGap <= TANDEM_LANE_M;
+  const depth = depthGap >= TANDEM_DEPTH_M;
+  const stagger = Math.abs(staggerTicks) >= TANDEM_STAGGER_TICKS;
+  const notCrossing = !crossGeometryOf(team, mainKind, partnerKind).crosses;
+  return {
+    lane, depth, stagger, notCrossing,
+    ok: lane && depth && stagger && notCrossing,
+    laneGap, depthGap, staggerTicks,
+  };
+}
+
+// 他人時間差的兩條判定（藍圖 §四 delay 條件 1／2）——**全程物理 tick**（護欄 3）。
+//   1 partner 物理起跳 < main 物理起跳（誘餌先跳，他才是誘餌）
+//   2 partner 落地（物理起跳 + AIR_TICKS）落在 main 擊球的 ±DELAY_WINDOW 內
+// 三個時間點全部由上方兩張實測表導出，本函式只做算術＝可單測、可符號檢查。
+export function delayTimingOf(mainTempo = DELAY_TEMPO, partnerKind = 'quick') {
+  const partnerTempo = tempoFor(partnerKind);
+  const nil = {
+    earlier: false, inWindow: false, ok: false, offset: null, land: null, hit: null,
+  };
+  const mainTakeoff = PHYS_TAKEOFF_TICKS[mainTempo];
+  const partnerTakeoff = PHYS_TAKEOFF_TICKS[partnerTempo];
+  const hit = SET_TO_HIT_TICKS[mainTempo];
+  if (mainTakeoff == null || partnerTakeoff == null || hit == null) return nil;
+  const land = partnerTakeoff + AIR_TICKS;
+  const offset = hit - land;
+  const earlier = partnerTakeoff < mainTakeoff;
+  const inWindow = Math.abs(offset) <= DELAY_WINDOW;
+  return { earlier, inWindow, ok: earlier && inWindow, offset, land, hit };
+}
+
 // 配合者＝**池內幾何最接近者**（裁定 B）——**不吃 trust**：用 trust 選誘餌語意是反的
-// （信任最高的人去當誘餌？）。「最接近」＝配合者起跳點離主攻者交叉線終點最近；
+// （信任最高的人去當誘餌？）。「最接近」＝配合者起跳點離主攻者本型終點最近；
 // 同距離時取 pid 字典序小者（決定論；現行池內 quick 至多一人，此分支是防禦性的）。
-function pickComboPartner(team, points, mainId, type) {
+// mainKind＝主攻者這一型**實際會跑的線**（delay 不換線 ⇒ 就是他本來那條）。
+function pickComboPartner(team, points, mainId, type, mainKind) {
   const want = COMBO_PARTNER_KIND[type];
   if (!want) return null;
-  const goal = takeoffSpotFor(team, type);
+  const goal = takeoffSpotFor(team, mainKind ?? type);
   let best = null;
   for (const pt of points) {
     if (pt.pid === mainId || pt.kind !== want) continue;
@@ -483,38 +683,57 @@ export function evaluateCombination(points, mainId, opts = {}) {
   const {
     team = 'A', flightId = 0, seed = 0, passTier = 'perfect', type = 'cross',
   } = opts;
-  const checks = {
-    hasMain: false,
-    mainKind: false,
-    tier: false,
-    partner: false,
-    crosses: false,
-    behind: false,
-    outOfReach: false,
-    roll: false,
-  };
+  // 型別專屬條件先佔位（順序＝探針列印順序，也是「前一條沒過就走不到下一條」的順序）
+  const checks = { hasMain: false, mainKind: false, tier: false, partner: false };
+  if (type === 'cross') Object.assign(checks, { crosses: false, behind: false, outOfReach: false });
+  else if (type === 'tandem') {
+    Object.assign(checks, { lane: false, depth: false, stagger: false, notCrossing: false });
+  } else if (type === 'delay') Object.assign(checks, { earlier: false, inWindow: false });
+  checks.roll = false;
+
   const main = mainId ? (points.find((p) => p.pid === mainId) ?? null) : null;
   checks.hasMain = !!main;
   if (!main) return { combo: null, checks };
-  // 只有 OH 的**直線**能升級成交叉：內切的機率帶（CROSS_RATE）因此一格不動（裁定 C 甲）
-  checks.mainKind = main.kind === 'left';
+  // 主攻者本來跑的線決定他有沒有資格升級成這一型：
+  //   cross ← left（OH 直線）／tandem ← right（OPP 直線）／delay ← left 或 right（邊攻）
+  // 內切（left_inside）與已經是組合線的 cross／tandem 都不在名單上
+  // ⇒ CROSS_RATE 的機率帶一格不動（裁定 C 甲），且不會出現「組合疊組合」。
+  checks.mainKind = (COMBO_MAIN_KINDS[type] ?? []).includes(main.kind);
   if (!checks.mainKind) return { combo: null, checks };
   // 跑戰術要一傳到位——與 routeKindFor 同一道三檔階梯，不另立判準。
-  // 一傳 poor 沒快攻時交叉自然不成立（裁定 B：這是預期行為，不是 bug）
+  // 一傳 poor 沒快攻時組合自然不成立（裁定 B：這是預期行為，不是 bug）
   checks.tier = (main.tier ?? passTier) === 'perfect';
   if (!checks.tier) return { combo: null, checks };
-  const partner = pickComboPartner(team, points, mainId, type);
+  // delay 不換線 ⇒ 主攻者實際跑的還是他本來那條
+  const mainKind = COMBO_LINE[type] ?? main.kind;
+  const partner = pickComboPartner(team, points, mainId, type, mainKind);
   checks.partner = !!partner;
   if (!partner) return { combo: null, checks };
-  const geo = crossGeometryOf(team, type, partner.kind);
-  checks.crosses = geo.crosses;
-  checks.behind = geo.behind;
-  checks.outOfReach = geo.outOfReach;
-  if (!geo.ok) return { combo: null, checks };
+  let structOk = false;
+  if (type === 'cross') {
+    const geo = crossGeometryOf(team, mainKind, partner.kind);
+    checks.crosses = geo.crosses;
+    checks.behind = geo.behind;
+    checks.outOfReach = geo.outOfReach;
+    structOk = geo.ok;
+  } else if (type === 'tandem') {
+    const geo = tandemGeometryOf(team, mainKind, partner.kind);
+    checks.lane = geo.lane;
+    checks.depth = geo.depth;
+    checks.stagger = geo.stagger;
+    checks.notCrossing = geo.notCrossing;
+    structOk = geo.ok;
+  } else {
+    const t = delayTimingOf(COMBO_TEMPO[type], partner.kind);
+    checks.earlier = t.earlier;
+    checks.inWindow = t.inWindow;
+    structOk = t.ok;
+  }
+  if (!structOk) return { combo: null, checks };
   // 觸發機率排在最後：前面每一條都是「這球有沒有資格組合」的結構條件，
   // 骰子只決定「有資格的這球要不要真的跑」。順序反過來會讓 checks 的通過率
   // 全部被骰子稀釋成 p×(結構通過率)＝看不出是哪一條在擋。
-  checks.roll = hash01(flightId * 1097 + CROSS_PLAY_SALT + seed) < CROSS_PLAY_RATE;
+  checks.roll = hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type];
   if (!checks.roll) return { combo: null, checks };
   return {
     combo: {
@@ -522,18 +741,35 @@ export function evaluateCombination(points, mainId, opts = {}) {
       mainId,
       partnerId: partner.pid,
       // 段 B2：由留白改為實值＝主攻者提早起步幾 tick（0＝與段 B 逐值相同）
-      tempoGap: CROSS_TEMPO_GAP,
+      tempoGap: COMBO_LEAD[type],
+      // 段 C：主攻者被指派的節奏；null＝照 tempoFor（delay 是唯一會指派的一型）
+      mainTempo: COMBO_TEMPO[type],
       // 幾何自證欄位：探針與測試直接讀，不必跨欄位對照
-      mainKind: type,
+      mainKind,
       partnerKind: partner.kind,
     },
     checks,
   };
 }
 
+// 三型逐一評估（順序＝COMBO_TYPES）。**先成立者勝** ⇒ 一波至多一個組合＝三型互斥，
+// 不可能同時被計為交叉與夾塞（驗收 ②）。三型全評估而不是命中就跳出：
+// checks 要交出「是哪一條在擋」，跳出等於把後兩型的診斷藏起來。
+// hash01 是純函式（不耗 game rng），多評估兩次零副作用。
+export function evaluateCombinations(points, mainId, opts = {}) {
+  const byType = {};
+  let combo = null;
+  for (const type of COMBO_TYPES) {
+    const ev = evaluateCombination(points, mainId, { ...opts, type });
+    byType[type] = ev.checks;
+    if (!combo && ev.combo) combo = ev.combo;
+  }
+  return { combo, byType };
+}
+
 // null＝本波沒有組合＝現行單人行為（退路分支）
 export function planCombination(points, mainId, opts = {}) {
-  return evaluateCombination(points, mainId, opts).combo;
+  return evaluateCombinations(points, mainId, opts).combo;
 }
 
 // 把組合的線寫回池——**只動涉及的兩人**，其餘 point 原樣（同一個物件參照）。
@@ -587,7 +823,13 @@ export function approachRoutesFor(team, points, opts = {}) {
     const start = approachStartFor(team, pt.kind);
     if (!start) return;
     // §7 D2：檔位以 point 自帶的為準（接一傳者的罰則檔），沒帶才吃本球的一傳品質
-    const tempo = tempoFor(pt.kind, { flightId, seed, index, passTier: pt.tier ?? passTier });
+    // 段 C：組合可以**指派主攻者的節奏**（delay ＝ 把三速換成二速，讓誘餌落地與擊球
+    // 對得上；見 DELAY_WINDOW 的實測分佈）。指派只掛在主攻者身上，配合者的 route
+    // 一格未動＝誘餌維持湧現式。combo.mainTempo 為 null／undefined 時逐值走原路徑。
+    const isComboMain = !!combo && pt.pid === combo.mainId;
+    const tempo = (isComboMain && combo.mainTempo)
+      ? combo.mainTempo
+      : tempoFor(pt.kind, { flightId, seed, index, passTier: pt.tier ?? passTier });
     const takeoff = takeoffSpotFor(team, pt.kind, tempo);
     // 助跑段跑完要幾 tick＝距離 ÷ 這個人的步長（決定論：moveSpeed 純吃屬性）。
     // 疲勞折速不計入——這是規劃期的預估值，估得樂觀＝晚到一點點，不影響到位即停
@@ -599,7 +841,7 @@ export function approachRoutesFor(team, points, opts = {}) {
     // 掛在 route 上而不是走位分支去讀 combo：走位分支讀 attackCombo 就等於內建誘餌
     // 旗標（藍圖 §六，ai.js 的 COMBO-SCAN 護欄）；route 欄位與 tempo 同性質＝
     // 「這條線幾時起步」，攔網手本來就讀得到的東西。
-    const comboLead = (combo && pt.pid === combo.mainId) ? (combo.tempoGap ?? 0) : 0;
+    const comboLead = isComboMain ? (combo.tempoGap ?? 0) : 0;
     routes.push({
       pid: pt.pid, kind: pt.kind, tempo, start, takeoff, runTicks, comboLead,
       ...routeTicks(tempo, setTick, runTicks, comboLead),

@@ -27,8 +27,12 @@ import { localToWorld } from '../src/sim/rotation.js';
 import * as APPROACH_MOD from '../src/sim/approach.js';
 
 const { applyRouteKinds, CROSS_RATE, TAKEOFF } = APPROACH_MOD;
+// 滯空窗＝落地時刻的單一真相（藍圖 §四 delay 條件 2 明文吃這個常數）
+const AIR_TICKS_LOCAL = APPROACH_MOD.AIR_TICKS;
 // 段 B 之前（基準 worktree）沒有這些匯出——選擇性取用，讓本檔在基準上也跑得完
 const evaluateCombination = APPROACH_MOD.evaluateCombination ?? null;
+// 段 C：三型逐一評估的入口（段 B 之前沒有這個匯出，同樣選擇性取用）
+const evaluateCombinations = APPROACH_MOD.evaluateCombinations ?? null;
 const CROSS_PLAY_RATE = APPROACH_MOD.CROSS_PLAY_RATE ?? null;
 
 const SETS = Number(process.argv[2] ?? 24);
@@ -104,24 +108,32 @@ function trustSweep() {
 function runSets() {
   const kindCount = {};
   const attackerCount = {};
-  const checkTally = {};
-  const comboBy = {};              // `${mainKind}` → 次數
+  const checkTally = {};           // `${type}` → `${check}` → {pass, seen}
+  const comboBy = {};              // `${type}` → 次數
   let planPoints = 0;
   let comboPlans = 0;
   let fidelityMismatch = 0;
-  let comboSpikes = 0;             // 組合成立且主攻者真的扣成的次數
+  const comboSpikes = {};          // `${type}` → 組合成立且主攻者真的扣成的次數
   const physByTempo = {};          // tempo → 物理起跳（相對二傳觸球）：**整個池**（含誘餌）
   const physSpiker = {};           // 同上，但只取**真的扣成那一人**＝口徑校準用
-  const stagger = [];              // 前後腳：main 物理起跳 − partner 物理起跳
-  const staggerPlanned = [];       // 對照：同兩人的**計畫** tick 差（藍圖 §〇.2 的兩個座標系）
+  const stagger = {};              // `${type}` → 前後腳：main 物理起跳 − partner 物理起跳
+  const staggerPlanned = {};       // `${type}` → 同兩人的**計畫** tick 差（藍圖 §〇.2 的兩個座標系）
   // ---- ④ 段 B2：前後腳的代價面（口徑同 tools/tempo-probe.mjs ③）----
-  const mainStand = [];            // 交叉主攻者**擊球前連續靜止** tick＝罰站
-  const mainSetToHit = [];         // 交叉主攻者的 二傳實際觸球 → 擊球 tick（弧線常數）
-  const mainPhys = [];             // 交叉主攻者物理起跳（相對二傳觸球）
-  const partnerPhys = [];          // 配合者物理起跳（相對二傳觸球）
+  const mainStand = {};            // `${type}` → 主攻者**擊球前連續靜止** tick＝罰站
+  const mainSetToHit = {};         // `${type}` → 主攻者的 二傳實際觸球 → 擊球 tick（弧線常數）
+  const mainPhys = {};             // `${type}` → 主攻者物理起跳（相對二傳觸球）
+  const partnerPhys = {};          // `${type}` → 配合者物理起跳（相對二傳觸球）
+  const comboDelayOffset = {};     // `${type}` → 誘餌落地 → 主攻擊球的實際 offset
   const leadAvail = [];            // 規劃點能給的提前量＝預估 setTick − 規劃 tick
   const leadUsed = [];             // 實際生效的提前量＝預估 setTick − max(startTick, 規劃 tick)
   const startGap = [];             // 起步生效那一刻，主攻者離助跑起點多遠（m）
+  // ---- ⑤ 段 C：他人時間差的窗（DELAY_WINDOW 先量再定）----
+  // offset ＝ main 擊球 tick − partner 落地 tick，partner 落地 ＝ 物理起跳 + AIR_TICKS。
+  // **兩端都是物理 tick**（護欄 3）：擊球用 TOUCH 事件的絕對 tick，
+  // 快攻誘餌的起跳用與 ③ 同一把尺（離開起點 → 起跳點附近 → 單 tick 位移 < EPS）。
+  const delayOffsetBy = {};        // `${主攻者 tempo}` → offset 陣列
+  const delayOffsetByKind = {};    // `${主攻者 kind}/${tempo}` → offset 陣列
+  const delayEarlier = { yes: 0, no: 0 }; // 條件 1：partner 物理起跳 < main 物理起跳
 
   for (let seed = 11; seed < 11 + SETS; seed += 1) {
     const g = createGame({ seed, setTarget: 25 });
@@ -131,6 +143,7 @@ function runSets() {
     let curRoutes = null;          // 本波的 route 表（結算時查 tempo 用）
     let waveSetTick = null;        // 本波二傳實際觸球的 tick
     let waveSpiker = null;         // 本波真的扣成的人（口徑校準用）
+    let waveHitTick = null;        // 本波第三擊扣球的絕對 tick（⑤ 用）
     const prevPos = {};
     const stillRun = {};           // pid → 目前連續靜止了幾 tick（④ 罰站用，跨波累計）
     let stopTick = {};             // pid → 本波第一次「真的停下來」的絕對 tick
@@ -148,21 +161,46 @@ function runSets() {
       if (curCombo
         && stopTick[curCombo.mainId] !== undefined
         && stopTick[curCombo.partnerId] !== undefined) {
-        stagger.push(stopTick[curCombo.mainId] - stopTick[curCombo.partnerId]);
+        const ty = curCombo.type;
+        (stagger[ty] ??= []).push(stopTick[curCombo.mainId] - stopTick[curCombo.partnerId]);
         if (waveSetTick != null) {
-          mainPhys.push(stopTick[curCombo.mainId] - waveSetTick);
-          partnerPhys.push(stopTick[curCombo.partnerId] - waveSetTick);
+          (mainPhys[ty] ??= []).push(stopTick[curCombo.mainId] - waveSetTick);
+          (partnerPhys[ty] ??= []).push(stopTick[curCombo.partnerId] - waveSetTick);
+        }
+        // 驗收 ③ 的實跑面：本波誘餌落地 → 主攻者擊球（組合真的成立的那些波）
+        if (waveHitTick != null && waveSpiker === curCombo.mainId) {
+          (comboDelayOffset[ty] ??= []).push(
+            waveHitTick - (stopTick[curCombo.partnerId] + AIR_TICKS_LOCAL),
+          );
         }
         const rMain = curRoutes.find((x) => x.pid === curCombo.mainId);
         const rPart = curRoutes.find((x) => x.pid === curCombo.partnerId);
         if (rMain?.takeoffTick != null && rPart?.takeoffTick != null) {
-          staggerPlanned.push(rMain.takeoffTick - rPart.takeoffTick);
+          (staggerPlanned[curCombo.type] ??= []).push(rMain.takeoffTick - rPart.takeoffTick);
+        }
+      }
+      // ---- ⑤ 他人時間差的實際窗（本波真的扣成 且 池內有快攻誘餌 才算得出來）----
+      // 誘餌＝跑 quick 那條線、且**不是**本波扣球者的人（他真的在騙）。
+      const decoy = (curRoutes ?? []).find(
+        (rt) => rt.kind === 'quick' && rt.pid !== waveSpiker && stopTick[rt.pid] !== undefined,
+      );
+      if (decoy && waveSpiker && waveHitTick != null) {
+        const land = stopTick[decoy.pid] + AIR_TICKS_LOCAL;
+        const off = waveHitTick - land;
+        const rMain = (curRoutes ?? []).find((x) => x.pid === waveSpiker);
+        const tp = rMain?.tempo ?? 'n/a';
+        (delayOffsetBy[tp] ??= []).push(off);
+        (delayOffsetByKind[`${rMain?.kind ?? 'n/a'}/${tp}`] ??= []).push(off);
+        if (stopTick[waveSpiker] !== undefined) {
+          if (stopTick[decoy.pid] < stopTick[waveSpiker]) delayEarlier.yes += 1;
+          else delayEarlier.no += 1;
         }
       }
       curRoutes = null;
       curCombo = null;
       waveSetTick = null;
       waveSpiker = null;
+      waveHitTick = null;
       stopTick = {};
     };
     let guard = 0;
@@ -176,18 +214,21 @@ function runSets() {
         planPoints += 1;
         const team = ai.approach.team;
         if (ai.attackerId) attackerCount[ai.attackerId] = (attackerCount[ai.attackerId] ?? 0) + 1;
-        if (evaluateCombination) {
+        if (evaluateCombinations) {
           const pts = applyRouteKinds(
             attackPointsOf(g, team, ai.claimId, ai.passTier, ai.passReceiverId),
             { flightId: g.rally.flightId, seed: g.seed ?? 0, passTier: ai.passTier },
           );
-          const ev = evaluateCombination(pts, ai.attackerId, {
+          const ev = evaluateCombinations(pts, ai.attackerId, {
             team, flightId: g.rally.flightId, seed: g.seed ?? 0, passTier: ai.passTier,
           });
-          for (const [k, v] of Object.entries(ev.checks)) {
-            const t = (checkTally[k] ??= { pass: 0, seen: 0 });
-            t.seen += 1;
-            if (v) t.pass += 1;
+          for (const [ty, checks] of Object.entries(ev.byType)) {
+            const bag = (checkTally[ty] ??= {});
+            for (const [k, v] of Object.entries(checks)) {
+              const t = (bag[k] ??= { pass: 0, seen: 0 });
+              t.seen += 1;
+              if (v) t.pass += 1;
+            }
           }
           if (JSON.stringify(ev.combo) !== JSON.stringify(ai.attackCombo ?? null)) {
             fidelityMismatch += 1;
@@ -197,7 +238,7 @@ function runSets() {
         curRoutes = ai.approach.routes ?? [];
         if (curCombo) {
           comboPlans += 1;
-          comboBy[curCombo.mainKind] = (comboBy[curCombo.mainKind] ?? 0) + 1;
+          comboBy[curCombo.type] = (comboBy[curCombo.type] ?? 0) + 1;
           // ④ 提前量：規劃點（＝本 tick）到預估二傳觸球之間有多少 tick 可用。
           // startTick 早於規劃點的部分是**拿不到的**（route 是這一刻才存在的）
           // ⇒ leadUsed 才是實際生效的偏移，leadAvail 是它的上界。
@@ -262,10 +303,12 @@ function runSets() {
           const k = ai.attackKind ?? 'n/a';
           kindCount[k] = (kindCount[k] ?? 0) + 1;
           waveSpiker = e.playerId;
+          waveHitTick = g.tick;
           if (curCombo && curCombo.mainId === e.playerId) {
-            comboSpikes += 1;
-            mainStand.push(stillRun[e.playerId] ?? 0);
-            if (waveSetTick != null) mainSetToHit.push(g.tick - waveSetTick);
+            const ty = curCombo.type;
+            comboSpikes[ty] = (comboSpikes[ty] ?? 0) + 1;
+            (mainStand[ty] ??= []).push(stillRun[e.playerId] ?? 0);
+            if (waveSetTick != null) (mainSetToHit[ty] ??= []).push(g.tick - waveSetTick);
           }
         }
         if (e.type === 'DEAD_BALL') flushWave();
@@ -277,6 +320,7 @@ function runSets() {
     kindCount, attackerCount, checkTally, comboBy, planPoints, comboPlans,
     fidelityMismatch, comboSpikes, physByTempo, physSpiker, stagger, staggerPlanned,
     mainStand, mainSetToHit, mainPhys, partnerPhys, leadAvail, leadUsed, startGap,
+    delayOffsetBy, delayOffsetByKind, delayEarlier, comboDelayOffset,
   };
 }
 
@@ -292,30 +336,59 @@ console.log(`  （參考）本次的攻擊線分佈：${JSON.stringify(sweep.kin
 console.log(`  （參考）本掃描內的組合成立次數：${sweep.combos}／${sweep.n} = ${pct(sweep.combos, sweep.n)}`);
 
 const r = runSets();
-console.log(`\n══ ② 實跑（seed 11..${10 + SETS}，${SETS} 局）：交叉的發生與逐條條件 ══`);
-console.log(`  CROSS_RATE（內切，未動）=${CROSS_RATE}　CROSS_PLAY_RATE（交叉，新）=${CROSS_PLAY_RATE}`);
+const TYPES = APPROACH_MOD.COMBO_TYPES ?? ['cross'];
+console.log(`\n══ ② 實跑（seed 11..${10 + SETS}，${SETS} 局）：三型的發生與逐條條件 ══`);
+console.log(`  CROSS_RATE（內切，未動）=${CROSS_RATE}　觸發機率：`
+  + `cross=${CROSS_PLAY_RATE}　tandem=${APPROACH_MOD.TANDEM_PLAY_RATE}　delay=${APPROACH_MOD.DELAY_PLAY_RATE}`);
 console.log(`  規劃點 ${r.planPoints} 次；其中組合成立 ${r.comboPlans} 次 = ${pct(r.comboPlans, r.planPoints)}`);
-console.log(`  組合型別分佈：${JSON.stringify(r.comboBy)}`);
-console.log(`  組合成立且主攻者真的扣成：${r.comboSpikes} 次`);
+console.log('  ── 三型各自的發生次數／佔全部規劃點 ──');
+for (const t of TYPES) {
+  console.log(`    ${t.padEnd(8)} ${String(r.comboBy[t] ?? 0).padStart(4)} 次`
+    + ` = ${pct(r.comboBy[t] ?? 0, r.planPoints).padStart(6)}`
+    + `　｜主攻者真的扣成 ${String(r.comboSpikes[t] ?? 0).padStart(4)} 次`
+    + `（扣成率 ${pct(r.comboSpikes[t] ?? 0, r.comboBy[t] ?? 0)}）`);
+}
 console.log(`  重建忠實度（重建的 combo ≠ sim 內部的 attackCombo 的次數）：${r.fidelityMismatch}`
   + `${r.fidelityMismatch === 0 ? '（0＝下面的逐條通過率有效）' : ' ★ 非 0＝本節作廢 ★'}`);
 console.log('  ── 逐條通過率（分母＝走到該條的規劃點；前一條沒過就不會走到下一條）──');
-const ORDER = ['hasMain', 'mainKind', 'tier', 'partner', 'crosses', 'behind', 'outOfReach', 'roll'];
+const ORDER = {
+  cross: ['hasMain', 'mainKind', 'tier', 'partner', 'crosses', 'behind', 'outOfReach', 'roll'],
+  tandem: ['hasMain', 'mainKind', 'tier', 'partner', 'lane', 'depth', 'stagger', 'notCrossing', 'roll'],
+  delay: ['hasMain', 'mainKind', 'tier', 'partner', 'earlier', 'inWindow', 'roll'],
+};
+const RATE_OF = {
+  cross: CROSS_PLAY_RATE,
+  tandem: APPROACH_MOD.TANDEM_PLAY_RATE,
+  delay: APPROACH_MOD.DELAY_PLAY_RATE,
+};
 const LABEL = {
   hasMain: '主攻者在池內',
-  mainKind: "主攻者跑 'left'（＝可升級成交叉）",
   tier: '一傳到位（perfect）',
   partner: '池內有 quick 配合者（幾何最近）',
   crosses: '條件2 穿越（線段 lx 區間含 0）',
   behind: '條件3 後方（lz(0) > quick 起跳 lz）',
   outOfReach: '條件5 搆不到（> BLOCK_REACH_X）',
-  roll: `觸發骰（CROSS_PLAY_RATE=${CROSS_PLAY_RATE}）`,
+  lane: `條件1 同線（|Δlx| ≤ ${APPROACH_MOD.TANDEM_LANE_M}）`,
+  depth: `條件2 前後疊（Δlz ≥ ${APPROACH_MOD.TANDEM_DEPTH_M}）`,
+  stagger: `條件3 節奏錯開（≥ ${APPROACH_MOD.TANDEM_STAGGER_TICKS} tick）`,
+  notCrossing: '條件4 不同時滿足交叉穿越（互斥）',
+  earlier: '條件1 誘餌物理起跳早於主攻者',
+  inWindow: `條件2 誘餌落地在擊球 ±${APPROACH_MOD.DELAY_WINDOW} 內`,
 };
-for (const k of ORDER) {
-  const t = r.checkTally[k];
-  if (!t) continue;
-  console.log(`    ${LABEL[k].padEnd(34)} ${String(t.pass).padStart(5)}/${String(t.seen).padStart(5)}`
-    + ` = ${pct(t.pass, t.seen).padStart(7)}`);
+const MAIN_KIND_LABEL = {
+  cross: "主攻者跑 'left'", tandem: "主攻者跑 'right'", delay: "主攻者跑 'left'／'right'",
+};
+for (const ty of TYPES) {
+  const bag = r.checkTally[ty];
+  if (!bag) continue;
+  console.log(`    【${ty}】觸發骰 p=${RATE_OF[ty]}`);
+  for (const k of ORDER[ty]) {
+    const t = bag[k];
+    if (!t) continue;
+    const label = k === 'mainKind' ? MAIN_KIND_LABEL[ty] : (k === 'roll' ? '觸發骰' : LABEL[k]);
+    console.log(`      ${label.padEnd(34)} ${String(t.pass).padStart(5)}/${String(t.seen).padStart(5)}`
+      + ` = ${pct(t.pass, t.seen).padStart(7)}`);
+  }
 }
 console.log(`  攻擊線實跑分佈（第三擊扣球）：${JSON.stringify(r.kindCount)}`);
 const L = r.kindCount;
@@ -323,15 +396,19 @@ const ohLine = (L.left ?? 0) + (L.left_inside ?? 0) + (L.cross ?? 0);
 console.log(`  OH 左線內：直線 ${pct(L.left ?? 0, ohLine)}／內切 ${pct(L.left_inside ?? 0, ohLine)}`
   + `／交叉 ${pct(L.cross ?? 0, ohLine)}（名目 ${((1 - CROSS_RATE) * (1 - (CROSS_PLAY_RATE ?? 0)) * 100).toFixed(1)}`
   + `／${(CROSS_RATE * 100).toFixed(1)}／${((1 - CROSS_RATE) * (CROSS_PLAY_RATE ?? 0) * 100).toFixed(1)}）`);
+const oppLine = (L.right ?? 0) + (L.tandem ?? 0);
+console.log(`  OPP 右線內：直線 ${pct(L.right ?? 0, oppLine)}／夾塞 ${pct(L.tandem ?? 0, oppLine)}`
+  + `（名目 ${((1 - APPROACH_MOD.TANDEM_PLAY_RATE) * 100).toFixed(1)}`
+  + `／${(APPROACH_MOD.TANDEM_PLAY_RATE * 100).toFixed(1)}）`);
 console.log(`  （參考）實跑主攻者次數：${JSON.stringify(r.attackerCount)}`
   + '　※ 實跑分佈**不是** ① 的判準（球路發散，見檔頭）');
 
-console.log('\n══ ③ 前後腳：兩人的物理起跳 tick 差（裁定 D 丙＝先量再定，本節只交分佈）══');
-console.log('  量測口徑：起步後第一個「單 tick 位移 < 0.005m」的 tick＝人跑到位停下來拔起；'
-  + '\n  **不是** route.takeoffTick（計畫值，一速兩者差 29 tick，藍圖 §〇.2）');
+console.log('\n══ ③ 前後腳：兩人的物理起跳 tick 差 ══');
+console.log('  量測口徑：起步後第一個「單 tick 位移 < 0.005m」且**人在自己起跳點 1.0m 內**的 tick；'
+  + '\n  **不是** route.takeoffTick（計畫值，兩個座標系不同值＝護欄 3 的存在理由）');
 console.log('  ── 口徑校準：各節奏的物理起跳（相對二傳觸球 tick）──');
-console.log('     藍圖 §〇.2 的基準（tools/tempo-routeb-probe.mjs 量的是**真的扣成那一人**）：'
-  + '一速 +15／二速 +44／三速 +68');
+console.log(`     approach.js 的 PHYS_TAKEOFF_TICKS（段 C 判準的地基）：`
+  + `${JSON.stringify(APPROACH_MOD.PHYS_TAKEOFF_TICKS)}`);
 for (const t of ['one', 'two', 'three']) {
   const a = r.physSpiker[t] ?? [];
   const all = r.physByTempo[t] ?? [];
@@ -339,52 +416,74 @@ for (const t of ['one', 'two', 'three']) {
     + `  p25=${q(a, 0.25)}  p50=${q(a, 0.5)}  p75=${q(a, 0.75)}`
     + `　｜整池（含誘餌） n=${String(all.length).padStart(4)}  p50=${q(all, 0.5)}`);
 }
-console.log('  ── 交叉兩人的前後腳（main 物理起跳 − partner 物理起跳；正值＝主攻者後起跳）──');
-if (!r.stagger.length) {
-  console.log('     n=0 ★ 沒有樣本 ★');
-} else {
-  const s = r.stagger;
-  console.log(`     n=${s.length}  min=${q(s, 0)}  p10=${q(s, 0.1)}  p25=${q(s, 0.25)}`
-    + `  **p50=${q(s, 0.5)}**  p75=${q(s, 0.75)}  **p90=${q(s, 0.9)}**  max=${q(s, 0.999)}`
-    + `  平均 ${mean(s).toFixed(1)}`);
-  const buckets = {};
-  for (const v of s) {
-    const b = Math.floor(v / 10) * 10;
-    buckets[b] = (buckets[b] ?? 0) + 1;
-  }
-  console.log(`     分佈（每 10 tick 一格，tick 差 → 筆數）：${JSON.stringify(
-    Object.fromEntries(Object.keys(buckets).map(Number).sort((a, b) => a - b)
-      .map((k) => [`${k}~${k + 9}`, buckets[k]])),
-  )}`);
-  console.log(`     同時起跳（差 0 tick）佔比：${pct(s.filter((v) => v === 0).length, s.length)}`);
-  if (r.staggerPlanned.length) {
-    const pl = r.staggerPlanned;
-    console.log(`     ※ 對照：同兩人的**計畫** tick 差 p50=${q(pl, 0.5)}／p90=${q(pl, 0.9)}`
-      + '（兩個座標系不同值＝護欄 3 的存在理由）');
-  }
+console.log('  ── 三型的前後腳（main 物理起跳 − partner 物理起跳；正值＝主攻者後起跳）──');
+for (const ty of TYPES) {
+  const s = r.stagger[ty] ?? [];
+  if (!s.length) { console.log(`     ${ty.padEnd(8)} n=0 ★ 沒有樣本 ★`); continue; }
+  console.log(`     ${ty.padEnd(8)} n=${String(s.length).padStart(4)}  min=${q(s, 0)}`
+    + `  p10=${q(s, 0.1)}  **p50=${q(s, 0.5)}**  **p90=${q(s, 0.9)}**  max=${q(s, 0.999)}`
+    + `  平均 ${mean(s).toFixed(1)}　｜同時起跳 ${pct(s.filter((v) => v === 0).length, s.length)}`
+    + `　｜計畫 tick 差 p50=${q(r.staggerPlanned[ty] ?? [], 0.5)}`);
 }
-// ── ④ 段 B2：前後腳的代價面 ──
+// ── ④ 罰站的代價面（口徑同 tools/tempo-probe.mjs ③）──
 const CROSS_TEMPO_GAP = APPROACH_MOD.CROSS_TEMPO_GAP ?? null;
-console.log('\n══ ④ 前後腳的代價面（tempoGap 的取捨；罰站口徑同 tools/tempo-probe.mjs ③）══');
-console.log(`  CROSS_TEMPO_GAP = ${CROSS_TEMPO_GAP}（交叉主攻者比三速黃金錨點提早幾 tick 起步）`);
+console.log('\n══ ④ 三型主攻者的罰站與時序（罰站口徑同 tools/tempo-probe.mjs ③）══');
+console.log(`  CROSS_TEMPO_GAP = ${CROSS_TEMPO_GAP}（只有交叉有起步偏移；夾塞／時間差皆 0）`);
 const row = (label, arr, unit = 'tick') => {
-  if (!arr?.length) { console.log(`  ${label.padEnd(30)} n=0`); return; }
-  console.log(`  ${label.padEnd(30)} n=${String(arr.length).padStart(4)}`
+  if (!arr?.length) { console.log(`    ${label.padEnd(26)} n=0`); return; }
+  console.log(`    ${label.padEnd(26)} n=${String(arr.length).padStart(4)}`
     + `  p10=${q(arr, 0.1)}  p50=${q(arr, 0.5)}  p90=${q(arr, 0.9)}  平均 ${mean(arr).toFixed(1)} ${unit}`);
 };
-row('主攻者物理起跳 − 二傳觸球', r.mainPhys);
-row('配合者物理起跳 − 二傳觸球', r.partnerPhys);
-row('主攻者 二傳觸球→擊球', r.mainSetToHit);
-row('★ 主攻者擊球前連續靜止（罰站）', r.mainStand);
-if (r.mainStand.length) {
-  const over = r.mainStand.filter((v) => v > 30).length;
-  console.log(`     站 > 0.5s（30 tick，07-23 硬線）佔比：${pct(over, r.mainStand.length)}`
-    + `　｜ 站 > 0.2s（12 tick＝AI.APPROACH_LEAD 的容許量）：`
-    + `${pct(r.mainStand.filter((v) => v > 12).length, r.mainStand.length)}`);
+for (const ty of TYPES) {
+  console.log(`  【${ty}】`);
+  row('主攻者物理起跳 − 二傳觸球', r.mainPhys[ty]);
+  row('配合者物理起跳 − 二傳觸球', r.partnerPhys[ty]);
+  row('主攻者 二傳觸球→擊球', r.mainSetToHit[ty]);
+  row('★ 擊球前連續靜止（罰站）', r.mainStand[ty]);
+  const st = r.mainStand[ty] ?? [];
+  if (st.length) {
+    console.log(`       站 > 0.5s（30 tick，07-23 硬線）：${pct(st.filter((v) => v > 30).length, st.length)}`
+      + `　｜ 站 > 0.2s（12 tick＝AI.APPROACH_LEAD）：${pct(st.filter((v) => v > 12).length, st.length)}`);
+  }
+  const off = r.comboDelayOffset[ty] ?? [];
+  if (off.length) {
+    console.log(`       誘餌落地 → 主攻擊球 offset：n=${off.length}`
+      + `  p10=${q(off, 0.1)}  **p50=${q(off, 0.5)}**  p90=${q(off, 0.9)}`
+      + `　｜落在 ±${APPROACH_MOD.DELAY_WINDOW} 內 `
+      + `${pct(off.filter((v) => Math.abs(v) <= APPROACH_MOD.DELAY_WINDOW).length, off.length)}`);
+  }
 }
 row('規劃點可用提前量（上界）', r.leadAvail);
 row('實際生效提前量', r.leadUsed);
 row('起步時離助跑起點', r.startGap, 'm');
-console.log(`  主攻者扣成率：${pct(r.comboSpikes, r.comboPlans)}（${r.comboSpikes}/${r.comboPlans}）`);
+
+// ── ⑤ 段 C：他人時間差的窗（DELAY_WINDOW 先量再定）──
+console.log('\n══ ⑤ 他人時間差的實際窗：main 擊球 tick − partner 落地 tick（兩端皆物理 tick）══');
+console.log(`  partner 落地 ＝ 快攻誘餌的物理起跳 + AIR_TICKS(${AIR_TICKS_LOCAL})；`
+  + 'main 擊球 ＝ 第三擊 TOUCH 事件的絕對 tick');
+console.log('  ★ 正值＝誘餌**先**落地、主攻者後擊球（真實時間差的方向）★');
+const offRow = (label, arr) => {
+  if (!arr?.length) { console.log(`  ${label.padEnd(22)} n=0`); return; }
+  console.log(`  ${label.padEnd(22)} n=${String(arr.length).padStart(4)}`
+    + `  min=${q(arr, 0)}  p10=${q(arr, 0.1)}  **p50=${q(arr, 0.5)}**  **p90=${q(arr, 0.9)}**`
+    + `  max=${q(arr, 0.999)}  平均 ${mean(arr).toFixed(1)}`);
+};
+for (const t of ['one', 'two', 'three']) offRow(`主攻者 tempo=${t}`, r.delayOffsetBy[t]);
+console.log('  ── 按線別×節奏 ──');
+for (const k of Object.keys(r.delayOffsetByKind).sort()) offRow(k, r.delayOffsetByKind[k]);
+const allOff = Object.values(r.delayOffsetBy).flat();
+if (allOff.length) {
+  console.log('  ── 若把窗定成 ±W，各 tempo 的成立率 ──');
+  for (const W of [8, 12, 16, 20, 24, 30, 40, 50, 60]) {
+    const parts = ['one', 'two', 'three'].map((t) => {
+      const a = r.delayOffsetBy[t] ?? [];
+      return `${t}=${a.length ? pct(a.filter((v) => Math.abs(v) <= W).length, a.length) : 'n/a'}`;
+    });
+    console.log(`     ±${String(W).padStart(2)}  ${parts.join('  ')}`);
+  }
+}
+console.log(`  條件 1（partner 物理起跳 < main 物理起跳）：`
+  + `${r.delayEarlier.yes}/${r.delayEarlier.yes + r.delayEarlier.no}`
+  + ` = ${pct(r.delayEarlier.yes, r.delayEarlier.yes + r.delayEarlier.no)}`);
 
 console.log(`\n（BLOCK_REACH_X=${TUNING.BLOCK_REACH_X}）`);

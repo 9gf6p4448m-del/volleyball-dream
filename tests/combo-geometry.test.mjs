@@ -273,13 +273,34 @@ test('段 A：抽籤一格未接——routeKindFor／tempoFor 永遠不會產出
       }
     }
   }
-  // 新線本身走三速（無 rng、決定論）
+  // 新線本身的節奏是**線的屬性、無 rng、決定論**（不隨 flightId／seed／tier 變）。
+  // ★ 段 C 更新：tandem 由 'three' 改為 'two' ★ 段 A 給 tandem 的舉球落點是 t=0.55
+  // （半快弧），節奏標籤卻留在三速——段 A 結案訊息把它列為「留給段 C 的已知不一致」，
+  // 段 C 把標籤改成它本來就在做的事（見 approach.js tempoFor 的段 C 註解）。
+  // 這一條**不是放寬**：仍然釘死「無 rng、決定論」，只是釘的值換了。
+  const EXPECT_TEMPO = { cross: 'three', tandem: 'two' };
   for (const k of NEW_KINDS) {
-    assert.equal(tempoFor(k, { flightId: 1, seed: 1, index: 0 }), 'three');
-    assert.equal(tempoFor(k, { flightId: 9, seed: 7, index: 3, passTier: 'poor' }), 'three');
+    const want = EXPECT_TEMPO[k];
+    assert.ok(want, `新線 ${k} 沒有登記期望節奏＝這條斷言會空洞成立`);
+    assert.equal(tempoFor(k, { flightId: 1, seed: 1, index: 0 }), want);
+    assert.equal(tempoFor(k, { flightId: 9, seed: 7, index: 3, passTier: 'poor' }), want);
     // routeKindFor 對新線原樣回傳（不再被二次改寫）
     assert.equal(routeKindFor(k, { flightId: 1, seed: 1, index: 0 }), k);
   }
+});
+
+// 段 C：夾塞的弧線與節奏必須同時是「半快」——段 A 留下的不一致的釘子。
+// 弧線那一半由 setAimFor 的 t 決定（0.55＝game.js 的 SHOOT 檔），節奏那一半由 tempoFor 決定。
+// 兩邊只要有一邊被改回去，這條就轉紅（而不是靜靜地又分岔一次）。
+test('段 C：tandem 的弧線（t=0.55 半快檔）與節奏（two）一致，且不影響落點／起跳點', () => {
+  const aim = setAimFor(null, 'A', null, 'tandem');
+  assert.equal(aim.t, 0.55, 'tandem 的舉球弧線不再是半快檔');
+  assert.ok(aim.t >= 0.5 && aim.t < 0.65, 't 必須落在 game.js 取 SHOOT_APEX 的區間');
+  assert.equal(tempoFor('tandem', { flightId: 1, seed: 1, index: 0 }), 'two');
+  // 帶 tempo='two' 呼叫時，SHOOT／SHOOT_HIT 的外推**不得**套到 tandem 身上
+  // （那兩張表只有 left／right 有鍵）——否則落點會被推到標誌桿、幾何整條作廢
+  assert.deepEqual(setAimFor(null, 'A', null, 'tandem', 'two'), aim);
+  assert.deepEqual(takeoffSpotFor('A', 'tandem', 'two'), takeoffSpotFor('A', 'tandem', 'three'));
 });
 
 // ---------------- 6. Q4 記帳鍵集 ----------------
