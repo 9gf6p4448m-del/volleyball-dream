@@ -196,12 +196,12 @@ export function createAiState() {
     // 由 aiCollectIntents 逐 tick 從 excludeIds 重算（零面板、零玩家指令），
     // block 可為 null＝模稜兩可的中性讀（同時是遲滯的記憶槽）
     blockRead: null,
-    // §十-2 攔網三段狀態機的鎖定槽。**每名攔網手一份**（攔網分工卷 step1，2026-07-31）：
+    // §十-2 攔網三段狀態機的鎖定槽。**每名攔網手一份**（攔網分工卷 step1／step2b，2026-07-31）：
     //   { team, template, byPid: { [playerId]: { x, enterTick, jumpTick, jumpAt,
-    //     replantUntil, pendingX, blind, seen, hand, cover } }, latest, chase }
+    //     replantUntil, pendingX, blind, seen, hand, cover, chase } }, latest }
     //   `team`＋`template`＝團隊級（建計畫是單一事件，見 blockPlanTargetX 的建計畫段）；
-    //   `latest`＝最近步進的那一份（外部觀測用的「共用物件」視角，見 blockPlanFor）；
-    //   `chase`＝已知結構債，仍是單值（見該處 TODO）。
+    //   `byPid` 的每一份從 `template` 複製一次後**只由本人步進**（step2b，見 blockPlanFor）；
+    //   `latest`＝最近步進的那一份，**純外部觀測用**（探針／測試），sim 不由它取值。
     // ——**兩種人格共用同一條路**（read／commit 只差何時允許做決定）。與本波攻擊同壽命
     //（來球／新的一擊完成都清空），純由可觀察量重算＝VCR v2 重演時跟其餘 AI 狀態
     // 一起被逐 tick 重建，不需要進錄影白名單
@@ -1200,23 +1200,24 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
 //       拆成各建各的會連建計畫的時機與輸入都變 ⇒ 本步不動這一層。）
 //   `byPid`＝每名攔網手一份（本步要拆出來的那一層）。
 function newBlockPlan(team, template) {
-  // `chase`（落地後的 close 預算）**刻意仍是單值**——它吃 `player`／`actor.x`，拆成
-  // per-blocker 就會各算各的（現行是第一個算出來的人寫進去、其餘人共讀那個布林），
-  // 與本步「行為中性」衝突。
-  // TODO(攔網分工卷 step2)：已知結構債，隨分工規則那一個 commit 的行為改動一起處理。
-  return { team, template, byPid: {}, chase: undefined };
+  // 攔網分工卷 step2b（2026-07-31）：`chase`（落地後的 close 預算）已改為 per-blocker
+  //（住在 `byPid[pid].chase`）——它吃 `player`／`actor.x`，本來就該各算各的。
+  return { team, template, byPid: {} };
 }
 
 // 這名攔網手自己的那一份。
 //
-// ★ 為什麼還要逐 tick 從 `latest` 同步——本步的行為中性就靠這一段 ★
-// 拆分前是一個共用物件：**誰步進它就往前走一格，當下沒步進的人回來時直接看到已推進的
-// 結果**。而攔網手並不是每個 tick 都走得到這條分支（去接球、去補位的 tick 就沒步進）
-// ——實測單局 601 次。真的讓每個人各跟各的，那些人回來時狀態會落後 ⇒ `seen`／`jumpTick`
-// 就對不上（實測 obsidian:15839 有一名攔網手因此整波沒起跳、sim-hash 逐值不同）。
-// 那是**行為改動**，屬第 2 步的範圍，本步不得夾帶。
-// TODO(攔網分工卷 step2)：拿掉這個同步，每名攔網手才真的各跟各的
-//   （＝「個別騙得到某一名攔網手」在結構上可表達）；那一刻的 Δ 全部歸因於第 2 步。
+// ★ 攔網分工卷 step2b（2026-07-31）：每名攔網手真的各跟各的 ★
+// 每份記錄在**第一次被取用時**從團隊級的 `template`（＝建計畫那一刻鎖存的內容）複製一次，
+// 之後**只由他自己步進**——step1 那條「逐 tick 從 `plan.latest` 同步」的行為中性膠帶已拆除。
+//
+// 語意上的後果（已知並接受，是本步的存在理由）：攔網手並不是每個 tick 都走得到攔網分支
+//（去接球、去補位的 tick 就沒步進——實測單局 601 次）。共用物件時是「誰步進誰推進、
+// 沒步進的人回來直接看到已推進的結果」；現在落後的人回來時 `seen`／`jumpTick` 會掉隊
+// ——**這正是「個別騙得到某一名攔網手」在結構上可表達的那一刻**（組合攻擊卷的交叉／夾塞／
+// 時間差要騙的就是這個），代價是「因為在忙別的事而沒跟上這一次攔網」會真的發生。
+//
+// `plan.latest` 只剩**外部觀測用**（探針／測試讀「最近步進的那一份」），sim 不再由它取值。
 const BLOCK_PLAN_CARRY = [
   'x', 'enterTick', 'jumpTick', 'jumpAt', 'replantUntil', 'pendingX', 'blind', 'seen', 'hand',
 ];
@@ -1224,14 +1225,11 @@ const BLOCK_PLAN_CARRY = [
 function blockPlanFor(plan, playerId) {
   let c = plan.byPid[playerId];
   if (!c) {
-    // `cover`（攔網分工卷 step2a：我是不是回落補吊球的那一個）刻意不在 CARRY 裡：
-    // 它是每人各自一格的判斷結果，同步過來會讓一個人的判斷變成另一個人的
+    // `cover`（step2a：我是不是回落補吊球的那一個）與 `chase`（step2b：落地後的 close 預算）
+    // 刻意不在 CARRY 裡：兩者都是每人各自一格的判斷結果，從別處帶過來會變成別人的決定
     c = {};
+    for (const k of BLOCK_PLAN_CARRY) c[k] = plan.template[k];
     plan.byPid[playerId] = c;
-  }
-  if (plan.latest !== c) {
-    const src = plan.latest ?? plan.template;
-    for (const k of BLOCK_PLAN_CARRY) c[k] = src[k];
   }
   plan.latest = c;
   return c;
@@ -1438,14 +1436,15 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
   // ② 在空中：不能橫移
   if (phase === ACTION_PHASE.AIR) return c.x;
   // ③ 落地後的 close 預算
-  // ⚠ `chase` 仍掛在團隊級的 plan 上（**單值，多名球員互相覆寫的既有語意原樣保留**）——
-  //   見 newBlockPlan 的 TODO(攔網分工卷 step2)。
-  if (plan.chase === undefined) {
+  // 攔網分工卷 step2b：`chase` 改為 per-blocker（形狀同 `cover`／舊 `wallBail`）——
+  // 它吃 `player`（移速／體力）與 `actor.x`（我現在站哪），本來就是每人不同的判斷；
+  // 掛在團隊級時是第一個算出來的人寫進去、其餘人共讀他的布林。
+  if (c.chase === undefined) {
     // 球自己的軌跡（人人看得見的物理）＝要追的人在哪、還剩多少時間；
     // 目標取**擊球點**不是過網點——落地那刻誰也不知道他會把球打去哪條線
     const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
     const stepM = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
-    plan.chase = blockCloseBudget({
+    c.chase = blockCloseBudget({
       fromX: actor.x,
       toX: hit?.x ?? game.ball.x,
       stepM,
@@ -1453,7 +1452,7 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
       slack: BLOCK_COMMIT.CLOSE_SLACK,
     }).canClose;
   }
-  return plan.chase ? null : actor.x;
+  return c.chase ? null : actor.x;
 }
 // ==== B1-SCAN-END ====
 
