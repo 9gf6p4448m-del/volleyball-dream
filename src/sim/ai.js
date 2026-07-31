@@ -198,7 +198,7 @@ export function createAiState() {
     blockRead: null,
     // §十-2 攔網三段狀態機的鎖定槽。**每名攔網手一份**（攔網分工卷 step1，2026-07-31）：
     //   { team, template, byPid: { [playerId]: { x, enterTick, jumpTick, jumpAt,
-    //     replantUntil, pendingX, blind, seen, hand, wallBail } }, latest, chase }
+    //     replantUntil, pendingX, blind, seen, hand, cover } }, latest, chase }
     //   `team`＋`template`＝團隊級（建計畫是單一事件，見 blockPlanTargetX 的建計畫段）；
     //   `latest`＝最近步進的那一份（外部觀測用的「共用物件」視角，見 blockPlanFor）；
     //   `chase`＝已知結構債，仍是單值（見該處 TODO）。
@@ -977,13 +977,13 @@ function decideOne(game, aiState, playerId) {
         x: clampCourtX(anchorX * 0.4 + laneOff), z: TEAM_SIDE[team] * 2.6,
       });
     }
-    // 遠側翼（攻擊點在對側且離中線夠遠）＝不參與攔網、撤退到攻擊線附近補吊球。
+    // 遠側翼（攻擊點在對側且離中線夠遠）＝不參與攔網、退防補吊球。
     // 讀期 anchorX＝0 ⇒ 三人都先留在牆上，決定之後遠側翼才撤——這正是「判斷發生前
-    // 不該知道要往哪邊撤」的誠實形狀
+    // 不該知道要往哪邊撤」的誠實形狀。
+    // 退防點改吃 blockCoverSpot（攔網分工卷 step2a）：原本寫死的 x = laneOff*2 = ±3.0
+    // 離吊球落點 p50 4.33m、≤2m 只有 15.0%＝站在那裡碰不到吊球，見該函式檔頭。
     if (blockFarWing(game, team, playerId, anchorX)) {
-      return moveIntent(game, playerId, tick, actor, {
-        x: laneOff * 2, z: TEAM_SIDE[team] * 2.6,
-      });
+      return moveIntent(game, playerId, tick, actor, blockCoverSpot(team, anchorX));
     }
     let nx;
     if (planX == null) {
@@ -1005,35 +1005,27 @@ function decideOne(game, aiState, playerId) {
       // 【判／關】§3 階段三：關牆——站距由幾何長出來（見 blockWallSlots 的檔頭說明）
       const slot = blockWallSlots(game, team, anchorX)?.[playerId];
       if (!slot) return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));
-      nx = slot.x;
-      // §3.2：close 預算從「只算主攔自己」擴到輔攔與第三人。
-      // **只有第三人（tier 2）趕不到才回落補吊球**；輔攔趕不到就是**留縫**
-      // ——§3.2 明文「趕不到就是留縫，不做寬容補償」，所以不給它退路、也不給容差。
-      if (slot.tier >= 2) {
-        // ★ 算一次就鎖存 ★ 沿用主攔 close 預算既有的 `c.chase === undefined` 快取模式。
-        // 逐 tick 重算會出事：`hit.ticks` 隨球下墜遞減 ⇒ ticksLeft 越來越小 ⇒
-        // **已經站好的人會在最後一刻突然棄牆撤退**。決定要在「判」的時候下，不是一路反覆。
-        // 攔網分工卷 step1：`wallBail` 本來就是 playerId 字典（每人各自一格），
-        // 拆分後它就住在自己那一份計畫裡＝同一個值、少一層索引
-        const c = aiState.blockPlan ? blockPlanFor(aiState.blockPlan, playerId) : null;
-        if (c && c.wallBail === undefined) {
-          const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
-          const stepM = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
-          c.wallBail = !blockCloseBudget({
-            fromX: actor.x,
-            toX: nx,
-            stepM,
-            ticksLeft: hit ? hit.ticks - reactionTicks(player) : null,
-            slack: BLOCK_COMMIT.CLOSE_SLACK,
-          }).canClose;
-        }
-        // 趕不到＝不加入牆，退到攻擊線一帶補吊球；橫向不再追牆（追不到還亂跑最糟）
-        if (c?.wallBail) {
-          return moveIntent(game, playerId, tick, actor, {
-            x: clampCourtX(actor.x), z: TEAM_SIDE[team] * 2.6,
-          });
-        }
+      // ★ 攔網分工卷 step2a（Sawmah 2026-07-31 裁定題 2）：單一攻擊點**最多 2 人上牆** ★
+      // 留牆的是離 anchorX 最近的兩人（tier 0 主攔／1 輔攔），最遠的那人（tier 2）
+      // **無條件**回落補吊球——這是分工，不是「趕不到才退」的時間預算。
+      // 依據＝開卷補量的 cap2b 反事實臂（brief §1.2）：拿掉第三人，攻方得分率
+      // −5.46pp ± 1.77（顯著），而被攔死率 −0.05pp ± 0.61（分不出）
+      // ⇒ 第三人在牆上零貢獻，防守的增益全部來自「地板多一個人」。
+      // 本條同時取代舊的 `wallBail`（close 預算退路）：tier 2 現在恆退，那條預算永遠問不到。
+      //
+      // ★ 算一次就鎖存 ★ 沿用舊 `wallBail` 記下來的教訓（原註解：「逐 tick 重算會出事」），
+      // 而且新的 tier 定義讓它變成**必要條件**：tier 吃的是**當下的 x**，而退防點在橫向上
+      // 也會動 ⇒ 第三人一往中路退，他離 anchorX 就變近、下一 tick 又被排成 tier 0/1、
+      // 於是回牆上跳（實測未鎖存時曜石快攻三人在窗率 77.7% → **83.5%＝更糟**，
+      // 雖然 AI 側同時要求攔網的人數已經是 0.0%——他是在 48 tick 的窗尾巴裡跳的）。
+      // 決定在「判」的那一刻下，之後不再反覆。`cover` 與舊 `wallBail` 同樣**不進**
+      // BLOCK_PLAN_CARRY：它是每人各自一格的判斷結果，同步過來會變成別人的決定。
+      const cp = aiState.blockPlan ? blockPlanFor(aiState.blockPlan, playerId) : null;
+      if (cp && cp.cover === undefined) cp.cover = slot.tier >= 2;
+      if (cp ? cp.cover : slot.tier >= 2) {
+        return moveIntent(game, playerId, tick, actor, blockCoverSpot(team, anchorX));
       }
+      nx = slot.x;
     }
     // 封線站位（B-1）：封直線＝往邊線側壓（守直線走廊外肩）、封斜線＝往內收（斜線角度）
     // 封線偏移的方向同樣錨在判定結果上，不看球現在在哪（讀期 anchorX＝0 ⇒ 退化為 +1 側，
@@ -1232,8 +1224,8 @@ const BLOCK_PLAN_CARRY = [
 function blockPlanFor(plan, playerId) {
   let c = plan.byPid[playerId];
   if (!c) {
-    // `wallBail` 刻意不在 CARRY 裡：它本來就是「每人各自一格」（原本的 playerId 字典），
-    // 同步過來會讓一個人的判斷結果變成另一個人的
+    // `cover`（攔網分工卷 step2a：我是不是回落補吊球的那一個）刻意不在 CARRY 裡：
+    // 它是每人各自一格的判斷結果，同步過來會讓一個人的判斷變成另一個人的
     c = {};
     plan.byPid[playerId] = c;
   }
@@ -1713,8 +1705,45 @@ function blockFarWing(game, team, playerId, anchorX) {
     && Math.sign(laneOff) !== Math.sign(anchorX);
 }
 
-// 回傳 { [playerId]: { x, tier } }；tier 0＝主攔、1＝輔攔、2＝第三人（愈大愈邊緣）。
-// 無人參戰回 null。
+// 退防補吊球點——**第三人與遠側翼共用同一個點**（同一個職責就該吃同一個判準，
+// 與 blockFarWing 抽成函式的理由相同）。
+//
+// ★ 為什麼不得沿用舊座標（攔網分工卷 step2a 的第二半）★
+// 舊的退防點有兩個：遠側翼寫死 `x = laneOff*2 = ±3.0`、`wallBail` 則是「原地不動」。
+// 開卷補量（brief §1.3）量到吊球救不起來時**100% 落在離網 <3m**、離網 p50 2.41–2.45m、
+// |橫向| p50 1.22–1.35m；而 ±3.0／±2.6 這個點離落點 **p50 4.33m、≤2m 只有 15.0%**
+// ⇒ 站在那裡的人結構上碰不到吊球，「回落補吊球」名不副實。
+//
+// ★ 取值與理由（40 局、吊球落地得分 n=101 實測分佈推導）★
+//   z ＝ ±2.6（**沿用不動**）：落點離網 p25/p50/p75 ＝ 2.25–2.30／2.41–2.45／2.64–2.70，
+//        2.6 本來就落在四分位距正中間——離網那一軸從來不是病灶，動它只是製造無謂差異。
+//   x ＝ anchorX × 0.4：吊球落在**攻擊點那一側**（守方 B 實測 85.0% 同側）但橫向幅度小
+//        （|橫向| p50 1.2–1.4m、p90 也只有 1.58–1.85m）⇒ 目標要在「攻擊點與中軸之間」，
+//        不是場邊；係數掃描（0／0.25／0.4／0.5／0.75／1.0）在 0.25–0.5 之間是平的，
+//        取 0.4 是因為**它不是新發明**——`blockScheme === 'off'`（攔手讓開・收吊球）
+//        用的就是 `anchorX * 0.4`，同一件事本來就該長同一個形狀。
+//        實測：離落點 p50 1.20m、**≤2m 93%**（舊點 15.0%）。
+const BLOCK_COVER_X_MUL = 0.4;
+const BLOCK_COVER_LZ = 2.6;
+
+function blockCoverSpot(team, anchorX) {
+  return {
+    x: clampCourtX(anchorX * BLOCK_COVER_X_MUL),
+    z: TEAM_SIDE[team] * BLOCK_COVER_LZ,
+  };
+}
+
+// 回傳 { [playerId]: { x, tier } }；tier ＝ **離 anchorX 的距離排名**
+// （0＝最近＝主攔、1＝次近＝輔攔、2＝最遠＝第三人）。無人參戰回 null。
+//
+// ★ 攔網分工卷 step2a：tier 換了定義，因為原式是一個**恆假的判斷式** ★
+// 舊式 `tier = Math.abs(i - main)` 算的是「**排序後的位置相鄰度**」而不是「離攻擊點多遠」。
+// 前排三人時 main 只可能是 0/1/2，而 main=1（主攔剛好站中間）⇒ 三人的 tier 是 **1/0/1，
+// 值 2 根本不存在** ⇒ 呼叫端那條「tier >= 2 才回落」對「主攔站中間」的情形**恆不成立**。
+// 實測佐證（brief §1.2）：只把回落改成無條件、tier 維持舊式時，nJ=3 只從 70.4% 動到
+// 71.7%＝沒動。這與剛修掉的二速 `takeoffLead` 是同一型的病：判斷式在半數合法輸入下恆偽。
+// 改成距離排名後，前排三人都參戰時 tier 2 恆存在，分工規則才真的掛得上去。
+// 排名的同分裁決（pid 較小者在前）與下方主攔挑選一致 ⇒ 距離最近者的排名恆為 0＝main。
 function blockWallSlots(game, team, anchorX) {
   const rot = game.match.rotations[team];
   const front = rot
@@ -1733,8 +1762,14 @@ function blockWallSlots(game, team, anchorX) {
   // 整面牆平移回場內（牆寬遠小於場寬，兩端不可能同時超出）
   const lim = COURT.WIDTH / 2 - 0.4;
   const shift = Math.min(0, lim - Math.max(...xs)) + Math.max(0, -lim - Math.min(...xs));
+  // 牆位 xs 仍照「排序後的位置」算 ⇒ 拿掉最遠那一格後，剩下兩格仍相鄰、不留內縫
+  const rank = new Array(front.length);
+  front.map((_, i) => i)
+    .sort((a, b) => (Math.abs(front[a].x - anchorX) - Math.abs(front[b].x - anchorX))
+      || (front[a].pid < front[b].pid ? -1 : 1))
+    .forEach((i, r) => { rank[i] = r; });
   const slots = {};
-  front.forEach((f, i) => { slots[f.pid] = { x: xs[i] + shift, tier: Math.abs(i - main) }; });
+  front.forEach((f, i) => { slots[f.pid] = { x: xs[i] + shift, tier: rank[i] }; });
   return slots;
 }
 

@@ -175,8 +175,17 @@ function runSet(seed) {
 
 // 07-30（§十 階段五 段 2，t=0.50）：三局語料的交叉樣本掉到剛好 20（貼線紅）——
 // 收斂讓 rally 變短、第三擊成立的回合變少（P1(b) 正式觀測項）。依段 1 裁定 ④ 的
-// 「取樣到量」同型處置：自 seed 11 起連續取局，收滿各樣本門檻（>20）為止、
-// 安全上限 8 局；**樣本門檻 20 與行為帶寬（±0.12、三倍、0.3m）一格未動**。
+// 「取樣到量」同型處置：自 seed 11 起連續取局，收滿各樣本門檻為止、
+// 安全上限 8 局；**樣本門檻與行為帶寬（±0.12、三倍、0.3m）一格未動**。
+//
+// ★ 07-31（攔網分工卷 step2a）第二次「取樣到量」：交叉樣本門檻 20 → 80、上限 8 → 24 局 ★
+// 症狀：攔網分工上線後這條轉紅（17.9%，門檻 |share−0.30| < 0.12）。**但那是取樣解析力
+// 不足，不是行為變了**——同一條治具把樣本從 4 局加到 24 局實測：
+//   基準（3b684a2）23.5%（cross 158／left 514）　本次改動 22.6%（cross 161／left 552）
+//   Δ = −0.9pp，二項 SE ≈ 1.6pp ⇒ **0.6 SE ＝分不出**，且兩邊都離帶緣 6.5–7.4pp。
+// 4 局語料的分母只有 ~116（SE ≈ 3.7pp），量不動自己那條 ±12pp 的帶＝02 §6.1 條 5 的
+// 「樣本數不足以在你關心的位置上區分有與沒有」。門檻 80 讓分母 ≥ ~350（SE ≤ 2.3pp，
+// 離帶緣約 3 SE）。**CROSS_RATE 與 ±0.12 帶寬一格未動**——動的只有樣本量。
 const runs = [];
 {
   const enough = () => {
@@ -185,11 +194,11 @@ const runs = [];
     for (const r of runs) {
       for (const k of Object.keys(r.runLat)) (lat[k] ??= []).push(...r.runLat[k]);
     }
-    return kinds.filter((k) => k.kind === 'left_inside').length > 20
+    return kinds.filter((k) => k.kind === 'left_inside').length > 80
       && kinds.filter((k) => k.kind === 'pipe').length > 20
       && (lat.left_inside?.length ?? 0) > 20 && (lat.left?.length ?? 0) > 20;
   };
-  for (let seed = 11; seed < 11 + 8 && !enough(); seed += 1) runs.push(runSet(seed));
+  for (let seed = 11; seed < 11 + 24 && !enough(); seed += 1) runs.push(runSet(seed));
 }
 const allKinds = runs.flatMap((r) => r.kinds);
 const allLat = {};
