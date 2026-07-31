@@ -308,14 +308,21 @@ const live = [11, 12, 13, 14].map(runSet);
 const allCombos = live.flatMap((r) => r.combos);
 const allSpikes = live.flatMap((r) => r.spikes);
 
-test('實跑：三型都真的發生（各自非 0），且組合內兩人的 route 與組合宣稱的線一致', () => {
+test('實跑：出廠開著的兩型真的發生、夾塞零發生，且組合內兩人的 route 與組合宣稱的線一致', () => {
   assert.ok(allCombos.length > 10, `四局只組出 ${allCombos.length} 次組合＝樣本不足以說「真的發生」`);
   const byType = {};
   for (const c of allCombos) byType[c.type] = (byType[c.type] ?? 0) + 1;
-  // ★ 恆假否證：三型**各自**都要出得來（合計非 0 不算——那可能全是交叉）★
-  for (const t of ['cross', 'tandem', 'delay']) {
+  // ★ 恆假否證：出廠開著的兩型**各自**都要出得來（合計非 0 不算——那可能全是交叉）★
+  //   2026-07-31 裁定丙：tandem 出廠關閉（TANDEM_PLAY_RATE=0），從本條移到下面的
+  //   「關閉確實生效」＋「機制仍在」兩條。**這不是把斷言拿掉**：交叉與時間差留在原位，
+  //   夾塞的機制改由直接呼叫層驗（見『段 C ⑧』『裁定丙：機制仍在』兩測），
+  //   而這裡多了一條原本沒有的硬斷言——夾塞必須是 **0**，關閉失效會轉紅。
+  for (const t of ['cross', 'delay']) {
     assert.ok((byType[t] ?? 0) > 0, `四局一次都沒組出 ${t}（實測分佈 ${JSON.stringify(byType)}）`);
   }
+  assert.equal(TANDEM_PLAY_RATE, 0, '出廠值應為 0（裁定丙）——若已重開，本條該改回三型齊發版');
+  assert.equal(byType.tandem ?? 0, 0,
+    `TANDEM_PLAY_RATE=0 四局仍組出 ${byType.tandem} 次夾塞＝關閉失效（實測分佈 ${JSON.stringify(byType)}）`);
   // ★ 驗收 ②：同一波不得同時被計為兩型——結構上 attackCombo 只有一個 type，
   //   這裡連同「型別必須是登記過的三型之一」一起釘（多長一型出來也會轉紅）★
   for (const c of allCombos) {
@@ -337,10 +344,12 @@ test('實跑：三型都真的發生（各自非 0），且組合內兩人的 ro
     }
   }
   // 真的有人拿新線扣成（不是只在規劃層存在）
-  for (const t of ['cross', 'tandem']) {
-    assert.ok(allSpikes.filter((s) => s.kind === t).length > 0,
-      `沒有任何一次 ${t} 真的扣成＝組合只活在規劃層`);
-  }
+  assert.ok(allSpikes.filter((s) => s.kind === 'cross').length > 0,
+    '沒有任何一次 cross 真的扣成＝組合只活在規劃層');
+  // 夾塞出廠關閉 ⇒ 連扣球端也必須是 0（關閉若只擋在規劃層、卻讓舊 route 漏到扣球端，
+  // 上面的 byType 斷言看不見，這一條看得見）
+  assert.equal(allSpikes.filter((s) => s.kind === 'tandem').length, 0,
+    '夾塞出廠關閉，卻仍有人以 tandem 線扣成');
 });
 
 test('實跑：交叉的舉球落點與助跑終點對得上（順序錯就會分家）', () => {
@@ -508,7 +517,8 @@ test('段 B2：帶偏移的主攻者起步後不得被叫回助跑起點（倒�
 //      而藍圖試算的 ±20 會讓 delay **恆假**（這條就是那個恆假的釘子）。
 //   ⑪ **判準地基不得過期**：SET_TO_HIT_TICKS 是實測常數，本測試**重新量一次**再比對
 //      ——改弧線卻沒回來改這裡就轉紅（delay 的窗會整個失效而沒有人察覺）。
-//   ⑫ **罰站硬線**（07-23 Sawmah 拍板 0.5s）三型都要守，不是只有交叉。
+//   ⑫ **罰站硬線**（07-23 Sawmah 拍板 0.5s）出廠開著的型別都要守，不是只有交叉
+//      （夾塞出廠關閉後改守結構保證：comboLead=0 ⇒ 它結構上不拿罰站換前後腳）。
 //   ⑬ **delay 只換節奏不換線**：它一旦動到路線，二傳瞄的落點就跟著搬家。
 
 test('段 C ⑧：夾塞四條件在 tandem×quick 全成立，且逐值留痕（段 A 符號驗算的落實）', () => {
@@ -667,8 +677,13 @@ function comboStandByType(seed) {
 
 const standTraces = [11, 12, 13].map(comboStandByType);
 
-test('段 C ⑫ 罰站硬線：三型主攻者擊球前連續靜止都不得破 0.5s（07-23 Sawmah 拍板）', () => {
-  for (const ty of COMBO_TYPES) {
+// 出廠開著的型別走實跑量測；關閉的型別（tandem，裁定丙）沒有實跑樣本，
+// 改由**結構證明**守同一件事——理由寫在下面那條測試的註解裡。
+const LIVE_COMBO_TYPES = COMBO_TYPES.filter((t) => t !== 'tandem');
+
+test('段 C ⑫ 罰站硬線：出廠開著的型別，主攻者擊球前連續靜止不得破 0.5s（07-23 Sawmah 拍板）', () => {
+  assert.deepEqual(LIVE_COMBO_TYPES, ['cross', 'delay'], '出廠開著的型別變了，本條的涵蓋要重算');
+  for (const ty of LIVE_COMBO_TYPES) {
     const all = standTraces.flatMap((t) => t[ty] ?? []);
     assert.ok(all.length >= 5, `${ty} 三局只有 ${all.length} 次扣成＝這條斷言空洞`);
     const over = all.filter((v) => v > 30); // 30 tick = 0.5s @60Hz
@@ -676,6 +691,99 @@ test('段 C ⑫ 罰站硬線：三型主攻者擊球前連續靜止都不得破 
     assert.equal(over.length, 0,
       `${ty}：${over.length}/${all.length} 次在擊球前站超過 0.5s（p90=${p90} tick）`);
   }
+  // 夾塞關閉 ⇒ 三局零樣本，這是預期而非「量不到」；一旦不是 0 代表關閉失效
+  assert.equal(standTraces.flatMap((t) => t.tandem ?? []).length, 0,
+    '夾塞出廠關閉卻仍有扣成樣本');
+});
+
+// ★ 裁定丙（2026-07-31）：夾塞 tandem **出廠關閉、機制與測試全部保留** ★
+//   關閉理由與真因見 approach.js 的 TANDEM_PLAY_RATE 註解（右線嚴格支配＋攔死 97.1%
+//   來自已落地的攔網手＝攔網時序卷的病）。
+//
+// ★ 為什麼下面兩條「不算放水」★
+//   原本守夾塞的是**實跑統計**（四局要組出 ≥1 次、三局要有 ≥5 次扣成）。骰子關到 0
+//   之後那些統計必然是 0，留著只會恆紅、刪掉則連機制保護一起丟。所以改守同樣的東西、
+//   但**換一個量測位置**：走真實判斷式（`evaluateCombination` / `tandemGeometryOf` /
+//   `applyComboRoutes` / `approachRoutesFor`）直接呼叫，證明
+//     ① 四條幾何條件在真實池上**逐球全過**——被擋掉的只有骰子那一條（結構沒死）；
+//     ② 把骰子的結果手動補上去（合成一個 combo），下游整條鏈仍然把主攻者改成
+//        tandem 線、二速、零偏移——也就是骰子若調回 >0，行為會原封不動回來。
+//   這**不是**放寬門檻：原測只證明「有發生過」，這兩條逐球檢查 600 顆球的每一條條件，
+//   鑑別力比原本的「≥1 次」更高；被拿掉的只有「它真的飛出去過」這件在關閉下不可能為真的事。
+//   ⇒ 重開（TANDEM_PLAY_RATE > 0）時，本註解上方的兩條實跑斷言要改回三型齊發版。
+
+test('裁定丙 ①：夾塞擋在骰子那一條——四條幾何條件在真實池上逐球全過，roll 恆假', () => {
+  assert.equal(TANDEM_PLAY_RATE, 0, '出廠值應為 0（裁定丙）');
+  const pts = poolOf(1);
+  const mainId = idOf(pts, 'right');
+  assert.ok(mainId, '真實池抽不到 right 主攻者＝下面的量測空洞');
+  const STRUCT = ['hasMain', 'mainKind', 'tier', 'partner', 'lane', 'depth', 'stagger', 'notCrossing'];
+  const N = 600;
+  let rolled = 0;
+  for (let f = 1; f <= N; f += 1) {
+    const { combo, checks } = evaluateCombination(pts, mainId,
+      { team: 'A', flightId: f, seed: 3, type: 'tandem' });
+    for (const k of STRUCT) {
+      assert.equal(checks[k], true,
+        `flightId=${f}：結構條件 ${k} 不成立＝夾塞的機制被關閉一起打死了（不只是骰子）`);
+    }
+    if (checks.roll) rolled += 1;
+    assert.equal(combo, null, `flightId=${f}：骰子為 0 卻組出了夾塞`);
+  }
+  assert.equal(rolled, 0, `${N} 顆球有 ${rolled} 次觸發骰通過＝TANDEM_PLAY_RATE 沒真的是 0`);
+  // 同一組球對照：delay 的骰子照常會過（證明「逐球全 false」不是量測位置壞掉）
+  const wing = idOf(pts, 'left') ?? mainId;
+  let delayRolls = 0;
+  for (let f = 1; f <= N; f += 1) {
+    if (evaluateCombination(pts, wing, { team: 'A', flightId: f, seed: 3, type: 'delay' }).checks.roll) {
+      delayRolls += 1;
+    }
+  }
+  assert.ok(delayRolls > 0, '同一支探針量 delay 也是 0＝量到的是探針壞掉，不是夾塞關閉');
+});
+
+test('裁定丙 ②：骰子若調回 >0，下游整條鏈原封不動——合成 combo 走真實 apply 路徑', () => {
+  const pts = poolOf(1);
+  const mainId = idOf(pts, 'right');
+  const quick = idOf(pts, 'quick');
+  assert.ok(mainId && quick);
+  // 這個 combo 物件＝`evaluateCombination` 在 roll 通過時**會**回傳的那一份
+  // （欄位逐一照 approach.js 的 return 建；COMBO_LINE.tandem='tandem'、
+  //   COMBO_TEMPO.tandem=null、COMBO_LEAD.tandem=0）
+  const combo = {
+    type: 'tandem',
+    mainId,
+    partnerId: quick,
+    tempoGap: 0,
+    mainTempo: null,
+    mainKind: 'tandem',
+    partnerKind: 'quick',
+  };
+  const out = applyComboRoutes(pts, combo);
+  const main = out.find((p) => p.pid === mainId);
+  assert.equal(main.kind, 'tandem', '主攻者沒被改成夾塞線＝applyComboRoutes 的夾塞分支死了');
+  assert.equal(main.rowFactor, pts.find((p) => p.pid === mainId).rowFactor, 'trust 權重被組合動到');
+  for (const p of out) {
+    if (p.pid === mainId) continue;
+    assert.equal(p, pts.find((x) => x.pid === p.pid), `${p.pid} 不在組合內卻被換了物件`);
+  }
+  // route 層：夾塞走二速（tempoFor 給的，不是被指派的）、且**零偏移**
+  const routes = approachRoutesFor('A', out, { setTick: 500, flightId: 1, seed: 3, combo });
+  const r = routes.find((x) => x.pid === mainId);
+  assert.equal(r.kind, 'tandem');
+  assert.equal(r.tempo, 'two', '夾塞的節奏不是二速＝tempoFor 的 tandem 條目被動過');
+  assert.equal(r.comboLead, 0, '夾塞吃到了偏移＝COMBO_LEAD.tandem 被動過');
+  // ⑫ 罰站硬線對夾塞的結構保證：偏移是拿罰站換前後腳的**唯一**來源，
+  // 夾塞的 comboLead=0 ⇒ 帶 combo 的 route 必須與不帶 combo 的逐值相同
+  // （時序一格未被組合層挪動 ⇒ 它的罰站就是一般二速攻擊的罰站，不會多）
+  assert.deepEqual(routes, approachRoutesFor('A', out, { setTick: 500, flightId: 1, seed: 3 }),
+    '夾塞的 route 被組合層挪動了時序＝它開始拿罰站換前後腳');
+  // 舉球落點與助跑終點對得上（＝二傳不會瞄到舊落點）
+  const aim = setAimFor(null, 'A', null, 'tandem');
+  const takeoff = takeoffSpotFor('A', 'tandem');
+  assert.equal(aim.t, 0.55, '夾塞的舉球弧線不是半快檔＝與二速對不上');
+  assert.ok(Math.abs(aim.lx - 0.3) < 1e-9, `夾塞的舉球落點 lx=${aim.lx} 不是起跳點的 0.3`);
+  assert.ok(Math.hypot(takeoff.x, takeoff.z) > 0, '取不到夾塞的起跳點');
 });
 
 test('段 C ⑬：delay 只換節奏不換線——applyComboRoutes 連物件參照都不換', () => {
@@ -709,10 +817,14 @@ test('段 C ⑬：delay 只換節奏不換線——applyComboRoutes 連物件參
   assert.deepEqual(noTempo, plain, 'mainTempo=null 必須逐值等同不指派節奏');
 });
 
-test('段 C：夾塞／時間差的觸發骰真的在擋，名目比例對得上，且三型的骰子不同步', () => {
-  for (const [type, rate] of [['tandem', TANDEM_PLAY_RATE], ['delay', DELAY_PLAY_RATE]]) {
+test('段 C：時間差的觸發骰真的在擋，名目比例對得上，且三型的骰子不同步', () => {
+  // ★ 裁定丙後 tandem 從本條移出 ★ 它的名目值是 0＝「恆假」正是預期，
+  //   放在這裡會與「恆假或恆真＝壞掉」的判準直接打架。夾塞的骰子改由
+  //   『裁定丙 ①』守（逐球 600 顆全 false，且同一支探針量 delay 非 0）——
+  //   那條的鑑別力比本條的比例區間更嚴，不是把檢查拿掉。
+  for (const [type, rate] of [['delay', DELAY_PLAY_RATE]]) {
     const pts = poolOf(1);
-    const mainId = type === 'tandem' ? idOf(pts, 'right') : (idOf(pts, 'left') ?? idOf(pts, 'right'));
+    const mainId = idOf(pts, 'left') ?? idOf(pts, 'right');
     assert.ok(mainId, `${type} 找不到來源線的主攻者＝下面的量測空洞`);
     let hit = 0;
     const N = 600;
@@ -725,6 +837,8 @@ test('段 C：夾塞／時間差的觸發骰真的在擋，名目比例對得上
     assert.ok(Math.abs(hit / N - rate) < 0.06,
       `${type} 觸發率 ${(hit / N * 100).toFixed(1)}% 偏離名目 ${rate * 100}%`);
   }
+  assert.equal(TANDEM_PLAY_RATE, 0,
+    '夾塞已重開（裁定丙被推翻）——本條要把 tandem 加回上面的迴圈');
   // 三型的骰子不得互相對齊（同一顆球三型同時中／同時不中＝salt 沒起作用）
   const pts = poolOf(1);
   const oh = idOf(pts, 'left');
