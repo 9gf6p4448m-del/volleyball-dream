@@ -115,10 +115,15 @@ function runSet(seed) {
           if (r.kind === 'quick') {
             assert.ok(isFrontRow(rot, r.pid), '快攻線只給前排 MB');
             lz.quick.push(d);
-          } else if (r.kind === 'left' || r.kind === 'right' || r.kind === 'left_inside') {
-            // §5 A2：left_inside（交叉，舊稱 cross）也是前排 OH 的線，離網深度與 left 同一檔
+          } else if (r.kind === 'left' || r.kind === 'right' || r.kind === 'left_inside'
+            || r.kind === 'cross') {
+            // §5 A2：left_inside（內切，舊稱 cross）也是前排 OH 的線，離網深度與 left 同一檔
             // ——分類補齊，斷言不放寬（反而多了一條「必須是前排」）
-            assert.ok(isFrontRow(rot, r.pid), '交叉線只給前排邊攻');
+            // 組合攻擊卷 段 B（2026-07-31）同款補齊：'cross'（真交叉）也是**前排 OH** 的線，
+            // 助跑起點 lz 3.6 與 left／left_inside **逐值相同**（approach.js APPROACH 表）。
+            // 沒補的話它會掉進下面的 else＝被當成後排攻擊線，紅在「後排攻擊線只給後排」
+            // ——那是分類過時，不是行為變了（此處**斷言一格未放寬**，仍要求前排）。
+            assert.ok(isFrontRow(rot, r.pid), '前排兩翼線（含內切／交叉）只給前排邊攻');
             lz.wing.push(d);
           } else {
             assert.ok(isBackRow(rot, r.pid), '後排攻擊線只給後排');

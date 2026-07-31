@@ -13,7 +13,7 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
-  applyRouteKinds, routePhaseAt,
+  applyRouteKinds, routePhaseAt, planCombination, applyComboRoutes,
 } from './approach.js';
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
@@ -175,6 +175,13 @@ export function createAiState() {
     // 與 attackerId 同壽命（touches===1 算一次、撐到本波攻擊結束、來球時清空）——
     // 「事前開多條線」的載體，不是只有被選中那一人才有
     approach: null,
+    // 組合攻擊卷 段 B §二：本波的組合攻擊（null＝沒有組合＝現行單人行為）。
+    // { type:'cross', mainId, partnerId, tempoGap, mainKind, partnerKind }
+    // 與 attackerId／approach **同壽命同重算範式**（一傳完成算一次；非 rally 與來球
+    // 兩處清空）⇒ 純由可觀察量重算，不需要進 rallyTape 的 PLAYER_AI_FIELDS。
+    // ★ 誘餌仍是**湧現式** ★ 池內未被選中者照樣跑完整 route，sim 的走位分支
+    //   （COMBO-SCAN 區）結構上讀不到本欄位——見 tests/combo-play.test.mjs 的靜態掃描。
+    attackCombo: null,
     // Phase 5 W1 §7 D2：本波接一傳的人（attackPointsOf 的罰則對象）。
     // 與 attackerId／passTier 同壽命、同重算範式（純由 rally.lastToucherId 推得）＝
     // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
@@ -243,6 +250,8 @@ function ensureFlightPlan(game, aiState) {
     // 於是把死球後的歸位站定（一次 0.5m 的瞬間復位）算成了助跑中的瞬移。
     // 髒狀態沒有讓 sim 說謊，但讓量測說謊——§十 這一卷要的正好是相反的東西。
     aiState.approach = null;
+    // 組合與 approach 同壽命（藍圖 §二）：死球之後沒有組合在跑
+    aiState.attackCombo = null;
     // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
     aiState.blockPlan = null;
     aiState.setTouch = null;
@@ -324,7 +333,24 @@ function ensureFlightPlan(game, aiState) {
     );
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
-    aiState.attackKind = pick?.kind ?? null; // 'left'|'left_inside'|'quick'|'right'|'pipe'|'dball'
+    // ---- 組合排程層（段 B，2026-07-31；藍圖 §三＝裁定 A 乙的形狀）----
+    // **順序不可調換**：選人（上一行，一格未動）→ 組合 → 寫回池 → 算 route。
+    // 組合排在選人之後 ⇒ `pickAttackPoint` 的入參逐值不變 ⇒ trust 分佈零漂移，
+    // 這是裁定 A 乙的驗收條件本身（tests/combo-play.test.mjs 有靜態順序斷言）。
+    const combo = planCombination(points, aiState.attackerId, {
+      team,
+      flightId: game.rally.flightId,
+      seed: game.seed ?? 0,
+      passTier: tier,
+    });
+    aiState.attackCombo = combo;
+    // 只改涉及的兩人；沒有組合時 comboPoints === points（同一個陣列參照）
+    const comboPoints = applyComboRoutes(points, combo);
+    // 攻擊線由**寫回後**的池決定——否則二傳瞄的落點（setAimFor(attackKind)）
+    // 與該人助跑的終點會是兩個地方（§5 A2 的順序教訓，這裡是它的組合版）。
+    // combo 為 null 時 find 取回的就是 pick 那一筆＝逐值等同舊寫法 `pick?.kind ?? null`
+    aiState.attackKind =
+      comboPoints.find((pt) => pt.pid === aiState.attackerId)?.kind ?? null;
     // Transition 拉開（§2-2）＋節奏三層（§4 A1）：整個池一次算完助跑起點、節奏與
     // 起步 tick——未被選中者照樣拉開跑假動作，攔網手才有多條線可讀。
     // 時間錨點＝contactPoint（球墜到接球高度的 tick）＝二傳觸球的預估時刻，
@@ -335,7 +361,7 @@ function ensureFlightPlan(game, aiState) {
     aiState.approach = {
       team,
       setTick,
-      routes: approachRoutesFor(team, points, {
+      routes: approachRoutesFor(team, comboPoints, {
         setTick,
         flightId: game.rally.flightId,
         seed: game.seed ?? 0,
@@ -405,6 +431,7 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackerId = null;
     aiState.attackKind = null;
     aiState.approach = null; // 來球＝上一波的助跑線作廢
+    aiState.attackCombo = null; // 同壽命：組合隨助跑線一起作廢（藍圖 §二 兩處清空點之二）
     // §十-2：來球＝沒有攻擊要攔，鎖定作廢——但**對方的扣球例外**：那正是要攔的那顆球。
     // 鎖定現在同時掛著起跳窗（planX 為 null 就不開窗），扣球一出手就清掉的話，
     // 窗會在球飛向網子、真正該攔的那幾十 tick 裡消失。改制前鎖定只管站位所以無害。
@@ -1098,6 +1125,14 @@ function decideOne(game, aiState, playerId) {
   // 只在我方持球且已完成第一擊時生效——接發（touches===0）與防守站位一格不動。
   // **只有「正在跑」這一段排在 cover 之前**：跑到一半被掩護位拉走就是瞬間收勢。
   // 還沒起步的人維持本輪之前的優先序（cover 優先，見下方等待段）
+  //
+  // ==== COMBO-SCAN-BEGIN（組合攻擊卷 段 B 護欄 1：本區內不得出現 attackCombo／partnerId）====
+  // ★ 誘餌必須維持湧現式 ★ 上位裁定書明訂 sim 內**沒有誘餌旗標**：池內每個 point 都拿到
+  // 完整 route，未被選中者照樣把整條線跑完——「他在騙人」是攔網手讀出來的結果，
+  // 不是 sim 標記出來的事實。而 `aiState.attackCombo.partnerId` 語意上非常接近誘餌旗標
+  // （「這個人是本波的配合者」），一旦走位分支讀它，誘餌就從湧現變成內建屬性。
+  // 掃描區涵蓋走位的三段（助跑中／cover／等起步）——它們是唯一會因為「知道自己是誘餌」
+  // 而改變行為的地方。範式抄 block-persona.test.mjs 的 B1-SCAN。
   const running = approachRunOf(aiState, playerId, tick, team, r);
   if (running) {
     const gap = Math.hypot(running.takeoff.x - actor.x, running.takeoff.z - actor.z);
@@ -1131,6 +1166,7 @@ function decideOne(game, aiState, playerId) {
       return moveIntent(game, playerId, tick, actor, route.start);
     }
   }
+  // ==== COMBO-SCAN-END ====
 
   // 其餘人待命：rally 中跑職責位（前排站位交換）、非 rally 回輪轉基準位
   return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));

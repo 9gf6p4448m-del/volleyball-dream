@@ -16,9 +16,12 @@
 //  「舉球落點往後退一段」，助跑 route 要自己算得出來就必須拿到這兩份；ai.js 反向
 //  import 會成環。數值與函式本體逐字未動，ai.js 的 `AI.TAKEOFF_*` 改為指向此處。）
 import { COURT, SIM_DT } from './constants.js';
-import { localToWorld } from './rotation.js';
+import { localToWorld, TEAM_SIDE } from './rotation.js';
 import { hash01 } from './rng.js';
 import { actionPhaseAt } from './actionPhase.js';
+// 單人攔網的水平涵蓋半寬——**單一真相來源**（blockBand.js:41，隨 CONVERGE_T 自己動）。
+// 交叉條件 5「搆不到」吃的就是這個值；抄一個字面量進來的話，攔網收斂一動這裡就分岔。
+import { BLOCK_HALF_WIDTH } from './blockBand.js';
 
 // 二傳落點：前後排皆已換位 → 各攻擊點固定（真實排球的進攻座標）
 // 前排 OH 左翼/OPP 右翼高球、MB 面前低弧快攻；
@@ -331,6 +334,165 @@ export function applyRouteKinds(points, opts = {}) {
   return points.map((pt, index) => {
     const kind = routeKindFor(pt.kind, { ...opts, index, passTier: pt.tier ?? opts.passTier });
     return kind === pt.kind ? pt : { ...pt, kind };
+  });
+}
+
+// ---- 組合排程層（組合攻擊卷 段 B，2026-07-31）：真交叉 ----
+//
+// ★ 排程順序（藍圖 §三＝裁定 A 乙的形狀），順序不可調換 ★
+//   applyRouteKinds（現行單人抽籤，**不動**）
+//     → pickAttackPoint（**一格未動**：trust 照現行抽出主攻者）
+//     → planCombination（由主攻者的 kind 決定能不能組合、配誰）
+//     → applyComboRoutes（只改涉及的兩人）
+//     → approachRoutesFor
+// 組合排在選人**之後**＝`pickAttackPoint` 的入參逐值不變 ⇒ trust 分佈零漂移。
+// 這不是實作偏好，是裁定 A 乙的驗收條件本身（今天已因難度位移欠了一卷，不再疊第二個）。
+// 代價（裁定 A 乙已知並接受）：組合觸發率被 trust 分佈綁死。
+
+// 交叉的觸發機率。裁定 C 甲＝`left_inside`（內切）的 `CROSS_RATE` **一格不動**，
+// 真交叉**另立**一個機率。
+//
+// ★★ 初值 0.25 ＝實作端提案，**待 Sawmah 裁定** ★★
+//    這是會影響平衡的策略參數，實作端沒有拍板權（CLAUDE.md 硬規則 3）。
+// 依據（由兩個上下界夾出來，不是憑感覺挑的）：
+//   ① 上界＝裁定 C 自己列的代價「兩個機率相加可能讓 left 直線攻擊出現率過低」。
+//      交叉只從**沒被抽成內切的那 (1−CROSS_RATE)** 裡再抽（見 evaluateCombination
+//      的 `main.kind === 'left'` 前置條件）⇒ P(直線) ＝ 0.7×(1−p)。
+//      要讓直線仍是 OH 左線的多數（>50%）⇒ **p < 0.286**。
+//   ② 下界＝可讀性。交叉的全部價值是「攔網手讀得到有這條線」，佔比太低＝與雜訊無異。
+//      p=0.25 ⇒ 交叉佔 OH 左線 0.7×0.25 ＝ **17.5%**（約每 5.7 顆 OH 球一次），
+//      與 CROSS_RATE 0.30／TEMPO_TWO_RATE 0.35 同一量級帶。
+//   ③ 這是**名目上界**：實際觸發還要過「主攻者恰是那名 OH」「MB 快攻在池裡」兩道
+//      （裁定 A 乙的已知代價）。實測觸發率見 `tools/combo-probe.mjs`。
+export const CROSS_PLAY_RATE = 0.25;
+const CROSS_PLAY_SALT = 91;
+
+// 組合型別 → 配合者必須跑的線（藍圖 §四 交叉條件 1）
+const COMBO_PARTNER_KIND = { cross: 'quick' };
+
+// 交叉的三條幾何條件（藍圖 §四 條件 2／3／5）——只吃兩條線的 kind，純幾何、可單測。
+// **回傳逐條結果而不是一個 boolean**：驗收 ② 要看得出「是哪一條在擋」，
+// 只回總結等於把失敗原因藏起來。
+export function crossGeometryOf(team, mainKind = 'cross', partnerKind = 'quick') {
+  const s = approachStartFor(team, mainKind);
+  const nil = {
+    crosses: false, behind: false, outOfReach: false, ok: false, lzAtLane: null, gap: null,
+  };
+  if (!s || !APPROACH[partnerKind]) return nil;
+  const t = takeoffSpotFor(team, mainKind);
+  const p = takeoffSpotFor(team, partnerKind);
+  const side = TEAM_SIDE[team];
+  const sLx = side * s.x; const sLz = side * s.z;
+  const tLx = side * t.x; const tLz = side * t.z;
+  const pLx = side * p.x; const pLz = side * p.z;
+  // 條件 2 穿越：主攻者助跑線段的 lx 區間包含配合者起跳點的 lx
+  const crosses = tLx !== sLx
+    && pLx >= Math.min(sLx, tLx) && pLx <= Math.max(sLx, tLx);
+  // 條件 3 後方：線段在該 lx 處的 lz 高於配合者起跳點的 lz（＝從他**身後**穿過去）
+  const lzAtLane = crosses
+    ? sLz + ((pLx - sLx) / (tLx - sLx)) * (tLz - sLz) : null;
+  const behind = crosses && lzAtLane > pLz;
+  // 條件 5 搆不到：兩人擊球點的距離超過單人攔網的水平涵蓋半寬
+  const gap = Math.hypot(t.x - p.x, t.z - p.z);
+  const outOfReach = gap > BLOCK_HALF_WIDTH;
+  return {
+    crosses, behind, outOfReach, ok: crosses && behind && outOfReach, lzAtLane, gap,
+  };
+}
+
+// 配合者＝**池內幾何最接近者**（裁定 B）——**不吃 trust**：用 trust 選誘餌語意是反的
+// （信任最高的人去當誘餌？）。「最接近」＝配合者起跳點離主攻者交叉線終點最近；
+// 同距離時取 pid 字典序小者（決定論；現行池內 quick 至多一人，此分支是防禦性的）。
+function pickComboPartner(team, points, mainId, type) {
+  const want = COMBO_PARTNER_KIND[type];
+  if (!want) return null;
+  const goal = takeoffSpotFor(team, type);
+  let best = null;
+  for (const pt of points) {
+    if (pt.pid === mainId || pt.kind !== want) continue;
+    const t = takeoffSpotFor(team, pt.kind);
+    const d = Math.hypot(t.x - goal.x, t.z - goal.z);
+    if (!best || d < best.d - 1e-12
+      || (Math.abs(d - best.d) <= 1e-12 && pt.pid < best.pt.pid)) best = { pt, d };
+  }
+  return best?.pt ?? null;
+}
+
+// 組合排程的**逐條診斷版**。`planCombination` 是它的薄封裝——sim 只吃 combo，
+// 探針與測試讀 checks。刻意讓探針**讀真實判斷式的結果**而不是自己重刻一份：
+// 重抄一份被測邏輯做成的探針是循環論證（`02 §6.1` 條 4）。
+//
+// points＝applyRouteKinds 之後的池（每個 point 自帶 `tier`，§7 D2）。
+// mainId＝pickAttackPoint 已經抽好的主攻者——**本函式不參與選人**。
+export function evaluateCombination(points, mainId, opts = {}) {
+  const {
+    team = 'A', flightId = 0, seed = 0, passTier = 'perfect', type = 'cross',
+  } = opts;
+  const checks = {
+    hasMain: false,
+    mainKind: false,
+    tier: false,
+    partner: false,
+    crosses: false,
+    behind: false,
+    outOfReach: false,
+    roll: false,
+  };
+  const main = mainId ? (points.find((p) => p.pid === mainId) ?? null) : null;
+  checks.hasMain = !!main;
+  if (!main) return { combo: null, checks };
+  // 只有 OH 的**直線**能升級成交叉：內切的機率帶（CROSS_RATE）因此一格不動（裁定 C 甲）
+  checks.mainKind = main.kind === 'left';
+  if (!checks.mainKind) return { combo: null, checks };
+  // 跑戰術要一傳到位——與 routeKindFor 同一道三檔階梯，不另立判準。
+  // 一傳 poor 沒快攻時交叉自然不成立（裁定 B：這是預期行為，不是 bug）
+  checks.tier = (main.tier ?? passTier) === 'perfect';
+  if (!checks.tier) return { combo: null, checks };
+  const partner = pickComboPartner(team, points, mainId, type);
+  checks.partner = !!partner;
+  if (!partner) return { combo: null, checks };
+  const geo = crossGeometryOf(team, type, partner.kind);
+  checks.crosses = geo.crosses;
+  checks.behind = geo.behind;
+  checks.outOfReach = geo.outOfReach;
+  if (!geo.ok) return { combo: null, checks };
+  // 觸發機率排在最後：前面每一條都是「這球有沒有資格組合」的結構條件，
+  // 骰子只決定「有資格的這球要不要真的跑」。順序反過來會讓 checks 的通過率
+  // 全部被骰子稀釋成 p×(結構通過率)＝看不出是哪一條在擋。
+  checks.roll = hash01(flightId * 1097 + CROSS_PLAY_SALT + seed) < CROSS_PLAY_RATE;
+  if (!checks.roll) return { combo: null, checks };
+  return {
+    combo: {
+      type,
+      mainId,
+      partnerId: partner.pid,
+      // 裁定 D 丙＝先量再定：欄位存在、值本段**留白**（段 D 的實驗回答要不要偏移量）
+      tempoGap: null,
+      // 幾何自證欄位：探針與測試直接讀，不必跨欄位對照
+      mainKind: type,
+      partnerKind: partner.kind,
+    },
+    checks,
+  };
+}
+
+// null＝本波沒有組合＝現行單人行為（退路分支）
+export function planCombination(points, mainId, opts = {}) {
+  return evaluateCombination(points, mainId, opts).combo;
+}
+
+// 把組合的線寫回池——**只動涉及的兩人**，其餘 point 原樣（同一個物件參照）。
+// 純函式、不改入參（與 applyRouteKinds 同範式）。
+export function applyComboRoutes(points, combo) {
+  if (!combo) return points;
+  return points.map((pt) => {
+    if (pt.pid === combo.mainId && pt.kind !== combo.mainKind) {
+      return { ...pt, kind: combo.mainKind };
+    }
+    if (pt.pid === combo.partnerId && pt.kind !== combo.partnerKind) {
+      return { ...pt, kind: combo.partnerKind };
+    }
+    return pt;
   });
 }
 

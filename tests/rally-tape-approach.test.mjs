@@ -6,6 +6,15 @@
 // 透過協調層下的指令，走的不是 Intent 管線）——這些已進 PLAYER_AI_FIELDS 白名單。
 // approach 沒有列進去；本檔用測試（不是推理）證明這個決定站不站得住腳。
 //
+// ★ 組合攻擊卷 段 B（2026-07-31）追加：aiState.attackCombo ★
+// 藍圖 §六 的 VCR 條款給了兩條路：「AI 產出的 combo＝重算即可；玩家指定的必須進
+// PLAYER_AI_FIELDS」。段 B 只做 AI 產出的組合（玩家叫戰術屬 §六.4 回饋層，未做），
+// 而 combo 的每一個輸入都是重演端本來就會重建的可觀察量——
+//   points（attackPointsOf → applyRouteKinds，吃 game 狀態＋flightId＋seed）
+//   ＋ attackerId（pickAttackPoint，同樣重算）＋ flightId ＋ seed。
+// ⇒ **走重算這條，不進白名單**。本檔把 attackCombo 也納入逐 tick 比對來證明它成立
+//    （附突變測試：故意讓重演端的 combo 不重建，比對必須轉紅）。
+//
 // 範式沿用 tests/rally-tape.test.mjs（playOneRally／replayAll 的錄製-重演-逐值比對
 // 三段式），但不修改該檔——helper 在本檔內自成一份，理由見下方 replayWithApproachTrace
 // 的註解（createRallyPlayer 的公開介面不回傳內部 aiState，白箱比對只能手刻同一份重演
@@ -23,7 +32,9 @@ function playOneRallyAllAi(seed) {
   const game = createGame({ seed, setTarget: 25 });
   const ai = createAiState();
   const rec = createRallyRecorder();
-  const truth = { intents: [], events: [], approach: [], pos: [] };
+  const truth = {
+    intents: [], events: [], approach: [], combo: [], pos: [],
+  };
   let guard = 0;
   while (guard < 20000) {
     guard += 1;
@@ -32,6 +43,7 @@ function playOneRallyAllAi(seed) {
     const intents = aiCollectIntents(game, ai, []);
     // 這顆球本身「有沒有走到 touches===1 之後的 Transition 分支」的前置條件證據
     truth.approach.push(structuredClone(ai.approach));
+    truth.combo.push(structuredClone(ai.attackCombo ?? null));
     truth.intents.push(structuredClone(intents));
     const events = stepGame(game, intents);
     truth.pos.push(snapshotPositions(game));
@@ -55,7 +67,7 @@ function snapshotPositions(game) {
 // 介面沒有這個 getter（本輪硬性限制不得改 src/app/rallyTape.js，故不加）。
 // breakApproach=true＝突變測試專用：每步算完後把 aiState.approach 打成 null，
 // 模擬「協調層狀態沒被正確重建」的情境，證明下面的比對真的抓得到。
-function replayWithApproachTrace(tape, { breakApproach = false } = {}) {
+function replayWithApproachTrace(tape, { breakApproach = false, breakCombo = false } = {}) {
   assert.equal(tape.v, TAPE_VERSION);
   const state = structuredClone(tape.snapshot);
   const aiState = structuredClone(tape.ai);
@@ -63,6 +75,7 @@ function replayWithApproachTrace(tape, { breakApproach = false } = {}) {
   const intents = [];
   const events = [];
   const approach = [];
+  const combo = [];
   const pos = [];
   for (const st of tape.steps) {
     if (st.a) Object.assign(aiState, structuredClone(st.a));
@@ -72,12 +85,16 @@ function replayWithApproachTrace(tape, { breakApproach = false } = {}) {
       ...aiCollectIntents(state, aiState, controlled ? [controlled] : []),
     ];
     if (breakApproach) aiState.approach = null;
+    if (breakCombo) aiState.attackCombo = null;
     approach.push(structuredClone(aiState.approach));
+    combo.push(structuredClone(aiState.attackCombo ?? null));
     intents.push(structuredClone(stepIntents));
     events.push(structuredClone(stepGame(state, stepIntents)));
     pos.push(snapshotPositions(state));
   }
-  return { intents, events, approach, pos, state };
+  return {
+    intents, events, approach, combo, pos, state,
+  };
 }
 
 test('前置條件：這顆球真的打出多人拉開的 Transition（routes.length>=2）', () => {
@@ -114,8 +131,37 @@ test('VCR 重演相容：aiState.approach（助跑 route 分配）逐值一致�
 
   // ③ aiState.approach.routes 的分配結果——逐 tick 直接比對（不是靠下游 Intent 反推）
   assert.deepEqual(run.approach, truth.approach.slice(from));
+  // ③' 組合攻擊卷 段 B：aiState.attackCombo 同樣逐 tick 比對（走重算、不進白名單）
+  assert.deepEqual(run.combo, truth.combo.slice(from));
   // ①②球的軌跡與各球員座標——逐 tick 快照直接比對
   assert.deepEqual(run.pos, truth.pos.slice(from));
+});
+
+test('前置條件：這顆球真的有組合攻擊可以驗（attackCombo 非全 null）', () => {
+  // 沒有這條的話，下面 combo 的逐值比對是「null === null」＝空洞成立
+  let seen = 0;
+  for (const seed of [11, 12, 13, 14, 15, 16]) {
+    const { truth } = playOneRallyAllAi(seed);
+    seen += truth.combo.filter(Boolean).length;
+  }
+  assert.ok(seen > 0, 'VCR 語料裡一次組合都沒出現＝combo 的逐值比對空洞成立');
+});
+
+test('突變測試：重演時 aiState.attackCombo 沒被正確重建，比對必須轉紅', () => {
+  // 找一顆真的有組合的球——沒有的話這條突變測試自己就空洞成立
+  let picked = null;
+  for (const seed of [11, 12, 13, 14, 15, 16, 17, 18]) {
+    const r = playOneRallyAllAi(seed);
+    const from = r.truth.combo.length - r.tape.steps.length;
+    if (r.truth.combo.slice(from).some(Boolean)) { picked = { ...r, from }; break; }
+  }
+  assert.ok(picked, '找不到含組合的一球——本條突變測試沒有標的');
+  const broken = replayWithApproachTrace(picked.tape, { breakCombo: true });
+  assert.throws(
+    () => assert.deepEqual(broken.combo, picked.truth.combo.slice(picked.from)),
+    assert.AssertionError,
+    '刻意打壞 aiState.attackCombo 後，逐值比對應該要失敗——沒失敗代表這條測試沒有牙齒',
+  );
 });
 
 test('突變測試：重演時 aiState.approach 沒被正確重建，比對必須轉紅', () => {
