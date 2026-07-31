@@ -67,10 +67,16 @@ function snapshotPositions(game) {
 // 介面沒有這個 getter（本輪硬性限制不得改 src/app/rallyTape.js，故不加）。
 // breakApproach=true＝突變測試專用：每步算完後把 aiState.approach 打成 null，
 // 模擬「協調層狀態沒被正確重建」的情境，證明下面的比對真的抓得到。
-function replayWithApproachTrace(tape, { breakApproach = false, breakCombo = false } = {}) {
+// dropCalledPlay=true＝**段 E 的鑑別力對照臂**：模擬「PLAYER_AI_FIELDS 沒有把
+// calledPlay／replanCall 列進去」的那個版本（＝本段修改之前的 rallyTape.js），
+// 證明白名單那兩個欄位真的在承重，不是「反正重算也會一樣」。
+function replayWithApproachTrace(tape, {
+  breakApproach = false, breakCombo = false, dropCalledPlay = false,
+} = {}) {
   assert.equal(tape.v, TAPE_VERSION);
   const state = structuredClone(tape.snapshot);
   const aiState = structuredClone(tape.ai);
+  if (dropCalledPlay) { aiState.calledPlay = null; aiState.replanCall = null; }
   let controlled = null;
   const intents = [];
   const events = [];
@@ -78,7 +84,11 @@ function replayWithApproachTrace(tape, { breakApproach = false, breakCombo = fal
   const combo = [];
   const pos = [];
   for (const st of tape.steps) {
-    if (st.a) Object.assign(aiState, structuredClone(st.a));
+    if (st.a) {
+      const patch = structuredClone(st.a);
+      if (dropCalledPlay) { delete patch.calledPlay; delete patch.replanCall; }
+      Object.assign(aiState, patch);
+    }
     if (st.c !== undefined) controlled = st.c;
     const stepIntents = [
       ...(st.p ?? []),
@@ -161,6 +171,86 @@ test('突變測試：重演時 aiState.attackCombo 沒被正確重建，比對�
     () => assert.deepEqual(broken.combo, picked.truth.combo.slice(picked.from)),
     assert.AssertionError,
     '刻意打壞 aiState.attackCombo 後，逐值比對應該要失敗——沒失敗代表這條測試沒有牙齒',
+  );
+});
+
+// ════════════════════════════════════════════════════════════
+// 組合攻擊卷 段 E（2026-07-31）：**玩家指定的組合**的 VCR 契約
+// ════════════════════════════════════════════════════════════
+//
+// 護欄 2 把兩條路分得很清楚：AI 產出的 combo 走「重算」（上面幾條測試已背書），
+// 玩家指定的**不可由重算還原** ⇒ 必須進 PLAYER_AI_FIELDS。
+// 本段錄一顆「玩家在死球窗叫了套路」的球，並用對照臂證明白名單在承重：
+// 把 calledPlay／replanCall 從卷帶的 patch 裡拿掉（＝修改前的 rallyTape.js），
+// combo 逐值比對必須轉紅。綠燈本身沒有證明力，會變紅的那個對照臂才有。
+function playOneRallyWithCall(seed, type = 'cross') {
+  const game = createGame({ seed, setTarget: 25 });
+  const ai = createAiState();
+  const rec = createRallyRecorder();
+  const setterA = game.match.rotations.A.find((id) => game.players[id].currentRole === 'setter');
+  const truth = {
+    intents: [], events: [], approach: [], combo: [], pos: [], outcomes: [],
+  };
+  let guard = 0;
+  let injected = false;
+  while (guard < 20000) {
+    guard += 1;
+    if (game.phase === 'serve') {
+      rec.begin(game, ai);
+      // 玩家在死球窗按下面板（S＝指令，無 trust 骰 ⇒ 對照臂的差異純粹來自「有沒有錄」）
+      if (!injected) { ai.calledPlay = { type, callerId: setterA, isSetter: true }; injected = true; }
+    }
+    rec.step(game, ai, null, []);
+    const intents = aiCollectIntents(game, ai, []);
+    truth.approach.push(structuredClone(ai.approach));
+    truth.combo.push(structuredClone(ai.attackCombo ?? null));
+    truth.outcomes.push(structuredClone(ai.callOutcome ?? null));
+    truth.intents.push(structuredClone(intents));
+    const events = stepGame(game, intents);
+    truth.pos.push(snapshotPositions(game));
+    truth.events.push(structuredClone(events));
+    if (events.some((e) => e.type === 'DEAD_BALL')) break;
+  }
+  return { tape: rec.end(), truth, endState: game };
+}
+
+// 找一顆「玩家的叫牌真的生效」的球——找不到的話下面兩條測試都會空洞成立
+function pickCalledRally() {
+  for (let seed = 11; seed <= 60; seed += 1) {
+    const r = playOneRallyWithCall(seed);
+    const from = r.truth.combo.length - r.tape.steps.length;
+    if (from < 0) continue;
+    const ok = r.truth.outcomes.slice(from).some((o) => o?.outcome === 'command');
+    if (ok && r.truth.combo.slice(from).some(Boolean)) return { ...r, from, seed };
+  }
+  return null;
+}
+
+test('段 E 前置：真的錄得到一顆「玩家叫牌生效」的球（否則下面兩條空洞成立）', () => {
+  const picked = pickCalledRally();
+  assert.ok(picked, '50 個 seed 都錄不到玩家叫牌生效的球');
+  assert.ok(picked.tape.steps.some((st) => st.a && 'calledPlay' in st.a),
+    'calledPlay 沒有出現在卷帶的任何一步＝根本沒被錄下來');
+});
+
+test('⑧ VCR：玩家指定的組合可逐值重演（approach／combo／座標全等）', () => {
+  const picked = pickCalledRally();
+  assert.ok(picked);
+  const run = replayWithApproachTrace(picked.tape);
+  assert.deepEqual(run.combo, picked.truth.combo.slice(picked.from),
+    '玩家指定的組合重演不出來');
+  assert.deepEqual(run.approach, picked.truth.approach.slice(picked.from));
+  assert.deepEqual(run.pos, picked.truth.pos.slice(picked.from));
+});
+
+test('⑧ 鑑別力：把 calledPlay 移出白名單（＝修改前的版本），重演必須轉紅', () => {
+  const picked = pickCalledRally();
+  assert.ok(picked);
+  const broken = replayWithApproachTrace(picked.tape, { dropCalledPlay: true });
+  assert.throws(
+    () => assert.deepEqual(broken.combo, picked.truth.combo.slice(picked.from)),
+    assert.AssertionError,
+    'calledPlay 不錄也重演得出來＝它根本不需要進白名單，或這條測試沒有牙齒',
   );
 });
 

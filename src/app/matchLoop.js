@@ -26,6 +26,8 @@ import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
+// 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
+import { callOptionsFor, callFeedbackOf, CALL_MODES } from '../input/callPlay.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -171,6 +173,17 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
       }
     };
   }
+  // 段 E 路徑甲：死球窗叫套路的執行回呼。**唯一的動作就是寫進協調層的指令槽**——
+  // 與 digBias／attackerId 同一條路（走的不是 Intent 管線，所以進了 rallyTape 白名單）。
+  // 誰是 S 由 sim 自己認（currentRole），UI 不做語意判定＝面板與 sim 不可能對「這是
+  // 指令還是請求」有兩種看法。真正的解析在 ai.js 的 touches===1（同源鐵則）。
+  stage.handlers.callPlay = (type) => {
+    s.aiState.calledPlay = {
+      type,
+      callerId: s.playerId,
+      isSetter: game.players[s.playerId]?.currentRole === 'setter',
+    };
+  };
   // W7 B3：我方暫停鈕的執行回呼（sim applyTimeout 唯一路徑）
   stage.handlers.requestTimeout = () => requestTimeout(s);
   // W7 C2④：回場鈕的執行回呼（sim applySubstitution 唯一路徑，走與 ⚙ 面板相同函式）
@@ -403,6 +416,23 @@ function fireSignatureBeat(s, pending, now) {
     stage.matchView.triggerPose(s.playerId, 'highfive');
     if (mateId) stage.matchView.triggerPose(mateId, 'highfive');
   }
+}
+
+// 段 E：叫套路的回饋層（裁定 E「湊不出套路當場回饋失敗、不得靜默降級」
+// ＋ UI 硬性要求「兩種語意的回饋必須分得開」）。
+// `callOutcome` 是**狀態**不是事件（協調層每波寫一次、逐幀讀得到），所以要自己記
+// 已播過的鍵，否則同一則字卡會每幀重播。鍵含 outcome ⇒ 同一波內若由改判產生第二
+// 個結果（甲的請求被無視、之後 S 又用乙改判成功）兩則都播得出來。
+function syncCallFeedback(s) {
+  const out = s.aiState.callOutcome;
+  if (!out) return;
+  const key = `${out.flightId}:${out.mode}:${out.outcome}:${out.reason ?? ''}`;
+  if (s.callFeedbackKey === key) return;
+  s.callFeedbackKey = key;
+  const fb = callFeedbackOf(out, s.aiState.approach?.routes ?? null);
+  if (fb) s.stage.floatText?.show(fb.text, fb.color, fb.ms);
+  // 叫牌已被 sim 消費＝面板的「已下指令／已請求」狀態列歸零（下個死球窗可再叫）
+  s.stage.callPanel?.clearPending();
 }
 
 // W6 換人執行（stage.handlers.requestSub）：sim 換人＋敘事對話
@@ -1013,11 +1043,28 @@ function updateDecisions(s, now) {
       if (zone.hesitant) floatText.show(`${zone.name}猶豫了一下…`, '#c8d6eb', 1400);
     };
     if (!setReady) {
-      // 遠段：只給真值（一傳品質＋協調層建議打誰），沒有可點的東西——
-      // 空選項面板＝既有通道的唯讀用法，不新增元件
+      // 段 E 路徑乙（2026-07-31）：遠段從「唯讀預覽」升級為**臨場改判**。
+      // 語意＝一傳歪了、死球窗叫的套路作廢時，S 在跑位途中換一個套路——
+      // 近段問「這球傳給誰」、遠段問「大家跑什麼」，兩段不重複，對應真實排球的
+      // 兩個決策點。**零新面板**：沿用既有的空選項通道，只是把選項填進去。
+      // 一傳品質與建議攻擊點照舊顯示在標題（真值早給，操作晚要的原則不變）。
       const suggest = setZones.find((z) => z.pid === aiState.attackerId) ?? setZones[0];
       stage.diegetic?.hide();
-      panel.show(setPreviewTitle(setZones[0].tier, suggest?.label ?? null), [], () => {});
+      panel.show(
+        setPreviewTitle(setZones[0].tier, suggest?.label ?? null),
+        callOptionsFor(game, s.controlledId).map((o) => ({
+          key: `call-${o.type}`,
+          label: `${CALL_MODES.replan.icon}改判・${o.label}`,
+          color: 'neutral',
+          callType: o.type,
+        })),
+        (it) => {
+          // 只寫指令槽——真正的重排（planCombination ＋ applyComboRoutes ＋
+          // approachRoutesFor 整份重建，已起跑者不得改線）在 sim 的 applyReplanCall。
+          // UI 不自己算一份 route ⇒ 同源鐵則；輸入進了 rallyTape 白名單 ⇒ 重演得出來
+          s.aiState.replanCall = { type: it.callType, callerId: s.controlledId };
+        },
+      );
     } else if (stage.diegetic) {
       panel.hide();
       stage.diegetic.showSet(
@@ -1916,6 +1963,8 @@ function frameStep(s, now) {
   // W6 換人面板開啟＝凍結模擬（畫面照跑；死球窗 tick 不流逝，慢慢讀數據慢慢換）；
   // W7 C2②：主角在板凳時面板＝教練儀表板，不凍結（在場時維持原凍結行為）
   if (stage.subPanel?.isOpen() && !benched) delta = 0;
+  // 段 E 路徑甲：叫套路面板開啟＝同一套凍結模擬法（死球窗，憲法 §九 不涵蓋）
+  if (stage.callPanel?.isOpen()) delta = 0;
   // W7.1 三輪（試玩回饋：對話沒看完球就開了）：教學/敘事對話開著＝凍結模擬，
   // 點完最後一句才恢復。教練選項對話框刻意不凍（倒數是 sim tick 驅動、有提早開賽鈕）
   if (stage.teachDialog?.isOpen?.()) delta = 0;
@@ -2041,6 +2090,8 @@ function frameStep(s, now) {
   }
   updateDiveReady(s);
   stage.subPanel?.sync(game); // W6 ⚙ 換人鈕可用性（死球窗＋剩餘額度）
+  syncCallFeedback(s); // 段 E：叫套路的回饋字卡＋面板狀態同步
+  stage.callPanel?.sync(game); // 段 E：⚡/🙋 叫套路鈕可用性（死球窗）
   stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
   stage.benchAccelBtn?.sync(benched); // W7 C2③：只在板凳期間顯示
   if (stage.comebackBtn) {

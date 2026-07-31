@@ -23,6 +23,7 @@ import { createCallButton } from '../ui/callButton.js';
 import { createBlockShadow } from '../render/blockShadow.js';
 import { createDiegeticUi } from '../render/diegeticUi.js';
 import { createSubPanel } from '../ui/subPanel.js';
+import { createCallPanel } from '../ui/callPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
 import { timeoutUsedThisPoint } from '../sim/game.js';
@@ -79,6 +80,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const subPanel = careerSetup
     ? createSubPanel({ game, playerId, handlers, floatText })
     : null;
+  // 組合攻擊卷 段 E 路徑甲：死球窗「叫套路」面板（⚙ 換人鈕下一格）。
+  // 生涯／快速比賽皆建——叫套路與 trust 一樣不綁生涯（快速比賽也有二傳與信任值）；
+  // callPlay 由 loop 注入，同 subPanel 的 handlers 後綁定慣例
+  const callPanel = createCallPanel({ game, playerId, handlers });
   // W7 B3：我方暫停鈕（⚙ 換人鈕同排；生涯／快速比賽皆可喊——timeouts 與 subs 一樣不綁生涯）
   const timeoutBtn = createTimeoutButton({ handlers, playerId });
   // W7 C2③④：板凳期間才有意義（無板凳＝快速比賽自然零出現）——同 subPanel 生涯閘
@@ -111,7 +116,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
+    panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, callPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, setBreakOverlay,
     boxScorePanel, callButton, blockShadow, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,

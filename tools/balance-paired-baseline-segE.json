@@ -1,0 +1,1213 @@
+{
+  "label": "基準（W7 全關）｜RUNS=100｜VD_HEIGHT=基準｜VD_ROLE=outside",
+  "matchIds": [
+    "group-1",
+    "group-2",
+    "group-3",
+    "national-qf",
+    "national-sf",
+    "national-final"
+  ],
+  "perRun": [
+    {
+      "seed": 100000,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 107919,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 115838,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 123757,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 1
+    },
+    {
+      "seed": 131676,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 139595,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 147514,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 155433,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 163352,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 171271,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 179190,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 187109,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 195028,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 202947,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 210866,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 218785,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 226704,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 234623,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 242542,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 250461,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 258380,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 266299,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 274218,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 282137,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 290056,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 297975,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 305894,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 313813,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 321732,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 1
+    },
+    {
+      "seed": 329651,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 337570,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 345489,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 353408,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 361327,
+      "wins": {
+        "group-1": 0,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 369246,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 377165,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 385084,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 393003,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 400922,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 408841,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 416760,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 424679,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 432598,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 1
+    },
+    {
+      "seed": 440517,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 448436,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 456355,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 464274,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 1
+    },
+    {
+      "seed": 472193,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 480112,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 488031,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 495950,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 503869,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 511788,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 519707,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 527626,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 535545,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 543464,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 551383,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 559302,
+      "wins": {
+        "group-1": 0,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 567221,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 575140,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 583059,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 590978,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 598897,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 606816,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 614735,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 622654,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 630573,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 1
+    },
+    {
+      "seed": 638492,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 646411,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 654330,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 662249,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 670168,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 678087,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 686006,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 693925,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 701844,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 709763,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 717682,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 725601,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 733520,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 741439,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 749358,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 757277,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 765196,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 773115,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 781034,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 788953,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 796872,
+      "wins": {
+        "group-1": 0,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 804791,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 812710,
+      "wins": {
+        "group-1": 0,
+        "group-2": 0,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 820629,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 828548,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 836467,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 1
+      },
+      "champion": 1
+    },
+    {
+      "seed": 844386,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 1
+      },
+      "champion": 0
+    },
+    {
+      "seed": 852305,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 0,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 860224,
+      "wins": {
+        "group-1": 0,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 868143,
+      "wins": {
+        "group-1": 1,
+        "group-2": 1,
+        "group-3": 0,
+        "national-qf": 1,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 876062,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 0,
+        "national-sf": 1,
+        "national-final": 0
+      },
+      "champion": 0
+    },
+    {
+      "seed": 883981,
+      "wins": {
+        "group-1": 1,
+        "group-2": 0,
+        "group-3": 1,
+        "national-qf": 1,
+        "national-sf": 0,
+        "national-final": 0
+      },
+      "champion": 0
+    }
+  ]
+}

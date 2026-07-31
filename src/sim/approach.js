@@ -703,6 +703,10 @@ function pickComboPartner(team, points, mainId, type, mainKind) {
 export function evaluateCombination(points, mainId, opts = {}) {
   const {
     team = 'A', flightId = 0, seed = 0, passTier = 'perfect', type = 'cross',
+    // 段 E：玩家叫套路＝**跳過觸發骰**（骰子只決定「有資格的這球要不要自動跑」，
+    // 玩家已經明確要跑了）。前面每一條結構條件一格不動——湊不出來還是湊不出來
+    // （裁定 E 的回饋就是從那些 checks 取出來的）。預設 false ⇒ AI 路徑逐值不變。
+    force = false,
   } = opts;
   // 型別專屬條件先佔位（順序＝探針列印順序，也是「前一條沒過就走不到下一條」的順序）
   const checks = { hasMain: false, mainKind: false, tier: false, partner: false };
@@ -754,7 +758,8 @@ export function evaluateCombination(points, mainId, opts = {}) {
   // 觸發機率排在最後：前面每一條都是「這球有沒有資格組合」的結構條件，
   // 骰子只決定「有資格的這球要不要真的跑」。順序反過來會讓 checks 的通過率
   // 全部被骰子稀釋成 p×(結構通過率)＝看不出是哪一條在擋。
-  checks.roll = hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type];
+  checks.roll = force
+    || hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type];
   if (!checks.roll) return { combo: null, checks };
   return {
     combo: {
@@ -791,6 +796,85 @@ export function evaluateCombinations(points, mainId, opts = {}) {
 // null＝本波沒有組合＝現行單人行為（退路分支）
 export function planCombination(points, mainId, opts = {}) {
   return evaluateCombinations(points, mainId, opts).combo;
+}
+
+// ════════════════════════════════════════════════════════════
+// 段 E：玩家叫套路（2026-07-31；藍圖 §2.6 甲／乙兩條輸入路徑共用的解析器）
+// ════════════════════════════════════════════════════════════
+//
+// 這一支的重點不是「多一個選項」，而是**玩家第一次能主動參與戰術**。
+// 兩條路徑（甲＝死球窗叫牌、乙＝S 遠段臨場改判）差別只在**何時解析**，
+// 判準與產出完全共用一份——同源鐵則在這裡的意思是：面板列得出來的、
+// 解析器算得出來的、實際跑出來的，是同一個函式的同一次呼叫。
+//
+// 判定順序＝回饋的優先序，**不得調換**：
+//   ① 有沒有叫（沒叫＝'none'，逐值走 AI 原路徑）
+//   ② 主攻者是誰（請求只能為自己叫；指令由 S 決定給誰）
+//   ③ 這球湊不湊得出這個套路（裁定 E）
+//   ④ 請求才有的 trust 閘（指令直接生效——S 本來就決定傳給誰）
+// ★ ③ 必須排在 ④ 前面 ★ 湊不出來的套路若先被 trust 擋掉再說「S 沒理你」，
+// 玩家會把「陣容不對」誤讀成「信任不夠」——兩者的行動方案完全相反
+// （前者是換一個套路叫，後者是先把球打好），回饋指錯方向比不給回饋更糟。
+const CALL_REQUEST_SALT = 211; // 與三型的觸發鹽（91／137／173）皆不同 ⇒ 兩組骰不同步
+
+// 裁定 E 的機器判準：checks 逐條看，第一個沒過的就是「湊不出來的原因」。
+// 回傳條件名（機器碼），文案在 input 層——sim 不產生給人看的字串。
+export function firstFailedCheck(checks) {
+  for (const k of Object.keys(checks)) if (!checks[k]) return k;
+  return null;
+}
+
+// 指令（S）的主攻者：trust 已經抽出來的那位優先——**S 的指令是「跑哪個套路」，
+// 不是「推翻 trust 分配」**；只有他跑的線本來就不能升級成這一型時，才換成池序中
+// 第一個有資格的人（決定論：attackPointsOf 的顯式順序，不再擲骰）。
+function commandMainId(points, type, fallbackMainId) {
+  const kinds = COMBO_MAIN_KINDS[type] ?? [];
+  const fb = points.find((pt) => pt.pid === fallbackMainId);
+  if (fb && kinds.includes(fb.kind)) return fallbackMainId;
+  return points.find((pt) => kinds.includes(pt.kind))?.pid ?? null;
+}
+
+// called＝{ type, callerId, isSetter }；null／型別不合法＝沒叫。
+// opts 除 evaluateCombination 的那些之外另吃：
+//   fallbackMainId＝pickAttackPoint 已經抽出的主攻者（指令路徑的優先人選）
+//   acceptP＝請求的採納機率（**由呼叫端用既有 trust 尺規算好**——本檔不吃 game）
+export function resolveCalledPlay(points, called, opts = {}) {
+  const none = {
+    outcome: 'none', type: null, mainId: null, mode: null, reason: null, combo: null,
+  };
+  if (!called?.type || !COMBO_TYPES.includes(called.type)) return none;
+  const { type, callerId = null, isSetter = false } = called;
+  const { fallbackMainId = null, acceptP = 0, flightId = 0, seed = 0 } = opts;
+  const mode = isSetter ? 'command' : 'request';
+  // 甲之三：非 S 只能為**自己**叫（玩家永遠只能代表自己說話，不做整隊控制）
+  const mainId = mode === 'command'
+    ? commandMainId(points, type, fallbackMainId)
+    : callerId;
+  const base = { type, mainId, mode, combo: null };
+  if (!mainId || !points.some((pt) => pt.pid === mainId)) {
+    return { ...base, outcome: 'infeasible', reason: 'hasMain' };
+  }
+  const ev = evaluateCombination(points, mainId, { ...opts, type, force: true });
+  if (!ev.combo) {
+    return { ...base, outcome: 'infeasible', reason: firstFailedCheck(ev.checks) };
+  }
+  if (mode === 'command') return { ...base, outcome: 'command', combo: ev.combo };
+  const accepted = hash01(flightId * 1097 + CALL_REQUEST_SALT + seed) < acceptP;
+  return accepted
+    ? { ...base, outcome: 'accepted', combo: ev.combo }
+    : { ...base, outcome: 'refused', reason: 'trust' };
+}
+
+// 面板要不要列這一型：出廠機率為 0 的型別（現況＝夾塞，裁定丙）預設不列。
+// ⚠ **這是停手回報項**（Sawmah 待裁，見 docs/kickoffs/combination-attack-blueprint.md）：
+//   解讀①＝關的是 AI 自動觸發，玩家明確叫就給（「機制保留」的意義）
+//   解讀②＝關就是關，面板不列（夾塞淨得分 10.6% vs 無組合 57.9%＝給玩家等於給陷阱）
+// 裁定之前照**保守的②**實作。切換點只有下面這一個常數：改成 true 即恢復解讀①。
+export const CALL_OFFERS_FACTORY_OFF_TYPES = false;
+export function offeredCallTypes() {
+  return COMBO_TYPES.filter(
+    (t) => CALL_OFFERS_FACTORY_OFF_TYPES || (COMBO_RATE[t] ?? 0) > 0,
+  );
 }
 
 // 把組合的線寫回池——**只動涉及的兩人**，其餘 point 原樣（同一個物件參照）。

@@ -20,7 +20,18 @@ import { createAiState, aiCollectIntents } from '../sim/ai.js';
 export const TAPE_VERSION = 2;
 
 // aiState 中「玩家（UI 層）會寫」的欄位——其餘欄位由 AI 自己逐 tick 演進、重演重算
-const PLAYER_AI_FIELDS = ['digBias', 'attackerId', 'attackKind', 'counterRead'];
+//
+// 組合攻擊卷 段 E（2026-07-31）追加 calledPlay／replanCall——**兩者錄的是「玩家的
+// 輸入」不是「重算出來的結果」**，這條界線決定了要不要進白名單：
+//   · AI 自己擲骰產出的 `attackCombo`／`approach`：吃 game 狀態＋flightId＋seed 的
+//     純函式，重演端重算即得 ⇒ **不進白名單**（tests/rally-tape-approach.test.mjs
+//     已用突變測試背書「真的算得出來」）
+//   · 玩家在死球窗叫的套路（calledPlay）與 S 的遠段改判（replanCall）：
+//     沒有任何可觀察量推得出來 ⇒ **必須錄**。錄了輸入之後，由它們導出的
+//     attackCombo／approach／callOutcome 仍走重算路徑，白名單不必為結果加欄位。
+const PLAYER_AI_FIELDS = [
+  'digBias', 'attackerId', 'attackKind', 'counterRead', 'calledPlay', 'replanCall',
+];
 
 // 發球前保留的 tick 數（1 秒）：更早的等哨時間逐秒重照快照丟掉——一顆球的戲
 // 從發球佈陣的最後一秒開始，不從玩家放下手機的那一刻開始
