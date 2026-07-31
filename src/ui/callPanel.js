@@ -1,4 +1,4 @@
-﻿// 組合攻擊卷 段 E 路徑甲（2026-07-31）— 死球窗「叫戰術」面板
+// 組合攻擊卷 段 E 路徑甲（2026-07-31）— 死球窗「叫戰術」面板
 //
 // 真實對應＝二傳在背後比的手勢：發球前把這一球要跑的套路講好。
 // **不觸憲法 §九**（`docs/phase5-decisions-RESOLVED.md:253`「球內新增任何決策面板」）
@@ -18,8 +18,20 @@ import { callOptionsFor, callModeOf, CALL_MODES, pendingCallTextOf } from '../in
 export function createCallPanel({ game, playerId, handlers }) {
   const css = (elm, arr) => { elm.style.cssText = arr.join(';'); };
   const btn = document.createElement('button');
+  // ★ 右上直欄的格位表（2026-07-31 試玩回報「叫戰術跟暫停卡在一起、只按得到暫停」後補）★
+  //   top+8   🎬 回放        matchStage.js:304
+  //   top+60  ✕ 離開         matchStage.js:273
+  //   top+112 ⚙ 換人         subPanel.js:45（生涯限定）
+  //   top+164 ⏱ 暫停         matchStage.js:324
+  //   top+216 ⏩×2 快轉       matchStage.js:467
+  //   top+268 🙋 叫戰術       ← 本檔
+  // 格距 52px（鈕高 44 ＋ 間距 8）。**新增鈕前先掃這張表**：
+  //   git grep -n "safe-area-inset-top, 0px) + " -- src
+  // 病灶紀錄：本鈕原本寫 top+164，與暫停鈕 CSS 逐字相同（同 top／同 right／同 z-index:16），
+  // 而暫停鈕在 matchStage.js:88 後掛進 DOM ⇒ 同層級下後者蓋前者，點擊全被暫停吃掉。
+  // 截圖裡還看得到叫戰術，是因為暫停面板開著時暫停鈕自己隱藏了。
   css(btn, [
-    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 164px)',
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 268px)',
     'right:calc(env(safe-area-inset-right, 0px) + 12px)',
     'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
     'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
