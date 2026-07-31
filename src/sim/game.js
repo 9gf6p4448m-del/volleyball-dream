@@ -364,8 +364,12 @@ function scoutTallyOf(state, pid) {
       // 組合攻擊卷 Q4 資料層（2026-07-31，純記帳）：路線種類分佈，比照 zones。
       // 鍵集＝approach.js 的合法 kind（'left_inside' 是 2026-07-31 由 'cross' 改名，
       // 見 approach.js routeKindFor 註解）。消費端（scoutBlockMul 同型門檻）本輪不開。
+      // 組合攻擊卷 段 A（2026-07-31）補 'cross'／'tandem'：下面 :659 的
+      // `tal.routes[...] !== undefined` 守衛在鍵不存在時**不報錯、直接不記**
+      // ⇒ 鍵集必須與 approach.js 的 APPROACH 表同步，否則段 B/C 一接上抽籤，
+      // 記帳就會靜默丟掉一半（tests/attack-routes.test.mjs 有同步性斷言）
       routes: {
-        quick: 0, left: 0, left_inside: 0, right: 0, pipe: 0, dball: 0,
+        quick: 0, left: 0, left_inside: 0, cross: 0, tandem: 0, right: 0, pipe: 0, dball: 0,
       },
       feints: 0, spikes: 0,
       serves: { jumps: 0, floats: 0, total: 0 },

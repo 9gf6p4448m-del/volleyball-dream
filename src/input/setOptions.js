@@ -24,6 +24,12 @@ export const KIND_LABELS = {
   // §5 A2（07-29 補）：缺這條的話標籤會 fallback 成英文字串 kind。
   // kind 標籤 2026-07-31 由 'cross' 改名為 'left_inside'（顯示文案「交叉」不變）
   left_inside: '交叉',
+  // 組合攻擊卷 段 A（2026-07-31）：兩條新線的標籤先補齊——缺了會 fallback 成英文
+  // kind 字串（§5 A2 那次的原坑）。段 A 沒有人跑得到這兩條線，這裡純粹是資料補齊。
+  // 'cross'＝真交叉（穿過快攻手身後），與 left_inside 的「交叉」是兩條不同的線，
+  // 文案必須分得開，否則玩家看到兩個一模一樣的選項
+  cross: '交叉X',
+  tandem: '夾塞',
 };
 
 // 選項：{ key, pid, name, kind, label, aim(世界座標), t(舉球弧線＝sim timing),

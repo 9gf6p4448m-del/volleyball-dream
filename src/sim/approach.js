@@ -45,6 +45,28 @@ export function setAimFor(game, team, attackerId, kind, tempo = 'three') {
   // kind 標籤 2026-07-31 由 'cross' 改名為 'left_inside'（CROSS_RATE 機率不變）：
   // 這條不是真交叉（單人改寫、不涉及 MB），名字讓給本卷稍後要做的真交叉。
   if (kind === 'left_inside') return { lx: -1.3, lz: 1.3, t: 0.75 };
+  // ---- 組合攻擊卷 段 A（2026-07-31）：真交叉／夾塞的幾何前置 ----
+  // **本段只建線，不接任何抽籤**（routeKindFor／tempoFor 一格未動）＝沒有人跑得到
+  // 這兩條線，sim-hash 因此必須逐值不變。段 B/C 才把它們接上組合排程層。
+  //
+  // cross（真交叉）：OH 從左邊線外側切進來，**穿過快攻手身後**落在快攻點的右肩。
+  //   lx ＝ +1.3 ＝ left_inside 的 −1.3 **鏡像**——同一個「離快攻點的橫向距離」語意，
+  //   只是 left_inside 停在快攻的同側（沒穿過去），cross 真的穿過 lx=0 到對側。
+  //   為什麼是這個距離：跟死快攻的中間攔網手涵蓋半寬＝TUNING.BLOCK_REACH_X
+  //   （＝blockBand.BLOCK_HALF_WIDTH，CONVERGE_T=1 下實測 0.5m），1.3 > 0.5
+  //   ⇒ **構造上搆不到**（藍圖 §四 交叉條件 5）。上界由 right 線的 lx=3 夾住：
+  //   3 − 1.3 ＝ 1.7m ≫ SEP_RADIUS 0.55，不會跟 OPP 擠成同一點。
+  if (kind === 'cross') return { lx: 1.3, lz: 1.3, t: 0.75 };
+  // tandem（夾塞）：躲在快攻手的影子裡、**同一條縱線上晚一拍**起跳。
+  //   lx ＝ +0.3：與快攻點（lx 0）的 |Δlx| ＝ 0.3 ≤ TANDEM 同線門檻 0.6（藍圖條件 1），
+  //   不取 0 是為了讓「助跑線段的 lx 區間」嚴格**不含** 0（藍圖條件 4：夾塞不得同時
+  //   滿足交叉的穿越條件，否則兩型雙重計數）——起點 lx 2.6 → 終點 0.3，區間 [0.3, 2.6]。
+  //   lz ＝ 2.0：起跳點 lz ＝ 2.0 + TAKEOFF.FRONT 0.68 ＝ 2.68，比快攻起跳點 1.68
+  //   **深 1.0m**，> 藍圖條件 2 的硬下界 SEP_RADIUS 0.55 ⇒ 同隊避讓不會把兩人推開。
+  //   t ＝ 0.55：落在 game.js 的 'shoot' 檔（SHOOT_APEX 4.2，介於快攻 3.4 與高球 5.2）
+  //   ——夾塞的球必須比高球平（否則攔網手有時間從快攻收回來），又不是快攻的一速低弧。
+  //   與二速平拉開共用同一檔弧線＝零新弧線。
+  if (kind === 'tandem') return { lx: 0.3, lz: 2.0, t: 0.55 };
   if (kind === 'right') return { lx: 3, lz: 1.3, t: 0.75 };
   if (kind === 'pipe') return { lx: -1, lz: 3.6, t: 0.75 };
   if (kind === 'dball') return { lx: 2.6, lz: 3.6, t: 0.75 };
@@ -94,6 +116,21 @@ export const APPROACH = {
   // 就是這條線與 left 的差，攔網手看得到的也正是這個差
   // kind 標籤改名 'cross'→'left_inside'（2026-07-31，理由見上方 setAimFor 註解）
   left_inside: { lx: -4.1, lz: 3.6, steps: 4 },
+  // ---- 組合攻擊卷 段 A（2026-07-31）：真交叉／夾塞 ----
+  // cross（真交叉）：起點與 left_inside **逐值相同**（−4.1, 3.6）＝場內夾制上限的同一點。
+  //   刻意相同：同一名 OH 不論跑 left／left_inside／cross，站上助跑起點的那一刻長得一樣，
+  //   攔網手要到他起步之後才分得出來——這是交叉的欺敵價值本身，不是巧合。
+  //   終點在 lx +1.3（見 setAimFor），助跑因此是一條橫越 **5.4m** 的斜線
+  //   （left_inside 2.8m、left 0.6m）——「穿過去」在幾何上就是這條線與那兩條的差。
+  //   ★ 穿越餘裕（藍圖 §四 條件 2/3）：線段 (−4.1, 3.6) → (+1.3, 1.98) 在 lx=0 處
+  //     lz ＝ 3.6 − (4.1/5.4)×1.62 ＝ **2.370** > 快攻起跳點 lz 1.68，餘裕 0.690m
+  //     ——且 0.690 > SEP_RADIUS 0.55 ⇒ 穿過去的那一刻不會被同隊避讓推開。
+  cross: { lx: -4.1, lz: 3.6, steps: 4 },
+  // tandem（夾塞）：從右側切進來、收在快攻手正後方。
+  //   起點 lx 2.6（＝dball 的縱線，但 lz 4.2 比 dball 的 5.6 近網 1.4m ⇒ 兩起點不相撞）。
+  //   lz 4.2 的下界＝助跑段不變量：4.2 − (2.0 + TAKEOFF.FRONT 0.68) − TAKEOFF.SETTLE 0.25
+  //   ＝ **1.37m** ≥ 0.5m（一步）。起點在攻擊線（3m）後，前排球員起跳點 2.68 仍在前區＝合法。
+  tandem: { lx: 2.6, lz: 4.2, steps: 4 },
   // OPP 2 號位：沿用 OH 架構鏡像
   right: { lx: 3.6, lz: 3.6, steps: 4 },
   // 後排 pipe：四步、**離網最遠**（4.7 量到的 0.86m 空中前飄即此成因，屬正確行為）
@@ -101,6 +138,16 @@ export const APPROACH = {
   // 後排 D 球：pipe 的右路版（同屬後排攻擊，深度一致）
   dball: { lx: 2.6, lz: 5.6, steps: 4 },
 };
+
+// ---- 夾塞的可機械判定門檻（藍圖 §四；段 A 只立值，段 C 才有消費端）----
+// 立在這裡而不是留在段 C 就地寫死：這兩個數字是**幾何參數**，與 APPROACH 表同壽命，
+// 分開放就會出現「表改了門檻沒改」的分岔（本專案已為同名不同義踩過坑）。
+// TANDEM_LANE_M＝「同一條縱線」的容忍（|Δlx|）。
+// TANDEM_DEPTH_M＝「前後疊」的最小深度差（Δlz）——**硬下界是 game.js 的 SEP_RADIUS
+//   0.55**：低於它，同隊避讓每 tick 會把兩人往外推，夾塞的幾何自己瓦解＝條件恆真但
+//   無意義。取 0.8 留 0.25m 餘裕（實際線距 1.0m，見 tandem 的 setAimFor 註解）。
+export const TANDEM_LANE_M = 0.6;
+export const TANDEM_DEPTH_M = 0.8;
 
 // 助跑起點（世界座標）；kind 不在表上（非攻擊手）回 null——呼叫端據此回落職責位
 export function approachStartFor(team, kind) {
