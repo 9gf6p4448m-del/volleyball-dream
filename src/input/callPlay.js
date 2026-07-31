@@ -54,7 +54,11 @@ const REASON_TEXT = {
   hasMain: '你不在這一波的攻擊池裡',
   mainKind: null, // 動態：要講出他實際被排到哪條線（見 reasonTextOf）
   tier: '一傳沒到位，沒有快攻可搭',
-  partner: 'MB 不在前排（或他就是接一傳的人）',
+  // 2026-07-31 文案對調：原文把罕見的「不在前排」放前面、常見的「他接了一傳」放進括號。
+  // 依據＝段 B 逐條通過率（tools/combo-probe.mjs）：一傳到位 22.6% → 有 quick 配合者 20.8%，
+  // 這一關只擋掉 1.8pp；而名冊是 {MB,MB} 對角（lineup.js:25,29），任何一輪都有一個 MB 在前排
+  // ⇒ 真的擋在這裡時，主因幾乎一定是「前排那個 MB 接了這一傳」（D2 針對性發球吃掉 transition）。
+  partner: '前排 MB 接了這一傳，沒時間跑快攻（或他不在前排）',
   crosses: '兩條線沒有交會',
   behind: '穿不到快攻手身後',
   outOfReach: '兩人擊球點太近，一個人就攔得完',
