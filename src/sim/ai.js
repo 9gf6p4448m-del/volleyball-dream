@@ -367,6 +367,9 @@ function ensureFlightPlan(game, aiState) {
         seed: game.seed ?? 0,
         passTier: tier,
         speedOf: (pid) => moveSpeed(game.players[pid]),
+        // 段 B2：組合的前後腳偏移（tempoGap）由 route 層表達——combo 為 null 時
+        // 每個 route 的 comboLead 都是 0＝逐值等同段 B 之前的寫法
+        combo,
       }),
     };
     // §5 A3 跳舉：一傳到位（憲法 §三 A3「一傳到位時的既有分支下」）＋真的是 S 在舉
@@ -1520,7 +1523,11 @@ function approachRunOf(aiState, playerId, tick, team, r) {
 // 因為「決策時點後移」不等於「取消一氣呵成」：還沒起跑的人照樣該在起點等
 function approachLaunched(aiState, playerId, tick) {
   const route = aiState.approach ? approachRouteOf(aiState.approach.routes, playerId) : null;
-  if (!route || route.tempo === 'three') return false;
+  if (!route) return false;
+  // 段 B2：帶正偏移的三速（＝交叉主攻者）與一速／二速同樣「二傳觸球前就跨過起步點」，
+  // 一樣不能再叫他回助跑起點等（那就是倒著跑）。`comboLead > 0` 才成立 ⇒ 偏移為 0 的
+  // 三速（所有非組合的線）逐值走原路徑。
+  if (route.tempo === 'three' && !(route.comboLead > 0)) return false;
   // §9 契約：離開 wait ＝已經起跑（含收勢後的 release——起跑過就是起跑過）
   return routePhaseAt(route, tick) !== ACTION_PHASE.WAIT;
 }

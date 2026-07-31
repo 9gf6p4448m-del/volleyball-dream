@@ -19,6 +19,7 @@ import { createAiState, aiCollectIntents, attackPointsOf } from '../src/sim/ai.j
 import {
   applyRouteKinds, applyComboRoutes, planCombination, evaluateCombination,
   crossGeometryOf, CROSS_PLAY_RATE, CROSS_RATE, setAimFor, takeoffSpotFor,
+  routeTicks, approachRoutesFor, AIR_TICKS, CROSS_TEMPO_GAP,
 } from '../src/sim/approach.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'sim');
@@ -105,7 +106,8 @@ test('交叉成立：真實池上組合得出來，結構欄位齊備且指向 O
   assert.equal(combo.partnerKind, 'quick');
   assert.equal(combo.mainId, idOf(pts, 'left'), 'mainId 必須就是主攻者本人');
   assert.equal(combo.partnerId, idOf(pts, 'quick'), '配合者必須是跑快攻的 MB');
-  assert.equal(combo.tempoGap, null, '裁定 D 丙＝tempoGap 本段留白（欄位在、值不用）');
+  // 段 B2：由留白（null）改為實值＝主攻者提早起步幾 tick
+  assert.equal(combo.tempoGap, CROSS_TEMPO_GAP, 'tempoGap 沒帶上本段的偏移量');
 });
 
 test('交叉的幾何三條件在 cross×quick 上全部成立（藍圖 §四 條件 2／3／5）', () => {
@@ -345,4 +347,117 @@ test('壽命：attackCombo 與 approach 同壽命——非 rally 與來球兩處
   }
   assert.ok(sawCombo, '整局沒出現過組合＝下面的清空斷言空洞成立');
   assert.equal(leak, 0, `組合殘留到非 rally／來球階段 ${leak} tick＝壽命與 approach 不同步`);
+});
+
+// ================= 段 B2：tempoGap（前後腳偏移） =================
+//
+// 本段守三件事：
+//   ⑤ 偏移只掛在**主攻者**身上，且 combo 為 null 時逐值等同段 B（零率對照的單元版）
+//   ⑥ **罰站硬線**（07-23 Sawmah 拍板 0.5s）：偏移是拿罰站換前後腳的，
+//      這條就是那筆交易的上限。把 CROSS_TEMPO_GAP 調到 70 以上會讓它轉紅（鑑別力）。
+//   ⑦ 起步後**不得倒著跑回助跑起點**：三速原本在二傳觸球後會被「一氣呵成」叫回
+//      起點等，帶偏移的人已經在半路上，叫回去就是倒退跑（approachLaunched 的守門）。
+
+test('段 B2 偏移語意：comboLead 把整條 route 往前平移，0 時逐值等同段 B', () => {
+  const SET = 1000;
+  const run = 79;
+  const base = routeTicks('three', SET, run);
+  assert.deepEqual(base, { startTick: SET, takeoffTick: SET + run, settleTick: SET + run + AIR_TICKS },
+    '三速的黃金錨點被動到了');
+  assert.deepEqual(routeTicks('three', SET, run, 0), base, 'comboLead=0 必須逐值等同不帶偏移');
+  const lead = routeTicks('three', SET, run, 30);
+  assert.equal(lead.startTick, SET - 30, '起步應比二傳觸球早 30 tick');
+  assert.equal(lead.takeoffTick, base.takeoffTick - 30, '起跳應整條跟著早 30 tick');
+  assert.equal(lead.takeoffTick - lead.startTick, run, '助跑段長度不得被偏移改變');
+  // 一速／二速也走同一條算式（本段沒有人用，但形式一致才不會日後分岔）
+  assert.equal(routeTicks('one', SET, run, 5).takeoffTick, routeTicks('one', SET, run).takeoffTick - 5);
+});
+
+test('段 B2：comboLead 只掛在主攻者身上；combo 為 null 時全池為 0', () => {
+  const pts = poolOf(1);
+  const mainId = idOf(pts, 'left');
+  const combo = { type: 'cross', mainId, partnerId: idOf(pts, 'quick'), tempoGap: 30, mainKind: 'cross', partnerKind: 'quick' };
+  const withCombo = applyComboRoutes(pts, combo);
+  const routes = approachRoutesFor('A', withCombo, { setTick: 500, flightId: 1, seed: 3, combo });
+  const main = routes.find((r) => r.pid === mainId);
+  assert.equal(main.comboLead, 30, '主攻者沒吃到偏移');
+  assert.equal(main.startTick, 500 - 30, '主攻者的起步沒被提前');
+  for (const r of routes) {
+    if (r.pid === mainId) continue;
+    assert.equal(r.comboLead, 0, `${r.pid}（${r.kind}）吃到了不該吃的偏移`);
+  }
+  // 沒有組合＝每個人都 0，且三個 tick 欄位與不傳 combo 逐值相同
+  const plain = approachRoutesFor('A', pts, { setTick: 500, flightId: 1, seed: 3 });
+  const nullCombo = approachRoutesFor('A', pts, { setTick: 500, flightId: 1, seed: 3, combo: null });
+  assert.deepEqual(nullCombo, plain, 'combo=null 必須逐值等同不傳 combo');
+  assert.ok(plain.every((r) => r.comboLead === 0));
+});
+
+// 實跑：追交叉主攻者的「擊球前連續靜止」與「有沒有倒著跑回起點」
+function crossMainTrace(seed) {
+  const g = createGame({ seed, setTarget: 25 });
+  const ai = createAiState();
+  const stand = [];      // 每次交叉扣球時，該人已連續靜止幾 tick
+  const recall = [];     // 起步後**還被叫回助跑起點**的 tick（走位目標＝起點）
+  const still = {};
+  const prev = {};
+  let combo = null;
+  let route = null;
+  let farthest = 0;
+  let guard = 0;
+  while (g.phase !== 'set_over' && guard < 300000) {
+    guard += 1;
+    const intents = aiCollectIntents(g, ai);
+    if (ai.attackCombo !== combo) {
+      combo = ai.attackCombo;
+      route = combo ? ai.approach.routes.find((r) => r.pid === combo.mainId) : null;
+      farthest = 0;
+    }
+    for (const pid of Object.keys(g.actors)) {
+      const a = g.actors[pid];
+      const p0 = prev[pid];
+      still[pid] = p0 && Math.hypot(a.x - p0.x, a.z - p0.z) < 0.005 ? (still[pid] ?? 0) + 1 : 0;
+      prev[pid] = { x: a.x, z: a.z };
+    }
+    // 起步之後才看：走位目標（intent.aim）不得再是助跑起點。
+    // ★ 為什麼看 aim 不看位置 ★「被叫回起點」是**決策**，位移只是它的殘影——
+    // 一氣呵成的等待條件會隨著他退後而自己失效（退越遠 runTicks 越大），所以位移
+    // 只有 ~0.5m、量位置的版本抓不到（實測：拿掉 ai.js 的守門，位移斷言仍全綠，
+    // 但前後腳 p50 73→79、罰站 14→6 ⇒ 守門確實在做事，只是位移不是它的量測位置）。
+    if (route?.startTick != null && g.tick > route.startTick + 2 && route.comboLead > 0) {
+      const im = intents.find((x) => x.playerId === combo.mainId);
+      const aim = im?.aim;
+      if (aim && Math.hypot(aim.x - route.start.x, aim.z - route.start.z) < 0.2) {
+        recall.push(g.tick - route.startTick);
+      }
+    }
+    for (const e of stepGame(g, intents)) {
+      if (e.type === 'TOUCH' && e.kind === 'spike' && e.touches === 3
+        && combo && e.playerId === combo.mainId) {
+        stand.push(still[e.playerId] ?? 0);
+      }
+    }
+  }
+  return { stand, recall };
+}
+
+const traces = [11, 12, 13].map(crossMainTrace);
+const allStand = traces.flatMap((t) => t.stand);
+const allRecall = traces.flatMap((t) => t.recall);
+
+test('段 B2 硬線：交叉主攻者擊球前連續靜止不得破 0.5s（07-23 Sawmah 拍板）', () => {
+  assert.ok(allStand.length >= 8, `樣本只有 ${allStand.length} 次交叉扣球＝這條斷言空洞`);
+  const over = allStand.filter((v) => v > 30); // 30 tick = 0.5s @60Hz
+  const p90 = [...allStand].sort((a, b) => a - b)[Math.floor(allStand.length * 0.9)];
+  assert.equal(over.length, 0,
+    `${over.length}/${allStand.length} 次交叉在擊球前站超過 0.5s（p90=${p90} tick）`
+    + '＝CROSS_TEMPO_GAP 拿罰站換前後腳換過頭了');
+});
+
+test('段 B2：帶偏移的主攻者起步後不得被叫回助跑起點（倒著跑）', () => {
+  assert.ok(traces.some((t) => t.stand.length > 0), '三局沒有交叉扣球＝這條斷言空洞');
+  assert.equal(allRecall.length, 0,
+    `起步後有 ${allRecall.length} tick 的走位目標仍是助跑起點`
+    + `（最早發生在起步後 ${allRecall.length ? Math.min(...allRecall) : '-'} tick）`
+    + '＝一氣呵成把已經在跑的人叫回去了，偏移會被吃掉一半');
 });

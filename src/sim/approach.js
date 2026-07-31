@@ -367,6 +367,61 @@ export function applyRouteKinds(points, opts = {}) {
 export const CROSS_PLAY_RATE = 0.25;
 const CROSS_PLAY_SALT = 91;
 
+// ---- 交叉的前後腳偏移（段 B2，2026-07-31）----
+//
+// 語意：**交叉主攻者比「三速的黃金錨點」早幾 tick 起步**（正值＝提早）。
+//   三速原式：startTick = setTick、takeoffTick = setTick + runTicks
+//   帶偏移後：startTick = setTick − tempoGap、takeoffTick = setTick + runTicks − tempoGap
+// 選這個形式（偏移加在起步，起跳跟著整條平移）而不是「錨死起跳 tick 再倒推起步」：
+//   後者對跑得慢的人會把 startTick 推到規劃點之前更遠，被規劃點截斷後反而不可預測；
+//   前者的偏移量就是「提早起步幾 tick」本身，可直接對照可用的提前量（見下方 ★）。
+//
+// ★★ 先讀這段：目標帶「前後腳 20–30 tick」在現行禁區約束下**恆不可達** ★★
+//
+// 不變量（符號推導，`02 §6.1` 條 6；下方每個數字都有實測對應）：
+//   前後腳 ＝ main 物理起跳 − partner 物理起跳
+//   main 物理起跳 ＝ main 擊球 tick − 罰站 tick（他到位之後就是站著等球，sim 沒有二次起跳）
+//   ⇒ **前後腳 ＝（main 擊球 − partner 起跳）− 罰站 ＝ 87 − 罰站**（tick）
+// 右邊那個 87 是兩個**本段禁止觸碰**的常數夾出來的：
+//   main 擊球 ＝ set + 82（cross 走 t=0.75 高球弧，tools/tempo-probe.mjs ④ 實測 p50=82）
+//   partner 起跳 ＝ set − 5（TEMPO.one.takeoffLead＝14，實測物理值 −5）
+// ⇒ 要把前後腳壓進 20–30，必須讓罰站落在 **57–67 tick ＝ 0.95–1.12 秒**，
+//   而 07-23 Sawmah 拍板的硬線是 0.5 秒。**兩條驗收互為補集，同時滿足是恆假的。**
+//   實測驗證（tools/combo-probe.mjs 24 局，見下表）：gap=80 → 前後腳 0、罰站 63 tick
+//   ＝ 100% 破硬線；gap=70 → 前後腳 33、罰站 53 ＝ 100% 破線。恆假成立。
+// 要真的做出 0.3–0.5s 的 X 戰術，得讓 cross 的 set→擊球 從 82 掉到 ~45–55 tick
+// ＝**新開一檔弧線**（現有兩檔：SHOOT 61／QUICK 33 都不在那個帶），那是段 A 的
+// 幾何／彈道層工作，本段明令不得動 ⇒ **交 Sawmah 裁定**。
+//
+// ★ 那本段的值怎麼定 ★ 取「sim 自己承認**不算罰站**的那個預算」當上界：
+//   AI.APPROACH_LEAD ＝ 12 tick（ai.js:51 原文「比精算早到 0.2s＝短暫引臂接起跳，不罰站」）。
+//   gap=30 實測罰站平均 13.0 tick ≈ 12 ⇒ **30 ＝ 在「引臂不算罰站」的定義內拿得到的最大壓縮**。
+//   這不是對著前後腳擬合出來的數字，是拿既有常數當錨（同 AIR_TICKS／SEP_RADIUS 的用法）。
+//
+// 實測前緣（tools/combo-probe.mjs 24 局；罰站口徑同 tools/tempo-probe.mjs ③）：
+//   gap  前後腳p50  罰站p50  站>0.5s  Δfinal(對段A,RUNS=40)  款3    主攻者扣成率
+//    0      88        0       0.0%       +17.5pp ± 7.1        8.1pp    88.8%
+//   20      82        3       0.0%        +7.5pp ± 6.6       14.9pp    95.4%
+//   30      72       15       0.0%       +10.0pp ± 7.0       15.9pp    95.4%   ← 本段採用
+//   40      61       24       1.9%       +10.0pp ± 7.0       16.2pp    95.4%
+//   55      53       33      62.5%        +2.5pp ± 6.7       16.6pp    95.4%
+//   70      33       53     100.0%       +10.0pp ± 7.8       16.5pp    95.4%
+//   ⇒ **前後腳＋罰站 ≈ 87 逐列成立**＝上面那條不變量的實測面。
+//   （款 3 是往「安全」的方向跑：門檻是 gap ≥5pp，8.1 → 16 是餘裕變大，不是翻。）
+//
+// 平衡（配對同種子，基準＝段 A d3542f7 現做）——**RUNS=40 的解析力不足以下判斷**：
+//   段 B（gap=0） vs 段A：RUNS=40 Δ決賽 +17.5±7.1（當時據此熔斷）
+//                         RUNS=100 Δ決賽 **+8.0±5.1**／Δ準決賽 +15.0±6.1／Δ奪冠 +4.0±2.8
+//   gap=30       vs 段A：RUNS=100 Δ決賽 **+4.0±4.9**／Δ準決賽 +3.0±6.7／Δ奪冠 −1.0±1.7
+//   ⇒ ① 段 B 那次 +17.5 有一半是 40 局的取樣噪音（100 局同一組種子的超集只剩 +8.0）
+//     ② 但方向是穩的，而**加上偏移後三個指標全部收斂到 1 SE 內**＝熔斷解除。
+//   真正在起作用的很可能不是「起跳差」本身，而是「攔網手做決定（二傳觸球）那一刻，
+//   交叉的 OH 是不是已經在跑」：gap=0 時他還站在邊線的助跑起點，牆讀不到這條線
+//   ——這也解釋了為什麼 gap=20（前後腳幾乎沒動）就已經把 Δ 拉下來。
+//
+// ★★ 值 30 ＝實作端提案，**待 Sawmah 裁定**（同 CROSS_PLAY_RATE 0.25 的處置）★★
+export const CROSS_TEMPO_GAP = 30;
+
 // 組合型別 → 配合者必須跑的線（藍圖 §四 交叉條件 1）
 const COMBO_PARTNER_KIND = { cross: 'quick' };
 
@@ -466,8 +521,8 @@ export function evaluateCombination(points, mainId, opts = {}) {
       type,
       mainId,
       partnerId: partner.pid,
-      // 裁定 D 丙＝先量再定：欄位存在、值本段**留白**（段 D 的實驗回答要不要偏移量）
-      tempoGap: null,
+      // 段 B2：由留白改為實值＝主攻者提早起步幾 tick（0＝與段 B 逐值相同）
+      tempoGap: CROSS_TEMPO_GAP,
       // 幾何自證欄位：探針與測試直接讀，不必跨欄位對照
       mainKind: type,
       partnerKind: partner.kind,
@@ -503,11 +558,13 @@ export function applyComboRoutes(points, combo) {
 //   settleTick  收勢完成（之後才落回 cover／職責位）
 // 一速／二速：先算起跳（早於二傳觸球 takeoffLead 個 tick），再倒推起步。
 // 三速：起步＝二傳觸球那一刻（黃金錨點），起跳自然落在觸球後 runTicks。
-export function routeTicks(tempo, setTick, runTicks) {
+// comboLead＝組合偏移（段 B2 的 tempoGap，正值＝整條 route 往前平移幾 tick）。
+// 預設 0＝本函式對所有非組合的 route 逐值不變（零率對照的機械保證之一）。
+export function routeTicks(tempo, setTick, runTicks, comboLead = 0) {
   if (setTick == null) return { startTick: null, takeoffTick: null, settleTick: null };
-  const takeoffTick = tempo === 'three'
+  const takeoffTick = (tempo === 'three'
     ? setTick + runTicks
-    : setTick - TEMPO[tempo].takeoffLead;
+    : setTick - TEMPO[tempo].takeoffLead) - comboLead;
   return {
     startTick: takeoffTick - runTicks,
     takeoffTick,
@@ -523,6 +580,7 @@ export function routeTicks(tempo, setTick, runTicks) {
 export function approachRoutesFor(team, points, opts = {}) {
   const {
     setTick = null, flightId = 0, seed = 0, speedOf = null, passTier = 'perfect',
+    combo = null,
   } = opts;
   const routes = [];
   points.forEach((pt, index) => {
@@ -537,9 +595,14 @@ export function approachRoutesFor(team, points, opts = {}) {
     const runTicks = Math.max(1, Math.round(
       Math.hypot(takeoff.x - start.x, takeoff.z - start.z) / stepM,
     ));
+    // 組合偏移只掛在**主攻者**身上（配合者跑他本來的一速，TEMPO.one 一格未動）。
+    // 掛在 route 上而不是走位分支去讀 combo：走位分支讀 attackCombo 就等於內建誘餌
+    // 旗標（藍圖 §六，ai.js 的 COMBO-SCAN 護欄）；route 欄位與 tempo 同性質＝
+    // 「這條線幾時起步」，攔網手本來就讀得到的東西。
+    const comboLead = (combo && pt.pid === combo.mainId) ? (combo.tempoGap ?? 0) : 0;
     routes.push({
-      pid: pt.pid, kind: pt.kind, tempo, start, takeoff, runTicks,
-      ...routeTicks(tempo, setTick, runTicks),
+      pid: pt.pid, kind: pt.kind, tempo, start, takeoff, runTicks, comboLead,
+      ...routeTicks(tempo, setTick, runTicks, comboLead),
     });
   });
   return routes;

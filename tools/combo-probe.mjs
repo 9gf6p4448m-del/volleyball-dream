@@ -37,6 +37,8 @@ const SETS = Number(process.argv[2] ?? 24);
 // 只會在「moveIntent 的目標就是自己現在的位置」時成立，也就是 sim 自己的
 // 「到位即停＝原地拔起」那一格（ai.js 助跑段與攻擊手起跳點分支用的是同一把尺）。
 const STILL_EPS = 0.005;
+// 「靜止＝起跳」只在起跳點附近才成立（見下方 runSets 內的位置閘註解）。
+const NEAR_TAKEOFF_M = 1.0;
 
 const q = (arr, p) => {
   if (!arr.length) return NaN;
@@ -112,6 +114,14 @@ function runSets() {
   const physSpiker = {};           // 同上，但只取**真的扣成那一人**＝口徑校準用
   const stagger = [];              // 前後腳：main 物理起跳 − partner 物理起跳
   const staggerPlanned = [];       // 對照：同兩人的**計畫** tick 差（藍圖 §〇.2 的兩個座標系）
+  // ---- ④ 段 B2：前後腳的代價面（口徑同 tools/tempo-probe.mjs ③）----
+  const mainStand = [];            // 交叉主攻者**擊球前連續靜止** tick＝罰站
+  const mainSetToHit = [];         // 交叉主攻者的 二傳實際觸球 → 擊球 tick（弧線常數）
+  const mainPhys = [];             // 交叉主攻者物理起跳（相對二傳觸球）
+  const partnerPhys = [];          // 配合者物理起跳（相對二傳觸球）
+  const leadAvail = [];            // 規劃點能給的提前量＝預估 setTick − 規劃 tick
+  const leadUsed = [];             // 實際生效的提前量＝預估 setTick − max(startTick, 規劃 tick)
+  const startGap = [];             // 起步生效那一刻，主攻者離助跑起點多遠（m）
 
   for (let seed = 11; seed < 11 + SETS; seed += 1) {
     const g = createGame({ seed, setTarget: 25 });
@@ -122,6 +132,7 @@ function runSets() {
     let waveSetTick = null;        // 本波二傳實際觸球的 tick
     let waveSpiker = null;         // 本波真的扣成的人（口徑校準用）
     const prevPos = {};
+    const stillRun = {};           // pid → 目前連續靜止了幾 tick（④ 罰站用，跨波累計）
     let stopTick = {};             // pid → 本波第一次「真的停下來」的絕對 tick
     // 一波結束才結算：一速的物理起跳發生在二傳觸球**之前**，當下還不知道要減去多少
     // ——當場相減會拿到上一波的 setTick（首版就是這樣量出 p50=141 的假值）。
@@ -138,6 +149,10 @@ function runSets() {
         && stopTick[curCombo.mainId] !== undefined
         && stopTick[curCombo.partnerId] !== undefined) {
         stagger.push(stopTick[curCombo.mainId] - stopTick[curCombo.partnerId]);
+        if (waveSetTick != null) {
+          mainPhys.push(stopTick[curCombo.mainId] - waveSetTick);
+          partnerPhys.push(stopTick[curCombo.partnerId] - waveSetTick);
+        }
         const rMain = curRoutes.find((x) => x.pid === curCombo.mainId);
         const rPart = curRoutes.find((x) => x.pid === curCombo.partnerId);
         if (rMain?.takeoffTick != null && rPart?.takeoffTick != null) {
@@ -183,6 +198,17 @@ function runSets() {
         if (curCombo) {
           comboPlans += 1;
           comboBy[curCombo.mainKind] = (comboBy[curCombo.mainKind] ?? 0) + 1;
+          // ④ 提前量：規劃點（＝本 tick）到預估二傳觸球之間有多少 tick 可用。
+          // startTick 早於規劃點的部分是**拿不到的**（route 是這一刻才存在的）
+          // ⇒ leadUsed 才是實際生效的偏移，leadAvail 是它的上界。
+          const stPlan = ai.approach.setTick;
+          const rMain = curRoutes.find((x) => x.pid === curCombo.mainId);
+          if (stPlan != null && rMain?.startTick != null) {
+            leadAvail.push(stPlan - g.tick);
+            leadUsed.push(stPlan - Math.max(rMain.startTick, g.tick));
+            const am = g.actors[curCombo.mainId];
+            if (am) startGap.push(Math.hypot(am.x - rMain.start.x, am.z - rMain.start.z));
+          }
         }
         prevApproach = ai.approach;
       }
@@ -204,10 +230,26 @@ function runSets() {
         // 少了這道濾網，三速攻擊手的「物理起跳」會被量成那段罰站的第一格
         // （首版實測 p50 掉到 +12，而逐波軌跡實際是 +81）。
         if (Math.hypot(a.x - rt.start.x, a.z - rt.start.z) <= TAKEOFF.SETTLE) continue;
+        // ★ 段 B2 修正：**還要真的站在自己那條線的起跳點附近** ★
+        // 段 B 的版本只要求「離開起點後第一次靜止」。那在段 B 成立，因為三速的人在
+        // 二傳觸球前一直站在助跑起點（被上一行濾掉）；但 tempoGap > 0 之後主攻者在
+        // 觸球前就已經在半路上，而**二傳觸球會讓全隊重新規劃、每個人各自吃一次
+        // reactionTicks（實測 ~10 tick）**——那 10 tick 的靜止會被記成「物理起跳」，
+        // 量到的前後腳因此塌成 ~7 tick 的假值（逐 tick 軌跡：主攻者在 set+0 站在
+        // 離起跳點 3.1m 的半路上，set+2 又跑起來，真正到位是 set+45）。
+        // 這道位置閘就是「量測位置」那一條（`02 §6.1` 條 5）：靜止只有發生在起跳點
+        // 附近時才是起跳。1.0m 的餘裕＝名目起跳點與 hitPoint 導出的實際起跳點之差
+        // （實測 0.44m），比半路上的距離（≥2m）小一個量級。
+        if (Math.hypot(a.x - rt.takeoff.x, a.z - rt.takeoff.z) > NEAR_TAKEOFF_M) continue;
         if (Math.hypot(a.x - p0.x, a.z - p0.z) < STILL_EPS) stopTick[pid] = g.tick;
       }
       for (const pid of Object.keys(g.actors)) {
         const a = g.actors[pid];
+        // ④ 連續靜止計數（罰站量法，口徑同 tools/tempo-probe.mjs ③：擊球那一刻
+        // 已經連續站著不動幾 tick）——與上面的「第一次靜止」是兩個不同的量。
+        const p0 = prevPos[pid];
+        const st = p0 ? Math.hypot(a.x - p0.x, a.z - p0.z) : 1;
+        stillRun[pid] = st < STILL_EPS ? (stillRun[pid] ?? 0) + 1 : 0;
         prevPos[pid] = { x: a.x, z: a.z };
       }
 
@@ -220,7 +262,11 @@ function runSets() {
           const k = ai.attackKind ?? 'n/a';
           kindCount[k] = (kindCount[k] ?? 0) + 1;
           waveSpiker = e.playerId;
-          if (curCombo && curCombo.mainId === e.playerId) comboSpikes += 1;
+          if (curCombo && curCombo.mainId === e.playerId) {
+            comboSpikes += 1;
+            mainStand.push(stillRun[e.playerId] ?? 0);
+            if (waveSetTick != null) mainSetToHit.push(g.tick - waveSetTick);
+          }
         }
         if (e.type === 'DEAD_BALL') flushWave();
       }
@@ -230,6 +276,7 @@ function runSets() {
   return {
     kindCount, attackerCount, checkTally, comboBy, planPoints, comboPlans,
     fidelityMismatch, comboSpikes, physByTempo, physSpiker, stagger, staggerPlanned,
+    mainStand, mainSetToHit, mainPhys, partnerPhys, leadAvail, leadUsed, startGap,
   };
 }
 
@@ -316,4 +363,28 @@ if (!r.stagger.length) {
       + '（兩個座標系不同值＝護欄 3 的存在理由）');
   }
 }
+// ── ④ 段 B2：前後腳的代價面 ──
+const CROSS_TEMPO_GAP = APPROACH_MOD.CROSS_TEMPO_GAP ?? null;
+console.log('\n══ ④ 前後腳的代價面（tempoGap 的取捨；罰站口徑同 tools/tempo-probe.mjs ③）══');
+console.log(`  CROSS_TEMPO_GAP = ${CROSS_TEMPO_GAP}（交叉主攻者比三速黃金錨點提早幾 tick 起步）`);
+const row = (label, arr, unit = 'tick') => {
+  if (!arr?.length) { console.log(`  ${label.padEnd(30)} n=0`); return; }
+  console.log(`  ${label.padEnd(30)} n=${String(arr.length).padStart(4)}`
+    + `  p10=${q(arr, 0.1)}  p50=${q(arr, 0.5)}  p90=${q(arr, 0.9)}  平均 ${mean(arr).toFixed(1)} ${unit}`);
+};
+row('主攻者物理起跳 − 二傳觸球', r.mainPhys);
+row('配合者物理起跳 − 二傳觸球', r.partnerPhys);
+row('主攻者 二傳觸球→擊球', r.mainSetToHit);
+row('★ 主攻者擊球前連續靜止（罰站）', r.mainStand);
+if (r.mainStand.length) {
+  const over = r.mainStand.filter((v) => v > 30).length;
+  console.log(`     站 > 0.5s（30 tick，07-23 硬線）佔比：${pct(over, r.mainStand.length)}`
+    + `　｜ 站 > 0.2s（12 tick＝AI.APPROACH_LEAD 的容許量）：`
+    + `${pct(r.mainStand.filter((v) => v > 12).length, r.mainStand.length)}`);
+}
+row('規劃點可用提前量（上界）', r.leadAvail);
+row('實際生效提前量', r.leadUsed);
+row('起步時離助跑起點', r.startGap, 'm');
+console.log(`  主攻者扣成率：${pct(r.comboSpikes, r.comboPlans)}（${r.comboSpikes}/${r.comboPlans}）`);
+
 console.log(`\n（BLOCK_REACH_X=${TUNING.BLOCK_REACH_X}）`);
