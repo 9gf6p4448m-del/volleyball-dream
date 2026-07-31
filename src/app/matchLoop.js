@@ -1052,7 +1052,9 @@ function updateDecisions(s, now) {
       stage.diegetic?.hide();
       panel.show(
         setPreviewTitle(setZones[0].tier, suggest?.label ?? null),
-        callOptionsFor(game, s.controlledId).map((o) => ({
+        // 同一把技術閘（07-31 裁定）：叫戰術沒受教＝連改判也沒得叫——退回段 E 之前的
+        // 「唯讀預覽」（空選項通道本來就是這條路，零額外分支）。快速比賽恆 true
+        (s.gates.canCallPlay ? callOptionsFor(game, s.controlledId) : []).map((o) => ({
           key: `call-${o.type}`,
           label: `${CALL_MODES.replan.icon}改判・${o.label}`,
           color: 'neutral',

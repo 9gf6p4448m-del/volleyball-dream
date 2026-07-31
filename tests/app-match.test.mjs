@@ -72,7 +72,8 @@ test('resolveMatchConfig：生涯建隊注入主角、gameOptions 齊備、point
 test('resolveTechGates：快速比賽全開；生涯新人全鎖、讀攔網檔位由 reaction 決定', () => {
   const quickGame = createGame({ seed: 5 });
   const open = resolveTechGates(quickGame, 'A2', false);
-  for (const k of ['canTip', 'canPipe', 'canJumpServe', 'canFloatServe', 'canFeint', 'canDive']) {
+  for (const k of ['canTip', 'canPipe', 'canJumpServe', 'canFloatServe', 'canFeint', 'canDive',
+    'canCallPlay']) {
     assert.equal(open[k], true, k);
   }
   assert.equal(open.readTier, 'instant');
@@ -83,7 +84,8 @@ test('resolveTechGates：快速比賽全開；生涯新人全鎖、讀攔網檔�
   });
   const careerGame = createGame(config.gameOptions);
   const locked = resolveTechGates(careerGame, 'A2', true);
-  for (const k of ['canTip', 'canPipe', 'canJumpServe', 'canFloatServe', 'canFeint', 'canDive']) {
+  for (const k of ['canTip', 'canPipe', 'canJumpServe', 'canFloatServe', 'canFeint', 'canDive',
+    'canCallPlay']) {
     assert.equal(locked[k], false, k); // 生涯新人技術全鎖（故事線傳授解鎖）
   }
   assert.equal(locked.readTier, 'slow'); // reaction 60 → 55-69 檔＝slow

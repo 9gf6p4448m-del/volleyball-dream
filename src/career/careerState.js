@@ -195,7 +195,7 @@ export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside
     // v:2＝技術欄位語意版本（normalizeCareerPlayer 的一次性遷移標記）
     techniques: {
       tip: 0, pipe: 0, feint: 0, feintUses: 0,
-      jumpServe: 0, floatServe: 0, dive: 0, v: 2,
+      jumpServe: 0, floatServe: 0, dive: 0, callPlay: 0, v: 2,
     },
   });
   // 單一事實源在 timeline（current＝末項快取）＋隱藏曲線 plan（逐屆揭曉）
@@ -354,7 +354,9 @@ export function normalizeCareerPlayer(player) {
     delete t.powerServe;
     t.v = 2;
   }
-  for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive']) t[k] = t[k] ?? 0;
+  // ④新技術缺欄＝未解鎖（callPlay 於 07-31 加入：段 E 叫戰術改走技術傳授；
+  // 舊存檔無此欄＝未受教＝鎖，與新生涯的顯式 0 同值，兩者行為一致）
+  for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive', 'callPlay']) t[k] = t[k] ?? 0;
   t.feintUses = t.feintUses ?? 0;
   return player;
 }

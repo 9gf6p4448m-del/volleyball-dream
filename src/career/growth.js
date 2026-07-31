@@ -37,6 +37,10 @@ export const TECH_DEFS = [
   { key: 'floatServe', name: '飄浮發球', desc: '不轉的球最難接——破壞對方一傳品質' },
   { key: 'feint', name: '假動作', desc: '按A滑B視線騙攔網；越用越純熟' },
   { key: 'jumpServe', name: '跳躍發球', desc: '最強的發球——力量換準度' },
+  // 組合攻擊卷 段 E（07-31 Sawmah 裁定）：叫戰術改由技術傳授解鎖，不硬綁屆數——
+  // 解鎖不是重點，**教學才是**（新玩家第一次看到「交叉」要有人告訴他那是什麼）。
+  // 閘門走 matchConfig.resolveTechGates 的 canCallPlay（同 pipe 先例）
+  { key: 'callPlay', name: '叫戰術', desc: '死球窗叫組合攻擊（右上 🙋）——交叉／夾塞／時間差' },
 ];
 
 // 從 sim 事件日誌統計玩家表現（歸因法與 pointBanner 同：得分前最後觸球者）

@@ -118,7 +118,10 @@ test('事件表：宣告式條件觸發、once 不重複、未知條件鍵安全
   assert.deepEqual(dueEvents(c, 'post').map((e) => e.id),
     ['first-win', 'hot-hand', 'teach-tip']); // 首勝＋手感＋北原傳授吊球
   c = recordEvent(recordEvent(recordEvent(c, 'first-win'), 'hot-hand'), 'teach-tip');
-  assert.equal(dueEvents(c, 'pre').length, 0); // 下一場是 group-2 白浪：無賽前事件
+  // 下一場是 group-2 白浪：賽前＝阿哲傳授「叫戰術」（07-31 段 E 裁定：改由教學解鎖）
+  assert.deepEqual(dueEvents(c, 'pre').map((e) => e.id), ['teach-call']);
+  c = recordEvent(c, 'teach-call');
+  assert.equal(dueEvents(c, 'pre').length, 0); // 入帳不重複
   c = recordResult(c, { matchId: 'group-2', won: false, scoreFor: 20, scoreAgainst: 25 });
   assert.deepEqual(dueEvents(c, 'post').map((e) => e.id),
     ['first-loss', 'teach-dive']); // 首敗＋白浪傳授魚躍（輸球也教）

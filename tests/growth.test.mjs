@@ -77,12 +77,15 @@ test('unlockTechnique：0→1、重複解鎖拒絕、假動作熟練度從 0 起
   const pf = unlockTechnique(p, 'feint');
   assert.equal(pf.techniques.feint, 1);
   assert.equal(pf.techniques.feintUses, 0);
-  assert.equal(TECH_DEFS.length, 6); // 吊球/魚躍/pipe/飄浮/假動作/跳發
+  assert.equal(TECH_DEFS.length, 7); // 吊球/魚躍/pipe/飄浮/假動作/跳發/叫戰術（07-31 段 E 裁定加入）
 });
 
 test('技術閘門起點：生涯新人全鎖、預設球員（快速比賽/AI）全開', () => {
   const rookie = createCareerPlayer('小夢');
-  for (const k of ['tip', 'pipe', 'feint', 'jumpServe', 'floatServe', 'dive']) {
+  // callPlay（叫戰術，07-31 段 E 裁定）同列鎖定；但**不入下方 createPlayer 預設全開的
+  // 檢查**——它是生涯層/UI 層的閘（sim 零改動），快速比賽的開放走 resolveTechGates 的
+  // careerActive===false 分支，不靠 sim Player 的預設值。閘門本身見 tests/call-unlock
+  for (const k of ['tip', 'pipe', 'feint', 'jumpServe', 'floatServe', 'dive', 'callPlay']) {
     assert.equal(rookie.techniques[k], 0, `${k} 應鎖定`);
   }
   assert.equal(rookie.techniques.feintUses, 0);

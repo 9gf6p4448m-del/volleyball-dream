@@ -63,6 +63,24 @@ export const EVENT_DEFS = [
       { speaker: '北原工商・杜品澄', text: '看好，手腕放軟、指尖推球。這叫吊球。拿去用吧。' },
     ],
   },
+  // 組合攻擊卷 段 E（07-31 Sawmah 裁定）：叫戰術＝**教出來的**，不是屆數解鎖的。
+  // 位置＝第二場賽前（第一場打完＝玩家已會「球來了就打」，此刻才聽得懂「你可以自己點」）。
+  // 教的人＝阿哲（二傳）——他是手勢的收訊端，這條知識只有他有立場教；
+  // 大山補一句「交叉＝我當幌子」＝把 MB 誘餌的角色從隊友嘴裡講出來（同 teach-dive 的傳承節拍）。
+  // moment 'pre'＝進場前教完、當場就用得到；且 pre 傳授不進 upcomingTeach 預告
+  // （既有規則），不會與同場賽後的 teach-dive 預告打架。
+  {
+    id: 'teach-call',
+    moment: 'pre',
+    when: { matchId: 'group-2' },
+    effect: { unlock: 'callPlay' },
+    lines: [
+      { speaker: '阿哲', text: '第一場我說「舉給你的球放心打」——那是對新人講的。從今天起，你可以自己點。' },
+      { speaker: '阿哲', text: '死球的空檔看我一眼，比個手勢：交叉、夾塞、時間差。這一球大家跑什麼，先講好。' },
+      { speaker: '大山', text: '交叉就是我先跳，把攔網拐走，你從我背後穿出來。……別客氣，把我當幌子用。' },
+      { speaker: '阿哲', text: '但先說清楚——你不是二傳，叫的是「請求」。球權我分，理不理你看你這球值不值得。' },
+    ],
+  },
   {
     id: 'teach-dive',
     moment: 'post',
@@ -229,6 +247,7 @@ export function upcomingTeach(career, matchId) {
 export const ONCE_EVENT_IDS = new Set([
   'debut', 'first-win', 'first-loss', 'nationals',
   'teach-tip', 'teach-dive', 'teach-pipe', 'teach-float', 'teach-feint', 'teach-jump',
+  'teach-call',
   'mb-warn', 'rematch-won', 'rematch-lost',
 ]);
 export function isOnceEvent(id) {

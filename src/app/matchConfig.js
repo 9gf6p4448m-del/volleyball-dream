@@ -164,6 +164,10 @@ export function resolveTechGates(game, playerId, careerActive, hintsOff = false)
     canFloatServe: !tech || (tech.floatServe ?? 0) >= 1,
     canFeint: !tech || (tech.feint ?? 0) >= 1,
     canDive: !tech || (tech.dive ?? 0) >= 1,
+    // 段 E 叫戰術（07-31 Sawmah 裁定：改由技術傳授解鎖）：與上列同一把尺——
+    // 快速比賽 tech===null＝恆開（與 trust／暫停／換人同款不綁生涯）；
+    // 生涯未受教＝false ⇒ matchStage 不建 🙋 鈕、matchLoop 遠段不列改判選項
+    canCallPlay: !tech || (tech.callPlay ?? 0) >= 1,
     // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
     readTier: hintsOff ? 'none' : (careerActive ? blockReadTier(game.players[playerId]) : 'instant'),
   };

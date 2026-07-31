@@ -81,9 +81,15 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     ? createSubPanel({ game, playerId, handlers, floatText })
     : null;
   // 組合攻擊卷 段 E 路徑甲：死球窗「叫套路」面板（⚙ 換人鈕下一格）。
-  // 生涯／快速比賽皆建——叫套路與 trust 一樣不綁生涯（快速比賽也有二傳與信任值）；
+  // 快速比賽恆建——叫套路與 trust 一樣不綁生涯（快速比賽也有二傳與信任值）；
+  // 生涯則走技術閘（07-31 Sawmah 裁定：由「技術傳授」事件解鎖，不硬綁屆數）——
+  // **未受教＝不建鈕**，照 canTip/canFloatServe 的既有先例（未解鎖的選項一律不出現；
+  // 反灰在本鈕已被「非死球窗」佔用，兩種語意共用一個外觀會分不清）。
+  // gates.canCallPlay 在快速比賽恆 true（resolveTechGates 的 tech===null 分支）。
   // callPlay 由 loop 注入，同 subPanel 的 handlers 後綁定慣例
-  const callPanel = createCallPanel({ game, playerId, handlers });
+  const callPanel = gates.canCallPlay
+    ? createCallPanel({ game, playerId, handlers })
+    : null;
   // W7 B3：我方暫停鈕（⚙ 換人鈕同排；生涯／快速比賽皆可喊——timeouts 與 subs 一樣不綁生涯）
   const timeoutBtn = createTimeoutButton({ handlers, playerId });
   // W7 C2③④：板凳期間才有意義（無板凳＝快速比賽自然零出現）——同 subPanel 生涯閘
