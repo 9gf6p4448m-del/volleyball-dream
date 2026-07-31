@@ -1003,7 +1003,14 @@ function decideOne(game, aiState, playerId) {
       }
     } else {
       // 【判／關】§3 階段三：關牆——站距由幾何長出來（見 blockWallSlots 的檔頭說明）
-      const slot = blockWallSlots(game, team, anchorX)?.[playerId];
+      // step2c：把**已鎖存的回落決定**餵給佈局，讓「牆上有誰」與「誰佔哪一格」同一個集合
+      // ——不餵的話，退場者漂到補吊球點（中路）會把自己插進兩名留牆者中間的那一格，
+      // 牆就開一個 0.55m 的洞（見該函式檔頭 step2c 段）。
+      // 直接讀 `byPid`：`blockPlanFor` 會為不存在的 pid 建格並改寫 `latest`，查詢不得有副作用。
+      const wallPlan = aiState.blockPlan && aiState.blockPlan.team === team
+        ? aiState.blockPlan : null;
+      const slot = blockWallSlots(game, team, anchorX,
+        wallPlan ? (pid) => wallPlan.byPid[pid]?.cover : null)?.[playerId];
       if (!slot) return moveIntent(game, playerId, tick, actor, dutyPosition(game, team, playerId));
       // ★ 攔網分工卷 step2a（Sawmah 2026-07-31 裁定題 2）：單一攻擊點**最多 2 人上牆** ★
       // 留牆的是離 anchorX 最近的兩人（tier 0 主攔／1 輔攔），最遠的那人（tier 2）
@@ -1735,6 +1742,33 @@ function blockCoverSpot(team, anchorX) {
 // 回傳 { [playerId]: { x, tier } }；tier ＝ **離 anchorX 的距離排名**
 // （0＝最近＝主攔、1＝次近＝輔攔、2＝最遠＝第三人）。無人參戰回 null。
 //
+// ★ 攔網分工卷 step2c：牆中間那個 0.55m 的洞 ★
+// step2a 引入的缺陷，收卷核對時抓到：**槽位與 tier 吃的是兩套不同的排序**——
+// 槽位照「陣列索引」（x 由小到大）算，tier 照「離 anchorX 的距離」算。
+// 舊註解寫「拿掉最遠那一格後，剩下兩格仍相鄰、不留內縫」，**那句話是錯的**：
+// 退場者鎖存 cover 之後會往補吊球點（x ＝ anchorX×0.4）移動，攻擊點在中路時
+// 那個點就在兩名留牆者中間 ⇒ ①他的陣列索引變成中間那格 ②他離 anchorX 反而最近、
+// 排名升回 0 ⇒ 留下的兩人各自站 index 0 與 2、中間空一格。
+// 實測（tools/triple-block-probe.mjs 40 局，曜石＝commit）：在窗兩人 x 全距 p50 **1.10m**
+// ＝相隔一格；三支 read 臂 0.55m（read 判得晚，退場者還沒漂到中間，故只有 commit 顯形）。
+// 診斷佐證：兩人在窗且全距 >0.8m 的 95 例中，**77 例**的第三人 x 卡在兩人之間，
+// 樣本形如 `在窗x=[-0.55, +0.55]、第三人 B5@0.00(cover)`。
+//
+// 修法＝**讓排名與佔格吃同一個集合**：先照原判準（全員的距離排名）決定誰退，
+// 退場者從**排名與佔格一起**拿掉，剩下的人重新連號佔格。於是「牆上的人」與
+// 「參與佈局的人」永遠是同一批，兩套排序不可能再岔開。
+// 判準本身一格未動（仍是「離 anchorX 最遠者退」），動的只是「退了之後怎麼排」。
+//
+// ★ 為什麼不會引入新的不一致 ★
+// ① 「誰退」用鎖存三態（true／false／未鎖存）判：已鎖存者照鎖存值，未鎖存者才用本 tick
+//    的距離排名——這正是呼叫端 `cp.cover` 的鎖存語意，兩邊同一套判準、不會各說各話。
+// ② 因為「未鎖存」那一格用的是**與呼叫端相同的 live 排名**，同一 tick 內先算的人與
+//    後算的人得到的 off 集合逐值相同（鎖存前後給出同一個答案）⇒ **與球員求值順序無關**，
+//    純函式的性質沒有被鎖存狀態破壞。
+// ③ 讀鎖存值時直接取 `plan.byPid[pid]?.cover`，**不走 blockPlanFor**——那個函式會為
+//    不存在的 pid 建格並改寫 `plan.latest`，在此處呼叫等於讓查詢產生副作用。
+// ④ 保序不變：留牆者仍照 x 由小到大連號佔格 ⇒ 永不交叉。
+//
 // ★ 攔網分工卷 step2a：tier 換了定義，因為原式是一個**恆假的判斷式** ★
 // 舊式 `tier = Math.abs(i - main)` 算的是「**排序後的位置相鄰度**」而不是「離攻擊點多遠」。
 // 前排三人時 main 只可能是 0/1/2，而 main=1（主攔剛好站中間）⇒ 三人的 tier 是 **1/0/1，
@@ -1743,7 +1777,7 @@ function blockCoverSpot(team, anchorX) {
 // 71.7%＝沒動。這與剛修掉的二速 `takeoffLead` 是同一型的病：判斷式在半數合法輸入下恆偽。
 // 改成距離排名後，前排三人都參戰時 tier 2 恆存在，分工規則才真的掛得上去。
 // 排名的同分裁決（pid 較小者在前）與下方主攔挑選一致 ⇒ 距離最近者的排名恆為 0＝main。
-function blockWallSlots(game, team, anchorX) {
+function blockWallSlots(game, team, anchorX, coverLatch = null) {
   const rot = game.match.rotations[team];
   const front = rot
     .filter((pid) => isFrontRow(rot, pid) && !blockFarWing(game, team, pid, anchorX))
@@ -1751,24 +1785,51 @@ function blockWallSlots(game, team, anchorX) {
     // 排序鍵帶 pid：同 x 時仍是唯一順序（決定論，不靠陣列原順序）
     .sort((a, b) => (a.x - b.x) || (a.pid < b.pid ? -1 : 1));
   if (!front.length) return null;
-  let main = 0;
-  for (let i = 1; i < front.length; i += 1) {
-    const d = Math.abs(front[i].x - anchorX);
-    const best = Math.abs(front[main].x - anchorX);
-    if (d < best || (d === best && front[i].pid < front[main].pid)) main = i;
-  }
-  const xs = front.map((_, i) => anchorX + (i - main) * BLOCK_SHOULDER_M);
-  // 整面牆平移回場內（牆寬遠小於場寬，兩端不可能同時超出）
-  const lim = COURT.WIDTH / 2 - 0.4;
-  const shift = Math.min(0, lim - Math.max(...xs)) + Math.max(0, -lim - Math.min(...xs));
-  // 牆位 xs 仍照「排序後的位置」算 ⇒ 拿掉最遠那一格後，剩下兩格仍相鄰、不留內縫
-  const rank = new Array(front.length);
-  front.map((_, i) => i)
-    .sort((a, b) => (Math.abs(front[a].x - anchorX) - Math.abs(front[b].x - anchorX))
-      || (front[a].pid < front[b].pid ? -1 : 1))
-    .forEach((i, r) => { rank[i] = r; });
+  // 一組人（已照 x 排序）→ 連號佔格＋距離排名。兩者吃**同一個 rows**，這就是不留內縫的保證。
+  const layout = (rows) => {
+    let main = 0;
+    for (let i = 1; i < rows.length; i += 1) {
+      const d = Math.abs(rows[i].x - anchorX);
+      const best = Math.abs(rows[main].x - anchorX);
+      if (d < best || (d === best && rows[i].pid < rows[main].pid)) main = i;
+    }
+    const xs = rows.map((_, i) => anchorX + (i - main) * BLOCK_SHOULDER_M);
+    // 整面牆平移回場內（牆寬遠小於場寬，兩端不可能同時超出）
+    const lim = COURT.WIDTH / 2 - 0.4;
+    const shift = Math.min(0, lim - Math.max(...xs)) + Math.max(0, -lim - Math.min(...xs));
+    const rank = new Array(rows.length);
+    rows.map((_, i) => i)
+      .sort((a, b) => (Math.abs(rows[a].x - anchorX) - Math.abs(rows[b].x - anchorX))
+        || (rows[a].pid < rows[b].pid ? -1 : 1))
+      .forEach((i, r) => { rank[i] = r; });
+    return { xs: xs.map((x) => x + shift), rank };
+  };
+  // 第一遍：全員在場的距離排名＝step2a 的分工判準（誰最遠誰退），一格未動
+  const all = layout(front);
+  // 誰不在牆上：已鎖存回落者照鎖存值；還沒鎖存的才用本 tick 的排名（＝呼叫端同一套判準）
+  const off = new Set(front
+    .filter((f, i) => {
+      const c = coverLatch ? coverLatch(f.pid) : undefined;
+      return c === undefined ? all.rank[i] >= 2 : c === true;
+    })
+    .map((f) => f.pid));
+  const wall = front.filter((f) => !off.has(f.pid));
+  // 全員都退（結構上不會發生：至多一人 tier>=2）時退回全員佈局，不讓牆憑空消失
+  const base = wall.length ? wall : front;
+  const { xs, rank } = base === front ? all : layout(base);
   const slots = {};
-  front.forEach((f, i) => { slots[f.pid] = { x: xs[i] + shift, tier: rank[i] }; });
+  base.forEach((f, i) => { slots[f.pid] = { x: xs[i], tier: rank[i] }; });
+  // 退場者不佔牆格。仍回一格（tier >= 2 讓呼叫端走回落分支）；x 是「牆再延一格」的
+  // 形式值——呼叫端拿到 tier>=2 必定回落補吊球，這個座標不會被用到。
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  for (const f of front) {
+    if (slots[f.pid]) continue;
+    slots[f.pid] = {
+      x: clampCourtX(f.x < lo ? lo - BLOCK_SHOULDER_M : hi + BLOCK_SHOULDER_M),
+      tier: Math.max(2, base.length),
+    };
+  }
   return slots;
 }
 
