@@ -1,4 +1,4 @@
-// 組合攻擊卷 段 E 路徑甲（2026-07-31）— 死球窗「叫套路」面板
+﻿// 組合攻擊卷 段 E 路徑甲（2026-07-31）— 死球窗「叫戰術」面板
 //
 // 真實對應＝二傳在背後比的手勢：發球前把這一球要跑的套路講好。
 // **不觸憲法 §九**（`docs/phase5-decisions-RESOLVED.md:253`「球內新增任何決策面板」）
@@ -89,7 +89,7 @@ export function createCallPanel({ game, playerId, handlers }) {
     css(head, ['display:flex', 'justify-content:space-between', 'align-items:center']);
     const title = document.createElement('div');
     css(title, ['font-size:16px', 'font-weight:800', 'letter-spacing:1px', `color:${spec.color}`]);
-    title.textContent = `${spec.icon} 叫套路（${spec.word}）`;
+    title.textContent = `${spec.icon} 叫戰術（${spec.word}）`;
     const done = document.createElement('button');
     css(done, ['height:38px', 'padding:0 16px', 'border-radius:19px', 'border:none',
       'background:#ffd166', 'color:#1a1405', 'font-size:14px', 'font-weight:700',
@@ -146,7 +146,7 @@ export function createCallPanel({ game, playerId, handlers }) {
       btn.style.opacity = usable ? '1' : '0.45';
       btn.textContent = pending
         ? `${spec.icon} ${spec.word}已下`
-        : `${spec.icon} 叫套路`;
+        : `${spec.icon} 叫戰術`;
       if (g.phase === 'set_over') {
         btn.style.display = 'none';
         if (open) api.close();

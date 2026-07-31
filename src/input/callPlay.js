@@ -28,7 +28,7 @@ export const CALL_DESCS = {
 export const CALL_MODES = {
   command: { icon: '⚡', word: '指令', color: '#ffd166', hint: '你是二傳——說了算' },
   request: { icon: '🙋', word: '請求', color: '#6ee7ff', hint: '你只能為自己叫——二傳理不理看信任' },
-  replan:  { icon: '🔄', word: '改判', color: '#ffd166', hint: '一傳歪了——臨場換套路' },
+  replan:  { icon: '🔄', word: '改判', color: '#ffd166', hint: '一傳歪了——臨場換戰術' },
 };
 
 // 開面板的人是不是二傳＝指令；其餘一律請求（甲之三，玩家只能代表自己）
