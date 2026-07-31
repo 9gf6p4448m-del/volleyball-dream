@@ -123,6 +123,9 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     ...(careerSetup ? {
       teams: careerSetup.teams,
       aiProfiles: careerSetup.aiProfiles,
+      // 組合攻擊屆數閘（2026-08-01）：值由 career 層算好（第 1 屆 0／第 2 屆起 1），
+      // 這裡只負責遞。快速比賽走 else 分支＝不傳＝出廠全開（同 trust／暫停／換人）
+      comboScale: careerSetup.comboScale ?? 1,
       benches: careerSetup.benches, // W6 賽中換人：生涯板凳（快速比賽無）
       ...(careerSetup.scoutRead ? { scoutRead: careerSetup.scoutRead } : {}),
       // W7 D2 舊隊情結：對戰原隊的隊友開場 trustDyn +8（場末即散）
@@ -140,6 +143,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
       seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos,
       teachFeature, careerSetup.benches, // W6：帶子與正賽同陣容鏡像（含板凳）
       stamina, true, // W7：帶子鏡像鐵律——體力/氣勢設定同正賽
+      careerSetup.comboScale ?? 1, // 2026-08-01：組合屆數閘同正賽（第 1 屆帶子也沒組合）
     )
     : [];
 

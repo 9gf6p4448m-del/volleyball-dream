@@ -707,6 +707,12 @@ export function evaluateCombination(points, mainId, opts = {}) {
     // 玩家已經明確要跑了）。前面每一條結構條件一格不動——湊不出來還是湊不出來
     // （裁定 E 的回饋就是從那些 checks 取出來的）。預設 false ⇒ AI 路徑逐值不變。
     force = false,
+    // ---- 組合觸發機率的**外部倍率**（2026-08-01；呼叫端注入）----
+    // sim **不認識屆數／賽季／生涯**——它只認一個數字：三型出廠機率要乘多少。
+    // 0＝這場沒有組合攻擊、1＝出廠值（預設，快速比賽與所有既有呼叫端逐值不變）。
+    // 誰把它設成 0 由呼叫端決定（現況＝career 層的 careerMatchSetup 依屆數給值），
+    // 與 passTier／aiProfiles／blockPersona 同一條注入範式：值從外面餵、語意留在外面。
+    comboScale = 1,
   } = opts;
   // 型別專屬條件先佔位（順序＝探針列印順序，也是「前一條沒過就走不到下一條」的順序）
   const checks = { hasMain: false, mainKind: false, tier: false, partner: false };
@@ -758,8 +764,12 @@ export function evaluateCombination(points, mainId, opts = {}) {
   // 觸發機率排在最後：前面每一條都是「這球有沒有資格組合」的結構條件，
   // 骰子只決定「有資格的這球要不要真的跑」。順序反過來會讓 checks 的通過率
   // 全部被骰子稀釋成 p×(結構通過率)＝看不出是哪一條在擋。
+  // comboScale＝呼叫端注入的機率倍率（預設 1＝出廠值；×1 在 IEEE754 下逐值相同
+  // ⇒ 沒注入的呼叫端一格不變）。乘在**機率**上而不是另立一道 if：關閉就是
+  // 「這一型的骰子永遠不會過」，不是多一條旁路——checks 的其餘每一條照樣算得出來，
+  // 探針仍看得到「結構上湊不湊得起來」（關閉期間的診斷不會整片變成空白）。
   checks.roll = force
-    || hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type];
+    || hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type] * (comboScale ?? 1);
   if (!checks.roll) return { combo: null, checks };
   return {
     combo: {

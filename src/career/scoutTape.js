@@ -55,7 +55,7 @@ function biasProfiles(aiProfiles, feature) {
 // substitution 測試把關，帶內容不受影響）
 export function buildScoutTape(
   seed, teams, aiProfiles, liberos = null, feature = null, benches = null,
-  stamina = null, momentum = false,
+  stamina = null, momentum = false, comboScale = 1,
 ) {
   const g = createGame({
     seed: (seed + TAPE_SEED_OFFSET) % 1000000007,
@@ -67,6 +67,9 @@ export function buildScoutTape(
     // W7 帶子鏡像鐵律：正賽開體力/氣勢＝帶子同開（快照含其 state，重播重模擬一致）
     ...(stamina ? { stamina } : {}),
     ...(momentum ? { momentum } : {}),
+    // 帶子鏡像鐵律（2026-08-01 延伸到組合攻擊）：第 1 屆正賽沒有組合，帶子裡也不能有
+    // ——否則賽前預演給玩家看的是他這場遇不到的東西。1＝出廠值＝既有呼叫端零擾動
+    comboScale,
   });
   const ai = createAiState();
   const clips = [];

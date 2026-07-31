@@ -598,6 +598,15 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
       B: { ...def.ai },
     },
     ...(scoutRead ? { scoutRead } : {}),
+    // ---- 組合攻擊的屆數閘（2026-08-01 Sawmah 裁定）----
+    // 第 1 屆＝學基本功（純個人能力的比賽）⇒ 交叉／夾塞／時間差三型全關；
+    // 第 2 屆起整個比賽升級 ⇒ 恢復出廠值。**雙方都適用**——它是場級參數（createGame
+    // 一個場一個值），不分敵我，玩家隊與對手同步開關，不存在「只關玩家」的形狀。
+    // ★ 屆數的認知**到這一行為止** ★ 往下遞給 sim 的只有 0 或 1 這個數字
+    // （`createGame({ comboScale })`），sim 不知道有「屆」這個東西——同 passTier／
+    // aiProfiles／blockPersona 的注入範式。第 2 屆的解鎖載體（訓練營／集訓）之後接在
+    // 這一行的條件上，不必再動 sim。
+    comboScale: seasonIndex >= 2 ? 1 : 0,
     // stage 6 自由人：雙方都有（我方固定隊友、對方吃參數檔強度）
     liberos: {
       A: liberoA,

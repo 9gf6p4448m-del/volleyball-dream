@@ -160,9 +160,14 @@ export const TUNING = {
 // trustDynInit（W7 D2）：{ playerId: 偏移 } 場內動態信任開場值（舊隊情結 +8；場末即散）
 // series（W4 Q8 分級賽制）：{ bestOf: 3|5 }＝多局系列（關鍵戰 bo3／冠軍戰 bo5、
 // 決勝局 15 分＋8 分換邊照 FIVB）；未傳或 bestOf 1＝現行單局、state.series null 零擾動
+// comboScale（2026-08-01）：組合攻擊（交叉／夾塞／時間差）三型觸發機率的**外部倍率**。
+// 未傳＝null＝出廠值（approach.js 的 COMBO_RATE 原值）＝快速比賽與所有既有呼叫端零擾動；
+// 傳 0＝這場沒有組合攻擊（雙方同步——它是場級參數，不分敵我）。
+// ★ sim 只認這個數字，不認識「屆數／賽季／生涯」★ 值由呼叫端算好（現況＝career 層
+// careerMatchSetup 依屆數給），與 aiProfiles／scoutRead／liberos 同一條注入範式。
 export function createGame({
   seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina, momentum,
-  trustDynInit, series,
+  trustDynInit, series, comboScale,
 } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
@@ -186,6 +191,8 @@ export function createGame({
     tick: 0,
     seed, // 原始種子（AI 決策 hash 的混合項——跨場次變化、同種子可重現）
     aiProfiles: aiProfiles ?? null,
+    // 組合攻擊觸發倍率（null＝未注入＝出廠值 1；讀取端 ai.js 一律 `?? 1`）
+    comboScale: comboScale ?? null,
     scoutRead: scoutRead ?? null, // 情蒐讀取（對手讀我的慣用線；生涯注入）
     liberos: liberos
       ? Object.fromEntries(Object.entries(liberos)

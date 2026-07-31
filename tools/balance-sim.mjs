@@ -137,6 +137,10 @@ function playMatch(setup, entry = null) {
     liberos: setup.liberos,
     ...(bestOf > 1 ? { series: { bestOf } } : {}),
     ...(setup.scoutRead ? { scoutRead: setup.scoutRead } : {}),
+    // 組合攻擊屆數閘（2026-08-01）：鏡像生涯現值——治具的職責是量「玩家實際會遇到的
+    // 那個難度」，第 1 屆正賽沒有組合，治具也不能有（同 stamina／benches 的鏡像慣例）。
+    // 值由 careerMatchSetup 依 `season` 算好，本檔只遞。
+    comboScale: setup.comboScale ?? 1,
     // VD_B_COSTMUL＝對手耗速掃描旋鈕（P1 驗證 07-30 用它掃出 0.6 下豁免從未咬合
     // ⇒ 改 1.0 對稱）；未給＝鏡像生涯現值 1.0（matchConfig.js 同步）
     ...(USE_STAMINA

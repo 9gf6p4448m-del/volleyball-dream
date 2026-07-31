@@ -397,11 +397,16 @@ function ensureFlightPlan(game, aiState) {
     // 這是裁定 A 乙的驗收條件本身（tests/combo-play.test.mjs 有靜態順序斷言）。
     // 段 E：玩家叫的套路已經由同一支 `evaluateCombination` 解析完（只是跳過觸發骰），
     // 直接用它的產出＝面板承諾的與實際跑的是同一個物件，不重算第二份。
+    // comboScale（2026-08-01）：組合三型的觸發機率倍率，由呼叫端經 createGame 注入
+    // （未注入＝1＝出廠值）。只掛在**自動觸發**這條路徑上：玩家叫的套路走 force，
+    // 本來就跳過觸發骰（見 evaluateCombination 的 force 註解）。
+    // ★ 這裡讀的是一個數字，不是「第幾屆」★ sim 不知道生涯／賽季存在。
     const combo = call.combo ?? planCombination(points, aiState.attackerId, {
       team,
       flightId: game.rally.flightId,
       seed: game.seed ?? 0,
       passTier: tier,
+      comboScale: game.comboScale ?? 1,
     });
     aiState.attackCombo = combo;
     // 只改涉及的兩人；沒有組合時 comboPoints === points（同一個陣列參照）
