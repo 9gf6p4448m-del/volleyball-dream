@@ -400,8 +400,10 @@ test('B1 回歸閘：read 對快攻的預測擊球 tick 仍偏晚（款 3 的載
     while (game.phase !== 'set_over' && guard < 400000) {
       guard += 1;
       const intents = aiCollectIntents(game, ai, []);
-      const plan = ai.blockPlan;
-      if (cur && plan && plan.team === 'B' && plan.jumpAt != null
+      // 攔網分工卷 step1（07-31）：計畫拆成 per-blocker 後，「建計畫那一刻鎖存的值」
+      // 住在團隊級的 `template`（建計畫仍是單一事件）——量的是同一個數字，逐值不變
+      const plan = ai.blockPlan?.team === 'B' ? ai.blockPlan.template : null;
+      if (cur && plan && plan.jumpAt != null
         && plan.enterTick === game.tick) cur.jumpAt = plan.jumpAt;
       for (const e of stepGame(game, intents)) {
         if (e.type === 'TOUCH' && e.kind === 'set' && e.team === 'A' && e.touches === 2) {

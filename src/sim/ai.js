@@ -196,8 +196,13 @@ export function createAiState() {
     // 由 aiCollectIntents 逐 tick 從 excludeIds 重算（零面板、零玩家指令），
     // block 可為 null＝模稜兩可的中性讀（同時是遲滯的記憶槽）
     blockRead: null,
-    // §十-2 攔網三段狀態機的鎖定槽（{ team, x, enterTick, jumpTick, replantUntil, pendingX }）
-    // ——**兩種人格共用**（read／commit 只差何時允許做決定）。與本波攻擊同壽命
+    // §十-2 攔網三段狀態機的鎖定槽。**每名攔網手一份**（攔網分工卷 step1，2026-07-31）：
+    //   { team, template, byPid: { [playerId]: { x, enterTick, jumpTick, jumpAt,
+    //     replantUntil, pendingX, blind, seen, hand, wallBail } }, latest, chase }
+    //   `team`＋`template`＝團隊級（建計畫是單一事件，見 blockPlanTargetX 的建計畫段）；
+    //   `latest`＝最近步進的那一份（外部觀測用的「共用物件」視角，見 blockPlanFor）；
+    //   `chase`＝已知結構債，仍是單值（見該處 TODO）。
+    // ——**兩種人格共用同一條路**（read／commit 只差何時允許做決定）。與本波攻擊同壽命
     //（來球／新的一擊完成都清空），純由可觀察量重算＝VCR v2 重演時跟其餘 AI 狀態
     // 一起被逐 tick 重建，不需要進錄影白名單
     blockPlan: null,
@@ -964,7 +969,7 @@ function decideOne(game, aiState, playerId) {
     // 而球最後會飛到攻擊手手上，等於用未來的答案本身當導航。
     //   planX == null ＝【讀】還沒被允許做決定 → 錨在場地中軸（陣型基準位）
     //   planX != null ＝【判／關】已選定攻擊手 → 錨在他身上
-    const planX = blockPlanTargetX(game, aiState, team, player, actor, tick);
+    const planX = blockPlanTargetX(game, aiState, team, playerId, player, actor, tick);
     const anchorX = planX ?? 0;
     // ==== B1-SCAN-END ====
     if (scheme === 'off') {
@@ -1008,12 +1013,13 @@ function decideOne(game, aiState, playerId) {
         // ★ 算一次就鎖存 ★ 沿用主攔 close 預算既有的 `c.chase === undefined` 快取模式。
         // 逐 tick 重算會出事：`hit.ticks` 隨球下墜遞減 ⇒ ticksLeft 越來越小 ⇒
         // **已經站好的人會在最後一刻突然棄牆撤退**。決定要在「判」的時候下，不是一路反覆。
-        const c = aiState.blockPlan;
-        if (c && c.wallBail === undefined) c.wallBail = {};
-        if (c && c.wallBail[playerId] === undefined) {
+        // 攔網分工卷 step1：`wallBail` 本來就是 playerId 字典（每人各自一格），
+        // 拆分後它就住在自己那一份計畫裡＝同一個值、少一層索引
+        const c = aiState.blockPlan ? blockPlanFor(aiState.blockPlan, playerId) : null;
+        if (c && c.wallBail === undefined) {
           const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
           const stepM = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
-          c.wallBail[playerId] = !blockCloseBudget({
+          c.wallBail = !blockCloseBudget({
             fromX: actor.x,
             toX: nx,
             stepM,
@@ -1022,7 +1028,7 @@ function decideOne(game, aiState, playerId) {
           }).canClose;
         }
         // 趕不到＝不加入牆，退到攻擊線一帶補吊球；橫向不再追牆（追不到還亂跑最糟）
-        if (c?.wallBail[playerId]) {
+        if (c?.wallBail) {
           return moveIntent(game, playerId, tick, actor, {
             x: clampCourtX(actor.x), z: TEAM_SIDE[team] * 2.6,
           });
@@ -1049,13 +1055,14 @@ function decideOne(game, aiState, playerId) {
     // 只留 landingTeam 也是同一個時點（球過網那一刻兩者一起翻），拆一個等於沒拆。
     // 「不會亂跳」由狀態機保證：blockPlan 只在對方持球時才建得起來（見 blockPlanTargetX
     // 開頭的 `atkTeam === team` 早退），所以自家進攻時窗恆不開。
-    const action = blockPlanAirborne(aiState, team, tick) ? 'block' : null;
+    const action = blockPlanAirborne(aiState, team, tick, playerId) ? 'block' : null;
     const it = moveIntent(game, playerId, tick, actor, netSpot);
     if (action) {
       it.action = 'block';
       // §十-4b：手態隨 intent 帶進 sim（game.js 窗開時定格到 actor.blockHand）
-      const c = aiState.blockPlan;
-      it.hand = (c && c.team === team ? c.hand : null) ?? 'vertical';
+      const plan = aiState.blockPlan;
+      const c = plan && plan.team === team ? plan.byPid[playerId] : null;
+      it.hand = (c ? c.hand : null) ?? 'vertical';
     }
     return it;
   }
@@ -1195,6 +1202,49 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
   return x == null ? null : { x, contactTicks: null };
 }
 
+// 攔網分工卷 step1（2026-07-31）：計畫的容器。
+//   `team`／`template`＝團隊級——**建計畫仍是單一事件**：第一個解鎖的人建，其餘人共讀。
+//     （read 的解鎖吃自己的 reactionTicks ⇒「誰先解鎖」本來就決定了整份計畫的內容與時點，
+//       拆成各建各的會連建計畫的時機與輸入都變 ⇒ 本步不動這一層。）
+//   `byPid`＝每名攔網手一份（本步要拆出來的那一層）。
+function newBlockPlan(team, template) {
+  // `chase`（落地後的 close 預算）**刻意仍是單值**——它吃 `player`／`actor.x`，拆成
+  // per-blocker 就會各算各的（現行是第一個算出來的人寫進去、其餘人共讀那個布林），
+  // 與本步「行為中性」衝突。
+  // TODO(攔網分工卷 step2)：已知結構債，隨分工規則那一個 commit 的行為改動一起處理。
+  return { team, template, byPid: {}, chase: undefined };
+}
+
+// 這名攔網手自己的那一份。
+//
+// ★ 為什麼還要逐 tick 從 `latest` 同步——本步的行為中性就靠這一段 ★
+// 拆分前是一個共用物件：**誰步進它就往前走一格，當下沒步進的人回來時直接看到已推進的
+// 結果**。而攔網手並不是每個 tick 都走得到這條分支（去接球、去補位的 tick 就沒步進）
+// ——實測單局 601 次。真的讓每個人各跟各的，那些人回來時狀態會落後 ⇒ `seen`／`jumpTick`
+// 就對不上（實測 obsidian:15839 有一名攔網手因此整波沒起跳、sim-hash 逐值不同）。
+// 那是**行為改動**，屬第 2 步的範圍，本步不得夾帶。
+// TODO(攔網分工卷 step2)：拿掉這個同步，每名攔網手才真的各跟各的
+//   （＝「個別騙得到某一名攔網手」在結構上可表達）；那一刻的 Δ 全部歸因於第 2 步。
+const BLOCK_PLAN_CARRY = [
+  'x', 'enterTick', 'jumpTick', 'jumpAt', 'replantUntil', 'pendingX', 'blind', 'seen', 'hand',
+];
+
+function blockPlanFor(plan, playerId) {
+  let c = plan.byPid[playerId];
+  if (!c) {
+    // `wallBail` 刻意不在 CARRY 裡：它本來就是「每人各自一格」（原本的 playerId 字典），
+    // 同步過來會讓一個人的判斷結果變成另一個人的
+    c = {};
+    plan.byPid[playerId] = c;
+  }
+  if (plan.latest !== c) {
+    const src = plan.latest ?? plan.template;
+    for (const k of BLOCK_PLAN_CARRY) c[k] = src[k];
+  }
+  plan.latest = c;
+  return c;
+}
+
 /**
  * 【關】起跳窗開不開——**問狀態機，不問球飛到哪了**。
  *
@@ -1209,22 +1259,24 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
  * （chase 段裡寫下 jumpTick）。判得晚 → 進 chase 晚 → 拔得晚；
  * 改判過 → 付了重新踩定的 tick → 更晚。窗長沿用既有的 `TUNING.BLOCK_WINDOW`，不另立常數。
  */
-function blockPlanAirborne(aiState, team, tick) {
-  const c = aiState.blockPlan;
-  if (!c || c.team !== team || c.jumpTick == null) return false;
+function blockPlanAirborne(aiState, team, tick, playerId) {
+  const plan = aiState.blockPlan;
+  if (!plan || plan.team !== team) return false;
+  const c = plan.byPid[playerId];
+  if (!c || c.jumpTick == null) return false;
   return actionPhaseAt(tick, {
     enterTick: c.enterTick, airTick: c.jumpTick, airTicks: TUNING.BLOCK_WINDOW,
   }) === ACTION_PHASE.AIR;
 }
 
-function blockPlanTargetX(game, aiState, team, player, actor, tick) {
+function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
   const r = game.rally;
   const atkTeam = r.possession;
   if (!atkTeam || atkTeam === team) return null;
   const persona = blockPersonaOf(game, team);
   const opts = { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
-  const c = aiState.blockPlan;
-  if (!c || c.team !== team) {
+  const plan = aiState.blockPlan;
+  if (!plan || plan.team !== team) {
     const unlocked = blockDecisionUnlocked(game, aiState, persona, player, tick);
     // 【判】選定攻擊點
     const aim = unlocked ? blockAimX(game, aiState, atkTeam, persona, opts) : null;
@@ -1254,11 +1306,12 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
       //   不改瞄才是誠實的：他賭了中路卻沒賭中，代價就該由他自己付（兩翼來就守不到），
       //   容許他事後跟著人跑＝把 commit 偷偷變成 read，人格差異會被抹平。
       if (persona !== BLOCK_PERSONA.COMMIT || unlocked) return null;
-      aiState.blockPlan = {
-        team, x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+      aiState.blockPlan = newBlockPlan(team, {
+        x: 0, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
         blind: true, seen: false, jumpAt: null,
         hand: 'press', // §十-4b：盲跳也是 commit 的計畫——commit 不縮（Q1 乙裁定書性格表達）
-      };
+      });
+      blockPlanFor(aiState.blockPlan, playerId);
       return 0;
     }
     // ★ read 的起跳時鐘：在**這一 tick 取樣並鎖存**，之後不重算（v4 裁定書 R1）★
@@ -1285,17 +1338,20 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
         || Math.abs(read.x) > AI.BLOCK_RETRACT_WIDE_X)
         ? 'retract' : 'vertical';
     // enterTick＝鎖定那一 tick（§9 契約：事件驅動的段界＝事件發生時把 tick 寫下來）
-    aiState.blockPlan = {
-      team, x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
+    aiState.blockPlan = newBlockPlan(team, {
+      x: read.x, enterTick: tick, jumpTick: null, replantUntil: -1, pendingX: null,
       jumpAt, hand,
       // `seen` 一律起手為偽、由 chase 段逐 tick 自己觀察——**不得在建計畫時預設為真**：
       // read 的計畫是從**球的拋物線**建的（blockAimX 走 predictContactPoint），
       // 不是從「看到有人在跑」建的。預設為真會讓 read 在兩翼助跑手還沒進偵測範圍時
       // 就當場拔起（實測 set+14，球 set+89 才到）。
       blind: false, seen: false,
-    };
+    });
+    blockPlanFor(aiState.blockPlan, playerId);
     return read.x;
   }
+  // 拆分後每名攔網手跟自己的那一份（建計畫的時機／輸入不變，見 blockPlanFor 檔頭）
+  const c = blockPlanFor(plan, playerId);
   // §9 契約：本狀態機的三段＝chase（跟死）／air（在空中）／release（落地結算）。
   // 進 air 的錨點是事件寫下的 jumpTick、窗長沿用既有的 TUNING.BLOCK_WINDOW
   const phase = actionPhaseAt(tick, {
@@ -1390,12 +1446,14 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
   // ② 在空中：不能橫移
   if (phase === ACTION_PHASE.AIR) return c.x;
   // ③ 落地後的 close 預算
-  if (c.chase === undefined) {
+  // ⚠ `chase` 仍掛在團隊級的 plan 上（**單值，多名球員互相覆寫的既有語意原樣保留**）——
+  //   見 newBlockPlan 的 TODO(攔網分工卷 step2)。
+  if (plan.chase === undefined) {
     // 球自己的軌跡（人人看得見的物理）＝要追的人在哪、還剩多少時間；
     // 目標取**擊球點**不是過網點——落地那刻誰也不知道他會把球打去哪條線
     const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
     const stepM = moveSpeed(player) * staminaPerfMul(game, player) * SIM_DT;
-    c.chase = blockCloseBudget({
+    plan.chase = blockCloseBudget({
       fromX: actor.x,
       toX: hit?.x ?? game.ball.x,
       stepM,
@@ -1403,7 +1461,7 @@ function blockPlanTargetX(game, aiState, team, player, actor, tick) {
       slack: BLOCK_COMMIT.CLOSE_SLACK,
     }).canClose;
   }
-  return c.chase ? null : actor.x;
+  return plan.chase ? null : actor.x;
 }
 // ==== B1-SCAN-END ====
 

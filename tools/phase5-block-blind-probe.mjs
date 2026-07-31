@@ -58,8 +58,10 @@ for (let s = 1; s <= SETS; s += 1) {
     if (cur.spikeTick != null && cur.crossTick == null && zBefore > 0 && game.ball.z <= 0) {
       cur.crossTick = game.tick;
     }
-    const c = ai.blockPlan;
-    if (c && c.team === 'B') {
+    // 攔網分工卷 step1（07-31）：計畫拆成 per-blocker，`latest`＝最近步進的那一份
+    //（本步三人逐 tick 同步 ⇒ 與拆分前的共用物件逐值相同）
+    const c = ai.blockPlan?.team === 'B' ? ai.blockPlan.latest : null;
+    if (c) {
       if (!cur.created) { cur.created = true; cur.blind = !!c.blind; }
       if (c.jumpTick != null && cur.jumpTick == null) cur.jumpTick = c.jumpTick;
     }

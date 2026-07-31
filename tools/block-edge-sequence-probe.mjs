@@ -191,8 +191,11 @@ function runSet(seed, persona) {
       // 攔網計畫（真實路徑：sim 自己寫的欄位，不重算）。
       // ★ 必須擋掉上一波殘留的計畫 ★ blockPlan 是單一欄位、跨波存活，
       //   只認 enterTick 落在本 episode 內的那一份，否則 jumpTick 會是別波的值。
-      const plan = ai.blockPlan;
-      if (plan && plan.team === 'B' && plan.enterTick >= cur.startTick) {
+      // 攔網分工卷 step1（07-31）：計畫拆成 per-blocker。`template`＝建計畫那一刻的鎖存值、
+      // `latest`＝最近步進的那一份（本步三人逐 tick 同步 ⇒ 與拆分前的共用物件逐值相同）
+      const plan = ai.blockPlan?.team === 'B'
+        ? { ...ai.blockPlan.template, ...ai.blockPlan.latest } : null;
+      if (plan && plan.enterTick >= cur.startTick) {
         if (cur.planEnter == null) { cur.planEnter = plan.enterTick; cur.planBlind = !!plan.blind; }
         if (cur.actualJump == null && plan.jumpTick != null) {
           cur.actualJump = plan.jumpTick;

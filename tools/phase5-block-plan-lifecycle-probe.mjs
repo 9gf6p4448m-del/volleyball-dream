@@ -73,8 +73,10 @@ function runSet(seed, blockPersona) {
     }
     if (!cur) continue;
 
-    const c = ai.blockPlan;
-    if (c && c.team === 'B') {
+    // 攔網分工卷 step1（07-31）：計畫拆成 per-blocker，`latest`＝最近步進的那一份
+    //（本步三人逐 tick 同步 ⇒ 與拆分前的共用物件逐值相同）
+    const c = ai.blockPlan?.team === 'B' ? ai.blockPlan.latest : null;
+    if (c) {
       cur.planCreated = true;
       if (c.jumpTick != null) cur.jumpSet = true;
     }
