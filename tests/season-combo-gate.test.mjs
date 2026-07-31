@@ -18,7 +18,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
-import { evaluateCombination, COMBO_TYPES } from '../src/sim/approach.js';
+import { evaluateCombination, resolveCalledPlay, COMBO_TYPES } from '../src/sim/approach.js';
 import { createCareer, createCareerPlayer, careerMatchSetup } from '../src/career/careerState.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { defaultLineup } from '../src/career/lineup.js';
@@ -57,12 +57,16 @@ function careerGame(seasonIndex, seed) {
 }
 
 // 整局實跑，回傳三型的組合次數與規劃點數（讀 sim 自己寫的 attackCombo，不重刻判斷式）
-function playAndCount(game) {
+// spam（2026-08-01）：模擬「玩家每個機會都在按叫戰術鈕」——每 tick 把 calledPlay 補滿
+// （sim 在 touches===1 消費即清）。isSetter true＝**指令**模式＝最強的繞過路徑：
+// 連 trust 採納骰都跳過，只剩結構條件與 comboScale 擋得住。
+function playAndCount(game, spam = null) {
   const ai = createAiState();
   const byType = Object.fromEntries(COMBO_TYPES.map((t) => [t, 0]));
   let plans = 0;
   let prev = null;
   while (game.phase !== 'set_over' && game.tick < MAX_TICKS) {
+    if (spam && !ai.calledPlay) ai.calledPlay = { ...spam };
     const intents = aiCollectIntents(game, ai);
     if (ai.approach && ai.approach !== prev) {
       prev = ai.approach;
@@ -159,4 +163,83 @@ test('comboScale 預設＝×1：不傳與傳 1 的觸發骰逐值相同，傳 0 
   assert.ok(none > 0 && none < N, `出廠臂觸發骰恆假或恆真（${none}/${N}）＝下面那條沒有鑑別力`);
   assert.equal(one, none);
   assert.equal(zero, 0, `comboScale=0 仍有 ${zero}/${N} 顆過骰`);
+});
+
+// ════════════════════════════════════════════════════════════
+// 裁定乙（2026-08-01）：連玩家的 `force` 路徑一起關
+// ════════════════════════════════════════════════════════════
+// ffdd342 只把閘掛在**機率**上，而玩家叫戰術走 `force = true` 依設計跳過觸發骰
+// ⇒ 第 1 屆玩家仍叫得出交叉、對手永遠不會跑＝很怪的狀態。
+// 裁定：force 跳過的是**骰子**（這球要不要自動跑），不是**世界規則**（這場有沒有
+// 組合攻擊）。兩者語意不同、不可互相覆寫 ⇒ comboScale===0 時 force 也不通。
+// 對照組：技術閘（這個球員學會了沒）住在 career／UI 層，見 tests/call-unlock.test.mjs。
+
+test('裁定乙・單元：comboScale=0 時 force 也不通（scale=1 時 force 照樣直通）', () => {
+  const pts = [
+    { pid: 'A2', kind: 'left', tier: 'perfect' },
+    { pid: 'A3', kind: 'quick', tier: 'perfect' },
+  ];
+  const base = { team: 'A', flightId: 1, seed: 3, type: 'cross', force: true };
+  // 鑑別力：出廠臂（scale 預設 1）在同一組輸入下 force 真的通——否則下面的 false
+  // 只是結構條件擋著，與 comboScale 無關
+  assert.equal(evaluateCombination(pts, 'A2', base).checks.roll, true, 'force 在出廠值下應直通');
+  assert.equal(evaluateCombination(pts, 'A2', { ...base, comboScale: 1 }).checks.roll, true);
+  assert.equal(evaluateCombination(pts, 'A2', { ...base, comboScale: 0 }).checks.roll, false,
+    'comboScale=0 ⇒ 玩家明確叫也不得產生組合');
+  // 結構條件本身沒被連坐：擋在 roll、不是提早在 partner/crosses 就死
+  const ck = evaluateCombination(pts, 'A2', { ...base, comboScale: 0 }).checks;
+  assert.equal(ck.partner, true);
+  assert.equal(ck.crosses, true);
+});
+
+test('裁定乙・解析器：resolveCalledPlay 在 comboScale=0 下產不出 combo（指令模式也不行）', () => {
+  const pts = [
+    { pid: 'A2', kind: 'left', tier: 'perfect' },
+    { pid: 'A3', kind: 'quick', tier: 'perfect' },
+  ];
+  const call = { type: 'cross', callerId: 'A2', isSetter: true }; // 指令＝跳過 trust 採納骰
+  const opts = { team: 'A', flightId: 1, seed: 3, fallbackMainId: 'A2' };
+  const open = resolveCalledPlay(pts, call, opts);
+  assert.equal(open.outcome, 'command', '出廠值下指令應成立（否則下面的 infeasible 沒鑑別力）');
+  assert.ok(open.combo);
+  const shut = resolveCalledPlay(pts, call, { ...opts, comboScale: 0 });
+  assert.equal(shut.outcome, 'infeasible');
+  assert.equal(shut.combo, null);
+  assert.equal(shut.reason, 'roll', '回饋指向骰子那一關（input 層有 fallback 文案）');
+});
+
+test('裁定乙・實跑：第 1 屆整局狂叫戰術也組不出，第 2 屆同樣狂叫組得出來', () => {
+  // 繞過 UI 的最強路徑：每個規劃窗都塞一筆**指令**（isSetter true）進 aiState.calledPlay
+  const spam = { type: 'cross', callerId: 'A2', isSetter: true };
+  const SETS = 2;
+  const tally = (make) => {
+    const acc = { plans: 0, sum: 0, byType: Object.fromEntries(COMBO_TYPES.map((t) => [t, 0])) };
+    for (let i = 0; i < SETS; i += 1) {
+      const r = playAndCount(make(1000 + i * 101), spam);
+      acc.plans += r.plans;
+      acc.sum += r.sum;
+      for (const t of COMBO_TYPES) acc.byType[t] += r.byType[t];
+    }
+    return acc;
+  };
+  const s1 = tally((seed) => careerGame(1, seed).game);
+  const s2 = tally((seed) => careerGame(2, seed).game);
+  assert.ok(s1.plans > 100, `第 1 屆規劃點只有 ${s1.plans}＝樣本不足以區分「有」與「沒有」`);
+  // 鑑別力：同一支 spam 在第 2 屆真的叫得出來 ⇒ 第 1 屆的 0 不是「叫牌注入根本沒生效」
+  assert.ok(s2.sum >= 5,
+    `第 2 屆狂叫只組出 ${s2.sum} 次＝叫牌注入沒生效，第 1 屆的 0 沒有鑑別力`);
+  assert.equal(s1.sum, 0,
+    `第 1 屆玩家叫出了組合：${JSON.stringify(s1.byType)}（規劃點 ${s1.plans}）`);
+});
+
+test('裁定乙・佈線守衛：兩條玩家輸入路徑都把 comboScale 遞進解析器', () => {
+  const src = readFileSync(join(SIM_DIR, 'ai.js'), 'utf8');
+  const calls = [...src.matchAll(/resolveCalledPlay\(/g)];
+  assert.equal(calls.length, 2, 'ai.js 應恰有兩條路徑（甲＝死球窗叫牌、乙＝遠段改判）');
+  for (const m of calls) {
+    const tail = src.slice(m.index, m.index + 800);
+    const end = tail.indexOf('\n  });') >= 0 ? tail.indexOf('\n  });') : tail.length;
+    assert.match(tail.slice(0, end + 8), /comboScale:/,
+      '每一條 resolveCalledPlay 呼叫都必須遞 comboScale（漏一條＝該路徑繞過世界閘）');
+  }
 });

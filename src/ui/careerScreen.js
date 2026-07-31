@@ -1577,7 +1577,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const seasonForPost = store.seasonIndex?.() ?? 1;
     const postEvs = [
       ...filterPlayedOnce(resolveEventsForRoster(
-        dueEvents(career, 'post'), rosterForPost?.members ?? null,
+        // 第 3 參數＝屆數（`when.seasonIndex` 條件用；省略＝視同第 1 屆）
+        dueEvents(career, 'post', seasonForPost), rosterForPost?.members ?? null,
       )),
       ...rivalPostEvents({ career, seasonIndex: seasonForPost, player }),
       ...n2PostEvents({ career, seasonIndex: seasonForPost, player, roster: rosterForPost }),
@@ -1835,7 +1836,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         const heightEv = next.id === 'group-1' ? heightGuidanceEventFor(career, player) : null;
         const preEvs = [
           ...(heightEv ? [heightEv] : []),
-          ...filterPlayedOnce(resolveEventsForRoster(dueEvents(career, 'pre'), rosterNow?.members ?? null)),
+          // 第 3 參數＝屆數（`when.seasonIndex` 條件用——teach-call 掛第 2 屆第一場賽前）
+          ...filterPlayedOnce(resolveEventsForRoster(
+            dueEvents(career, 'pre', store.seasonIndex?.() ?? 1), rosterNow?.members ?? null,
+          )),
           ...oldTeamPreEvents(career, rosterNow),
           ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
         ];

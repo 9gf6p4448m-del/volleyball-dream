@@ -64,20 +64,35 @@ export const EVENT_DEFS = [
     ],
   },
   // 組合攻擊卷 段 E（07-31 Sawmah 裁定）：叫戰術＝**教出來的**，不是屆數解鎖的。
-  // 位置＝第二場賽前（第一場打完＝玩家已會「球來了就打」，此刻才聽得懂「你可以自己點」）。
   // 教的人＝阿哲（二傳）——他是手勢的收訊端，這條知識只有他有立場教；
-  // 大山補一句「交叉＝我當幌子」＝把 MB 誘餌的角色從隊友嘴裡講出來（同 teach-dive 的傳承節拍）。
+  // MB 補一句「交叉＝我當幌子」＝把誘餌的角色從隊友嘴裡講出來（同 teach-dive 的傳承節拍）。
+  // 2026-08-01 搬到第 2 屆後這句改由**阿岩**（A6，第 2 屆的中間；大山 A3 第 1 屆末已畢業）講，
+  // 並加 elderId 年級守衛——阿岩若被逐出／不在現役名冊，改播阿哲代述的 altLines。
   // moment 'pre'＝進場前教完、當場就用得到；且 pre 傳授不進 upcomingTeach 預告
   // （既有規則），不會與同場賽後的 teach-dive 預告打架。
   {
     id: 'teach-call',
     moment: 'pre',
-    when: { matchId: 'group-2' },
+    // ★ 位置（2026-08-01 搬家；c5419ce 已註明第 1 屆 group-2 是**暫置、會搬家**）★
+    // 裁定乙：第 1 屆＝純個人能力的比賽，雙方都沒有組合攻擊 ⇒ 那一屆教了也用不出來，
+    // 教學鏈不該在那裡卡一課空的。改掛**第 2 屆第一場賽前**（seasonIndex 2＋group-1）
+    // ——第 2 屆整個比賽升級，開賽第一課正是「這一球大家跑什麼，先講好」。
+    // ⚠ 這仍是**過渡位置** ⚠ 最終歸宿是第 2 屆的「集訓」（解鎖載體，另一卷設計中、
+    // 尚未實作）；集訓做好後這一條再搬一次，屆時只動 when（unlock／lines 不變）。
+    // 一次性旗標（ONCE_EVENT_IDS）照舊 ⇒ 第 1 屆已學過的舊存檔不會在第 2 屆重播。
+    when: { seasonIndex: 2, matchId: 'group-1' },
     effect: { unlock: 'callPlay' },
+    elderId: 'A6',
     lines: [
-      { speaker: '阿哲', text: '第一場我說「舉給你的球放心打」——那是對新人講的。從今天起，你可以自己點。' },
+      { speaker: '阿哲', text: '去年那句「舉給你的球放心打」——那是對新人講的。你已經不是新人了，從今天起，你可以自己點。' },
       { speaker: '阿哲', text: '死球的空檔看我一眼，比個手勢：交叉、夾塞、時間差。這一球大家跑什麼，先講好。' },
-      { speaker: '大山', text: '交叉就是我先跳，把攔網拐走，你從我背後穿出來。……別客氣，把我當幌子用。' },
+      { speaker: '阿岩', text: '……交叉，我先跳。攔網會跟著我走，你從我背後穿出來。把我當幌子，不用客氣。' },
+      { speaker: '阿哲', text: '但先說清楚——你不是二傳，叫的是「請求」。球權我分，理不理你看你這球值不值得。' },
+    ],
+    altLines: [
+      { speaker: '阿哲', text: '去年那句「舉給你的球放心打」——那是對新人講的。你已經不是新人了，從今天起，你可以自己點。' },
+      { speaker: '阿哲', text: '死球的空檔看我一眼，比個手勢：交叉、夾塞、時間差。這一球大家跑什麼，先講好。' },
+      { speaker: '阿哲', text: '交叉就是中間那個先跳、把攔網拐走，你從他背後穿出來——前排的中間是你的幌子，別客氣。' },
       { speaker: '阿哲', text: '但先說清楚——你不是二傳，叫的是「請求」。球權我分，理不理你看你這球值不值得。' },
     ],
   },
@@ -256,13 +271,17 @@ export function isOnceEvent(id) {
 
 // 取當下應觸發的事件（依表序；已觸發者不重複）。
 // moment 'pre'＝出戰前（條件看下一場）；'post'＝賽後回到生涯畫面（條件看最後一場）
-export function dueEvents(career, moment) {
+// seasonIndex（2026-08-01）：career 物件本身不帶屆數（每屆重建 schedule/results），
+// 由呼叫端（careerScreen 讀 store.seasonIndex()）供給——`when.seasonIndex` 條件用。
+// 省略＝1＝第 1 屆：與 careerStore.seasonIndex() 的 `?? 1` 同一個保守方向，
+// 推不出屆數時不會誤發第 2 屆才該播的事件。
+export function dueEvents(career, moment, seasonIndex = 1) {
   const triggered = career.events ?? [];
   const last = career.results[career.results.length - 1] ?? null;
   const next = nextMatch(career);
   return EVENT_DEFS.filter(
     (e) => e.moment === moment && !triggered.includes(e.id) &&
-      matchesWhen(e.when, { career, last, next }),
+      matchesWhen(e.when, { career, last, next, seasonIndex }),
   );
 }
 
@@ -485,9 +504,14 @@ export function recordEvent(career, id) {
   return { ...career, events: [...(career.events ?? []), id] };
 }
 
-function matchesWhen(when, { career, last, next }) {
+function matchesWhen(when, { career, last, next, seasonIndex = 1 }) {
   for (const [key, val] of Object.entries(when)) {
     switch (key) {
+      // 第幾屆（2026-08-01）：值由呼叫端供給（career 物件每屆重建、自己不記屆數）。
+      // 教學鏈搬家用——例：teach-call 掛第 2 屆第一場賽前
+      case 'seasonIndex':
+        if (seasonIndex !== val) return false;
+        break;
       case 'matchId':
         if (next?.id !== val) return false;
         break;

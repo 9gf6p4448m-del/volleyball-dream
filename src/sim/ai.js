@@ -376,6 +376,10 @@ function ensureFlightPlan(game, aiState) {
       passTier: tier,
       fallbackMainId: aiState.attackerId,
       acceptP: requestAcceptP(game, points, aiState.calledPlay),
+      // 2026-08-01：玩家叫的套路走 force＝跳過觸發骰，但**跳不過 comboScale===0**
+      // ——那是「這場比賽有沒有組合攻擊」的世界規則，不是「這球要不要自動跑」的骰子
+      // （見 evaluateCombination 的 scale 註解）。未注入＝1＝與前一版逐值相同。
+      comboScale: game.comboScale ?? 1,
     });
     aiState.callOutcome = call.outcome === 'none' ? null : {
       type: call.type,
@@ -924,6 +928,7 @@ function applyReplanCall(game, aiState) {
     seed: game.seed ?? 0,
     passTier: tier,
     fallbackMainId: aiState.attackerId,
+    comboScale: game.comboScale ?? 1, // 同路徑甲：世界規則關閉時，遠段改判也叫不出來
   });
   const out = {
     type: call.type, mode: 'replan', outcome: res.outcome, reason: res.reason,

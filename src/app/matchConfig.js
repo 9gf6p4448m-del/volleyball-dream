@@ -171,7 +171,16 @@ export function resolveTechGates(game, playerId, careerActive, hintsOff = false)
     // 段 E 叫戰術（07-31 Sawmah 裁定：改由技術傳授解鎖）：與上列同一把尺——
     // 快速比賽 tech===null＝恆開（與 trust／暫停／換人同款不綁生涯）；
     // 生涯未受教＝false ⇒ matchStage 不建 🙋 鈕、matchLoop 遠段不列改判選項
-    canCallPlay: !tech || (tech.callPlay ?? 0) >= 1,
+    //
+    // ★ 這一條吃**兩道語意不同的閘**（2026-08-01 Sawmah 裁定乙）★
+    //   · 技術閘 `tech.callPlay`＝**這個球員學會了沒**（角色成長，只影響玩家）
+    //   · 世界閘 `game.comboScale`＝**這場比賽有沒有組合攻擊**（場級規則，雙方適用）
+    // 讀 comboScale 而不是屆數：這裡要問的是「這場有沒有組合攻擊」，不是「第幾屆」——
+    // 屆數只是現階段決定該值的**理由**（careerState.careerMatchSetup），之後換成集訓
+    // 解鎖時本行不必改。快速比賽未注入＝null ⇒ `?? 1` ⇒ 恆開，與上列同款不受波及。
+    // 注意這只是 UI 閘：邏輯層另有一道（evaluateCombination 的 scale===0 連 force 一起關），
+    // 繞過面板直接送 calledPlay 也產不出 combo——兩層各自獨立，不互為前提。
+    canCallPlay: (!tech || (tech.callPlay ?? 0) >= 1) && (game.comboScale ?? 1) > 0,
     // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
     readTier: hintsOff ? 'none' : (careerActive ? blockReadTier(game.players[playerId]) : 'instant'),
   };

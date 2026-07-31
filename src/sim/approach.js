@@ -768,8 +768,17 @@ export function evaluateCombination(points, mainId, opts = {}) {
   // ⇒ 沒注入的呼叫端一格不變）。乘在**機率**上而不是另立一道 if：關閉就是
   // 「這一型的骰子永遠不會過」，不是多一條旁路——checks 的其餘每一條照樣算得出來，
   // 探針仍看得到「結構上湊不湊得起來」（關閉期間的診斷不會整片變成空白）。
-  checks.roll = force
-    || hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type] * (comboScale ?? 1);
+  //
+  // ★ scale === 0 連 force 一起關 ★（2026-08-01 Sawmah 裁定乙）
+  // 兩者是**不同語意的兩道閘**，不可互相覆寫：
+  //   · comboScale＝**這場比賽有沒有組合攻擊**（世界規則，呼叫端注入、雙方適用）
+  //   · force＝**這球玩家明確要跑**（跳過「有資格的這球要不要自動跑」那顆骰子）
+  // 玩家能跳過的只有骰子，不是世界規則——這場根本沒有組合攻擊時，明確叫也叫不出來
+  // （否則會變成「只有玩家跑得出交叉、對手永遠不會跑」）。
+  // scale > 0 時本行與前一版逐值相同（force 照樣直通）⇒ 既有呼叫端零擾動。
+  const scale = comboScale ?? 1;
+  checks.roll = scale > 0
+    && (force || hash01(flightId * 1097 + COMBO_SALT[type] + seed) < COMBO_RATE[type] * scale);
   if (!checks.roll) return { combo: null, checks };
   return {
     combo: {
