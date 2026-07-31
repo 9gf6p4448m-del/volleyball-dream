@@ -311,7 +311,7 @@ function ensureFlightPlan(game, aiState) {
     // （setOptions）都吃這一份，兩邊看到的是同一顆池（4.5A 的教訓：同一個判定寫
     // 在兩個地方遲早分岔）
     aiState.passReceiverId = r.lastToucherId ?? null;
-    // §5 A2 路線組合：先決定「每條線往哪跑」（OH 的 left 可能變 cross），**再**選人。
+    // §5 A2 路線組合：先決定「每條線往哪跑」（OH 的 left 可能變 left_inside），**再**選人。
     // 順序不可調換——選完人再改線＝二傳瞄的落點與該人助跑的終點是兩個地方
     const points = applyRouteKinds(
       attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
@@ -319,7 +319,7 @@ function ensureFlightPlan(game, aiState) {
     );
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
-    aiState.attackKind = pick?.kind ?? null; // 'left'|'cross'|'quick'|'right'|'pipe'|'dball'
+    aiState.attackKind = pick?.kind ?? null; // 'left'|'left_inside'|'quick'|'right'|'pipe'|'dball'
     // Transition 拉開（§2-2）＋節奏三層（§4 A1）：整個池一次算完助跑起點、節奏與
     // 起步 tick——未被選中者照樣拉開跑假動作，攔網手才有多條線可讀。
     // 時間錨點＝contactPoint（球墜到接球高度的 tick）＝二傳觸球的預估時刻，
@@ -847,7 +847,13 @@ function decideOne(game, aiState, playerId) {
           && digBiasCorrectFor(game, aiState, team)) {
           timing = 1.0;
         }
-        return createIntent({ playerId, tick, action, aim, timing, jump: jumpSet });
+        // Q4 資料層：這一擊若是「協調層選定的攻擊手」扣球，帶上已定案的路線種類
+        // （純記帳、零判定語意）。用 attackerId 比對而非單看 action==='spike'——
+        // S 二次球（setterDump）也是 action==='spike' 但攻擊手是 S 本人，
+        // aiState.attackKind 那時掛的是本來要舉給誰的舊值，比對不上就不記
+        const routeKind = action === 'spike' && aiState.attackerId === playerId
+          ? aiState.attackKind : null;
+        return createIntent({ playerId, tick, action, aim, timing, jump: jumpSet, routeKind });
       }
     }
     // AI 魚躍救球（接噴救球／方案A 全隊 AI 魚躍）：正常站立搆不到、但魚躍可及範圍內

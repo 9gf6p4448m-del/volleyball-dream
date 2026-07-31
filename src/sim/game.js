@@ -361,6 +361,12 @@ function scoutTallyOf(state, pid) {
   if (!state.scoutTally[pid]) {
     state.scoutTally[pid] = {
       zones: { line: 0, cross: 0, middle: 0, tip: 0 },
+      // 組合攻擊卷 Q4 資料層（2026-07-31，純記帳）：路線種類分佈，比照 zones。
+      // 鍵集＝approach.js 的合法 kind（'left_inside' 是 2026-07-31 由 'cross' 改名，
+      // 見 approach.js routeKindFor 註解）。消費端（scoutBlockMul 同型門檻）本輪不開。
+      routes: {
+        quick: 0, left: 0, left_inside: 0, right: 0, pipe: 0, dball: 0,
+      },
       feints: 0, spikes: 0,
       serves: { jumps: 0, floats: 0, total: 0 },
     };
@@ -648,6 +654,11 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     const tal = scoutTallyOf(state, player.id);
     tal.zones[zone] += 1;
     tal.spikes += 1;
+    // Q4 資料層：路線記帳——只有協調層選定的攻擊手扣球時 intent 才帶 routeKind
+    // （見 ai.js／matchControls.js 的記帳規則），不耗 rng、不影響任何判定
+    if (intent.routeKind && tal.routes[intent.routeKind] !== undefined) {
+      tal.routes[intent.routeKind] += 1;
+    }
     if (dec.deceiveP > 0) tal.feints += 1;
   } else {
     rally.lastSpikeZone = null;

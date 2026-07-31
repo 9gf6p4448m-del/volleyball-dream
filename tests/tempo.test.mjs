@@ -17,23 +17,33 @@ import { SIM_DT } from '../src/sim/constants.js';
 
 // ---- ② 規格：三種節奏相對「二傳觸球 tick」的先後 ----
 
-test('節奏三層的時序規格：一速在二傳觸球前已離地、二速觸球前起跳、三速觸球後起跳', () => {
+// ★ 2026-07-31 二速解封（route B）後的規格修訂 ★
+// 舊標題與斷言是「二速觸球**前**起跳」——那條規格物理上不可能成立（見 approach.js
+// TEMPO 的解封註記：球飛 61 tick、人只滯空 24 tick），已由 Sawmah 裁定改為觸球後起跳。
+//
+// ⚠ 這裡刻意**不再斷言「二速 planned 起跳早於三速」**，理由要看清楚才不會日後被誤修回去：
+//   `routeTicks` 對三速走特例（`setTick + runTicks`，黃金錨點＝起步踩在觸球那一刻），
+//   所以三速的 planned takeoffTick 是一個**不會實際發生的名目值**——三速走
+//   `ai.js:885-899` 的一氣呵成分支，`approachLaunched` 對三速恆回 false
+//   （實測：三速 planned 35、物理 68）。拿它跟二速的 planned 值比大小沒有意義。
+//   **物理層的三檔順序仍然正確且是解封的主要成果**：一速 15／二速 44／三速 68
+//   （相對二傳實際觸球，tools/tempo-routeb-probe.mjs 40 局實測），IQR 互不重疊。
+//   要守物理層順序請看那支探針，不要在這條純算術測試裡假裝守得到。
+test('節奏三層的時序規格：一速在二傳觸球前已離地、二速與三速在觸球後起跳', () => {
   const SET = 1000;
   const run = 20; // 助跑段長度（tick）；三種節奏用同一條線比較才公平
   const one = routeTicks('one', SET, run);
   const two = routeTicks('two', SET, run);
   const three = routeTicks('three', SET, run);
 
-  // 起跳：一速最早、三速最晚，且一速／二速在觸球前、三速在觸球後
+  // 起跳：只有一速在觸球前（人已在空中等球）；二速／三速都在觸球後
   assert.ok(one.takeoffTick < SET, `一速須在二傳觸球前離地（${one.takeoffTick} vs ${SET}）`);
-  assert.ok(two.takeoffTick < SET, `二速須在二傳觸球前起跳（${two.takeoffTick} vs ${SET}）`);
+  assert.ok(two.takeoffTick > SET, `二速須在二傳觸球後起跳（${two.takeoffTick} vs ${SET}）`);
   assert.ok(three.takeoffTick > SET, `三速須在二傳觸球後起跳（${three.takeoffTick} vs ${SET}）`);
   assert.ok(one.takeoffTick < two.takeoffTick, '一速須早於二速離地');
-  assert.ok(two.takeoffTick < three.takeoffTick, '二速須早於三速起跳');
 
-  // 起步：同樣是一速最早、三速最晚（起步 tick＝起跳倒推一整段助跑）
+  // 起步：一速最早（其餘兩檔的 planned 起步順序同樣不可比，理由見上方註記）
   assert.ok(one.startTick < two.startTick, '一速起步須早於二速');
-  assert.ok(two.startTick < three.startTick, '二速起步須早於三速');
   // 憲法的黃金錨點：三速＝二傳觸球那一刻正踩在助跑第一步上
   assert.equal(three.startTick, SET, '三速起步 tick＝二傳觸球 tick（黃金錨點）');
   // 起步→起跳恰好是一整段助跑；收勢窗在起跳之後

@@ -67,11 +67,11 @@ test('D2①：留在池裡的被針對者只剩降級路線——不跑交叉、
   let crossForFree = 0;
   for (let flightId = 0; flightId < 300; flightId += 1) {
     const mapped = applyRouteKinds(pts, { flightId, seed: 1, passTier: 'perfect' });
-    if (byId(mapped).A2.kind === 'cross') crossForPassed += 1;
+    if (byId(mapped).A2.kind === 'left_inside') crossForPassed += 1;
     const free = applyRouteKinds(
       attackPointsOf(g, 'A', 'A1', 'perfect'), { flightId, seed: 1, passTier: 'perfect' },
     );
-    if (byId(free).A2.kind === 'cross') crossForFree += 1;
+    if (byId(free).A2.kind === 'left_inside') crossForFree += 1;
   }
   assert.equal(crossForPassed, 0, '接了一傳的 OH 一次都不得跑交叉（交叉＝繞過中間的跑戰術）');
   assert.ok(crossForFree > 0, `對照組（沒接一傳）本來跑得出交叉（實得 ${crossForFree}/300）`);

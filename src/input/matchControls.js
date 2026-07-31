@@ -465,9 +465,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         }
       }
 
+      // Q4 資料層：同 ai.js 的記帳規則——只在「本人正是協調層選定的攻擊手」扣球時
+      // 帶上路線種類（純記帳、零判定語意；S 二次球是本人扣球但不是協調層選定的
+      // 攻擊手，比對不上 attackerId 就不記，見 ai.js 同段註解）
+      const routeKind = action === 'spike' && aiState?.attackerId === playerId
+        ? (aiState.attackKind ?? null) : null;
       return [createIntent({
         playerId, tick, move, action, aim, gaze, timing,
         style: queuedAction?.style ?? null,
+        routeKind,
       })];
     },
     // 出手成功（sim 發出我的觸球/發球事件）→ 清掉緩衝

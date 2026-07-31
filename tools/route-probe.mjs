@@ -35,7 +35,7 @@ for (const kind of Object.keys(APPROACH)) {
     + `　全長 ${Math.hypot(t.x - s.x, t.z - s.z).toFixed(2)}m`);
 }
 const tq = takeoffSpotFor('A', 'quick');
-const tc = takeoffSpotFor('A', 'cross');
+const tc = takeoffSpotFor('A', 'left_inside');
 const tl = takeoffSpotFor('A', 'left');
 console.log(`── ③ cross 擊球點離快攻點 ${Math.hypot(tc.x - tq.x, tc.z - tq.z).toFixed(2)}m`
   + `（left 離快攻點 ${Math.hypot(tl.x - tq.x, tl.z - tq.z).toFixed(2)}m）`
@@ -110,8 +110,8 @@ const total = Object.values(kindCount).reduce((s, v) => s + v, 0);
 for (const k of Object.keys(kindCount).sort()) {
   console.log(`${k.padEnd(6)} ${String(kindCount[k]).padStart(4)} 次（${((kindCount[k] / total) * 100).toFixed(1)}%）`);
 }
-const wing = (kindCount.left ?? 0) + (kindCount.cross ?? 0);
-console.log(`  OH 前排線內：cross ${(((kindCount.cross ?? 0) / wing) * 100).toFixed(1)}%（名目 ${CROSS_RATE * 100}%）`);
+const wing = (kindCount.left ?? 0) + (kindCount.left_inside ?? 0);
+console.log(`  OH 前排線內：left_inside ${(((kindCount.left_inside ?? 0) / wing) * 100).toFixed(1)}%（名目 ${CROSS_RATE * 100}%）`);
 
 console.log('\n── ② 實跑：起步 → 起跳點之間人真的橫移了多少 ──');
 for (const k of Object.keys(runLat).sort()) {

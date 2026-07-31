@@ -17,6 +17,11 @@ export function createIntent({
   // 一格未動，唯一的效果是「可以更早、在更高的位置接管這顆球」。
   // 為 false 時不寫進物件＝既有 Intent 逐值不變（VCR 舊卷與既有比對零擾動）
   jump = false,
+  // 組合攻擊卷 Q4 資料層（2026-07-31，純記帳）：這一擊的攻擊路線種類
+  // ('quick'|'left'|'left_inside'|'right'|'pipe'|'dball'|null)——只有 action==='spike'
+  // 時才有意義，來源是協調層已定案的 aiState.attackKind。**不帶任何判定語意**：
+  // 物理／落點／散佈一律不讀這個欄位，唯一消費者是 game.js 的 scoutTally 路線記帳。
+  routeKind = null,
 }) {
   if (playerId === undefined || tick === undefined) {
     throw new Error('Intent 必須帶 playerId 與 tick');
@@ -27,5 +32,6 @@ export function createIntent({
   return {
     playerId, tick, move, action, aim, gaze: gaze ?? aim, timing, style,
     ...(jump ? { jump: true } : {}),
+    ...(routeKind ? { routeKind } : {}),
   };
 }

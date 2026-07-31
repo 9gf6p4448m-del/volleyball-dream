@@ -421,14 +421,26 @@ export function mergeScouting(career, opponentId, tally) {
   if (!tally) return career;
   const prev = career.scouting?.[opponentId] ?? {
     zones: { line: 0, cross: 0, middle: 0, tip: 0 },
+    // 組合攻擊卷 Q4 資料層（2026-07-31，純記帳）：比照 zones 跨場累積。
+    // 舊存檔沒有這個欄位＝prev.routes 為 undefined，下面用 ?? {} 保底不 crash
+    routes: { quick: 0, left: 0, left_inside: 0, right: 0, pipe: 0, dball: 0 },
     feints: 0, spikes: 0,
   };
+  const prevRoutes = prev.routes ?? {};
   const merged = {
     zones: {
       line: prev.zones.line + (tally.zones?.line ?? 0),
       cross: prev.zones.cross + (tally.zones?.cross ?? 0),
       middle: prev.zones.middle + (tally.zones?.middle ?? 0),
       tip: prev.zones.tip + (tally.zones?.tip ?? 0),
+    },
+    routes: {
+      quick: (prevRoutes.quick ?? 0) + (tally.routes?.quick ?? 0),
+      left: (prevRoutes.left ?? 0) + (tally.routes?.left ?? 0),
+      left_inside: (prevRoutes.left_inside ?? 0) + (tally.routes?.left_inside ?? 0),
+      right: (prevRoutes.right ?? 0) + (tally.routes?.right ?? 0),
+      pipe: (prevRoutes.pipe ?? 0) + (tally.routes?.pipe ?? 0),
+      dball: (prevRoutes.dball ?? 0) + (tally.routes?.dball ?? 0),
     },
     feints: prev.feints + (tally.feints ?? 0),
     spikes: prev.spikes + (tally.spikes ?? 0),
