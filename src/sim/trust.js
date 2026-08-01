@@ -42,10 +42,13 @@ export const TRUST_DYN = {
   // 叫戰術重做卷 段 4／集訓卷 題 2（Sawmah 2026-08-01 跨卷共用裁定）：**組合獎金**。
   // 「獎勵跟角色走，不跟位置走」——得分者只拿既有的 KILL（不重複賺、反滾雪球紅線
   // 不觸），本波的**配合者（誘餌）**帶走了牆，組合獎金全額給他。
-  // ★出廠 0＝機制上線、幅度待定★ 幅度是策略數值（CLAUDE.md 硬規則 3），須 Sawmah
-  // 拍板；0 的時候 `applyComboAssist` 第一行就 return ⇒ 行為逐值零變化
-  //（機械背書＝`node tools/sim-hash-probe.mjs`；量測基準＝`tools/combo-assist-probe.mjs`）
-  COMBO_ASSIST: 0,
+  // ★幅度 1＝Sawmah 2026-08-01 拍板★（策略數值，CLAUDE.md 硬規則 3）
+  // 依據＝`docs/snapshots/combo-assist-baseline-2026-08-01.txt`（30 局、1408 rally）：
+  // 發放頻率每 7.7 球一次（每局約 6.1 次）⇒ 幅度 1 每局約 +6.1，約 4 局（25 次）
+  // 才頂到 CLAMP ±25。對照得分者 KILL=5：配合者單次拿得比得分者少一個量級，
+  // 但因為跑得勤，一個賽段累積下來與「他真的把牆帶走了」相稱，且不會滾雪球。
+  // 幅度 2（每局 +12.2、2 局頂到 CLAMP）已被裁掉——會把配合者推到信任天花板。
+  COMBO_ASSIST: 1,
 };
 
 // trustDyn 的唯一寫入路徑（含 ±CLAMP 夾限）。所有場內動態調整都經過這裡——

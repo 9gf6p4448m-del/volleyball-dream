@@ -28,9 +28,13 @@ function rig({ assist = { pid: 'A3', team: 'A' }, team = 'A' } = {}) {
   return g;
 }
 
-test('段4 出廠值是 0（幅度未定案前不得有人偷填數字）', () => {
-  assert.equal(TRUST_DYN.COMBO_ASSIST, 0,
-    '組合獎金幅度是策略數值（硬規則 3），未經 Sawmah 拍板不得為非 0');
+// ★ 2026-08-01 Sawmah 拍板幅度＝1（依據＝combo-assist-baseline 的每局 6.1 次發放率）★
+// 本條原文是「出廠值是 0（幅度未定案前不得有人偷填數字）」——那道鎖守的是**未拍板**
+// 這個狀態，拍板之後該語意由裁定明文取代。改成守拍板值本身：任何人要動這個數字，
+// 都得先拿到新的裁定（硬規則 3），改了就在這裡紅。
+test('段4 幅度＝Sawmah 拍板的 1（策略數值，改動須重新拿裁定）', () => {
+  assert.equal(TRUST_DYN.COMBO_ASSIST, 1,
+    '組合獎金幅度是策略數值（硬規則 3）；現行拍板值是 1，要改須經 Sawmah 重新裁定');
 });
 
 test('段4：配合者實際起跳＋該波得分 → 拿到組合獎金', () => {
@@ -93,8 +97,13 @@ test('段4：獎金走既有的 CLAMP 夾限，不得繞過', () => {
   });
 });
 
-test('段4：出廠 0 時整支是 no-op（sim-hash 逐值不變的程式面背書）', () => {
-  const g = rig();
-  applyComboAssist(g, 'A2', true);
-  assert.deepEqual(g.trustDyn, {}, 'COMBO_ASSIST 為 0 時仍寫了 trustDyn＝行為不是零改動');
+// 幅度歸 0 就整支 no-op——這道閘（`applyComboAssist` 第一行的 `!TRUST_DYN.COMBO_ASSIST`）
+// 是「機制保留、出廠關閉」這個本專案慣用退路的程式面背書（比照夾塞、tool 瞄手）。
+// 拍板成 1 之後它仍要能被關回去，所以改成**就地覆寫成 0** 來問，不再依賴出廠值。
+test('段4：幅度歸 0 時整支是 no-op（機制可關回去的程式面背書）', () => {
+  withBonus(0, () => {
+    const g = rig();
+    applyComboAssist(g, 'A2', true);
+    assert.deepEqual(g.trustDyn, {}, 'COMBO_ASSIST 為 0 時仍寫了 trustDyn＝關不掉');
+  });
 });
