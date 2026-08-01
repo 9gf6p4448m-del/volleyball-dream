@@ -60,6 +60,14 @@ export const AI = {
   TAKEOFF_FRONT_M: TAKEOFF.FRONT,
   TAKEOFF_BACK_M: TAKEOFF.BACK,
   TAKEOFF_SETTLE_M: TAKEOFF.SETTLE,  // 離起跳點多近算「到位」（到位即停＝原地拔起）
+  // 叫戰術重做卷 段 1（裁定 1C）：早訊號判準①「他離自己的助跑起點多近算已進助跑線」（m）。
+  // ★不是新數字★ 它對齊的是 `src/ui/routeCue.js` 的 `AT_START_M`（同值 0.3、同語意
+  // 「距起點多遠算還沒到位」）——**畫面對玩家說「就位」的那把尺，必須與 sim 判
+  // 「他有跑」的那把尺是同一把**，否則提示說就位、S 卻在同一 tick 判他不跑。
+  // 兩處同值由 tests/route-commit.test.mjs 的靜態掃描守著（漂了就轉紅）。
+  // 量級來源同 routeCue 的原註解：sim 判「走到定點了」的死區量級
+  //（approach.js `TAKEOFF.SETTLE` 0.25＝離起跳點多近算到位）。
+  AT_START_M: 0.3,
   SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
@@ -236,6 +244,17 @@ export function createAiState() {
     // 選二傳觸球而非攻擊手起跳，是因為快攻在二傳觸球前就已離地（W1 實測 100%），
     // 等起跳就永遠來不及。這是**可觀察量**（球離手看得見），不是未來資訊
     setTouch: null,
+    // 叫戰術重做卷 段 1（Sawmah 2026-08-01 裁定 1A/1B/1C）：本波「跑不跑」記帳。
+    //   { team, flightId, replanned, entries: [{ pid, kind, tempo, startTick,
+    //     takeoffTick, ran, jumped }] }
+    //   ・`ran`＝早訊號（承諾 tick 到了他有沒有進助跑線）；null＝還沒到判定時刻
+    //   ・`jumped`＝實際起跳（他有沒有從自己那條戰術線的起跳點拔起）
+    //   ・`replanned`＝本波已經改過一次組織（裁定 1A「一波只改一次」的旗標）
+    // ★ 本段只記帳、零消費端 ★ 消費端是下一段的組合獎金；裁定 1B 明文「不跑零懲罰」，
+    //   所以本波記帳路徑上**不得出現任何 trust 寫入**（tests/route-commit.test.mjs 釘死）。
+    // 與 attackCombo／approach 同壽命、純由可觀察量重建（受控者的實際位移）＝
+    // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
+    routeCommit: null,
   };
 }
 
@@ -249,6 +268,10 @@ export function aiCollectIntents(game, aiState, excludeIds = []) {
   // 輸入（replanCall）由 UI 層寫、在此消費：走的是 digBias／attackerId 同一條
   // 「玩家透過協調層下指令」的路，因此同樣要進 rallyTape 的 PLAYER_AI_FIELDS。
   applyReplanCall(game, aiState);
+  // 叫戰術重做卷 段 1：受控玩家「不跑就改組織」。掛在 applyReplanCall **之後**、
+  // 走位（decideOne）**之前**——理由與上一行逐字相同：改判要在同一個 tick 內生效，
+  // 否則這一 tick 的人還照舊線跑＝提示與跑位分岔一格。
+  applyRouteCommit(game, aiState, excludeIds);
   updateBlockRead(game, aiState, excludeIds); // C2：先讀受控玩家的攔網站位，後排本 tick 就吃得到
   const intents = [];
   // 以輪轉名單的顯式順序遍歷（不靠 Object.keys 插入序；接生涯資料換 id 型別也不變序）
@@ -281,6 +304,7 @@ function ensureFlightPlan(game, aiState) {
     // ⚠ `calledPlay` **不在此清** ⚠ 死球窗正是玩家叫牌的時機，跟著清等於一按就沒。
     aiState.callOutcome = null;
     aiState.replanCall = null; // 遠段改判只在第二觸窗內有效，死球即作廢
+    aiState.routeCommit = null; // 段 1 記帳與助跑線同壽命（清空點之一）
     // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
     aiState.blockPlan = null;
     aiState.setTouch = null;
@@ -504,6 +528,10 @@ function ensureFlightPlan(game, aiState) {
     aiState.attackKind = null;
     aiState.approach = null; // 來球＝上一波的助跑線作廢
     aiState.attackCombo = null; // 同壽命：組合隨助跑線一起作廢（藍圖 §二 兩處清空點之二）
+    // 段 1 記帳同壽命（清空點之二）。★壽命刻意綁在「來球」而不是「重新規劃」★
+    // 我方要開新的一波，球必然先回到我方（走這條來球分支）⇒ 這裡清＝天然每波一份，
+    // 且不受第二觸窗內 flightId churn 影響（同 jumpSetRoll 鎖存要處理的那個問題）
+    aiState.routeCommit = null;
     // §十-2：來球＝沒有攻擊要攔，鎖定作廢——但**對方的扣球例外**：那正是要攔的那顆球。
     // 鎖定現在同時掛著起跳窗（planX 為 null 就不開窗），扣球一出手就清掉的話，
     // 窗會在球飛向網子、真正該攔的那幾十 tick 裡消失。改制前鎖定只管站位所以無害。
@@ -940,6 +968,137 @@ function applyReplanCall(game, aiState) {
   aiState.approach = { team, setTick: aiState.approach.setTick, routes };
   aiState.attackTempo = approachRouteOf(routes, res.combo.mainId)?.tempo ?? 'three';
   aiState.callOutcome = out;
+}
+
+// ---- 叫戰術重做卷 段 1：受控玩家「不跑」的後果（Sawmah 2026-08-01 裁定 1A/1B/1C）----
+//
+// 新語意的下半場。段 0 已經做完上半場：一傳完成 → S 決策 → 非 S 收到球內提示
+//（`src/ui/routeCue.js`「S 要你跑 X」）→ **他自己決定跑不跑**。本函式處理
+// 「他不跑會怎樣」：S 當場把他從攻擊池拿掉、改給別人（裁定 1A）。
+//
+// ★★★ 護欄 C：本機制只檢查 excludeIds（受控玩家）★★★
+// AI 隊友「沒跑自己的線」是**既有行為**——他去接球、去補位（實測單局 601 次沒步進
+// 協調分支），那不是「決定不跑」。拿它觸發改判會把既有平衡整個打爛。
+// 因此 excludeIds 為空（AI vs AI 對局）時第一行就 return ⇒ `tools/sim-hash-probe.mjs`
+// 必須逐值相同。這條護欄轉紅代表把 AI 也算進去了，不是基準該重立。
+//
+// ★ 兩段式判定（裁定 1C）★ 兩段各有各的消費端，不得互相替代：
+//   ① 早訊號（**S 改組織用**）＝承諾 tick（該員 route 的 `startTick`）到了，他還沒
+//      「進助跑線」。要早，因為 S 得來得及改給別人；「起跳」那時球都出手了。
+//      「進助跑線」只認兩種，不得另立第三種：
+//        ⓐ 離自己的 `route.start` 在 `AI.AT_START_M` 內（就位在等，本來就該站那）
+//        ⓑ 這一 tick 正朝網推進（`BLOCK_COMMIT.APPROACH_EPS`，＝攔網手判「這個人正在
+//           助跑」的同一把尺；玩家面板 `src/input/blockRead.js` 讀的也是它）
+//   ② 實際起跳（**信任結算用**）＝AIR 相位期間人真的停在自己那條線的起跳點上
+//      （`AI.TAKEOFF_SETTLE_M`＝sim 自己的「到位即停＝原地拔起」判準，不另立尺）。
+//      sim 沒有滯空狀態機（game.js「真正的滯空狀態機留給 Phase 2」），所以「起跳」
+//      在這一層就是相位＋站位，不是一個 y 座標。
+//
+// ★ 裁定 1B：零懲罰 ★ 不跑**不扣任何 trust**，只是失去這一波的獎勵資格。
+// 因此本函式（含 replanWithoutRunners）**一行 trust 都不寫**——現行 trust 只在
+// `applyAttackOutcome` 因得分／失誤變動，這裡不加第二條路。
+function applyRouteCommit(game, aiState, excludeIds) {
+  if (!excludeIds?.length) return; // ★護欄 C★ AI vs AI 一格不動
+  const r = game.rally;
+  const team = aiState.landingTeam;
+  if (game.phase !== 'rally' || !team || r.possession !== team || r.touches < 1) return;
+  if (aiState.approach?.team !== team || !aiState.approach.routes) return;
+
+  // 建帳：壽命同 approach（清空點在 ensureFlightPlan 的死球分支與來球分支）。
+  // `team` 不符＝上一波的殘帳（清空點沒蓋到的縫），整份重來
+  if (!aiState.routeCommit || aiState.routeCommit.team !== team) {
+    aiState.routeCommit = { team, flightId: r.flightId, replanned: false, entries: [] };
+  }
+  const ledger = aiState.routeCommit;
+  const tick = game.tick;
+  const side = TEAM_SIDE[team];
+
+  for (const pid of excludeIds) {
+    const route = approachRouteOf(aiState.approach.routes, pid);
+    const actor = game.actors[pid];
+    if (!route || !actor) continue; // 不在攻擊池＝這一波沒被叫，沒有帳可記
+    let e = ledger.entries.find((x) => x.pid === pid);
+    if (!e) {
+      e = {
+        pid, kind: route.kind, tempo: route.tempo,
+        startTick: route.startTick, takeoffTick: route.takeoffTick,
+        ran: null, jumped: false,
+      };
+      ledger.entries.push(e);
+    }
+    // ---- ① 早訊號：承諾 tick 一到就判一次，判完不再改（`ran` 從 null 變成布林）----
+    // 用 `>=` 而不是 `===`：規劃點本身可能已經晚於 startTick（一速／二速的起步早於
+    // 二傳觸球，而規劃是在一傳完成那一刻才做的），那時第一個看得到的 tick 就是判定時刻。
+    // `startTick` 為 null＝錨點算不出來（setTick 預測失效）＝這一波沒有承諾 tick，不判。
+    if (e.ran === null && route.startTick != null && tick >= route.startTick) {
+      const atStart = Math.hypot(route.start.x - actor.x, route.start.z - actor.z)
+        <= AI.AT_START_M;
+      const closing = (side * actor.pz) - (side * actor.z) > BLOCK_COMMIT.APPROACH_EPS;
+      e.ran = atStart || closing;
+    }
+    // ---- ② 實際起跳：只記帳，本段零消費端（下一段的組合獎金才會讀）----
+    if (!e.jumped && routePhaseAt(route, tick) === ACTION_PHASE.AIR
+      && Math.hypot(route.takeoff.x - actor.x, route.takeoff.z - actor.z)
+        < AI.TAKEOFF_SETTLE_M) {
+      e.jumped = true;
+    }
+  }
+
+  // ---- 裁定 1A：S 當場改組織 ----
+  // 窗界＝與路徑甲／乙同一個規劃窗（第二觸窗）。出了窗球已經在飛向攻擊手，
+  // 改攻擊手沒有意義；但上面的**記帳**不受此限（起跳發生在二傳觸球之後）。
+  if (ledger.replanned || r.touches !== 1) return;
+  const skipIds = ledger.entries.filter((e) => e.ran === false).map((e) => e.pid);
+  if (!skipIds.length) return;
+  replanWithoutRunners(game, aiState, team, skipIds, ledger);
+}
+
+// 把 skipIds（判定為「不跑」的受控玩家）從攻擊池拿掉，重選攻擊手、重算組合與助跑線。
+// **範式逐項抄 `applyReplanCall`**（那支已經在做同一件事，只是觸發源是 S 的面板指令）：
+// 同一顆池的重建方式、同一道「已起跑者不得改線」硬線、同一組寫回欄位。
+// 不造第二套重規劃流程——兩套遲早分岔（4.5A 的教訓）。
+function replanWithoutRunners(game, aiState, team, skipIds, ledger) {
+  const r = game.rally;
+  // 一波只改一次：**嘗試即記旗標**。湊不出替代方案（池子空了／新主攻已起跑）時也
+  // 不再逐 tick 重試——重試除了燒 CPU 沒有新資訊，輸入下一 tick 不會變。
+  ledger.replanned = true;
+  const tier = aiState.passTier ?? 'perfect';
+  // 池子用**與 ensureFlightPlan 逐字相同的**三個輸入重建（claimId／tier／passReceiverId
+  // 都是本波已定案的協調層狀態）⇒ 同一顆池，不另闢真相
+  const points = applyRouteKinds(
+    attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
+    { flightId: r.flightId, seed: game.seed ?? 0, passTier: tier },
+  ).filter((pt) => !skipIds.includes(pt.pid));
+  if (!points.length) return; // 池子被掏空＝沒有別人可以改給，維持原案（不跑就不跑）
+  const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
+  if (!pick) return;
+  const tick = game.tick;
+  // 起跑判定必須在覆寫 aiState.approach **之前**取（approachLaunched 讀的就是它）
+  const launched = (pid) => approachLaunched(aiState, pid, tick);
+  const combo = planCombination(points, pick.pid, {
+    team, flightId: r.flightId, seed: game.seed ?? 0, passTier: tier,
+    comboScale: game.comboScale ?? 1,
+  });
+  // ⚠ 已起跑的人不得改線 ⚠ 與 applyReplanCall 同一道硬線、同樣不做「只改沒起跑的
+  // 那一個」的半套改判：組合是兩人之間的關係，只改一邊等於兩人跑不同的套路
+  if (launched(pick.pid) || (combo && launched(combo.partnerId))) return;
+  const prev = aiState.approach.routes;
+  const comboPoints = applyComboRoutes(points, combo);
+  const routes = approachRoutesFor(team, comboPoints, {
+    setTick: aiState.approach.setTick,
+    flightId: r.flightId,
+    seed: game.seed ?? 0,
+    passTier: tier,
+    speedOf: (pid) => moveSpeed(game.players[pid]),
+    combo,
+  }).map((rt) => (launched(rt.pid) ? (prev.find((o) => o.pid === rt.pid) ?? rt) : rt));
+  aiState.attackerId = pick.pid;
+  aiState.attackCombo = combo;
+  // 攻擊線由**寫回後**的池決定（同 ensureFlightPlan／applyReplanCall 的教訓）
+  aiState.attackKind = comboPoints.find((pt) => pt.pid === pick.pid)?.kind ?? null;
+  // setTick 是本波的時間錨點，改組織不得重算它（重算＝助跑時序整組平移）
+  aiState.approach = { team, setTick: aiState.approach.setTick, routes };
+  aiState.attackTempo = approachRouteOf(routes, pick.pid)?.tempo ?? 'three';
 }
 
 // ---- 個體層 ----
