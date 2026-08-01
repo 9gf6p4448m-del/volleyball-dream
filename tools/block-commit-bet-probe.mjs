@@ -62,7 +62,9 @@ function runSet(seed) {
       // 本場配分歷史：這一刻各攻擊手已經扣過幾球（可觀察量）
       const hist = {};
       for (const pid of game.match.rotations.A) hist[pid] = game.scoutTally?.[pid]?.spikes ?? 0;
+      const bt = tendency ? tendency(game, 'A', { passTier: ai.passTier ?? null }) : null;
       pending = {
+        betKind: bt?.kind ?? null,
         blind: plan.template.blind === true,
         betPid,
         histAtBet: hist,
@@ -73,6 +75,7 @@ function runSet(seed) {
     }
     if (pending) {
       if (game.rally.possession === 'A' && ai.attackerId) pending.attackerId = ai.attackerId;
+      if (game.rally.possession === 'A' && ai.attackKind) pending.realKind = ai.attackKind;
       for (const e of events) {
         if (e.type === 'BLOCK_TOUCH' && e.team === 'B') {
           pending.touched = true;
@@ -143,3 +146,13 @@ for (const r of aimed) {
 console.log(`  歷史分得出高下的樣本 n=${alignable}；賭注落在本場「被舉最多次」者身上 `
   + `${aligned} ＝ ${pct(aligned, alignable)}% ± ${se(aligned, alignable)}`);
 console.log(`  （隨機基準＝1／池子大小 ≈ 25%，池子通常 4 人）`);
+
+console.log('\n-- ⑤ 賭注線別分佈 vs 真實攻擊線別分佈 --');
+const tally = (get) => { const m = {}; for (const r of rows) { const k = get(r) ?? 'null'; m[k] = (m[k] ?? 0) + 1; } return m; };
+const betT = tally((r) => r.betKind);
+const realT = tally((r) => r.realKind);
+const keys = [...new Set([...Object.keys(betT), ...Object.keys(realT)])].sort();
+console.log('線別      賭注%    真實攻擊%');
+for (const k of keys) {
+  console.log(`${k.padEnd(10)} ${pct(betT[k] ?? 0, rows.length).padStart(6)}  ${pct(realT[k] ?? 0, rows.length).padStart(9)}`);
+}

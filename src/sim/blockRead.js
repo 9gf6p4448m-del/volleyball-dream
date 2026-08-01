@@ -10,20 +10,28 @@
 // 07-29 追記：本檔同時是 §6 B1「攔網 read／commit 人格」＋ B2「close 時間預算」
 // 的純函式家（見檔案下半的 B1／B2 段）——同屬「攔網手在讀什麼」，不另開新檔。
 import { TEAM_SIDE } from './rotation.js';
+// 攔網時序卷 段 3：偵測深度的界線要對得上**助跑起點的單一真相**（APPROACH 表），
+// 不再自己寫一個數字（本專案累犯型錯誤：拿看起來合理的數字去卡沒量過的量）
+import { APPROACH } from './approach.js';
 
 // 攻擊瞄準點幾何。原本只存在於 input/attackZones.js，C2 之後 sim 也要讀同一份
 // （sim 不得 import input）——故上移到此當單一真相，input 端改為 import。
 // **數值一格未動**（line/cross/middle/tip 與遷移前逐字相同）。
-export function spikeAimsFor(game, attackerId) {
-  const a = game.actors[attackerId];
-  const side = TEAM_SIDE[game.players[attackerId].teamId]; // 對方場在 z 為 -side 方向
-  const sign = a.x >= 0 ? 1 : -1;                          // 攻擊手所在半邊
+// 同一份幾何，改吃**位置**而不是人（攔網時序卷段 3：commit 要對「他賭的那個人會在哪裡
+// 擊球」算過網點，那個位置是名目擊球點、不是那個人此刻站哪）。數值一格未動。
+export function spikeAimsAt(from, team) {
+  const side = TEAM_SIDE[team];        // 對方場在 z 為 -side 方向
+  const sign = from.x >= 0 ? 1 : -1;   // 攻擊手所在半邊
   return {
     line: { x: sign * 4.15, z: -side * 5.2 },   // 直線（seamZ＝前後排之間的縫）
     cross: { x: -sign * 3.9, z: -side * 6.3 },  // 斜線
     middle: { x: 0, z: -side * 5.0 },           // 中路
     tip: { x: -sign * 1.2, z: -side * 1.9 },    // 吊球短區
   };
+}
+
+export function spikeAimsFor(game, attackerId) {
+  return spikeAimsAt(game.actors[attackerId], game.players[attackerId].teamId);
 }
 
 // 攻擊路線在網面（z=0）通過的 x（攻守兩端共用：讀攔網、攔網站位計算、C2 讀站位）
@@ -120,10 +128,49 @@ export const BLOCK_COMMIT = {
   // 朝網位移門檻（m／tick）：與 src/input/blockRead.js 的 APPROACH_EPS 同值同語意
   //（玩家面板判「這個人正在助跑」用的就是這把尺）
   APPROACH_EPS: 0.005,
-  // 助跑判定深度（隊伍視角 lz）：前排職責站位 lz＝3.0（rotation.js POSITION_TEMPLATE）。
-  // 比職責線**更進去**且還在往網走＝這個人已經在跑快攻，不是站著等或走回位。
-  // 2.9 是「職責線再進去一點點」——站著微抖的人跨不過，快攻手起步後 1-2 tick 就跨過。
-  DEPTH_LZ: 2.9,
+  // 助跑判定深度（隊伍視角 lz）。
+  //
+  // ★ 攔網時序卷 段 3（Sawmah 2026-08-01 裁定 4：甲）★ 2.9 → 兩翼助跑起點再出去一點點。
+  // 舊值 2.9 的語意是「前排職責線（3.0）再進去一點點」——站著微抖的人跨不過、
+  // 快攻手起步後 1-2 tick 就跨過。問題是**只有快攻手跨得過**：
+  //   APPROACH 助跑起點 lz ＝ 快攻 3.0／兩翼 3.6／夾塞 4.2／後排 5.6
+  // ⇒ 兩翼從頭到尾在偵測範圍外，commit 看得到的人恆是中路誘餌，
+  //   牆首手 x 的 p50 恆為 0.000、右翼被攔死率 0.00%（n=3362）。
+  //
+  // 新值＝**兩翼助跑起點 + 0.1**（沿用舊值對職責線的同一個 0.1 餘裕，零手挑數字）。
+  // 刻意仍把夾塞 4.2 與後排 5.6 擋在外面：本段只授權「讓兩翼進候選池」。
+  DEPTH_LZ: APPROACH.left.lz + 0.1,
+  // 「外圍候選」的界線＝**快攻助跑起點再出去一點點**（APPROACH.quick.lz 3.0 ＋ 0.1）。
+  // 語意＝「這麼深的地方還在往網跑的人，跑的不是快攻那條線」。
+  // ⚠ 這條**不能設在快攻起點以內**（試過 2.9）：快攻手起步那一刻 lz 就是 3.0，
+  //   會連他一起降級 ⇒ commit 對快攻的早跳被砍掉，款 3 離地率 gap 實測翻成 −7.3pp。
+  //
+  // commit 對外圍候選**看得見位置、讀不穿時序**（裁定 4 原文）：
+  //   位置＝段 2 的 blockSetterTendency 直接給（零延遲）；
+  //   時序＝這個人要多花 OUTER_LAG_MUL × 該攔網手自己的反應延遲才進得了候選池，
+  //         於是「中路誘餌停下來」那一刻兩翼是否已被看見，就成了可調的賭局
+  //         ——延遲越長越騙得動（交叉活著），越短牆越準（兩翼補得到）。
+  OUTER_LZ: APPROACH.quick.lz + 0.1,
+  // 外圍的第二條判準＝**橫向**：前排兩翼職責站位 |lx| ＝ 3（ai.js DUTY_SLOTS）。
+  // 「外圍」在排球裡本來就同時是深度與邊路兩件事：快攻手恆在 lx 0，兩翼助跑起點
+  // |lx| 3.6–4.1 ⇒ 這條判準結構上分得開快攻與兩翼，不必靠深度去猜。
+  // 兩條判準取聯集（任一成立即為外圍）；設 Infinity ＝關掉該條（掃描臂用）。
+  OUTER_LX: 3.0,
+  // 外圍時序延遲的幅度倍率。★ 1 ＝**零新常數**：延遲量直接取該員既有的
+  // `reactionTicks`（每人不同 6–21 tick）——「遠處的人我反應慢一拍」。
+  // ⚠ 這是策略數值（硬規則 3）：本卷只量基準與掃描曲線，正式值待 Sawmah 定案。
+  OUTER_LAG_MUL: 0,
+  // ★ 裁定 2「賭對就死」強度端的**形狀提案**（攔網時序卷段 3 量到的缺口）★
+  // 0 ＝現行：commit 站在他賭的那個**人**身上。
+  // 1 ＝站到那個人的**過網點**上（直線／斜線兩條過網線的中點——他不知道對方會打哪條，
+  //     就站在兩條中間，這是真實攔網手的做法）。
+  // 為什麼需要它：實測 commit 對右翼的手身攔回 **0/311**，而 read 是 21/309（6.80%）。
+  // 根因不是賭錯人——是**瞄錯位置**：右翼攻擊手站 lx 3.0–3.6，球卻從 lx≈1.9 過網，
+  // 差 1.1–1.7m ＞ BLOCK_REACH_X ⇒ 就算賭中也結構上搆不到。read 瞄的是球的預測擊球點，
+  // 所以他碰得到。這正是裁定 2 說的「更佳的對位」，且**零數值 buff**：位置對了就攔得到，
+  // 位置錯了就空門，賭中與賭錯的差距由幾何自己長出來。
+  // ⚠ 幅度＝策略數值（硬規則 3）：出廠 0＝行為不變，曲線已量，正式值待 Sawmah 定案。
+  AIM_CROSSING_MIX: 0,
   // 同深度視為「兩個人一起在跑」的帶寬（m）——線索②只在這種模稜情境才有事做
   TIE_M: 0.5,
   // 二傳站位偏移到這麼多（m）才算「朝向讀得出來」；以下一律當成沒有資訊
@@ -174,8 +221,23 @@ export function setterLeanOf(game, team, setterSpotLx = 0) {
 // ★ 反作弊保證線 ★ —— 參數只有 game／攻方隊伍代號／可觀察線索，取不到 attackerId。
 // 回傳「此刻該跟死的那個人在世界 x 的哪裡」（{ x, depth }）或 null（沒人在跑快攻）。
 // 刻意**不回傳任何 playerId**：呼叫端就算想偷渡也拿不到人。
+// 段 3：外圍候選的「延遲視角」——用 lag tick 之前的位置判他過線了沒／還在不在推進。
+// 資料源＝ `actor.zHistory`（game.js 每 tick 推入、長度＝TAKEOFF_LOOKBACK_TICKS 24），
+// 既有欄位，不新增狀態。歷史還不夠長＝這個人才剛出現在視野裡，一律當作「還沒讀到」。
+function laggedZView(actor, lag) {
+  if (lag <= 0) return { z: actor.z, pz: actor.pz };
+  const h = actor.zHistory;
+  const i = h.length - 1 - lag;
+  if (i <= 0) return null;
+  return { z: h[i], pz: h[i - 1] };
+}
+
 export function blockCommitRead(game, atkTeam, opts = {}) {
-  const { passTier = null, setterSpotLx = 0, k = BLOCK_COMMIT } = opts;
+  const {
+    passTier = null, setterSpotLx = 0, k = BLOCK_COMMIT,
+    // 這名攔網手對外圍候選的時序延遲（tick）。呼叫端給 0＝不降級（read 的退路、探針對照臂）
+    outerLag = 0,
+  } = opts;
   // 線索①：一傳沒到位＝快攻不在池裡，commit 沒有標的（目前恆 perfect，見檔頭）
   if (passTier != null && passTier !== 'perfect') return null;
   const rot = game.match.rotations?.[atkTeam];
@@ -192,10 +254,17 @@ export function blockCommitRead(game, atkTeam, opts = {}) {
     // 角色是公開資訊（玩家面板 mbReadFor 也照 currentRole 分翼別）：
     // 二傳往網跑是去舉球、自由人不進攻擊池
     if (p.currentRole === 'setter' || p.currentRole === 'libero') continue;
-    const lz = side * a.z;
+    // 段 3：先用**當下**的位置判他是不是外圍（這是「看得見位置」那一半，不延遲）；
+    // 是外圍就改用延遲視角判「過線了沒／還在不在推進」（「讀不穿時序」那一半）
+    const nowLz = side * a.z;
+    const outer = nowLz > k.OUTER_LZ || Math.abs(side * a.x) > k.OUTER_LX;
+    const view = outer ? laggedZView(a, outerLag) : { z: a.z, pz: a.pz };
+    if (!view) continue; // 外圍且歷史還不夠長＝這一刻還讀不到他
+    const lz = side * view.z;
     if (lz > k.DEPTH_LZ) continue;
-    if ((side * a.pz) - lz <= k.APPROACH_EPS) continue;
-    cands.push({ lz, x: a.x, lx: side * a.x });
+    if ((side * view.pz) - lz <= k.APPROACH_EPS) continue;
+    // 排序與回傳一律用**真實當下的位置**：位置是看得見的，延遲的只有時序判定
+    cands.push({ lz: nowLz, x: a.x, lx: side * a.x });
   }
   if (!cands.length) return null;
   let best = cands[0];

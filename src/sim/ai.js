@@ -18,7 +18,7 @@ import {
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
   blockLaneRead, digForBlock, blockCommitRead, blockCloseBudget,
-  BLOCK_PERSONA, BLOCK_COMMIT,
+  BLOCK_PERSONA, BLOCK_COMMIT, spikeAimsAt, netCrossingX,
 } from './blockRead.js';
 import { hash01 } from './rng.js';
 import { TUNING, spikeSpeed, spikeRouteAt, spikeClearanceFor } from './game.js';
@@ -1443,6 +1443,19 @@ export function blockSetterTendency(game, atkTeam, opts = {}) {
   if (!best) return null;
   const a = game.actors[best.pid];
   if (!a) return null;
+  // 裁定 2 強度端（形狀提案，出廠 MIX=0＝行為不變）：從「站在人身上」朝
+  // 「站在他的過網點上」收斂。過網點＝該線別的**名目擊球點**（setAimFor，公開的
+  // 位置知識，不含任何 route 的時間欄位）拉出直線／斜線兩條過網線再取中點——
+  // 他不知道對方會打哪一條，就站在兩條中間。零新幾何、零數值加成。
+  const mix = BLOCK_COMMIT.AIM_CROSSING_MIX;
+  if (mix > 0) {
+    const spot = setAimFor(game, atkTeam, best.pid, best.kind);
+    const from = localToWorld(atkTeam, spot.lx, spot.lz);
+    const aims = spikeAimsAt(from, atkTeam);
+    const midX = (netCrossingX(from, aims.line) + netCrossingX(from, aims.cross)) / 2;
+    const x = a.x + (midX - a.x) * mix;
+    return { x, lx: TEAM_SIDE[atkTeam] * x, kind: best.kind };
+  }
   return { x: a.x, lx: TEAM_SIDE[atkTeam] * a.x, kind: best.kind };
 }
 
@@ -1688,7 +1701,17 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
       }
     } else {
       // commit（含 blind 退路），以及 read 在 predictContactPoint 罕見回不出值時的退路
-      const liveRead = blockCommitRead(game, atkTeam, opts);
+      //
+      // ★ 攔網時序卷 段 3（裁定 4）：外圍候選的**賭注品質降級** ★
+      // 段 3 放寬了偵測深度讓兩翼進候選池——但「看得見位置」不等於「讀得穿時序」。
+      // 對外圍（新放進來的那一批）他的時序判定延遲 `OUTER_LAG_MUL × 自己的反應延遲`，
+      // 於是交叉／內切之間的時序差**仍然騙得動他**（裁定 4 的成敗判準之一）。
+      // ★ 這個延遲是 per-blocker 的（reactionTicks 逐人不同）★——順帶也是攔網分工卷
+      // step2b「個別演進」在輸入端的第一條真通道（此前只有「漏 tick」一條）。
+      const liveRead = blockCommitRead(game, atkTeam, {
+        ...opts,
+        outerLag: Math.round(reactionTicks(player) * BLOCK_COMMIT.OUTER_LAG_MUL),
+      });
       if (liveRead) c.seen = true;
       if (r.touches >= 2 && c.seen && liveRead == null) {
         c.jumpTick = tick;
