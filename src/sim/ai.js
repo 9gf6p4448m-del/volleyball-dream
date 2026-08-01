@@ -1431,15 +1431,30 @@ export function blockSetterTendency(game, atkTeam, opts = {}) {
   const hist = entries.map((e) => game.scoutTally?.[e.pid]?.spikes ?? 0);
   const totalHist = hist.reduce((s, v) => s + v, 0);
   const n = entries.length;
-  let best = null;
+  const scores = [];
+  let sum = 0;
   for (let i = 0; i < n; i += 1) {
     const share = (hist[i] + 1) / (totalHist + n);
-    const score = (w[i] ?? 0) * share * n;
-    // 平手取輪轉序在前者＝決定論
-    if (best === null || score > best.score) {
-      best = { score, pid: entries[i].pid, kind: entries[i].kind };
-    }
+    const v = (w[i] ?? 0) * share * n;
+    scores.push(v);
+    sum += v;
   }
+  if (sum <= 0) return null;
+  // ★ 賭注＝**按權重抽**，不是取眾數（Sawmah 2026-08-01 裁定，段 3 掃描後追加）★
+  //   取 argmax 的話，權重 0.35 的人會被賭 100% ⇒ 賭注分佈與真實配分分佈嚴重脫節
+  //   （實測 pipe 賭 33.9% vs 真實 12.1%、quick 賭 1.8% vs 真實 20.4%），
+  //   於是低傾向的翼**結構上永遠是空門**（右翼手身攔回 0/311，而 read 是 21/309）。
+  //   改抽之後賭注分佈貼合二傳的分佈——「讀傾向」讀的本來就是分佈，不是那個第一名。
+  //
+  // ★ roll 的兩個要求 ★
+  //   ① 與二傳自己的 roll **不同源**：同源＝100% 賭中＝直接讀答案。
+  //      pickAttackPoint 用 `flightId * 977 + 131`，這裡用不同的乘數與位移。
+  //   ② **一個 rally 內恆定**：flightId 每次觸球就 +1，拿它當鍵會讓賭注在一傳／二傳
+  //      觸球那一刻無故換人 ⇒ chase 段當成「改判」白付 REPLANT_TICKS。
+  //      改用比分（一個 rally 內不變、每一分換一次）當鍵。零 rng 消耗（hash01 是純 hash）。
+  const { score } = game.match;
+  const roll = hash01((score.A * 1009 + score.B) * 613 + 71 + (game.seed ?? 0));
+  const best = pickByWeights(entries, scores.map((v) => v / sum), roll);
   if (!best) return null;
   const a = game.actors[best.pid];
   if (!a) return null;
