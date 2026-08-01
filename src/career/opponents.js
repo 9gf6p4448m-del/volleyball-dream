@@ -34,7 +34,22 @@
 //   read   ＝守住追球軸、等球離手才反應（＝本輪之前所有隊伍的既有行為，一行未動）
 //   commit ＝不等二傳出手就跟死快攻；讀對＝中路封死，判錯＝晚一整段反應時間才動身、
 //            邊線變單人攔網（交叉／兩翼就是解法）
-// 分級以 level 為主軸（≥64 read／<64 commit），曜石體中是刻意的個性例外：
+// ★★ 2026-08-01 Sawmah 裁定（難度重校卷 題 1b）：`blockPersona` **入隊伍 DNA 欄位** ★★
+// **與 level 門檻脫鉤**——每一隊在自己的 `ai` 區塊裡明文寫死，不再由分級表推導、
+// 也不再經任何白名單／總開關過濾。理由：攔網人格是**隊伍個性**（這隊怎麼打球），
+// 不是難度旋鈕；把它綁在 level 上，等於每次校難度都會順手改掉隊伍的性格。
+// 難度校正的合法旋鈕只有三層（對手 level／賽程模板／titles 衛冕加成），攔網人格封存。
+//
+// 首發分配結果**照舊**（曜石 commit、其餘六隊 read）——本次是純結構重構，
+// sim-hash 逐值不變可證（見 tests/opponent-persona.test.mjs 的「恰好一隊 commit」斷言）。
+//
+// 副產物（Phase 4 敘事鉤子）：招募球員帶原隊人格血統。**欄位早就在對的位置**——
+// `buildRecruitMember` 已經寫入 `origin: def.id`（recruitment.js:310），
+// 要用的時候 `opponentById(member.origin).ai.blockPersona` 就是他的血統，
+// 不另存一份（存兩份＝日後兩邊會不一致）。
+//
+// 以下保留歷史，說明這條路是怎麼走到「明文指定」的：
+// 分級曾以 level 為主軸（≥64 read／<64 commit），曜石體中是刻意的個性例外：
 // level 60 卻 commit——「這隊 MB 攔網極快、中路是他們的天下」的 trait 本來就是
 // 「賭中間」的打法，玩家該學會的是拿交叉去懲罰它，而不是硬扣中路。
 // ★ 2026-07-29 Sawmah 拍板：commit 暫停派任；**開啟條件＝憲法 §十「讓 sim 誠實」落地**。
@@ -51,9 +66,8 @@
 // 「中路是他們的天下」trait 本來就是賭中間的打法，交叉/兩翼是解法——commit 對兩翼
 // 只攔 2.6%），其餘維持 read；全面派任留給未來難度重校卷（重校 §三 B 分級表時
 // 把 COMMIT_PERSONA_ENABLED 改回 true 並刪白名單）。
-const COMMIT_PERSONA_ENABLED = false;
-const COMMIT_ALLOWLIST = new Set(['obsidian']);
-const persona = (p, id) => (COMMIT_PERSONA_ENABLED || COMMIT_ALLOWLIST.has(id) ? p : 'read');
+// ★ 2026-08-01：上面那個總開關＋白名單＋`persona()` 包裝**已刪除**（題 1b）——
+//   它的存在意義是「暫時只開一隊」，而現在每一隊本來就各寫各的，包裝層沒有事做了。
 
 export const OPPONENTS = [
   {
@@ -78,7 +92,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 0, name: '杜品澄', title: '節拍器' }, // S・隊長——一傳一舉把亂流理成直線
     scoutRead: 0,
-    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03, blockPersona: persona('commit') }, // 控制系：飄浮發球、防守韌性低（少魚躍）
+    ai: { tipRate: 0.06, dumpRate: 0.04, floatServeRate: 0.25, diveRate: 0.03, blockPersona: 'read' }, // 控制系：飄浮發球、防守韌性低（少魚躍）；紀律型＝不賭，等你出手
   },
   {
     id: 'white-wave',
@@ -102,7 +116,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 'L', name: '蔡沐恩', title: '不沉之浪' }, // 自由人＝隊魂——球不落地是他唯一的信仰
     scoutRead: 0.25,
-    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15, blockPersona: persona('commit') }, // 防守隊招牌：拚命魚躍、球不落地不放棄
+    ai: { tipRate: 0.22, dumpRate: 0.08, floatServeRate: 0.15, diveRate: 0.15, blockPersona: 'read' }, // 防守隊招牌：拚命魚躍、球不落地不放棄；地板撿得起來就不必賭牆
   },
   {
     id: 'obsidian',
@@ -126,7 +140,7 @@ export const OPPONENTS = [
     ],
     ace: { slot: 2, name: '詹子曜', title: '黑曜箭' }, // MB・阿曜——起跳永遠快你半拍
     scoutRead: 0.7,
-    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: persona('commit', 'obsidian') }, // §6 B1 個性例外：中路是他們的天下＝賭中間（裁定丙唯一現役 commit）
+    ai: { tipRate: 0.1, dumpRate: 0.1, jumpServeRate: 0.05, diveRate: 0.08, blockPersona: 'commit' }, // ★全隊唯一 commit★ 中路是他們的天下＝賭中間；交叉／兩翼就是解法（隊伍 DNA，與 level 無關）
   },
   // W6 A1 新隊①（level 55，北原↔白浪空檔）：變化球隊——身材矮、火力弱，
   // 靠球路變化（吊球/二次球/飄浮球）打亂節奏；攔網差＝扣過去很痛快
@@ -156,7 +170,7 @@ export const OPPONENTS = [
     // S・小嵐——亂流的正中央永遠是靜的；grows（N2）＝跨屆吃身高與能力曲線
     ace: { slot: 0, name: '簡子嵐', title: '颱風眼', grows: true },
     scoutRead: 0.15,
-    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1, blockPersona: persona('commit') },
+    ai: { tipRate: 0.28, dumpRate: 0.18, floatServeRate: 0.35, diveRate: 0.1, blockPersona: 'read' }, // 節奏擾亂型：吊球與二次球才是招牌，攔網不賭
   },
   {
     id: 'iron-mist',
