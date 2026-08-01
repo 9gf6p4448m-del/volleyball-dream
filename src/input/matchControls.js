@@ -341,6 +341,11 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       let aim = { x: 0, z: -6.5 * TEAM_SIDE[me.teamId] }; // 預設瞄對方深區
       let gaze = null;
       let timing = 1;
+      // 攔網時序卷 段 1：這次的攔網是不是玩家**手動投遞**的（K 鍵／攔網鈕／
+      // 「立即攔網」面板／主動作鈕在攔網情境）。sim 用它豁免物理滯空閘——
+      // 玩家的 48-tick 窗是與身體無關的計時器，那段落地資格屬已記債項目。
+      // 下方的自動跳攔（simpleMode 反射）**不設**這個旗標＝吃與 AI 同一道閘。
+      let manualBlock = false;
 
       if (queuedAction) {
         // 出手緩衝：放開後持續投遞到成功（onEvents 清除）或逾時——按了就會打
@@ -349,6 +354,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         }
         action = queuedAction.forceAction ?? contextAction(game);
         if (action === 'block' && !queuedAction.forceAction) blockSignal = true;
+        if (action === 'block') manualBlock = true; // 走緩衝＝玩家按出來的
         // 起跳滯空窗：放開起跳後 JUMP_WINDOW_MS 內是扣球窗，超過（落地了）降級安全球
         // 用「現在」與起跳時刻比較（活時間）；jumpAt/releasedAt 同時設定會讓比較恆真＝死邏輯
         if (action === 'spike') {
@@ -470,11 +476,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       // 攻擊手，比對不上 attackerId 就不記，見 ai.js 同段註解）
       const routeKind = action === 'spike' && aiState?.attackerId === playerId
         ? (aiState.attackKind ?? null) : null;
-      return [createIntent({
+      const it = createIntent({
         playerId, tick, move, action, aim, gaze, timing,
         style: queuedAction?.style ?? null,
         routeKind,
-      })];
+      });
+      // 段 1 記債豁免旗標：只在手動攔網時掛上（同 ai.js 掛 `hand` 的既有作法，
+      // 不擴充 createIntent 的白名單）——自動跳攔不掛＝與 AI 同閘
+      if (manualBlock) it.manual = true;
+      return [it];
     },
     // 出手成功（sim 發出我的觸球/發球事件）→ 清掉緩衝
     onEvents(events) {

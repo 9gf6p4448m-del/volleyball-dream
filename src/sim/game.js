@@ -11,6 +11,9 @@ import {
   createPlayer, spikeReach, blockReach, blockTopEdge, moveSpeed, feintMasteryMul,
 } from './player.js';
 import { reachVolumeFor, ballInReach } from './reach.js';
+// 攔網時序卷 段 1：攔網接觸資格＝物理滯空，界線沿用 sim 既有的滯空窗定義
+// （＝TUNING.TAKEOFF_LOOKBACK_TICKS，也是 blockTopEdge 判「手回站立摸高」用的同一條線）
+import { AIR_TICKS } from './approach.js';
 import {
   BLOCK_HALF_WIDTH, buildBand, bandContact, overBlockerHands, classifyBlockContact,
 } from './blockBand.js';
@@ -182,6 +185,8 @@ export function createGame({
       actors[p.id] = {
         x: 0, z: 0, px: 0, pz: 0,
         blockUntil: -1, blockStartTick: -9999, blockHand: 'vertical', lastTouchTick: -9999,
+        // 攔網時序卷 段 1：這個攔網窗是不是玩家手動投遞的（記債豁免，見 tryBlock）
+        blockManual: false,
         divedUntil: -1, // 魚躍倒地恢復期（此前不得移動/觸球）
         zHistory: [], // 每 tick 推入舊 z（見 takeoffZ）；固定長度＝回溯窗
       };
@@ -481,6 +486,11 @@ function tryAction(state, intent, ev) {
       // §十-4b 手態三檔（press/vertical/retract）：AI blockPlan 決定、隨 intent 帶入，
       // 一窗一態（窗開時定格；玩家手動攔網無 hand 欄位＝vertical，範圍⑤不在本卷）
       actor.blockHand = intent.hand ?? 'vertical';
+      // 攔網時序卷 段 1（裁定 1 適用範圍）：`manual` ＝玩家手動投遞（K 鍵／攔網鈕／
+      // 「立即攔網」面板）。AI（雙方）與玩家的自動跳攔都不帶這個旗標 ⇒ 一律吃物理滯空閘。
+      // 玩家手動窗（48-tick 計時器）的落地段 tick 25–48 是**已記債、本卷不處理**的項目：
+      // 玩家在 sim 裡沒有攔網滯空狀態，那個窗與身體無關，砍它＝砍掉玩家的攔網手感。
+      actor.blockManual = intent.manual === true;
       drainStamina(state, intent.playerId, STAMINA.COST_JUMP_BLOCK, ev); // W7 A1：一新窗＝一跳
     }
     actor.blockUntil = state.tick + TUNING.BLOCK_WINDOW;
@@ -1025,6 +1035,18 @@ function tryBlock(state, toTeam, ev) {
     // 頂邊吃「起跳後經過幾 tick」（2-B 之前 blockTopEdge 忽略 t＝退化成跳躍頂點，
     // 行為與改制前逐值相同；換的是介面不是數值）。W7：累了跳不高
     const airT = state.tick - actor.blockStartTick;
+    // ★ 攔網時序卷 段 1（Sawmah 2026-08-01 裁定 1：A＋擴大）★
+    // 攔網接觸資格＝**物理滯空**。落地＝資格結束，界線就是 `AIR_TICKS`——
+    // 與 `blockTopEdge` 判「這次跳躍已經結束、手回站立摸高」用的同一條線，不另立標準。
+    //
+    // 為什麼非有這條不可：`blockUntil` 每 tick 被 block intent 續期（見上方 intent 分支），
+    // 有效窗最長到起跳後約 95 tick ≫ AIR_TICKS(24)；落地後 `blockTopEdge` 回站立摸高，
+    // **仍搆得到貼手頂的低平慢球**。實測 commit 牆的攔網接觸有 76.9% 發生在落地之後
+    // （read 牆 2.6%），其中 press 桶 95.6% 是站著擦到的——那不是攔網。
+    //
+    // ⚠ 只動這道資格閘，**不動續期本身**（改續期會讓窗過期後當場重開新窗＝原地重跳，
+    // 那是第三種行為，裁定書明文禁止）。
+    if (airT > AIR_TICKS && !actor.blockManual) continue;
     const top = blockTopEdge(p, airT, staminaPerfMul(state, p));
     if (overBlockerHands(b.y, top)) continue;
     members.push({ id: p.id, x: actor.x, top, p, actor });
