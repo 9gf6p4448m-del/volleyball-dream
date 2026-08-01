@@ -380,9 +380,15 @@ test('款3 離地率警報器：read 對快攻的離地率須明顯低於 commit
   assert.ok(read.n >= 30 && commit.n >= 30,
     `樣本足夠（read n=${read.n} / commit n=${commit.n}，門檻各 30）`);
   const gap = commit.share - read.share;
-  // 跌破 5pp＝read 開始對快攻賭＝款 3 行為載體弱化，必須回頭重看 R4 款 3
-  assert.ok(gap >= 5,
-    `commit 離地率 ${commit.share.toFixed(1)}% − read ${read.share.toFixed(1)}% = ${gap.toFixed(1)}pp < 5pp`
+  // ★ 2026-08-01 攔網時序卷卷尾重釘：5pp → **10pp**（Sawmah 裁定 0 乙案「隨卷重定基準」）★
+  // 本卷把工作點整個推走了，門檻不跟著走就會失去解析力：
+  //   卷前 a52c08f   read 19.5%／commit 25.8% → gap  +6.3pp（門檻 5、餘裕 1.3pp）
+  //   段 1 落地後                              → gap  +1.8pp（**紅過一次**，裁定 0 預先簽准）
+  //   本卷定案（40 局）read 19.5% n=307／commit 34.0% n=256 → gap **+14.4pp**
+  // 留在 5pp 等於容許 gap 被磨掉三分之二還不響。10pp ⇒ 餘裕 4.4pp，與卷前同量級。
+  // ⚠ 門檻只跟著**已裁定的重設計**走，不得為了讓某次改動過關而調——那是改測試遷就實作。
+  assert.ok(gap >= 10,
+    `commit 離地率 ${commit.share.toFixed(1)}% − read ${read.share.toFixed(1)}% = ${gap.toFixed(1)}pp < 10pp`
     + '＝「read 不對快攻賭」的行為載體弱化，回頭重看 R4 款 3');
 });
 
