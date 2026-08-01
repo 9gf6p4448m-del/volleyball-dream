@@ -1381,6 +1381,71 @@ function blockDecisionUnlocked(game, aiState, persona, player, tick) {
   return tick >= st.tick + reactionTicks(player);
 }
 
+// ★★ 攔網時序卷 段 2（Sawmah 2026-08-01 裁定 2＋5：commit 人格重寫）★★
+//
+// commit 的招牌從「牆很黏」改為「**賭對就死**」。舊路（`blockCommitRead` 猜助跑）
+// 的病灶是**看得太窄**：只認 `lz ≤ DEPTH_LZ(2.9)` 的候選，而兩翼助跑起點 lz 3.58
+// ⇒ 偵測範圍內唯一看得到的人恆是中路誘餌，實測 43.1% 的賭注是「盲賭中路」
+// （沒鎖任何人），牆首手 x 的 p50 恆為 0.000。
+//
+// 新的賭注方向＝**讀二傳的配分傾向**。三個訊號源（裁定 5 原文）：
+//   ① 攻擊池 trust 權重  ——`pickAttackPoint` 決定給誰時用的同一把尺
+//   ② 一傳品質戰術分支  ——`attackPointsOf` 天然吃 `passTier`：到位才有快攻、
+//                          勉強只剩兩翼高球 ⇒ 池子本身就是「這球他有哪些選擇」
+//   ③ **本場配分歷史**  ——`scoutTally[pid].spikes`：這一場他已經給過誰幾次
+//
+// ★ 反作弊界線：讀**傾向**不是讀**答案** ★
+//   本函式拿不到、也沒有任何管道拿到「這一球二傳最後選了誰」——參數只有 game
+//   與攻方隊伍代號，且整段在 B1-SCAN 掃描區內（靜態掃描把關）。
+//   ③ 是純粹的可觀察量（球真的被打去哪，全場都看見了）；① 是同一件事的隱藏半邊，
+//   語意＝「情蒐知道這隊誰是主砲」，與既有的 `scoutBlockMul`（守方讀攻方慣用線）
+//   同一個授權層級——它描述的是**這支隊伍的習慣**，不是這一球的結果。
+//
+// ★ 局內記帳約束（裁定 5 明文）★ 記憶範圍**限本場**：`scoutTally` 住在 `state` 上、
+//   隨 `createGame` 重生，sim 拿不到也不認識屆數（`SEASON-SCAN` 靜態掃描釘死）。
+//
+// ★ 副產物（測試覆蓋）★ 二傳玩家可藉刻意打破配分習慣反制 commit——③ 一變，
+//   argmax 就跟著換人。
+//
+// 回傳 `{ x, lx, kind }`（他**自己的賭注**落在誰身上，不是這球的答案）或 null。
+// `kind` 對外只有探針／測試在讀（要量「賭中率」得知道他賭了誰）——回傳自己的賭注
+// 不構成洩漏：本函式與呼叫端都不知道這球真的會給誰。
+export function blockSetterTendency(game, atkTeam, opts = {}) {
+  const rot = game.match.rotations?.[atkTeam];
+  if (!rot?.length) return null;
+  // 二傳＝角色，公開資訊（玩家面板 mbReadFor 也照 currentRole 分翼別）
+  const setterId = rot.find((pid) => game.players[pid]?.currentRole === 'setter') ?? null;
+  // 一傳還沒落地時 `passTier` 為 null＝「還不知道」⇒ 取最樂觀的那一檔當先驗，
+  // 與 `blockCommitRead` 線索①「passTier == null 就不擋」同一個保守方向
+  const pts = attackPointsOf(game, atkTeam, setterId, opts.passTier ?? 'perfect');
+  if (!pts.length) return null;
+  const entries = pts.map((pt) => ({
+    ...pt,
+    trust: effectiveTrust(game, game.players[pt.pid]),
+    floorShare: game.players[pt.pid].trust.floorShare ?? 0,
+  }));
+  const w = applyFloorShare(entries, trustToWeights(entries));
+  // ③ 本場配分歷史：Laplace 平滑（+1／+n）——本場還沒打過球時退化成均勻分佈，
+  // 也就是「沒有歷史可讀 ⇒ 這一項不表態，純看 ①②」。乘上 n 讓這一項的均值≈1，
+  // 語意是**對 trust 權重的調變**而不是取代（零新常數：n 就是池子大小）
+  const hist = entries.map((e) => game.scoutTally?.[e.pid]?.spikes ?? 0);
+  const totalHist = hist.reduce((s, v) => s + v, 0);
+  const n = entries.length;
+  let best = null;
+  for (let i = 0; i < n; i += 1) {
+    const share = (hist[i] + 1) / (totalHist + n);
+    const score = (w[i] ?? 0) * share * n;
+    // 平手取輪轉序在前者＝決定論
+    if (best === null || score > best.score) {
+      best = { score, pid: entries[i].pid, kind: entries[i].kind };
+    }
+  }
+  if (!best) return null;
+  const a = game.actors[best.pid];
+  if (!a) return null;
+  return { x: a.x, lx: TEAM_SIDE[atkTeam] * a.x, kind: best.kind };
+}
+
 // 【判】選定的攻擊點在世界 x 的哪裡。**兩種人格看的東西不同，因為時點不同**：
 //
 //   commit 在二傳觸球**之前**決定——球那時還在飛向二傳，球的軌跡對「誰要扣」
@@ -1404,8 +1469,12 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
     const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
     if (hit) return { x: hit.x, contactTicks: hit.ticks };
   }
-  const x = blockCommitRead(game, atkTeam, opts)?.x ?? null;
-  return x == null ? null : { x, contactTicks: null };
+  // 段 2（裁定 2＋5）：commit 的**賭注方向**改讀二傳配分傾向，不再走 `blockCommitRead`。
+  // ⚠ `blockCommitRead` **沒有退場**——它仍是 commit 的**起跳訊號**（助跑下降沿，
+  //   見 blockPlanTargetX chase 段）。裁定 5 明文「位準早跳保留（招牌視覺）」，
+  //   改的只有「往哪裡賭」這一件事。
+  const t = blockSetterTendency(game, atkTeam, opts);
+  return t == null ? null : { x: t.x, contactTicks: null };
 }
 
 // 攔網分工卷 step1（2026-07-31）：計畫的容器。
