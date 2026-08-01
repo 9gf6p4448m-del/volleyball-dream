@@ -46,6 +46,7 @@ const USE_GROWTH = process.env.VD_NO_GROWTH !== '1';
 const USE_FULL_ROSTER = process.env.VD_FULL_ROSTER === '1';
 const SEASONS = Math.max(1, Number.parseInt(process.env.VD_SEASONS ?? '1', 10));
 const NO_COMBO = process.env.VD_NO_COMBO === '1'; // 歸因臂：組合攻擊全屆關閉
+const DUMP = process.env.VD_DUMP === '1';         // 逐場診斷傾印（只印第一條生涯）
 // W7 E1 雙臂：VD_STAMINA=1＝「無管理」臂（體力開、AI 不換人＝下緣基準）；
 // VD_MANAGE=1＝「自動管理」臂（<25% 換人；被連 4 分喊暫停待 B3 sim 上線後補）。
 // 體力設定鏡像生涯（A4 拍板：對手 costMul 0.6 慢耗；P1 2026-07-30 移除 heavyExempt
@@ -387,6 +388,27 @@ for (let run = 0; run < RUNS; run += 1) {
       const setup = careerMatchSetup(
         career, player, entry, USE_ROSTER ? roster : null, lineup, season,
       );
+      // VD_DUMP=1＝逐場診斷傾印（難度重校卷前置：查「第 2 屆 group-3 懸崖」）。
+      // **在真實路徑上取值**——印的就是 careerMatchSetup 真的交給 sim 的那份 setup，
+      // 不重建任何模型（02 §6.1 條 4）。只在第一條生涯（run===0）印，避免洗版。
+      if (DUMP && run === 0) {
+        const oppAttrs = setup.teams.B.map((p) => p.attributes);
+        const myAttrs = setup.teams.A.map((p) => p.attributes);
+        const avg = (arr) => {
+          const ks = Object.keys(arr[0]);
+          const m = {};
+          for (const k of ks) m[k] = +(arr.reduce((t, a) => t + a[k], 0) / arr.length).toFixed(1);
+          return m;
+        };
+        const mean = (arr) => +(Object.values(avg(arr)).reduce((t, v) => t + v, 0)
+          / Object.keys(avg(arr)).length).toFixed(1);
+        console.log(`[DUMP] 屆${season} ${entry.id.padEnd(14)} 對手=${entry.opponentId.padEnd(11)}`
+          + ` 對手均屬性=${String(mean(oppAttrs)).padStart(5)}`
+          + ` 我方均屬性=${String(mean(myAttrs)).padStart(5)}`
+          + ` 對手情蒐讀我=${setup.scoutRead ? (setup.scoutRead.B?.read ?? '?') : '無'}`
+          + ` titles=${career.titles ?? 0}`
+          + ` 對手level=${setup.opponent.level}`);
+      }
       const { g, maxDeficit, setStartStamina } = playMatch(setup, entry);
       // W4 Q8：多局系列＝勝負吃 series、分差記局差；bo1 照舊
       const won = (g.series?.winner ?? g.match.winner) === 'A';
