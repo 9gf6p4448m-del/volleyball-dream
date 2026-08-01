@@ -20,7 +20,7 @@ import {
 import { velocityForApex, spikeVelocity } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rotationRules.js';
-import { applyAttackOutcome } from './trust.js';
+import { applyAttackOutcome, applyComboAssist } from './trust.js';
 import {
   STAMINA, drainStamina, recoverStamina, staminaPerfMul, staminaRecvMul,
 } from './stamina.js';
@@ -294,6 +294,11 @@ export function createGame({
       serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
       callPid: null,     // W4 題5 OPP 要球：本波要球者（trust 2×/甜蜜區放寬的資料底）
+      // 段 4 組合獎金的資料底：`{ pid, team }`＝本波組合的配合者且他**實際起跳**了。
+      // 由 ai.js 的 applyRouteCommit 寫（那裡才同時看得到 attackCombo 與 routeCommit），
+      // settlePoint 讀。放 rally 而不是 aiState 的理由：獎金要在**得分結算**那一刻兌現，
+      // 而 game.js 讀不到 aiState；rally 又剛好與「一波」同壽命（死球即清，同 callPid）
+      comboAssist: null,
     },
     events: [], // 完整事件日誌（測試/回放用）
   };
@@ -1194,11 +1199,15 @@ function settlePoint(state, winner, reason, ev) {
   if (r.profile === 'spike' && r.lastToucherId) {
     // W4 題5：要球者的信任雙倍下注——要了球又是這記攻擊的歸因者＝升降幅同倍放大
     const mul = r.callPid === r.lastToucherId ? TUNING.CALL_TRUST_MUL : 1;
-    if (reason === 'BALL_IN' && r.lastTouchTeam === winner) {
+    const scored = reason === 'BALL_IN' && r.lastTouchTeam === winner;
+    if (scored) {
       applyAttackOutcome(state, r.lastToucherId, true, mul);
     } else if (reason === 'OUT' && r.lastTouchTeam !== winner) {
       applyAttackOutcome(state, r.lastToucherId, false, mul);
     }
+    // 段 4 組合獎金：得分者拿的還是上面那份 KILL，配合者（誘餌）另外拿一份。
+    // 掛在同一個閘後面＝「有人因為這記攻擊拿到 KILL」才有獎金可分（出廠 0＝不動）
+    applyComboAssist(state, r.lastToucherId, scored);
   }
   // W7 B3：隊級連得分（暫停 AI 判準＋氣勢輸入）——純記帳零 rng
   state.pointStreak = state.pointStreak.team === winner
@@ -1651,6 +1660,7 @@ function setupServePhase(state) {
   r.deceiveP = 0;
   r.touchLockTick = -1;
   r.callPid = null; // 要球一波一效（死球即清）
+  r.comboAssist = null; // 組合獎金候選同樣一波一效（另一個清空點在 ai.js：新的一波開帳時）
 }
 
 // ---- 預設隊伍（測試/示範用；正式生涯隊伍由 Phase 2+ 資料驅動）----

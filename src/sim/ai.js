@@ -1020,6 +1020,10 @@ function applyRouteCommit(game, aiState, excludeIds) {
   // `team` 不符＝上一波的殘帳（清空點沒蓋到的縫），整份重來
   if (!aiState.routeCommit || aiState.routeCommit.team !== team) {
     aiState.routeCommit = { team, flightId: r.flightId, replanned: false, entries: [] };
+    // 新的一波開帳＝上一波的組合獎金候選作廢（清空點之一；另一個在 game.js 死球重置）。
+    // 沒有這一行的話：第一波配合者起跳了但被對方救起、第二波換人打並得分，
+    // 獎金會發給第一波的人＝跨波誤發
+    r.comboAssist = null;
   }
   const ledger = aiState.routeCommit;
   const tick = game.tick;
@@ -1054,6 +1058,23 @@ function applyRouteCommit(game, aiState, excludeIds) {
         < AI.TAKEOFF_SETTLE_M) {
       e.jumped = true;
     }
+  }
+
+  // ---- 段 4 組合獎金：登記本波的「配合者已起跳」----
+  // 段 1 留下的記帳在這裡有了第一個消費端。**只寫不清**（清在上面的開帳處與死球重置）：
+  // 起跳這件事發生過就發生過了，之後球飛到對面、possession 一換，上面的守衛就會讓
+  // 本函式整個 return——那正是我們要保住這筆登記活到 settlePoint 的那段時間。
+  //
+  // 為什麼是 partnerId 不是 mainId：裁定「獎勵跟角色走，不跟位置走」——S 舉給 OH 時
+  // MB 是配合者、舉給快攻時 OH 是配合者，誰帶走牆誰拿。得分者（mainId）拿的是既有的
+  // KILL，不重複賺（trust.js applyComboAssist 另有一道 pid === scorerId 的防守性閘）。
+  //
+  // ⚠ 受益者只可能是受控玩家 ⚠ 上面的護欄 C 讓 routeCommit 只記 excludeIds，
+  // 所以 AI 配合者永遠沒有 `jumped` 可讀＝拿不到獎金。這是刻意的：AI 隊友「跑不跑」
+  // 不是一個決定（見護欄 C 的說明），沒有決定就沒有獎勵的對象。
+  const partnerId = aiState.attackCombo?.partnerId ?? null;
+  if (partnerId && ledger.entries.find((e) => e.pid === partnerId)?.jumped) {
+    r.comboAssist = { pid: partnerId, team };
   }
 
   // ---- 裁定 1A：S 當場改組織 ----

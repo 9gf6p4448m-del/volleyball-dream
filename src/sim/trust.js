@@ -39,7 +39,21 @@ export const TRUST_DYN = {
   ERR_STREAK: -4, // 連續失誤加碼
   CLAMP: 25,      // 動態偏移上限 ±（baseline 另有 0–100 夾限）
   OLD_TEAM_BOOST: 8, // W7 D2 舊隊情結：對戰原隊開場 trustDyn +8（憋著一股勁；場末即散）
+  // 叫戰術重做卷 段 4／集訓卷 題 2（Sawmah 2026-08-01 跨卷共用裁定）：**組合獎金**。
+  // 「獎勵跟角色走，不跟位置走」——得分者只拿既有的 KILL（不重複賺、反滾雪球紅線
+  // 不觸），本波的**配合者（誘餌）**帶走了牆，組合獎金全額給他。
+  // ★出廠 0＝機制上線、幅度待定★ 幅度是策略數值（CLAUDE.md 硬規則 3），須 Sawmah
+  // 拍板；0 的時候 `applyComboAssist` 第一行就 return ⇒ 行為逐值零變化
+  //（機械背書＝`node tools/sim-hash-probe.mjs`；量測基準＝`tools/combo-assist-probe.mjs`）
+  COMBO_ASSIST: 0,
 };
+
+// trustDyn 的唯一寫入路徑（含 ±CLAMP 夾限）。所有場內動態調整都經過這裡——
+// 誰要加第二條路，就是繞過夾限的那條路
+function addTrustDyn(state, playerId, delta) {
+  const next = (state.trustDyn[playerId] ?? 0) + delta;
+  state.trustDyn[playerId] = Math.max(-TRUST_DYN.CLAMP, Math.min(TRUST_DYN.CLAMP, next));
+}
 
 // 攻擊定勝負的歸因（settlePoint 呼叫）：scored＝這記攻擊直接得分/失分。
 // mul（W4 題5 OPP 要球「信任雙倍下注」）：升降幅同倍放大——沿乘係數、零新機制
@@ -50,8 +64,26 @@ export function applyAttackOutcome(state, playerId, scored, mul = 1) {
   const delta = (scored
     ? TRUST_DYN.KILL + (streak >= 2 ? TRUST_DYN.KILL_STREAK : 0)
     : TRUST_DYN.ERR + (streak <= -2 ? TRUST_DYN.ERR_STREAK : 0)) * mul;
-  const next = (state.trustDyn[playerId] ?? 0) + delta;
-  state.trustDyn[playerId] = Math.max(-TRUST_DYN.CLAMP, Math.min(TRUST_DYN.CLAMP, next));
+  addTrustDyn(state, playerId, delta);
+}
+
+// 組合獎金（段 4）：本波配合者＝誘餌，他把牆帶走了，這一分有他一半。
+// settlePoint 在既有的攻擊歸因段呼叫一次，`scored`＝與 KILL 同一個閘（該波得分）。
+//
+// 三個條件（缺一不發，對應裁定原文）：
+//   ① 本波有組合 ⇒ `state.rally.comboAssist` 非空（ai.js 的 applyRouteCommit 才會寫）
+//   ② 該波得分 ⇒ `scored`
+//   ③ 配合者**實際起跳** ⇒ 同上，routeCommit 記到 `jumped` 才寫得出 comboAssist
+//      （裁定 1B：不跑只是放棄資格，不扣 trust——本函式沒有任何負向分支）
+//
+// ★得分者不重複賺★ `pid === scorerId` 直接 return：他拿的還是既有那份 KILL，
+// 不因為身兼組合的一角再加一次（理論上組合的主攻≠配合者，這行是防守性的）。
+export function applyComboAssist(state, scorerId, scored) {
+  if (!scored || !TRUST_DYN.COMBO_ASSIST) return;
+  const a = state.rally?.comboAssist;
+  if (!a || a.pid === scorerId) return;
+  if (a.team !== state.rally.lastTouchTeam) return; // 跨隊殘帳（不該發生）不發
+  addTrustDyn(state, a.pid, TRUST_DYN.COMBO_ASSIST);
 }
 
 // 分配當下的有效 trust＝baseline＋場內動態（夾限 0–100）
