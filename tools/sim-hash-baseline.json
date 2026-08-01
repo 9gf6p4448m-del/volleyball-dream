@@ -2,7 +2,7 @@
   "note": "Phase 5 §十 階段二：sim 行為逐值雜湊基準（2-B timing 幾何化併入後重立）。--write 只在拍板允許行為變更時用。",
   "seedBase": 1,
   "perOpponent": 2,
-  "total": "27d722f8b4b4b650",
+  "total": "c81955fdea3f6877",
   "matches": [
     {
       "opponent": "north-tech",
@@ -14,9 +14,9 @@
     {
       "opponent": "north-tech",
       "seed": 102,
-      "digest": "929ad65ca35580c5",
-      "ticks": 22642,
-      "score": "25-21"
+      "digest": "985a857188bbec52",
+      "ticks": 22398,
+      "score": "25-19"
     },
     {
       "opponent": "white-wave",
@@ -35,16 +35,16 @@
     {
       "opponent": "obsidian",
       "seed": 15839,
-      "digest": "af8fde46c523f8a2",
-      "ticks": 27505,
-      "score": "19-25"
+      "digest": "bb9aa4763bc811ec",
+      "ticks": 24718,
+      "score": "25-23"
     },
     {
       "opponent": "obsidian",
       "seed": 15940,
-      "digest": "e40b1e0a34eba23f",
-      "ticks": 27342,
-      "score": "24-26"
+      "digest": "7611366b2ee7967d",
+      "ticks": 29027,
+      "score": "27-29"
     },
     {
       "opponent": "gale-shore",
@@ -56,9 +56,9 @@
     {
       "opponent": "gale-shore",
       "seed": 23859,
-      "digest": "bf3a4911599f5611",
-      "ticks": 25052,
-      "score": "25-17"
+      "digest": "30876ec85e668209",
+      "ticks": 24728,
+      "score": "25-16"
     },
     {
       "opponent": "iron-mist",
@@ -70,9 +70,9 @@
     {
       "opponent": "iron-mist",
       "seed": 31778,
-      "digest": "2e6c47d840b4c70e",
-      "ticks": 23037,
-      "score": "18-25"
+      "digest": "9a593c7c09cb1d69",
+      "ticks": 25947,
+      "score": "23-25"
     },
     {
       "opponent": "black-pine",
