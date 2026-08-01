@@ -19,6 +19,15 @@ const APPROACH_EPS = 0.005;
 //                approaching }] }
 // tier＝對手一傳品質（aiState.passTier——對手規劃一傳時寫入的同一份分檔；
 // 場上可觀察事實，非內心讀取）；讀不到＝null（線索缺席誠實呈現）
+// ★ 攔網時序卷 段 4（Sawmah 2026-08-01 裁定 3）：MB 的專屬性**上移到資訊層** ★
+// 「立即攔網」的時機賭局擴到前排全員（見 matchControls.mbMomentFor），但**讀心**
+// ——一傳品質＋哪一翼正在助跑——仍然只有 MB 有。這是 MB 身分的分界線：
+// 誰都能決定「現在跳」，只有攔中看得懂「該跳誰」。
+// 抽成純函式而不是寫在呼叫端的 if 裡：這是一條**規則**，規則要能被單獨問到、被測到。
+export function blockReadAllowedFor(game, playerId) {
+  return game.players[playerId]?.currentRole === 'middle';
+}
+
 export function mbReadFor(game, aiState, playerId) {
   const me = game.players[playerId];
   if (!me) return null;

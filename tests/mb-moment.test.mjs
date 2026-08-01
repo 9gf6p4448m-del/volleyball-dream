@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../src/sim/game.js';
 import { mbMomentFor, NEAR_NET_Z } from '../src/input/matchControls.js';
+import { blockReadAllowedFor } from '../src/input/blockRead.js';
 import { isFrontRow } from '../src/sim/rotation.js';
 
 // 佈置：對手（B）持球第二觸＝讀舉球時刻；受測者＝A 隊前排 MB
@@ -26,6 +27,44 @@ test('B2：前排 MB 貼網＝讀心時刻成立；退防到攔網帶外＝不�
   g.actors[mb].z = NEAR_NET_Z + 0.8; // 玩家選擇退防接球
   assert.equal(mbMomentFor(g, mb), false,
     '退防（|z|≥攔網帶）仍判讀心時刻＝攔網鈕誤彈（回饋 #3 的現象）');
+});
+
+// ==== 攔網時序卷 段 4（Sawmah 2026-08-01 裁定 3：乙）====
+test('段4：前排全員（S／OH／OPP／MB）都有「立即攔網」時機窗；後排一律沒有', () => {
+  const g = createGame({ seed: 7 });
+  g.phase = 'rally';
+  g.rally.possession = 'B';
+  g.rally.touches = 2;
+  const rot = g.match.rotations.A;
+  const front = rot.filter((id) => isFrontRow(rot, id));
+  const back = rot.filter((id) => !isFrontRow(rot, id));
+  assert.ok(front.length === 3 && back.length === 3, '佈置前提：前後排各三人');
+  const roles = new Set();
+  for (const id of front) {
+    g.actors[id].z = NEAR_NET_Z - 0.5; // 貼網
+    roles.add(g.players[id].currentRole);
+    assert.equal(mbMomentFor(g, id), true,
+      `前排 ${g.players[id].currentRole}（${id}）沒有立即攔網窗＝裁定 3 的位置擴散沒落地`);
+  }
+  assert.ok(roles.size >= 2, `前排三人只有 ${roles.size} 種角色，這條測試分不出「不只 MB」`);
+  for (const id of back) {
+    g.actors[id].z = NEAR_NET_Z - 0.5; // 就算站到網前，後排也不該有（輪轉序才是資格）
+    assert.equal(mbMomentFor(g, id), false, `後排 ${id} 也彈出攔網窗＝前排閘鬆掉了`);
+  }
+});
+
+test('段4：MB 專屬性上移到資訊層——讀心資格仍只有攔中', () => {
+  const g = createGame({ seed: 7 });
+  const rot = g.match.rotations.A;
+  const front = rot.filter((id) => isFrontRow(rot, id));
+  const allowed = front.filter((id) => blockReadAllowedFor(g, id));
+  assert.equal(allowed.length, 1, '前排應該恰好一個人有讀心資格');
+  assert.equal(g.players[allowed[0]].currentRole, 'middle', '有讀心資格的不是攔中');
+  for (const id of front) {
+    if (id === allowed[0]) continue;
+    assert.equal(blockReadAllowedFor(g, id), false,
+      `${g.players[id].currentRole} 也拿得到讀心＝MB 身分被稀釋掉了`);
+  }
 });
 
 test('B2 邊界：非前排 MB／非對手第二觸＝一律不彈（原有 gate 不因站位檢查而鬆動）', () => {

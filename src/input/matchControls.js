@@ -12,7 +12,7 @@ import { TUNING } from '../sim/game.js';
 import { predictLanding } from '../sim/flight.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
 import { setOptionsFor } from './setOptions.js';
-import { mbReadFor } from './blockRead.js';
+import { mbReadFor, blockReadAllowedFor } from './blockRead.js';
 import { digReadFor, digReadCorrect } from './liberoRead.js';
 import { dutyPosition, digTargetFor } from '../sim/ai.js';
 
@@ -36,7 +36,20 @@ export function mbMomentFor(game, playerId) {
   const r = game.rally;
   if (game.phase !== 'rally' || !r.possession || r.possession === me.teamId) return false;
   if (r.touches !== 2) return false;
-  if (me.currentRole !== 'middle') return false;
+  // ★ 攔網時序卷 段 4（Sawmah 2026-08-01 裁定 3：乙）★
+  // 「立即攔網」的時機賭局擴到**前排全員**（S／OH／OPP／MB）——原本只有 MB 有這個窗，
+  // 其餘前排只能等自動跳攔，抓不了時機。
+  //
+  // ★ 憲法留痕 ★ 這是**既有球內輸入元件的位置擴散**，援引 OPP ⚡要球鈕的球內先例：
+  // §九 禁止的是新增**決策面板**，本擴散不新增面板、不新增按鈕種類、不新增投遞路徑
+  // （同一個 chooseMbTiming → blockTap → 同一條 intent）。
+  //
+  // MB 的專屬性**上移到資訊層**：面板誰都有，但「讀心」（一傳品質＋哪一翼在助跑，
+  // 見 mbOptions）維持 MB 獨有。二次起跳等進一步補償屬 MB 身分後續討論，本卷不做。
+  //
+  // ⚠ 命名債：本函式與 controls 的 `isMbMoment`／`mbOptions`／`chooseMbTiming` 仍帶
+  // `mb` 前綴＝歷史名，語意已不限 MB。併入 Phase 3 收尾的命名工程，本卷不改名
+  // （改名要動 matchLoop 的四個呼叫點，與本段的行為改動混在一起會擋住 Δ 歸因）。
   if (!isFrontRow(game.match.rotations[me.teamId], playerId)) return false;
   // B2 修復（試玩回饋 0730 #3）：玩家選擇退防（|z| ≥ 攔網帶）＝不彈攔網賭局——
   // 「攔網站位全交玩家」的拍板下，站位就是退防意圖的唯一可讀訊號（顯式選單已收）
@@ -600,9 +613,14 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     isMbMoment(game) {
       return mbMomentFor(game, playerId);
     },
-    // 讀取面板資料（誠實線索：一傳品質＋助跑動向）；非讀舉球時刻回傳 null
+    // 讀取面板資料（誠實線索：一傳品質＋助跑動向）；非讀舉球時刻回傳 null。
+    // ★ 段 4（裁定 3）：面板本身前排全員都有，**讀心線索維持 MB 獨有** ★
+    // 非 MB 拿到的是空線索——面板標題退回通用的「讀舉球！」（mbPanelTitle(null)）、
+    // 助跑 tells 為空字串。他有的是「現在跳」這個決定權，沒有的是「看得懂要跳誰」。
     mbOptions(game, aiState) {
-      return this.isMbMoment(game) ? mbReadFor(game, aiState, playerId) : null;
+      if (!this.isMbMoment(game)) return null;
+      if (!blockReadAllowedFor(game, playerId)) return { tier: null, lanes: [] };
+      return mbReadFor(game, aiState, playerId);
     },
     // 選定時機（07-27 Sawmah 拍板：站位全交搖桿手動——面板只管時機賭局）：
     // early＝搶快攻＝立即起跳開攔網窗（你自己先站好位負責）；不按＝等高球＝
