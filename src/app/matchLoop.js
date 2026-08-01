@@ -428,7 +428,12 @@ function fireSignatureBeat(s, pending, now) {
 function syncCallFeedback(s) {
   const out = s.aiState.callOutcome;
   if (!out) return;
-  const key = `${out.flightId}:${out.mode}:${out.outcome}:${out.reason ?? ''}`;
+  // 段 3（2026-08-01）：`calledPlay` 改為整個 rally 內持續有效 ⇒ 同一個指令每一波
+  // 組織都會重新產生一次 callOutcome。防重播鍵**不得再含 flightId**，否則同一句
+  // 「⚡指令・交叉——照跑！」會每波播一次。改用**本分**（比分）當 rally 鍵：
+  // 同一分內同樣的結果只播一次；換分／換結果（例如從 command 變 infeasible）才再播。
+  const rallyKey = `${s.game.match.score.A}-${s.game.match.score.B}`;
+  const key = `${rallyKey}:${out.mode}:${out.outcome}:${out.reason ?? ''}:${out.type}`;
   if (s.callFeedbackKey === key) return;
   s.callFeedbackKey = key;
   const fb = callFeedbackOf(out, s.aiState.approach?.routes ?? null);

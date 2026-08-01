@@ -117,8 +117,11 @@ test('① 同源：玩家叫的套路，主攻者與配合者實際跑的線與 
   assert.equal(routeOf(ai, combo.partnerId).kind, combo.partnerKind, '配合者實際跑的線與 combo 宣稱的不符');
   assert.equal(ai.attackerId, combo.mainId, '球沒有分配給套路的主攻者');
   assert.equal(ai.attackKind, combo.mainKind, '二傳瞄的線與主攻者跑的線分家');
-  // 叫牌消費即清＝一次叫牌只管一球
-  assert.equal(ai.calledPlay, null, 'calledPlay 沒有被消費，會漏到下一球');
+  // ★ 段 3（2026-08-01 裁定題 3）：**一次性 flag 已廢除** ★
+  // 原本這裡守的是「叫牌消費即清＝一次叫牌只管一球」。新語意下每一波組織都是完整的
+  // 新決策循環、不設次數限制 ⇒ S 的指令在整個 rally 內持續有效，被覆寫才會變。
+  assert.deepEqual(ai.calledPlay, { type: 'cross', callerId: 'A1', isSetter: true },
+    'calledPlay 被清掉了＝一次性 flag 又回來了（裁定題 3 明文廢除）');
 });
 
 // ---------------- ③ 舊「請求」語意已廢除（2026-08-01 題 0） ----------------

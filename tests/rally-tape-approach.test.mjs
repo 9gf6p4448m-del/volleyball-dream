@@ -229,8 +229,15 @@ function pickCalledRally() {
 test('段 E 前置：真的錄得到一顆「玩家叫牌生效」的球（否則下面兩條空洞成立）', () => {
   const picked = pickCalledRally();
   assert.ok(picked, '50 個 seed 都錄不到玩家叫牌生效的球');
-  assert.ok(picked.tape.steps.some((st) => st.a && 'calledPlay' in st.a),
-    'calledPlay 沒有出現在卷帶的任何一步＝根本沒被錄下來');
+  // ★ 段 3（2026-08-01 裁定題 3）：`calledPlay` 改為整個 rally 內持續有效、不再消費即清。
+  // 卷帶是**差分**錄影：一個不再逐波 toggle 的欄位，只要 `begin()` 重照快照時它已經
+  // 有值，它就落在 baseline（`tape.ai`）而不是任何一步的 diff 裡——重演端照樣拿得到
+  //（下一條「⑧ VCR 逐值重演」就是那件事的證明）。
+  // 因此判準改成「**卷帶取得得到**」而不是「出現在某一步」：後者守的是舊的一次性壽命。
+  const inSteps = picked.tape.steps.some((st) => st.a && st.a.calledPlay);
+  const inBase = !!picked.tape.ai?.calledPlay;
+  assert.ok(inSteps || inBase,
+    'calledPlay 在卷帶的 baseline 與所有步骤裡都取不到＝根本沒被錄下來，重演不出來');
 });
 
 test('⑧ VCR：玩家指定的組合可逐值重演（approach／combo／座標全等）', () => {

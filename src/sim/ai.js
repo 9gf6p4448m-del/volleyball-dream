@@ -413,9 +413,21 @@ function ensureFlightPlan(game, aiState) {
       mainId: call.mainId,
       flightId: game.rally.flightId,
     };
-    // 一次叫牌只管一球：消費即清（下一個死球窗可以再叫）。回饋留在 callOutcome，
-    // 由表現層讀——**不得靜默降級**（裁定 E），湊不出來時 outcome 就是 'infeasible'
-    aiState.calledPlay = null;
+    // ★ 叫戰術重做卷 段 3（Sawmah 2026-08-01 裁定題 3）：**廢除一次性 flag** ★
+    // 這裡原本是 `aiState.calledPlay = null;`＝「一次叫牌只管一球，消費即清」。
+    // 新語意下那條線不成立：每一波組織都是**完整的新決策循環**（S 決定 → 非 S 收提示
+    // → 自己決定跑不跑），**不設次數限制** ⇒ S 下的指令在整個 rally 內持續有效，
+    // 每一波組織都當輸入吃一次。玩家要換就在下個死球窗改叫（覆寫），
+    // 或在球內用既有的遠段改判（`replanCall`）當場換。
+    //
+    // 為什麼不需要另設清除點：`calledPlay` 只會被**覆寫**。死球分支刻意不清它
+    //（見 :304 的既有註解「死球窗正是玩家叫牌的時機，跟著清等於一按就沒」），
+    // 而 rally 之間玩家本來就會重叫或不叫——不叫就沿用上一次的決定，那正是
+    // 「不設次數限制」的字面意思。
+    //
+    // ⚠ 連帶要求：`callOutcome` 現在每一波都會重新產生 ⇒ 回饋字卡的防重播鍵
+    //   **不得再含 flightId**，否則同一個指令會每波播一次（見 matchLoop syncCallFeedback）。
+    // 回饋內容不變——**不得靜默降級**（裁定 E），湊不出來時 outcome 就是 'infeasible'
     // 叫成了＝主攻者換成套路的主攻者。**只有叫成才改**：湊不出來（'infeasible'）
     // 逐值走 AI 原路徑，玩家從回饋看得出差別
     if (call.combo) aiState.attackerId = call.mainId;
