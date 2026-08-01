@@ -403,3 +403,29 @@ test('壽命：叫牌回饋隨死球作廢，但 calledPlay **不得**在死球�
   assert.deepEqual(ai.calledPlay, { type: 'delay', callerId: 'A2', isSetter: false },
     '死球窗把玩家剛叫的牌清掉了＝一按就沒（死球窗正是叫牌的時機）');
 });
+
+// ---------------- 卷尾：面板顯示與真相同源（2026-08-01）----------------
+//
+// 記債出處＝段 3 commit `891d179` 末段：`calledPlay` 整個 rally 活著，面板卻在回饋
+// 字卡播出時被 `clearPending()` 清掉狀態列 ⇒ 顯示「尚未叫牌」而指令仍生效。
+// 病灶不是少通知一次，是**鏡像這個設計本身**：真相的清除點是「被覆寫」，沒有事件
+// 可掛。所以拆鏡像、改現讀。DOM 元件在 node --test 下建不起來（無 jsdom），沿
+// `call-unlock.test.mjs:219` 的既有先例用靜態源碼掃描守。
+test('卷尾：callPanel 不得自留叫牌鏡像，狀態一律現讀 aiState.calledPlay', () => {
+  // 走 stripComments：本卷的註解本身就在複述舊制那幾行，含註解掃會被自己的說明打紅
+  const panel = stripComments(readFileSync(join(SRC, 'ui', 'callPanel.js'), 'utf8'));
+  const loop = stripComments(readFileSync(join(SRC, 'app', 'matchLoop.js'), 'utf8'));
+  // ① 鏡像變數不得存在（`let pending = ...` 是舊制那一行）
+  assert.ok(!/\blet\s+pending\b/.test(panel),
+    'callPanel 又自己記了一份 pending＝鏡像回來了，指令活著時會顯示成尚未叫牌');
+  // ② 歸零通知不得存在於任何一端
+  assert.ok(!/clearPending/.test(panel), 'callPanel 仍留著 clearPending');
+  assert.ok(!/clearPending/.test(loop), 'matchLoop 仍在通知面板歸零＝顯示會與真相分岔');
+  // ③ 讀取管道要接上，且兩端對得起來
+  assert.ok(/handlers\.calledPlayOf/.test(panel), 'callPanel 沒有現讀真相的管道');
+  assert.ok(/handlers\.calledPlayOf\s*=\s*\(\)\s*=>\s*s\.aiState\.calledPlay/.test(loop),
+    'matchLoop 沒把 aiState.calledPlay 的讀取權接給面板');
+  // ④ 顯示用的兩處（狀態列、鈕文字）都要走現讀，不得有漏網的舊識別字
+  assert.ok(/pendingCallTextOf\(calledOf\(\)\)/.test(panel), '狀態列沒改成現讀');
+  assert.ok(/btn\.textContent\s*=\s*calledOf\(\)/.test(panel), '鈕文字沒改成現讀');
+});

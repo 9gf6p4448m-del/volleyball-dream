@@ -59,7 +59,15 @@ export function createCallPanel({ game, playerId, handlers }) {
   document.body.appendChild(overlay);
 
   let open = false;
-  let pending = null; // 本次已叫的牌（供狀態列顯示；真相在 aiState.calledPlay）
+  // ★ 叫戰術重做卷 收尾（2026-08-01）：狀態列**直接讀真相**，不再自己鏡一份 ★
+  // 舊制這裡是 `let pending = null`＋`clearPending()`：面板自己記「本次已叫的牌」，
+  // 由 matchLoop 在回饋字卡播出時通知歸零（語意＝「叫牌已被 sim 消費」）。
+  // 段 3 廢除一次性 flag 之後那個語意不存在了——`calledPlay` 被消費後**還活著**
+  //（整個 rally 持續有效、只會被覆寫），鏡像卻已歸零 ⇒ 面板顯示「尚未叫牌」而指令仍生效。
+  // 鏡像與真相不可能靠補通知對齊（真相的清除點是「被覆寫」，沒有事件可掛），
+  // 所以**拆掉鏡像**：每次 paint／sync 現讀 `aiState.calledPlay`。
+  // 讀取管道沿 handlers 後綁定慣例（同 `handlers.callPlay`），面板照樣不碰 sim 物件。
+  const calledOf = () => handlers.calledPlayOf?.() ?? null;
 
   const modeOf = () => callModeOf(game, playerId);
   // 非 S 時 modeOf() 是 null（面板本來就開不了）——鈕仍要畫得出來，退回指令規格當底
@@ -67,11 +75,12 @@ export function createCallPanel({ game, playerId, handlers }) {
 
   function optionRow(opt, spec) {
     const r = document.createElement('div');
+    const picked = calledOf()?.type === opt.type;
     css(r, [
       'display:flex', 'flex-direction:column', 'gap:2px', 'padding:10px 12px',
       'border-radius:10px', 'cursor:pointer', 'text-align:left',
-      `background:${pending?.type === opt.type ? 'rgba(110,231,255,0.18)' : 'rgba(30,40,64,0.55)'}`,
-      `border:1px solid ${pending?.type === opt.type ? spec.color : 'transparent'}`,
+      `background:${picked ? 'rgba(110,231,255,0.18)' : 'rgba(30,40,64,0.55)'}`,
+      `border:1px solid ${picked ? spec.color : 'transparent'}`,
     ]);
     const top = document.createElement('div');
     css(top, ['display:flex', 'gap:8px', 'align-items:center', 'font-size:15px', 'font-weight:700']);
@@ -91,8 +100,8 @@ export function createCallPanel({ game, playerId, handlers }) {
     r.appendChild(desc);
     r.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
+      // 寫進 sim 的指令槽是同步的 ⇒ 下一行 paint() 現讀就已經是新值，不需要樂觀更新
       handlers.callPlay?.(opt.type);
-      pending = { type: opt.type, isSetter: opt.mode === 'command' };
       paint();
     });
     return r;
@@ -121,7 +130,7 @@ export function createCallPanel({ game, playerId, handlers }) {
     card.appendChild(hint);
     const status = document.createElement('div');
     css(status, ['font-size:12px', 'font-weight:700', `color:${spec.color}`, 'min-height:16px']);
-    status.textContent = pendingCallTextOf(pending) ?? '（尚未叫牌——這球照系統分配）';
+    status.textContent = pendingCallTextOf(calledOf()) ?? '（尚未叫牌——這球照系統分配）';
     card.appendChild(status);
     for (const opt of callOptionsFor(game, playerId)) card.appendChild(optionRow(opt, spec));
     const foot = document.createElement('div');
@@ -141,8 +150,6 @@ export function createCallPanel({ game, playerId, handlers }) {
   const api = {
     el: btn,
     isOpen: () => open,
-    // 本波叫牌被 sim 消費（或死球重置）時由 matchLoop 通知，狀態列跟著歸零
-    clearPending() { pending = null; if (open) paint(); },
     openPanel() {
       open = true;
       paint();
@@ -159,7 +166,9 @@ export function createCallPanel({ game, playerId, handlers }) {
       const spec = specOf();
       btn.dataset.enabled = usable ? '1' : '0';
       btn.style.opacity = usable ? '1' : '0.45';
-      btn.textContent = pending
+      // 段 3 之後「已下」是**持續狀態**不是一次性事件：指令活著鈕就一直顯示已下，
+      // 到下個死球窗改叫（覆寫）才換字。面板開著時 paint() 另有一份狀態列。
+      btn.textContent = calledOf()
         ? `${spec.icon} ${spec.word}已下`
         : `${spec.icon} 叫戰術`;
       if (g.phase === 'set_over') {

@@ -186,6 +186,11 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
       isSetter: game.players[s.playerId]?.currentRole === 'setter',
     };
   };
+  // 叫戰術重做卷 收尾（2026-08-01）：面板的狀態列／鈕文字**現讀這一格**，不再自己
+  // 鏡一份。段 3 廢除一次性 flag 後「被消費」不再等於「沒了」——鏡像沒有可掛的清除
+  // 事件（真相只會被覆寫），所以把讀取權開給 UI，鏡像整個拆掉（見 callPanel.js）。
+  // 唯讀存取子，UI 拿不到也改不了 sim 物件本身。
+  stage.handlers.calledPlayOf = () => s.aiState.calledPlay;
   // W7 B3：我方暫停鈕的執行回呼（sim applyTimeout 唯一路徑）
   stage.handlers.requestTimeout = () => requestTimeout(s);
   // W7 C2④：回場鈕的執行回呼（sim applySubstitution 唯一路徑，走與 ⚙ 面板相同函式）
@@ -438,8 +443,10 @@ function syncCallFeedback(s) {
   s.callFeedbackKey = key;
   const fb = callFeedbackOf(out, s.aiState.approach?.routes ?? null);
   if (fb) s.stage.floatText?.show(fb.text, fb.color, fb.ms);
-  // 叫牌已被 sim 消費＝面板的「已下指令／已請求」狀態列歸零（下個死球窗可再叫）
-  s.stage.callPanel?.clearPending();
+  // ★ 這裡原本有 `s.stage.callPanel?.clearPending()`＝「叫牌已被 sim 消費 ⇒ 面板狀態列
+  //   歸零」。段 3 之後那句話是**錯的**：指令被消費後整個 rally 還活著，面板卻顯示
+  //   「尚未叫牌」。面板改成現讀 `aiState.calledPlay`（`handlers.calledPlayOf`），
+  //   鏡像連同這個通知一起拆掉 ⇒ 顯示與行為不可能再分岔。★
 }
 
 // W6 換人執行（stage.handlers.requestSub）：sim 換人＋敘事對話
