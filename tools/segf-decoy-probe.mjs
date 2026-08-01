@@ -19,7 +19,9 @@
 //
 // tick↔秒：SIM_HZ = 60 ⇒ 1 tick = 1/60 s。
 import { createGame, stepGame } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import {
+  createAiState, aiCollectIntents, attackPointsOf, blockSetterTendency,
+} from '../src/sim/ai.js';
 import { isFrontRow, TEAM_SIDE } from '../src/sim/rotation.js';
 import { BLOCK_HALF_WIDTH } from '../src/sim/blockBand.js';
 import { BLOCK_COMMIT } from '../src/sim/blockRead.js';
@@ -72,12 +74,22 @@ function runSet(run, oppId, acc) {
     return r !== 'setter' && r !== 'libero';
   });
   const xOf = (pid) => game.actors[pid]?.x ?? null;
-  // template.x 逐值等於某個 A 隊 actor 的 x（blockCommitRead 回傳的就是 best.x）
-  // ⇒ 用逐值相等回推「鎖到誰」。這是**真實路徑取得**，不是重刻判斷式。
-  const whoIsAt = (x) => {
-    if (x == null) return null;
-    for (const pid of game.match.rotations.A) if (game.actors[pid]?.x === x) return pid;
-    return null;
+  // 「這份計畫鎖到誰」——**直接問 sim 自己的那個函式**，不從 template.x 回推。
+  //
+  // ⚠ 2026-08-01 攔網時序卷段 5 修正（02 §6.1 條 2「語意同座標系」的活教材）：
+  //   原版用 `template.x` 對各 actor 的 x 做**浮點逐值相等**回推。段 2 之前成立
+  //   （blockCommitRead 回傳的就是 best.x），段 3 的 AIM_CROSSING_MIX=1 之後
+  //   template.x 變成**過網點**、逐值等於誰的 x 都不成立 ⇒ 全部判成「沒鎖任何人」
+  //   ⇒ ① 的誤歸因率被量成 100%。那是量錯了，不是機制斷了。
+  //   改成呼叫 `blockSetterTendency`（sim 真正在用的那條路徑）＋ `attackPointsOf`
+  //   把 kind 映回 pid——兩者都是既有匯出，探針零重建模型。
+  const whoIsBet = () => {
+    const t = blockSetterTendency(game, 'A', { passTier: ai.passTier ?? null });
+    if (!t) return null;
+    const setterId = game.match.rotations.A
+      .find((pid) => game.players[pid]?.currentRole === 'setter') ?? null;
+    const pts = attackPointsOf(game, 'A', setterId, ai.passTier ?? 'perfect');
+    return pts.find((p) => p.kind === t.kind)?.pid ?? null;
   };
 
   let seenReplant = {};   // pid → 上次看到的 replantUntil
@@ -94,7 +106,7 @@ function runSet(run, oppId, acc) {
       if (plan.team === 'B') {
         acc.plans += 1;
         if (plan.template.blind) { acc.planBlind += 1; curLock = { pid: null, blind: true }; } else {
-          const pid = whoIsAt(plan.template.x);
+          const pid = whoIsBet();
           acc.planLocked += 1;
           curLock = { pid, blind: false };
           if (pid == null) acc.planUnmatched += 1;
@@ -129,7 +141,8 @@ function runSet(run, oppId, acc) {
         const prev = seenReplant[pid];
         if (prev !== undefined && c.replantUntil > prev) {
           acc.replants += 1;
-          const who = whoIsAt(c.pendingX);
+          // 同上：pendingX 也在過網點座標系，改問 sim 自己「現在賭誰」
+          const who = whoIsBet();
           if (who == null) acc.replantUnmatched += 1;
           else {
             acc.replantBy[who] = (acc.replantBy[who] ?? 0) + 1;

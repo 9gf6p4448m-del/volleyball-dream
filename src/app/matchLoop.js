@@ -28,6 +28,7 @@ import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 // 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
 import { callOptionsFor, callFeedbackOf, CALL_MODES } from '../input/callPlay.js';
+import { blockBetFeedbackOf } from '../input/blockBetFeedback.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -1315,6 +1316,17 @@ function applyEvents(s, frameEvents, now) {
       && s.counterArmedFlight === game.rally.flightId) {
       s.counterArmedFlight = -1;
       stage.floatText.show('他改線了——他在讀你的暗號', '#ff9d7a', 2200);
+    }
+    // 攔網時序卷 段 5 回饋層：本方扣球那一刻，對方 commit 攔網手賭錯留下空門 → 字卡。
+    // 防重播比照 `syncCallFeedback`：同一波（flightId）只播一次——一波內可能有多次
+    // 扣球事件（被攔回再扣），鍵記到 flightId 就夠，不會每次都喊。
+    if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === myTeam
+      && s.blockBetKey !== game.rally.flightId) {
+      const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, e.playerId);
+      if (bet) {
+        s.blockBetKey = game.rally.flightId;
+        stage.floatText?.show(bet.text, bet.color, bet.ms);
+      }
     }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
       s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
