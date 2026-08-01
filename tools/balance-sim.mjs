@@ -45,6 +45,7 @@ const USE_ROSTER = process.env.VD_NO_ROSTER !== '1';
 const USE_GROWTH = process.env.VD_NO_GROWTH !== '1';
 const USE_FULL_ROSTER = process.env.VD_FULL_ROSTER === '1';
 const SEASONS = Math.max(1, Number.parseInt(process.env.VD_SEASONS ?? '1', 10));
+const NO_COMBO = process.env.VD_NO_COMBO === '1'; // 歸因臂：組合攻擊全屆關閉
 // W7 E1 雙臂：VD_STAMINA=1＝「無管理」臂（體力開、AI 不換人＝下緣基準）；
 // VD_MANAGE=1＝「自動管理」臂（<25% 換人；被連 4 分喊暫停待 B3 sim 上線後補）。
 // 體力設定鏡像生涯（A4 拍板：對手 costMul 0.6 慢耗；P1 2026-07-30 移除 heavyExempt
@@ -140,7 +141,10 @@ function playMatch(setup, entry = null) {
     // 組合攻擊屆數閘（2026-08-01）：鏡像生涯現值——治具的職責是量「玩家實際會遇到的
     // 那個難度」，第 1 屆正賽沒有組合，治具也不能有（同 stamina／benches 的鏡像慣例）。
     // 值由 careerMatchSetup 依 `season` 算好，本檔只遞。
-    comboScale: setup.comboScale ?? 1,
+    // VD_NO_COMBO=1＝**歸因臂**（難度重校卷前置，2026-08-01）：把組合攻擊全屆關掉，
+    // 用來把「第 2 屆 group-3 掉到 21%」這個懸崖歸因到屆數閘 vs 其他成因。
+    // 只在治具端覆寫，src 一格未動。
+    comboScale: NO_COMBO ? 0 : (setup.comboScale ?? 1),
     // VD_B_COSTMUL＝對手耗速掃描旋鈕（P1 驗證 07-30 用它掃出 0.6 下豁免從未咬合
     // ⇒ 改 1.0 對稱）；未給＝鏡像生涯現值 1.0（matchConfig.js 同步）
     ...(USE_STAMINA
