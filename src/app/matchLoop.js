@@ -20,6 +20,7 @@ import {
 import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
 import { digReadCorrect, schemeByKey, noteScheme, counterReadOf } from '../input/liberoRead.js';
+import { myRouteFor } from '../input/myRoute.js';
 import { applySeasonRoster } from '../career/careerState.js';
 import { serverId } from '../sim/match.js';
 import { STAMINA } from '../sim/stamina.js';
@@ -2105,6 +2106,10 @@ function frameStep(s, now) {
   updateDiveReady(s);
   stage.subPanel?.sync(game); // W6 ⚙ 換人鈕可用性（死球窗＋剩餘額度）
   syncCallFeedback(s); // 段 E：叫套路的回饋字卡＋面板狀態同步
+  // 叫戰術重做卷 段 0：非 S 的球內提示「S 要你跑 X」。純顯示、零互動——
+  // 決定跑不跑用既有的移動輸入，系統只補上玩家缺的那項資訊（裁定題 0）。
+  // 資料源 myRouteFor 自己會判「這一刻有沒有線可報」，回 null 就收起來。
+  stage.routeCue?.sync(myRouteFor(game, s.aiState, s.controlledId));
   stage.callPanel?.sync(game); // 段 E：⚡/🙋 叫套路鈕可用性（死球窗）
   stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
   stage.benchAccelBtn?.sync(benched); // W7 C2③：只在板凳期間顯示

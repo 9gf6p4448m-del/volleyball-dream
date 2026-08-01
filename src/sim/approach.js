@@ -828,13 +828,15 @@ export function planCombination(points, mainId, opts = {}) {
 //
 // 判定順序＝回饋的優先序，**不得調換**：
 //   ① 有沒有叫（沒叫＝'none'，逐值走 AI 原路徑）
-//   ② 主攻者是誰（請求只能為自己叫；指令由 S 決定給誰）
+//   ② 主攻者是誰（由 S 決定給誰）
 //   ③ 這球湊不湊得出這個套路（裁定 E）
-//   ④ 請求才有的 trust 閘（指令直接生效——S 本來就決定傳給誰）
-// ★ ③ 必須排在 ④ 前面 ★ 湊不出來的套路若先被 trust 擋掉再說「S 沒理你」，
-// 玩家會把「陣容不對」誤讀成「信任不夠」——兩者的行動方案完全相反
-// （前者是換一個套路叫，後者是先把球打好），回饋指錯方向比不給回饋更糟。
-const CALL_REQUEST_SALT = 211; // 與三型的觸發鹽（91／137／173）皆不同 ⇒ 兩組骰不同步
+//
+// ★ 2026-08-01 戰術重做卷 題 0：舊「請求」語意已廢除 ★
+// 舊制：非 S 可以按 🙋 為自己叫，再由 S 的 AI 依 trust 擲骰決定採不採納
+// （outcome 另有 'accepted'／'refused' 兩種、mode 另有 'request'）。
+// 廢除理由＝玩家叫的是願望不是決策。新制的決策流是「S 決策 → 非 S 收到球內提示
+// → 用移動輸入自己決定跑不跑」，非 S 在死球窗沒有事情做。
+// ⇒ 本函式的 mode 恆為 'command'，outcome 只剩 none／command／infeasible。
 
 // 裁定 E 的機器判準：checks 逐條看，第一個沒過的就是「湊不出來的原因」。
 // 回傳條件名（機器碼），文案在 input 層——sim 不產生給人看的字串。
@@ -853,22 +855,18 @@ function commandMainId(points, type, fallbackMainId) {
   return points.find((pt) => kinds.includes(pt.kind))?.pid ?? null;
 }
 
-// called＝{ type, callerId, isSetter }；null／型別不合法＝沒叫。
+// called＝{ type }（callerId／isSetter 仍可帶著，本函式不再讀）；null／型別不合法＝沒叫。
 // opts 除 evaluateCombination 的那些之外另吃：
-//   fallbackMainId＝pickAttackPoint 已經抽出的主攻者（指令路徑的優先人選）
-//   acceptP＝請求的採納機率（**由呼叫端用既有 trust 尺規算好**——本檔不吃 game）
+//   fallbackMainId＝pickAttackPoint 已經抽出的主攻者（優先人選）
 export function resolveCalledPlay(points, called, opts = {}) {
   const none = {
     outcome: 'none', type: null, mainId: null, mode: null, reason: null, combo: null,
   };
   if (!called?.type || !COMBO_TYPES.includes(called.type)) return none;
-  const { type, callerId = null, isSetter = false } = called;
-  const { fallbackMainId = null, acceptP = 0, flightId = 0, seed = 0 } = opts;
-  const mode = isSetter ? 'command' : 'request';
-  // 甲之三：非 S 只能為**自己**叫（玩家永遠只能代表自己說話，不做整隊控制）
-  const mainId = mode === 'command'
-    ? commandMainId(points, type, fallbackMainId)
-    : callerId;
+  const { type } = called;
+  const { fallbackMainId = null } = opts;
+  const mode = 'command'; // 叫套路的人一定是 S（面板只對 S 開）＝指令，直接生效
+  const mainId = commandMainId(points, type, fallbackMainId);
   const base = { type, mainId, mode, combo: null };
   if (!mainId || !points.some((pt) => pt.pid === mainId)) {
     return { ...base, outcome: 'infeasible', reason: 'hasMain' };
@@ -877,11 +875,7 @@ export function resolveCalledPlay(points, called, opts = {}) {
   if (!ev.combo) {
     return { ...base, outcome: 'infeasible', reason: firstFailedCheck(ev.checks) };
   }
-  if (mode === 'command') return { ...base, outcome: 'command', combo: ev.combo };
-  const accepted = hash01(flightId * 1097 + CALL_REQUEST_SALT + seed) < acceptP;
-  return accepted
-    ? { ...base, outcome: 'accepted', combo: ev.combo }
-    : { ...base, outcome: 'refused', reason: 'trust' };
+  return { ...base, outcome: 'command', combo: ev.combo };
 }
 
 // 面板要不要列這一型：出廠機率為 0 的型別（現況＝夾塞，裁定丙）預設不列。

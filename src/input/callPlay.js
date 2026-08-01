@@ -5,15 +5,14 @@
 //   乙：S 遠段面板（`app/matchLoop.js` 的 `setReady === false` 分支）——臨場改判
 // 選項清單一律由 sim 的 `offeredCallTypes()` 給，**面板列得出來的就是解析器認得的**。
 //
-// ★ 甲之三的兩種語意（上位裁定書 §四.2）★
+// ★ 2026-08-01 戰術重做卷 題 0：只剩一種語意 ★
 //   S    ＝**指令**：本來就決定傳給誰，直接生效
-//   非 S ＝**請求**：只能為自己叫，由 S 的 AI 依 trust 權衡採納與否
-// UI 硬性要求「回饋必須分得開」——本檔用**三條互相獨立的通道**同時表達，
-// 任一條被色盲／小螢幕／關音效吃掉，另外兩條仍分得出來：
-//   ① 圖示：⚡指令 ／ 🙋請求 ／ 🔄改判
-//   ② 詞：「指令」「請求」「改判」寫在文字裡，不倚賴圖示
-//   ③ 顏色：指令＝琥珀（我說了算）／請求＝天藍（我在拜託）／被無視＝灰
-// 面板自己也照同一套（見 callPanel 的標題與按鈕文案）＝按下去之前就知道是哪一種。
+//   非 S ＝**沒有叫套路這件事**（面板開不了、選項池是空的）
+// 舊制的「請求」（非 S 為自己叫、由 S 的 AI 依 trust 擲骰採納與否）已廢除——
+// 玩家叫的是願望不是決策。新制改成：S 決策 → 非 S 收到**球內提示**（`ui/routeCue.js`）
+// →用既有移動輸入自己決定跑不跑，非 S 在死球窗沒有事情做。
+// 回饋仍用**三條互相獨立的通道**（圖示／詞／顏色）表達，任一條被色盲／小螢幕吃掉，
+// 另外兩條仍分得出來：⚡指令（琥珀）／🔄改判／湊不出來（紅）。
 import { offeredCallTypes } from '../sim/approach.js';
 import { KIND_LABELS } from './setOptions.js';
 
@@ -24,22 +23,24 @@ export const CALL_DESCS = {
   delay: '快攻手先跳，你等他落地那一刻才擊球',
 };
 
-// 兩種語意的表現層規格（單一真相：面板與回饋讀同一份，不會一邊說指令一邊說請求）
+// 表現層規格（單一真相：面板與回饋讀同一份）。
+// `request` 已於 2026-08-01 隨舊語意刪除——不得再加回來。
 export const CALL_MODES = {
   command: { icon: '⚡', word: '指令', color: '#ffd166', hint: '你是二傳——說了算' },
-  request: { icon: '🙋', word: '請求', color: '#6ee7ff', hint: '你只能為自己叫——二傳理不理看信任' },
   replan:  { icon: '🔄', word: '改判', color: '#ffd166', hint: '一傳歪了——臨場換戰術' },
 };
 
-// 開面板的人是不是二傳＝指令；其餘一律請求（甲之三，玩家只能代表自己）
+// 只有二傳叫得了套路；非 S 回 null＝**沒有可用的語意**（不是「另一種語意」）
 export function callModeOf(game, playerId) {
-  return game.players?.[playerId]?.currentRole === 'setter' ? 'command' : 'request';
+  return game.players?.[playerId]?.currentRole === 'setter' ? 'command' : null;
 }
 
-// 選項池。**不預先變灰任何一項**——變灰要預判一傳品質＝作弊（裁定 E 明文），
+// 選項池。非 S 一律空陣列（他在死球窗沒有事情做）。
+// **不預先變灰任何一項**——變灰要預判一傳品質＝作弊（裁定 E 明文），
 // 湊不出來一律等到當場再回饋。
 export function callOptionsFor(game, playerId) {
   const mode = callModeOf(game, playerId);
+  if (!mode) return [];
   return offeredCallTypes().map((type) => ({
     type,
     mode,
@@ -83,18 +84,11 @@ function reasonTextOf(reason, actualKind) {
 // routes＝aiState.approach?.routes（拿主攻者實際跑的線，讓 mainKind 的回饋講得具體）
 export function callFeedbackOf(outcome, routes = null) {
   if (!outcome) return null;
-  const spec = CALL_MODES[outcome.mode] ?? CALL_MODES.request;
+  const spec = CALL_MODES[outcome.mode] ?? CALL_MODES.command;
   const name = CALL_LABELS[outcome.type] ?? outcome.type;
   const head = `${spec.icon}${spec.word}・${name}`;
-  if (outcome.outcome === 'command' || outcome.outcome === 'accepted') {
-    // 兩種語意的「成功」也要分得開：指令是「照跑」，請求是「二傳點頭了」
-    const tail = outcome.mode === 'request' ? '二傳點頭了！' : '照跑！';
-    return { text: `${head}——${tail}`, color: spec.color, ms: 1400 };
-  }
-  if (outcome.outcome === 'refused') {
-    // 請求專屬：被無視。**不得與「湊不出來」共用文案**——玩家的下一步完全不同
-    // （被無視＝先把球打好累積信任；湊不出來＝這球換一個套路叫）
-    return { text: `${head}——二傳沒理你（信任不夠）`, color: '#9fb0cc', ms: 1400 };
+  if (outcome.outcome === 'command') {
+    return { text: `${head}——照跑！`, color: spec.color, ms: 1400 };
   }
   const actual = routes?.find((r) => r.pid === outcome.mainId)?.kind ?? null;
   return {
@@ -107,6 +101,6 @@ export function callFeedbackOf(outcome, routes = null) {
 // 面板上的「已叫牌」狀態列（按下去之後、球還沒發之前看得到自己剛才做了什麼）
 export function pendingCallTextOf(called) {
   if (!called?.type) return null;
-  const spec = CALL_MODES[called.isSetter ? 'command' : 'request'];
+  const spec = CALL_MODES.command; // 叫得了套路的只有 S ⇒ 恆為指令
   return `${spec.icon} 已下${spec.word}：${CALL_LABELS[called.type] ?? called.type}`;
 }

@@ -195,7 +195,8 @@ export function createAiState() {
     //   壽命＝**下一個 tick 內消費**（aiCollectIntents 的 applyReplanCall），窗外即作廢。
     replanCall: null,
     // callOutcome（回饋層的唯一真相）：{ type, mode, outcome, reason, mainId, flightId }
-    //   outcome ∈ command｜accepted｜refused｜infeasible；mode ∈ command｜request｜replan。
+    //   outcome ∈ command｜infeasible；mode ∈ command｜replan。
+    //   （2026-08-01 題 0：舊「請求」語意廢除 ⇒ accepted／refused／request 三個值已消失）
     //   由 sim 產生**機器碼**、文案在 input 層——裁定 E 要求「當場回饋失敗、不得靜默
     //   降級」，所以失敗也要留下逐條原因（reason＝第一個沒過的 check）。
     //   純由 calledPlay＋可觀察量重算 ⇒ 不進錄影白名單。
@@ -375,7 +376,6 @@ function ensureFlightPlan(game, aiState) {
       seed: game.seed ?? 0,
       passTier: tier,
       fallbackMainId: aiState.attackerId,
-      acceptP: requestAcceptP(game, points, aiState.calledPlay),
       // 2026-08-01：玩家叫的套路走 force＝跳過觸發骰，但**跳不過 comboScale===0**
       // ——那是「這場比賽有沒有組合攻擊」的世界規則，不是「這球要不要自動跑」的骰子
       // （見 evaluateCombination 的 scale 註解）。未注入＝1＝與前一版逐值相同。
@@ -392,8 +392,8 @@ function ensureFlightPlan(game, aiState) {
     // 一次叫牌只管一球：消費即清（下一個死球窗可以再叫）。回饋留在 callOutcome，
     // 由表現層讀——**不得靜默降級**（裁定 E），湊不出來時 outcome 就是 'infeasible'
     aiState.calledPlay = null;
-    // 採納＝主攻者換成叫牌指定的那位。**只有採納才改**：被 trust 無視（'refused'）
-    // 與湊不出來（'infeasible'）都逐值走 AI 原路徑，玩家從回饋看得出差別
+    // 叫成了＝主攻者換成套路的主攻者。**只有叫成才改**：湊不出來（'infeasible'）
+    // 逐值走 AI 原路徑，玩家從回饋看得出差別
     if (call.combo) aiState.attackerId = call.mainId;
     // ---- 組合排程層（段 B，2026-07-31；藍圖 §三＝裁定 A 乙的形狀）----
     // **順序不可調換**：選人（上一行，一格未動）→ 組合 → 寫回池 → 算 route。
@@ -863,29 +863,9 @@ function pickAttackPoint(game, team, setterId, passTier = 'perfect', points = nu
   return pickByWeights(entries, weights, roll);
 }
 
-// 段 E 甲之三：非 S 的請求「由 S 的 AI 依 trust 權衡採納與否」。
-// 採納機率＝**該員在本波攻擊池中的 trust 權重佔比**（沿用既有的 trustToWeights
-// 尺規，含後排折減）——零新常數、隨場內動態信任自己浮動。
-//
-// ★ 為什麼不是「我的 trust ÷ 池內最高」★（動手前實測，tools/called-play-probe.mjs，
-//   七個對手各一場、241 個規劃點）：主角的那個比值是 **1.000／102 次全部**
-//   ＝**恆真**，請求會變成「永遠採納」，驗收「低信任時會被無視」從出廠就不會響。
-//   這正是本專案 07-31 已抓到六次的形狀——拿一個看起來合理的數字去卡一個沒量過的量。
-//   改用權重佔比後實測：主角 min 0.318／p50 0.500／p90 0.639／max 1.000，
-//   池內全員 0.071–1.000 ⇒ 兩側都跨得過、非恆真亦非恆假。
-// ★ 為什麼不套 floorShare ★ 地板是「保底球權、不淪為觀眾」的分配安全網，
-//   不是「戰術請求的優先權」。套上去等於給低信任者 0.27 的採納率＝把 trust 閘稀釋掉。
-// ★ 指令（S）不走這裡 ★ S 本來就決定傳給誰，直接生效（甲之三原文）。
-function requestAcceptP(game, points, called) {
-  if (!called || called.isSetter) return 0;
-  const i = points.findIndex((pt) => pt.pid === called.callerId);
-  if (i < 0) return 0;
-  const w = trustToWeights(points.map((pt) => ({
-    trust: effectiveTrust(game, game.players[pt.pid]),
-    rowFactor: pt.rowFactor,
-  })));
-  return w[i] ?? 0;
-}
+// 【已刪除・2026-08-01 戰術重做卷 題 0】原本此處有 `requestAcceptP()`：
+// 非 S 的「請求」由 S 的 AI 依 trust 權重佔比擲骰決定採納與否。舊語意廢除後
+// 沒有任何一條路徑需要採納機率——叫套路的人恆為 S、指令直接生效。
 
 // ---- 段 E 路徑乙：S 遠段臨場改判（藍圖 §2.6）----
 //

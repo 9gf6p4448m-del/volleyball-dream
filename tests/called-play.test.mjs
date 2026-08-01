@@ -5,8 +5,9 @@
 //   ② **回寫順序在 pickAttackPoint 之後、planCombination 之前**（靜態順序斷言）
 //      ——「之後」才保得住 trust 分佈零漂移，「之前」才讓選擇成為組合的**輸入**
 //      而不是事後回寫。兩邊都釘死，少釘一邊都會靜默失效。
-//   ③ **非 S 的請求真的經 trust 權衡**：高信任採納、低信任被無視（固定 seed 重演）
-//   ④ **兩種語意的回饋分得開**（S＝指令／非 S＝請求）——三條獨立通道
+//   ③ **非 S 沒有「叫套路」這件事**（2026-08-01 題 0 廢除舊「請求」語意後改守的點）：
+//      模式是 null、選項池是空的，解析器也不再產生 accepted／refused
+//   ④ **回饋講得清楚**（指令／改判／湊不出來）——三條獨立通道
 //   ⑤ **裁定 E**：湊不出套路當場回饋失敗，且**不是靜默降級**
 //   ⑦ **乙路徑**：臨場改判真的重建 approach，且**已起跑者不得改線**
 //   非恆真／非恆假：每一條閘都要有兩側樣本，否則等於沒有閘
@@ -120,101 +121,93 @@ test('① 同源：玩家叫的套路，主攻者與配合者實際跑的線與 
   assert.equal(ai.calledPlay, null, 'calledPlay 沒有被消費，會漏到下一球');
 });
 
-// ---------------- ③ 非 S 的請求：trust 權衡 ----------------
+// ---------------- ③ 舊「請求」語意已廢除（2026-08-01 題 0） ----------------
+//
+// 舊制：非 S 在死球窗按 🙋 為自己叫，由 S 的 AI 依 trust 擲骰決定採不採納
+//       （outcome ∈ accepted／refused、mode ＝ request）。
+// 廢除理由＝玩家叫的是願望不是決策。新的決策流是「S 決策 → 非 S 收球內提示 →
+// 自己決定跑不跑」，非 S 在死球窗沒有事情做。
+// 這一段守的是**廢除有沒有拆乾淨**：不是「請求會不會被採納」，而是「請求叫不出來」。
 
-// 高／低信任的對照必須**同 seed 同 flightId**——骰值一格不動，只有 acceptP 變，
-// 才證明得了「差別來自 trust 而不是來自骰子」。
-function requestOutcome(flightId, callerTrust, callerId) {
-  const { ai } = planWith({
-    flightId,
-    trust: { [callerId]: callerTrust },
-    calledPlay: { type: 'cross', callerId, isSetter: false },
-  });
-  return ai.callOutcome?.outcome ?? null;
-}
-
-test('③ 請求經 trust 權衡：同 seed 同骰值下，高信任採納、低信任被無視', () => {
-  const flips = [];
-  for (let f = 1; f <= 200; f += 1) {
-    const base = planWith({ flightId: f });
-    const oh = runnerOf(base.ai, 'left');
-    if (!oh) continue;
-    const hi = requestOutcome(f, 100, oh);
-    const lo = requestOutcome(f, 1, oh);
-    if (hi === 'accepted' && lo === 'refused') flips.push({ f, oh, hi, lo });
-  }
-  assert.ok(flips.length > 0,
-    'trust 從 1 拉到 100 都翻不動任何一球的採納結果＝trust 閘沒有在作用（恆真或恆假）');
-  // 逐值可重演：把第一個翻轉案例原地重跑一次，兩次逐值相同
-  const { f, oh } = flips[0];
-  assert.equal(requestOutcome(f, 100, oh), 'accepted');
-  assert.equal(requestOutcome(f, 1, oh), 'refused');
-  // eslint-disable-next-line no-console
-  console.log(`      ③ 翻轉案例 ${flips.length} 筆；首例 flightId=${f} 叫牌者=${oh}`
-    + `　trust100 → accepted／trust1 → refused`);
+test('③ 非 S 沒有「叫套路」這件事：模式是 null、選項池是空的', () => {
+  const g = createGame({ seed: 3 });
+  const setter = g.match.rotations.A.find((id) => g.players[id].currentRole === 'setter');
+  const other = g.match.rotations.A.find((id) => g.players[id].currentRole !== 'setter');
+  assert.equal(callModeOf(g, other), null, '非 S 拿到了一種可用語意＝舊請求語意還活著');
+  assert.deepEqual(callOptionsFor(g, other), [], '非 S 拿得到叫戰術選項＝面板還開得出來');
+  // 對照組：S 這一側必須還在（否則「空陣列」只是整個功能壞掉）
+  assert.equal(callModeOf(g, setter), 'command');
+  assert.ok(callOptionsFor(g, setter).length > 0, 'S 也拿不到選項＝叫戰術整個死掉了');
 });
 
-test('③ 非恆真亦非恆假：同一組球上，採納與被無視兩側都拿得到樣本', () => {
-  const tally = { accepted: 0, refused: 0, infeasible: 0 };
-  for (let f = 1; f <= 200; f += 1) {
-    const base = planWith({ flightId: f });
-    const oh = runnerOf(base.ai, 'left');
-    if (!oh) continue;
-    const o = requestOutcome(f, 45, oh); // 45＝主角實測 effectiveTrust 的 p50
-    if (o in tally) tally[o] += 1;
-  }
-  assert.ok(tally.accepted > 0, '一顆都沒被採納＝請求恆假（玩家永遠許不到願）');
-  assert.ok(tally.refused > 0, '一顆都沒被無視＝請求恆真（trust 閘等於不存在）');
-  // eslint-disable-next-line no-console
-  console.log(`      ③ trust=45 的分佈：採納 ${tally.accepted}／被無視 ${tally.refused}`
-    + `／湊不出 ${tally.infeasible}`);
-});
-
-test('③ 被無視＝逐值走 AI 原路徑（不得偷偷給半套）', () => {
-  let hit = null;
-  for (let f = 1; f <= 200 && !hit; f += 1) {
-    const base = planWith({ flightId: f });
-    const oh = runnerOf(base.ai, 'left');
-    if (!oh) continue;
-    const r = planWith({
-      flightId: f, trust: { [oh]: 1 },
-      calledPlay: { type: 'cross', callerId: oh, isSetter: false },
+test('③ 解析器不再產生 accepted／refused：isSetter 帶什麼都是指令', () => {
+  const g = createGame({ seed: 3 });
+  const pts = applyRouteKinds(attackPointsOf(g, 'A', 'A1', 'perfect'), { flightId: 1, seed: 3 });
+  const mb = pts.find((p) => p.kind === 'quick')?.pid ?? pts[0].pid;
+  for (const isSetter of [true, false]) {
+    const res = resolveCalledPlay(pts, { type: 'cross', callerId: mb, isSetter }, {
+      team: 'A', flightId: 1, seed: 3, fallbackMainId: pts[0].pid,
     });
-    if (r.ai.callOutcome?.outcome === 'refused') {
-      const ref = planWith({ flightId: f, trust: { [oh]: 1 } });
-      hit = { r, ref };
-    }
+    assert.equal(res.mode, 'command', `isSetter=${isSetter} 時 mode 不是 command＝request 還在`);
+    assert.ok(['command', 'infeasible'].includes(res.outcome),
+      `outcome 出現了 ${res.outcome}——accepted／refused 應已隨請求語意消失`);
+    // 舊制「非 S 只能為自己叫」已廢：主攻者一律由 commandMainId 挑（S 決定給誰）
+    assert.notEqual(res.mainId, mb, '主攻者仍是叫牌者本人＝「只能為自己叫」的舊語意殘留');
   }
-  assert.ok(hit, '找不到被無視的樣本');
-  assert.deepEqual(hit.r.ai.approach, hit.ref.ai.approach, '被無視卻改了助跑線');
-  assert.deepEqual(hit.r.ai.attackCombo, hit.ref.ai.attackCombo, '被無視卻改了組合');
-  assert.equal(hit.r.ai.attackerId, hit.ref.ai.attackerId, '被無視卻改了球權');
+});
+
+test('③ trust 不再影響叫牌成敗（採納骰已整支拆除）', () => {
+  // 同 seed 同 flightId，只把叫牌者的信任從 1 拉到 100——舊制這會翻轉 accepted／refused，
+  // 新制必須逐值相同。只比**成敗三欄**：mainId 會隨 trust 變是合法的（trust 本來就
+  // 影響 pickAttackPoint 抽出的 fallbackMainId），拿它來比會把合法差異誤判成殘留。
+  const verdict = (o) => (o ? { outcome: o.outcome, mode: o.mode, reason: o.reason } : null);
+  let samples = 0;
+  for (let f = 1; f <= 60; f += 1) {
+    const base = planWith({ flightId: f });
+    const oh = runnerOf(base.ai, 'left');
+    if (!oh) continue;
+    // 刻意用 isSetter:false（舊制的請求路徑）——舊程式碼在這裡會兩側翻轉
+    const call = { type: 'cross', callerId: oh, isSetter: false };
+    const lo = planWith({ flightId: f, trust: { [oh]: 1 }, calledPlay: { ...call } });
+    const hi = planWith({ flightId: f, trust: { [oh]: 100 }, calledPlay: { ...call } });
+    assert.deepEqual(verdict(lo.ai.callOutcome), verdict(hi.ai.callOutcome),
+      `flightId=${f}：信任高低改變了叫牌成敗＝採納骰還在`);
+    samples += 1;
+  }
+  assert.ok(samples > 0, '一個樣本都沒取到＝這條測試等於沒跑');
 });
 
 // ---------------- ⑤ 裁定 E：湊不出來當場回饋，不靜默降級 ----------------
 
 test('⑤ 裁定 E：湊不出套路時 outcome=infeasible 且說得出是哪一條沒過', () => {
+  // 2026-08-01 題 0 後的取樣改法：舊版靠「MB 為自己叫交叉」造 infeasible（＝請求語意的
+  // 「只能為自己叫」）。新制主攻者一律由 commandMainId 挑，池裡有 left 就挑得到 ⇒
+  // 擋在 mainKind 已不可能，改由**池裡根本沒有那條線的人**造（reason=hasMain）。
+  // 守的點一格未放寬：叫了牌一定有回饋、infeasible 一定講得出原因、不得靜默降級。
   const seen = new Set();
+  let feasible = 0;
+  let blocked = 0;
   for (let f = 1; f <= 200; f += 1) {
     const base = planWith({ flightId: f });
-    const mb = runnerOf(base.ai, 'quick');
-    if (!mb) continue;
-    // MB 跑快攻——他不可能當交叉的主攻者（COMBO_MAIN_KINDS.cross＝['left']）
     const r = planWith({
-      flightId: f, calledPlay: { type: 'cross', callerId: mb, isSetter: false },
+      flightId: f, calledPlay: { type: 'cross', callerId: 'A1', isSetter: true },
     });
     const o = r.ai.callOutcome;
     assert.ok(o, '叫了牌卻沒有任何回饋＝靜默降級（裁定 E 明文禁止）');
+    if (o.outcome === 'command') { feasible += 1; continue; }
     assert.equal(o.outcome, 'infeasible');
     assert.ok(o.reason, 'infeasible 沒有帶原因＝回饋講不出「為什麼」');
     seen.add(o.reason);
+    blocked += 1;
     // 不靜默降級的另一半：也不得偷偷把它降級成別的套路
     assert.deepEqual(r.ai.attackCombo, base.ai.attackCombo, '湊不出來卻自己換了一個組合');
   }
-  assert.ok(seen.size > 0, '一顆都沒測到');
-  assert.ok(seen.has('mainKind'), `預期擋在 mainKind，實得 ${[...seen].join('/')}`);
+  // 兩側都要有樣本：全成功＝這條閘等於不存在，全失敗＝叫戰術根本叫不成
+  assert.ok(blocked > 0, '200 顆球都湊得出交叉＝裁定 E 的失敗回饋從出廠就不會響');
+  assert.ok(feasible > 0, '200 顆球都湊不出交叉＝叫戰術恆假');
+  assert.ok(seen.has('hasMain'), `預期擋在 hasMain，實得 ${[...seen].join('/')}`);
   // eslint-disable-next-line no-console
-  console.log(`      ⑤ MB 叫交叉的失敗原因集合：${[...seen].join('、')}`);
+  console.log(`      ⑤ 叫交叉：成功 ${feasible}／湊不出 ${blocked}（原因：${[...seen].join('、')}）`);
 });
 
 test('⑤ 一傳不到位＝擋在 tier 那一條（與 routeKindFor 同一道階梯，不另立判準）', () => {
@@ -238,43 +231,43 @@ test('⑤ firstFailedCheck 的鑑別力：全過回 null、擋哪條就回哪條
 
 // ---------------- ④ 兩種語意的回饋分得開 ----------------
 
-test('④ 指令與請求：圖示／詞／顏色三條通道全部不同（任一條被吃掉仍分得出來）', () => {
+test('④ 指令與改判：圖示／詞兩條通道不同，且 request 規格已不存在', () => {
   const c = CALL_MODES.command;
-  const r = CALL_MODES.request;
-  assert.notEqual(c.icon, r.icon, '圖示相同＝色盲/單色螢幕下分不出來');
-  assert.notEqual(c.word, r.word, '詞相同＝念出來分不出來（最不倚賴視覺的一條）');
-  assert.notEqual(c.color, r.color, '顏色相同＝掃一眼分不出來');
+  const p = CALL_MODES.replan;
+  assert.notEqual(c.icon, p.icon, '圖示相同＝色盲/單色螢幕下分不出來');
+  assert.notEqual(c.word, p.word, '詞相同＝念出來分不出來（最不倚賴視覺的一條）');
+  // 舊制的第三種語意：非 S 的「請求」。廢除後不得再有規格，否則面板會把它畫回來
+  assert.equal(CALL_MODES.request, undefined, 'CALL_MODES.request 還在＝請求語意沒拆乾淨');
+  assert.deepEqual(Object.keys(CALL_MODES).sort(), ['command', 'replan']);
 });
 
-test('④ 四種結果的字卡兩兩不同，且指令/請求各自的成功文案也不同', () => {
+test('④ 兩種結果的字卡不同，且失敗字卡講得出原因', () => {
   const mk = (mode, outcome, reason = null) => callFeedbackOf(
     { type: 'cross', mode, outcome, reason, mainId: 'A2', flightId: 1 }, null,
   );
   const cmd = mk('command', 'command');
-  const acc = mk('request', 'accepted');
-  const ref = mk('request', 'refused', 'trust');
-  const inf = mk('request', 'infeasible', 'partner');
-  const texts = [cmd.text, acc.text, ref.text, inf.text];
-  assert.equal(new Set(texts).size, 4, `四種結果的文案有重複：${texts.join(' | ')}`);
-  // 語意錨點：指令帶「指令」、請求帶「請求」——不靠圖示也講得清楚
+  const inf = mk('command', 'infeasible', 'partner');
+  const rep = mk('replan', 'command');
+  const texts = [cmd.text, inf.text, rep.text];
+  assert.equal(new Set(texts).size, 3, `結果的文案有重複：${texts.join(' | ')}`);
+  // 語意錨點：不靠圖示也講得清楚
   assert.ok(cmd.text.includes(CALL_MODES.command.word));
-  assert.ok(acc.text.includes(CALL_MODES.request.word));
-  // 被無視 vs 湊不出來：顏色也要分（灰＝人的問題／紅＝陣容的問題），
-  // 因為玩家的下一步完全相反（前者累積信任、後者換套路）
-  assert.notEqual(ref.color, inf.color, '「二傳沒理你」與「湊不出來」同色＝行動方案會被混淆');
+  assert.ok(rep.text.includes(CALL_MODES.replan.word));
+  // 成功 vs 湊不出來：顏色也要分（琥珀＝跑得成／紅＝陣容的問題）
+  assert.notEqual(cmd.color, inf.color, '「照跑」與「湊不出來」同色＝掃一眼分不出成敗');
   assert.ok(inf.text.includes('MB'), `裁定 E 的原因沒有出現在文案裡：${inf.text}`);
   // eslint-disable-next-line no-console
   console.log(`      ④ ${texts.join('\n      ④ ')}`);
 });
 
-test('④ 面板側也分得開：S 開＝指令池、非 S 開＝請求池', () => {
+test('④ 面板側：S 開＝指令池、非 S 根本開不了', () => {
   const g = createGame({ seed: 3 });
   const setter = g.match.rotations.A.find((id) => g.players[id].currentRole === 'setter');
   const other = g.match.rotations.A.find((id) => g.players[id].currentRole !== 'setter');
   assert.equal(callModeOf(g, setter), 'command');
-  assert.equal(callModeOf(g, other), 'request');
+  assert.equal(callModeOf(g, other), null);
   assert.ok(callOptionsFor(g, setter).every((o) => o.mode === 'command'));
-  assert.ok(callOptionsFor(g, other).every((o) => o.mode === 'request'));
+  assert.deepEqual(callOptionsFor(g, other), []);
 });
 
 test('④ 沒叫牌＝沒有字卡（不得每球都彈東西）', () => {
@@ -399,7 +392,7 @@ test('決定論：同 seed 同輸入的叫牌結果逐值相同（甲與乙都�
 
 test('壽命：叫牌回饋隨死球作廢，但 calledPlay **不得**在死球窗被清掉', () => {
   const { g, ai } = planWith({ flightId: 1, calledPlay: { type: 'cross', callerId: 'A2', isSetter: false } });
-  ai.callOutcome = { type: 'cross', mode: 'request', outcome: 'refused', reason: 'trust', mainId: 'A2', flightId: 1 };
+  ai.callOutcome = { type: 'cross', mode: 'command', outcome: 'infeasible', reason: 'hasMain', mainId: 'A2', flightId: 1 };
   ai.calledPlay = { type: 'delay', callerId: 'A2', isSetter: false };
   g.phase = 'serve';
   aiCollectIntents(g, ai);

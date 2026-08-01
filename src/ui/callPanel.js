@@ -7,11 +7,13 @@
 // 框架沿 `subPanel.js` 逐項：常駐鈕＋全屏 overlay、inline CSS、掛 document.body、
 // 開啟時由 matchLoop 把 delta 砍成 0（凍結模擬——死球窗 tick 不流逝，慢慢想）。
 //
-// ★ UI 硬性要求：同一個面板兩種語意，回饋必須分得開 ★
-// 本面板在**按下去之前**就分：標題、鈕色、每一顆選項鈕的動詞、底部提示語都吃
-// `CALL_MODES` 的同一份規格（S＝⚡指令／非 S＝🙋請求）。按下去之後的字卡由
-// `input/callPlay.js` 的 `callFeedbackOf` 給，用同一份規格 ⇒ 前後不會一邊說指令
-// 一邊說請求。玩家不可能分不清自己剛才是下令還是許願。
+// ★ 2026-08-01 戰術重做卷 題 0：本面板只服務二傳 ★
+// 舊制非 S 可以按 🙋 送「請求」（由 S 的 AI 依 trust 擲骰採納），該語意已廢除——
+// 非 S 改成一傳完成後收球內提示（`ui/routeCue.js`），死球窗沒有事情做 ⇒
+// `sync(g)` 的可用性判準多一道「我是不是 S」，非 S 開不了本面板。
+// 面板機制本身留用（裁定明文：語意改掛、機制留用）。
+// 按下去之後的字卡由 `input/callPlay.js` 的 `callFeedbackOf` 給，讀同一份 `CALL_MODES`
+// ⇒ 面板承諾的與字卡說的是同一種語意。
 import { callOptionsFor, callModeOf, CALL_MODES, pendingCallTextOf } from '../input/callPlay.js';
 
 // handlers.callPlay(type) 由 matchLoop 開機注入（stage.handlers 後綁定慣例，同 subPanel）
@@ -60,6 +62,8 @@ export function createCallPanel({ game, playerId, handlers }) {
   let pending = null; // 本次已叫的牌（供狀態列顯示；真相在 aiState.calledPlay）
 
   const modeOf = () => callModeOf(game, playerId);
+  // 非 S 時 modeOf() 是 null（面板本來就開不了）——鈕仍要畫得出來，退回指令規格當底
+  const specOf = () => CALL_MODES[modeOf()] ?? CALL_MODES.command;
 
   function optionRow(opt, spec) {
     const r = document.createElement('div');
@@ -96,7 +100,7 @@ export function createCallPanel({ game, playerId, handlers }) {
 
   function paint() {
     card.replaceChildren();
-    const spec = CALL_MODES[modeOf()];
+    const spec = specOf();
     const head = document.createElement('div');
     css(head, ['display:flex', 'justify-content:space-between', 'align-items:center']);
     const title = document.createElement('div');
@@ -123,9 +127,7 @@ export function createCallPanel({ game, playerId, handlers }) {
     const foot = document.createElement('div');
     css(foot, ['font-size:11px', 'color:#9fb0cc', 'line-height:1.5', 'margin-top:4px']);
     // 裁定 E 的預告：不預先變灰（那要預判一傳品質＝作弊），改成事前講清楚規則
-    foot.textContent = modeOf() === 'command'
-      ? '一傳到位、陣容湊得出來才跑得成——湊不出來當場會告訴你原因'
-      : '請求不是指令：二傳依信任決定理不理你，湊不出來也會當場告訴你';
+    foot.textContent = '一傳到位、陣容湊得出來才跑得成——湊不出來當場會告訴你原因';
     card.appendChild(foot);
   }
 
@@ -150,10 +152,11 @@ export function createCallPanel({ game, playerId, handlers }) {
       open = false;
       overlay.style.display = 'none';
     },
-    // 每幀同步：死球窗（phase==='serve'）才可開——與 subPanel 同一把尺
+    // 每幀同步：死球窗（phase==='serve'）＋**我這一輪是二傳**才可開。
+    // 後者每幀重算＝輪轉換到 S 位時鈕自己活起來、轉走時自己失效（角色會變）。
     sync(g) {
-      const usable = g.phase === 'serve';
-      const spec = CALL_MODES[modeOf()];
+      const usable = g.phase === 'serve' && modeOf() === 'command';
+      const spec = specOf();
       btn.dataset.enabled = usable ? '1' : '0';
       btn.style.opacity = usable ? '1' : '0.45';
       btn.textContent = pending

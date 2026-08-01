@@ -14,6 +14,7 @@ import { createTouchUi } from '../ui/touchUi.js';
 import { createActionButtons } from '../ui/actionButtons.js';
 import { createZonePanel } from '../ui/zonePanel.js';
 import { createFloatText } from '../ui/floatText.js';
+import { createRouteCue } from '../ui/routeCue.js';
 import { createPointBanner } from '../ui/pointBanner.js';
 import { showTutorialOnce } from '../ui/tutorial.js';
 import { createSetOverOverlay } from '../ui/setOverOverlay.js';
@@ -75,6 +76,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
   const teachDialog = careerSetup ? createTeachDialog() : null;
   const floatText = createFloatText(); // subPanel/timeoutBtn 反灰提示要用，提前建
+  // 叫戰術重做卷 段 0：「S 要你跑 X」的球內提示（純顯示、零互動——憲法 §九 留痕見該檔檔頭）
+  const routeCue = createRouteCue();
   // W6 B2 賽中換人面板：生涯才建（⚙ 鈕右上堆疊第三格；requestSub 由 loop 注入）；
   // W7 E3（拍板）：鈕常駐顯示，板凳無人改由 subPanel.sync() 反灰＋點擊提示，不再由此處擋建鈕
   const subPanel = careerSetup
@@ -123,7 +126,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, callPanel, timeoutBtn,
-    aimMarker, landingMarker, floatText, pointBanner, setOverOverlay, setBreakOverlay,
+    aimMarker, landingMarker, floatText, routeCue, pointBanner, setOverOverlay, setBreakOverlay,
     boxScorePanel, callButton, blockShadow, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
