@@ -21,6 +21,8 @@ export const CALL_BALL_AT = 30;
 // 受控者自己的線索上不得有兩種叫法）
 export const KIND_LABELS = {
   quick: '快攻', left: '左翼', right: '右翼', pipe: '後排P', dball: 'D球',
+  // 卷五（2026-08-02）：MB 分檔後「快攻」要分得開——A 快＝二傳正前方、B 快＝往 OH 側 2.2m
+  bquick: 'B快',
   // §5 A2（07-29 補）：缺這條的話標籤會 fallback 成英文字串 kind。
   //
   // ★ 2026-07-31 Sawmah 命名裁定 ★

@@ -41,6 +41,19 @@ export function setAimFor(game, team, attackerId, kind, tempo = 'three') {
     return { lx: SHOOT[kind], lz: 1.3, t: 0.55 };
   }
   if (kind === 'quick') return { lx: 0, lz: 1.0, t: 0.4 }; // t<0.5＝sim 低弧快球
+  // ---- 卷五（2026-08-02）：B 快 ----
+  // ★ 本段只建線，不接任何抽籤 ★ 沒有人跑得到這條線（`attackPointsOf` 一格未動、
+  //   `routeKindFor` 也沒有它），所以 sim-hash **必須逐值不變**——先例＝組合攻擊卷
+  //   段 A 的真交叉／夾塞幾何前置。接上入口是下一段的事。
+  // lx −2.2（Sawmah 2026-08-02 拍板，量測交付 §三）：往 **OH／4 號位**＝二傳**面向**
+  //   的方向。⚠ 正 lx 是二傳**背後**＝C 快（背快），那條裁定 4 明文另立一卷。
+  //   區間 −1.6~−2.7 由三道邊界夾出：`left_inside −1.3`／`left −3.0`／中間攔網手
+  //   涵蓋半寬實測 0.5m（B 快離 A 快 ≥1.1m 才「構造上搆不到」，同 left_inside/cross
+  //   當初取 1.3m 的理由）。−2.2 兩側各留 0.9／0.8m，最平衡。
+  // lz 1.0／t 0.4＝**與 A 快同一條弧、同一個深度帶**：B 快是「二傳前方 1.5–2m 的
+  //   **第一時間**快球」，節奏與 A 快同檔、只差位置。走二速出來的是半快／平拉開，
+  //   那是另一種攻擊（且二速已有現成的 SHOOT／SHOOT_HIT 參數，不在本卷）。
+  if (kind === 'bquick') return { lx: -2.2, lz: 1.0, t: 0.4 };
   if (kind === 'left') return { lx: -3, lz: 1.3, t: 0.75 };
   // §5 A2 交叉：OH 從外側切進中間（真實排球的 X 戰術）——落點在快攻點的左肩、
   // 離快攻點 1.3m ＞ TUNING.BLOCK_REACH_X（1.1m）＝跟死快攻的中間攔網手**構造上
@@ -112,6 +125,15 @@ export const APPROACH = {
   // 站超過 0.5s 佔 100%。3.0 是改動前 dutyPosition 的等效值（該版罰站 0 筆），
   // 留約 1m 助跑＝MB 的兩步。（07-28 Sawmah 拍板；§4 A1 把 MB 起跳提前後可再議）
   quick: { lx: 0, lz: 3.0, steps: 2 },
+  // 卷五 B 快：起點鏡到 OH 側（由外往內，沿本表既有的設計原則），lz 與 A 快同 3.0。
+  // 助跑距離＝起點(−3.0,3.0)→起跳點(−2.2, 1.0+TAKEOFF.FRONT 0.68 ＝1.68)＝**1.54m**
+  // ⇒ runTicks ≈21（A 快實測 18）。起跳時刻**不受影響**：`routeTicks` 對一速的
+  // takeoffTick 完全不吃 runTicks，拉長助跑只把起步從 +67 推到 +64
+  // （實測依據＝tools/vol5-mb-reach-probe.mjs：起跳餘裕 85 tick、可及上限 6.23m）。
+  // ⚠ 落地後必查：與 OH 三條線（left −3.6／left_inside、cross −4.1）的助跑交叉——
+  //   要對每條各算一次 SEP_RADIUS 0.55 的穿越餘裕（範式＝真交叉的 0.690>0.55 論證），
+  //   任一條低於 0.55 就會出現「兩人互相推開」的走位鬼影。
+  bquick: { lx: -3.0, lz: 3.0, steps: 2 },
   // OH 4 號位：約四步距離離網，從邊線外側切進來
   left: { lx: -3.6, lz: 3.6, steps: 4 },
   // §5 A2 交叉：**同一個 OH**，起點更貼邊線（-4.1＝場內夾制上限）、終點在中間，
@@ -289,7 +311,8 @@ const KIND_SALT = { left: 11, right: 23 };
 // 'poor' 的規格字面就是「只剩兩翼高球」＝那一檔不得跑二速的平拉開／半快，
 // 沿用同一道三檔階梯、不另立判準。
 export function tempoFor(kind, { flightId = 0, seed = 0, index = 0, passTier = 'perfect' } = {}) {
-  if (kind === 'quick') return 'one';
+  // 卷五：B 快與 A 快同一檔節奏（第一時間快球，只差位置）——見 setAimFor 的 bquick 註解
+  if (kind === 'quick' || kind === 'bquick') return 'one';
   // ---- 段 C：夾塞的節奏＝二速（把段 A 留下的「弧線是半快、節奏是三速」不一致收掉）----
   //
   // 段 A 給 tandem 的舉球落點是 `t = 0.55`＝game.js 的 SHOOT_APEX 4.2 檔（半快弧），

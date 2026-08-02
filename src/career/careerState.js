@@ -427,7 +427,7 @@ export function mergeScouting(career, opponentId, tally) {
     // 舊存檔沒有這個欄位＝prev.routes 為 undefined，下面用 ?? {} 保底不 crash
     // 段 A（2026-07-31）補 'cross'／'tandem'——鍵集與 game.js scoutTallyOf 同步
     routes: {
-      quick: 0, left: 0, left_inside: 0, cross: 0, tandem: 0, right: 0, pipe: 0, dball: 0,
+      quick: 0, bquick: 0, left: 0, left_inside: 0, cross: 0, tandem: 0, right: 0, pipe: 0, dball: 0,
     },
     feints: 0, spikes: 0,
   };
@@ -441,6 +441,7 @@ export function mergeScouting(career, opponentId, tally) {
     },
     routes: {
       quick: (prevRoutes.quick ?? 0) + (tally.routes?.quick ?? 0),
+      bquick: (prevRoutes.bquick ?? 0) + (tally.routes?.bquick ?? 0),
       left: (prevRoutes.left ?? 0) + (tally.routes?.left ?? 0),
       left_inside: (prevRoutes.left_inside ?? 0) + (tally.routes?.left_inside ?? 0),
       cross: (prevRoutes.cross ?? 0) + (tally.routes?.cross ?? 0),

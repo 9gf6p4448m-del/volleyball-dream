@@ -386,7 +386,7 @@ function scoutTallyOf(state, pid) {
       // ⇒ 鍵集必須與 approach.js 的 APPROACH 表同步，否則段 B/C 一接上抽籤，
       // 記帳就會靜默丟掉一半（tests/attack-routes.test.mjs 有同步性斷言）
       routes: {
-        quick: 0, left: 0, left_inside: 0, cross: 0, tandem: 0, right: 0, pipe: 0, dball: 0,
+        quick: 0, bquick: 0, left: 0, left_inside: 0, cross: 0, tandem: 0, right: 0, pipe: 0, dball: 0,
       },
       feints: 0, spikes: 0,
       serves: { jumps: 0, floats: 0, total: 0 },

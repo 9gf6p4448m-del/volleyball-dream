@@ -229,7 +229,7 @@ test('夾塞條件 1 非恆真：除了 tandem，沒有任何一條線與快攻�
 
 test('段 A：八條線的起跳點兩兩距離都 ≥ SEP_RADIUS（同時在場也不會被避讓推開）', () => {
   const kinds = Object.keys(APPROACH);
-  assert.equal(kinds.length, 8, '攻擊線總數應為 8（六舊＋cross＋tandem）');
+  assert.equal(kinds.length, 9, '攻擊線總數應為 9（六舊＋cross＋tandem＋卷五 bquick）');
   for (let i = 0; i < kinds.length; i += 1) {
     for (let j = i + 1; j < kinds.length; j += 1) {
       const a = takeoffSpotFor('A', kinds[i]);
@@ -359,4 +359,43 @@ test('Q4 鍵集：生涯層 mergeScouting 對每一條 APPROACH 線都累積得�
   const migrated = mergeScouting(legacy, 'north-tech', tally);
   assert.equal(migrated.scouting['north-tech'].routes.cross, 2);
   assert.equal(migrated.scouting['north-tech'].routes.tandem, 2);
+});
+
+// ---------------- 卷五（2026-08-02）：B 快幾何前置 ----------------
+//
+// 本段與段 A 同狀態：**只建線、不接抽籤**。沒有人跑得到 bquick，所以 sim-hash
+// 必須逐值不變（零率對照的機械保證）。接上戰術入口是下一段的事。
+// 這條護欄轉紅的兩種情形，都要求你有意識地處理，不得順手改綠：
+//   ① 抽籤誤接 ⇒ 真的有人跑了 B 快，那 sim-hash 基準要一起重寫並附完整驗證
+//   ② 幾何被改動 ⇒ 參數是 Sawmah 拍板的（lx −2.2），改它要回頭走裁定流程
+test('卷五 B 快：幾何已建、抽籤一格未接（沒有人跑得到 ⇒ 行為零改動）', () => {
+  // ① 幾何查得出來，且是 Sawmah 拍板的那組值
+  const aim = setAimFor(null, 'A', null, 'bquick');
+  assert.equal(aim.lx, -2.2, 'B 快擊球點 lx 被改了（Sawmah 2026-08-02 拍板 −2.2）');
+  assert.equal(aim.lz, 1.0, 'B 快應與 A 快同深度帶');
+  assert.equal(aim.t, 0.4, 'B 快應與 A 快同一條弧（第一時間快球）');
+  assert.ok(APPROACH.bquick, 'B 快的助跑起點沒建');
+  assert.equal(APPROACH.bquick.lx, -3.0);
+  // ② 方向護欄：**負 lx＝OH 側**。正值就是 C 快（背快），那條裁定 4 明文另立一卷
+  assert.ok(aim.lx < 0,
+    'B 快跑到二傳背後去了＝那是 C 快（背快），裁定 4 明文另立一卷');
+  // ③ 與鄰居的距離：離 A 快要 ≥1.1m（中間攔網手構造上搆不到），
+  //    離 left_inside(−1.3)／left(−3.0) 都要錯開
+  assert.ok(Math.abs(aim.lx - 0) >= 1.1,
+    'B 快離 A 快 <1.1m ⇒ 跟死 A 快的中間攔網手順手就搆到了，分檔失去意義');
+  assert.ok(Math.abs(aim.lx - (-1.3)) > 0.5, 'B 快與 left_inside 落點太近');
+  assert.ok(Math.abs(aim.lx - (-3.0)) > 0.5, 'B 快與 left 落點太近');
+  // ④ 抽籤一格未接：400 波 × 三檔一傳品質，routeKindFor 永遠不產出 bquick
+  for (let f = 0; f < 400; f += 1) {
+    for (const tier of ['perfect', 'ok', 'poor']) {
+      for (const k of OLD_KINDS) {
+        const out = routeKindFor(k, { flightId: f, seed: 3, index: f % 4, passTier: tier });
+        assert.notEqual(out, 'bquick', 'routeKindFor 產出了 bquick＝抽籤誤接');
+      }
+    }
+  }
+  // ⑤ 節奏是線的屬性、無 rng：B 快與 A 快同一檔（第一時間快球）
+  assert.equal(tempoFor('bquick', { flightId: 7, seed: 3, index: 2 }), 'one');
+  assert.equal(tempoFor('bquick', { flightId: 99, seed: 11, index: 0, passTier: 'ok' }), 'one',
+    'B 快的節奏不得隨 flightId／seed／tier 變（那是線的屬性不是骰子）');
 });
