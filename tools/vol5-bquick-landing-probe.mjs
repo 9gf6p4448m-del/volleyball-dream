@@ -20,7 +20,8 @@
 //   node tools/vol5-bquick-landing-probe.mjs base [局數=40]   ← 不叫戰術的對照（MB 跑 A 快）
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
-import { approachStartFor, takeoffSpotFor } from '../src/sim/approach.js';
+import { approachStartFor, takeoffSpotFor, setAimFor } from '../src/sim/approach.js';
+import { localToWorld } from '../src/sim/rotation.js';
 
 const MODE = process.argv[2] ?? 'call';
 const SETS = Number(process.argv[3] ?? 40);
@@ -118,6 +119,37 @@ const winLens = [];      // 每個助跑窗被追蹤的 tick 數（窗界自我�
 const runWin = [];       // 每個窗的 [MB 起步, MB 起跳] 相對建帳 tick（判斷擠壓發生在哪一段）
 const firedCases = [];   // 觸發避讓的球：最小距當下的兩人位置與時序（診斷「哪個常數要調」）
 
+// ════ 第二輪（協調者追問）：位移量與機能性後果 ════
+//
+// ★ 誠實標註：**每 tick 的「避讓造成的位移」無法從 stepGame 外面直接量到** ★
+//   game.js:319-320 的 px/pz 快照取在 applyMove **之前**（＝上一 tick 末的位置），
+//   而 separateTeammates（game.js:333）是本 tick 最後一個動 actor 的東西
+//   ⇒ 「applyMove 之後、避讓之前」那一格座標沒有任何對外出口。
+//   要直接量到它就得改 src（本輪禁區），也無法把避讓關掉做 A/B 軌跡差（SEP_RADIUS
+//   是 module-level const，不是 TUNING/AI 那種可 patch 的物件）。
+//   因此本節給**兩個都不是代理指標**的量：
+//     (i) 推導值：把 game.js:445-452 的算式對觀測到的 d 做反解（見 pushFromD）
+//     (ii) 直接值：MB／OH 該 tick 的**實際總位移**——它是 (i) 的**上界**
+//         （實際位移 ＝ 自己要走的 ＋ 避讓推的），也是「玩家眼睛看得到多少移動」的上界。
+const sepDisp = { mb: [], oh: [] };   // 每顆受影響球：推導的避讓位移累計（m）
+const sepMaxTick = { mb: [], oh: [] }; // 每顆受影響球：推導的單 tick 最大避讓位移（m）
+const actDisp = { mb: [], oh: [] };   // 每顆受影響球：觸發 tick 內的**實際**總位移（上界）
+const actMaxTick = { mb: [], oh: [] };
+// 機能性後果：兩組（fired＝該窗曾觸發避讓／clean＝沒觸發）
+const func = {
+  fired: { atStart: [], atTakeoff: [], hitOff: [], spiked: 0, n: 0 },
+  clean: { atStart: [], atTakeoff: [], hitOff: [], spiked: 0, n: 0 },
+};
+// 反解 push：避讓推完的距離 d = hypot(min(0.55, d_pre+2push), 1.2*push)
+//   未觸頂支（push < SEP_PUSH）⇒ 徑向分量恰好收在 0.55 ⇒ 1.2*push = sqrt(d² − 0.55²)
+//   觸頂支（push = 0.08，需 d_pre < 0.39）在本批**從未發生**（d < 0.55 的 tick 數 = 0，
+//   且觸頂時 d = hypot(d_pre+0.16, 0.096) 會落在 0.55 以下 ⇒ 觀測不到）。
+// 一個人的實際位移量 = |n| = push * hypot(1, SEP_SLIDE 0.6) = push * 1.1662
+const pushFromD = (d) => (d > SEP_RADIUS ? Math.sqrt(d * d - SEP_RADIUS * SEP_RADIUS) / 1.2 : 0);
+const SEP_DISP_MUL = Math.hypot(1, 0.6);
+const aimLocal = setAimFor(null, 'A', null, MB_KIND, 'one');
+const aimWorld = localToWorld('A', aimLocal.lx, aimLocal.lz);
+
 function tallyStall(kind, ticks) {
   if (!stalls[kind]) stalls[kind] = [];
   stalls[kind].push(ticks);
@@ -132,6 +164,32 @@ for (let seed = 1; seed <= SETS; seed += 1) {
   let track = null;   // { flight, mb, pairs:[{kind,pid,min}], endTick, ticks }
   let atk = null;     // 罰站帳（口徑抄 attack-flow-probe §2）
   let stillRun = {};  // pid → 目前連續靜止了幾 tick（②b）
+  // 機能窗關帳：距離窗若還沒關就一併補關（未扣球的短波）
+  const closeTrack = () => {
+    if (!track) return;
+    if (!track.distClosed) {
+      track.distClosed = true;
+      track.fired = track.pairs.some((p) => p.min <= SEP_FIRED);
+      winLens.push(track.ticks);
+      for (const p of track.pairs) {
+        if (!Number.isFinite(p.min)) continue;
+        pairMin[p.kind].push(p.min); pairMinAt[p.kind].push(p.minAt);
+        if (p.min <= SEP_FIRED) firedCases.push({ kind: p.kind, min: p.min, minAt: p.minAt, ...p.at });
+      }
+      if (track.fired) {
+        sepDisp.mb.push(track.sd.mb); sepDisp.oh.push(track.sd.oh);
+        sepMaxTick.mb.push(track.sm.mb); sepMaxTick.oh.push(track.sm.oh);
+        actDisp.mb.push(track.ad.mb); actDisp.oh.push(track.ad.oh);
+        actMaxTick.mb.push(track.am.mb); actMaxTick.oh.push(track.am.oh);
+      }
+    }
+    const b = func[track.fired ? 'fired' : 'clean'];
+    b.n += 1;
+    if (track.atStart != null) b.atStart.push(track.atStart);
+    if (track.atTakeoff != null) b.atTakeoff.push(track.atTakeoff);
+    if (track.hitOff != null) b.hitOff.push(track.hitOff);
+    if (track.spiked) b.spiked += 1;
+  };
   let allPrev = {};
   let guard = 0;
   while (g.phase !== 'set_over' && guard < 400000) {
@@ -188,15 +246,49 @@ for (let seed = 1; seed <= SETS; seed += 1) {
             t0: g.tick,
             runFrom: mbR.startTick - g.tick,
             runTo: mbR.takeoffTick - g.tick,
+            route: mbR,
+            // 第二輪：位移與機能後果的帳
+            oh: pairs[0].pid,           // 唯一會擠到的那條線就是 left（見第一輪 ①(b)）
+            sd: { mb: 0, oh: 0 }, sm: { mb: 0, oh: 0 },
+            ad: { mb: 0, oh: 0 }, am: { mb: 0, oh: 0 },
+            prev: null,
+            atStart: null, atTakeoff: null, hitOff: null, spiked: false,
           };
           runWin.push([track.runFrom, track.runTo]);
           tracked += 1;
         }
       }
     }
+    // ★ 事件必須在關帳之前處理 ★ 扣球那一 tick flightId 就變了，關帳排在前面的話
+    //   這一波的擊球點永遠量不到（第二輪 ② 的 hitOff 會恆為 null）
+    for (const e of ev) {
+      if (e.type === 'TOUCH' && e.kind === 'spike') {
+        const k = ai.attackKind ?? 'unknown';
+        spikes[k] = (spikes[k] ?? 0) + 1;
+        (standBy[k] ??= []).push(stillRun[e.playerId] ?? 0);
+        if (atk && e.playerId === atk.pid) {
+          tallyStall(atk.kind ?? 'unknown', g.tick - atk.arrivedTick);
+          atk = null;
+        }
+        // 第二輪 ②：這一波的 MB 真的把 B 快打出去了嗎、打在哪
+        if (track && e.playerId === track.mb) {
+          const a = g.actors[e.playerId];
+          track.spiked = true;
+          track.hitOff = Math.hypot(a.x - aimWorld.x, a.z - aimWorld.z);
+        }
+      }
+      if (e.type === 'DEAD_BALL') atk = null;
+    }
     if (track) {
-      const alive = g.phase === 'rally' && r.flightId === track.flight && g.tick <= track.endTick;
-      if (alive) {
+      // ★ 兩個窗，刻意分開 ★
+      //   距離窗（distAlive）＝第一輪用的那個（flightId 綁定），**數字不得因本輪而變**；
+      //   機能窗（alive）要活到扣球——二傳觸球時 flightId 就換了，綁 flightId 的話
+      //   `hitOff`／`spiked` 會恆為 null／0（本輪第一版就踩到，115 次扣球量到 0 次）。
+      const distAlive = g.phase === 'rally' && r.flightId === track.flight
+        && g.tick <= track.endTick;
+      const alive = g.phase === 'rally' && r.possession === 'A'
+        && g.tick <= track.route.takeoffTick + 90;
+      if (distAlive) {
         track.ticks += 1;
         const m = g.actors[track.mb];
         for (const p of track.pairs) {
@@ -210,38 +302,48 @@ for (let seed = 1; seed <= SETS; seed += 1) {
           if (d < SEP_RADIUS) pairTicksDeep[p.kind] += 1;
           if (d <= SEP_FIRED) pairTicksFired[p.kind] += 1;
           else if (d < SEP_NEAR) pairTicksNear[p.kind] += 1;
+          // 第二輪 ①：只對「這一 tick 真的觸發了避讓」的那名 OH 累計
+          if (p.pid === track.oh && d <= SEP_FIRED) {
+            const disp = pushFromD(d) * SEP_DISP_MUL;
+            track.sd.mb += disp; track.sd.oh += disp;
+            if (disp > track.sm.mb) { track.sm.mb = disp; track.sm.oh = disp; }
+            if (track.prev) { // 實際位移（上界）：兩次 post-step 座標的差
+              const am = Math.hypot(m.x - track.prev.mx, m.z - track.prev.mz);
+              const ao = Math.hypot(o.x - track.prev.ox, o.z - track.prev.oz);
+              track.ad.mb += am; track.ad.oh += ao;
+              if (am > track.am.mb) track.am.mb = am;
+              if (ao > track.am.oh) track.am.oh = ao;
+            }
+          }
         }
-      } else {
+        track.prev = { mx: m.x, mz: m.z, ox: g.actors[track.oh].x, oz: g.actors[track.oh].z };
+        // 第二輪 ②：機能性後果——承諾 tick 上的到位程度（route 的值，不是我重算的）
+        if (g.tick === track.route.startTick) {
+          track.atStart = Math.hypot(m.x - track.route.start.x, m.z - track.route.start.z);
+        }
+        if (g.tick === track.route.takeoffTick) {
+          track.atTakeoff = Math.hypot(m.x - track.route.takeoff.x, m.z - track.route.takeoff.z);
+        }
+      } else if (!track.distClosed) {
+        track.distClosed = true;
+        track.fired = track.pairs.some((p) => p.min <= SEP_FIRED);
         winLens.push(track.ticks);
         for (const p of track.pairs) {
           if (!Number.isFinite(p.min)) continue;
           pairMin[p.kind].push(p.min); pairMinAt[p.kind].push(p.minAt);
           if (p.min <= SEP_FIRED) firedCases.push({ kind: p.kind, min: p.min, minAt: p.minAt, ...p.at });
         }
-        track = null;
-      }
-    }
-    for (const e of ev) {
-      if (e.type === 'TOUCH' && e.kind === 'spike') {
-        const k = ai.attackKind ?? 'unknown';
-        spikes[k] = (spikes[k] ?? 0) + 1;
-        (standBy[k] ??= []).push(stillRun[e.playerId] ?? 0);
-        if (atk && e.playerId === atk.pid) {
-          tallyStall(atk.kind ?? 'unknown', g.tick - atk.arrivedTick);
-          atk = null;
+        if (track.fired) {
+          sepDisp.mb.push(track.sd.mb); sepDisp.oh.push(track.sd.oh);
+          sepMaxTick.mb.push(track.sm.mb); sepMaxTick.oh.push(track.sm.oh);
+          actDisp.mb.push(track.ad.mb); actDisp.oh.push(track.ad.oh);
+          actMaxTick.mb.push(track.am.mb); actMaxTick.oh.push(track.am.oh);
         }
       }
-      if (e.type === 'DEAD_BALL') atk = null;
+      if (!alive) { closeTrack(); track = null; }
     }
   }
-  if (track) {
-    winLens.push(track.ticks);
-    for (const p of track.pairs) {
-      if (!Number.isFinite(p.min)) continue;
-      pairMin[p.kind].push(p.min); pairMinAt[p.kind].push(p.minAt);
-      if (p.min <= SEP_FIRED) firedCases.push({ kind: p.kind, min: p.min, minAt: p.minAt, ...p.at });
-    }
-  }
+  if (track) closeTrack();
 }
 
 console.log(`=== vol5 B 快落地量測　模式 ${MODE}　${SETS} 局　（MB 線＝${MB_KIND}）===\n`);
@@ -286,6 +388,43 @@ if (firedCases.length) {
       + `　OH(${f2(c.ox)}, ${f2(c.oz)})　minAt ${c.minAt}　起步 ${c.rf}／起跳 ${c.rt}`);
   }
 }
+
+console.log('');
+console.log('══ 第二輪 ①：位移量——玩家看不看得到 ══');
+console.log('⚠ 每 tick「避讓造成的位移」無法從 stepGame 外面直接量到（px/pz 快照在 applyMove 之前、');
+console.log('  separateTeammates 是最後一個動 actor 的）⇒ 下面 (i) 是**推導**、(ii) 是**直接量**且為上界。');
+console.log(`受影響球 n=${sepDisp.mb.length}（＝曾觸發避讓的球）`);
+for (const [name, who] of [['MB', 'mb'], ['OH', 'oh']]) {
+  const cum = sepDisp[who]; const mx = sepMaxTick[who];
+  const ac = actDisp[who]; const am = actMaxTick[who];
+  if (!cum.length) { console.log(`${name}：無樣本`); continue; }
+  console.log(`${name} (i)推導・避讓位移　累計 p50 ${f4(q(cum, 0.5))}m　p90 ${f4(q(cum, 0.9))}m`
+    + `　max ${f4(Math.max(...cum))}m　│ 單 tick 最大 p50 ${f4(q(mx, 0.5))}m`
+    + `　p90 ${f4(q(mx, 0.9))}m　max ${f4(Math.max(...mx))}m`);
+  console.log(`${name} (ii)直接・觸發 tick 內**實際**總位移（上界）`
+    + `　累計 p50 ${f4(q(ac, 0.5))}m　p90 ${f4(q(ac, 0.9))}m　max ${f4(Math.max(...ac))}m`
+    + `　│ 單 tick p50 ${f4(q(am, 0.5))}m　max ${f4(Math.max(...am))}m`);
+}
+
+console.log('');
+console.log('══ 第二輪 ②：機能性後果——有避讓 vs 無避讓 ══');
+console.log('（三項都直接讀 sim 狀態：route.startTick/takeoffTick 上的到位距離、擊球點對 setAimFor 的偏離）');
+const row = (label, key, unit) => {
+  const a = func.fired[key]; const b = func.clean[key];
+  const fmt = (arr) => (arr.length
+    ? `n=${arr.length} p50 ${f4(q(arr, 0.5))}${unit} p90 ${f4(q(arr, 0.9))}${unit} max ${f4(Math.max(...arr))}${unit}`
+    : '無樣本');
+  console.log(`${label}`);
+  console.log(`   有避讓：${fmt(a)}`);
+  console.log(`   無避讓：${fmt(b)}`);
+};
+console.log(`窗數：有避讓 ${func.fired.n}　無避讓 ${func.clean.n}`);
+row('startTick 那一刻離 route.start 的距離（＝有沒有準時站到助跑起點）', 'atStart', 'm');
+row('takeoffTick 那一刻離 route.takeoff 的距離（＝有沒有錯過起跳點）', 'atTakeoff', 'm');
+row(`擊球點離 setAimFor(${MB_KIND}) 落點 (${aimLocal.lx}, ${aimLocal.lz}) 的水平距離`, 'hitOff', 'm');
+const pc = (b) => (b.n ? ((b.spiked / b.n) * 100).toFixed(1) : 'n/a');
+console.log(`MB 真的把這條線打出去的比例：有避讓 ${pc(func.fired)}%（${func.fired.spiked}/${func.fired.n}）`
+  + `　無避讓 ${pc(func.clean)}%（${func.clean.spiked}/${func.clean.n}）`);
 
 console.log('');
 console.log('── ② 罰站（口徑抄 tools/attack-flow-probe.mjs §2：到球下 → 擊球）──');
