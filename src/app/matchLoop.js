@@ -15,7 +15,7 @@ import {
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
 import {
-  setPanelTitle, setPreviewTitle, setStageOf, SET_HESITANT_BELOW,
+  setPanelTitle, setPreviewTitle, setStageOf, setEtaOf, SET_HESITANT_BELOW,
 } from '../input/setOptions.js';
 import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
@@ -846,16 +846,9 @@ function updateDecisions(s, now) {
     game.ball.vy < 0 && game.ball.y > 1.8 && !controls.setPending();
   // 4.6 追修（07-28 試玩）：分配窗兩段式——遠段唯讀、近段才可下指令。
   // ★ 卷五裁定 3（2026-08-02）：判準從空間換成**時間** ★
-  //   ETA＝`aiState.setContactPoint.ticks`＝球墜到**二傳舉球手點高度**
-  //   （SET_HANDPOINT_H_RATIO × 身高，reach.js 單一真相）還剩幾 tick
-  //   ＝「球還有多久到我手上」。協調層每 tick 重算（ai.js 的第二觸窗分支），
-  //   UI 只讀不算 ⇒ 不另闢真相。
-  //   ⚠ 不可改用 `aiState.contactPoint`——那個瞄的是接球舒適高度 1.35m，
-  //     球墜到 1.35m 比墜到手點高度**晚**（實測 p50 99 vs 95），是另一個時刻。
-  //   取不到時（S 由 backup 代舉等）回退接球高度版，再取不到＝不擋操作。
-  const setEta = aiState.setContactPoint?.ticks
-    ?? (aiState.contactPoint ?? aiState.landing)?.ticks
-    ?? null;
+  //   ETA 的取點與換算**整段在 `setEtaOf` 裡**（單一真相，UI 不自己算一份）——
+  //   那支的檔頭寫清楚了為什麼一定要扣 `planTick`（漏扣＝近段永遠不開始）。
+  const setEta = setEtaOf(aiState, game.tick);
   const setReady = !setDeciding || setStageOf(setEta) === 'ready';
   // 4.5B §4：S diegetic 掃場鏡位（分配決策窗＝自 S 視線回望自家半場）；窗外歸位。
   // 4.6 追修：**鏡頭跟著操作段走**——遠段維持三人稱（跑位要空間感；掃場鏡位會把

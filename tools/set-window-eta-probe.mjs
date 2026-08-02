@@ -60,7 +60,11 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
         const recvCp = ai.contactPoint ?? ai.landing;
         if (recvCp) {
           const d = Math.hypot(recvCp.x - a.x, recvCp.z - a.z);
-          if (d <= SET_READY_M) cur.nearEta = ai.setContactPoint?.ticks ?? null;
+          // ⚠ 扣掉已過去的 tick：`ticks` 是規劃那一刻的值、整波不變（ai.js:317 呼叫鎖定）
+          const raw = ai.setContactPoint?.ticks;
+          if (d <= SET_READY_M) {
+            cur.nearEta = Number.isFinite(raw) ? raw - (g.tick - ai.planTick) : null;
+          }
         }
       }
     } else if (cur) {

@@ -142,6 +142,29 @@ export const SET_READY_M = 3.2;
 //     時間。往上調＝遠段變短（戰術窗更趕）、往下調＝近段變短（選人更趕）。
 export const SET_READY_TICKS = 55;
 
+// 距我接觸還剩幾 tick（**換算的單一真相**，UI 與測試共用同一支）。
+//
+// ⚠⚠ 這裡的 `-(gameTick - planTick)` 是本卷最容易漏掉的一行 ⚠⚠
+// `ensureFlightPlan` 有 **flight 級呼叫鎖定**（`ai.js:317`
+// `if (aiState.flightId === game.rally.flightId) return`）⇒ `setContactPoint.ticks`
+// 是**規劃那一刻**距接觸的 tick 數，整波固定不變、**不會自己遞減**。
+// 漏扣的話它恆為 ~95 ⇒ `setStageOf` 恆回 'preview' ⇒ **近段永遠不開始、玩家永遠
+// 選不了人**（實測診斷：每波觀察 89 tick，最小 ETA 仍是 93）。
+// 換算範式逐字沿用 `ai.js:1227`（`hitPoint.ticks - (tick - planTick)`）。
+//
+// 取哪一個接觸點：優先 `setContactPoint`＝球墜到**二傳舉球手點高度**
+// （SET_HANDPOINT_H_RATIO × 身高，reach.js 單一真相）＝「球到我手上」的那一刻。
+// 取不到（S 由 backup 代舉等）才回退接球高度版——那個瞄 1.35m，墜到 1.35m 比墜到
+// 手點**晚**（實測 p50 99 vs 95），是另一個時刻，只當退路不當首選。
+export function setEtaOf(aiState, gameTick) {
+  const raw = aiState?.setContactPoint?.ticks
+    ?? (aiState?.contactPoint ?? aiState?.landing)?.ticks;
+  if (!Number.isFinite(raw)) return null;
+  const planTick = aiState?.planTick;
+  if (!Number.isFinite(planTick)) return raw; // 沒有基準＝不換算（保守：不吞決策權）
+  return raw - (gameTick - planTick);
+}
+
 // 距我接觸的剩餘 tick → 分配窗階段：'preview'＝球還在飛（講戰術）／'ready'＝球到手上（選人）
 export function setStageOf(ticksLeft) {
   // 算不出接觸點＝不擋操作（寧可早開也不吞掉決策權）——與空間判準時期同語意
