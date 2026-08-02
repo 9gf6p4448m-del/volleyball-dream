@@ -56,6 +56,11 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
           ranValue: null,
           minEta: null,           // 診斷：本波觀察到的最小 ETA（看窗有沒有開到）
           ticksSeen: 0,           // 診斷：本波被觀察到幾個 tick
+          // ---- ②b：改組織真的接得上嗎（sim 自動，不需要 UI 入口）----
+          replanTick: null,       // ledger.replanned 變 true 的 tick
+          attackerBefore: null,   // 改組織前的主攻者
+          attackerAfter: null,    // 改組織後的主攻者（沒換＝湊不出替代方案）
+          newStartLead: null,     // 新主攻的 startTick − 改組織 tick（負＝助跑起點已過）
         };
         rows.push(cur);
       }
@@ -71,8 +76,30 @@ for (let seed = 1; seed <= SEEDS; seed += 1) {
       // 承諾判定：讀協調層自己的帳本，不重算判定條件
       if (cur.ranJudgedTick == null && ai.routeCommit?.flightId === cur.flightId) {
         const e = ai.routeCommit.entries.find((x) => x.pid === cur.quickPid);
-        if (e && e.ran !== null) { cur.ranJudgedTick = g.tick; cur.ranValue = e.ran; }
+        if (e && e.ran !== null) {
+          cur.ranJudgedTick = g.tick;
+          cur.ranValue = e.ran;
+          // ⚠ **不可**在這裡讀 ai.attackerId 當「改組織前」的值：本次 aiCollectIntents
+          //   已經跑完（含 applyRouteCommit → replanWithoutRunners），讀到的是改組織
+          //   **之後**的結果 ⇒ before === after 恆成立、換人率恆 0%（第一版的假象）。
+          //   正確的 before ＝**上一 tick** 的值，見迴圈尾端的 lastAttacker。
+          cur.attackerBefore = cur.lastAttacker ?? null;
+        }
       }
+      // ②b 改組織：`replanWithoutRunners` 由 sim 在判定的同一 tick 自動跑完
+      //（applyRouteCommit 末尾），**不需要玩家操作也不需要 UI 入口**。
+      // 要驗的是它接不接得上：新主攻的助跑起點是不是已經過去了。
+      if (cur.replanTick == null && ai.routeCommit?.replanned) {
+        cur.replanTick = g.tick;
+        cur.attackerAfter = ai.attackerId;
+        // 判定不跑的那個人，當時是不是主攻者？不是的話「沒換人」本來就是對的
+        //（skipIds 只把他從池裡拿掉，主攻者根本不是他）
+        cur.skippedWasMain = cur.lastAttacker === cur.quickPid;
+        const nr = ai.approach?.routes?.find((r) => r.pid === ai.attackerId);
+        if (nr?.startTick != null) cur.newStartLead = nr.startTick - g.tick;
+      }
+      // 迴圈尾：記下這一 tick 的主攻者，供**下一 tick** 當「改組織前」的基準
+      cur.lastAttacker = ai.attackerId;
     } else if (cur) {
       cur = null;
     }
@@ -133,6 +160,36 @@ const ranTrue = judged.filter((r) => r.ranValue === true).length;
 console.log(`判定結果分佈：跑了 ${pct(ranTrue, judged.length)}%／沒跑`
   + ` ${pct(judged.length - ranTrue, judged.length)}%（n=${judged.length}）`);
 console.log('  ↑ 兩側都要有樣本，否則「判定」等於沒有判＝零懲罰無從觸發');
+
+// ---- ②b：改組織（sim 自動）接不接得上 ----
+// ★ 這才是 §五.2「MB 不跑會不會讓整波垮掉」真正的載體 ★
+// `replanWithoutRunners` 由 `applyRouteCommit` 末尾自動呼叫，玩家不必按任何東西
+// ⇒ 「改判入口在近段關閉」對它無關。要驗的是**新主攻來不來得及助跑**。
+const skipped = withQuick.filter((r) => r.ranValue === false);
+const replanned = skipped.filter((r) => r.replanTick != null);
+const switched = replanned.filter((r) => r.attackerAfter && r.attackerAfter !== r.attackerBefore);
+const leadsNew = replanned.filter((r) => r.newStartLead != null).map((r) => r.newStartLead);
+console.log('\n-- ②b 改組織接得上嗎（受控玩家判定為「不跑」的那些波）--');
+console.log(`判定不跑的波數：${skipped.length}`);
+console.log(`其中 sim 真的執行了改組織：${pct(replanned.length, skipped.length)}%`
+  + `（n=${replanned.length}）`);
+console.log(`  ↑ 沒執行＝池子被掏空（ai.js:1063「沒有別人可以改給，維持原案」）`);
+// 只在「不跑的那個人本來就是主攻者」時，換人才是應該發生的事
+const wasMain = replanned.filter((r) => r.skippedWasMain);
+const wasMainSwitched = wasMain.filter((r) => r.attackerAfter && r.attackerAfter !== r.attackerBefore);
+console.log(`不跑的人本來就是主攻者：${pct(wasMain.length, replanned.length)}%`
+  + `（n=${wasMain.length}）——只有這些波「該換人」`);
+console.log(`  其中真的換掉主攻者：${pct(wasMainSwitched.length, wasMain.length)}%`
+  + ` ± ${sePct(wasMainSwitched.length, wasMain.length)}pp`);
+console.log(`（全體，含本來就不是主攻者的）換人率：${pct(switched.length, replanned.length)}%`
+  + ` ± ${sePct(switched.length, replanned.length)}pp`);
+console.log(`新主攻的助跑餘裕（startTick − 改組織 tick，**負＝助跑起點已經過去**）：`
+  + `p10 ${f(q(leadsNew, 0.1))}  p50 ${f(q(leadsNew, 0.5))}  p90 ${f(q(leadsNew, 0.9))} tick`);
+const lateNew = leadsNew.filter((v) => v < 0).length;
+console.log(`  其中「起點已過」的比例：${pct(lateNew, leadsNew.length)}%`
+  + ` ± ${sePct(lateNew, leadsNew.length)}pp（n=${leadsNew.length}）`);
+console.log('  ↑ 這一行高＝改組織接得上「名義」但接不上「助跑」＝整波品質垮掉，'
+  + '\n    那才是零懲罰要重議的理由；低＝裁定 5 的時序前提成立。');
 
 // ---- 對照：承諾判定 vs 起步 tick（確認判定點就是 startTick）----
 const startVsJudge = withQuick.filter((r) => r.ranJudgedTick != null && r.quickStart != null)
