@@ -25,11 +25,12 @@ import { createGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { localToWorld } from '../src/sim/rotation.js';
 import {
-  resolveCalledPlay, offeredCallTypes, firstFailedCheck, COMBO_TYPES,
-  applyRouteKinds, CALL_OFFERS_FACTORY_OFF_TYPES,
+  resolveCalledPlay, offeredCallTypes, firstFailedCheck, COMBO_TYPES, SOLO_CALL_TYPES,
+  applyRouteKinds, applySoloRoute, CALL_OFFERS_FACTORY_OFF_TYPES,
 } from '../src/sim/approach.js';
 import { attackPointsOf } from '../src/sim/ai.js';
 import { callFeedbackOf, CALL_MODES, callModeOf, callOptionsFor } from '../src/input/callPlay.js';
+import { myRouteFor } from '../src/input/myRoute.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const stripComments = (src) => src
@@ -302,7 +303,11 @@ test('面板選項池＝保守解讀②：出廠機率 0 的型別不列（切�
   assert.ok(!offered.includes('tandem'),
     '夾塞出廠關閉（裁定丙）卻列進面板——Sawmah 裁定前一律照保守解讀②');
   assert.equal(CALL_OFFERS_FACTORY_OFF_TYPES, false, '切換旗標被改動＝解讀①上線，需 Sawmah 裁定');
-  assert.ok(offered.every((t) => COMBO_TYPES.includes(t)), '面板列出了 sim 不認得的型別');
+  // 卷五：解析器認得的型別＝組合三型 ∪ 單人改線型（SOLO_CALL_TYPES）。
+  // 單人型不吃「出廠機率 0 就不列」那道濾網——它本來就沒有自動觸發機率（只有玩家叫得出來）。
+  const known = [...COMBO_TYPES, ...SOLO_CALL_TYPES];
+  assert.ok(offered.every((t) => known.includes(t)), '面板列出了 sim 不認得的型別');
+  assert.ok(offered.includes('bquick'), 'B 快沒進面板＝卷五的入口沒接上');
 });
 
 test('面板列的每一型，解析器都真的處理得動（面板與 sim 同源的最低保證）', () => {
@@ -392,6 +397,152 @@ test('⑦ 乙窗界：不在第二觸窗內的改判指令一律作廢，且不�
   assert.equal(ai.replanCall, null, '窗外的殘留指令沒被清掉，會在下一球突然生效');
   assert.equal(ai.callOutcome, null, '窗外指令不該產生回饋');
   assert.deepEqual(ai.approach, before);
+});
+
+// ---------------- 卷五：單人改線型（B 快）走同一個入口 ----------------
+//
+// 組合是「兩人之間的關係」，B 快只改 MB 自己那一條線 ⇒ 解析器多一種回傳形狀。
+// 這一組守的是**兩種形狀不得互相污染**：solo 不得被硬塞進 combo（partnerId 會是
+// undefined，applyComboRoutes 的 `pt.pid === undefined` 恆假＝靜默失效），
+// combo 也不得在單人型落地後殘留（下游會拿一份「線早就被覆蓋掉」的舊組合做判定）。
+
+test('卷五・解析器：B 快回的是 solo 形狀，不是硬塞進 combo', () => {
+  const g = createGame({ seed: 3 });
+  const pts = applyRouteKinds(attackPointsOf(g, 'A', 'A1', 'perfect'), { flightId: 1, seed: 3 });
+  const quickPid = pts.find((p) => p.kind === 'quick')?.pid;
+  assert.ok(quickPid, '這一組池裡沒有人跑 A 快＝本測試沒有標的');
+  const res = resolveCalledPlay(pts, { type: 'bquick', callerId: 'A1', isSetter: true }, {
+    team: 'A', flightId: 1, seed: 3, fallbackMainId: pts[0].pid,
+  });
+  assert.equal(res.outcome, 'command');
+  assert.equal(res.combo, null, 'B 快產出了 combo＝單人型被當成兩人配合');
+  assert.deepEqual(res.solo, { mainId: quickPid, kind: 'bquick' });
+  // 主攻者一定是**跑 A 快的那個人**：B 快是把他拉開，不是「叫誰都行」
+  assert.equal(res.mainId, quickPid);
+  assert.ok(SOLO_CALL_TYPES.includes('bquick'), 'bquick 沒登記在單人型清單裡');
+});
+
+test('卷五・解析器：池裡沒人跑 A 快 ⇒ 專屬 reason，不與組合的 hasMain 混用', () => {
+  const noQuick = [
+    { pid: 'A2', kind: 'left', tier: 'perfect' },
+    { pid: 'A4', kind: 'right', tier: 'perfect' },
+  ];
+  const res = resolveCalledPlay(noQuick, { type: 'bquick' }, { team: 'A', flightId: 1, seed: 3 });
+  assert.equal(res.outcome, 'infeasible');
+  assert.equal(res.reason, 'hasQuick', '沿用了組合的 hasMain＝文案會說成「你不在攻擊池裡」');
+  assert.equal(res.solo, null);
+  // 表現層要講得出實情：落回預設文案「這球湊不出來」等於什麼都沒說
+  const fb = callFeedbackOf({
+    type: 'bquick', mode: 'replan', outcome: 'infeasible', reason: 'hasQuick', mainId: null,
+  });
+  assert.ok(fb.text.includes('B 快'), `字卡沒有型別名＝CALL_LABELS 缺 bquick：${fb.text}`);
+  assert.ok(fb.text.includes('快攻'), `失敗回饋沒講出實情：${fb.text}`);
+  assert.ok(!fb.text.includes('湊不出來'), 'REASON_TEXT 沒有 hasQuick 這一鍵＝落回了預設文案');
+});
+
+test('卷五・世界規則閘：comboScale = 0 時 B 快也叫不出來（Sawmah 2026-08-02 裁定）', () => {
+  const g = createGame({ seed: 3 });
+  const pts = applyRouteKinds(attackPointsOf(g, 'A', 'A1', 'perfect'), { flightId: 1, seed: 3 });
+  assert.ok(pts.some((p) => p.kind === 'quick'), '池裡沒有 A 快＝擋下來的可能是別的原因');
+  const res = resolveCalledPlay(pts, { type: 'bquick' }, {
+    team: 'A', flightId: 1, seed: 3, comboScale: 0,
+  });
+  assert.equal(res.outcome, 'infeasible');
+  assert.equal(res.reason, 'playsOff');
+  assert.equal(res.solo, null, '世界規則關著卻仍產出了 B 快');
+});
+
+test('卷五・applySoloRoute：只動那一個人，其餘 point 是同一個物件參照', () => {
+  const pts = [
+    { pid: 'A2', kind: 'left' }, { pid: 'A3', kind: 'quick' }, { pid: 'A4', kind: 'right' },
+  ];
+  const frozen = structuredClone(pts);
+  const out = applySoloRoute(pts, { mainId: 'A3', kind: 'bquick' });
+  assert.deepEqual(pts, frozen, '改了入參＝純函式破功（與 applyComboRoutes 同範式）');
+  assert.equal(out[1].kind, 'bquick');
+  assert.equal(out[0], pts[0], '沒被指定的人被複製了一份新物件');
+  assert.equal(out[2], pts[2]);
+  assert.equal(applySoloRoute(pts, null), pts, 'solo 為 null 時應原樣回傳');
+});
+
+test('卷五・乙路徑端到端：叫 B 快真的把 MB 的線改掉，且不外溢到別人', () => {
+  // 挑一顆「AI 本來沒排組合」的球：那樣「其餘人逐值不動」才是乾淨的判準
+  let hit = null;
+  for (let f = 1; f <= 200 && !hit; f += 1) {
+    const r = replanAt(f, 'bquick');
+    if (r.ai.callOutcome?.outcome === 'command' && r.beforeCombo == null) hit = r;
+  }
+  assert.ok(hit, '200 顆球都叫不出 B 快＝入口沒接上');
+  const { ai, before } = hit;
+  const mb = ai.attackerId;
+  assert.equal(before.routes.find((r) => r.pid === mb)?.kind, 'quick',
+    '改判前他跑的不是 A 快＝標的不對');
+  assert.equal(routeOf(ai, mb).kind, 'bquick', 'MB 的 route 沒換線＝只改了標籤沒重建');
+  assert.equal(ai.attackKind, 'bquick', 'attackKind 與 route 分岔＝二傳瞄的和他跑的是兩個地方');
+  assert.equal(ai.attackCombo, null, '單人型卻生出了組合');
+  assert.equal(ai.approach.setTick, before.setTick, '改判動到了 setTick 錨點');
+  assert.equal(ai.callOutcome.mode, 'replan');
+  assert.equal(ai.replanCall, null, 'replanCall 沒被消費，會重複觸發');
+  for (const r0 of before.routes) {
+    if (r0.pid === mb) continue;
+    assert.deepEqual(routeOf(ai, r0.pid), r0, `${r0.pid} 的線被 B 快改判波及＝單人型外溢`);
+  }
+  // 裁定 5 的承諾：MB 自己要看得到「S 要你跑 B 快」。routeCue 不認角色、只讀 route.kind
+  //（myRoute.js:49 → KIND_LABELS），所以 MB 一進 route 系統就自動有提示——這一行守的是
+  // 那條鏈沒斷（label 落回原始 kind 字串就代表 KIND_LABELS 少了這一鍵）。
+  const cue = myRouteFor(hit.g, ai, mb);
+  assert.equal(cue.kind, 'bquick');
+  assert.ok(cue.label.startsWith('B快'), `MB 的球內提示沒認出 B 快：${cue.label}`);
+});
+
+test('卷五・單人型必須清掉上一份組合（否則下游拿早就不存在的線做判定）', () => {
+  let hit = null;
+  for (let f = 1; f <= 400 && !hit; f += 1) {
+    const r = replanAt(f, 'bquick');
+    if (r.ai.callOutcome?.outcome === 'command' && r.beforeCombo != null) hit = r;
+  }
+  assert.ok(hit, '400 顆球都湊不到「AI 已排組合 ＋ B 快叫得成」＝本測試沒有標的');
+  const { ai, beforeCombo } = hit;
+  assert.ok(beforeCombo.partnerId, '基準組合沒有配合者＝比對的對象不對');
+  assert.equal(ai.attackCombo, null,
+    '叫了單人型卻留著舊組合：那份 combo 宣稱的兩條線已經被這次重建覆蓋掉了');
+  // 為什麼舊組合一定不成立了：三型的誘餌都是跑 A 快的 MB，而 B 快正是把他拉走
+  // ⇒ 被拉走的人就是舊組合的 partner，那份 combo 的關係當場斷掉。
+  assert.equal(ai.attackerId, beforeCombo.partnerId,
+    '被拉去跑 B 快的不是舊組合的誘餌＝這一題的因果前提不成立，斷言失去標的');
+  assert.equal(routeOf(ai, beforeCombo.partnerId).kind, 'bquick');
+});
+
+test('卷五・乙硬線：MB 已起跑就整筆作廢（單人型也守「不得倒著跑回起點」）', () => {
+  let hit = null;
+  for (let f = 1; f <= 200 && !hit; f += 1) {
+    const ok = replanAt(f, 'bquick');
+    if (ok.ai.callOutcome?.outcome !== 'command') continue; // 先確認這球本來叫得成
+    const mb = ok.ai.attackerId;
+    const base = planWith({ flightId: f });
+    const mRoute = base.ai.approach.routes.find((r) => r.pid === mb);
+    if (mRoute?.startTick == null) continue;
+    const advance = (mRoute.startTick - base.g.tick) + 1;
+    if (advance <= 0) continue;
+    const late = replanAt(f, 'bquick', { advanceTicks: advance });
+    if (late.ai.callOutcome?.reason === 'launched') hit = late;
+  }
+  assert.ok(hit, '推過起步點之後仍改得動＝單人型漏了「已起跑者不得改線」');
+  const { ai, before, beforeCombo } = hit;
+  assert.equal(ai.callOutcome.outcome, 'infeasible');
+  assert.deepEqual(ai.approach, before, '改判被拒卻仍動了助跑線');
+  assert.deepEqual(ai.attackCombo ?? null, beforeCombo, '改判被拒卻仍動了組合');
+});
+
+test('卷五・決定論：同 seed 同輸入的 B 快結果逐值相同', () => {
+  for (let f = 1; f <= 30; f += 1) {
+    const a = replanAt(f, 'bquick');
+    const b = replanAt(f, 'bquick');
+    assert.ok(a.ai.callOutcome, `flightId=${f}：沒產生任何回饋＝這一輪比的是兩個 null`);
+    assert.deepEqual(a.ai.callOutcome, b.ai.callOutcome);
+    assert.deepEqual(a.ai.approach, b.ai.approach);
+    assert.deepEqual(a.ai.attackCombo ?? null, b.ai.attackCombo ?? null);
+  }
 });
 
 // ---------------- 決定論 ----------------

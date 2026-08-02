@@ -868,11 +868,26 @@ export function firstFailedCheck(checks) {
   return null;
 }
 
+// ---- 卷五（2026-08-02）：單人改線型戰術（solo）----
+//
+// 組合是**兩人之間的關係**（主攻者＋誘餌）；單人型只改一個人自己的線，沒有配合者。
+// 兩者共用同一個面板、同一支 `resolveCalledPlay`，但**回傳形狀不同**：
+//   組合 → `combo: { mainId, mainKind, partnerId, partnerKind, ... }`、`solo: null`
+//   單人 → `solo:  { mainId, kind }`、`combo: null`
+// ⇒ 呼叫端一律先看哪一個非 null，再走對應的寫回函式（applyComboRoutes／applySoloRoute）。
+// **不要把單人型硬塞進 combo 形狀**：那樣 partnerId 會是 undefined，
+// applyComboRoutes 的 `pt.pid === undefined` 恆假＝靜默失效（不報錯、線也沒改到）。
+export const SOLO_CALL_TYPES = ['bquick'];
+// 這個人本來要跑哪條線才叫得動（B 快＝把跑 A 快的 MB 拉去 OH／4 號位側）
+const SOLO_MAIN_KINDS = { bquick: ['quick'] };
+// 叫成功之後他改跑哪條線
+const SOLO_LINE = { bquick: 'bquick' };
+
 // 指令（S）的主攻者：trust 已經抽出來的那位優先——**S 的指令是「跑哪個套路」，
 // 不是「推翻 trust 分配」**；只有他跑的線本來就不能升級成這一型時，才換成池序中
 // 第一個有資格的人（決定論：attackPointsOf 的顯式順序，不再擲骰）。
-function commandMainId(points, type, fallbackMainId) {
-  const kinds = COMBO_MAIN_KINDS[type] ?? [];
+// kinds＝有資格的線（組合看 COMBO_MAIN_KINDS，單人型看 SOLO_MAIN_KINDS）。
+function commandMainId(points, kinds, fallbackMainId) {
   const fb = points.find((pt) => pt.pid === fallbackMainId);
   if (fb && kinds.includes(fb.kind)) return fallbackMainId;
   return points.find((pt) => kinds.includes(pt.kind))?.pid ?? null;
@@ -883,16 +898,34 @@ function commandMainId(points, type, fallbackMainId) {
 //   fallbackMainId＝pickAttackPoint 已經抽出的主攻者（優先人選）
 export function resolveCalledPlay(points, called, opts = {}) {
   const none = {
-    outcome: 'none', type: null, mainId: null, mode: null, reason: null, combo: null,
+    outcome: 'none', type: null, mainId: null, mode: null, reason: null,
+    combo: null, solo: null,
   };
-  if (!called?.type || !COMBO_TYPES.includes(called.type)) return none;
-  const { type } = called;
+  const type = called?.type ?? null;
+  const isSolo = SOLO_CALL_TYPES.includes(type);
+  if (!type || !(isSolo || COMBO_TYPES.includes(type))) return none;
   const { fallbackMainId = null } = opts;
   const mode = 'command'; // 叫套路的人一定是 S（面板只對 S 開）＝指令，直接生效
-  const mainId = commandMainId(points, type, fallbackMainId);
-  const base = { type, mainId, mode, combo: null };
+  const mainId = commandMainId(
+    points, (isSolo ? SOLO_MAIN_KINDS[type] : COMBO_MAIN_KINDS[type]) ?? [], fallbackMainId,
+  );
+  const base = { type, mainId, mode, combo: null, solo: null };
   if (!mainId || !points.some((pt) => pt.pid === mainId)) {
-    return { ...base, outcome: 'infeasible', reason: 'hasMain' };
+    // 單人型的「找不到人」語意不同（組合＝沒有夠格的主攻者；單人＝這波根本沒人跑 A 快）
+    // ⇒ 給不同的 reason，讓 input 層講得出實情。
+    return { ...base, outcome: 'infeasible', reason: isSolo ? 'hasQuick' : 'hasMain' };
+  }
+  if (isSolo) {
+    // 世界規則閘：Sawmah 2026-08-02 裁定「B 快與組合共用同一道閘」⇒ 讀 comboScale
+    // 這一個旗標。**sim 端只知道「這場有沒有戰術」這件事**，那個 0 是誰算出來的
+    //（呼叫端的生涯層）不歸這裡管——SEASON-SCAN 護欄守的就是這條界線。
+    // ⚠ **誠實標註**：UI 的 `canCallPlay` 已經在 comboScale === 0 時整個面板不開
+    //（matchConfig.js:183）⇒ 正常遊玩走不到這一行。留著是因為它是 sim 端**不倚賴 UI**
+    // 的第二層，讓「這場沒戰術」在解析器上也成立；不得把它當成 UI 那道閘的證據。
+    if ((opts.comboScale ?? 1) <= 0) {
+      return { ...base, outcome: 'infeasible', reason: 'playsOff' };
+    }
+    return { ...base, outcome: 'command', solo: { mainId, kind: SOLO_LINE[type] } };
   }
   const ev = evaluateCombination(points, mainId, { ...opts, type, force: true });
   if (!ev.combo) {
@@ -908,9 +941,12 @@ export function resolveCalledPlay(points, called, opts = {}) {
 // 裁定之前照**保守的②**實作。切換點只有下面這一個常數：改成 true 即恢復解讀①。
 export const CALL_OFFERS_FACTORY_OFF_TYPES = false;
 export function offeredCallTypes() {
-  return COMBO_TYPES.filter(
-    (t) => CALL_OFFERS_FACTORY_OFF_TYPES || (COMBO_RATE[t] ?? 0) > 0,
-  );
+  return [
+    ...COMBO_TYPES.filter((t) => CALL_OFFERS_FACTORY_OFF_TYPES || (COMBO_RATE[t] ?? 0) > 0),
+    // 單人型沒有 COMBO_RATE——它**不會被 AI 自動抽到**（400 波抽籤零產出，d888f03 的護欄），
+    // 只有玩家叫得出來 ⇒ 不吃上面那道「出廠機率為 0 就不列」的濾網。
+    ...SOLO_CALL_TYPES,
+  ];
 }
 
 // 把組合的線寫回池——**只動涉及的兩人**，其餘 point 原樣（同一個物件參照）。
@@ -926,6 +962,15 @@ export function applyComboRoutes(points, combo) {
     }
     return pt;
   });
+}
+
+// 單人型的線寫回池——**只動那一個人**，其餘 point 原樣（同一個物件參照）。
+// 純函式、不改入參（與 applyComboRoutes 同範式）。
+export function applySoloRoute(points, solo) {
+  if (!solo) return points;
+  return points.map((pt) => (
+    pt.pid === solo.mainId && pt.kind !== solo.kind ? { ...pt, kind: solo.kind } : pt
+  ));
 }
 
 // 一條 route 的三個時間點（純算術，與幾何無關；抽出來是為了三種節奏都能被單測到

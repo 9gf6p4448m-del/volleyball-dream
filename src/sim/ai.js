@@ -13,7 +13,8 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
-  applyRouteKinds, routePhaseAt, planCombination, applyComboRoutes, resolveCalledPlay,
+  applyRouteKinds, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
+  resolveCalledPlay,
 } from './approach.js';
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
@@ -912,31 +913,43 @@ function applyReplanCall(game, aiState) {
     type: call.type, mode: 'replan', outcome: res.outcome, reason: res.reason,
     mainId: res.mainId, flightId: r.flightId,
   };
-  if (!res.combo) { aiState.callOutcome = out; return; }
+  // 卷五：解析器現在有**兩種**成立形狀——組合（combo，兩人配合）與單人改線（solo，
+  // 只動他自己的線）。兩者都帶 mainId，底下共用的那幾行只讀 mainId；分歧的兩處
+  //（起跑判定要不要看配合者、線怎麼寫回池）各自分支。
+  const shaped = res.combo ?? res.solo;
+  if (!shaped) { aiState.callOutcome = out; return; }
   const tick = game.tick;
   // 起跑判定必須在覆寫 aiState.approach **之前**取（approachLaunched 讀的就是它）
+  // 組合是兩人之間的關係 ⇒ 任一人已起跑就整筆作廢；單人型只有他自己這一條線要看。
   const launched = (pid) => approachLaunched(aiState, pid, tick);
-  if (launched(res.combo.mainId) || launched(res.combo.partnerId)) {
+  if (launched(shaped.mainId) || (res.combo && launched(res.combo.partnerId))) {
     aiState.callOutcome = { ...out, outcome: 'infeasible', reason: 'launched' };
     return;
   }
   const prev = aiState.approach.routes;
-  const comboPoints = applyComboRoutes(points, res.combo);
-  const routes = approachRoutesFor(team, comboPoints, {
+  const nextPoints = res.combo
+    ? applyComboRoutes(points, res.combo)
+    : applySoloRoute(points, res.solo);
+  const routes = approachRoutesFor(team, nextPoints, {
     setTick: aiState.approach.setTick,
     flightId: r.flightId,
     seed: game.seed ?? 0,
     passTier: tier,
     speedOf: (pid) => moveSpeed(game.players[pid]),
+    // 單人型沒有 tempoGap／指派節奏 ⇒ 傳 null，approachRoutesFor 逐值走原路徑
     combo: res.combo,
   }).map((rt) => (launched(rt.pid) ? (prev.find((o) => o.pid === rt.pid) ?? rt) : rt));
-  aiState.attackerId = res.combo.mainId;
+  aiState.attackerId = shaped.mainId;
+  // ⚠ **無條件指派**（不得寫成 `if (res.combo)`）：單人型的 res.combo 是 null，而它
+  // 正是要把上一份組合清掉——B 快拉走的就是那份組合的誘餌（三型的誘餌都是跑 A 快的
+  // MB），關係當場斷掉。留著舊 combo ⇒ 下游（組合獎金判定，本檔 attackCombo?.partnerId）
+  // 會拿一份「兩條線都已經被這次重建覆蓋掉」的組合做判定。
   aiState.attackCombo = res.combo;
   // 攻擊線由**寫回後**的池決定（與 ensureFlightPlan 同一道教訓：否則二傳瞄的落點
   // 與該人助跑的終點是兩個地方）
-  aiState.attackKind = comboPoints.find((pt) => pt.pid === res.combo.mainId)?.kind ?? null;
+  aiState.attackKind = nextPoints.find((pt) => pt.pid === shaped.mainId)?.kind ?? null;
   aiState.approach = { team, setTick: aiState.approach.setTick, routes };
-  aiState.attackTempo = approachRouteOf(routes, res.combo.mainId)?.tempo ?? 'three';
+  aiState.attackTempo = approachRouteOf(routes, shaped.mainId)?.tempo ?? 'three';
   aiState.callOutcome = out;
 }
 

@@ -18,11 +18,16 @@
 import { offeredCallTypes } from '../sim/approach.js';
 import { KIND_LABELS } from './setOptions.js';
 
-export const CALL_LABELS = { cross: '交叉', tandem: '夾塞', delay: '時間差' };
+// 卷五：`bquick` 是**單人改線**型（只動 MB 自己那條線，沒有配合者），與上面三型
+// 的「兩人配合」不同族，但走同一個面板、同一支 `resolveCalledPlay`。
+export const CALL_LABELS = {
+  cross: '交叉', tandem: '夾塞', delay: '時間差', bquick: 'B 快',
+};
 export const CALL_DESCS = {
   cross: 'MB 打快攻當誘餌，你從他背後穿過去',
   tandem: '貼著快攻手同一條線、身後再跳一次',
   delay: '快攻手先跳，你等他落地那一刻才擊球',
+  bquick: 'MB 的快攻往 4 號位側拉開，一個人跑（不必配合）',
 };
 
 // 表現層規格（單一真相：面板與回饋讀同一份）。
@@ -72,6 +77,10 @@ const REASON_TEXT = {
   earlier: '誘餌沒有先跳',
   inWindow: '誘餌落地與你擊球對不上',
   launched: '來不及了——人已經起跑',
+  // 卷五・單人型專用：組合的 hasMain 問的是「有沒有夠格的主攻者」，單人型問的是
+  // 「這一波到底有沒有人在跑 A 快」——兩者的實情不同，文案不共用。
+  hasQuick: '這一波沒有人跑快攻（一傳沒到位，或 MB 不在前排）',
+  playsOff: '這個賽季還沒有戰術可以叫',
 };
 
 function reasonTextOf(reason, actualKind) {
