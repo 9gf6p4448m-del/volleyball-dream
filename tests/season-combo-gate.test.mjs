@@ -232,10 +232,13 @@ test('裁定乙・實跑：第 1 屆整局狂叫戰術也組不出，第 2 屆�
     `第 1 屆玩家叫出了組合：${JSON.stringify(s1.byType)}（規劃點 ${s1.plans}）`);
 });
 
-test('裁定乙・佈線守衛：兩條玩家輸入路徑都把 comboScale 遞進解析器', () => {
+test('裁定乙・佈線守衛：玩家輸入路徑把 comboScale 遞進解析器', () => {
+  // 卷五（2026-08-02 裁定 1）：路徑甲（死球窗叫牌）退場後只剩一條。
+  // 守的點一格未放寬——**每一條**呼叫都要遞 comboScale，漏一條就繞過世界閘；
+  // 條數斷言同時擋住「日後又偷偷加一條沒受閘的路徑」。
   const src = readFileSync(join(SIM_DIR, 'ai.js'), 'utf8');
   const calls = [...src.matchAll(/resolveCalledPlay\(/g)];
-  assert.equal(calls.length, 2, 'ai.js 應恰有兩條路徑（甲＝死球窗叫牌、乙＝遠段改判）');
+  assert.equal(calls.length, 1, 'ai.js 應恰有一條玩家輸入路徑（乙＝球內遠段改判）');
   for (const m of calls) {
     const tail = src.slice(m.index, m.index + 800);
     const end = tail.indexOf('\n  });') >= 0 ? tail.indexOf('\n  });') : tail.length;

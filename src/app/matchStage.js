@@ -24,7 +24,6 @@ import { createCallButton } from '../ui/callButton.js';
 import { createBlockShadow } from '../render/blockShadow.js';
 import { createDiegeticUi } from '../render/diegeticUi.js';
 import { createSubPanel } from '../ui/subPanel.js';
-import { createCallPanel } from '../ui/callPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
 import { timeoutUsedThisPoint } from '../sim/game.js';
@@ -83,16 +82,11 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const subPanel = careerSetup
     ? createSubPanel({ game, playerId, handlers, floatText })
     : null;
-  // 組合攻擊卷 段 E 路徑甲：死球窗「叫套路」面板（⚙ 換人鈕下一格）。
-  // 快速比賽恆建——叫套路與 trust 一樣不綁生涯（快速比賽也有二傳與信任值）；
-  // 生涯則走技術閘（07-31 Sawmah 裁定：由「技術傳授」事件解鎖，不硬綁屆數）——
-  // **未受教＝不建鈕**，照 canTip/canFloatServe 的既有先例（未解鎖的選項一律不出現；
-  // 反灰在本鈕已被「非死球窗」佔用，兩種語意共用一個外觀會分不清）。
-  // gates.canCallPlay 在快速比賽恆 true（resolveTechGates 的 tech===null 分支）。
-  // callPlay 由 loop 注入，同 subPanel 的 handlers 後綁定慣例
-  const callPanel = gates.canCallPlay
-    ? createCallPanel({ game, playerId, handlers })
-    : null;
+  // 【已刪除・2026-08-02 卷五裁定 1】原本此處建立死球窗「叫套路」面板（路徑甲）。
+  // ★ `gates.canCallPlay` 這道技術閘**沒有跟著退場**，它改掛在球內入口 ★
+  // ——遠段改判的選項池（matchLoop 的 `!setReady` 分支）本來就讀同一個布林值，
+  // 現在它是這道閘的唯一消費點。技術閘（由「技術傳授」事件解鎖）與戰術分屆
+  // （careerState 算 comboScale）仍是兩套獨立的閘，兩者都不因本次退場而改變。
   // W7 B3：我方暫停鈕（⚙ 換人鈕同排；生涯／快速比賽皆可喊——timeouts 與 subs 一樣不綁生涯）
   const timeoutBtn = createTimeoutButton({ handlers, playerId });
   // W7 C2③④：板凳期間才有意義（無板凳＝快速比賽自然零出現）——同 subPanel 生涯閘
@@ -125,7 +119,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
 
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
-    panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, callPanel, timeoutBtn,
+    panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, routeCue, pointBanner, setOverOverlay, setBreakOverlay,
     boxScorePanel, callButton, blockShadow, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,

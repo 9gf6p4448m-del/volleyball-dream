@@ -67,16 +67,16 @@ function snapshotPositions(game) {
 // 介面沒有這個 getter（本輪硬性限制不得改 src/app/rallyTape.js，故不加）。
 // breakApproach=true＝突變測試專用：每步算完後把 aiState.approach 打成 null，
 // 模擬「協調層狀態沒被正確重建」的情境，證明下面的比對真的抓得到。
-// dropCalledPlay=true＝**段 E 的鑑別力對照臂**：模擬「PLAYER_AI_FIELDS 沒有把
-// calledPlay／replanCall 列進去」的那個版本（＝本段修改之前的 rallyTape.js），
-// 證明白名單那兩個欄位真的在承重，不是「反正重算也會一樣」。
+// dropPlayerCall=true＝**段 E 的鑑別力對照臂**：模擬「PLAYER_AI_FIELDS 沒有把
+// replanCall 列進去」的那個版本，證明白名單那個欄位真的在承重，不是「反正重算也會
+// 一樣」。（卷五 2026-08-02：`calledPlay` 隨死球窗入口退場，對照臂只剩 replanCall。）
 function replayWithApproachTrace(tape, {
-  breakApproach = false, breakCombo = false, dropCalledPlay = false,
+  breakApproach = false, breakCombo = false, dropPlayerCall = false,
 } = {}) {
   assert.equal(tape.v, TAPE_VERSION);
   const state = structuredClone(tape.snapshot);
   const aiState = structuredClone(tape.ai);
-  if (dropCalledPlay) { aiState.calledPlay = null; aiState.replanCall = null; }
+  if (dropPlayerCall) { aiState.replanCall = null; }
   let controlled = null;
   const intents = [];
   const events = [];
@@ -86,7 +86,7 @@ function replayWithApproachTrace(tape, {
   for (const st of tape.steps) {
     if (st.a) {
       const patch = structuredClone(st.a);
-      if (dropCalledPlay) { delete patch.calledPlay; delete patch.replanCall; }
+      if (dropPlayerCall) { delete patch.replanCall; }
       Object.assign(aiState, patch);
     }
     if (st.c !== undefined) controlled = st.c;
@@ -180,9 +180,11 @@ test('突變測試：重演時 aiState.attackCombo 沒被正確重建，比對�
 //
 // 護欄 2 把兩條路分得很清楚：AI 產出的 combo 走「重算」（上面幾條測試已背書），
 // 玩家指定的**不可由重算還原** ⇒ 必須進 PLAYER_AI_FIELDS。
-// 本段錄一顆「玩家在死球窗叫了套路」的球，並用對照臂證明白名單在承重：
-// 把 calledPlay／replanCall 從卷帶的 patch 裡拿掉（＝修改前的 rallyTape.js），
-// combo 逐值比對必須轉紅。綠燈本身沒有證明力，會變紅的那個對照臂才有。
+// 本段錄一顆「玩家在球內遠段窗叫了套路」的球，並用對照臂證明白名單在承重：
+// 把 replanCall 從卷帶的 patch 裡拿掉，combo 逐值比對必須轉紅。
+// 綠燈本身沒有證明力，會變紅的那個對照臂才有。
+// 卷五（2026-08-02）：注入點從死球窗（`phase === 'serve'`）搬到球內第二觸窗
+// （`touches === 1` 且 approach 已排好）——死球窗入口整條退場後那裡沒有輸入通道。
 function playOneRallyWithCall(seed, type = 'cross') {
   const game = createGame({ seed, setTarget: 25 });
   const ai = createAiState();
@@ -195,11 +197,19 @@ function playOneRallyWithCall(seed, type = 'cross') {
   let injected = false;
   while (guard < 20000) {
     guard += 1;
-    if (game.phase === 'serve') {
-      rec.begin(game, ai);
-      // 玩家在死球窗按下面板（S＝指令，無 trust 骰 ⇒ 對照臂的差異純粹來自「有沒有錄」）
-      if (!injected) { ai.calledPlay = { type, callerId: setterA, isSetter: true }; injected = true; }
+    if (game.phase === 'serve') rec.begin(game, ai);
+    // 玩家在球內遠段窗按下改判（S＝指令，無 trust 骰 ⇒ 對照臂的差異純粹來自「有沒有錄」）。
+    // 條件＝ai.js 的 applyReplanCall 窗界：我方持球、touches===1、approach 已排好。
+    // 注入排在 rec.step **之前**，卷帶錄的才是「這一 tick 開始時玩家已下的指令」。
+    // ⚠ `replanCall` 是一次性指令（消費即清），而 `cross` 常常湊不出來（infeasible）
+    //   ⇒ 只注入一次的話多數球會空手而回。改成**窗界成立就按，叫成一次為止**——
+    //   這也是真實操作：S 每一波組織都可以再按一次。
+    if (!injected && game.phase === 'rally' && game.rally.touches === 1
+      && game.rally.possession === game.players[setterA].teamId
+      && ai.approach?.routes && !ai.replanCall) {
+      ai.replanCall = { type, callerId: setterA };
     }
+    if (ai.callOutcome?.outcome === 'command') injected = true;
     rec.step(game, ai, null, []);
     const intents = aiCollectIntents(game, ai, []);
     truth.approach.push(structuredClone(ai.approach));
@@ -229,15 +239,12 @@ function pickCalledRally() {
 test('段 E 前置：真的錄得到一顆「玩家叫牌生效」的球（否則下面兩條空洞成立）', () => {
   const picked = pickCalledRally();
   assert.ok(picked, '50 個 seed 都錄不到玩家叫牌生效的球');
-  // ★ 段 3（2026-08-01 裁定題 3）：`calledPlay` 改為整個 rally 內持續有效、不再消費即清。
-  // 卷帶是**差分**錄影：一個不再逐波 toggle 的欄位，只要 `begin()` 重照快照時它已經
-  // 有值，它就落在 baseline（`tape.ai`）而不是任何一步的 diff 裡——重演端照樣拿得到
-  //（下一條「⑧ VCR 逐值重演」就是那件事的證明）。
-  // 因此判準改成「**卷帶取得得到**」而不是「出現在某一步」：後者守的是舊的一次性壽命。
-  const inSteps = picked.tape.steps.some((st) => st.a && st.a.calledPlay);
-  const inBase = !!picked.tape.ai?.calledPlay;
-  assert.ok(inSteps || inBase,
-    'calledPlay 在卷帶的 baseline 與所有步骤裡都取不到＝根本沒被錄下來，重演不出來');
+  // ★ 卷五裁定 2（2026-08-02）：戰術只管一球 ★ `replanCall` 是**消費即清**的一次性
+  // 指令（applyReplanCall 進門就把它設 null），所以它一定以 diff 的形式出現在某一步，
+  // 不會像段 3 的 calledPlay 那樣沉進 baseline。判準因此收回「出現在某一步」。
+  const inSteps = picked.tape.steps.some((st) => st.a && st.a.replanCall);
+  assert.ok(inSteps,
+    'replanCall 在卷帶的所有步驟裡都取不到＝根本沒被錄下來，重演不出來');
 });
 
 test('⑧ VCR：玩家指定的組合可逐值重演（approach／combo／座標全等）', () => {
@@ -250,14 +257,14 @@ test('⑧ VCR：玩家指定的組合可逐值重演（approach／combo／座標
   assert.deepEqual(run.pos, picked.truth.pos.slice(picked.from));
 });
 
-test('⑧ 鑑別力：把 calledPlay 移出白名單（＝修改前的版本），重演必須轉紅', () => {
+test('⑧ 鑑別力：把 replanCall 移出白名單（＝沒錄玩家輸入的版本），重演必須轉紅', () => {
   const picked = pickCalledRally();
   assert.ok(picked);
-  const broken = replayWithApproachTrace(picked.tape, { dropCalledPlay: true });
+  const broken = replayWithApproachTrace(picked.tape, { dropPlayerCall: true });
   assert.throws(
     () => assert.deepEqual(broken.combo, picked.truth.combo.slice(picked.from)),
     assert.AssertionError,
-    'calledPlay 不錄也重演得出來＝它根本不需要進白名單，或這條測試沒有牙齒',
+    'replanCall 不錄也重演得出來＝它根本不需要進白名單，或這條測試沒有牙齒',
   );
 });
 

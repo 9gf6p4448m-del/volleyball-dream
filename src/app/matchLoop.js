@@ -175,22 +175,10 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
       }
     };
   }
-  // 段 E 路徑甲：死球窗叫套路的執行回呼。**唯一的動作就是寫進協調層的指令槽**——
-  // 與 digBias／attackerId 同一條路（走的不是 Intent 管線，所以進了 rallyTape 白名單）。
-  // 誰是 S 由 sim 自己認（currentRole），UI 不做語意判定＝面板與 sim 不可能對「這是
-  // 指令還是請求」有兩種看法。真正的解析在 ai.js 的 touches===1（同源鐵則）。
-  stage.handlers.callPlay = (type) => {
-    s.aiState.calledPlay = {
-      type,
-      callerId: s.playerId,
-      isSetter: game.players[s.playerId]?.currentRole === 'setter',
-    };
-  };
-  // 叫戰術重做卷 收尾（2026-08-01）：面板的狀態列／鈕文字**現讀這一格**，不再自己
-  // 鏡一份。段 3 廢除一次性 flag 後「被消費」不再等於「沒了」——鏡像沒有可掛的清除
-  // 事件（真相只會被覆寫），所以把讀取權開給 UI，鏡像整個拆掉（見 callPanel.js）。
-  // 唯讀存取子，UI 拿不到也改不了 sim 物件本身。
-  stage.handlers.calledPlayOf = () => s.aiState.calledPlay;
+  // 【已刪除・2026-08-02 卷五裁定 1】原本此處有 `handlers.callPlay`／`calledPlayOf`：
+  // 死球窗叫套路的寫入與讀取管道（路徑甲）。整條退場——玩家在死球窗不知道自己被排到
+  // 哪條線、也不知道一傳品質，叫的是願望不是決策。戰術入口統一到球內遠段（路徑乙，
+  // 寫 `aiState.replanCall`，見本檔 `!setReady` 分支）。
   // W7 B3：我方暫停鈕的執行回呼（sim applyTimeout 唯一路徑）
   stage.handlers.requestTimeout = () => requestTimeout(s);
   // W7 C2④：回場鈕的執行回呼（sim applySubstitution 唯一路徑，走與 ⚙ 面板相同函式）
@@ -427,26 +415,20 @@ function fireSignatureBeat(s, pending, now) {
 
 // 段 E：叫套路的回饋層（裁定 E「湊不出套路當場回饋失敗、不得靜默降級」
 // ＋ UI 硬性要求「兩種語意的回饋必須分得開」）。
-// `callOutcome` 是**狀態**不是事件（協調層每波寫一次、逐幀讀得到），所以要自己記
-// 已播過的鍵，否則同一則字卡會每幀重播。鍵含 outcome ⇒ 同一波內若由改判產生第二
-// 個結果（甲的請求被無視、之後 S 又用乙改判成功）兩則都播得出來。
+// `callOutcome` 是**狀態**不是事件（協調層寫一次、逐幀讀得到），所以要自己記已播過
+// 的鍵，否則同一則字卡會每幀重播。
 function syncCallFeedback(s) {
   const out = s.aiState.callOutcome;
   if (!out) return;
-  // 段 3（2026-08-01）：`calledPlay` 改為整個 rally 內持續有效 ⇒ 同一個指令每一波
-  // 組織都會重新產生一次 callOutcome。防重播鍵**不得再含 flightId**，否則同一句
-  // 「⚡指令・交叉——照跑！」會每波播一次。改用**本分**（比分）當 rally 鍵：
-  // 同一分內同樣的結果只播一次；換分／換結果（例如從 command 變 infeasible）才再播。
-  const rallyKey = `${s.game.match.score.A}-${s.game.match.score.B}`;
-  const key = `${rallyKey}:${out.mode}:${out.outcome}:${out.reason ?? ''}:${out.type}`;
+  // ★ 卷五裁定 2（2026-08-02）：**戰術只管一球** ⇒ 防重播鍵回到 `flightId` ★
+  //   段 3 的「整個 rally 持續有效」語意退場後，指令不再跨波重新解析——每一波最多
+  //   產生一個 callOutcome（`replanCall` 一經消費即清）。用比分當鍵反而會把「同一分
+  //   內兩波各改判一次」壓成只播一則；鍵含 outcome ⇒ 同一波內結果改變仍播得出來。
+  const key = `${out.flightId}:${out.mode}:${out.outcome}:${out.reason ?? ''}:${out.type}`;
   if (s.callFeedbackKey === key) return;
   s.callFeedbackKey = key;
   const fb = callFeedbackOf(out, s.aiState.approach?.routes ?? null);
   if (fb) s.stage.floatText?.show(fb.text, fb.color, fb.ms);
-  // ★ 這裡原本有 `s.stage.callPanel?.clearPending()`＝「叫牌已被 sim 消費 ⇒ 面板狀態列
-  //   歸零」。段 3 之後那句話是**錯的**：指令被消費後整個 rally 還活著，面板卻顯示
-  //   「尚未叫牌」。面板改成現讀 `aiState.calledPlay`（`handlers.calledPlayOf`），
-  //   鏡像連同這個通知一起拆掉 ⇒ 顯示與行為不可能再分岔。★
 }
 
 // W6 換人執行（stage.handlers.requestSub）：sim 換人＋敘事對話
@@ -1990,8 +1972,6 @@ function frameStep(s, now) {
   // W6 換人面板開啟＝凍結模擬（畫面照跑；死球窗 tick 不流逝，慢慢讀數據慢慢換）；
   // W7 C2②：主角在板凳時面板＝教練儀表板，不凍結（在場時維持原凍結行為）
   if (stage.subPanel?.isOpen() && !benched) delta = 0;
-  // 段 E 路徑甲：叫套路面板開啟＝同一套凍結模擬法（死球窗，憲法 §九 不涵蓋）
-  if (stage.callPanel?.isOpen()) delta = 0;
   // W7.1 三輪（試玩回饋：對話沒看完球就開了）：教學/敘事對話開著＝凍結模擬，
   // 點完最後一句才恢復。教練選項對話框刻意不凍（倒數是 sim tick 驅動、有提早開賽鈕）
   if (stage.teachDialog?.isOpen?.()) delta = 0;
@@ -2122,7 +2102,6 @@ function frameStep(s, now) {
   // 決定跑不跑用既有的移動輸入，系統只補上玩家缺的那項資訊（裁定題 0）。
   // 資料源 myRouteFor 自己會判「這一刻有沒有線可報」，回 null 就收起來。
   stage.routeCue?.sync(myRouteFor(game, s.aiState, s.controlledId));
-  stage.callPanel?.sync(game); // 段 E：⚡/🙋 叫套路鈕可用性（死球窗）
   stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
   stage.benchAccelBtn?.sync(benched); // W7 C2③：只在板凳期間顯示
   if (stage.comebackBtn) {

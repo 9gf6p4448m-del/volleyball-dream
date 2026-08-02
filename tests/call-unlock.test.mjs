@@ -13,7 +13,7 @@
 //   · 世界閘 `game.comboScale`＝**這場比賽有沒有組合攻擊**（場級規則，雙方適用；
 //     現階段由屆數決定，第 1 屆 0／第 2 屆起 1）
 // 兩道並存且不可互相覆寫 ⇒ 四格真值表逐格驗（下面 ①②③＋「第 1 屆已學會仍關」）。
-// 邏輯層那一半（繞過面板直接送 calledPlay 也產不出 combo）在 season-combo-gate.test.mjs。
+// 邏輯層那一半（繞過面板直接送 replanCall 也產不出 combo）在 season-combo-gate.test.mjs。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -211,23 +211,20 @@ test('教學鏈資料形狀：teach-call 進表、一次性去重、技術頁與
   assert.deepEqual(upcomingTeach({ results: [] }, 'group-2'), ['dive']);
 });
 
-test('佈線守衛：建鈕與遠段改判都吃 gates.canCallPlay（未受教＝不出現）', () => {
+test('佈線守衛：遠段改判吃 gates.canCallPlay（未受教＝不出現）', () => {
+  // ★ 卷五（2026-08-02 裁定 1）：死球窗建鈕那半段隨路徑甲退場 ★
+  // 技術閘本身**沒有**退場——它改掛球內入口，遠段改判的選項池是它現在唯一的消費點。
+  // 這條測試因此從「兩個消費點都要受閘」收成「唯一消費點必須受閘，且不得有第二個」。
   const stageSrc = readFileSync(new URL('../src/app/matchStage.js', import.meta.url), 'utf8');
-  // 建鈕唯一路徑必須被閘門包住——移除閘門本測試即紅
-  assert.match(
-    stageSrc,
-    /callPanel\s*=\s*gates\.canCallPlay[\s\S]{0,80}?createCallPanel\(/,
-    'matchStage 的 createCallPanel 必須由 gates.canCallPlay 決定',
-  );
   assert.equal(
-    (stageSrc.match(/createCallPanel\(/g) ?? []).length, 1,
-    '不得有第二個未受閘的建鈕點',
+    (stageSrc.match(/createCallPanel\(/g) ?? []).length, 0,
+    '死球窗建鈕又回來了（卷五裁定 1：路徑甲整條退場）',
   );
   const loopSrc = readFileSync(new URL('../src/app/matchLoop.js', import.meta.url), 'utf8');
   assert.match(
     loopSrc,
     /s\.gates\.canCallPlay\s*\?\s*callOptionsFor\(/,
-    '段 E 路徑乙（遠段改判）同閘：未受教退回唯讀預覽',
+    '球內遠段入口沒吃技術閘：未受教應退回唯讀預覽',
   );
   assert.equal(
     (loopSrc.match(/callOptionsFor\(/g) ?? []).length, 1,

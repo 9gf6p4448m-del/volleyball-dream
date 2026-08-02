@@ -179,7 +179,7 @@ export function resolveTechGates(game, playerId, careerActive, hintsOff = false)
     // 屆數只是現階段決定該值的**理由**（careerState.careerMatchSetup），之後換成集訓
     // 解鎖時本行不必改。快速比賽未注入＝null ⇒ `?? 1` ⇒ 恆開，與上列同款不受波及。
     // 注意這只是 UI 閘：邏輯層另有一道（evaluateCombination 的 scale===0 連 force 一起關），
-    // 繞過面板直接送 calledPlay 也產不出 combo——兩層各自獨立，不互為前提。
+    // 繞過面板直接送 replanCall 也產不出 combo——兩層各自獨立，不互為前提。
     canCallPlay: (!tech || (tech.callPlay ?? 0) >= 1) && (game.comboScale ?? 1) > 0,
     // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
     readTier: hintsOff ? 'none' : (careerActive ? blockReadTier(game.players[playerId]) : 'instant'),

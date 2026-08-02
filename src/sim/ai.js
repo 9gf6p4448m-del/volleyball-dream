@@ -190,24 +190,25 @@ export function createAiState() {
     // ★ 誘餌仍是**湧現式** ★ 池內未被選中者照樣跑完整 route，sim 的走位分支
     //   （COMBO-SCAN 區）結構上讀不到本欄位——見 tests/combo-play.test.mjs 的靜態掃描。
     attackCombo: null,
-    // ---- 組合攻擊卷 段 E（2026-07-31）：玩家叫套路的三個槽 ----
-    // ★ 前兩個是**玩家寫、sim 讀**的指令槽 ★ 與 digBias／attackerId 同性質：
-    //   走的不是 Intent 管線，重演時算不出來 ⇒ 兩者都必須進 rallyTape 的
+    // ---- 組合攻擊卷 段 E（2026-07-31）：玩家叫套路的指令槽 ----
+    // ★ 這是**玩家寫、sim 讀**的指令槽 ★ 與 digBias／attackerId 同性質：
+    //   走的不是 Intent 管線，重演時算不出來 ⇒ 必須進 rallyTape 的
     //   PLAYER_AI_FIELDS（護欄 2；段 B 的 AI 產出 combo 走重算路徑，不進白名單）。
     //
-    // calledPlay（路徑甲・死球窗叫牌）：{ type, callerId, isSetter }
-    //   壽命＝**跨死球窗存活、消費即清**（在 touches===1 被 resolveCalledPlay 吃掉）。
-    //   刻意不與 approach 同壽命：叫牌發生在助跑線存在之前，跟著它清就永遠讀不到。
-    calledPlay: null,
+    // ★ 卷五（2026-08-02 裁定 1）：**路徑甲（死球窗叫牌）整條退場** ★
+    //   舊制在死球窗寫 `calledPlay`，於 touches===1 被 resolveCalledPlay 吃掉。
+    //   退場理由＝玩家在死球窗**不知道自己被排到哪條線、也不知道一傳品質**
+    //   ⇒ 他叫的是願望不是決策。戰術入口統一到球內的遠段窗（路徑乙），
+    //   那裡一傳品質已知，且走的是**同一支** resolveCalledPlay、**同一個**窗界。
     // replanCall（路徑乙・S 遠段臨場改判）：{ type, callerId }
     //   壽命＝**下一個 tick 內消費**（aiCollectIntents 的 applyReplanCall），窗外即作廢。
     replanCall: null,
     // callOutcome（回饋層的唯一真相）：{ type, mode, outcome, reason, mainId, flightId }
-    //   outcome ∈ command｜infeasible；mode ∈ command｜replan。
+    //   outcome ∈ command｜infeasible；mode 恆為 replan（卷五：command 那條隨路徑甲退場）。
     //   （2026-08-01 題 0：舊「請求」語意廢除 ⇒ accepted／refused／request 三個值已消失）
     //   由 sim 產生**機器碼**、文案在 input 層——裁定 E 要求「當場回饋失敗、不得靜默
     //   降級」，所以失敗也要留下逐條原因（reason＝第一個沒過的 check）。
-    //   純由 calledPlay＋可觀察量重算 ⇒ 不進錄影白名單。
+    //   純由 replanCall＋可觀察量重算 ⇒ 不進錄影白名單。
     callOutcome: null,
     // Phase 5 W1 §7 D2：本波接一傳的人（attackPointsOf 的罰則對象）。
     // 與 attackerId／passTier 同壽命、同重算範式（純由 rally.lastToucherId 推得）＝
@@ -301,7 +302,8 @@ function ensureFlightPlan(game, aiState) {
     // 組合與 approach 同壽命（藍圖 §二）：死球之後沒有組合在跑
     aiState.attackCombo = null;
     // 段 E：上一球的叫牌回饋隨死球作廢（新的一球從乾淨狀態開始）。
-    // ⚠ `calledPlay` **不在此清** ⚠ 死球窗正是玩家叫牌的時機，跟著清等於一按就沒。
+    // 卷五裁定 1／2：死球窗不再是叫牌時機（路徑甲已退場），戰術只管一球
+    // ⇒ 沒有任何指令需要跨死球存活。
     aiState.callOutcome = null;
     aiState.replanCall = null; // 遠段改判只在第二觸窗內有效，死球即作廢
     aiState.routeCommit = null; // 段 1 記帳與助跑線同壽命（清空點之一）
@@ -386,62 +388,18 @@ function ensureFlightPlan(game, aiState) {
     );
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
-    // ---- 段 E 路徑甲：玩家在死球窗叫的套路（2026-07-31；藍圖 §2.6）----
-    // ★ 位置就是規格 ★ 這一段排在 `pickAttackPoint` **之後**、`planCombination`
-    // **之前**，兩件事同時成立：
-    //   ① `pickAttackPoint` 一格未動 ⇒ **沒有玩家輸入的對局** trust 分佈逐值不變
-    //      （護欄 1；玩家真的叫了牌本來就該改變球權，那不是漂移）
-    //   ② 玩家的選擇在 `touches === 1` 之前就存在（死球窗寫進 `calledPlay`），
-    //      在這裡當成 `planCombination` 的**輸入**吃掉 ⇒ 天然滿足同源鐵則
-    //      「回寫順序在 pickAttackPoint 之前」——不需要任何事後回寫。
-    const call = resolveCalledPlay(points, aiState.calledPlay, {
-      team,
-      flightId: game.rally.flightId,
-      seed: game.seed ?? 0,
-      passTier: tier,
-      fallbackMainId: aiState.attackerId,
-      // 2026-08-01：玩家叫的套路走 force＝跳過觸發骰，但**跳不過 comboScale===0**
-      // ——那是「這場比賽有沒有組合攻擊」的世界規則，不是「這球要不要自動跑」的骰子
-      // （見 evaluateCombination 的 scale 註解）。未注入＝1＝與前一版逐值相同。
-      comboScale: game.comboScale ?? 1,
-    });
-    aiState.callOutcome = call.outcome === 'none' ? null : {
-      type: call.type,
-      mode: call.mode,
-      outcome: call.outcome,
-      reason: call.reason,
-      mainId: call.mainId,
-      flightId: game.rally.flightId,
-    };
-    // ★ 叫戰術重做卷 段 3（Sawmah 2026-08-01 裁定題 3）：**廢除一次性 flag** ★
-    // 這裡原本是 `aiState.calledPlay = null;`＝「一次叫牌只管一球，消費即清」。
-    // 新語意下那條線不成立：每一波組織都是**完整的新決策循環**（S 決定 → 非 S 收提示
-    // → 自己決定跑不跑），**不設次數限制** ⇒ S 下的指令在整個 rally 內持續有效，
-    // 每一波組織都當輸入吃一次。玩家要換就在下個死球窗改叫（覆寫），
-    // 或在球內用既有的遠段改判（`replanCall`）當場換。
-    //
-    // 為什麼不需要另設清除點：`calledPlay` 只會被**覆寫**。死球分支刻意不清它
-    //（見 :304 的既有註解「死球窗正是玩家叫牌的時機，跟著清等於一按就沒」），
-    // 而 rally 之間玩家本來就會重叫或不叫——不叫就沿用上一次的決定，那正是
-    // 「不設次數限制」的字面意思。
-    //
-    // ⚠ 連帶要求：`callOutcome` 現在每一波都會重新產生 ⇒ 回饋字卡的防重播鍵
-    //   **不得再含 flightId**，否則同一個指令會每波播一次（見 matchLoop syncCallFeedback）。
-    // 回饋內容不變——**不得靜默降級**（裁定 E），湊不出來時 outcome 就是 'infeasible'
-    // 叫成了＝主攻者換成套路的主攻者。**只有叫成才改**：湊不出來（'infeasible'）
-    // 逐值走 AI 原路徑，玩家從回饋看得出差別
-    if (call.combo) aiState.attackerId = call.mainId;
     // ---- 組合排程層（段 B，2026-07-31；藍圖 §三＝裁定 A 乙的形狀）----
     // **順序不可調換**：選人（上一行，一格未動）→ 組合 → 寫回池 → 算 route。
     // 組合排在選人之後 ⇒ `pickAttackPoint` 的入參逐值不變 ⇒ trust 分佈零漂移，
     // 這是裁定 A 乙的驗收條件本身（tests/combo-play.test.mjs 有靜態順序斷言）。
-    // 段 E：玩家叫的套路已經由同一支 `evaluateCombination` 解析完（只是跳過觸發骰），
-    // 直接用它的產出＝面板承諾的與實際跑的是同一個物件，不重算第二份。
+    // 卷五（2026-08-02）：路徑甲退場後，這裡只剩**自動觸發**一條路。
+    // 玩家叫的套路改由路徑乙（applyReplanCall）在同一個窗界內以同一支
+    // `resolveCalledPlay` 解析並覆寫 approach ⇒ 面板承諾的與實際跑的仍是同一個物件。
     // comboScale（2026-08-01）：組合三型的觸發機率倍率，由呼叫端經 createGame 注入
     // （未注入＝1＝出廠值）。只掛在**自動觸發**這條路徑上：玩家叫的套路走 force，
     // 本來就跳過觸發骰（見 evaluateCombination 的 force 註解）。
     // ★ 這裡讀的是一個數字，不是「第幾屆」★ sim 不知道生涯／賽季存在。
-    const combo = call.combo ?? planCombination(points, aiState.attackerId, {
+    const combo = planCombination(points, aiState.attackerId, {
       team,
       flightId: game.rally.flightId,
       seed: game.seed ?? 0,
@@ -909,8 +867,8 @@ function pickAttackPoint(game, team, setterId, passTier = 'perfect', points = nu
 
 // ---- 段 E 路徑乙：S 遠段臨場改判（藍圖 §2.6）----
 //
-// 甲發生在 `touches === 1` **之前**（存進 calledPlay，由 planCombination 當輸入吃掉）；
-// 乙發生在 `touches === 1` **之後**——一傳歪了、套路作廢，助跑線已經排好、人已經在跑。
+// ★ 卷五（2026-08-02）：路徑甲（死球窗）退場後，**這裡是玩家叫戰術的唯一入口** ★
+// 乙發生在 `touches === 1` **之後**——一傳已經觸球、品質已知，助跑線已經排好、人已經在跑。
 // ⇒ 沒有「事前輸入」這條捷徑可走，**必須真的重跑** planCombination ＋ applyComboRoutes
 // ＋ approachRoutesFor，把 `aiState.approach` 整份重建。
 //

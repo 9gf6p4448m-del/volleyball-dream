@@ -1,10 +1,15 @@
 // 組合攻擊卷 段 E —— 輸入落點（玩家第一次能主動參與戰術）
 //
+// ★ 卷五（2026-08-02 裁定 1）：路徑甲（死球窗 `calledPlay`）整條退場 ★
+//   本檔原本用 `ai.calledPlay` 當輸入的條目，一律改掛路徑乙（`ai.replanCall`）——
+//   它走**同一支** `resolveCalledPlay`、**同一個**窗界（`touches === 1`），
+//   守的行為一格未放寬，只是輸入從死球窗換成球內遠段窗。
+//
 // 本檔守的七件事（＝上位裁定書 §六.3 驗收＋裁定 E＋護欄）：
 //   ① **同源**：玩家選定的套路，實際跑位與面板承諾的線一致
-//   ② **回寫順序在 pickAttackPoint 之後、planCombination 之前**（靜態順序斷言）
-//      ——「之後」才保得住 trust 分佈零漂移，「之前」才讓選擇成為組合的**輸入**
-//      而不是事後回寫。兩邊都釘死，少釘一邊都會靜默失效。
+//   ② **改判解析排在 ensureFlightPlan 之後、走位之前**（靜態順序斷言）
+//      ——「之後」才有排好的 approach 可改，「之前」才讓改判在同一 tick 內生效。
+//      舊制守的是甲路徑「pickAttackPoint 之後、planCombination 之前」，隨甲退場。
 //   ③ **非 S 沒有「叫套路」這件事**（2026-08-01 題 0 廢除舊「請求」語意後改守的點）：
 //      模式是 null、選項池是空的，解析器也不再產生 accepted／refused
 //   ④ **回饋講得清楚**（指令／改判／湊不出來）——三條獨立通道
@@ -36,13 +41,16 @@ const aiSrc = () => readFileSync(join(SRC, 'sim', 'ai.js'), 'utf8');
 
 // 凍結輸入的單一規劃點（範式抄 tools/combo-probe.mjs 的 trustSweep：
 // 同一組輸入下只跑協調層一次，把「玩家叫了牌」以外的變因全部按住）
-function planWith({ seed = 3, flightId = 1, calledPlay = null, rot = 0, trust = null } = {}) {
+// 卷五：輸入槽改成 `replanCall`（路徑乙）。單次 aiCollectIntents 就跑得完整條路——
+// `applyReplanCall` 排在 `ensureFlightPlan` 之後（ai.js），所以同一次呼叫內
+// 「排好 approach → 改判覆寫」兩步都會發生，不需要跑兩個 tick。
+function planWith({ seed = 3, flightId = 1, replanCall = null, rot = 0, trust = null } = {}) {
   const g = createGame({ seed });
   const base = g.match.rotations.A.slice();
   g.match.rotations.A = [...base.slice(rot), ...base.slice(0, rot)];
   if (trust) for (const [pid, v] of Object.entries(trust)) g.players[pid].trust.fromSetter = v;
   const ai = createAiState();
-  ai.calledPlay = calledPlay;
+  ai.replanCall = replanCall;
   g.phase = 'rally';
   Object.assign(g.rally, {
     flightId, profile: 'arc', possession: 'A', touches: 1,
@@ -62,21 +70,25 @@ const runnerOf = (ai, kind) => (ai.approach?.routes ?? []).find((r) => r.kind ==
 
 // ---------------- ② 回寫順序（靜態，機械可驗） ----------------
 
-test('② 順序：叫套路的解析排在 pickAttackPoint 之後、planCombination 之前', () => {
+test('② 順序：改判解析排在 ensureFlightPlan 之後、走位之前', () => {
   const src = stripComments(aiSrc());
-  const iPick = src.indexOf('pickAttackPoint(game, team, aiState.claimId, tier, points)');
-  const iCall = src.indexOf('resolveCalledPlay(points, aiState.calledPlay');
-  const iPlan = src.indexOf('planCombination(points, aiState.attackerId');
-  assert.ok(iPick > 0 && iCall > 0 && iPlan > 0, '三個錨點都要找得到，否則順序斷言失去標的');
-  // 之後：pickAttackPoint 的入參一格未動 ⇒ 沒有玩家輸入的對局 trust 分佈逐值不變
-  assert.ok(iPick < iCall, '叫套路解析排到了 pickAttackPoint 之前＝trust 分佈會被帶偏（護欄 1）');
-  // 之前：玩家的選擇成為 planCombination 的**輸入**，不需要任何事後回寫
-  assert.ok(iCall < iPlan, '叫套路解析排到了 planCombination 之後＝變成事後回寫，同源鐵則失守');
-  // pickAttackPoint 本體對叫牌一無所知（與段 B 的「對組合一無所知」同一道防線）
+  const iPlan = src.indexOf('ensureFlightPlan(game, aiState);');
+  const iCall = src.indexOf('applyReplanCall(game, aiState);');
+  const iMove = src.indexOf('applyRouteCommit(game, aiState, excludeIds);');
+  assert.ok(iPlan > 0 && iCall > 0 && iMove > 0, '三個錨點都要找得到，否則順序斷言失去標的');
+  // 之後：改判要改的正是那一步剛排好的 approach／attackCombo
+  assert.ok(iPlan < iCall, '改判排到了 ensureFlightPlan 之前＝那一刻還沒有 approach 可改');
+  // 之前：改判要在同一個 tick 內生效，否則這一 tick 的人還照舊線跑＝面板與跑位分岔一格
+  assert.ok(iCall < iMove, '改判排到了走位之後＝這一 tick 的人照舊線跑，面板與跑位分岔');
+  // ★ 卷五：路徑甲的死球窗輸入槽必須真的不存在了 ★（拆一半比不拆更危險：
+  //   欄位還在但沒有消費者＝玩家按了沒反應，且靜態掃描看起來仍「有這個功能」）
+  assert.ok(!src.includes('aiState.calledPlay'),
+    'ai.js 仍有 aiState.calledPlay＝路徑甲沒拆乾淨（卷五裁定 1）');
+  // pickAttackPoint 本體對玩家指令一無所知（與段 B 的「對組合一無所知」同一道防線）
   const body = src.slice(src.indexOf('function pickAttackPoint('));
   const fnBody = body.slice(0, body.indexOf('\n}\n') + 2);
   assert.ok(fnBody.includes('pickByWeights'), '擷取到的 pickAttackPoint 函式本體不對');
-  for (const w of ['calledPlay', 'resolveCalledPlay', 'callOutcome']) {
+  for (const w of ['replanCall', 'resolveCalledPlay', 'callOutcome']) {
     assert.ok(!fnBody.includes(w), `pickAttackPoint 本體出現 ${w}＝選人被玩家指令污染`);
   }
 });
@@ -84,7 +96,7 @@ test('② 順序：叫套路的解析排在 pickAttackPoint 之後、planCombina
 test('② 護欄 1 延伸：沒有玩家輸入時，叫套路整條路徑逐值 no-op', () => {
   for (let f = 1; f <= 40; f += 1) {
     const a = planWith({ flightId: f });
-    const b = planWith({ flightId: f, calledPlay: null });
+    const b = planWith({ flightId: f, replanCall: null });
     assert.equal(a.ai.callOutcome, null, '沒叫牌卻產生了回饋＝AI 對局被污染');
     assert.deepEqual(a.ai.approach, b.ai.approach);
     assert.deepEqual(a.ai.attackCombo, b.ai.attackCombo);
@@ -103,11 +115,11 @@ test('① 同源：玩家叫的套路，主攻者與配合者實際跑的線與 
     // S 指令：直接生效，不吃 trust 閘 ⇒ 只要陣容湊得出來就一定跑
     const r = planWith({
       flightId: f,
-      calledPlay: { type: 'cross', callerId: 'A1', isSetter: true },
+      replanCall: { type: 'cross', callerId: 'A1' },
     });
     if (r.ai.callOutcome?.outcome === 'command') hit = r;
   }
-  assert.ok(hit, '200 顆球都叫不成交叉＝甲路徑恆假');
+  assert.ok(hit, '200 顆球都叫不成交叉＝乙路徑恆假');
   const { ai } = hit;
   const combo = ai.attackCombo;
   assert.ok(combo, '回饋說指令生效，attackCombo 卻是 null＝面板與 sim 分家');
@@ -117,11 +129,11 @@ test('① 同源：玩家叫的套路，主攻者與配合者實際跑的線與 
   assert.equal(routeOf(ai, combo.partnerId).kind, combo.partnerKind, '配合者實際跑的線與 combo 宣稱的不符');
   assert.equal(ai.attackerId, combo.mainId, '球沒有分配給套路的主攻者');
   assert.equal(ai.attackKind, combo.mainKind, '二傳瞄的線與主攻者跑的線分家');
-  // ★ 段 3（2026-08-01 裁定題 3）：**一次性 flag 已廢除** ★
-  // 原本這裡守的是「叫牌消費即清＝一次叫牌只管一球」。新語意下每一波組織都是完整的
-  // 新決策循環、不設次數限制 ⇒ S 的指令在整個 rally 內持續有效，被覆寫才會變。
-  assert.deepEqual(ai.calledPlay, { type: 'cross', callerId: 'A1', isSetter: true },
-    'calledPlay 被清掉了＝一次性 flag 又回來了（裁定題 3 明文廢除）');
+  // ★ 卷五裁定 2（2026-08-02）：**戰術只管一球** ★
+  // 卷三段 3 的「指令整個 rally 內持續有效」語意退場（連同它的載體路徑甲）。
+  // 乙路徑本來就是「窗內窗外都只嘗試一次」——消費即清，殘留指令不跨波生效。
+  assert.equal(ai.replanCall, null,
+    'replanCall 沒被消費掉＝指令會跨波重複生效（裁定 2 明文：戰術只管一球）');
 });
 
 // ---------------- ③ 舊「請求」語意已廢除（2026-08-01 題 0） ----------------
@@ -169,10 +181,14 @@ test('③ trust 不再影響叫牌成敗（採納骰已整支拆除）', () => {
     const base = planWith({ flightId: f });
     const oh = runnerOf(base.ai, 'left');
     if (!oh) continue;
-    // 刻意用 isSetter:false（舊制的請求路徑）——舊程式碼在這裡會兩側翻轉
-    const call = { type: 'cross', callerId: oh, isSetter: false };
-    const lo = planWith({ flightId: f, trust: { [oh]: 1 }, calledPlay: { ...call } });
-    const hi = planWith({ flightId: f, trust: { [oh]: 100 }, calledPlay: { ...call } });
+    // 卷五：改掛路徑乙。乙的 callerId 一樣是「叫的人」，解析器對它一律 isSetter:true
+    //（遠段面板只有 S 開得了）——舊制的採納骰若還在，這裡拉 trust 就會翻轉成敗。
+    const call = { type: 'cross', callerId: oh };
+    const lo = planWith({ flightId: f, trust: { [oh]: 1 }, replanCall: { ...call } });
+    const hi = planWith({ flightId: f, trust: { [oh]: 100 }, replanCall: { ...call } });
+    // 前置：兩臂都真的叫出了東西——否則「逐值相同」會在兩個 null 上空洞成立
+    assert.ok(lo.ai.callOutcome && hi.ai.callOutcome,
+      `flightId=${f}：叫牌沒產生任何回饋＝這一輪的比較是空的`);
     assert.deepEqual(verdict(lo.ai.callOutcome), verdict(hi.ai.callOutcome),
       `flightId=${f}：信任高低改變了叫牌成敗＝採納骰還在`);
     samples += 1;
@@ -193,7 +209,7 @@ test('⑤ 裁定 E：湊不出套路時 outcome=infeasible 且說得出是哪一
   for (let f = 1; f <= 200; f += 1) {
     const base = planWith({ flightId: f });
     const r = planWith({
-      flightId: f, calledPlay: { type: 'cross', callerId: 'A1', isSetter: true },
+      flightId: f, replanCall: { type: 'cross', callerId: 'A1' },
     });
     const o = r.ai.callOutcome;
     assert.ok(o, '叫了牌卻沒有任何回饋＝靜默降級（裁定 E 明文禁止）');
@@ -380,10 +396,11 @@ test('⑦ 乙窗界：不在第二觸窗內的改判指令一律作廢，且不�
 
 // ---------------- 決定論 ----------------
 
-test('決定論：同 seed 同輸入的叫牌結果逐值相同（甲與乙都要）', () => {
+test('決定論：同 seed 同輸入的叫牌結果逐值相同（planWith 與 replanAt 兩個治具都要）', () => {
   for (let f = 1; f <= 30; f += 1) {
-    const a = planWith({ flightId: f, calledPlay: { type: 'cross', callerId: 'A2', isSetter: false } });
-    const b = planWith({ flightId: f, calledPlay: { type: 'cross', callerId: 'A2', isSetter: false } });
+    const a = planWith({ flightId: f, replanCall: { type: 'cross', callerId: 'A2' } });
+    const b = planWith({ flightId: f, replanCall: { type: 'cross', callerId: 'A2' } });
+    assert.ok(a.ai.callOutcome, `flightId=${f}：沒產生任何回饋＝這一輪比的是兩個 null`);
     assert.deepEqual(a.ai.callOutcome, b.ai.callOutcome);
     assert.deepEqual(a.ai.approach, b.ai.approach);
     const ra = replanAt(f, 'cross');
@@ -393,39 +410,44 @@ test('決定論：同 seed 同輸入的叫牌結果逐值相同（甲與乙都�
   }
 });
 
-test('壽命：叫牌回饋隨死球作廢，但 calledPlay **不得**在死球窗被清掉', () => {
-  const { g, ai } = planWith({ flightId: 1, calledPlay: { type: 'cross', callerId: 'A2', isSetter: false } });
-  ai.callOutcome = { type: 'cross', mode: 'command', outcome: 'infeasible', reason: 'hasMain', mainId: 'A2', flightId: 1 };
-  ai.calledPlay = { type: 'delay', callerId: 'A2', isSetter: false };
+test('壽命：叫牌回饋隨死球作廢，殘留的改判指令也不得跨死球生效', () => {
+  const { g, ai } = planWith({ flightId: 1 });
+  ai.callOutcome = { type: 'cross', mode: 'replan', outcome: 'infeasible', reason: 'hasMain', mainId: 'A2', flightId: 1 };
+  ai.replanCall = { type: 'delay', callerId: 'A2' };
   g.phase = 'serve';
   aiCollectIntents(g, ai);
   assert.equal(ai.callOutcome, null, '死球後上一球的回饋沒清＝新的一球會看到舊字卡');
-  assert.deepEqual(ai.calledPlay, { type: 'delay', callerId: 'A2', isSetter: false },
-    '死球窗把玩家剛叫的牌清掉了＝一按就沒（死球窗正是叫牌的時機）');
+  // ★ 卷五裁定 2：戰術只管一球 ★ 舊制（卷三段 3）在此守的是相反的事——
+  // 「死球窗正是叫牌的時機，calledPlay 不得被清」。入口搬進球內之後那句話不成立了：
+  // 死球窗不再收戰術輸入，任何殘留指令跨死球生效都是玩家沒下過的命令。
+  assert.equal(ai.replanCall, null, '殘留的改判指令跨死球活下來＝玩家沒下過的命令會生效');
 });
 
-// ---------------- 卷尾：面板顯示與真相同源（2026-08-01）----------------
+// ---------------- 卷尾：死球窗面板已整支退場（2026-08-02 卷五）----------------
 //
-// 記債出處＝段 3 commit `891d179` 末段：`calledPlay` 整個 rally 活著，面板卻在回饋
-// 字卡播出時被 `clearPending()` 清掉狀態列 ⇒ 顯示「尚未叫牌」而指令仍生效。
-// 病灶不是少通知一次，是**鏡像這個設計本身**：真相的清除點是「被覆寫」，沒有事件
-// 可掛。所以拆鏡像、改現讀。DOM 元件在 node --test 下建不起來（無 jsdom），沿
-// `call-unlock.test.mjs:219` 的既有先例用靜態源碼掃描守。
-test('卷尾：callPanel 不得自留叫牌鏡像，狀態一律現讀 aiState.calledPlay', () => {
-  // 走 stripComments：本卷的註解本身就在複述舊制那幾行，含註解掃會被自己的說明打紅
-  const panel = stripComments(readFileSync(join(SRC, 'ui', 'callPanel.js'), 'utf8'));
+// 【已刪除】原本此處有『卷尾：callPanel 不得自留叫牌鏡像，狀態一律現讀
+// aiState.calledPlay』：靜態掃描 `src/ui/callPanel.js` 守「鏡像變數不存在／
+// clearPending 兩端都沒有／現讀管道接得上」。
+// ★ 留痕（§六表明列）：那個修復本身就證明了鏡像設計不可行 ★——真相的清除點是
+// 「被覆寫」，沒有事件可掛，於是顯示與行為必然分岔。卷五裁定 1 把整個死球窗入口
+// 拆掉，`callPanel.js` 與 `handlers.calledPlayOf` 一併不存在，這條測試失去標的。
+// 它守的「面板不得自留鏡像」在球內入口上由設計本身保證：遠段面板每幀重繪、
+// 選項池現算（`callOptionsFor`），沒有可鏡像的長壽狀態。
+test('卷尾：死球窗叫戰術的入口確實不存在（拆一半比不拆更危險）', () => {
   const loop = stripComments(readFileSync(join(SRC, 'app', 'matchLoop.js'), 'utf8'));
-  // ① 鏡像變數不得存在（`let pending = ...` 是舊制那一行）
-  assert.ok(!/\blet\s+pending\b/.test(panel),
-    'callPanel 又自己記了一份 pending＝鏡像回來了，指令活著時會顯示成尚未叫牌');
-  // ② 歸零通知不得存在於任何一端
-  assert.ok(!/clearPending/.test(panel), 'callPanel 仍留著 clearPending');
-  assert.ok(!/clearPending/.test(loop), 'matchLoop 仍在通知面板歸零＝顯示會與真相分岔');
-  // ③ 讀取管道要接上，且兩端對得起來
-  assert.ok(/handlers\.calledPlayOf/.test(panel), 'callPanel 沒有現讀真相的管道');
-  assert.ok(/handlers\.calledPlayOf\s*=\s*\(\)\s*=>\s*s\.aiState\.calledPlay/.test(loop),
-    'matchLoop 沒把 aiState.calledPlay 的讀取權接給面板');
-  // ④ 顯示用的兩處（狀態列、鈕文字）都要走現讀，不得有漏網的舊識別字
-  assert.ok(/pendingCallTextOf\(calledOf\(\)\)/.test(panel), '狀態列沒改成現讀');
-  assert.ok(/btn\.textContent\s*=\s*calledOf\(\)/.test(panel), '鈕文字沒改成現讀');
+  const stage = stripComments(readFileSync(join(SRC, 'app', 'matchStage.js'), 'utf8'));
+  const tape = stripComments(readFileSync(join(SRC, 'app', 'rallyTape.js'), 'utf8'));
+  // ① UI 檔本體不得復活
+  assert.throws(() => readFileSync(join(SRC, 'ui', 'callPanel.js'), 'utf8'),
+    'src/ui/callPanel.js 又回來了＝死球窗入口復活（卷五裁定 1）');
+  // ② 寫入／讀取管道兩端都不得留
+  assert.ok(!/handlers\.callPlay\b/.test(loop), 'matchLoop 仍留著 callPlay 寫入管道');
+  assert.ok(!/calledPlayOf/.test(loop), 'matchLoop 仍留著 calledPlayOf 讀取管道');
+  assert.ok(!/callPanel/.test(stage), 'matchStage 仍在建死球窗面板');
+  assert.ok(!/callPanel/.test(loop), 'matchLoop 仍在同步死球窗面板');
+  // ③ 錄影白名單要跟著收——留著等於錄一個永遠是 null 的欄位，重演端會誤以為它有意義
+  assert.ok(!/'calledPlay'/.test(tape), 'rallyTape 白名單仍列著 calledPlay');
+  // ④ 技術閘**不得**跟著退場：它改掛球內入口，是遠段改判選項池的唯一開關
+  assert.ok(/gates\.canCallPlay|s\.gates\.canCallPlay/.test(loop),
+    '球內遠段入口沒有吃 gates.canCallPlay＝技術閘被一起拆掉了（護欄 1）');
 });
