@@ -137,7 +137,10 @@ export function createRouteCue() {
     'display:flex', 'align-items:baseline', 'justify-content:space-between', 'gap:14px',
   ].join(';');
   const actionEl = document.createElement('span');
-  actionEl.style.cssText = ['font-size:clamp(14px,5vh,22px)', 'font-weight:700', 'letter-spacing:1px'].join(';');
+  // 2026-08-03 Sawmah 裁定：動作行放大到與路線名**同級**。
+  // 理由＝層級原本是反的：路線名整球不變、只需確認一次，而動作行（現在跑！／0.4s 後起步）
+  // 每 tick 都在變且要玩家當下動作，卻只有路線名的三分之二大。並重之後餘光掃得到。
+  actionEl.style.cssText = ['font-size:clamp(20px,8vh,34px)', 'font-weight:800', 'letter-spacing:1px'].join(';');
   const distEl = document.createElement('span');
   distEl.style.cssText = ['font-size:clamp(11px,3.5vh,15px)', 'color:rgba(255,255,255,0.5)'].join(';');
   footEl.append(actionEl, distEl);
