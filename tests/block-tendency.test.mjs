@@ -15,9 +15,16 @@ function setterOf(game, team) {
   return game.match.rotations[team].find((pid) => game.players[pid]?.currentRole === 'setter') ?? null;
 }
 
+// 守方（＝攔網方）的第一名球員：卷六之後賭注是**逐攔網手一份**的，
+// 所以問「賭注分佈」一定要指名是誰在賭。取哪一個不影響三條訊號測試要問的事
+//（訊號有沒有接上），只要整條測試裡固定同一個人即可。
+function blockerOf(game, atkTeam) {
+  return game.match.rotations[atkTeam === 'A' ? 'B' : 'A'][0];
+}
+
 // 賭注落在誰身上（kind → pid；與探針同一條映射）
-function betPid(game, team, passTier = 'perfect') {
-  const t = blockSetterTendency(game, team, { passTier });
+function betPid(game, team, passTier = 'perfect', blockerId = null) {
+  const t = blockSetterTendency(game, team, { passTier, blockerId: blockerId ?? blockerOf(game, team) });
   if (!t) return null;
   const pts = attackPointsOf(game, team, setterOf(game, team), passTier);
   return pts.find((p) => p.kind === t.kind)?.pid ?? null;
@@ -95,11 +102,70 @@ test('段2-② 一傳品質戰術分支：passTier 掉檔後池裡沒有快攻�
   assert.equal(ok, 0, `一傳 ok 時仍有 ${(ok * 100).toFixed(1)}% 賭中路 MB＝戰術分支沒吃到`);
 });
 
-test('段2 反作弊：blockSetterTendency 只吃隊伍代號，回傳不含任何 playerId', () => {
+// ★ 護欄改名（卷六 2026-08-02）★ 舊名「只吃隊伍代號」在卷六之後就不誠實了——
+// 本函式現在還吃**守方攔網手自己的 pid**（賭注逐人一份，憲法 §2.2 釋義）。
+// 但這**不是放寬**：守方攔網手知道自己是誰從來就不是作弊資訊，本護欄禁的一直是
+// **攻方** pid（拿得到才等於讀答案）。改名同時把斷言升級成機械執行那條界線，
+// 而不是只讓名字誠實。
+test('反作弊界線：只吃隊伍代號＋守方自己的 pid；攻方 pid 進不來；回傳不含任何 playerId', () => {
   const game = createGame({ seed: 3 });
-  const t = blockSetterTendency(game, 'A', { passTier: 'perfect' });
+  const blockerId = blockerOf(game, 'A');
+  const t = blockSetterTendency(game, 'A', { passTier: 'perfect', blockerId });
   assert.ok(t, '正常局面應該讀得出傾向');
   assert.deepEqual(Object.keys(t).sort(), ['kind', 'lx', 'x'], '回傳欄位多了東西（不得夾帶 pid）');
   const ids = new Set(Object.keys(game.players));
   for (const v of Object.values(t)) assert.ok(!ids.has(v), '回傳值裡出現 playerId');
+
+  // ★ 參數語意：餵攻方名冊裡的 pid 必須炸掉 ★
+  // 沒有這一條，改名之後「攻方 pid 進不來」就只是註解上的宣稱——誰哪天把攻擊手的 pid
+  // 傳進來（他手上就有「這球給誰」的資訊）也不會有任何東西轉紅。逐一驗攻方全員。
+  for (const atkPid of game.match.rotations.A) {
+    assert.throws(
+      () => blockSetterTendency(game, 'A', { passTier: 'perfect', blockerId: atkPid }),
+      /blockerId 不得是攻方球員/,
+      `餵攻方球員 ${atkPid} 當 blockerId 卻沒被擋下＝反作弊界線只剩註解`,
+    );
+  }
+});
+
+// ★ 卷六驗收 5：分歧的來源必須是「自己是誰」，不得是「輪到誰先算」★
+// 方向 B（拿解鎖順序當 salt）已在裁定 2 出局——它把分歧掛在一個沒有任何護欄在守的
+// 遍歷順序缺口上。這條就是那道護欄：roll 鍵只吃比分＋seed＋自己的 pid，三項都與
+// 誰先被處理無關 ⇒ 打亂處理順序，每個人的賭注必須逐值不變。
+test('卷六護欄：打亂攔網手的處理順序，每個人的賭注逐值不變', () => {
+  const game = createGame({ seed: 21 });
+  const blockers = game.match.rotations.B; // A 進攻 ⇒ B 是守方
+  assert.ok(blockers.length >= 2, '守方至少要有兩個人，這條測試才問得出「順序」');
+  const { score } = game.match;
+  const a0 = score.A;
+  const b0 = score.B;
+  const collect = (order) => {
+    const out = {};
+    for (let a = 0; a <= 24; a += 1) {
+      score.A = a;
+      for (const pid of order) {
+        const t = blockSetterTendency(game, 'A', { passTier: 'perfect', blockerId: pid });
+        out[`${a}|${pid}`] = t ? `${t.kind}@${t.x.toFixed(6)}` : null;
+      }
+    }
+    return out;
+  };
+  const forward = collect(blockers);
+  const reverse = collect([...blockers].reverse());
+  const shuffled = collect([...blockers].sort((p, q) => (p < q ? 1 : -1)));
+  score.A = a0;
+  score.B = b0;
+  assert.deepEqual(reverse, forward, '倒過來處理就換了賭注＝分歧吃到了遍歷順序（方向 B 復活）');
+  assert.deepEqual(shuffled, forward, '換一種排序就換了賭注＝分歧吃到了遍歷順序（方向 B 復活）');
+
+  // 非空轉檢查：一個恆定不變的函式也會通過上面兩條。要先確認這批輸入下**真的有分歧**，
+  // 順序不變性才是有內容的斷言（否則哪天賭注退化回團隊級單一 roll，這條照樣是綠的）。
+  let diverged = 0;
+  for (let a = 0; a <= 24; a += 1) {
+    const kinds = new Set(blockers.map((pid) => forward[`${a}|${pid}`]));
+    if (kinds.size > 1) diverged += 1;
+  }
+  assert.ok(diverged > 0,
+    `掃過 25 個比分，兩名以上攔網手一次都沒賭到不同的東西＝賭注又變回團隊級單一 roll，`
+    + '本條的順序不變性就只是在驗一個常數');
 });

@@ -3,7 +3,9 @@
 // 用法：
 //   node tools/block-divergence-probe.mjs [局數=40]
 //   BD_ARMS=base            node tools/block-divergence-probe.mjs 200   # 只跑現行臂（A0/A1 用）
-//   BD_ARMS=base,nearest    node tools/block-divergence-probe.mjs 200   # 加反事實臂（A2）
+//   BD_ARMS=base,nosalt     node tools/block-divergence-probe.mjs 200   # 加卷六鑑別力臂
+//     （nosalt＝拔掉 roll 鍵裡的 pid salt，其餘一律不動；卷六驗收 6）
+//     ⚠ 舊的 `nearest`／`wide` 兩臂已退場，理由見 installHooks 開頭。
 //   BD_OUT=<dir>            …                                          # 每臂各存一份 JSON
 //
 // ★ 零行為改動的機械保證 ★
@@ -50,9 +52,21 @@ const TAG = process.env.BD_TAG ?? 'arm';
 // 反事實臂的載入鉤子（只在 BD_ARM=nearest 的子行程裡裝）
 // ════════════════════════════════════════════════════════
 function installHooks(arm) {
+  const wantNoSalt = arm.includes('nosalt');
   const wantNear = arm.includes('nearest');
   const wantWide = arm.includes('wide');
-  const hit = { sig: 0, call: 0, build: 0, live: 0, pick: 0, tie: 0, depth: 0 };
+  // ★ 這兩條臂已退場（卷六必查項 3 實查）★ 它們的 patch 目標在後續幾卷被改掉了：
+  //   nearest → `const x = blockCommitRead(game, atkTeam, opts)...`（段 2 換成
+  //             `blockSetterTendency` 之後 grep 0 命中）
+  //   wide    → `  DEPTH_LZ: 2.9,`（blockRead.js:142 現為 `APPROACH.left.lz + 0.1`）
+  // 直接跑會炸在 `sub()` 的「patch 目標消失」，錯誤訊息看不出是臂過期還是 src 壞了，
+  // 所以在這裡先擋下並說清楚。**兩條臂的主張本身也已被卷五實測否決**
+  //（病灶不在讀取範圍／候選數，見 vol5-measurement-delivery.md:125-151），不予重建。
+  if (wantNear || wantWide) {
+    throw new Error(`臂 ${arm} 已退場：patch 目標在段 2／卷一之後不存在，且其假說已被卷五實測否決。`
+      + '本卷的反事實臂是 `nosalt`（拔掉 roll 鍵的 pid salt）。');
+  }
+  const hit = { sig: 0, call: 0, build: 0, live: 0, pick: 0, tie: 0, depth: 0, salt: 0 };
   registerHooks({
     load(url, context, nextLoad) {
       const res = nextLoad(url, context);
@@ -65,6 +79,14 @@ function installHooks(arm) {
         src = src.replace(from, to);
         hit[tag] += 1;
       };
+      if (norm.endsWith('/src/sim/ai.js') && wantNoSalt) {
+        // ★ 卷六驗收 6（鑑別力）：**只**拔掉 roll 鍵裡的 pid salt ★
+        // 其餘一律不動——`blockerId` 照樣傳進來、`resolveX` 照樣逐 pid 求值、
+        // 反作弊入參檢查照樣在。拔掉之後每名攔網手 roll 到同一個賭注 ⇒ 分歧率必須塌回去。
+        // 塌不回去＝這一卷量到的分歧不是 pid salt 造成的，驗收 1 的綠燈就與因果脫鉤。
+        sub('    + (blockerId == null ? 0 : idHash(blockerId)));',
+          '    + 0 * (blockerId == null ? 0 : idHash(blockerId)));', 'salt');
+      }
       if (norm.endsWith('/src/sim/blockRead.js') && wantWide) {
         // ⑥ 觀察窗放寬（**第二個自變數**，只在 `wide` 臂開）：
         //    DEPTH_LZ 2.9 → 4.0，讓兩翼助跑起點（lz 3.58，ai.js:1424 註解實測值）進得了候選池。
@@ -496,7 +518,7 @@ async function child() {
 if (ARM) {
   await child();
 } else {
-  const arms = (process.env.BD_ARMS ?? 'base,nearest,wide,wide-nearest').split(',').map((s) => s.trim()).filter(Boolean);
+  const arms = (process.env.BD_ARMS ?? 'base,nosalt').split(',').map((s) => s.trim()).filter(Boolean);
   for (const arm of arms) {
     const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), String(SETS)], {
       stdio: 'inherit',

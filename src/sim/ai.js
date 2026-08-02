@@ -1553,9 +1553,20 @@ function blockDecisionUnlocked(game, aiState, persona, player, tick) {
 // 回傳 `{ x, lx, kind }`（他**自己的賭注**落在誰身上，不是這球的答案）或 null。
 // `kind` 對外只有探針／測試在讀（要量「賭中率」得知道他賭了誰）——回傳自己的賭注
 // 不構成洩漏：本函式與呼叫端都不知道這球真的會給誰。
+//
+// ★★ 卷六（2026-08-02 裁定 0＋2）：`opts.blockerId` ＝**這名攔網手自己的 pid** ★★
+// 憲法 §2.2 之「選定一名攻擊手」讀作**每名攔網手各自執行**，所以賭注是逐人一份的。
+// 反作弊界線**沒有放寬**：守方攔網手知道自己是誰，不是作弊資訊；本函式禁的一直都是
+// **攻方** pid（那才等於讀答案），下面那道入參檢查就是這條界線的機械執行。
 export function blockSetterTendency(game, atkTeam, opts = {}) {
   const rot = game.match.rotations?.[atkTeam];
   if (!rot?.length) return null;
+  // ★ 反作弊入參檢查（卷六）★ `blockerId` 只准是守方的人。餵進攻方名冊裡的 pid＝
+  // 呼叫端手上有「這一球誰要扣」的資訊，那是讀答案不是讀傾向——直接炸掉，不靜默容忍。
+  const blockerId = opts.blockerId ?? null;
+  if (blockerId != null && rot.includes(blockerId)) {
+    throw new Error(`blockSetterTendency: blockerId 不得是攻方球員（${blockerId} 在 ${atkTeam} 名冊內）`);
+  }
   // 二傳＝角色，公開資訊（玩家面板 mbReadFor 也照 currentRole 分翼別）
   const setterId = rot.find((pid) => game.players[pid]?.currentRole === 'setter') ?? null;
   // 一傳還沒落地時 `passTier` 為 null＝「還不知道」⇒ 取最樂觀的那一檔當先驗，
@@ -1595,8 +1606,13 @@ export function blockSetterTendency(game, atkTeam, opts = {}) {
   //   ② **一個 rally 內恆定**：flightId 每次觸球就 +1，拿它當鍵會讓賭注在一傳／二傳
   //      觸球那一刻無故換人 ⇒ chase 段當成「改判」白付 REPLANT_TICKS。
   //      改用比分（一個 rally 內不變、每一分換一次）當鍵。零 rng 消耗（hash01 是純 hash）。
+  //   ③ **逐攔網手分開**（卷六裁定 2）：鍵再併入自己的 pid。三項（比分／seed／自己的 pid）
+  //      在 rally 內皆恆定 ⇒ 約束②照樣成立；而且不論哪個 tick 入場都 roll 到同一個賭注，
+  //      入場時點的差異不會漏進「賭誰」這件事。與遍歷順序徹底無關（只吃這三項）。
+  //      idHash＋seed 的併法沿用本檔既有慣例（見 ai.js:1123 的攻擊點抽選）。
   const { score } = game.match;
-  const roll = hash01((score.A * 1009 + score.B) * 613 + 71 + (game.seed ?? 0));
+  const roll = hash01((score.A * 1009 + score.B) * 613 + 71 + (game.seed ?? 0)
+    + (blockerId == null ? 0 : idHash(blockerId)));
   const best = pickByWeights(entries, scores.map((v) => v / sum), roll);
   if (!best) return null;
   const a = game.actors[best.pid];
@@ -1653,10 +1669,14 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
 //     （read 的解鎖吃自己的 reactionTicks ⇒「誰先解鎖」本來就決定了整份計畫的內容與時點，
 //       拆成各建各的會連建計畫的時機與輸入都變 ⇒ 本步不動這一層。）
 //   `byPid`＝每名攔網手一份（本步要拆出來的那一層）。
-function newBlockPlan(team, template) {
+// `resolveX`（卷六）＝「這名攔網手自己的賭注落在哪個 x」。給了就在**首次複製那一刻**
+//   逐 pid 求值取代 template 的 x；**沒給（＝blind 退路計畫）就照抄 0**——blind 的語意是
+//   「賭了中路卻沒賭中，代價自己付、不得改瞄」（見下方 chase 段 `if (c.blind) return c.x`），
+//   晚入場的人在那裡求值就會拿到一個非 null 的新瞄準點＝事後改瞄，違反該裁定。
+function newBlockPlan(team, template, resolveX = null) {
   // 攔網分工卷 step2b（2026-07-31）：`chase`（落地後的 close 預算）已改為 per-blocker
   //（住在 `byPid[pid].chase`）——它吃 `player`／`actor.x`，本來就該各算各的。
-  return { team, template, byPid: {} };
+  return { team, template, resolveX, byPid: {} };
 }
 
 // 這名攔網手自己的那一份。
@@ -1683,6 +1703,17 @@ function blockPlanFor(plan, playerId) {
     // 刻意不在 CARRY 裡：兩者都是每人各自一格的判斷結果，從別處帶過來會變成別人的決定
     c = {};
     for (const k of BLOCK_PLAN_CARRY) c[k] = plan.template[k];
+    // ★★ 卷六裁定 2：分歧點在**入場**，不在改判 ★★
+    // 九欄裡只有 `x` 逐 pid 求值，其餘八欄照抄 template（它們是「建計畫那一刻」的鎖存值，
+    // template 建立後全域唯讀 ⇒ 不論哪個 tick 入場都拿到同一份，順序相依只在「誰建計畫」）。
+    // **首次取用不算改判**：replant 的語意是「已 commit 後改主意的重蹲成本」，這裡沒有
+    // 先前的 commit ⇒ `replantUntil` 維持 -1、`pendingX` 維持 null，一格都不動。
+    // 求值讀的是**當下**的局面（與同一 tick chase 段的 `live` 同源），所以首次複製完
+    // 立刻進 chase 時 `|live.x − c.x|` 為 0，不會被 REPLANT_JUMP_M 誤判成換人跟。
+    if (plan.resolveX) {
+      const own = plan.resolveX(playerId);
+      if (own != null) c.x = own;
+    }
     plan.byPid[playerId] = c;
   }
   plan.latest = c;
@@ -1713,17 +1744,24 @@ function blockPlanAirborne(aiState, team, tick, playerId) {
   }) === ACTION_PHASE.AIR;
 }
 
+// 瞄準用的 opts 只有一份定義（`blockPlanTargetX` 與計畫上的 `resolveX` 共用）——
+// 兩邊各抄一份，哪天多一個欄位就會漂移成兩種輸入，首次複製與 chase 段當場對不起來。
+function blockAimOptsOf(aiState) {
+  return { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
+}
+
 function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
   const r = game.rally;
   const atkTeam = r.possession;
   if (!atkTeam || atkTeam === team) return null;
   const persona = blockPersonaOf(game, team);
-  const opts = { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
+  const opts = blockAimOptsOf(aiState);
   const plan = aiState.blockPlan;
   if (!plan || plan.team !== team) {
     const unlocked = blockDecisionUnlocked(game, aiState, persona, player, tick);
     // 【判】選定攻擊點
-    const aim = unlocked ? blockAimX(game, aiState, atkTeam, persona, opts) : null;
+    // 卷六：賭注逐人一份 ⇒ 連建計畫的那一次也是「他自己的」賭注（`blockerId`）
+    const aim = unlocked ? blockAimX(game, aiState, atkTeam, persona, { ...opts, blockerId: playerId }) : null;
     if (aim == null) {
       // ★ commit 的「賭輸了也要站上場」退路（2026-07-29 Sawmah 簽准；v2 裁定書題 2 的實測修正）★
       //
@@ -1790,6 +1828,16 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
       // 不是從「看到有人在跑」建的。預設為真會讓 read 在兩翼助跑手還沒進偵測範圍時
       // 就當場拔起（實測 set+14，球 set+89 才到）。
       blind: false, seen: false,
+    }, (pid) => {
+      // ★ 卷六：晚入場的攔網手在**他自己第一次取用的那一 tick**求自己的賭注 ★
+      // 一律讀當下局面（possession／persona／passTier 都重取），與同一 tick chase 段
+      // 算 `live` 的輸入逐項相同——鎖存建計畫那一刻的 opts 會讓兩者對不起來，
+      // 首次取用當場被 REPLANT_JUMP_M 判成「換人跟」而白付重新踩定成本。
+      const at = game.rally.possession;
+      if (!at || at === team) return null;
+      const own = blockAimX(game, aiState, at, blockPersonaOf(game, team),
+        { ...blockAimOptsOf(aiState), blockerId: pid });
+      return own?.x ?? null;
     });
     blockPlanFor(aiState.blockPlan, playerId);
     return read.x;
@@ -1879,7 +1927,7 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
     // `blind` ＝ 沒鎖定任何人的退路計畫：**不得改瞄**。
     // 他賭了中路卻沒賭中，代價就該由他自己付；容許事後跟著人跑＝把 commit 偷偷變成 read。
     if (c.blind) return c.x;
-    const live = blockAimX(game, aiState, atkTeam, persona, opts);
+    const live = blockAimX(game, aiState, atkTeam, persona, { ...opts, blockerId: playerId });
     if (!live) return c.x; // 這一刻讀不出新的瞄準點：守住既有目標，不亂動
     // §2.4-e 改判要付重新踩定的代價（**不做加速度／慣性模型**：移動從來不是瓶頸，
     // 窗長 p50 80 tick × 移速 2.8–5.2 m/s 可跑 3.7–6.9m，而實測最大淨位移僅 4.864m。
