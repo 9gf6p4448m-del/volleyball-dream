@@ -1368,7 +1368,10 @@ function decideOne(game, aiState, playerId) {
       // 雖然 AI 側同時要求攔網的人數已經是 0.0%——他是在 48 tick 的窗尾巴裡跳的）。
       // 決定在「判」的那一刻下，之後不再反覆。`cover` 與舊 `wallBail` 同樣**不進**
       // BLOCK_PLAN_CARRY：它是每人各自一格的判斷結果，同步過來會變成別人的決定。
-      const cp = aiState.blockPlan ? blockPlanFor(aiState.blockPlan, playerId) : null;
+      // 卷六：這裡也會替不存在的 pid **建格**（比 blockPlanTargetX 先跑到就由它建）⇒
+      // 求值器一樣要傳，否則被這條路搶先建格的攔網手會靜默拿回團隊級 x、分歧當場消失。
+      const cp = aiState.blockPlan
+        ? blockPlanFor(aiState.blockPlan, playerId, blockAimResolver(game, aiState, team)) : null;
       if (cp && cp.cover === undefined) cp.cover = slot.tier >= 2;
       if (cp ? cp.cover : slot.tier >= 2) {
         return moveIntent(game, playerId, tick, actor, blockCoverSpot(team, anchorX));
@@ -1669,14 +1672,26 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
 //     （read 的解鎖吃自己的 reactionTicks ⇒「誰先解鎖」本來就決定了整份計畫的內容與時點，
 //       拆成各建各的會連建計畫的時機與輸入都變 ⇒ 本步不動這一層。）
 //   `byPid`＝每名攔網手一份（本步要拆出來的那一層）。
-// `resolveX`（卷六）＝「這名攔網手自己的賭注落在哪個 x」。給了就在**首次複製那一刻**
-//   逐 pid 求值取代 template 的 x；**沒給（＝blind 退路計畫）就照抄 0**——blind 的語意是
-//   「賭了中路卻沒賭中，代價自己付、不得改瞄」（見下方 chase 段 `if (c.blind) return c.x`），
-//   晚入場的人在那裡求值就會拿到一個非 null 的新瞄準點＝事後改瞄，違反該裁定。
-function newBlockPlan(team, template, resolveX = null) {
+function newBlockPlan(team, template) {
   // 攔網分工卷 step2b（2026-07-31）：`chase`（落地後的 close 預算）已改為 per-blocker
   //（住在 `byPid[pid].chase`）——它吃 `player`／`actor.x`，本來就該各算各的。
-  return { team, template, resolveX, byPid: {} };
+  return { team, template, byPid: {} };
+}
+
+// 卷六：「這名攔網手自己的賭注落在哪個 x」。**只當參數傳，絕不存進 aiState**——
+// `rallyTape.js:66` 每個 rally 都對 `aiState` 做一次 `structuredClone`，函式不可結構化複製，
+// 存進去會讓錄影帶每一幀丟例外（2026-08-03 真人試玩踩到，node 端測試一個都攔不住）。
+function blockAimResolver(game, aiState, team) {
+  return (pid) => {
+    const at = game.rally.possession;
+    if (!at || at === team) return null;
+    // 一律讀當下局面（possession／persona／passTier 都重取），與同一 tick chase 段算 `live`
+    // 的輸入逐項相同——鎖存建計畫那一刻的 opts 會讓兩者對不起來，首次取用當場被
+    // REPLANT_JUMP_M 判成「換人跟」而白付重新踩定成本。
+    const own = blockAimX(game, aiState, at, blockPersonaOf(game, team),
+      { ...blockAimOptsOf(aiState), blockerId: pid });
+    return own?.x ?? null;
+  };
 }
 
 // 這名攔網手自己的那一份。
@@ -1696,7 +1711,7 @@ const BLOCK_PLAN_CARRY = [
   'x', 'enterTick', 'jumpTick', 'jumpAt', 'replantUntil', 'pendingX', 'blind', 'seen', 'hand',
 ];
 
-function blockPlanFor(plan, playerId) {
+function blockPlanFor(plan, playerId, resolveX = null) {
   let c = plan.byPid[playerId];
   if (!c) {
     // `cover`（step2a：我是不是回落補吊球的那一個）與 `chase`（step2b：落地後的 close 預算）
@@ -1710,8 +1725,11 @@ function blockPlanFor(plan, playerId) {
     // 先前的 commit ⇒ `replantUntil` 維持 -1、`pendingX` 維持 null，一格都不動。
     // 求值讀的是**當下**的局面（與同一 tick chase 段的 `live` 同源），所以首次複製完
     // 立刻進 chase 時 `|live.x − c.x|` 為 0，不會被 REPLANT_JUMP_M 誤判成換人跟。
-    if (plan.resolveX) {
-      const own = plan.resolveX(playerId);
+    // blind 退路計畫**不參與求值**：建計畫時 `blockAimX` 回的是 null（沒鎖定任何人），
+    // 晚入場的人在這裡求值會拿到一個非 null 的新瞄準點＝事後改瞄，
+    // 違反下方 chase 段 `if (c.blind) return c.x` 那條裁定（賭錯了代價自己付）。
+    if (resolveX && !c.blind) {
+      const own = resolveX(playerId);
       if (own != null) c.x = own;
     }
     plan.byPid[playerId] = c;
@@ -1828,22 +1846,13 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
       // 不是從「看到有人在跑」建的。預設為真會讓 read 在兩翼助跑手還沒進偵測範圍時
       // 就當場拔起（實測 set+14，球 set+89 才到）。
       blind: false, seen: false,
-    }, (pid) => {
-      // ★ 卷六：晚入場的攔網手在**他自己第一次取用的那一 tick**求自己的賭注 ★
-      // 一律讀當下局面（possession／persona／passTier 都重取），與同一 tick chase 段
-      // 算 `live` 的輸入逐項相同——鎖存建計畫那一刻的 opts 會讓兩者對不起來，
-      // 首次取用當場被 REPLANT_JUMP_M 判成「換人跟」而白付重新踩定成本。
-      const at = game.rally.possession;
-      if (!at || at === team) return null;
-      const own = blockAimX(game, aiState, at, blockPersonaOf(game, team),
-        { ...blockAimOptsOf(aiState), blockerId: pid });
-      return own?.x ?? null;
     });
-    blockPlanFor(aiState.blockPlan, playerId);
+    // ★ 卷六：晚入場的攔網手在**他自己第一次取用的那一 tick**求自己的賭注 ★
+    blockPlanFor(aiState.blockPlan, playerId, blockAimResolver(game, aiState, team));
     return read.x;
   }
   // 拆分後每名攔網手跟自己的那一份（建計畫的時機／輸入不變，見 blockPlanFor 檔頭）
-  const c = blockPlanFor(plan, playerId);
+  const c = blockPlanFor(plan, playerId, blockAimResolver(game, aiState, team));
   // §9 契約：本狀態機的三段＝chase（跟死）／air（在空中）／release（落地結算）。
   // 進 air 的錨點是事件寫下的 jumpTick、窗長沿用既有的 TUNING.BLOCK_WINDOW
   const phase = actionPhaseAt(tick, {
