@@ -22,8 +22,11 @@ const PID = 'A2'; // 生涯主角＝受控者的槽位
 
 // 回傳物件的欄位白名單（排序後比對）——這份清單就是「表現層拿得到什麼」的契約，
 // 也是誠實性的閘：要新增欄位得先確認它不是未來值
+// `playsOn`（2026-08-03 加入）＝這場比賽的世界規則裡有沒有組合攻擊（`game.comboScale > 0`）。
+// 過閘理由：它是**雙方適用的世界規則**、賽前就成立、對手也一樣，不是「這一球會怎樣」
+// 的未來值，也不揭露任何對手資訊。用途＝表現層分屆換措辭（第 1 屆說「你的線」）。
 const FIELDS = [
-  'distToStart', 'kind', 'kindLabel', 'label', 'phase', 'pid', 'start', 'startTick',
+  'distToStart', 'kind', 'kindLabel', 'label', 'phase', 'pid', 'playsOn', 'start', 'startTick',
   'steps', 'takeoff', 'takeoffTick', 'tempo', 'tempoLabel', 'ticksToStart',
 ].sort();
 

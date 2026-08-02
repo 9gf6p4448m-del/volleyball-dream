@@ -68,5 +68,11 @@ export function myRouteFor(game, aiState, playerId) {
     ticksToStart: route.startTick == null ? null : route.startTick - game.tick,
     // 現在離自己的助跑起點多遠（m）——玩家判斷「來不來得及退回去拉開」的唯一數字
     distToStart: (a && start) ? Math.hypot(start.x - a.x, start.z - a.z) : null,
+    // 這場比賽的世界規則裡「有沒有戰術」（`comboScale`＝呼叫端注入，雙方適用；
+    // 生涯層第 1 屆為 0，見 careerState.js:610）。給表現層分屆換措辭用——
+    // 第 1 屆連對手都沒有組合攻擊，說「S 要你跑」會讓玩家以為 S 叫了什麼
+    // （2026-08-03 Sawmah 試玩回報＋裁定）。**這不是屆數**，sim 照樣不認識屆；
+    // 這裡讀的是同一個世界規則旗標。
+    playsOn: (game.comboScale ?? 1) > 0,
   };
 }

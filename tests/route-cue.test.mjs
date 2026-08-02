@@ -57,3 +57,32 @@ test('段0 接線：資料源就是 myRouteFor，沒有線時整條鏈回 null',
   assert.equal(myRouteFor(game, ai, pid), null, '前提：這一刻本來就沒有線');
   assert.equal(routeCueTextOf(myRouteFor(game, ai, pid)), null);
 });
+
+// ★ 2026-08-03 Sawmah 試玩回報＋裁定 ★
+// 第 1 屆連對手都沒有組合攻擊（`comboScale=0`，careerState.js:610），
+// 但提示照樣寫「S 要你跑：內切」⇒ 玩家以為 S 叫了一個戰術、以為屆數閘漏了。
+// 實際上「內切」只是助跑線的隨機變化（approach.js CROSS_RATE=0.3，不吃屆數）。
+test('分屆換詞：沒有戰術的那一屆說「你的線」，有戰術之後才說「S 要你跑」', () => {
+  const off = routeCueTextOf({ ...base, playsOn: false });
+  assert.equal(off.lead, '你的線');
+  assert.doesNotMatch(off.text, /S 要你跑/,
+    '第 1 屆沒有戰術系統，說「S 要你跑」會被讀成 S 叫了戰術');
+
+  const on = routeCueTextOf({ ...base, playsOn: true });
+  assert.equal(on.lead, 'S 要你跑', '第 2 屆起 callPlay 解鎖了，措辭要回來');
+  // 舊呼叫端／既有測試沒有這個欄位 ⇒ 不得默默改掉它們看到的措辭
+  assert.equal(routeCueTextOf(base).lead, 'S 要你跑', '缺 playsOn 時要維持既有措辭');
+});
+
+test('三層卡片：三件事各自成欄，不是一整串字（版面才排得出三層）', () => {
+  const cue = routeCueTextOf({
+    ...base, kindLabel: '內切', tempo: 'one', tempoLabel: '一速', ticksToStart: 3, distToStart: 2.4,
+  });
+  assert.equal(cue.kindLabel, '內切', '跑哪條線要單獨一欄');
+  assert.equal(cue.tempoLabel, '一速', '幾速要單獨一欄');
+  assert.equal(cue.tempo, 'one', '速度色條要吃檔位鍵，不是吃中文標籤');
+  assert.equal(cue.action, '現在跑！', '現在該做什麼要單獨一欄');
+  assert.match(cue.dist, /離起點 2\.4m/, '距離要單獨一欄');
+  // 三欄不得互相吃掉：動作欄裡不該混進路線名或速度
+  assert.doesNotMatch(cue.action, /內切|一速/);
+});
