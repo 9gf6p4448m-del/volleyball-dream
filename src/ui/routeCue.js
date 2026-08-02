@@ -95,10 +95,14 @@ export function routeCueTextOf(route) {
 export function createRouteCue() {
   const el = document.createElement('div');
   el.style.cssText = [
-    'position:fixed', 'left:50%', 'bottom:calc(env(safe-area-inset-bottom, 0px) + 96px)',
+    // ★ 2026-08-03 真人回報「卡在畫面中央」★ 舊值是 `+96px`：桌機直式視窗看起來貼底，
+    // 但**手機橫向的可視高度只有 ~390px**，96px 往上就落到球場正中央、壓住攻擊區按鈕。
+    // 先前的單行提醒條也吃同一個 bug，只是它面積小、看起來像「在下面」而已。
+    // 改成真的貼下緣；與攻擊區按鈕的重疊由「選攻擊區時收起」處理（matchLoop）。
+    'position:fixed', 'left:50%', 'bottom:calc(env(safe-area-inset-bottom, 0px) + 12px)',
     'transform:translateX(-50%)', 'z-index:19',
     'font-family:system-ui,sans-serif', 'white-space:nowrap',
-    'padding:8px 14px 9px', 'border-radius:14px',
+    'padding:6px 12px 7px', 'border-radius:12px',
     'background:rgba(8,12,20,0.62)', 'backdrop-filter:blur(3px)',
     'border:1px solid rgba(255,255,255,0.10)',
     'text-shadow:0 2px 6px rgba(0,0,0,0.85)',
@@ -108,34 +112,34 @@ export function createRouteCue() {
 
   const leadEl = document.createElement('div');
   leadEl.style.cssText = [
-    'font-size:11px', 'font-weight:600', 'letter-spacing:2px',
-    'color:rgba(255,255,255,0.45)', 'margin-bottom:2px',
+    'font-size:10px', 'font-weight:600', 'letter-spacing:2px',
+    'color:rgba(255,255,255,0.45)', 'margin-bottom:1px',
   ].join(';');
 
   const mainEl = document.createElement('div');
-  mainEl.style.cssText = ['display:flex', 'align-items:center', 'gap:10px'].join(';');
+  mainEl.style.cssText = ['display:flex', 'align-items:center', 'gap:8px'].join(';');
   const kindEl = document.createElement('span');
   kindEl.style.cssText = [
-    'font-size:26px', 'font-weight:800', 'letter-spacing:3px', 'color:#f4f8ff',
+    'font-size:20px', 'font-weight:800', 'letter-spacing:2px', 'color:#f4f8ff',
   ].join(';');
   const tempoEl = document.createElement('span');
   tempoEl.style.cssText = [
-    'font-size:14px', 'font-weight:800', 'letter-spacing:1px',
-    'padding:2px 9px', 'border-radius:999px', 'border:1px solid currentColor',
+    'font-size:12px', 'font-weight:800', 'letter-spacing:1px',
+    'padding:1px 7px', 'border-radius:999px', 'border:1px solid currentColor',
   ].join(';');
   mainEl.append(kindEl, tempoEl);
 
   const rule = document.createElement('div');
-  rule.style.cssText = ['height:1px', 'background:rgba(255,255,255,0.14)', 'margin:6px 0 5px'].join(';');
+  rule.style.cssText = ['height:1px', 'background:rgba(255,255,255,0.14)', 'margin:4px 0 4px'].join(';');
 
   const footEl = document.createElement('div');
   footEl.style.cssText = [
     'display:flex', 'align-items:baseline', 'justify-content:space-between', 'gap:14px',
   ].join(';');
   const actionEl = document.createElement('span');
-  actionEl.style.cssText = ['font-size:17px', 'font-weight:700', 'letter-spacing:1px'].join(';');
+  actionEl.style.cssText = ['font-size:14px', 'font-weight:700', 'letter-spacing:1px'].join(';');
   const distEl = document.createElement('span');
-  distEl.style.cssText = ['font-size:12px', 'color:rgba(255,255,255,0.5)'].join(';');
+  distEl.style.cssText = ['font-size:11px', 'color:rgba(255,255,255,0.5)'].join(';');
   footEl.append(actionEl, distEl);
 
   el.append(leadEl, mainEl, rule, footEl);

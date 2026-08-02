@@ -2099,7 +2099,13 @@ function frameStep(s, now) {
   // 叫戰術重做卷 段 0：非 S 的球內提示「S 要你跑 X」。純顯示、零互動——
   // 決定跑不跑用既有的移動輸入，系統只補上玩家缺的那項資訊（裁定題 0）。
   // 資料源 myRouteFor 自己會判「這一刻有沒有線可報」，回 null 就收起來。
-  stage.routeCue?.sync(myRouteFor(game, s.aiState, s.controlledId));
+  // ★ 選攻擊區時收起（2026-08-03 Sawmah 試玩裁定）★ 這張卡回答的是「要不要跑這條線」，
+  // 而攻擊區面板一開＝助跑已經跑完、球就在手邊，那個資訊已經沒有可操作性，
+  // 留著只是壓在球場中央擋讀攔網。旗標沿用既有的 `attackDecidingSince`（>=0＝面板開著），
+  // 不另立狀態。
+  stage.routeCue?.sync(
+    s.attackDecidingSince >= 0 ? null : myRouteFor(game, s.aiState, s.controlledId),
+  );
   stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
   stage.benchAccelBtn?.sync(benched); // W7 C2③：只在板凳期間顯示
   if (stage.comebackBtn) {
