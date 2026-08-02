@@ -102,7 +102,7 @@ export function createRouteCue() {
     'position:fixed', 'left:50%', 'bottom:calc(env(safe-area-inset-bottom, 0px) + 12px)',
     'transform:translateX(-50%)', 'z-index:19',
     'font-family:system-ui,sans-serif', 'white-space:nowrap',
-    'padding:6px 12px 7px', 'border-radius:12px',
+    'padding:clamp(6px,2.2vh,12px) clamp(12px,3.6vh,20px)', 'border-radius:clamp(12px,2.6vh,18px)',
     'background:rgba(8,12,20,0.62)', 'backdrop-filter:blur(3px)',
     'border:1px solid rgba(255,255,255,0.10)',
     'text-shadow:0 2px 6px rgba(0,0,0,0.85)',
@@ -112,34 +112,34 @@ export function createRouteCue() {
 
   const leadEl = document.createElement('div');
   leadEl.style.cssText = [
-    'font-size:10px', 'font-weight:600', 'letter-spacing:2px',
-    'color:rgba(255,255,255,0.45)', 'margin-bottom:1px',
+    'font-size:clamp(10px,3vh,13px)', 'font-weight:600', 'letter-spacing:2px',
+    'color:rgba(255,255,255,0.45)', 'margin-bottom:2px',
   ].join(';');
 
   const mainEl = document.createElement('div');
-  mainEl.style.cssText = ['display:flex', 'align-items:center', 'gap:8px'].join(';');
+  mainEl.style.cssText = ['display:flex', 'align-items:center', 'gap:clamp(8px,2.4vh,14px)'].join(';');
   const kindEl = document.createElement('span');
   kindEl.style.cssText = [
-    'font-size:20px', 'font-weight:800', 'letter-spacing:2px', 'color:#f4f8ff',
+    'font-size:clamp(20px,8vh,34px)', 'font-weight:800', 'letter-spacing:2px', 'color:#f4f8ff',
   ].join(';');
   const tempoEl = document.createElement('span');
   tempoEl.style.cssText = [
-    'font-size:12px', 'font-weight:800', 'letter-spacing:1px',
-    'padding:1px 7px', 'border-radius:999px', 'border:1px solid currentColor',
+    'font-size:clamp(12px,4vh,18px)', 'font-weight:800', 'letter-spacing:1px',
+    'padding:clamp(1px,0.6vh,4px) clamp(7px,2vh,12px)', 'border-radius:999px', 'border:1px solid currentColor',
   ].join(';');
   mainEl.append(kindEl, tempoEl);
 
   const rule = document.createElement('div');
-  rule.style.cssText = ['height:1px', 'background:rgba(255,255,255,0.14)', 'margin:4px 0 4px'].join(';');
+  rule.style.cssText = ['height:1px', 'background:rgba(255,255,255,0.14)', 'margin:clamp(4px,1.2vh,7px) 0'].join(';');
 
   const footEl = document.createElement('div');
   footEl.style.cssText = [
     'display:flex', 'align-items:baseline', 'justify-content:space-between', 'gap:14px',
   ].join(';');
   const actionEl = document.createElement('span');
-  actionEl.style.cssText = ['font-size:14px', 'font-weight:700', 'letter-spacing:1px'].join(';');
+  actionEl.style.cssText = ['font-size:clamp(14px,5vh,22px)', 'font-weight:700', 'letter-spacing:1px'].join(';');
   const distEl = document.createElement('span');
-  distEl.style.cssText = ['font-size:11px', 'color:rgba(255,255,255,0.5)'].join(';');
+  distEl.style.cssText = ['font-size:clamp(11px,3.5vh,15px)', 'color:rgba(255,255,255,0.5)'].join(';');
   footEl.append(actionEl, distEl);
 
   el.append(leadEl, mainEl, rule, footEl);
