@@ -31,12 +31,23 @@ test('段0：三檔狀態由 ticksToStart／phase 驅動，不是寫死的', () 
   assert.match(running.text, /跑！/);
 });
 
-test('段0：離起點的距離只在「還沒到位且還沒起跑」時報（其餘是噪音）', () => {
-  assert.match(routeCueTextOf({ ...base, distToStart: 2.4 }).text, /離起點 2\.4m/);
-  assert.doesNotMatch(routeCueTextOf({ ...base, distToStart: 0.1 }).text, /離起點/,
+// ⚠ 2026-08-03：`dist` **目前沒有畫出來**（Sawmah 要求砍掉最不急的一項、把橫帶壓窄），
+// 所以斷言的對象從 `.text` 換成 `.dist` 欄位——**守的規則一格未改**，只是載體移位。
+// 哪天把距離加回畫面，這條照樣是那道閘。
+test('段0：離起點的距離只在「還沒到位且還沒起跑」時才算得出來（其餘是噪音）', () => {
+  assert.match(routeCueTextOf({ ...base, distToStart: 2.4 }).dist, /離起點 2\.4m/);
+  assert.equal(routeCueTextOf({ ...base, distToStart: 0.1 }).dist, '',
     '已經站在起點上還報距離＝噪音');
-  assert.doesNotMatch(routeCueTextOf({ ...base, phase: 'air', distToStart: 2.4 }).text, /離起點/,
+  assert.equal(routeCueTextOf({ ...base, phase: 'air', distToStart: 2.4 }).dist, '',
     '人都跳起來了還報「離起點多遠」＝噪音');
+});
+
+// ③ 起步前 1.5s 才亮起來（2026-08-03 Sawmah 試行）——太早就不顯示，別整球佔著畫面。
+test('③ 太早不顯示：倒數還很長時 tooEarly 為真，進入視窗與起跑後為假', () => {
+  assert.equal(routeCueTextOf({ ...base, ticksToStart: 300 }).tooEarly, true, '5s 前就亮著＝整球佔畫面');
+  assert.equal(routeCueTextOf({ ...base, ticksToStart: 60 }).tooEarly, false, '1s 前必須看得到');
+  assert.equal(routeCueTextOf({ ...base, ticksToStart: 300, phase: 'chase' }).tooEarly, false,
+    '已經在跑就不算太早——這時它是「我跑對了嗎」的確認');
 });
 
 test('段0：三檔的文案兩兩不同（玩家要分得出現在是哪一檔）', () => {

@@ -23,6 +23,10 @@ import { AI } from '../sim/ai.js';
 // 給一格 8 tick（≈0.13s）的提前量＝人看到畫面到手指動的量級，不是憑空挑的數字：
 // 沿用 `ai.js reactionTicks` 的下界（`Math.max(6, …)`）再進一位，讓提示比人快一點點。
 const URGENT_TICKS = 8;
+// ③ 起步前多久才亮起來（tick）。**暫定值 90＝1.5s，等 Sawmah 試玩後再定**——
+// 挑它的理由只是「夠你看一眼再決定要不要退回去拉開」，沒有量過。
+// 之前提過的 8 tick 是錯的：那只有 0.13s，等於玩家永遠看不到。
+const SHOW_LEAD_TICKS = 90;
 // 距起點多遠算「還沒到位」（m）——**直接向 sim 取值，不在這裡放第二份**。
 // 這把尺同時被兩邊用：畫面說「就位」、S 判「他有跑」。兩份數字一旦漂開，
 // 玩家會看到提示說就位、同一 tick 二傳卻把球改給別人。單一真相在 `AI.AT_START_M`。
@@ -83,7 +87,11 @@ export function routeCueTextOf(route) {
     action,
     dist,
     tone,
-    text: `${lead}：${route.label}　${action}${dist ? `　${dist}` : ''}`,
+    // ③ 這一刻還太早、玩家沒事要做 ⇒ 元件不顯示（判斷寫在這裡，動作在 sync）
+    tooEarly: !running && route.ticksToStart != null && route.ticksToStart > SHOW_LEAD_TICKS,
+    // ② 2026-08-03 Sawmah：`dist` 不再畫出來（最不急的一項，砍掉橫帶少約 100px 寬）。
+    //    欄位與計算保留＝要開回來只是把 distEl 加回 DOM、把 dist 併回 text 兩行。
+    text: `${lead}：${route.label}　${action}`,
   };
 }
 
@@ -108,8 +116,9 @@ export function createRouteCue() {
     // 單行：四段並排、基線對齊（大字與小字混排時 baseline 比 center 穩）
     'display:flex', 'align-items:baseline', 'gap:clamp(8px,2.4vh,14px)',
     'padding:clamp(4px,1.4vh,9px) clamp(12px,3.6vh,20px)', 'border-radius:999px',
-    'background:rgba(8,12,20,0.62)', 'backdrop-filter:blur(3px)',
-    'border:1px solid rgba(255,255,255,0.10)',
+    // ① 2026-08-03 Sawmah：底色調更透明並拿掉模糊——資訊還在，但看得到底下的球場
+    'background:rgba(8,12,20,0.32)',
+    'border:1px solid rgba(255,255,255,0.07)',
     'text-shadow:0 2px 6px rgba(0,0,0,0.85)',
     'pointer-events:none', 'user-select:none',
     'opacity:0', 'transition:opacity 160ms ease',
@@ -137,10 +146,7 @@ export function createRouteCue() {
   // 理由＝層級原本是反的：路線名整球不變、只需確認一次，而動作行（現在跑！／0.4s 後起步）
   // 每 tick 都在變且要玩家當下動作，卻只有路線名的三分之二大。並重之後餘光掃得到。
   actionEl.style.cssText = ['font-size:clamp(20px,8vh,34px)', 'font-weight:800', 'letter-spacing:1px'].join(';');
-  const distEl = document.createElement('span');
-  distEl.style.cssText = ['font-size:clamp(11px,3.5vh,15px)', 'color:rgba(255,255,255,0.5)'].join(';');
-
-  el.append(leadEl, kindEl, tempoEl, actionEl, distEl);
+  el.append(leadEl, kindEl, tempoEl, actionEl);
   document.body.appendChild(el);
 
   let shownKey = null; // 內容沒變就不動 DOM（rally 中逐幀呼叫）
@@ -158,6 +164,10 @@ export function createRouteCue() {
         return;
       }
       const cue = routeCueTextOf(route);
+      if (cue?.tooEarly) {
+        if (shownKey !== null) { el.style.opacity = '0'; shownKey = null; }
+        return;
+      }
       if (!cue) {
         if (shownKey !== null) { el.style.opacity = '0'; shownKey = null; }
         return;
@@ -175,7 +185,6 @@ export function createRouteCue() {
       tempoEl.style.background = tt ? tt.bg : 'transparent';
       actionEl.textContent = cue.action;
       actionEl.style.color = tone.color;
-      distEl.textContent = cue.dist;
       el.style.boxShadow = `0 0 18px ${tone.glow}`;
       el.style.opacity = '1';
     },
