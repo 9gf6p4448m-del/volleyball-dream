@@ -95,17 +95,20 @@ function makeControls() {
 // 為什麼需要：`matchControls.js:326-331` 明訂「前排防守不自動帶位」——玩家不推搖桿
 // 就會停在職責位 z≈3.0（實測 p50=3.00），|z| ≥ NEAR_NET_Z(2.2) ⇒ 面板永不出現、
 // 自動跳攔也永不成立。不走位＝兩臂都量不到東西。
-// 站位目標**不是我重建的幾何**：x 直接讀遊戲自己算的 `aiState.blockPlan.byPid.A2.x`
-// （AI 協調層替 A2 排的牆位，與 AI 隊友吃同一份），z 用 AI 攔網手的網前深度 0.6
-// （tools/block-divergence-probe.mjs:247 的 atNet 判準同值）。
+// 站位目標**不是我重建的幾何**：x 讀 `controls.blockOptions(game, aiState)` 的「封斜線」
+// 過網點（matchControls.js:705-717 → attackZones.js 的 crossingXOf）——那是遊戲自己
+// 端給玩家看的攔網選項，不是我另外算的一份；z 用 0.6（AI 攔網手的網前深度，
+// tools/block-divergence-probe.mjs:247 的 atNet 判準同值）。
+// ⚠ 已知替代方案不可用：`aiState.blockPlan.byPid.A2` 在 A2 由玩家操控時**不存在**
+//   （槽位由 `blockPlanFor` 在 AI 逐人決策時惰性建立，A2 被排除在 aiCollectIntents 外）。
 const BLOCK_Z = 0.6;
 const DEADBAND = 0.15;
-function wantKeys(game, ai, front, defending) {
+function wantKeys(game, ai, front, defending, controls) {
   if (!front || !defending) return [];
   const A = game.actors[ME];
-  const plan = ai.blockPlan;
-  const slot = (plan && plan.team === MY_TEAM) ? plan.byPid?.[ME] : null;
-  const tx = slot && slot.x != null ? slot.x : A.x;
+  const opts = controls.blockOptions(game, ai);
+  const opt = opts ? (opts.find((o) => o.key === 'cross') ?? opts.find((o) => o.key === 'line')) : null;
+  const tx = opt && opt.x != null ? opt.x : A.x;
   const out = [];
   if (A.z - BLOCK_Z > DEADBAND) out.push('KeyW');        // W＝朝網（A 隊 side=+1，z 減少）
   else if (BLOCK_Z - A.z > DEADBAND) out.push('KeyS');
@@ -182,7 +185,7 @@ function runSet(run, arm) {
     const front = game.phase === 'rally' && isFrontRow(game.match.rotations[MY_TEAM], ME);
     const defending = game.phase === 'rally' && r.possession && r.possession !== MY_TEAM &&
       r.profile !== 'serve';
-    const want = new Set(wantKeys(game, ai, front, defending));
+    const want = new Set(wantKeys(game, ai, front, defending, controls));
     for (const k of held) if (!want.has(k)) { fireKey('keyup', k); held.delete(k); }
     for (const k of want) if (!held.has(k)) { fireKey('keydown', k); held.add(k); }
 
@@ -254,6 +257,10 @@ function runSet(run, arm) {
         cur.crossDx = Math.abs(A.x - game.ball.x);
         cur.crossBallY = game.ball.y;
         cur.crossAz = A.z;
+        // W7 A1：一新窗＝一跳，`drainStamina(COST_JUMP_BLOCK)`（game.js:499）——
+        // 早跳＋二次起跳＝一波付兩次；體力低會壓低 blockTopEdge（game.js:1055）
+        const st = game.stamina?.[ME];
+        cur.crossStam = typeof st === 'number' ? st : (st?.value ?? st?.cur ?? null);
       }
     }
 
@@ -278,12 +285,10 @@ function runSet(run, arm) {
         eps.push(cur); cur = null;
       }
     }
-    // 對手放棄攻擊／球權翻面但沒觸球事件（保險閘）
-    if (cur && game.phase === 'rally' && game.rally.possession === MY_TEAM &&
-        game.rally.touches === 0 && game.ball.z > 0 && cur.crossTick != null &&
-        tick - cur.crossTick > 240) {
-      cur.out = 'stale'; eps.push(cur); cur = null;
-    }
+    // ★ 波的終點＝球過網那一 tick（tryBlock 的結算位置，game.js:1024）★
+    // 不closing 在這裡的話，長多回合（攔回去→對方再組織→再攻）會被併進同一波，
+    // Q1／Q3 的 dSpike 會被下一次攻擊污染（實測 p90 曾到 226 tick）。
+    if (cur && cur.crossTick != null) { cur.out = cur.out ?? 'crossed'; eps.push(cur); cur = null; }
     if (cur && game.phase !== 'rally') { cur.out = 'phase'; eps.push(cur); cur = null; }
   }
   if (cur) { cur.out = 'eos'; eps.push(cur); }
@@ -369,6 +374,23 @@ for (const arm of ['noPress', 'early']) {
     console.log(`  球已過網（z>0，我方半場）                ${rate(crossed, w2.length)}`);
     console.log(`  距對方擊球 tick   p50=${f(qtl(dS, 0.5), 0)} p90=${f(qtl(dS, 0.9), 0)} mean=${f(mean(dS), 1)} n=${dS.length}`);
     console.log(`  距球落地 tick     p50=${f(qtl(lt, 0.5), 0)} p90=${f(qtl(lt, 0.9), 0)} mean=${f(mean(lt), 1)} n=${lt.length}`);
+    // 對照：手動早跳那一刻離對方擊球還有多久（負值＝擊球前，＝賭注的「早」有多早）
+    const pd = pressed.filter((e) => e.spikeTick != null).map((e) => e.pressTick - e.spikeTick);
+    console.log(`  【對照】手動早跳距對方擊球 tick p50=${f(qtl(pd, 0.5), 0)} p10=${f(qtl(pd, 0.1), 0)}`
+      + ` p90=${f(qtl(pd, 0.9), 0)} n=${pd.length}（負值＝擊球前幾 tick 就按了）`);
+
+    // ★ 誘因結構：手動窗只有 48 tick，按下到對方擊球的間隔決定它有沒有過期 ★
+    console.log('\n[按下 → 對方擊球的間隔（lead）決定一切；手動窗長＝TUNING.BLOCK_WINDOW 48]');
+    console.log('lead 區間      波數 | 開了二次窗       | 攔到');
+    const buckets = [[0, 24], [24, 48], [48, 72], [72, 96], [96, Infinity]];
+    for (const [lo, hi] of buckets) {
+      const rows = pressed.filter((e) => e.spikeTick != null &&
+        e.spikeTick - e.pressTick >= lo && e.spikeTick - e.pressTick < hi);
+      const rj = rows.filter((e) => e.windows.some((w) => w.tick > e.pressTick));
+      const hit = rows.filter((e) => e.touchTick != null);
+      const label = hi === Infinity ? `≥${lo}` : `${lo}–${hi}`;
+      console.log(`${label.padEnd(12)} ${String(rows.length).padStart(5)} | ${rate(rj.length, rows.length)} | ${rate(hit.length, rows.length)}`);
+    }
   } else {
     const autoWin = elig.filter((e) => e.windows.length > 0);
     const autoHit = autoWin.filter((e) => e.touchTick != null);
@@ -398,8 +420,28 @@ for (const arm of ['noPress', 'early']) {
   console.log(`  |A2.x − ball.x| p50=${f(qtl(dxs, 0.5), 2)} p90=${f(qtl(dxs, 0.9), 2)}`
     + `｜≤BLOCK_REACH_X(1.1) ${rate(dxs.filter((v) => v <= 1.1).length, dxs.length)}`
     + `｜過網球高 y p50=${f(qtl(bys, 0.5), 2)} p90=${f(qtl(bys, 0.9), 2)}`);
+  // 站位是否為兩臂差距的來源：把「站對位」這個變因固定住再比一次
+  const near = cw.filter((e) => e.crossDx != null && e.crossDx <= 1.1);
+  console.log(`  控制站位後（|dx|≤1.1）攔到率 ${rate(near.filter((e) => e.touchTick != null).length, near.length)}`);
   console.log(`  全隊(A) 攔網接觸波數 ${eps.filter((e) => e.teamTouch).length}`
     + `（A2 ${touched.length}）`);
+  const byManual = open.filter((e) => e.crossManual === true);
+  // 續期證據：手動窗只有 48 tick（TUNING.BLOCK_WINDOW）；結算時 airT>48 還開著
+  // ⇒ 一定是被自動跳攔的 block intent 續期（game.js:501），而不是開了新窗
+  const renewed = byManual.filter((e) => e.crossAirT > 48).length;
+  if (byManual.length) {
+    console.log(`  手動窗撐到結算者 airT>48（＝被自動跳攔續期，非新窗）${rate(renewed, byManual.length)}`);
+  }
+  const byAuto = open.filter((e) => e.crossManual === false);
+  console.log(`  結算窗＝手動窗 → 攔到 ${rate(byManual.filter((e) => e.touchTick != null).length, byManual.length)}`
+    + `｜結算窗＝自動窗 → 攔到 ${rate(byAuto.filter((e) => e.touchTick != null).length, byAuto.length)}`);
+  const stams = cw.map((e) => e.crossStam).filter((v) => v != null);
+  console.log(stams.length
+    ? `  結算時 A2 體力 mean=${f(mean(stams), 3)} p50=${f(qtl(stams, 0.5), 3)} n=${stams.length}`
+    : '  結算時 A2 體力：**量不出來** —— careerMatchSetup 不回傳 stamina 欄位 ⇒ '
+      + 'game.stamina===null ⇒ W7 體力系統在本治具下全程短路（drainStamina 無效果）。'
+      + '⇒「早跳多付一次跳躍體力」這條機制在本次量測中**不成立**，不得用來解釋兩臂差距。');
+  console.log(`  ★臂總結：A2 攔網接觸／面板可按波 ${rate(touched.length, elig.length)}`);
 }
 
 if (OUTDIR) {
