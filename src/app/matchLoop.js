@@ -841,9 +841,21 @@ function updateDecisions(s, now) {
   // 選項池＝一傳品質分支（setOptions 純函式）；窗尾（球墜破 1.8m）未選＝
   // 二傳保底自動舉給 AI 建議攻擊手（matchControls collect 既有路徑）
   const setZones = controls.setOptions(game);
+  // ★★ 2026-08-03：拿掉 `game.ball.vy < 0`——它讓遠段在數學上不存在 ★★
+  // 實測（`tools/set-preview-gate-probe.mjs`，n=497）：其餘三個條件在距接觸 ETA≈91–93
+  // 就全部就緒，**只有 `vy < 0` 一個人吃掉 47–49 tick**——因為它的意思是「一傳弧線
+  // 過了最高點」，而從頂點掉到二傳手點是幾何常數 44±1 tick（perfect/ok/poor 三分層
+  // 逐值相同）。門檻 `SET_READY_TICKS` 是 55 ⇒ `setStageOf` 恆回 'ready'
+  // ⇒ **遠段出現率 0/497**，卷五裁定 4「入口走乙：遠段戰術指令」從落地起沒開過一次。
+  //
+  // 語意上它本來就與遠段相反：遠段的定義是「**球還在飛**，講戰術」，
+  // 而 `vy < 0` 說的正是「球已經不在飛了、開始掉了」。
+  //
+  // ⚠ 卷五驗收的「遠段出現率 100%」量的不是這件事——那是「sim 第二觸窗開啟時
+  // `setContactPoint.ticks`（**未扣 planTick**）是否 >55」，中間卡著本行這四個條件。
   const setDeciding =
     !!setZones && setZones.length > 0 &&
-    game.ball.vy < 0 && game.ball.y > 1.8 && !controls.setPending();
+    game.ball.y > 1.8 && !controls.setPending();
   // 4.6 追修（07-28 試玩）：分配窗兩段式——遠段唯讀、近段才可下指令。
   // ★ 卷五裁定 3（2026-08-02）：判準從空間換成**時間** ★
   //   ETA 的取點與換算**整段在 `setEtaOf` 裡**（單一真相，UI 不自己算一份）——
