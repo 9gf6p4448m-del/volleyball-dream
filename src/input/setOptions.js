@@ -20,7 +20,12 @@ export const CALL_BALL_AT = 30;
 // 路線標籤的單一真相（07-29：`input/myRoute.js` 亦讀這份——同一條線在分配面板與
 // 受控者自己的線索上不得有兩種叫法）
 export const KIND_LABELS = {
-  quick: '快攻', left: '左翼', right: '右翼', pipe: '後排P', dball: 'D球',
+  // ★ 2026-08-03 Sawmah 命名裁定：`pipe` 統一叫「後排 pipe」★
+  // 病灶＝同一條線兩種叫法：本表原寫「後排P」，主播詞卻是「後排 pipe 攻擊！」
+  //（commentary.js:141）——玩家會以為是兩件事。裁定「統一成 pipe」。
+  // 附帶理由：「後排P」與輪轉位置的 P1–P6（careerScreen.js:849/880「後排 P1/P6/P5」）
+  // 撞名，改掉之後兩個概念不再混。
+  quick: '快攻', left: '左翼', right: '右翼', pipe: '後排 pipe', dball: 'D球',
   // 卷五（2026-08-02）：MB 分檔後「快攻」要分得開——A 快＝二傳正前方、B 快＝往 OH 側 2.2m
   bquick: 'B快',
   // §5 A2（07-29 補）：缺這條的話標籤會 fallback 成英文字串 kind。
