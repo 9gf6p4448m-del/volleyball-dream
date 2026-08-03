@@ -14,20 +14,22 @@ import {
 import { buildStarterMembers, applyRosterGrowth, openSlots } from '../src/career/roster.js';
 import {
   buildRecruitMember, RECRUIT_TRUST, RECRUIT_CONDS,
-  accrueRecruitProgress, conditionMet, nextRecruitId,
+  accrueRecruitProgress, conditionMet, nextRecruitId, recruitTargetGone,
+  pendingWaiting, mergeWaiting, waitingOf,
 } from '../src/career/recruitment.js';
 import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, startNextSet, TUNING,
 } from '../src/sim/game.js';
 import { STAMINA } from '../src/sim/stamina.js';
 import { matchFormatOf } from '../src/career/schedule.js';
+import { revealHeightForSeason } from '../src/career/heightGrowth.js'; // G7 屆界身高揭曉
 import { isBackRow } from '../src/sim/rotation.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
 } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
-import { buildDeficitFillIns } from '../src/career/graduation.js';
-import { defaultLineup } from '../src/career/lineup.js';
+import { buildDeficitFillIns, applySeasonTurnover } from '../src/career/graduation.js';
+import { defaultLineup, FRESHMAN_TRUST } from '../src/career/lineup.js';
 import {
   digSuggestionFor, schemeByKey, schemeForDig, noteScheme, counterReadOf,
 } from '../src/input/liberoRead.js';
@@ -60,6 +62,9 @@ const W7_ON = USE_STAMINA || USE_MOMENTUM;
 // W2(P4) 身高錨點臂：VD_HEIGHT=公分（150/175/195 三錨點；工單 B3）。
 // 未給＝188 基準（Phase 1 遺留值；本週校準後 175 為主錨、188＝「明顯優勢」）
 const HEIGHT_CM = process.env.VD_HEIGHT ? Number.parseInt(process.env.VD_HEIGHT, 10) : null;
+// W2 拍板的平衡主錨（`docs/phase4-w2-status.md` §B3）＝ production 創角畫面的預設值
+// （`src/ui/careerScreen.js:1502`）。不是 `createCareerPlayer` 的簽名預設 188——見 G3 修復註。
+const BALANCE_ANCHOR_HEIGHT_CM = 175;
 // W3(P4) 位置臂（工單 §9：分位置獨立跑）：VD_ROLE=setter|middle|opposite|libero
 // （未給＝outside 基準）。建隊走正式轉位鏈同款：currentRole＋缺額補位員＋
 // defaultLineup 新對位（S 臂 AI 代打＝trust 權重鏡像＝現行 AI 舉球；MB/OPP＝現行
@@ -78,7 +83,42 @@ const L_MODE = process.env.VD_L_MODE ?? null;
 //   決定論公式——權重增益按建議頻率近似，工單 §10）
 const FORCE_BO = [3, 5].includes(Number.parseInt(process.env.VD_BO ?? '', 10))
   ? Number.parseInt(process.env.VD_BO, 10) : 0;
-const MULTISET = process.env.VD_MULTISET === '1';
+// ★★ VD_FAITHFUL=1 ＝保真度總開關（2026-08-03 治具比對稽核後新增）★★
+//
+// 為什麼要有這個總開關：治具為了「取樣方便」與 production 有一批**刻意**或**遺漏**的
+// 行為差異，難度校準時每一項都得記得手動打開。今天已經連續兩次因為漏帶而量錯：
+//   F5 賽制（bo1 vs 決賽 bo5／準決 bo3）——三屆奪冠率 8/20/36 → 2/11/47，
+//      而且偏誤方向逐屆相反（多局放大實力差）
+//   G1 止步後照打（見下）
+// 開關越多越容易漏 ⇒ 收成一個總開關。**難度校準的每一支臂一律帶 `VD_FAITHFUL=1`**，
+// 需要「取樣方便」的舊行為時才個別關掉。完整差異清單＝`docs/kickoffs/fixture-fidelity-audit.md`。
+const FAITHFUL = process.env.VD_FAITHFUL === '1';
+const MULTISET = FAITHFUL || process.env.VD_MULTISET === '1';
+// G1：production 八強落敗即該屆結束（`careerState.js:60-66` nextMatch 回 null），
+// 治具**無條件跑滿六場**——那是檔頭寫明的刻意取捨（「打好打滿」＝止步後照打取數據，
+// 讓每一場都有樣本）。**不是 bug，但用它校難度就是錯的**：實測第 1 屆 qf 勝率約六成
+// ⇒ 約四成生涯在真實遊戲每屆少打兩場（少成長點／少兩場隊友成長／少兩場情蒐與招募），
+// 且未進決賽者在 production 根本學不到跳發（`events.js` 要求實際打到決賽對天鷹）。
+// 偏移逐屆複利，正好壓在「二三屆曲線太陡」這個病灶上。
+const STOP_ON_ELIM = FAITHFUL || process.env.VD_STOP_ON_ELIM === '1';
+// ★ F1／G6／G11：屆末名冊變動一包（2026-08-03 治具比對稽核；VD_TURNOVER=1 可單開）★
+// 治具原本的屆界**只有** `advanceSeason`（賽程與戰績重置），production 的屆界是
+// `careerStore.advanceSeason`（`careerStore.js:159-269`）——那裡還做了整包名冊換血：
+//   F1  畢業（三年級離隊進 alumni）→ 全員年級 +1 → 新生入學（`graduation.applySeasonTurnover`）
+//       ⇒ 治具讓 grade 3 的 A3 大山／A4 阿烈打滿三屆還持續成長（production 第 1 屆末就畢業）
+//   G6  等候名單遞補（達標但滿編者排隊，畢業騰位時優先於新生）＋來投保底
+//       （本屆零招募入隊＝屆末補一名 walk-on，屬性以隊伍平均為底線）
+//   G11 lineup 由治具「每場現算」（lineup=null ⇒ careerMatchSetup 每場 defaultLineup、
+//       trust 一律回退 20）改為**持有一份跨場 lineup**：招募生入隊顯式 trust 10
+//       （`RECRUIT_TRUST`）、新生／來投者 10（`FRESHMAN_TRUST`）、等候遞補者 10、
+//       倖存者沿用舊值，另加賽末換人信任演化（`matchCareer.js:114-138`）。
+// 方向：F1 讓治具的玩家隊逐屆偏強（難度被低估）、G6 的來投讓 production 偏強、
+// G11 的 trust 10 讓新血球權變少 ⇒ 三項不同號，淨效應要實測（見 audit 文件）。
+// **不是取樣取捨、是漏了 production 的一整段**，但既有基準全部在「不換血」上量的
+// ⇒ 依本檔通則掛在 VD_FAITHFUL 之下，不帶開關的臂逐值不變。
+// 逐出（expel）維持未建模：production 的逐出是**玩家手動決定**（`canExpel` 由 UI 閘門
+// 呼叫，無自動政策），與 G14「玩家手動操作全未建模」同類——治具沒有玩家意圖模型可鏡像。
+const TURNOVER = FAITHFUL || process.env.VD_TURNOVER === '1';
 const USE_CALL = process.env.VD_CALL === '1';
 const CALL_FREQ = 0.6; // 建議頻率近似（玩家不會每窗都按；初擬）
 const CALL_GRANT = 0.7; // 與 matchLoop 同值
@@ -330,18 +370,148 @@ function spendEvenly(player, points) {
 
 // 招募入隊鏡像（settleRecruitJoins 的無 store 版，同表序/同規則）：
 // 條件達成＋有空位→生成入隊；額滿＝條件保持、progress 不清（與正式路徑一致）
-function settleJoinsMirror(roster, recruitment, careerSeed, season, joinLog) {
+function settleJoinsMirror(roster, recruitment, careerSeed, season, joinLog, lineup = null) {
   let r = roster;
   let rec = recruitment;
+  let lu = lineup;
+  // G6：達標但滿編者＝進**等候名單**（`recruitment.js:370-386`），下屆畢業騰位時優先
+  // 遞補；治具原本只是 `continue`（＝production 2026-07-30 P2② 修掉的那個黑洞）。
+  // 只在 TURNOVER 下記帳——沒有屆末換血就沒有騰位的時點，等候名單永遠不會被消費。
+  const waitlisted = [];
   for (const key of Object.keys(RECRUIT_CONDS)) {
     if (rec.recruited.includes(key) || !conditionMet(rec, key)) continue;
-    if (openSlots(r) <= 0) continue;
+    // ★ G5 保真度修復（無條件——這是漏了 production 的邏輯，不是取樣取捨）★
+    // production（`careerStore.js` 的等候者生成器）會先問 `recruitTargetGone`：
+    // 目標本人已經畢業離校（現行年級 >3）就招不到了。
+    // 治具原本沒這道檢查 ⇒ 第 2／3 屆還招得到早就畢業的人。
+    //
+    // ★ 修法分兩類（本檔通則）★
+    //   ・**純粹的 bug**（漏傳參數、用錯常數）＝ G3 身高／G4 seasonIndex／G5 本項 ⇒ **無條件修**
+    //   ・**刻意的取樣取捨**（檔頭寫明的「打好打滿」）＝ G1 ⇒ **開關控制**（VD_FAITHFUL）
+    if (recruitTargetGone(key, season)) continue;
+    // 順序照 production（`recruitment.js:368-373`）：先問「人還在不在」，再問「有沒有位子」
+    // ——反過來會把已畢業的目標也排進等候名單。滿編＝不入隊（兩序等值），
+    // 差別只在等候名單的內容 ⇒ 不帶 TURNOVER 的臂逐值不變。
+    if (openSlots(r) <= 0) {
+      if (TURNOVER) waitlisted.push(key);
+      continue;
+    }
     const id = nextRecruitId(r.members, rec.expelled);
-    r = { ...r, members: [...r.members, buildRecruitMember(key, careerSeed, id, r.members)] };
+    // ★ G4 保真度修復（與 F4 完全同型：漏傳 seasonIndex）★
+    // `buildRecruitMember` 的第 5 參數 seasonIndex 決定**入隊年級**
+    // （`recruitment.js:283`：入隊年級＝來源隊該屆的年級）。漏傳＝恆為 1
+    // ⇒ 招募生年級永遠停在最會成長的那一檔 ⇒ 玩家隊偏強、難度被低估。
+    r = {
+      ...r,
+      members: [...r.members, buildRecruitMember(key, careerSeed, id, r.members, season)],
+    };
     rec = { ...rec, recruited: [...rec.recruited, key] };
+    // ★ G11 保真度修復（TURNOVER 包）★ production 入隊時**顯式寫入 lineup.trust＝10**
+    // （`careerStore.js:285-294` applyRecruit，值＝`RECRUIT_TRUST`）。治具沒有持久
+    // lineup ⇒ 每場 `careerMatchSetup` 現算 defaultLineup ⇒ 招募生 trust 回退 20
+    // ＝球權比 production 多（`lineup.js:174-176` trustOf 缺鍵回退 DEFAULT_TEAMMATE_TRUST）。
+    if (lu?.trust) lu = { ...lu, trust: { ...lu.trust, [id]: RECRUIT_TRUST } };
     joinLog.push({ key, season });
   }
-  return { roster: r, recruitment: rec };
+  if (TURNOVER && waitlisted.length) rec = mergeWaiting(rec, waitlisted);
+  return { roster: r, recruitment: rec, lineup: lu };
+}
+
+// ── F1／G6 屆末換血鏡像（`careerStore.advanceSeason` 的無 store 版）────────────
+// production 權威路徑＝`careerStore.js:169-257`（單次 RMW）：
+//   ① pendingWaiting → ② applySeasonTurnover（畢業→等候遞補→來投保底→年級+1→新生）
+//   → ③ lineup 重排（trust 跟人：倖存者沿用、新生/來投 10、遞補者 RECRUIT_TRUST）
+//   → ④ recruitment（遞補者記進 recruited、出等候名單）
+// 兩顆種子刻意分開，與 production 逐值對齊：
+//   newSeed＝advanceSeason 之後的 career.seed（`careerStore.js:186` 傳 next.seed）
+//     ——新生／來投者的決定論素材
+//   oldSeed＝advanceSeason 之前的 career.seed（`careerStore.js:195` 傳 prev.season.seed，
+//     RMW 讀的是**舊**存檔）——等候遞補者 buildRecruitMember 的 careerSeed
+function applyTurnoverMirror({
+  roster, recruitment, lineup, endingSeason, oldSeed, newSeed, playerRole,
+}) {
+  const nextIdx = endingSeason + 1;
+  const rec = recruitment ?? { progress: {}, recruited: [], expelled: [] };
+  const waiting = pendingWaiting(rec, nextIdx);
+  // P2①：本屆有無招募入隊——`joinedSeason` 是唯一判準（`careerStore.js:181-182`）
+  const joinedThisSeason = roster.members.some((m) => m.joinedSeason === endingSeason)
+    || (rec.expelled ?? []).some((e) => e.member?.joinedSeason === endingSeason);
+  const turnover = applySeasonTurnover({
+    roster,
+    seasonIndex: endingSeason,
+    seed: newSeed,
+    playerRole,
+    waiting,
+    buildWaitingMember: (key, members, alumni) => (
+      recruitTargetGone(key, nextIdx)
+        ? null
+        : buildRecruitMember(
+          key,
+          oldSeed,
+          nextRecruitId(
+            [...members, ...(alumni ?? []).map((a) => a.member)],
+            rec.expelled ?? [],
+          ),
+          members,
+          nextIdx,
+        )
+    ),
+    walkOn: !joinedThisSeason,
+  });
+  // ③ 預設陣重排（`careerStore.js:210-223`）：畢業者不可留在 starters；trust 跟人
+  const nextLineup = defaultLineup(turnover.roster.members, 'A2', playerRole);
+  const prevTrust = lineup?.trust ?? {};
+  for (const id of Object.keys(nextLineup.trust)) {
+    if (prevTrust[id] !== undefined) nextLineup.trust[id] = prevTrust[id];
+  }
+  for (const f of turnover.freshmen) {
+    if (nextLineup.trust[f.id] !== undefined) nextLineup.trust[f.id] = FRESHMAN_TRUST;
+  }
+  for (const m of [...(turnover.admitted ?? []), ...(turnover.walkOn ? [turnover.walkOn] : [])]) {
+    if (nextLineup.trust[m.id] !== undefined) {
+      nextLineup.trust[m.id] = m.origin === 'walkon' ? FRESHMAN_TRUST : RECRUIT_TRUST;
+    }
+  }
+  // ④ 遞補入隊者記進 recruited、出等候名單（`careerStore.js:237-245`）
+  const admittedKeys = turnover.admittedKeys ?? [];
+  const restWaiting = waitingOf(rec).filter(
+    (k) => !admittedKeys.includes(k) && !recruitTargetGone(k, nextIdx),
+  );
+  return {
+    roster: turnover.roster,
+    recruitment: {
+      ...rec,
+      recruited: [...(rec.recruited ?? []), ...admittedKeys],
+      ...(restWaiting.length || rec.waiting ? { waiting: restWaiting } : {}),
+    },
+    lineup: nextLineup,
+    turnover,
+  };
+}
+
+// G11 後半：賽末換人信任演化（`matchCareer.js:114-138` 的鏡像；純由 events 導出）。
+// 被換下 −1、被換上且本場有建功（殺球/吊球/攔網得分/ACE）+2；主控不計；夾限 0–100。
+// 治具基準臂 A 隊零換人 ⇒ 恆 no-op；VD_MANAGE 臂與屆末換血包一起才會咬合。
+function applySubTrustMirror(lineup, events, myTeam, playerId) {
+  if (!lineup?.trust) return lineup;
+  const subs = events.filter((e) => e.type === 'SUBSTITUTION' && e.team === myTeam);
+  if (!subs.length) return lineup;
+  const clamp = (v) => Math.max(0, Math.min(100, v));
+  const trust = { ...lineup.trust };
+  const outs = new Set();
+  const ins = new Set();
+  for (const e of subs) {
+    if (e.outId !== playerId) outs.add(e.outId);
+    if (e.inId !== playerId) ins.add(e.inId);
+  }
+  for (const id of outs) trust[id] = clamp((trust[id] ?? 20) - 1);
+  for (const id of ins) {
+    const st = matchStatsFor(events, id, myTeam);
+    if (st.kills + st.tipKills + st.blockPoints + st.aces > 0) {
+      trust[id] = clamp((trust[id] ?? 20) + 2);
+    }
+  }
+  return { ...lineup, trust };
 }
 
 const matchIds = ['group-1', 'group-2', 'group-3', 'national-qf', 'national-sf', 'national-final'];
@@ -383,6 +553,11 @@ const perSeason = Array.from({ length: SEASONS }, () => ({
   // 已逼近地板（RUNS=100 的配對 SE ±6pp > 錨 3a 的 3pp 目標間距，排不出方案優劣）。
   natWinsSum: 0,
 }));
+// F1／G6 換血量測（TURNOVER 臂才累積；純記帳）：屆界次數、畢業人次、新生人次、
+// 等候名單遞補人次、來投保底觸發屆數
+const turnoverStats = {
+  boundaries: 0, graduates: 0, freshmen: 0, admitted: 0, walkOn: 0,
+};
 const byTitles = new Map(); // 屆初 titles → { seasons, wins:{matchId:勝}, champions }
 const joinStats = {}; // recruitKey → { joined, seasonSum }
 let rosterEndSizeSum = 0;
@@ -399,9 +574,17 @@ const jsonRuns = []; // VD_JSON：{ seed, seasons:[{ titlesAtStart, wins, champi
 for (let run = 0; run < RUNS; run += 1) {
   const seed0 = 100000 + run * 7919;
   let career = createCareer({ seed: seed0, playerName: '治具' });
-  const player = createCareerPlayer('治具', HEIGHT_CM
-    ? { heightCm: HEIGHT_CM, seed: career.seed }
-    : {});
+  // ★ G3 保真度修復（2026-08-03 治具比對稽核）★ 原本不傳 heightCm ⇒ 吃
+  // `createCareerPlayer` 的**簽名預設 188**。但 production 創角畫面預設是 **175**
+  // （`src/ui/careerScreen.js:1502`），且 W2 拍板明文「**平衡主錨改 175**」
+  // （`docs/phase4-w2-status.md` §B3）⇒ 治具一直在 188 上量、驗收錨卻是在 175 上定的。
+  // 影響方向：188 比 175 強（該檔 §4：175 決賽帶 23%／奪冠 7%；188 決賽帶 30%）
+  // ⇒ 難度被低估。`VD_HEIGHT` 臂照舊可覆寫。
+  // let（非 const）＝G7 身高揭曉要在屆界整份換掉（revealHeightForSeason 回傳新物件）
+  let player = createCareerPlayer('治具', {
+    heightCm: HEIGHT_CM ?? BALANCE_ANCHOR_HEIGHT_CM,
+    seed: career.seed,
+  });
   // W2 名冊管線（鏡像正式路徑）：具名個性化 starter＋逐場表現驅動成長
   // capacity 12＝schema v2 現值（W5 拍板 10→12）
   let roster = { capacity: 12, members: buildStarterMembers() };
@@ -438,6 +621,12 @@ for (let run = 0; run < RUNS; run += 1) {
       },
     };
   }
+  // ★ G11 保真度修復（TURNOVER 包）★ production 的 lineup 是**存檔狀態**
+  // （`schema.js:32`＋`roster.ensureLineup` 落預設陣），一路帶著 trust 跨場跨屆；
+  // 治具原本 lineup=null ⇒ `careerState.js:522-524` 每場現算 defaultLineup、trust 全 20。
+  // 這裡改成建檔時落一份預設陣持有——第 1 屆先發序與現算逐位等價
+  // （招募生一律排在名冊末尾、進不了 defaultStarters＝F2），差別在 trust 有主可跟。
+  if (TURNOVER && !lineup) lineup = defaultLineup(roster.members, 'A2', PLAYER_ROLE);
   // ── 跨屆歸因臂的「第 1 屆初值」快照（只在有開臂時才複製，基準臂零成本）──
   // 玩家：屬性／技術兩份分開存（VD_NO_PCARRY／VD_NO_TCARRY 各自獨立可測）
   const player0 = (NO_PCARRY || NO_TCARRY)
@@ -472,6 +661,9 @@ for (let run = 0; run < RUNS; run += 1) {
     const tGroup = byTitles.get(titlesAtStart);
     tGroup.seasons += 1;
     for (let mi = 0; mi < matchIds.length; mi += 1) {
+      // G1（見 STOP_ON_ELIM 定義處）：止步就收工，與 production 的 nextMatch 一致。
+      // 放在迴圈頂端＝連帶讓下面的 TEACH_BEFORE_FINAL 也跟著不發（沒打到決賽就學不到）。
+      if (STOP_ON_ELIM && careerStage(career) === 'eliminated') break;
       if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
       const entry = career.schedule[mi];
       // seasonIndex 補接（07-30 批4 送裁項 2）：漏傳＝VD_SEASONS 跨屆臂永遠打第 1 屆
@@ -505,6 +697,8 @@ for (let run = 0; run < RUNS; run += 1) {
           // 難度重校卷 08-03：招募歸因臂量到 Δ 恆為 0，下面兩欄是**真實路徑**的證據
           // ——先發＝真的交給 sim 的那六個 id，名冊＝當下人數。招募生若從不出現在
           // 先發欄，就證明「挖角進來的人根本沒上場」（defaultStarters 依名冊序取首位）
+          // G7 驗證用：玩家身高逐屆是否真的揭曉（治具原本三屆不動，見屆界的 G7 修復註）
+          + ` 我身高=${Math.round((player.height?.current ?? 0) * 100)}`
           + ` 先發=${setup.teams.A.map((p) => p.id).join(',')}`
           + ` 名冊=${roster.members.length}`);
       }
@@ -583,6 +777,8 @@ for (let run = 0; run < RUNS; run += 1) {
           members: applyRosterGrowth(roster.members, g.events, 'A', entry.id, season),
         };
       }
+      // G11 後半：賽末換人信任演化（production `matchCareer.js:117-138` 同一顆判準）
+      if (TURNOVER) lineup = applySubTrustMirror(lineup, g.events, 'A', 'A2');
       // 招募鏡像（正式路徑＝settleCareerMatch 累加→renderCareer 入隊，同節拍）；
       // FULL_ROSTER 臂固定名冊不跑（避免與手動注入的 R1-R3 重複入隊）
       if (USE_ROSTER && !USE_FULL_ROSTER) {
@@ -590,7 +786,9 @@ for (let run = 0; run < RUNS; run += 1) {
           opponentId: entry.opponentId, matchId: entry.id, won,
           events: g.events, playerId: 'A2', myTeam: 'A',
         });
-        ({ roster, recruitment } = settleJoinsMirror(roster, recruitment, career.seed, season, joinLog));
+        ({ roster, recruitment, lineup } = settleJoinsMirror(
+          roster, recruitment, career.seed, season, joinLog, lineup,
+        ));
         noteMembers(roster.members); // 新入隊者的「入隊當下」快照（VD_NO_MCARRY 用）
       }
       // scouting 跨場累積（宿敵記憶）；戰績照實記（全國賽輸了也繼續模擬後段取數據）
@@ -615,7 +813,45 @@ for (let run = 0; run < RUNS; run += 1) {
       // 天鷹 72 改掛準決賽。漏傳 ⇒ 治具走預設階梯 ⇒ 第 2 屆決賽仍是天鷹 72
       // ⇒ **治具的第 2 屆比真實遊戲難**，量到的第 2 屆奪冠率是**低估**。
       // 這個缺口由跨屆難度因果分解 agent 發現（F4），本檔的三屆量測全部受影響、已重跑。
+      const seedBeforeAdvance = career.seed; // ＝production RMW 讀到的 prev.season.seed
       career = advanceSeason(career, { seasonIndex: season + 1 });
+      // ★ F1／G6／G11 保真度修復 ★ production 的屆界不只換賽程——同一次 RMW 還做了
+      // 畢業換血＋等候遞補＋來投保底＋預設陣重排（`careerStore.js:169-257`）。
+      // 治具整段沒有 ⇒ grade 3 的大山／阿烈打滿三屆、名冊只進不出、trust 永遠 20。
+      if (TURNOVER) {
+        let turnover;
+        ({ roster, recruitment, lineup, turnover } = applyTurnoverMirror({
+          roster,
+          recruitment,
+          lineup,
+          endingSeason: season,
+          oldSeed: seedBeforeAdvance,
+          newSeed: career.seed,
+          playerRole: PLAYER_ROLE,
+        }));
+        // 換血量測（純記帳，不進模擬）：證明這條路真的有咬合，並量 G6 兩條分支的觸發率
+        turnoverStats.boundaries += 1;
+        turnoverStats.graduates += turnover.graduates.length;
+        turnoverStats.freshmen += turnover.freshmen.length;
+        turnoverStats.admitted += (turnover.admitted ?? []).length;
+        if (turnover.walkOn) turnoverStats.walkOn += 1;
+        // 等候名單遞補者＝挖角成功只是慢了一屆 ⇒ 記進招募流動統計（入隊屆＝下一屆）
+        for (const key of recruitment.recruited) {
+          if (!joinLog.some((j) => j.key === key)) joinLog.push({ key, season: season + 1 });
+        }
+        noteMembers(roster.members); // 新生／來投者的「入隊當下」快照（VD_NO_MCARRY 用）
+      }
+      // ★ G7 保真度修復（掛 VD_FAITHFUL，與 F1 同一組屆界鏡像）★
+      // production 在同一次 RMW 揭曉下一屆身高（`careerStore.js:227`
+      // `revealHeightForSeason`）——曲線在創角時就預生成在 `player.height.plan`，
+      // 屆界只是揭曉。治具整段沒有 ⇒ **玩家三屆身高不動**。
+      // ★ 這是全清單裡**唯一逐屆放大且方向相反**的漏項★：G1/F1/G4/G5 都讓治具高估玩家隊
+      // （修好＝難度上升），只有本項是低估玩家（修好＝難度下降）。
+      // ⇒ 補 F1 而不補它會**過度校正**，兩者必須一起進基準。
+      if (FAITHFUL) {
+        const revealed = revealHeightForSeason(player, season + 1);
+        if (revealed.reveal) player = revealed.player;
+      }
       // ── 跨屆歸因臂：屆界切斷（全關＝下面整段是 no-op，基準臂逐值不變）──
       if (NO_PCARRY) player.attributes = { ...player0.attributes };
       if (NO_TCARRY) player.techniques = { ...player0.techniques };
@@ -748,6 +984,15 @@ if (SEASONS > 1) {
     const p = (n) => `${Math.round((n / gp.seasons) * 100)}%`.padStart(4);
     const row = matchIds.map((id) => p(gp.wins[id])).join(' ');
     console.log(`titles=${t}（${String(gp.seasons).padStart(4)} 屆） ${row}  奪冠 ${p(gp.champions)}`);
+  }
+  if (TURNOVER) {
+    const per = (n) => (n / Math.max(1, turnoverStats.boundaries)).toFixed(2);
+    console.log('\n=== 屆末換血（F1／G6；production careerStore.advanceSeason 鏡像）===');
+    console.log(`屆界 ${turnoverStats.boundaries} 次｜畢業 ${turnoverStats.graduates} 人次（${per(turnoverStats.graduates)}/屆）`
+      + `｜新生 ${turnoverStats.freshmen} 人次（${per(turnoverStats.freshmen)}/屆）`);
+    console.log(`等候名單遞補 ${turnoverStats.admitted} 人次（${per(turnoverStats.admitted)}/屆）`
+      + `｜來投保底觸發 ${turnoverStats.walkOn} 次`
+      + `（${(turnoverStats.walkOn / Math.max(1, turnoverStats.boundaries) * 100).toFixed(1)}% 的屆界）`);
   }
   if (USE_ROSTER && !USE_FULL_ROSTER) {
     console.log('\n=== 招募跨屆流動（打好打滿＝上緣；逐出未建模）===');
