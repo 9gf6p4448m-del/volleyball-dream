@@ -1255,9 +1255,27 @@ function decideOne(game, aiState, playerId) {
     // （撲回自家二傳點＝白送第 4 擊犯規）。
     // roll 吃 flightId＝一個 flight 只決定一次（撲/不撲固定，非每 tick 骰）；倒地 42tick
     // 代價＋diveRate<1 是「球不落地不結束」與「rally 不爆長」的平衡閘
+    // ★ 2026-08-03 收斂殘留清算（難度重校卷 題 C，Sawmah 拍板「全部併入、排在調參之前」）★
+    // 這兩條閘原本寫死 `TUNING.REACH_RADIUS`(1.3)＝**基準 A 的舊值**。`CONVERGE_T` 已收斂到
+    // 1.0（`constants.js:41`），真實可及改由 `reachRadiusFor` 決定 ⇒ 兩端都與實情脫鉤：
+    //   ・**下界** 1.3 遠寬於真實接球可及（0.38×身高≈0.665）⇒ (0.77, 1.30] 這段
+    //     「站著搆不到、又不觸發魚躍」＝**放生帶**（實測 2.94% 的防守低球窗無人處理）
+    //   ・**上界** 1.3×DIVE_REACH_MUL=2.34 遠於真實魚躍可及 2.0（`DIVE_REACH_TARGET_M`）
+    //     ⇒ 撲了搆不到＝**撲空**（實測 27.69%，`CONVERGE_T=0` 對照僅 0.88%），
+    //     每次代價 42 tick 倒地＋體力。**上界的量級是下界的約 6 倍**。
+    // P0 對齊修當時明文「嚴門檻與魚躍閘不動」（`phase5-section10-convergence.md:808`）
+    // ⇒ 這是**已知債**、不是遺漏；本卷把它還掉。
+    // 兩者方向相反（補下界讓 rally 變長、補上界讓它變短）⇒ **必須一起改**，分開做會各自
+    // 把難度推向一邊。裁決書＝`docs/kickoffs/dive-gap-verdict.md`。
+    // ★ 對抗審查 MEDIUM-5 修正 ★ 下界一度寫成 `aiReachFor(player, r.touches)`＝
+    // 依觸數取 RECEIVE/SET/SPIKE。**錯的**：本閘的前提是 `ball.y ≤ DIVE_MAX_Y`(1.15)，
+    // 而 SET 手點在 1.03H(1.80m)、SPIKE 手點在 spikeReach(2.92m)——那種高度的可及體
+    // 根本罩不到 1.15m 以下的球（實測第三觸低球 sim 端「任何水平距離都搆不到」）。
+    // 且 `chooseTouch` 對低球一律回 `'receive'`（本檔函式尾端的 fallback）
+    // ⇒ 真正生效的是 RECEIVE 可及體，下界就必須用 RECEIVE 半徑。
     if (ball.vy < 0 && ball.y <= TUNING.DIVE_MAX_Y
-      && dist > TUNING.REACH_RADIUS
-      && dist <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL
+      && dist > reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, player?.height?.current ?? null)
+      && dist <= reachRadiusFor(REACH_ACTION.DIVE, TUNING, player?.height?.current ?? null)
       && game.tick >= actor.divedUntil
       && (player.techniques?.dive ?? 1) >= 1) {
       const { diveRate } = aiProfileOf(game, team);

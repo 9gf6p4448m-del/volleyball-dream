@@ -10,7 +10,9 @@ import {
 import {
   createPlayer, spikeReach, blockReach, blockTopEdge, moveSpeed, feintMasteryMul,
 } from './player.js';
-import { reachVolumeFor, ballInReach } from './reach.js';
+import {
+  reachVolumeFor, ballInReach, reachRadiusFor, REACH_ACTION,
+} from './reach.js';
 // 攔網時序卷 段 1：攔網接觸資格＝物理滯空，界線沿用 sim 既有的滯空窗定義
 // （＝TUNING.TAKEOFF_LOOKBACK_TICKS，也是 blockTopEdge 判「手回站立摸高」用的同一條線）
 import { AIR_TICKS } from './approach.js';
@@ -593,8 +595,16 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   // 接球品質＝到位程度（dist：走到球正下方＝穩、勉強搆＝飄）×控制屬性×Perfect 時機×
   // 來球難度。魚躍一律用正常 reach 算到位比例＝r 恆偏大＝勉強救起（撲救本就飄）
   // W7 B1：氣勢進散佈（全動作一致；氣勢差＝手緊＝散佈/失誤率微升，±封頂 8%）
+  // ★ 2026-08-03 收斂殘留清算 #4（難度重校卷 題 C）★ 第二參數是「到位程度」的**分母**，
+  // 原本寫死 `TUNING.REACH_RADIUS`(1.3)＝基準 A 舊值。`CONVERGE_T` 收斂到 1 後真實接球
+  // 可及是 0.38×身高（175cm ⇒ 0.665）⇒ `r = dist/reach` 被**系統性低估**：
+  // 一顆 dist=0.6 的球實際已在可及邊緣（0.90），卻被算成 0.46「還算到位」。
+  // 後果＝全體（雙方）接球品質被高估，且 r 的值域被壓在 [0, 0.51] ⇒ 位置修正乘數
+  // 只用到 [0.9, 1.002]（設計值域是 [0.9, 1.1]）＝「走位深度」這個設計維度**幾乎沒在作用**。
+  // 上一行註解「魚躍一律用正常 reach 算到位比例」的設計意圖不變——魚躍的 dist 遠大於
+  // 接球可及，`receiveQualityMul` 內部 `Math.min(1, …)` 仍把它夾成 r=1（勉強救起）。
   const qualityMul = (isReceiveLike
-    ? receiveQualityMul(dist, TUNING.REACH_RADIUS, player) * receivePerfectMul(rawT)
+    ? receiveQualityMul(dist, receiveReachOf(player), player) * receivePerfectMul(rawT)
       * serveRecvMul * staminaRecvMul(state, player) // W7 A2：重度疲勞手軟（餵爆接湧現）
     : intent.action === 'spike'
       // W4 題5：要球者的甜蜜區微放寬（callPid＝本波要球者；非傷害加成、只放時機窗）
@@ -943,6 +953,20 @@ export function receivePerfectMul(t) {
 // 自由人最高＝接球最好；次要＝到位程度（走到球正下方微獎、勉強搆微罰）。取代舊「觸球
 // 高度」判準——低姿勢墊球不再冤枉。技術主導的理由：實測 AI 接球 dist≈1.1 不分角色
 // （球進範圍就接），純到位既無法讓自由人突出、又會全隊崩盤（見 TUNING.RECV_* 註）。
+/**
+ * 接球「到位程度」的**分母**——單一具名來源。
+ *
+ * ★ 為什麼要抽成具名 export（對抗審查 HIGH-3）★
+ * 這個分母原本直接寫在呼叫端（`TUNING.REACH_RADIUS`，基準 A 舊值 1.3）。清算改對之後，
+ * 審查指出**沒有任何測試能抓到它被改回去**——`tests/mechanics.test.mjs:181/190` 測的是
+ * `receiveQualityMul` 這個純函式本身、分母由測試自己傳入，呼叫端傳什麼它都不知道。
+ * 抽成具名函式之後，「分母該是什麼」變成一條可斷言的契約
+ * （守門測試＝`tests/mechanics.test.mjs` 的「接球到位程度的分母必須是收斂後的可及半徑」）。
+ */
+export function receiveReachOf(player) {
+  return reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, player?.height?.current ?? null);
+}
+
 export function receiveQualityMul(dist, reach, player) {
   const a = player.attributes;
   const skill = (a.control + a.reaction) / 2; // 接球技術

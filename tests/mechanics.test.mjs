@@ -6,8 +6,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createGame, stepGame, receiveQualityMul, timingQualityMul,
-  receivePerfectMul, TUNING,
+  receivePerfectMul, receiveReachOf, TUNING,
 } from '../src/sim/game.js';
+import { REACH_ACTION, reachRadiusFor, RECEIVE_REACH_H_RATIO } from '../src/sim/reach.js';
 import {
   createPlayer, standingReach, blockReach, blockTopEdge,
 } from '../src/sim/player.js';
@@ -175,6 +176,32 @@ test('Perfect 接球：timing≥0.95 一傳更準；AI 基準 0.75 拿不到', (
   assert.equal(receivePerfectMul(0.95), TUNING.PERFECT_RECV_ACC);
   assert.equal(receivePerfectMul(0.75), 1);
   assert.equal(receivePerfectMul(0.6), 1);
+});
+
+// ★ 對抗審查 HIGH-3 補的守門測試（2026-08-03 收斂殘留清算 #4）★
+// 本檔下面兩條既有測試把分母**自己傳進去**（`const reach = TUNING.REACH_RADIUS`），
+// 所以它們測的是 `receiveQualityMul` 這個純函式，**呼叫端傳什麼都不知道**
+// ⇒ 清算把 `game.js` 呼叫端的分母從 1.3 改成收斂後可及時，1005 條測試沒有一條會轉紅。
+// 這條測試守的就是那個缺口：分母的**來源**必須是收斂後的可及半徑，不是基準 A 的 1.3。
+test('接球到位程度的分母＝收斂後的可及半徑（不得退回基準 A 的 REACH_RADIUS）', () => {
+  const p = createPlayer({
+    id: 'R', name: 'r', teamId: 'A', height: 1.75, attributes: { control: 66, reaction: 62 },
+  });
+  const got = receiveReachOf(p);
+  // ① 與單一真相逐值相同
+  assert.equal(got, reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, 1.75));
+  // ② 就是「身高 × RECEIVE 比例」（CONVERGE_T=1 時）
+  assert.ok(Math.abs(got - RECEIVE_REACH_H_RATIO * 1.75) < 1e-9,
+    `分母 ${got} 不等於 0.38×身高＝收斂目標值`);
+  // ③ ★鑑別力★ 必須明顯**小於**基準 A 的 1.3——這一行就是「被改回去會轉紅」的那道閘
+  assert.ok(got < TUNING.REACH_RADIUS * 0.6,
+    `分母 ${got} 太接近基準 A 的 ${TUNING.REACH_RADIUS}＝疑似退回舊值`);
+  // ④ 值域用滿：在可及邊緣接球時到位修正必須吃到滿罰（r=1），
+  //    分母若退回 1.3 這裡只會拿到 r≈0.51 的半量程
+  const edge = receiveQualityMul(got, got, p);
+  const onpoint = receiveQualityMul(0, got, p);
+  assert.ok(edge / onpoint > 1.2,
+    `可及邊緣/正下方＝${(edge / onpoint).toFixed(3)}，未用滿 [0.9,1.1] 值域＝分母偏大`);
 });
 
 test('接球品質吃技術屬性：高 control+reaction 球員接球明顯較準（自由人最強）', () => {

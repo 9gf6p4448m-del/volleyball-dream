@@ -9,6 +9,9 @@ import {
 } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
+// 收斂殘留清算（難度重校卷 題 C）：玩家端的魚躍三閘原本讀 TUNING.REACH_RADIUS(1.3)＝
+// 基準 A 舊值，與收斂後的真實可及脫鉤。改向單一真相取值，與 AI 端（ai.js 同一組條件）一致。
+import { REACH_ACTION, reachRadiusFor, RECEIVE_HANDPOINT_H_RATIO } from '../sim/reach.js';
 import { predictLanding } from '../sim/flight.js';
 import { attackZonesFor, crossingXOf } from './attackZones.js';
 import { setOptionsFor } from './setOptions.js';
@@ -55,7 +58,13 @@ export function mbMomentFor(game, playerId) {
   // 「攔網站位全交玩家」的拍板下，站位就是退防意圖的唯一可讀訊號（顯式選單已收）
   return Math.abs(game.actors[playerId].z) < NEAR_NET_Z;
 }
-const AUTO_RECEIVE_DIST = TUNING.REACH_RADIUS * 0.9;
+// ★ 2026-08-03 收斂殘留清算 #5 ★ 原本是模組常數 `TUNING.REACH_RADIUS * 0.9` ＝ 1.17m，
+// 但收斂後真實接球可及只有 0.38×身高（175cm ⇒ 0.665）⇒ 玩家在 0.665–1.17m 這段會觸發
+// 「走位到位自動接發」、實際卻搆不到 ＝ **空揮**。改成逐球員計算（係數 0.9 的設計意圖不變：
+// 可及半徑的九成內才自動觸發，留一點邊界不搶主動操作）。
+const AUTO_RECEIVE_MUL = 0.9;
+const autoReceiveDistOf = (player) => AUTO_RECEIVE_MUL
+  * reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, player?.height?.current ?? null);
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
 const JUMP_WINDOW_MS = 900;  // 放開＝起跳揮擊後的出手有效窗
@@ -85,16 +94,21 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
 
   // W6.1 落點閘（拍板 07-24 Q3-A）：自動魚躍原判定式吃「瞬時球距」——朝我飛來的
   // 低球會在 dist>1.3 時觸發、球其實落在腳邊（探針 456 樣本 16% 誤撲、9% 落點 ≤0.9m）。
-  // 加閘＝預測落點仍在站立可及（REACH_RADIUS）內就不撲，等球到腳邊普通接。
+  // 加閘＝預測落點仍在站立可及內就不撲，等球到腳邊普通接。
   // 落點逐 flight 快取（彈道不變）；預測不到落地（理論罕見）＝放行維持原行為。
   // 只動玩家自動魚躍（輸入層）；AI 有走位深度天然少誤撲，sim 不動＝balance 零擾動
-  const diveLandingOutOfReach = (game, actor) => {
+  // ★ 2026-08-03 題 C 清算：判準從 TUNING.REACH_RADIUS(1.3) 改為該球員**當前動作**的
+  // 真實可及半徑。用 1.3 會把「其實站著搆不到」的球判成「等它到腳邊就好」⇒ 不撲 ⇒ 落地。
+  const diveLandingOutOfReach = (game, actor, player) => {
     if (diveLand.flightId !== game.rally.flightId) {
       diveLand = { flightId: game.rally.flightId, landing: predictLanding(game.ball) };
     }
     const L = diveLand.landing;
     if (!L) return true;
-    return Math.hypot(L.x - actor.x, L.z - actor.z) > TUNING.REACH_RADIUS;
+    const action = game.rally.touches === 0 ? REACH_ACTION.RECEIVE
+      : game.rally.touches === 1 ? REACH_ACTION.SET : REACH_ACTION.SPIKE;
+    const reach = reachRadiusFor(action, TUNING, player?.height?.current ?? null);
+    return Math.hypot(L.x - actor.x, L.z - actor.z) > reach;
   };
 
   window.addEventListener('keydown', (e) => {
@@ -167,7 +181,12 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       const me = lastGame.players[playerId];
       const a = lastGame.actors[playerId];
       const b = lastGame.ball;
-      const near = Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * 1.1;
+      // ★ 2026-08-03 收斂殘留清算 #6 ★ 原本 `TUNING.REACH_RADIUS * 1.1` ＝ 1.43m，
+      // 遠寬於收斂後的真實接球可及（0.665）⇒ 玩家**在搆不到的距離按下去也判 perfect**
+      // （timing 1.0），一傳品質被系統性高估。係數 1.1 的設計意圖不變（可及邊緣再放寬一成）。
+      // ⚠ 這會讓玩家的一傳品質**下降**，是體感輪必須先知道的變化。
+      const near = Math.hypot(b.x - a.x, b.z - a.z)
+        <= reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, me?.height?.current ?? null) * 1.1;
       timing = near && b.vy < 0 && b.y <= standingReach(me) + 0.6 ? 1 : 0.7;
     }
     queuedAction = {
@@ -417,8 +436,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         const canTouch = r.touches < 3 &&
           !(r.profile === 'serve' && r.lastTouchTeam === me.teamId) &&
           r.lastToucherId !== playerId;
-        const near = Math.hypot(b.x - a.x, b.z - a.z) <= AUTO_RECEIVE_DIST;
-        const reachable = near && b.vy < 0 && b.y <= standingReach(me) + 0.3;
+        const near = Math.hypot(b.x - a.x, b.z - a.z) <= autoReceiveDistOf(me);
+        // ★ 對抗審查 MEDIUM-4 修正 ★ 垂直閘原本是 `standingReach(me) + 0.3`
+        // ＝1.31H+0.3（175cm ⇒ **2.59m**），那是基準 A 舊圓柱模型的垂直帶。
+        // 收斂後 RECEIVE 可及體的頂點＝手點 0.43H(0.752) ＋ 半徑(0.665) ＝ **1.417m**
+        // ⇒ 球在 (1.417, 2.59] 且水平夠近時，這裡判「搆得到」而 sim 的 ballInReach 判不到
+        // ＝**空揮**。#5 只修了水平半軸，病灶會原封不動搬到垂直軸上，兩軸要一起修。
+        const recvReach = reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, me?.height?.current ?? null);
+        const reachTopY = RECEIVE_HANDPOINT_H_RATIO * (me?.height?.current ?? 1.75) + recvReach;
+        const reachable = near && b.vy < 0 && b.y <= reachTopY;
         const claimedToMe = aiState?.claimId === playerId;
         // 攔網情境不自動墊（07-27 Sawmah 試玩抓包：貼網站位時，對手扣球過網瞬間
         // 球權翻面＋觸球歸零，「到位自動接」搶在攔網體系前把球墊掉＝攔網變接球）：
@@ -455,9 +481,18 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
             (aiState?.claimId === playerId || aiState?.backupId === playerId) &&
             (me.techniques?.dive ?? 0) >= 1 &&
             b.vy < 0 && b.y <= TUNING.DIVE_MAX_Y && tick >= a.divedUntil &&
-            Math.hypot(b.x - a.x, b.z - a.z) > TUNING.REACH_RADIUS &&
-            Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * TUNING.DIVE_REACH_MUL &&
-            diveLandingOutOfReach(game, a)) {
+            // ★ 題 C 清算（與 ai.js 的魚躍閘同一組判準，兩端必須一起改）★
+            // 下界：站立真的搆不到才撲（原本用 1.3 ⇒ 放生帶）
+            // 上界：撲得到才撲（原本用 1.3×MUL=2.34 > 真實 2.0 ⇒ 撲空 27.69%）
+            // 玩家端**必撲不擲骰**，所以這兩條的誤差對真人是 100% 生效，比 AI 端更痛。
+            // ★ 對抗審查 MEDIUM-5 修正 ★ 與 ai.js 同步：下界一律用 RECEIVE 半徑。
+            // 低球（y ≤ DIVE_MAX_Y 1.15）在 sim 端一律走 receive 可及體，
+            // 依觸數取 SET/SPIKE 會用 1.80m／2.92m 手點的半徑去量 1.15m 以下的球＝放生帶。
+            Math.hypot(b.x - a.x, b.z - a.z)
+              > reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, me?.height?.current ?? null) &&
+            Math.hypot(b.x - a.x, b.z - a.z)
+              <= reachRadiusFor(REACH_ACTION.DIVE, TUNING, me?.height?.current ?? null) &&
+            diveLandingOutOfReach(game, a, me)) {
           // 自動魚躍（拍板 07-24：常駐鈕太難用→撤除、改自動判斷）：與 AI 同一組
           // 觸發條件（這球歸我/備援＋站立搆不到＋魚躍可及＋低球下墜），但玩家版
           // 【必撲】不擲骰——機率會變「角色不聽話」；技術表達回到站位（站得好不用撲）。
