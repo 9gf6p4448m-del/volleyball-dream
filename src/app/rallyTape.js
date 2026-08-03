@@ -31,7 +31,7 @@ export const TAPE_VERSION = 2;
 //     為結果加欄位。
 // 卷五（2026-08-02 裁定 1）：`calledPlay`（路徑甲・死球窗）已隨入口退場而移除。
 const PLAYER_AI_FIELDS = [
-  'digBias', 'attackerId', 'attackKind', 'counterRead', 'replanCall',
+  'digBias', 'blockCall', 'attackerId', 'attackKind', 'counterRead', 'replanCall',
 ];
 
 // 發球前保留的 tick 數（1 秒）：更早的等哨時間逐秒重照快照丟掉——一顆球的戲

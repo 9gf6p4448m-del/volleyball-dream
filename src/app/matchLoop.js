@@ -793,6 +793,11 @@ function updateDecisions(s, now) {
   // W3 L：digBias 生命週期——我方第一觸之後/死球＝指令歸零（一次指揮只管一次對手
   // 攻擊）。注意：攻擊過網瞬間 possession 即翻到我方（touches=0、profile 仍 spike）
   // ——此時指令必須還活著（Perfect 窗在我方起球當下才結算），不得提前清
+  // 攔網手的封線指令與 digBias 同壽（同一個生命週期，2026-08-03 裁定乙）
+  if (aiState.blockCall && (game.phase !== 'rally'
+    || game.rally.possession === aiState.blockCall.team)) {
+    aiState.blockCall = null;
+  }
   if (aiState.digBias && (game.phase !== 'rally'
     || (game.rally.possession === game.players[s.controlledId]?.teamId
       && game.rally.touches >= 1))) {
@@ -959,12 +964,23 @@ function updateDecisions(s, now) {
       .map((l) => `🏃${l.label.slice(1, 2)}`).join(' ');
     panel.show(
       `${mbPanelTitle(mbRead.tier)}${tells ? `　${tells}` : ''}`,
-      [{ key: 'jump-now', label: '🧱 起跳攔網', color: 'orange' }],
-      () => {
-        // 07-27 四輪（Sawmah：字卡太多以體驗為主）：起跳確認浮字移除——
-        // 你自己按的鈕零資訊量；結果真值卡（賭對/早了）才是 MB 身分核心，保留
-        controls.chooseMbTiming(true);
-        s.mbCommit = { jumped: true };
+      // ★ 2026-08-03 Sawmah 裁定乙：這個面板改問「封哪邊」，不再問「何時跳」★
+      // 起跳交回自動跳攔——實測（tools/block-timing-oracle-probe.mjs，10 臂）證明
+      // 時機軸上沒有可贏的區間：最佳臂（開天眼、擊球前 3 tick）只有 +0.82pp（0.44 SE），
+      // 按早 ≥12 tick 一律顯著變差（−6.2～−13.7pp）。機制原因：blockTopEdge 是
+      // sin(airT·π/24)、頂點在 airT=12，而自動跳攔結算時 airT p50=6 已在甜蜜帶
+      // ⇒ 按鈕只能把跳躍**提前**，提前一律遠離頂點。
+      // 換成封線之後，玩家管的是實測**完全沒被碰過**的橫向維度，而取捨、地板影子、
+      // 讀對/讀反字卡全都是 L 配套（liberoRead.js）現成的。
+      [
+        { key: 'block-line', label: '🧱 封直線', color: 'orange', line: 'line' },
+        { key: 'block-cross', label: '🧱 封斜線', color: 'orange', line: 'cross' },
+      ],
+      (it) => {
+        aiState.blockCall = { team: game.players[s.controlledId].teamId, line: it.line };
+        // 不再送出「立即起跳」——起跳交給自動跳攔（就位後在擊球瞬間開窗）
+        controls.chooseMbTiming(false);
+        s.mbCommit = { jumped: false, line: it.line };
       },
       null,
       'low',

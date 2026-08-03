@@ -1344,7 +1344,16 @@ function decideOne(game, aiState, playerId) {
     // W4(P4) 附錄 B-1：L 配套的攔網手站線（blockScheme——digBias 同一指令的前排半）。
     // 'off'（攔手讓開・收吊球）＝前排退攻擊線一帶補吊球、不開攔網窗（賭吊球的語意）；
     // 站線幾何自然改變攔網涵蓋——攔網數值零特例
-    const scheme = aiState.digBias?.team === team ? aiState.digBias.block : undefined;
+    // ★ 2026-08-03 Sawmah 裁定乙：**現場執行者說了算** ★
+    // 牆是攔網手在砌，往哪封該由他決定；L 的配套退成**後備**（他沒下就照 L 的）。
+    // 這反轉了 W4(P4) 附錄 B-1「一個指令同時驅動牆與地板」那條 4-1 拍板 A——
+    // 反轉理由＝實測（tools/block-timing-oracle-probe.mjs）證明攔網按鈕問「何時跳」
+    // 在時機軸上沒有可贏的區間（連開天眼都只有 +0.82pp／0.44 SE），
+    // 而橫向維度 |A2.x − ball.x| 全臂 p50 都是 0.69–0.75、完全沒被那顆按鈕碰過。
+    // ⚠ 目前只有**玩家**攔網手寫得出 blockCall；AI 攔網手仍照 L 的配套走
+    //   ⇒ AI 對局逐值不變（sim-hash 可證）。AI 自己決定封線屬後續另量。
+    const scheme = (aiState.blockCall?.team === team ? aiState.blockCall.line : undefined)
+      ?? (aiState.digBias?.team === team ? aiState.digBias.block : undefined);
     // ==== B1-SCAN-BEGIN（工單 §6 反作弊掃描區：本區內不得出現 attackerId）====
     // §十-2 三段狀態機的錨點。**本分支自此以下零 `game.ball.x`**（工單 §11-5 可 grep 驗）：
     // 改制前這裡是 `clampCourtX(game.ball.x + laneOff)`——攔網手逐 tick 直接追球的 x，
