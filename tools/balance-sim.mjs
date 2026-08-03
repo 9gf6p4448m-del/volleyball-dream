@@ -31,7 +31,7 @@ import { defaultLineup } from '../src/career/lineup.js';
 import {
   digSuggestionFor, schemeByKey, schemeForDig, noteScheme, counterReadOf,
 } from '../src/input/liberoRead.js';
-import { opponentById } from '../src/career/opponents.js';
+import { opponentById, OPPONENTS } from '../src/career/opponents.js';
 import { boxScoreLFor } from '../src/career/boxScoreL.js';
 
 const RUNS = Number.parseInt(process.argv[2] ?? '100', 10);
@@ -87,6 +87,65 @@ if (process.env.VD_NO_BREAK_RECOV === '1') STAMINA.RECOV_SET_BREAK = 0; // 治�
 // 反讀量測用——對宿敵場另記 suggest/omni 差＝反讀對改判空間的制衡量化）
 const USE_RIVAL = process.env.VD_RIVAL === '1';
 if (USE_RIVAL) opponentById('sky-hawk').ace.rival = true;
+// ═══ 難度重校卷 · 跨屆歸因臂（2026-08-03）═══════════════════════════════════
+// 問題：二三屆奪冠率 5%→17%→35%，各驅動力各貢獻多少？
+// 手法：**屆間切斷某一條跨屆帶入**（不是關掉該系統）——每屆「屆內」照常運作，
+//   只在 advanceSeason 之後把該項倒回第 1 屆初值。這樣設計的好處是
+//   **第 1 屆逐 seed 必然全等於基準臂**（自驗閘：Δ第1屆 ≠ 0 就是臂寫壞了）。
+// 全部預設關閉；一格 src/ 未動，開關只作用在本治具的屆界。
+//
+// VD_NO_PCARRY=1  切斷「玩家屬性」跨屆帶入：每屆開頭把 player.attributes 倒回創角初值
+//                 （屆內仍照 growthPointsFor 實算成長；只是不累積到下一屆）
+// VD_NO_TCARRY=1  切斷「玩家技術」跨屆帶入：每屆開頭清空 techniques（tip/dive/pipe/
+//                 feint/floatServe/jumpServe 照 TEACH 時程在該屆重新解鎖）
+// VD_NO_MCARRY=1  切斷「隊友屬性成長」跨屆帶入：每屆開頭把名冊成員整個物件倒回
+//                 「入隊當下」的快照（含 growth.xp/log/grade），成員名單本身不動
+// VD_NO_RCARRY=1  切斷「招募」跨屆帶入：每屆開頭把招募入隊的成員移出名冊、
+//                 recruitment 進度歸零（＝每屆都從純 starter 名冊重新招募）
+// VD_NO_SCARRY=1  切斷「情蒐／宿敵記憶」跨屆帶入：每屆開頭清空 career.scouting
+//                 （對手讀我的 scoutRead 每屆從零累積）
+// VD_FREEZE_OPP=1 凍結「對手的屆數效應」：careerMatchSetup 的 seasonIndex 恆傳 1
+//                 ⇒ applySeasonRoster 不跑（ace 畢業遞補、成長型 ace 逐屆加成全不生效）
+// VD_FIXED_SCHED=1 凍結賽程：每屆沿用第 1 屆的賽程項（消掉小組輪抽＋保底債造成的
+//                 對手變化；prework §三 記載的 group-3 天鷹效應由此臂量化）
+// VD_NO_CARRY=1   以上七項全開（合計臂；titles 不在此列——它讓後屆變難不是變簡單，
+//                 覆蓋率另由 VD_JSON 的 titlesAtStart 欄位回答）
+const ALL_OFF = process.env.VD_NO_CARRY === '1';
+const NO_PCARRY = ALL_OFF || process.env.VD_NO_PCARRY === '1';
+const NO_TCARRY = ALL_OFF || process.env.VD_NO_TCARRY === '1';
+const NO_MCARRY = ALL_OFF || process.env.VD_NO_MCARRY === '1';
+const NO_RCARRY = ALL_OFF || process.env.VD_NO_RCARRY === '1';
+const NO_SCARRY = ALL_OFF || process.env.VD_NO_SCARRY === '1';
+const FREEZE_OPP = ALL_OFF || process.env.VD_FREEZE_OPP === '1';
+const FIXED_SCHED = ALL_OFF || process.env.VD_FIXED_SCHED === '1';
+// VD_JSON=<路徑>＝把逐 run／逐屆的結果落檔（配對分析用；不影響模擬）。
+// 各臂 seed 序列相同（100000+run*7919）⇒ 依 run 索引即為同種子配對。
+const JSON_OUT = process.env.VD_JSON ?? null;
+// 難度重校卷（工單前置）：VD_LEVEL_DELTA=N＝全部對手 level 統一 +N（可負）。
+// 只在治具端就地改寫已載入的 OPPONENTS 陣列（同 VD_RIVAL 手法，非改 src 檔案）；
+// 均勻位移不影響 schedule.js 依 level 排序的相對順序，量測「level 每 +1 值多少勝率」用。
+const LEVEL_DELTA = Number.parseInt(process.env.VD_LEVEL_DELTA ?? '0', 10);
+if (LEVEL_DELTA) {
+  for (const o of OPPONENTS) o.level += LEVEL_DELTA;
+}
+// 難度重校卷 題 A（A2「對手隨屆成長」候選規則的實測臂）：
+//   VD_LEVEL_RAMP="0,2,4" ＝逐屆 delta 列表（第 1 屆 +0、第 2 屆 +2、第 3 屆 +4）。
+// ★ 為什麼需要這支臂、不能拿 VD_LEVEL_DELTA 的結果組合 ★
+// `VD_LEVEL_DELTA` 是**全屆統一位移**，它的「第 2 屆」是在「第 1 屆也被加難」的前提下
+// 打出來的——玩家的贏球場次／成長點／招募進度都不同 ⇒ 兩者的第 2 屆**不是同一件事**。
+// 逐屆遞增必須自己實測（`02 §6.1` 條 4：重建的組合不得用於否證）。
+// 允許小數（level 是全屬性基準值，非門檻——`opponents.js:38` 已明文攔網人格與 level 脫鉤；
+// `schedule.js` 只用它排序，小數不影響相對順序）。
+const LEVEL_RAMP = (process.env.VD_LEVEL_RAMP ?? '')
+  .split(',').map((s) => Number.parseFloat(s.trim())).filter((v) => Number.isFinite(v));
+const RAMP_BASE = LEVEL_RAMP.length ? new Map(OPPONENTS.map((o) => [o.id, o.level])) : null;
+// 每屆開打前把 level 重設為「原始值 + 該屆 delta」（冪等，逐場呼叫也安全）。
+// 超出列表長度的屆沿用最後一項＝加成封頂，不會無限外插。
+function applyLevelRamp(season) {
+  if (!RAMP_BASE) return;
+  const d = LEVEL_RAMP[Math.min(season, LEVEL_RAMP.length) - 1];
+  for (const o of OPPONENTS) o.level = RAMP_BASE.get(o.id) + d;
+}
 function hash01(n) {
   let x = Math.imul(n | 0, 2654435761);
   x ^= x >>> 16;
@@ -315,6 +374,14 @@ let fullDistanceGames = 0; // 打滿場數（bo5＝五局打滿）
 const perSeason = Array.from({ length: SEASONS }, () => ({
   wins: Object.fromEntries(matchIds.map((id) => [id, 0])),
   champions: 0,
+  // 難度重校卷 題 B（2026-08-03 Sawmah 拍板「改用逐屆決賽帶」）：
+  // 原本只有第 1 屆有決賽帶（`reachedFinal` 被包在 `if (season === 1)` 裡）⇒
+  // 四個逐屆候選方案量出來的決賽帶**全是 38%**，對「逐屆」方案零解析力。
+  reachedFinal: 0,
+  // natWinsSum＝國賽三場的累計勝場數（0–3）總和 ⇒ 除以 RUNS 得平均。
+  // ★這是**連續量**，解析力遠優於「三連勝」的二元奪冠率★——奪冠率在現行難度下
+  // 已逼近地板（RUNS=100 的配對 SE ±6pp > 錨 3a 的 3pp 目標間距，排不出方案優劣）。
+  natWinsSum: 0,
 }));
 const byTitles = new Map(); // 屆初 titles → { seasons, wins:{matchId:勝}, champions }
 const joinStats = {}; // recruitKey → { joined, seasonSum }
@@ -327,9 +394,11 @@ let rosterEndSizeSum = 0;
 //                     檔案存在   ⇒ 載入並逐 seed 相減，報 Δ 與配對 SE
 const PAIRED_FILE = process.env.VD_PAIRED ?? null;
 const perRun = []; // { seed, wins:{matchId:0|1}, champion:0|1 }
+const jsonRuns = []; // VD_JSON：{ seed, seasons:[{ titlesAtStart, wins, champion }] }
 
 for (let run = 0; run < RUNS; run += 1) {
-  let career = createCareer({ seed: 100000 + run * 7919, playerName: '治具' });
+  const seed0 = 100000 + run * 7919;
+  let career = createCareer({ seed: seed0, playerName: '治具' });
   const player = createCareerPlayer('治具', HEIGHT_CM
     ? { heightCm: HEIGHT_CM, seed: career.seed }
     : {});
@@ -369,8 +438,30 @@ for (let run = 0; run < RUNS; run += 1) {
       },
     };
   }
+  // ── 跨屆歸因臂的「第 1 屆初值」快照（只在有開臂時才複製，基準臂零成本）──
+  // 玩家：屬性／技術兩份分開存（VD_NO_PCARRY／VD_NO_TCARRY 各自獨立可測）
+  const player0 = (NO_PCARRY || NO_TCARRY)
+    ? { attributes: { ...player.attributes }, techniques: { ...player.techniques } } : null;
+  // 名冊：逐成員「入隊當下」的深拷貝（starter 在此、招募生在 settleJoinsMirror 之後補登）
+  const memberInit = new Map();
+  const noteMembers = (ms) => {
+    if (!NO_MCARRY) return;
+    for (const m of ms) if (!memberInit.has(m.id)) memberInit.set(m.id, structuredClone(m));
+  };
+  noteMembers(roster.members);
+  // 賽程：第 1 屆賽程項（VD_FIXED_SCHED 逐屆沿用）
+  const schedule0 = FIXED_SCHED ? structuredClone(career.schedule) : null;
+  // 招募：第 1 屆的 starter 名單 id（VD_NO_RCARRY 只留這些人）
+  const starterIds = new Set(roster.members.map((m) => m.id));
+  const runSeasons = [];
   for (let season = 1; season <= SEASONS; season += 1) {
     const titlesAtStart = career.titles ?? 0;
+    const rec = {
+      titlesAtStart,
+      wins: Object.fromEntries(matchIds.map((id) => [id, 0])),
+      champion: 0,
+    };
+    runSeasons.push(rec);
     if (!byTitles.has(titlesAtStart)) {
       byTitles.set(titlesAtStart, {
         seasons: 0,
@@ -385,8 +476,11 @@ for (let run = 0; run < RUNS; run += 1) {
       const entry = career.schedule[mi];
       // seasonIndex 補接（07-30 批4 送裁項 2）：漏傳＝VD_SEASONS 跨屆臂永遠打第 1 屆
       // 對手（量不到 ace 成長／畢業換臉）；單屆預設 season=1 行為逐值不變
+      // VD_FREEZE_OPP=1（歸因臂）＝恆傳 1 ⇒ 對手側的屆數效應（ace 畢業遞補／成長型
+      // ace 逐屆加成）全部關掉，量「對手自己變了多少」
+      applyLevelRamp(season); // 題 A 實測臂：逐屆 delta（未設 VD_LEVEL_RAMP 時為 no-op）
       const setup = careerMatchSetup(
-        career, player, entry, USE_ROSTER ? roster : null, lineup, season,
+        career, player, entry, USE_ROSTER ? roster : null, lineup, FREEZE_OPP ? 1 : season,
       );
       // VD_DUMP=1＝逐場診斷傾印（難度重校卷前置：查「第 2 屆 group-3 懸崖」）。
       // **在真實路徑上取值**——印的就是 careerMatchSetup 真的交給 sim 的那份 setup，
@@ -407,7 +501,12 @@ for (let run = 0; run < RUNS; run += 1) {
           + ` 我方均屬性=${String(mean(myAttrs)).padStart(5)}`
           + ` 對手情蒐讀我=${setup.scoutRead ? (setup.scoutRead.B?.read ?? '?') : '無'}`
           + ` titles=${career.titles ?? 0}`
-          + ` 對手level=${setup.opponent.level}`);
+          + ` 對手level=${setup.opponent.level}`
+          // 難度重校卷 08-03：招募歸因臂量到 Δ 恆為 0，下面兩欄是**真實路徑**的證據
+          // ——先發＝真的交給 sim 的那六個 id，名冊＝當下人數。招募生若從不出現在
+          // 先發欄，就證明「挖角進來的人根本沒上場」（defaultStarters 依名冊序取首位）
+          + ` 先發=${setup.teams.A.map((p) => p.id).join(',')}`
+          + ` 名冊=${roster.members.length}`);
       }
       const { g, maxDeficit, setStartStamina } = playMatch(setup, entry);
       // W4 Q8：多局系列＝勝負吃 series、分差記局差；bo1 照舊
@@ -451,9 +550,15 @@ for (let run = 0; run < RUNS; run += 1) {
         margins[entry.id].push(s.A - s.B);
         if (mi === 4 && careerStage(career) !== 'eliminated') reachedFinal += won ? 1 : 0;
       }
+      // 題 B：逐屆決賽帶（與上面第 1 屆那行同判準，只是不限屆——第 1 屆兩者必然一致，
+      // 可當自驗閘：輸出的「第 1 屆決賽帶」應逐值等於既有的總決賽帶）
+      if (mi === 4 && careerStage(career) !== 'eliminated') {
+        perSeason[season - 1].reachedFinal += won ? 1 : 0;
+      }
       if (won) {
         perSeason[season - 1].wins[entry.id] += 1;
         tGroup.wins[entry.id] += 1;
+        rec.wins[entry.id] = 1;
       }
       // 成長：實算 gp → 平均灑點；技術照傳授時程；隊友表現驅動成長（W2；W6 起帶屆數冪等鍵）
       const stats = matchStatsFor(g.events, 'A2', 'A');
@@ -486,6 +591,7 @@ for (let run = 0; run < RUNS; run += 1) {
           events: g.events, playerId: 'A2', myTeam: 'A',
         });
         ({ roster, recruitment } = settleJoinsMirror(roster, recruitment, career.seed, season, joinLog));
+        noteMembers(roster.members); // 新入隊者的「入隊當下」快照（VD_NO_MCARRY 用）
       }
       // scouting 跨場累積（宿敵記憶）；戰績照實記（全國賽輸了也繼續模擬後段取數據）
       career = mergeScouting(career, entry.opponentId, g.scoutTally.A2);
@@ -495,13 +601,43 @@ for (let run = 0; run < RUNS; run += 1) {
     }
     // 冠軍線：六場全部真實串接下，國賽三連勝才算
     const natWins = career.results.slice(3).filter((r) => r.won).length;
+    perSeason[season - 1].natWinsSum += natWins; // 題 B：連續量指標（見 perSeason 定義處）
     if (natWins === 3) {
       perSeason[season - 1].champions += 1;
       tGroup.champions += 1;
+      rec.champion = 1;
       if (season === 1) champions += 1;
     }
-    if (season < SEASONS) career = advanceSeason(career);
+    if (season < SEASONS) {
+      // ★ F4 保真度修復（2026-08-03，難度重校卷）★ 原本是 `advanceSeason(career)`＝**漏傳
+      // seasonIndex**，與 production 不一致：`careerStore.js:165` 傳的是 `index + 1`，
+      // 於是 `nationalLadderFor(2)`（`schedule.js:23-32`）讓第 2 屆決賽對手是**曜石 60**、
+      // 天鷹 72 改掛準決賽。漏傳 ⇒ 治具走預設階梯 ⇒ 第 2 屆決賽仍是天鷹 72
+      // ⇒ **治具的第 2 屆比真實遊戲難**，量到的第 2 屆奪冠率是**低估**。
+      // 這個缺口由跨屆難度因果分解 agent 發現（F4），本檔的三屆量測全部受影響、已重跑。
+      career = advanceSeason(career, { seasonIndex: season + 1 });
+      // ── 跨屆歸因臂：屆界切斷（全關＝下面整段是 no-op，基準臂逐值不變）──
+      if (NO_PCARRY) player.attributes = { ...player0.attributes };
+      if (NO_TCARRY) player.techniques = { ...player0.techniques };
+      if (NO_RCARRY) {
+        // 招募生移出名冊、進度歸零＝下一屆從純 starter 名冊重新招募
+        roster = { ...roster, members: roster.members.filter((m) => starterIds.has(m.id)) };
+        recruitment = { progress: {}, recruited: [], expelled: [] };
+      }
+      if (NO_MCARRY) {
+        // 逐成員倒回「入隊當下」快照（含 growth.xp/log/grade）；名單本身不動
+        roster = {
+          ...roster,
+          members: roster.members.map(
+            (m) => (memberInit.has(m.id) ? structuredClone(memberInit.get(m.id)) : m),
+          ),
+        };
+      }
+      if (NO_SCARRY) career = { ...career, scouting: {} };
+      if (FIXED_SCHED) career = { ...career, schedule: structuredClone(schedule0) };
+    }
   }
+  jsonRuns.push({ seed: seed0, seasons: runSeasons });
   for (const j of joinLog) {
     joinStats[j.key] = joinStats[j.key] ?? { joined: 0, seasonSum: 0 };
     joinStats[j.key].joined += 1;
@@ -533,6 +669,16 @@ const armName = [
   USE_CALL ? '要球近似' : null,
   USE_RIVAL ? '宿敵反讀' : null,
   process.env.VD_NO_BREAK_RECOV === '1' ? '裸延續（無局間恢復）' : null,
+  LEVEL_DELTA ? `對手level${LEVEL_DELTA > 0 ? '+' : ''}${LEVEL_DELTA}` : null,
+  LEVEL_RAMP.length ? `對手level逐屆[${LEVEL_RAMP.join('/')}]` : null,
+  ALL_OFF ? '跨屆全切' : null,
+  !ALL_OFF && NO_PCARRY ? '切玩家屬性帶入' : null,
+  !ALL_OFF && NO_TCARRY ? '切玩家技術帶入' : null,
+  !ALL_OFF && NO_MCARRY ? '切隊友成長帶入' : null,
+  !ALL_OFF && NO_RCARRY ? '切招募帶入' : null,
+  !ALL_OFF && NO_SCARRY ? '切情蒐帶入' : null,
+  !ALL_OFF && FREEZE_OPP ? '凍結對手屆數效應' : null,
+  !ALL_OFF && FIXED_SCHED ? '凍結賽程' : null,
 ].filter(Boolean).join('＋') || '基準（W7 全關）';
 console.log(`\n=== 勝率曲線（${RUNS} 次生涯模擬；臂＝${armName}；A2=AI 代打基準）===`);
 for (const id of matchIds) {
@@ -576,6 +722,26 @@ if (SEASONS > 1) {
     const row = matchIds.map((id) => pct(perSeason[s].wins[id]).padStart(4)).join(' ');
     console.log(`第 ${s + 1} 屆  ${row}  奪冠 ${pct(perSeason[s].champions)}`);
   }
+  // 題 B（Sawmah 2026-08-03 拍板）：奪冠率解析力不足 ⇒ 逐屆補兩個指標。
+  // 決賽帶＝真實連勝踏進決賽；國賽勝場＝三場累計勝場數平均（0–3，連續量、解析力最好）。
+  console.log(`\n=== 逐屆驗收指標（題 B：奪冠率的 SE 蓋過錨 3a 的 3pp 目標間距）===`);
+  for (let s = 0; s < SEASONS; s += 1) {
+    const band = pct(perSeason[s].reachedFinal).padStart(4);
+    const nw = (perSeason[s].natWinsSum / RUNS).toFixed(2);
+    console.log(`第 ${s + 1} 屆  決賽帶 ${band}　國賽勝場 ${nw}/3`);
+  }
+  console.log(`（自驗閘：第 1 屆決賽帶應逐值等於上方總計的 ${pct(reachedFinal)}）`);
+  // Q2 覆蓋率（難度重校卷 2026-08-03）：TITLE_LEVEL_BONUS 只在 titles>0 時生效，
+  // 所以「這個旋鈕實際碰得到多少生涯」＝有多少條生涯在某一屆開頭 titles>0。
+  // 分母兩種都印：屆槽（RUNS×(SEASONS-1) 個可能被加成的屆）與生涯條數。
+  const slotsHot = jsonRuns.reduce(
+    (n, r) => n + r.seasons.filter((s) => s.titlesAtStart > 0).length, 0,
+  );
+  const slotsAll = RUNS * SEASONS;
+  const runsHot = jsonRuns.filter((r) => r.seasons.some((s) => s.titlesAtStart > 0)).length;
+  console.log(`\n=== TITLE_LEVEL_BONUS 覆蓋率（Q2）===`);
+  console.log(`屆槽：${slotsHot}/${slotsAll}（${(slotsHot / slotsAll * 100).toFixed(1)}%）的屆開頭 titles>0`);
+  console.log(`生涯：${runsHot}/${RUNS}（${(runsHot / RUNS * 100).toFixed(1)}%）的生涯三屆內至少觸發過一次`);
   console.log('\n=== 衛冕曲線（依屆初 titles 分組；TITLE_LEVEL_BONUS 收斂性）===');
   for (const t of [...byTitles.keys()].sort((a, b) => a - b)) {
     const gp = byTitles.get(t);
@@ -593,6 +759,15 @@ if (SEASONS > 1) {
     }
     console.log(`名冊終量平均 ${(rosterEndSizeSum / RUNS).toFixed(1)}/12（含玩家）`);
   }
+}
+
+// VD_JSON：逐 run／逐屆結果落檔（跨屆歸因的配對分析用；各臂 seed 序列相同 ⇒ 同索引即配對）
+if (JSON_OUT) {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(JSON_OUT, `${JSON.stringify({
+    label: armName, runs: RUNS, seasons: SEASONS, matchIds, perRun: jsonRuns,
+  })}\n`);
+  console.log(`\n=== 逐屆結果已落檔 ${JSON_OUT}（${jsonRuns.length} 條 × ${SEASONS} 屆）===`);
 }
 
 // ★ 配對同種子輸出（裁定書 §4.3 的形式要求）★
