@@ -65,7 +65,11 @@ test('A3 跨帶檢查：跨帶＝教練動態評語、未跨帶＝null', () => {
   assert.equal(bandShiftLines(170, 174), null); // 同帶
   const up = bandShiftLines(190, 193); // 183–192 → ≥192
   assert.ok(Array.isArray(up) && up[0].speaker === '教練');
-  assert.ok(up[0].text.includes('中間手'), '跨進 ≥192 帶應重新看好 MB');
+  // 2026-08-03：對照 `roleLabel('middle')` 的名字本身而不是寫死字面——這條守的是
+  // 「跨帶評語要點名 MB 這個位置」，不是那個位置怎麼叫。Sawmah 當日把它從
+  // 「中間手」改成「攔中」，寫死字面會讓每次命名裁定都誤炸這條。
+  const MB_NAME = roleLabel('middle').split('（')[0]; // 「攔中（MB）」→「攔中」
+  assert.ok(up[0].text.includes(MB_NAME), `跨進 ≥192 帶應重新看好 MB：${up[0].text}`);
   assert.ok(bandShiftLines(163, 166) !== null); // ≤165 → 165–175
   assert.ok(bandShiftLines(181, 184) !== null); // 175–183 → 183–192
 });

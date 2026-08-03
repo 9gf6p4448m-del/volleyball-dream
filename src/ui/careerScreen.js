@@ -645,7 +645,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const roleKeyOf = (id) => (id === playerId
       ? player.currentRole
       : members.find((m) => m.id === id)?.role);
-    // 5-1 對位（拍板 07-23）：僅同角色可互換（OH↔OH、MB↔MB），舉球員↔對角砲例外可換
+    // 5-1 對位（拍板 07-23）：僅同角色可互換（OH↔OH、MB↔MB），舉球員↔舉對例外可換
     const canSwap = (a, b) => {
       const ra = roleKeyOf(a);
       const rb = roleKeyOf(b);

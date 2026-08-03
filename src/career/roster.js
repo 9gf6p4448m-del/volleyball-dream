@@ -62,7 +62,7 @@ export const STARTER_DEFS = [
     persona: '一年級的速度型主攻——還很生，但成長空間是全隊最大的',
     attributes: { jump: 62, power: 60, reaction: 63, stamina: 62, speed: 66, control: 65, serve: 59, block: 53 } },
   { id: 'A6', name: '阿岩', fullName: '陳定岩', role: 'middle', grade: 2, height: 1.94,
-    persona: '第二中間手——不搶戲的耐力型攔網工兵，教練最信任的輪替',
+    persona: '第二攔中——不搶戲的耐力型攔網工兵，教練最信任的輪替',
     attributes: { jump: 62, power: 61, reaction: 60, stamina: 63, speed: 57, control: 65, serve: 57, block: 65 } },
   // A7 替補 OH（W3 07-27 Sawmah 拍板：①第 1 屆就有板凳可換＝主角能下場休息
   // （RECOV_BENCH 快回閉環）＋新玩家第一屆體驗換人 ②grade 2＝第 2 屆末與阿岩同屆
