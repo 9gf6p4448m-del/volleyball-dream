@@ -59,7 +59,11 @@ export function digSuggestionFor(game, aiState) {
 export function digReadFor(game, aiState) {
   const suggestion = digSuggestionFor(game, aiState);
   const atk = aiState?.claimId ? game.players[aiState.claimId] : null;
-  const mark = atk ? spikeBiasOf(game, atk) : null;
+  // ★ 2026-08-03 修：原本傳的是 player **物件**（`atk`），而 spikeBiasOf 吃的是 **pid**
+  // ⇒ `scoutTally[物件]` 恆 undefined ⇒ `markText` 從落地起一次都沒顯示過。
+  // 同檔 digSuggestionFor(:50) 傳的是正確的 id，所以建議照常運作、只有線索文字全滅
+  // ——最難察覺的形態（功能看起來是好的）。實測坐實：`tools/auditB-deadbranch-probe.mjs`。
+  const mark = aiState?.claimId ? spikeBiasOf(game, aiState.claimId) : null;
   return {
     choices: DIG_SCHEMES,
     suggestion,

@@ -951,7 +951,12 @@ function applyReplanCall(game, aiState) {
     comboScale: game.comboScale ?? 1, // 同路徑甲：世界規則關閉時，遠段改判也叫不出來
   });
   const out = {
-    type: call.type, mode: 'replan', outcome: res.outcome, reason: res.reason,
+    // ★ 2026-08-03 裁定甲的另一半 ★ 這裡原本寫死 'replan'，於是面板按鈕是「⚡指令」、
+    // 按下去的回饋字卡卻是「🔄改判」——同一件事兩種說法。
+    // 「改判」是死球窗入口還在的時代的措辭（先在死球窗叫一次、遠段才是「改」那一次）；
+    // 卷五 §六 把死球窗入口整條拆了之後**沒有前一次判定可以改**。
+    // 解析器自己回的 mode 一直都是 'command'（approach.js:908「叫套路的人一定是 S」）。
+    type: call.type, mode: res.mode ?? 'command', outcome: res.outcome, reason: res.reason,
     mainId: res.mainId, flightId: r.flightId,
   };
   // 卷五：解析器現在有**兩種**成立形狀——組合（combo，兩人配合）與單人改線（solo，

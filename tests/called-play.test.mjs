@@ -343,17 +343,22 @@ function replanAt(flightId, type, { advanceTicks = 0 } = {}) {
   return { g, ai, before, beforeCombo };
 }
 
-test('⑦ 乙：臨場改判真的重建 approach（不是只改一個標籤）', () => {
+// ★ 2026-08-03 裁定甲的另一半：語意護欄反向 ★ 這兩條（本測試＋卷五端到端）原本守
+// mode === 'replan'，防的是「改判被字卡說成死球窗指令」。卷五 §六把死球窗入口整條拆了
+// 之後，沒有前一次判定可以「改」——面板按鈕是「⚡指令」、callModeOf 只回 'command'、
+// 解析器（approach.js「叫套路的人一定是 S」）也恆回 'command'。護欄改守反方向：
+// 語意標記必須是 'command'，否則字卡（🔄改判）會和面板按鈕（⚡指令）把同一件事說成兩種。
+test('⑦ 乙：遠段叫牌真的重建 approach（不是只改一個標籤）', () => {
   let hit = null;
   for (let f = 1; f <= 200 && !hit; f += 1) {
     const r = replanAt(f, 'cross');
     if (r.ai.callOutcome?.outcome === 'command') hit = r;
   }
-  assert.ok(hit, '200 顆球都改判不成＝乙路徑恆假');
+  assert.ok(hit, '200 顆球都叫不成＝乙路徑恆假');
   const { ai, before } = hit;
   assert.equal(ai.replanCall, null, 'replanCall 沒被消費，會重複觸發');
   assert.equal(ai.attackCombo?.type, 'cross');
-  assert.equal(ai.callOutcome.mode, 'replan', '改判的語意標記不是 replan＝回饋會說成死球窗指令');
+  assert.equal(ai.callOutcome.mode, 'command', '語意標記不是 command＝字卡會跟面板按鈕（⚡指令）分岔成兩種說法');
   const combo = ai.attackCombo;
   // 重建的機械證明：主攻者的 route 真的換了線，且與 combo 宣稱的一致（同源）
   assert.equal(routeOf(ai, combo.mainId).kind, combo.mainKind);
@@ -489,7 +494,8 @@ test('卷五・乙路徑端到端：叫 B 快真的把 MB 的線改掉，且不�
   assert.equal(ai.attackKind, 'bquick', 'attackKind 與 route 分岔＝二傳瞄的和他跑的是兩個地方');
   assert.equal(ai.attackCombo, null, '單人型卻生出了組合');
   assert.equal(ai.approach.setTick, before.setTick, '改判動到了 setTick 錨點');
-  assert.equal(ai.callOutcome.mode, 'replan');
+  // 與 ⑦ 乙同一條護欄（見該測試上方的 2026-08-03 註記）：單人型走同一個出口，語意也必須是 command
+  assert.equal(ai.callOutcome.mode, 'command', '語意標記不是 command＝字卡會跟面板按鈕（⚡指令）分岔成兩種說法');
   assert.equal(ai.replanCall, null, 'replanCall 沒被消費，會重複觸發');
   for (const r0 of before.routes) {
     if (r0.pid === mb) continue;

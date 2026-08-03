@@ -40,7 +40,10 @@ export const TECH_DEFS = [
   // 組合攻擊卷 段 E（07-31 Sawmah 裁定）：叫戰術改由技術傳授解鎖，不硬綁屆數——
   // 解鎖不是重點，**教學才是**（新玩家第一次看到「交叉」要有人告訴他那是什麼）。
   // 閘門走 matchConfig.resolveTechGates 的 canCallPlay（同 pipe 先例）
-  { key: 'callPlay', name: '叫戰術', desc: '當二傳時在死球窗下組合攻擊指令（右上 ⚡）——交叉／夾塞／時間差' },
+  // 2026-08-03 修：入口與招式清單都過期了——死球窗入口卷五 §六 已整條拆除（改在
+  // 一傳起來、球飛向你的那段下指令）；夾塞出廠關閉（TANDEM_PLAY_RATE=0 ＋
+  // CALL_OFFERS_FACTORY_OFF_TYPES=false）玩家結構上叫不出來；而真正叫得出來的 B快沒提。
+  { key: 'callPlay', name: '叫戰術', desc: '當二傳時，一傳起來後下組合攻擊指令（⚡）——交叉攻擊／時間差／B快' },
 ];
 
 // 從 sim 事件日誌統計玩家表現（歸因法與 pointBanner 同：得分前最後觸球者）
