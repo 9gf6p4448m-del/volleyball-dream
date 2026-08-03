@@ -1062,7 +1062,13 @@ function updateDecisions(s, now) {
         // 「唯讀預覽」（空選項通道本來就是這條路，零額外分支）。快速比賽恆 true
         (s.gates.canCallPlay ? callOptionsFor(game, s.controlledId) : []).map((o) => ({
           key: `call-${o.type}`,
-          label: `${CALL_MODES.replan.icon}改判・${o.label}`,
+          // ★ 2026-08-03 Sawmah 裁定甲：顯示改用 `command`（⚡指令），不再寫「改判」★
+          // 「改判」是死球窗入口還在的時代留下的：那時先在死球窗叫一次、遠段才是「改」
+          // 那一次的判。卷五 §六（f526afb）把死球窗入口整條拆了、callPanel.js 整支刪，
+          // **已經沒有前一次判定可以改**——遠段是唯一一次下令的機會。
+          // 而且選項本身的 mode 一直都是 `'command'`（callPlay.js:44），
+          // 只有這行標籤寫死 replan ⇒ 語意是指令、顯示是改判，兩邊對不上。
+          label: `${CALL_MODES.command.icon}${o.label}`,
           color: 'neutral',
           callType: o.type,
         })),
