@@ -87,10 +87,13 @@ export function routeCueTextOf(route) {
   };
 }
 
-// 三層卡片（2026-08-03 Sawmah 裁定）：
-//   第 0 層 lead   —— 小字說明這條線哪來的（分屆換詞）
-//   第 1 層 路線名＋速度徽章 —— 主體，一眼看「跑哪條、幾速」
-//   第 2 層 動作＋距離        —— 現在該做什麼（沿用既有三態變色）
+// 單行橫帶（2026-08-03 Sawmah 第二次裁定，取代同日稍早的三層卡片）：
+//   `S 要你跑　左翼 [二速]　跑！　離起點 1.0m` 全部排成一行，貼著畫面下緣。
+//
+// ★ 為什麼從三層改回一行 ★ 字級不是問題、**高度才是**：三層在手機橫向佔掉
+// 32% 的畫面高（127/394），從下緣往上長就會蓋住玩家角色與球的落點——那正是
+// 這個遊戲最需要看清楚的兩樣東西。一行只佔約 12%，橫向再寬也只是佔掉本來就空的
+// 下緣帶狀區。字級一格未縮（路線名與動作行維持 clamp(20,8vh,34)）。
 // 仍然零互動（`pointer-events:none`）＝不是決策面板，憲法 §九 不觸。
 export function createRouteCue() {
   const el = document.createElement('div');
@@ -102,7 +105,9 @@ export function createRouteCue() {
     'position:fixed', 'left:50%', 'bottom:calc(env(safe-area-inset-bottom, 0px) + 12px)',
     'transform:translateX(-50%)', 'z-index:19',
     'font-family:system-ui,sans-serif', 'white-space:nowrap',
-    'padding:clamp(6px,2.2vh,12px) clamp(12px,3.6vh,20px)', 'border-radius:clamp(12px,2.6vh,18px)',
+    // 單行：四段並排、基線對齊（大字與小字混排時 baseline 比 center 穩）
+    'display:flex', 'align-items:baseline', 'gap:clamp(8px,2.4vh,14px)',
+    'padding:clamp(4px,1.4vh,9px) clamp(12px,3.6vh,20px)', 'border-radius:999px',
     'background:rgba(8,12,20,0.62)', 'backdrop-filter:blur(3px)',
     'border:1px solid rgba(255,255,255,0.10)',
     'text-shadow:0 2px 6px rgba(0,0,0,0.85)',
@@ -110,14 +115,12 @@ export function createRouteCue() {
     'opacity:0', 'transition:opacity 160ms ease',
   ].join(';');
 
-  const leadEl = document.createElement('div');
+  const leadEl = document.createElement('span');
   leadEl.style.cssText = [
     'font-size:clamp(10px,3vh,13px)', 'font-weight:600', 'letter-spacing:2px',
-    'color:rgba(255,255,255,0.45)', 'margin-bottom:2px',
+    'color:rgba(255,255,255,0.45)',
   ].join(';');
 
-  const mainEl = document.createElement('div');
-  mainEl.style.cssText = ['display:flex', 'align-items:center', 'gap:clamp(8px,2.4vh,14px)'].join(';');
   const kindEl = document.createElement('span');
   kindEl.style.cssText = [
     'font-size:clamp(20px,8vh,34px)', 'font-weight:800', 'letter-spacing:2px', 'color:#f4f8ff',
@@ -127,15 +130,6 @@ export function createRouteCue() {
     'font-size:clamp(12px,4vh,18px)', 'font-weight:800', 'letter-spacing:1px',
     'padding:clamp(1px,0.6vh,4px) clamp(7px,2vh,12px)', 'border-radius:999px', 'border:1px solid currentColor',
   ].join(';');
-  mainEl.append(kindEl, tempoEl);
-
-  const rule = document.createElement('div');
-  rule.style.cssText = ['height:1px', 'background:rgba(255,255,255,0.14)', 'margin:clamp(4px,1.2vh,7px) 0'].join(';');
-
-  const footEl = document.createElement('div');
-  footEl.style.cssText = [
-    'display:flex', 'align-items:baseline', 'justify-content:space-between', 'gap:14px',
-  ].join(';');
   const actionEl = document.createElement('span');
   // 2026-08-03 Sawmah 裁定：動作行放大到與路線名**同級**。
   // 理由＝層級原本是反的：路線名整球不變、只需確認一次，而動作行（現在跑！／0.4s 後起步）
@@ -143,9 +137,8 @@ export function createRouteCue() {
   actionEl.style.cssText = ['font-size:clamp(20px,8vh,34px)', 'font-weight:800', 'letter-spacing:1px'].join(';');
   const distEl = document.createElement('span');
   distEl.style.cssText = ['font-size:clamp(11px,3.5vh,15px)', 'color:rgba(255,255,255,0.5)'].join(';');
-  footEl.append(actionEl, distEl);
 
-  el.append(leadEl, mainEl, rule, footEl);
+  el.append(leadEl, kindEl, tempoEl, actionEl, distEl);
   document.body.appendChild(el);
 
   let shownKey = null; // 內容沒變就不動 DOM（rally 中逐幀呼叫）
