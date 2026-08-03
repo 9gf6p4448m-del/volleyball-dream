@@ -77,3 +77,35 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId) {
   }
   return null;
 }
+
+// ★ 2026-08-03 裁定乙第二步：玩家自己封線的結果字卡 ★
+//
+// ★ 為什麼要抽成純函式（而不是內聯在 matchLoop）★
+// 這則字卡的前一版**恆假了一整天沒人發現**：`6b7051b` 把面板從「何時跳」改成問
+// 「封哪邊」之後，生產端寫的是 `{ jumped: false, line }`，而消費端的條件仍是
+// `s.mbCommit?.jumped` ⇒ 三句字卡一句都印不出來（08-03 稽核 auditA 抓到）。
+// 根因是判定邏輯內聯在 UI 迴圈裡、沒有任何測試守著。抽出來之後
+// `tests/block-bet-feedback.test.mjs` 就能把「什麼形狀進、什麼字卡出」釘住。
+//
+// ★ 判準與 L 指揮的「讀對」共用同一個真相 ★
+// `zone` 來自 `game.rally.lastSpikeZone`（`game.js:classifySpikeZone` 在扣球當下分類），
+// 與 `liberoRead.js:digReadCorrect` 同源 —— 兩個位置的回饋才不會各說各話。
+//
+// ★ 為什麼收整個 `mbCommit` 物件而不是收 `line` 字串 ★
+// 恆假的根因是**欄位名對不上**（生產端寫 `line`、消費端讀 `jumped`）。
+// 若本函式只收字串，取欄位的責任還留在呼叫端 ⇒ 測試守不到那一步、同樣的錯還會再犯。
+// 收物件之後，「要讀哪個欄位」變成本函式的責任，測試餵生產端的字面形狀就能釘死它。
+//
+// @param {string|null} zone 本波扣球的線路分類（line／cross／middle／tip）
+//   ＝ `game.rally.lastSpikeZone`
+// @param {{line?: string}|null} mbCommit 玩家的封線指令（matchLoop 的 `s.mbCommit`）
+export function mbCallFeedbackOf(zone, mbCommit) {
+  const calledLine = mbCommit?.line;
+  if (!calledLine) return null; // 玩家沒下指令＝沒有賭注，不評
+  // 只評方向題。middle／tip 不是「封哪邊」能回答的問題 ⇒ 不評，
+  // 免得玩家把「他打中間」誤讀成自己選錯邊。
+  if (zone !== 'line' && zone !== 'cross') return null;
+  return zone === calledLine
+    ? { text: '方向讀對了——他從你頭上過', color: '#ffd166', ms: 1600 }
+    : { text: '他打你沒守的那邊', color: '#c8d6eb', ms: 1600 };
+}

@@ -30,7 +30,7 @@ import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 // 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
 import { callOptionsFor, callFeedbackOf, CALL_MODES } from '../input/callPlay.js';
-import { blockBetFeedbackOf } from '../input/blockBetFeedback.js';
+import { blockBetFeedbackOf, mbCallFeedbackOf } from '../input/blockBetFeedback.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -283,8 +283,6 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     lWallCardAt: -1e9,
     // 07-27 六輪：影子收帶排程（我方第一觸後 +1.2s 收；0＝未排程）
     shadowFadeAt: 0,
-    // 07-27 七輪：對方本波舉球是否快攻低弧（「早了」卡的原因分語）
-    oppQuickSet: false,
     // W4 B-3：封線影子首次教學（07-27 試玩回饋「看不懂黑色陰影」——每場一次講色語）
     shadowHintShown: false,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
@@ -1294,31 +1292,25 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
     }
-    // 07-27 七輪：對方舉球球種真值（e.power＝舉球 timing、<0.5＝快攻低弧 sim 同判準）
-    // ——「早了」卡的原因說明用（賭輸快攻 vs 高球按太早，玩家最想知道的是哪一種）
-    if (e.type === 'TOUCH' && e.kind === 'set'
-      && e.team !== game.players[s.controlledId]?.teamId) {
-      s.oppQuickSet = (e.power ?? 1) < 0.5;
-    }
-    // 07-27 三改：MB 時機字卡改判「真值」——看你的攔網窗 vs 球實際過網：
-    // 窗已過期＝跳太早落地了（七輪：補球種原因——快攻賭輸/高球按早分語）；
-    // 窗內但沒碰到且球在附近＝線差一點；封到＝BLOCK_TOUCH 回饋（上方）。
-    // 球沒被攔到才有 BALL_OVER_NET
-    if (e.type === 'BALL_OVER_NET' && s.mbCommit?.jumped
+    // ★ 2026-08-03 裁定乙第二步（Sawmah 拍板）★ 字卡從評「時機」改成評「封哪邊」。
+    //
+    // 為什麼要整組改寫：`6b7051b` 把面板從「何時跳」改成問「封哪邊」（起跳交給自動跳攔）
+    // 之後，`s.mbCommit` 從 `{jumped:true}` 變成 `{jumped:false, line}`，而這裡的條件是
+    // `s.mbCommit?.jumped` ⇒ **恆假**，三句字卡從那天起一句都沒印出來過（稽核 auditA 抓到）。
+    // 但**不能只把 jumped 改回 true**：那三句評的全是「你這一跳早了/晚了」，
+    // 而時機已經不是玩家的決定 ⇒ 語意整組過期，玩家會困惑「我又沒選時機」。
+    //
+    // 新判準與 L 指揮的「讀對」共用同一個真相來源（`rally.lastSpikeZone`，
+    // 由 `game.js:classifySpikeZone` 在扣球當下分類）——兩個位置的回饋才不會各說各話。
+    // 時序：扣球 TOUCH 先於過網，且過網不重置 lastSpikeZone ⇒ 這裡讀得到本波的分類。
+    // 封到球的情況已有 BLOCK_TOUCH 字卡（上方），這裡只處理「球過網了＝沒攔到」。
+    if (e.type === 'BALL_OVER_NET' && s.mbCommit?.line
       && e.toTeam === game.players[s.controlledId]?.teamId
       && game.players[s.controlledId]?.currentRole === 'middle') {
-      const a = game.actors[s.controlledId];
-      const jumpedThisAttack = game.tick - (a.blockStartTick ?? -9999) < 90;
-      if (jumpedThisAttack) {
-        if (a.blockUntil < game.tick) {
-          stage.floatText.show(
-            s.oppQuickSet ? '快攻比你更快——再搶半拍' : '早了——是高球，等它下來',
-            '#c8d6eb', 1400,
-          );
-        } else if (Math.abs(game.ball.x - a.x) < 1.6) {
-          stage.floatText.show('時機對了——線差一點！', '#ffd166', 1400);
-        } // 球不在你這條線＝不評（不是你的球）
-      }
+      // 判定抽在 blockBetFeedback.js（純函式＋測試守著），不內聯——
+      // 前一版就是因為內聯而恆假了一整天沒人發現。
+      const card = mbCallFeedbackOf(game.rally.lastSpikeZone, s.mbCommit);
+      if (card) stage.floatText.show(card.text, card.color, card.ms);
       s.mbCommit = null;
     }
     // 07-27 L 指揮結果（W4 B-2 兩層讀對之「漏接起」層）：我方第一觸出字卡——
