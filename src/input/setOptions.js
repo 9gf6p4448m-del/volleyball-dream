@@ -180,7 +180,23 @@ export function setStageOf(ticksLeft) {
 }
 
 // 遠段標題：一傳品質＋協調層建議的攻擊點（真值，與近段選項池同源）
-export function setPreviewTitle(tier, suggestLabel) {
+export function setPreviewTitle(tier, suggestLabel, noCall = false) {
   const base = tier === 'perfect' ? '一傳到位' : tier === 'ok' ? '一傳可用' : '一傳勉強';
+  // ★ 2026-08-03 Sawmah 裁定：一個戰術都湊不出來時**要說話**，不能留白 ★
+  // 裁定乙把湊不出來的戰術濾掉之後，一傳掉檔的球會變成「面板一個選項都沒有、
+  // 畫面上也沒說為什麼」——實測 **13.2% 的波**會走到這裡
+  //（`tools/call-feasibility-probe.mjs`，n=1491；一傳 ok/poor 時三型全滅、零例外）。
+  // 沒有理由的空白比講錯的理由更糟：玩家會以為壞了。
+  if (noCall) return `${base}　${noCallHintOf(tier)}`;
   return suggestLabel ? `${base}　建議：${suggestLabel}——先跑到位` : `${base}——先跑到位`;
+}
+
+// 一個戰術都叫不出來時，用真實排球的因果講給玩家聽——這句話本身就在教那道階梯：
+// 一傳決定你這球剩下幾種進攻。組合戰術（交叉／時間差／B快）全都要一個快攻手當
+// 誘餌或主體，快攻一死它們就一起死。
+export function noCallHintOf(tier) {
+  if (tier === 'poor') return '球接得勉強——先穩穩送過去，這球不追戰術';
+  if (tier === 'ok') return '二傳被拉開了，快攻搭不上——這球走兩翼高球';
+  // 一傳到位卻仍湊不出來：實測 100% 是「這一波沒有人跑快攻」（前排 MB 多半接了這一傳）
+  return '沒有人跑快攻，搭不起來——這球走兩翼';
 }

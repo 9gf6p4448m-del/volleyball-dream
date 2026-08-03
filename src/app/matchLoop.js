@@ -1057,18 +1057,15 @@ function updateDecisions(s, now) {
       // 一傳品質與建議攻擊點照舊顯示在標題（真值早給，操作晚要的原則不變）。
       const suggest = setZones.find((z) => z.pid === aiState.attackerId) ?? setZones[0];
       const callFeas = s.gates.canCallPlay ? callFeasibilityOf(game, aiState) : null;
-      stage.diegetic?.hide();
-      panel.show(
-        setPreviewTitle(setZones[0].tier, suggest?.label ?? null),
-        // 同一把技術閘（07-31 裁定）：叫戰術沒受教＝連改判也沒得叫——退回段 E 之前的
-        // 「唯讀預覽」（空選項通道本來就是這條路，零額外分支）。快速比賽恆 true
-        // ★ 2026-08-03 Sawmah 裁定乙：湊不出來的當場不列 ★
-        // 可行性由 sim 的 `callFeasibilityOf` 給——它與 `applyReplanCall` 共用同一段
-        // 窗界＋池子重建＋同一支 resolveCalledPlay ⇒ **面板列得出來的，按下去一定成立**。
-        // UI 不自己重建一顆池（那會變成第二份真相）。
-        // 這不違反裁定 E 的「不得預先變灰」：那條禁的是**預判**一傳品質，
-        // 而入口搬到遠段之後 passTier 已經定案（面板標題自己就印著），這裡讀的是已知事實。
-        (s.gates.canCallPlay ? callOptionsFor(game, s.controlledId) : [])
+      // 同一把技術閘（07-31 裁定）：叫戰術沒受教＝連改判也沒得叫——退回段 E 之前的
+      // 「唯讀預覽」（空選項通道本來就是這條路，零額外分支）。快速比賽恆 true
+      // ★ 2026-08-03 Sawmah 裁定乙：湊不出來的當場不列 ★
+      // 可行性由 sim 的 `callFeasibilityOf` 給——它與 `applyReplanCall` 共用同一段
+      // 窗界＋池子重建＋同一支 resolveCalledPlay ⇒ **面板列得出來的，按下去一定成立**。
+      // UI 不自己重建一顆池（那會變成第二份真相）。
+      // 這不違反裁定 E 的「不得預先變灰」：那條禁的是**預判**一傳品質，
+      // 而入口搬到遠段之後 passTier 已經定案（面板標題自己就印著），這裡讀的是已知事實。
+      const callItems = (s.gates.canCallPlay ? callOptionsFor(game, s.controlledId) : [])
           .filter((o) => (callFeas ? callFeas[o.type]?.feasible !== false : true))
           .map((o) => ({
           key: `call-${o.type}`,
@@ -1081,7 +1078,12 @@ function updateDecisions(s, now) {
           label: `${CALL_MODES.command.icon}${o.label}`,
           color: 'neutral',
           callType: o.type,
-        })),
+        }));
+      stage.diegetic?.hide();
+      panel.show(
+        // 一個戰術都列不出來時，標題改講「為什麼沒得叫」——不留白（裁定：空清單要說話）
+        setPreviewTitle(setZones[0].tier, suggest?.label ?? null, callItems.length === 0),
+        callItems,
         (it) => {
           // 只寫指令槽——真正的重排（planCombination ＋ applyComboRoutes ＋
           // approachRoutesFor 整份重建，已起跑者不得改線）在 sim 的 applyReplanCall。

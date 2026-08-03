@@ -275,7 +275,12 @@ test('④ 兩種結果的字卡不同，且失敗字卡講得出原因', () => {
   assert.ok(rep.text.includes(CALL_MODES.replan.word));
   // 成功 vs 湊不出來：顏色也要分（琥珀＝跑得成／紅＝陣容的問題）
   assert.notEqual(cmd.color, inf.color, '「照跑」與「湊不出來」同色＝掃一眼分不出成敗');
-  assert.ok(inf.text.includes('MB'), `裁定 E 的原因沒有出現在文案裡：${inf.text}`);
+  // ★ 2026-08-03：錨點從 'MB' 改到機制 ★ 舊文案是「前排 MB 接了這一傳（或他不在前排）」，
+  // 那句**猜成因的括號**已因實測猜錯 79% 被拔掉（callPlay.js 的 partner／hasQuick 註解）。
+  // 這條要守的是「說得出**哪一條**沒過」，不是「一定要提到 MB」——後者會把
+  // 「文案不得猜成因」這條裁定卡死。
+  assert.ok(inf.text.includes('快攻'), `裁定 E 的原因沒有出現在文案裡：${inf.text}`);
+  assert.ok(!inf.text.includes('湊不出來'), `落回了預設文案＝沒講出哪一條沒過：${inf.text}`);
   // eslint-disable-next-line no-console
   console.log(`      ④ ${texts.join('\n      ④ ')}`);
 });
