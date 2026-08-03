@@ -6,3 +6,6 @@ dev-dist/
 
 # 治具產生的季末存檔（本機測試用，不入庫）
 tools/w6-save*.json
+
+# subagent 量測用的暫存探針（不進版控）
+tools/_tmp_*.mjs
