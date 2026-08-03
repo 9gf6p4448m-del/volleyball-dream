@@ -127,8 +127,10 @@ export function createRouteCue() {
   ].join(';');
   const tempoEl = document.createElement('span');
   tempoEl.style.cssText = [
-    'font-size:clamp(12px,4vh,18px)', 'font-weight:800', 'letter-spacing:1px',
-    'padding:clamp(1px,0.6vh,4px) clamp(7px,2vh,12px)', 'border-radius:999px', 'border:1px solid currentColor',
+    // 2026-08-03 Sawmah：速度放大到與路線名／動作行**同級**——三件事並重，
+    // 「幾速」本來就跟「哪條線」一樣是一眼要讀到的東西。內距同步收，膠囊才不會變成一大塊。
+    'font-size:clamp(20px,8vh,34px)', 'font-weight:800', 'letter-spacing:1px',
+    'padding:0 clamp(6px,1.6vh,10px)', 'border-radius:999px', 'border:1px solid currentColor',
   ].join(';');
   const actionEl = document.createElement('span');
   // 2026-08-03 Sawmah 裁定：動作行放大到與路線名**同級**。
