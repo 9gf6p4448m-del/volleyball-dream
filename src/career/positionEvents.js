@@ -66,10 +66,10 @@ function offerLinesFor(role, aspMatch) {
   // opposite
   return aspMatch ? [
     { speaker: '教練', text: '你登記志願那天寫的是右翼重砲。我記著，一直記著。' },
-    { speaker: '教練', text: '轉主攻對角。右翼的高球、後排的 D 球，全歸你——要不要接？' },
+    { speaker: '教練', text: '轉舉對。右翼的高球、後排的 D 球，全歸你——要不要接？' },
   ] : [
     { speaker: '教練', text: '你的攻擊，硬到左翼快裝不下了。' },
-    { speaker: '教練', text: '右翼缺一門重砲。轉主攻對角——要不要接？' },
+    { speaker: '教練', text: '右翼缺一門重砲。轉舉對——要不要接？' },
   ];
 }
 
@@ -171,7 +171,8 @@ export function interSeasonTalkAllowed(career) {
   return !seasonTransferState(career).used;
 }
 
-const ROLE_LABEL = { setter: '舉球員', middle: '攔中', opposite: '主攻對角', libero: '自由人' };
+// 2026-08-03 Sawmah 命名裁定：OPP 一律叫「舉對」（原為「主攻對角」，與位置選單的名字對不上）
+const ROLE_LABEL = { setter: '舉球員', middle: '攔中', opposite: '舉對', libero: '自由人' };
 
 // 教練反問開場（場景拍板：教練會反問、依表現分版；performanceGood＝當屆勝率 ≥ 5 成）
 export function transferAskLines(career) {

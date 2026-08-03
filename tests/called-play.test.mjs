@@ -29,7 +29,7 @@ import {
   applyRouteKinds, applySoloRoute, CALL_OFFERS_FACTORY_OFF_TYPES,
 } from '../src/sim/approach.js';
 import { attackPointsOf } from '../src/sim/ai.js';
-import { callFeedbackOf, CALL_MODES, callModeOf, callOptionsFor } from '../src/input/callPlay.js';
+import { callFeedbackOf, CALL_MODES, callModeOf, callOptionsFor, CALL_LABELS } from '../src/input/callPlay.js';
 import { myRouteFor } from '../src/input/myRoute.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
@@ -435,7 +435,10 @@ test('卷五・解析器：池裡沒人跑 A 快 ⇒ 專屬 reason，不與組�
   const fb = callFeedbackOf({
     type: 'bquick', mode: 'replan', outcome: 'infeasible', reason: 'hasQuick', mainId: null,
   });
-  assert.ok(fb.text.includes('B 快'), `字卡沒有型別名＝CALL_LABELS 缺 bquick：${fb.text}`);
+  // 2026-08-03：對照 `CALL_LABELS.bquick` 本身而不是寫死字面——這條守的是
+  // 「字卡有沒有把型別名講出來」，不是那個名字怎麼拼。Sawmah 當日把它從
+  // 「B 快」統一成「B快」，寫死字面會讓每次命名裁定都誤炸這條。
+  assert.ok(fb.text.includes(CALL_LABELS.bquick), `字卡沒有型別名＝CALL_LABELS 缺 bquick：${fb.text}`);
   assert.ok(fb.text.includes('快攻'), `失敗回饋沒講出實情：${fb.text}`);
   assert.ok(!fb.text.includes('湊不出來'), 'REASON_TEXT 沒有 hasQuick 這一鍵＝落回了預設文案');
 });

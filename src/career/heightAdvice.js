@@ -10,7 +10,8 @@
 import { ROLE_ABBR } from './roster.js';
 
 const ROLE_NAME = {
-  setter: '舉球員', outside: '主攻手', middle: '中間手', opposite: '對角手', libero: '自由人',
+  // 2026-08-03 Sawmah 命名裁定：OPP 一律叫「舉對」（舉球員的對角）
+  setter: '舉球員', outside: '主攻手', middle: '中間手', opposite: '舉對', libero: '自由人',
 };
 
 // A2 映射表（公分；找第一個 cm < max 的帶——165/175/183/192 落在各自上一帶的下緣）

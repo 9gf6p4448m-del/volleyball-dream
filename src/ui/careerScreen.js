@@ -658,7 +658,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       if (fieldId === playerId) {
         notice = '主控球員不可下場——你恆在先發';
       } else if (!canSwap(fieldId, benchId)) {
-        notice = '不同角色不能替換上場——維持 5-1 對位（舉球員與對角砲除外）';
+        notice = '不同角色不能替換上場——維持 5-1 對位（舉球員與舉對除外）';
       } else {
         working.starters[si] = benchId;
         selected = null;
@@ -673,7 +673,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       } else if (selected.kind === 'bench') {
         benchToField(selected.id, si);
       } else if (!canSwap(working.starters[selected.si], working.starters[si])) {
-        notice = '不同角色不能互換——維持 5-1 對位（舉球員與對角砲除外），職責才不相撞';
+        notice = '不同角色不能互換——維持 5-1 對位（舉球員與舉對除外），職責才不相撞';
       } else {
         const s = working.starters;
         [s[selected.si], s[si]] = [s[si], s[selected.si]];

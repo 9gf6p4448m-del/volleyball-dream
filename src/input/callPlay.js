@@ -21,7 +21,9 @@ import { KIND_LABELS } from './setOptions.js';
 // 卷五：`bquick` 是**單人改線**型（只動 MB 自己那條線，沒有配合者），與上面三型
 // 的「兩人配合」不同族，但走同一個面板、同一支 `resolveCalledPlay`。
 export const CALL_LABELS = {
-  cross: '交叉', tandem: '夾塞', delay: '時間差', bquick: 'B 快',
+  // 2026-08-03 Sawmah 命名裁定：與 setOptions.js 的 KIND_LABELS 對齊——
+  // 同一個戰術在死球窗叫「交叉」、球內提示卻寫「交叉攻擊」，玩家會以為是兩件事。
+  cross: '交叉攻擊', tandem: '夾塞', delay: '時間差', bquick: 'B快',
 };
 export const CALL_DESCS = {
   cross: 'MB 打快攻當誘餌，你從他背後穿過去',
