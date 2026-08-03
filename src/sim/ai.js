@@ -14,7 +14,7 @@ import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
   applyRouteKinds, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
-  resolveCalledPlay,
+  resolveCalledPlay, offeredCallTypes,
 } from './approach.js';
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
@@ -884,15 +884,15 @@ function pickAttackPoint(game, team, setterId, passTier = 'perfect', points = nu
 // 真正在承重的是上面那道「主攻者/配合者已起跑就整筆作廢」——它兩側都有測試。
 // 這三行是**防禦性**的，留著是因為單人型擴充卷（slide／背飛）會再加一速線，
 // 屆時它才會變成活的；**不得把它當成「已起跑者不得改線」的證據**。
-function applyReplanCall(game, aiState) {
-  const call = aiState.replanCall;
-  if (!call) return;
+// 窗界＋池子重建——`applyReplanCall`（會改狀態）與 `callFeasibilityOf`（純查詢）共用同一段。
+// 抽出來的理由：UI 要知道「哪幾個戰術這球湊得出來」，但**不得自己再重建一顆池**
+// （那就變成第二份真相，與 applyReplanCall 遲早漂開）。窗外一律回 null。
+function replanContextOf(game, aiState) {
   const r = game.rally;
   const team = aiState.landingTeam;
-  aiState.replanCall = null; // 窗內窗外都只嘗試一次（殘留指令不跨球生效）
   // 窗界＝與甲同一個規劃窗（我方持球的第二觸窗、助跑線還活著）
   if (game.phase !== 'rally' || !team || r.possession !== team || r.touches !== 1
-    || aiState.approach?.team !== team || !aiState.approach.routes) return;
+    || aiState.approach?.team !== team || !aiState.approach.routes) return null;
   const tier = aiState.passTier ?? 'perfect';
   // 池子用**與 ensureFlightPlan 逐字相同的**三個輸入重建（claimId／tier／passReceiverId
   // 都是本波已定案的協調層狀態）⇒ 同一顆池，不另闢真相
@@ -900,6 +900,47 @@ function applyReplanCall(game, aiState) {
     attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
     { flightId: r.flightId, seed: game.seed ?? 0, passTier: tier },
   );
+  return { team, tier, points };
+}
+
+// ★ 2026-08-03 Sawmah 裁定乙：湊不出來的戰術**當場不列** ★
+// 為什麼現在可以列（而 `callPlay.js:47-49` 的裁定 E 曾禁止「預先變灰」）：
+// 那條禁令的理由是「變灰＝**預判**一傳品質＝作弊」，而它成立於**死球窗入口還在**
+// 的時代——那時你在一傳落地**之前**就要叫，變灰確實等於劇透未來。
+// 卷五 §六把死球窗入口拆了、入口搬到遠段（一傳已落地、`passTier` 已定案，
+// 面板標題自己就印著「一傳到位／可用／勉強」）⇒ **這裡讀的是已知事實，不是預測**。
+//
+// 回傳 `{ [type]: { feasible, reason } }`；窗外回 null（＝沒有可判定的東西）。
+// **純查詢：不改 game／aiState 任何一格。**
+// ⚠ 不含 `launched`（已起跑就作廢）那一關——那是取用時點才問得出來的，
+//   而實測改判窗開在二傳觸球前、0/300 次有人起跑過（見上方誠實標註）。
+export function callFeasibilityOf(game, aiState) {
+  const ctx = replanContextOf(game, aiState);
+  if (!ctx) return null;
+  const { team, tier, points } = ctx;
+  const out = {};
+  for (const type of offeredCallTypes()) {
+    const res = resolveCalledPlay(points, { type, callerId: null, isSetter: true }, {
+      team,
+      flightId: game.rally.flightId,
+      seed: game.seed ?? 0,
+      passTier: tier,
+      fallbackMainId: aiState.attackerId,
+      comboScale: game.comboScale ?? 1,
+    });
+    out[type] = { feasible: !!(res.combo ?? res.solo), reason: res.reason ?? null };
+  }
+  return out;
+}
+
+function applyReplanCall(game, aiState) {
+  const call = aiState.replanCall;
+  if (!call) return;
+  const r = game.rally;
+  aiState.replanCall = null; // 窗內窗外都只嘗試一次（殘留指令不跨球生效）
+  const ctx = replanContextOf(game, aiState);
+  if (!ctx) return;
+  const { team, tier, points } = ctx;
   // 遠段改判的人一定是 S（面板在 S 的分配窗裡）⇒ 語意是**指令**
   const res = resolveCalledPlay(points, { type: call.type, callerId: call.callerId, isSetter: true }, {
     team,

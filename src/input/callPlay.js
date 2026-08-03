@@ -81,7 +81,12 @@ const REASON_TEXT = {
   launched: '來不及了——人已經起跑',
   // 卷五・單人型專用：組合的 hasMain 問的是「有沒有夠格的主攻者」，單人型問的是
   // 「這一波到底有沒有人在跑 A 快」——兩者的實情不同，文案不共用。
-  hasQuick: '這一波沒有人跑快攻（一傳沒到位，或 MB 不在前排）',
+  // 2026-08-03 更正：括號裡原本寫「一傳沒到位，或 MB 不在前排」＝**猜的兩個原因**，
+  // 而實際觸發條件是「池裡沒有人跑 A 快」，成因至少三種，且依本檔 :67-70 的實測，
+  // **最常見的是「前排那個 MB 接了這一傳」**（D2 針對性發球專吃這個）。
+  // Sawmah 實玩回報「MB 明明在前排卻說他在後排」＝被這句猜錯的括號誤導。
+  // 講不出確切原因就不要猜——只陳述判定結果，並把最常見的成因擺第一個。
+  hasQuick: '這一波沒有人跑快攻——前排 MB 接了這一傳，或他不在前排',
   playsOff: '這個賽季還沒有戰術可以叫',
 };
 
@@ -104,10 +109,13 @@ export function callFeedbackOf(outcome, routes = null) {
     return { text: `${head}——照跑！`, color: spec.color, ms: 1400 };
   }
   const actual = routes?.find((r) => r.pid === outcome.mainId)?.kind ?? null;
+  // 2026-08-03：失敗字卡 1600 → 2800ms。Sawmah 實玩回報「跳出來的時間很短，
+  // 我看不出來為什麼我不能叫」——失敗的文案比成功的長得多（要講出哪一條沒過），
+  // 卻用同一個量級的時間，讀不完。成功那條維持 1400（只有四個字）。
   return {
     text: `${head}——${reasonTextOf(outcome.reason, actual)}`,
     color: '#ff8a8a',
-    ms: 1600,
+    ms: 2800,
   };
 }
 

@@ -236,9 +236,18 @@ test('裁定乙・佈線守衛：玩家輸入路徑把 comboScale 遞進解析�
   // 卷五（2026-08-02 裁定 1）：路徑甲（死球窗叫牌）退場後只剩一條。
   // 守的點一格未放寬——**每一條**呼叫都要遞 comboScale，漏一條就繞過世界閘；
   // 條數斷言同時擋住「日後又偷偷加一條沒受閘的路徑」。
+  // ★ 2026-08-03：由「恰有一條」升級為「**恰有這兩條具名的**」★
+  // 新增的第二條是 `callFeasibilityOf`——UI 用來判斷「哪幾個戰術這球湊得出來」的
+  // **純查詢**（Sawmah 裁定乙：湊不出來的當場不列）。它與 `applyReplanCall` 共用
+  // 同一段窗界＋池子重建，也照樣遞 comboScale ⇒ 實質規則一格未放寬。
+  // 用具名清單而不是把數字從 1 改成 2：日後再偷加第三條、或把其中一條改名，都還是會紅。
   const src = readFileSync(join(SIM_DIR, 'ai.js'), 'utf8');
   const calls = [...src.matchAll(/resolveCalledPlay\(/g)];
-  assert.equal(calls.length, 1, 'ai.js 應恰有一條玩家輸入路徑（乙＝球內遠段改判）');
+  assert.equal(calls.length, 2,
+    'ai.js 應恰有兩條 resolveCalledPlay：applyReplanCall（乙＝球內遠段改判）＋ callFeasibilityOf（純查詢）');
+  for (const name of ['function applyReplanCall(', 'export function callFeasibilityOf(']) {
+    assert.ok(src.includes(name), `少了具名路徑 ${name}——有人改名或刪掉了，守衛的清單要跟著重裁`);
+  }
   for (const m of calls) {
     const tail = src.slice(m.index, m.index + 800);
     const end = tail.indexOf('\n  });') >= 0 ? tail.indexOf('\n  });') : tail.length;
