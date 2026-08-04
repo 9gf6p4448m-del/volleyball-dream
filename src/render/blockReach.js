@@ -38,12 +38,14 @@ import { COURT } from '../sim/constants.js';
 
 // 面片高度（m）——貼在網頂下緣往下鋪，讓它落在網面上而不是飄在空中。
 const BAND_H = 0.42;
-// 隊友的帶子**矮一半**：主次之分改用「高度」承擔，濃度就不必壓到看不見。
-// ★ 教訓（同一個坑踩第二次）★ 四版初稿給隊友 0.18／0.30，而 `blockShadow.js` 的
-// 實測定帶白紙黑字寫著「0.34/0.24 疊暖橘地板**人眼無感**」——0.18 比那還低。
-// 回報果然是「好淡 幾乎看不到」。**這個專案的可見濃度下限就是 0.32 上下**，
-// 要做主次區分請動**尺寸或顏色**，不要再往下壓濃度。
-const MATE_BAND_H = 0.22;
+// ★★ 主次區分的兩次失敗（都被實玩打回來，留檔免得再試第三次）★★
+//   ① 壓濃度：隊友 0.18／0.30 ⇒「好淡 幾乎看不到」。
+//      `blockShadow.js` 的實測定帶白紙黑字寫著「0.34/0.24 疊暖橘地板**人眼無感**」，
+//      0.18 比那還低。**本專案的可見濃度下限就是 0.32 上下。**
+//   ② 壓高度：隊友帶高砍半（0.42→0.22）⇒「矮一半這樣也不明顯，一樣高就好了吧」。
+//      把「次要」做成「看不清」，等於沒解決原本的問題。
+//   ⇒ **定案：三塊帶子同尺寸**，主次只由濃度差一階承擔，且兩階都在可見門檻之上。
+//      要辨識「哪一格是我」還有一個天然線索——鏡頭恆在受控玩家身後，自己那塊恆在畫面中央。
 // 隊友格子最多幾個（前排三人，扣掉玩家自己）
 const MATE_SLOTS = 2;
 
@@ -74,7 +76,7 @@ export function createBlockReach(scene) {
     return m;
   };
   const mine = mk();
-  const mates = Array.from({ length: MATE_SLOTS }, () => mk(MATE_BAND_H));
+  const mates = Array.from({ length: MATE_SLOTS }, () => mk());
 
   const place = (mesh, x, side, opacity, h) => {
     mesh.visible = true;
@@ -99,9 +101,9 @@ export function createBlockReach(scene) {
       // 看不見是這個功能唯一的失敗模式 ⇒ 自己這格不壓低。
       place(mine, x, side, armed ? 0.80 : 0.55, BAND_H);
       // 隊友＝**參考資訊**（看牆的形狀與縫），不是要玩家去管他們的位置。
-      // 主次之分由**高度**承擔（矮一半），濃度只比自己低一階、仍在可見門檻之上。
+      // 同尺寸、濃度低一階（見檔頭「主次區分的兩次失敗」）。
       for (let i = 0; i < mates.length; i += 1) {
-        if (i < mateXs.length) place(mates[i], mateXs[i], side, armed ? 0.52 : 0.36, MATE_BAND_H);
+        if (i < mateXs.length) place(mates[i], mateXs[i], side, armed ? 0.55 : 0.38, BAND_H);
         else mates[i].visible = false;
       }
     },
