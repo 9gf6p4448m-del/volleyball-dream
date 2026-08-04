@@ -14,7 +14,7 @@ import {
   callFeasibilityOf,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
-import { landedCourtTeam, isBackRow, isFrontRow, TEAM_SIDE } from '../sim/rotation.js';
+import { landedCourtTeam, isBackRow, isFrontRow } from '../sim/rotation.js';
 import { NEAR_NET_Z } from '../input/matchControls.js'; // 攔網帶寬度＝與自動跳攔同一把尺
 import {
   setPanelTitle, setPreviewTitle, setStageOf, setEtaOf, SET_HESITANT_BELOW,
@@ -2175,7 +2175,12 @@ function frameStep(s, now) {
       && Math.abs(a.z) < NEAR_NET_Z; // 向 matchControls 取單一真相，不放第二份
     stage.blockReach?.set(
       blocking ? a.x : null,
-      me ? TEAM_SIDE[me.teamId] : 1,
+      // ★ 畫在「你與網之間」而不是腳下 ★ 攔網時相機走 defend 視角
+      // （`cameraRig.js:209-213`：機位在玩家**身後略高**、看向網對面）⇒ 腳下那塊會被
+      // 自己的身體擋掉一半、又落在畫面下緣；擺到網前 0.35m 才進視線正中。
+      // 語意也更準：攔網的手本來就是伸到**網上方**，範圍標在網前比標在腳下貼切。
+      // `Math.sign(a.z)` ＝我方半場的符號（玩家恆在自己這側），不必另外取 TEAM_SIDE。
+      a ? Math.sign(a.z || 1) * 0.35 : 0.35,
       blocking && r.profile === 'spike',
     );
   }
