@@ -1409,6 +1409,11 @@ function decideOne(game, aiState, playerId) {
       // 兩人各自從同樣輸入算出一致結論（純函式無共享狀態），且讓位方向恆向內＝永不交叉
       nx = clampCourtX(anchorX + laneOff);
       if (lane === 0) {
+        // ⚠ 2026-08-04（稽核 08-03 B2）：**這段在現行設計下不可達，但不是死碼**。
+        // 本分支的前提就是 `planX == null`（讀期），而讀期的 `anchorX` 恆為 0
+        // ——上方註解明文「錨在場地中軸」⇒ `Math.sign(0) === 0` ⇒ 下面的 `bs !== 0` 恆假。
+        // 讀期站在中軸上，結構上不可能發生邊線夾擠，所以這裡本來就沒事做。
+        // 留著是為了「讀期錨點哪天改成非中軸」的那一天——屆時夾擠會真的發生。
         const bs = Math.sign(anchorX);
         const nearWingX = clampCourtX(anchorX + bs * AI.BLOCK_SPREAD);
         if (bs !== 0 && Math.abs(nearWingX - nx) < AI.BLOCK_SPREAD * 0.9) {
@@ -1693,10 +1698,16 @@ export function blockSetterTendency(game, atkTeam, opts = {}) {
   if (!best) return null;
   const a = game.actors[best.pid];
   if (!a) return null;
-  // 裁定 2 強度端（形狀提案，出廠 MIX=0＝行為不變）：從「站在人身上」朝
-  // 「站在他的過網點上」收斂。過網點＝該線別的**名目擊球點**（setAimFor，公開的
-  // 位置知識，不含任何 route 的時間欄位）拉出直線／斜線兩條過網線再取中點——
-  // 他不知道對方會打哪一條，就站在兩條中間。零新幾何、零數值加成。
+  // 裁定 2 強度端：從「站在人身上」朝「站在他的過網點上」收斂。過網點＝該線別的
+  // **名目擊球點**（setAimFor，公開的位置知識，不含任何 route 的時間欄位）拉出
+  // 直線／斜線兩條過網線再取中點——他不知道對方會打哪一條，就站在兩條中間。
+  // 零新幾何、零數值加成。
+  //
+  // ★ 2026-08-04 更正過期註解（稽核 08-03 B11）★ 原文寫「出廠 MIX=0＝行為不變」，
+  // 但 **2026-08-01 Sawmah 已定案＝1**（掃描曲線見 `blockRead.js` 該常數註解）。
+  // ⇒ 下面的 `mix > 0` 在出廠值下恆真、末行的 fallback `return` 不可達。
+  // 那是**參數所致、不是死碼**：把 `AIM_CROSSING_MIX` 調回 0 就會復活。
+  // （稽核記為「不可達死碼」，實情是註解沒跟上定案值。）
   const mix = BLOCK_COMMIT.AIM_CROSSING_MIX;
   if (mix > 0) {
     const spot = setAimFor(game, atkTeam, best.pid, best.kind);

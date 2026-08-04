@@ -1912,6 +1912,15 @@ function buildBoxPanelData(s) {
     extras.push(`🛡 L 四欄：起球 ${lb.digs}・助攻一傳 ${lb.assistDigs}・續命 ${lb.rallySaves}・改判成功 ${ovText}`);
   } else if (me.currentRole === 'middle' && myRow) {
     extras.push(`🧱 MB 攔網歸因：攔網得分 ${myRow.blocks}`);
+  } else if (me.currentRole === 'opposite' && myRow) {
+    // ★ 2026-08-04 補漏（稽核 08-03 A-UI-2，HIGH）★ 這裡原本只有 S／L／MB 三支，
+    // 但同段註解寫著「Q9 四位置全數上線」、`positionFlags.js` 也把 OPP 列為
+    // `ENGINEERED_OPEN` 四位置之一 ⇒ **玩家轉任 OPP 打完整場，永遠看不到任何專屬數據**。
+    // 欄位選擇對齊 OPP 的職責（對角＝主要火力點＋右翼攔網），與 MB 只報攔網、
+    // S 只報分配同一個原則：報這個位置**被期待做的事**，不重複所有人都有的通用欄。
+    const rate = myRow.spikes ? Math.round((myRow.kills / myRow.spikes) * 100) : null;
+    extras.push(`⚡ OPP 火力：扣球 ${myRow.spikes}・得分 ${myRow.kills}`
+      + `${rate == null ? '' : `（${rate}%）`}・攔網 ${myRow.blocks}`);
   }
   return {
     title: won ? '🏆 勝利' : '敗北',
