@@ -1727,7 +1727,57 @@ export function blockSetterTendency(game, atkTeam, opts = {}) {
 // `contactTicks` ＝ 距「球墜到扣球窗上緣」還有幾 tick，**只有 read 有值**——
 // commit 猜的是人，`blockCommitRead` 結構上只給位置不給時間。
 // read 的起跳時鐘就吃這個值（v4 裁定書主題「甲」，見 blockPlanTargetX 的建計畫段）。
+// ★ 2026-08-04 誘餌量測臂（`BLOCK_COMMIT.DECOY_AIM_MIX`，預設 0＝不啟用）★
+// 重建**當年被拿掉的那條選人規則**：瞄「最接近網、正在朝網推進」的攻方前排球員身體 x。
+// 只讀可觀察量（actors 的 x／z／pz），與 `blockCommitRead` 同一組線索 ⇒ 反作弊鐵律不破。
+// `closing` 的判準沿用 `BLOCK_COMMIT.APPROACH_EPS`（本檔 :1069 同款），不另立門檻。
+function decoyAimX(game, atkTeam) {
+  const rot = game.match.rotations?.[atkTeam];
+  if (!rot?.length) return null;
+  const side = TEAM_SIDE[atkTeam];
+  let best = null;
+  for (const pid of rot) {
+    if (!isFrontRow(rot, pid)) continue;
+    const a = game.actors?.[pid];
+    if (!a) continue;
+    // 正在朝網推進嗎（同 :1069 的 closing）——誘餌的招牌就是「衝向網」
+    const closing = (side * a.pz) - (side * a.z) > BLOCK_COMMIT.APPROACH_EPS;
+    if (!closing) continue;
+    const dz = Math.abs(a.z); // 離網距離：越小越像「正要打的那個」
+    if (!best || dz < best.dz) best = { x: a.x, dz };
+  }
+  return best?.x ?? null;
+}
+
 function blockAimX(game, aiState, atkTeam, persona, opts) {
+  // ★★ 誘餌只騙得到 commit，read 免疫（2026-08-04，款3 警報器逼出來的設計）★★
+  //
+  // 初版對兩種人格一視同仁，結果**款3 離地率警報器當場轉紅**：
+  // 「commit 離地率 28.4% − read 20.1% ＝ 8.3pp < 10pp 門檻」（基準 gap 是 14.4pp）。
+  // 警報器是對的——read 的人格定義就是「**看清楚球再動、不對快攻賭**」
+  // （見 blockAimXBase 註解：read 在二傳觸球後才決定，讀的是球自己的拋物線），
+  // 而誘餌逼他跟著「衝向網的那個人」跑 ⇒ **直接消滅 read 與 commit 的區別**。
+  //
+  // ⇒ 正解是讓誘餌只作用於 commit：他本來就是在二傳觸球**之前**賭、手上只有助跑可讀，
+  //   被假動作騙走完全符合他的人格；read 看的是球，本來就不該被身體動作帶偏。
+  //   這也讓 `opponents.js` 對曜石的註解「中路是他們的天下＝賭中間；**交叉／兩翼就是解法**」
+  //   第一次真的成立——解法之所以是解法，正因為騙得動他。
+  const decoyMix = persona === BLOCK_PERSONA.COMMIT ? (BLOCK_COMMIT.DECOY_AIM_MIX ?? 0) : 0;
+  if (decoyMix > 0) {
+    const dx = decoyAimX(game, atkTeam);
+    if (dx != null) {
+      if (decoyMix >= 1) return { x: dx, contactTicks: null };
+      const base = blockAimXBase(game, aiState, atkTeam, persona, opts);
+      if (base) {
+        return { x: base.x * (1 - decoyMix) + dx * decoyMix, contactTicks: base.contactTicks };
+      }
+      return { x: dx, contactTicks: null };
+    }
+  }
+  return blockAimXBase(game, aiState, atkTeam, persona, opts);
+}
+
+function blockAimXBase(game, aiState, atkTeam, persona, opts) {
   if (persona === BLOCK_PERSONA.READ) {
     const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
     if (hit) return { x: hit.x, contactTicks: hit.ticks };
