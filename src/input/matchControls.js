@@ -181,12 +181,20 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       const me = lastGame.players[playerId];
       const a = lastGame.actors[playerId];
       const b = lastGame.ball;
-      // ★ 2026-08-03 收斂殘留清算 #6 ★ 原本 `TUNING.REACH_RADIUS * 1.1` ＝ 1.43m，
-      // 遠寬於收斂後的真實接球可及（0.665）⇒ 玩家**在搆不到的距離按下去也判 perfect**
-      // （timing 1.0），一傳品質被系統性高估。係數 1.1 的設計意圖不變（可及邊緣再放寬一成）。
-      // ⚠ 這會讓玩家的一傳品質**下降**，是體感輪必須先知道的變化。
-      const near = Math.hypot(b.x - a.x, b.z - a.z)
-        <= reachRadiusFor(REACH_ACTION.RECEIVE, TUNING, me?.height?.current ?? null) * 1.1;
+      // ★★ 2026-08-04 回退（Sawmah 實玩：生涯第一局就輸，以前第一屆能全贏）★★
+      //
+      // 08-03 的收斂殘留清算把這裡從 `TUNING.REACH_RADIUS * 1.1`（1.43m）改成
+      // 「真實接球可及 × 1.1」（0.73m），理由是「玩家在搆不到的距離按下去也判 perfect」。
+      // **那個判斷是錯的**——這一條**不是可及判定，是品質判定**，而且是
+      // **刻意給玩家的特權**：`ai.js:1235` 明文「AI 觸球品質基準 0.75
+      // （**玩家 Perfect＝1.0 才有超越空間**）」，AI 的接球 timing 恆為 0.75、
+      // 結構上拿不到 perfect；而 perfect 讓散佈乘數變成 `PERFECT_RECV_ACC = 0.5`（**減半**）。
+      // ⇒ 縮窄它＝**單方面砍掉玩家的核心優勢，AI 毫髮無傷**（不對稱削弱）。
+      //
+      // 教訓：「與收斂後的幾何對不上」不等於「錯」。判斷一個常數該不該跟著收斂走，
+      // 要先問**它是幾何量還是遊戲性參數**——這條是後者，窗寬是手感設計、不是可及真相。
+      // 幾何誠實與遊戲性的取捨已送裁（`docs/kickoffs/converge-residue-cleanup.md` §七）。
+      const near = Math.hypot(b.x - a.x, b.z - a.z) <= TUNING.REACH_RADIUS * 1.1;
       timing = near && b.vy < 0 && b.y <= standingReach(me) + 0.6 ? 1 : 0.7;
     }
     queuedAction = {
