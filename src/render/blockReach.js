@@ -38,6 +38,12 @@ import { COURT } from '../sim/constants.js';
 
 // 面片高度（m）——貼在網頂下緣往下鋪，讓它落在網面上而不是飄在空中。
 const BAND_H = 0.42;
+// 隊友的帶子**矮一半**：主次之分改用「高度」承擔，濃度就不必壓到看不見。
+// ★ 教訓（同一個坑踩第二次）★ 四版初稿給隊友 0.18／0.30，而 `blockShadow.js` 的
+// 實測定帶白紙黑字寫著「0.34/0.24 疊暖橘地板**人眼無感**」——0.18 比那還低。
+// 回報果然是「好淡 幾乎看不到」。**這個專案的可見濃度下限就是 0.32 上下**，
+// 要做主次區分請動**尺寸或顏色**，不要再往下壓濃度。
+const MATE_BAND_H = 0.22;
 // 隊友格子最多幾個（前排三人，扣掉玩家自己）
 const MATE_SLOTS = 2;
 
@@ -51,10 +57,10 @@ const MATE_SLOTS = 2;
 const BAND_COLOR = 0xffd166;
 
 export function createBlockReach(scene) {
-  const mk = () => {
+  const mk = (h = BAND_H) => {
     const m = new THREE.Mesh(
       // 寬＝涵蓋**直徑**（半寬 ×2）：看到的就是真正守得住的那一段網
-      new THREE.PlaneGeometry(BLOCK_HALF_WIDTH * 2, BAND_H),
+      new THREE.PlaneGeometry(BLOCK_HALF_WIDTH * 2, h),
       new THREE.MeshBasicMaterial({
         color: BAND_COLOR,
         transparent: true,
@@ -68,12 +74,12 @@ export function createBlockReach(scene) {
     return m;
   };
   const mine = mk();
-  const mates = Array.from({ length: MATE_SLOTS }, mk);
+  const mates = Array.from({ length: MATE_SLOTS }, () => mk(MATE_BAND_H));
 
-  const place = (mesh, x, side, opacity) => {
+  const place = (mesh, x, side, opacity, h) => {
     mesh.visible = true;
     // 網頂 2.43m，面片中心壓在網頂下方半個帶高＝整條貼在網面上緣
-    mesh.position.set(x, COURT.NET_HEIGHT - BAND_H / 2, side * 0.06);
+    mesh.position.set(x, COURT.NET_HEIGHT - h / 2, side * 0.06);
     mesh.material.opacity = opacity;
   };
 
@@ -91,11 +97,11 @@ export function createBlockReach(scene) {
       }
       // 濃度沿 `blockShadow` 實測定帶（0.32–0.38 才在夜賽場景裡讀得出來）。
       // 看不見是這個功能唯一的失敗模式 ⇒ 自己這格不壓低。
-      place(mine, x, side, armed ? 0.72 : 0.42);
-      // 隊友明顯更暗：這是**參考資訊**（看牆的形狀與縫），不是要玩家去管他們的位置。
-      // 兩者同色不同濃度＝一眼分得出「哪一格是我」，又讀得出整面牆。
+      place(mine, x, side, armed ? 0.80 : 0.55, BAND_H);
+      // 隊友＝**參考資訊**（看牆的形狀與縫），不是要玩家去管他們的位置。
+      // 主次之分由**高度**承擔（矮一半），濃度只比自己低一階、仍在可見門檻之上。
       for (let i = 0; i < mates.length; i += 1) {
-        if (i < mateXs.length) place(mates[i], mateXs[i], side, armed ? 0.30 : 0.18);
+        if (i < mateXs.length) place(mates[i], mateXs[i], side, armed ? 0.52 : 0.36, MATE_BAND_H);
         else mates[i].visible = false;
       }
     },
