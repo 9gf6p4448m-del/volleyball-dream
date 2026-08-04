@@ -1304,9 +1304,15 @@ function applyEvents(s, frameEvents, now) {
     // 由 `game.js:classifySpikeZone` 在扣球當下分類）——兩個位置的回饋才不會各說各話。
     // 時序：扣球 TOUCH 先於過網，且過網不重置 lastSpikeZone ⇒ 這裡讀得到本波的分類。
     // 封到球的情況已有 BLOCK_TOUCH 字卡（上方），這裡只處理「球過網了＝沒攔到」。
+    // ★ 2026-08-04 試玩回報修復 ★ 原本這裡還有一條 `currentRole === 'middle'`，
+    // 是從「MB 讀心面板」時代沿用下來的。**但那個面板早就不限 MB 了**——
+    // `matchControls.js:53-56` 明文「命名債：`mbOptions` 仍帶 mb 前綴＝歷史名，
+    // **語意已不限 MB**」，開啟條件是「前排 ＋ 站在攔網帶」（`:56-59`）。
+    // ⇒ 主攻／副攻站上網前一樣選得了封線，卻**永遠看不到回饋**（Sawmah 08-04 實玩回報）。
+    // 判準改成只看「玩家有沒有下過封線指令」——`s.mbCommit` 只在面板回呼裡寫入，
+    // 有值就代表他選過，角色檢查多餘且有害。
     if (e.type === 'BALL_OVER_NET' && s.mbCommit?.line
-      && e.toTeam === game.players[s.controlledId]?.teamId
-      && game.players[s.controlledId]?.currentRole === 'middle') {
+      && e.toTeam === game.players[s.controlledId]?.teamId) {
       // 判定抽在 blockBetFeedback.js（純函式＋測試守著），不內聯——
       // 前一版就是因為內聯而恆假了一整天沒人發現。
       const card = mbCallFeedbackOf(game.rally.lastSpikeZone, s.mbCommit);
