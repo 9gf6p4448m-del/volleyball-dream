@@ -64,7 +64,9 @@ const BAND_COLOR = 0xffd166;
 // 背板＝深色半透明面片、比金帶稍大一圈，讓金色永遠浮在暗底上
 // ⇒ 不論背後是米白網帶、深色網面還是夜空，可讀性都一致。
 const BACK_COLOR = 0x14161c;
-const BACK_PAD = 0.10; // 背板比金帶各邊大這麼多（m）＝視覺上的描邊寬度
+// 0.10 → 0.05（2026-08-04 試玩：「背板可以再窄一點」）。
+// 窄了之後面積大減，即使濃度不變、視覺重量也會輕很多——它要像**描邊**不像底板。
+const BACK_PAD = 0.05; // 背板比金帶各邊大這麼多（m）＝視覺上的描邊寬度
 
 export function createBlockReach(scene) {
   // 一格＝背板（深色、稍大）＋金帶（前景）。兩片一起收進 Group，位置同步。
@@ -101,8 +103,9 @@ export function createBlockReach(scene) {
     // 網頂 2.43m，面片中心壓在網頂下方半個帶高＝整條貼在網面上緣
     grp.position.set(x, COURT.NET_HEIGHT - h / 2, side * 0.06);
     grp.userData.face.material.opacity = opacity;
-    // 背板固定比前景暗一階半——它只負責製造對比，不該自己搶眼
-    grp.userData.back.material.opacity = Math.min(0.62, opacity * 0.85);
+    // 背板只負責製造對比，不該自己搶眼 ⇒ 綁前景的 0.7 倍並封頂 0.48
+    //（2026-08-04 試玩：「顏色變深了，要再淡一點嗎」——會，描邊夠細就不需要那麼濃）
+    grp.userData.back.material.opacity = Math.min(0.48, opacity * 0.7);
   };
 
   return {
