@@ -103,9 +103,10 @@ export function createBlockReach(scene) {
     // 網頂 2.43m，面片中心壓在網頂下方半個帶高＝整條貼在網面上緣
     grp.position.set(x, COURT.NET_HEIGHT - h / 2, side * 0.06);
     grp.userData.face.material.opacity = opacity;
-    // 背板只負責製造對比，不該自己搶眼 ⇒ 綁前景的 0.7 倍並封頂 0.48
-    //（2026-08-04 試玩：「顏色變深了，要再淡一點嗎」——會，描邊夠細就不需要那麼濃）
-    grp.userData.back.material.opacity = Math.min(0.48, opacity * 0.7);
+    // 背板只負責製造對比，不該自己搶眼 ⇒ 綁前景的 0.5 倍並封頂 0.34
+    //（2026-08-04 試玩兩輪：先「要再淡一點嗎」→ ×0.7/0.48，再「再淡一點就好了」→ 現值。
+    // 描邊收到 0.05m 之後，對比靠的是**邊緣**而不是**面積**，濃度可以再讓一階。）
+    grp.userData.back.material.opacity = Math.min(0.34, opacity * 0.5);
   };
 
   return {
