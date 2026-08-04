@@ -57,32 +57,52 @@ const MATE_SLOTS = 2;
 // 同一個畫面兩塊紅會讀成同一件事 ② 紅在遊戲裡的普世語意是警示／失誤，
 // 而這塊帶子講的是「你守得住這裡」——那是能力不是警告。
 const BAND_COLOR = 0xffd166;
+// ★★ 為什麼要墊一層深色背板（2026-08-04 第三次「還是很淡」）★★
+// 根因不是濃度也不是尺寸，是**背景色**：`court.js` 的網帶材質是 `0xf5f1e8`＝**米白**，
+// 而本帶子正好貼在網頂下緣（就是那條白帶上）⇒ 琥珀金疊米白，對比先天就低。
+// 前兩次只在「金色本身多濃」上打轉，等於在錯的變數上調參。
+// 背板＝深色半透明面片、比金帶稍大一圈，讓金色永遠浮在暗底上
+// ⇒ 不論背後是米白網帶、深色網面還是夜空，可讀性都一致。
+const BACK_COLOR = 0x14161c;
+const BACK_PAD = 0.10; // 背板比金帶各邊大這麼多（m）＝視覺上的描邊寬度
 
 export function createBlockReach(scene) {
+  // 一格＝背板（深色、稍大）＋金帶（前景）。兩片一起收進 Group，位置同步。
   const mk = (h = BAND_H) => {
-    const m = new THREE.Mesh(
+    const g = new THREE.Group();
+    const back = new THREE.Mesh(
+      new THREE.PlaneGeometry(BLOCK_HALF_WIDTH * 2 + BACK_PAD * 2, h + BACK_PAD * 2),
+      new THREE.MeshBasicMaterial({
+        color: BACK_COLOR, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    back.position.z = -0.012; // 壓在金帶後面一點點（同 Group 內的相對位移）
+    const face = new THREE.Mesh(
       // 寬＝涵蓋**直徑**（半寬 ×2）：看到的就是真正守得住的那一段網
       new THREE.PlaneGeometry(BLOCK_HALF_WIDTH * 2, h),
       new THREE.MeshBasicMaterial({
-        color: BAND_COLOR,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
+        color: BAND_COLOR, transparent: true, opacity: 0, depthWrite: false,
         side: THREE.DoubleSide, // 兩側都要看得見（換邊發球後鏡頭在另一側）
       }),
     );
-    m.visible = false;
-    scene.add(m);
-    return m;
+    g.add(back);
+    g.add(face);
+    g.visible = false;
+    g.userData = { back, face };
+    scene.add(g);
+    return g;
   };
   const mine = mk();
   const mates = Array.from({ length: MATE_SLOTS }, () => mk());
 
-  const place = (mesh, x, side, opacity, h) => {
-    mesh.visible = true;
+  const place = (grp, x, side, opacity, h) => {
+    grp.visible = true;
     // 網頂 2.43m，面片中心壓在網頂下方半個帶高＝整條貼在網面上緣
-    mesh.position.set(x, COURT.NET_HEIGHT - h / 2, side * 0.06);
-    mesh.material.opacity = opacity;
+    grp.position.set(x, COURT.NET_HEIGHT - h / 2, side * 0.06);
+    grp.userData.face.material.opacity = opacity;
+    // 背板固定比前景暗一階半——它只負責製造對比，不該自己搶眼
+    grp.userData.back.material.opacity = Math.min(0.62, opacity * 0.85);
   };
 
   return {
