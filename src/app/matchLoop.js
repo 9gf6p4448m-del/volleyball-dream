@@ -2175,12 +2175,11 @@ function frameStep(s, now) {
       && Math.abs(a.z) < NEAR_NET_Z; // 向 matchControls 取單一真相，不放第二份
     stage.blockReach?.set(
       blocking ? a.x : null,
-      // ★ 畫在「你與網之間」而不是腳下 ★ 攔網時相機走 defend 視角
-      // （`cameraRig.js:209-213`：機位在玩家**身後略高**、看向網對面）⇒ 腳下那塊會被
-      // 自己的身體擋掉一半、又落在畫面下緣；擺到網前 0.35m 才進視線正中。
-      // 語意也更準：攔網的手本來就是伸到**網上方**，範圍標在網前比標在腳下貼切。
-      // `Math.sign(a.z)` ＝我方半場的符號（玩家恆在自己這側），不必另外取 TEAM_SIDE。
-      a ? Math.sign(a.z || 1) * 0.35 : 0.35,
+      // 三版：改畫在**網上**（見 blockReach.js 檔頭沿革）。地板方案依賴「鏡頭俯視地面」，
+      // 但攔網視角本來就是平視網，鏡頭一換（`cameraRig.js` 的 defend 模式由面板開關驅動）
+      // 地上的東西就離開視線 ⇒ 改貼網面，網恆在視線前方。
+      // 這裡傳的是**我方半場符號**（玩家恆在自己這側），面片往自己這側偏 6cm 防 z-fighting。
+      a ? Math.sign(a.z || 1) : 1,
       blocking && r.profile === 'spike',
     );
   }
