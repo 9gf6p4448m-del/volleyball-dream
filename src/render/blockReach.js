@@ -38,8 +38,15 @@ export function createBlockReach(scene) {
   const mesh = new THREE.Mesh(
     // 寬＝涵蓋**直徑**（半寬 ×2）：玩家看到的就是他真正守得住的那一段網
     new THREE.PlaneGeometry(BLOCK_HALF_WIDTH * 2, BAND_H),
+    // ★ 色彩語言（2026-08-04 Sawmah 問「要不要改紅色」）★
+    // 選**琥珀金 #ffd166**——這是專案既有的「攔網」色語：`blockShadow.js` 07-27 試玩
+    // 定案時就寫明「改琥珀金（與『🧱封線成功！』字卡同色＝封線的色彩語言）」，
+    // 而「🧱 封到了！」「🧱 封線成功！」兩張字卡也都是這個色。
+    // **不用紅色**的兩個理由：① `blockShadow` 的紅已經佔用了「封住的線」這個語意，
+    // 同一個畫面兩塊紅會讀成同一件事 ② 紅在遊戲裡的普世語意是警示／失誤，
+    // 而這塊帶子講的是「你守得住這裡」——那是能力不是警告。
     new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+      color: 0xffd166,
       transparent: true,
       opacity: 0,
       depthWrite: false,

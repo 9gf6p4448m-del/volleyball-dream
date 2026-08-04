@@ -2169,8 +2169,12 @@ function frameStep(s, now) {
     const me = game.players[s.controlledId];
     const a = game.actors[s.controlledId];
     const r = game.rally;
+    // ★ 2026-08-04 二修（Sawmah 實玩：「剛剛扣球也有閃過那個白色的帶」）★
+    // 原本只看「球權在對方」，但球一過網 `possession` 就切了（`game.js:1029`）
+    // ⇒ 玩家扣完球還在收動作時帶子就閃出來。加 `touches >= 1`：
+    // 對方**已經接起球、開始組織**才是該準備攔網的時刻；球還在飛過去的路上不算。
     const blocking = me && a && game.phase === 'rally'
-      && r.possession && r.possession !== me.teamId
+      && r.possession && r.possession !== me.teamId && r.touches >= 1
       && isFrontRow(game.match.rotations[me.teamId], s.controlledId)
       && Math.abs(a.z) < NEAR_NET_Z; // 向 matchControls 取單一真相，不放第二份
     stage.blockReach?.set(
