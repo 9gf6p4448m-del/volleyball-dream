@@ -22,6 +22,7 @@ import { createSetBreakOverlay } from '../ui/setBreakOverlay.js';
 import { createBoxScorePanel } from '../ui/boxScorePanel.js';
 import { createCallButton } from '../ui/callButton.js';
 import { createBlockShadow } from '../render/blockShadow.js';
+import { createBlockReach } from '../render/blockReach.js';
 import { createDiegeticUi } from '../render/diegeticUi.js';
 import { createSubPanel } from '../ui/subPanel.js';
 import { careerReturnUrl } from './matchCareer.js';
@@ -111,6 +112,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const callButton = createCallButton();
   // W4(P4) 附錄 B-3 封線影子（L 2.0 佈陣可視化——配套下達即現，純表現層）
   const blockShadow = createBlockShadow(ctx.scene);
+  // 2026-08-04 試玩裁定：玩家自己的攔網涵蓋帶（看得見「我守得住多寬」；不畫球的預測落點）
+  const blockReach = createBlockReach(ctx.scene);
   // W7 A6：主角體力條（HUD 角落；stamina 未啟用時 update() 內部短路不顯示）
   const heroStamina = createHeroStaminaBar();
   // 4.5B §4：S/L diegetic 介面（取代舊面板；?panel=classic＝降規/開發退路）
@@ -121,7 +124,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, routeCue, pointBanner, setOverOverlay, setBreakOverlay,
-    boxScorePanel, callButton, blockShadow, heroStamina, diegetic,
+    boxScorePanel, callButton, blockShadow, blockReach, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
 }

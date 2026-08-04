@@ -14,7 +14,8 @@ import {
   callFeasibilityOf,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
-import { landedCourtTeam, isBackRow } from '../sim/rotation.js';
+import { landedCourtTeam, isBackRow, isFrontRow, TEAM_SIDE } from '../sim/rotation.js';
+import { NEAR_NET_Z } from '../input/matchControls.js'; // 攔網帶寬度＝與自動跳攔同一把尺
 import {
   setPanelTitle, setPreviewTitle, setStageOf, setEtaOf, SET_HESITANT_BELOW,
 } from '../input/setOptions.js';
@@ -2150,6 +2151,25 @@ function frameStep(s, now) {
   stage.routeCue?.sync(
     s.attackDecidingSince >= 0 ? null : myRouteFor(game, s.aiState, s.controlledId),
   );
+  // 2026-08-04 試玩裁定：攔網涵蓋帶——玩家看得見「我的手守得住哪一段網」。
+  // 顯示條件刻意與**自動跳攔**（`matchControls.js:511-513`）逐條對齊：前排＋站在攔網帶內
+  // ＋球權在對方。條件一致＝帶子出現就代表「這一球我真的會跳」，不會出現
+  // 「看到帶子卻沒跳」或「跳了卻沒帶子」的分岔。
+  // armed＝對方已進入扣球階段（profile==='spike'）⇒ 亮起來；其餘時候淡淡的不搶視線。
+  {
+    const me = game.players[s.controlledId];
+    const a = game.actors[s.controlledId];
+    const r = game.rally;
+    const blocking = me && a && game.phase === 'rally'
+      && r.possession && r.possession !== me.teamId
+      && isFrontRow(game.match.rotations[me.teamId], s.controlledId)
+      && Math.abs(a.z) < NEAR_NET_Z; // 向 matchControls 取單一真相，不放第二份
+    stage.blockReach?.set(
+      blocking ? a.x : null,
+      me ? TEAM_SIDE[me.teamId] : 1,
+      blocking && r.profile === 'spike',
+    );
+  }
   stage.timeoutBtn?.sync(game); // W7 B3 暫停鈕可用性（死球窗＋剩餘額度）
   stage.benchAccelBtn?.sync(benched); // W7 C2③：只在板凳期間顯示
   if (stage.comebackBtn) {
