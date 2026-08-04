@@ -100,8 +100,27 @@ const REASON_TEXT = {
   // 78.7% 發生在一傳 ok/poor（整波根本不產生快攻線），我擺第一的那個只佔 21.3%。
   // ⇒ 改成不猜成因。一傳品質已經印在面板標題上，理由句只要陳述判定結果。
   hasQuick: '這一波沒有人跑快攻',
+  // ★ 2026-08-04 補漏 ★ `hasMain` 一直**沒有文案**，玩家遇到它時看到的是 fallback
+  // 「這球湊不出來」——最模糊的那一句。而它是真的會發生的：
+  // `COMBO_MAIN_KINDS = { cross:['left'], tandem:['right'], delay:['left','right'] }`
+  // ⇒ 場上沒有人在跑那條線就回它（實測：前排主攻跑的是 `left_inside` 而非 `left` 時，
+  // 叫交叉就會撞上）。句式對齊 `hasQuick`，同樣只陳述判定結果、不猜成因
+  // （08-03 兩度猜錯成因的教訓見上方註記）。
+  hasMain: '這一波沒有人跑得了主攻線',
   playsOff: '這個賽季還沒有戰術可以叫',
 };
+
+// ★ 2026-08-04 結構性護欄 ★ `sim` 端每新增一個失敗 reason，這裡就得補一句文案，
+// 否則玩家看到的是 fallback「這球湊不出來」——`hasMain` 就是這樣漏了一輪沒人發現。
+// 本清單＝`approach.js` 會回出的**全部** reason（`resolveCalledPlay` 的直接 return
+// ＋ `firstFailedCheck` 會挑到的 checks 鍵）＋ `ai.js applyReplanCall` 的 `launched`。
+// 守門測試在 `tests/called-play.test.mjs`：清單裡每一個都必須查得到文案。
+export const ALL_CALL_REASONS = [
+  'playsOff', 'hasQuick', 'hasMain', 'mainKind', 'partner',
+  'crosses', 'behind', 'outOfReach',
+  'lane', 'depth', 'stagger', 'notCrossing',
+  'earlier', 'inWindow', 'launched',
+];
 
 function reasonTextOf(reason, actualKind) {
   if (reason === 'mainKind') {

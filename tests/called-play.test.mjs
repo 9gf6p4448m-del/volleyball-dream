@@ -29,7 +29,9 @@ import {
   applyRouteKinds, applySoloRoute, CALL_OFFERS_FACTORY_OFF_TYPES,
 } from '../src/sim/approach.js';
 import { attackPointsOf } from '../src/sim/ai.js';
-import { callFeedbackOf, CALL_MODES, callModeOf, callOptionsFor, CALL_LABELS } from '../src/input/callPlay.js';
+import {
+  callFeedbackOf, CALL_MODES, callModeOf, callOptionsFor, CALL_LABELS, ALL_CALL_REASONS,
+} from '../src/input/callPlay.js';
 import { myRouteFor } from '../src/input/myRoute.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
@@ -615,4 +617,37 @@ test('卷尾：死球窗叫戰術的入口確實不存在（拆一半比不拆�
   // ④ 技術閘**不得**跟著退場：它改掛球內入口，是遠段改判選項池的唯一開關
   assert.ok(/gates\.canCallPlay|s\.gates\.canCallPlay/.test(loop),
     '球內遠段入口沒有吃 gates.canCallPlay＝技術閘被一起拆掉了（護欄 1）');
+});
+
+
+// ---------------- 失敗理由文案的完整性護欄（2026-08-04）----------------
+//
+// ★ 為什麼要這一條 ★
+// `hasMain` 漏了文案一整輪沒人發現——玩家撞上它時看到的是 fallback「這球湊不出來」，
+// 也就是**最模糊的那一句**，而它是真的會發生的（前排主攻跑 `left_inside` 而非 `left`
+// 時叫交叉就會撞上）。sim 端每新增一個 reason，input 層就得補一句話，
+// 這種「兩邊各改一半」的漏接靠人眼盯不住，用測試釘。
+
+test('每一個失敗 reason 都要有專屬文案（不得掉進 fallback「這球湊不出來」）', () => {
+  const generic = '這球湊不出來';
+  const missing = [];
+  for (const reason of ALL_CALL_REASONS) {
+    const card = callFeedbackOf({
+      type: 'cross', mode: 'command', outcome: 'infeasible', reason, mainId: 'A2', flightId: 1,
+    });
+    assert.ok(card, `reason=${reason} 連字卡都生不出來`);
+    if (card.text.includes(generic)) missing.push(reason);
+  }
+  assert.deepEqual(missing, [],
+    `這些 reason 沒有專屬文案、會顯示成「${generic}」：${missing.join('／')}`);
+});
+
+test('★鑑別力★ 拿掉任一句文案，上面那條護欄要能抓到', () => {
+  // 用一個不在表裡的 reason 模擬「漏寫文案」——它必須掉進 fallback（＝護欄的偵測對象）
+  const card = callFeedbackOf({
+    type: 'cross', mode: 'command', outcome: 'infeasible',
+    reason: '__不存在的reason__', mainId: 'A2', flightId: 1,
+  });
+  assert.ok(card.text.includes('這球湊不出來'),
+    'fallback 機制本身壞了＝上面那條護欄失去偵測能力');
 });
