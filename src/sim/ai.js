@@ -73,6 +73,10 @@ export const AI = {
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
   BLOCK_SCHEME_SHIFT: 0.9, // W4 附錄 B-1：L 配套封線站位偏移（封直線往邊線/封斜線往內）
+  // 治具保真度量測臂（見 decideOne 的 PLAYER_PERFECT_RECV 註解）：
+  // 0 ＝**現行，零行為改動**；1 ＝讓治具的主角 A2 接球也拿 Perfect（模擬真人）。
+  // 只有量測臂會 patch 它，production 恆 0。
+  PLAYER_PERFECT_RECV: 0,
   // §7 D2 針對性發球：多少比例的球指名發給對方後排主攻手（其餘走既有四區循環）。
   // 0.5＝兩種發球各半，「這球是不是衝著我來的」才讀得出來。設計值，**未依治具校準**
   SERVE_TARGET_RATE: 0.5,
@@ -1237,6 +1241,17 @@ function decideOne(game, aiState, playerId) {
         // AI 代打（治具上下限臂）與真人走同一條規則（真人路徑在 matchControls 鏡像）
         if (action === 'receive' && r.touches === 0 && player.currentRole === 'libero'
           && digBiasCorrectFor(game, aiState, team)) {
+          timing = 1.0;
+        }
+        // ★ 2026-08-04 治具保真度量測臂（`AI.PLAYER_PERFECT_RECV`，預設 0＝零行為改動）★
+        // 為什麼需要它：治具用 AI 代打主角，接球 timing 恆 0.75、**結構上拿不到 Perfect**；
+        // 但真人幾乎**無條件**拿得到——`matchControls.js` 的 perfect 判定門檻是
+        // `REACH_RADIUS × 1.1 = 1.43m`，而觸球本身要求 dist ≤ 收斂後的接球可及 0.665m
+        // ⇒ **觸球一旦發生，那個 near 必然為真**（稽核 08-03 存疑項，08-04 覆核成立）。
+        // Perfect 讓散佈乘數變成 `PERFECT_RECV_ACC = 0.5`（減半）⇒ 這是真人相對治具的
+        // **系統性優勢**，而難度重校卷的所有錨都是為真人定的。
+        // ⇒ 開這個臂＝量「治具低估真人多少」，那是把治具數字換算成真人難度的橋。
+        if (action === 'receive' && playerId === 'A2' && (AI.PLAYER_PERFECT_RECV ?? 0) > 0) {
           timing = 1.0;
         }
         // Q4 資料層：這一擊若是「協調層選定的攻擊手」扣球，帶上已定案的路線種類

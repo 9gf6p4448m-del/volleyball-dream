@@ -25,7 +25,7 @@ import { matchFormatOf } from '../src/career/schedule.js';
 import { revealHeightForSeason } from '../src/career/heightGrowth.js'; // G7 屆界身高揭曉
 import { isBackRow } from '../src/sim/rotation.js';
 import {
-  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
+  createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted, AI,
 } from '../src/sim/ai.js';
 import { matchStatsFor, growthPointsFor, GROWTH, GROWABLE_ATTRS } from '../src/career/growth.js';
 import { buildDeficitFillIns, applySeasonTurnover } from '../src/career/graduation.js';
@@ -65,6 +65,13 @@ const HEIGHT_CM = process.env.VD_HEIGHT ? Number.parseInt(process.env.VD_HEIGHT,
 // W2 拍板的平衡主錨（`docs/phase4-w2-status.md` §B3）＝ production 創角畫面的預設值
 // （`src/ui/careerScreen.js:1502`）。不是 `createCareerPlayer` 的簽名預設 188——見 G3 修復註。
 const BALANCE_ANCHOR_HEIGHT_CM = 175;
+// VD_PLAYER_PERFECT=1＝讓治具的主角 A2 接球拿 Perfect（timing 1.0），模擬真人。
+// ★ 為什麼這是難度重校卷的關鍵臂 ★ 治具用 AI 代打主角、接球 timing 恆 0.75，
+// 但真人幾乎**無條件**拿得到 Perfect（`matchControls.js` 的門檻 1.43m 遠寬於
+// 觸球必要的 0.665m ⇒ 觸球一發生就必然成立），而 Perfect 讓散佈減半。
+// ⇒ 本臂量的是「**治具低估真人多少**」——所有難度錨都是為真人定的，
+//   拿治具的絕對值直接對錨，會把旋鈕調到錯的位置。
+if (process.env.VD_PLAYER_PERFECT === '1') AI.PLAYER_PERFECT_RECV = 1;
 // W3(P4) 位置臂（工單 §9：分位置獨立跑）：VD_ROLE=setter|middle|opposite|libero
 // （未給＝outside 基準）。建隊走正式轉位鏈同款：currentRole＋缺額補位員＋
 // defaultLineup 新對位（S 臂 AI 代打＝trust 權重鏡像＝現行 AI 舉球；MB/OPP＝現行
