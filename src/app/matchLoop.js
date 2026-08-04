@@ -2177,8 +2177,24 @@ function frameStep(s, now) {
       && r.possession && r.possession !== me.teamId && r.touches >= 1
       && isFrontRow(game.match.rotations[me.teamId], s.controlledId)
       && Math.abs(a.z) < NEAR_NET_Z; // 向 matchControls 取單一真相，不放第二份
+    // 四版：連**前排隊友**的格子一起畫（見 blockReach.js 檔頭）。理由是封線指令
+    // （`AI.BLOCK_SCHEME_SHIFT` 0.9m）是整面牆同方向平移、而玩家不跟著平移
+    // ⇒ 相對位置被拉開，足以在玩家那一格開縫（肩寬間距只有 0.55m）。
+    // 隊友的判準與玩家同一組（前排＋站在攔網帶內），不同的只有濃度。
+    const mateXs = [];
+    if (blocking) {
+      const rot = game.match.rotations[me.teamId];
+      for (const pid of rot) {
+        if (pid === s.controlledId) continue;
+        if (!isFrontRow(rot, pid)) continue;
+        const ma = game.actors[pid];
+        if (!ma || Math.abs(ma.z) >= NEAR_NET_Z) continue; // 退防的人不畫（他不在牆上）
+        mateXs.push(ma.x);
+      }
+    }
     stage.blockReach?.set(
       blocking ? a.x : null,
+      mateXs,
       // 三版：改畫在**網上**（見 blockReach.js 檔頭沿革）。地板方案依賴「鏡頭俯視地面」，
       // 但攔網視角本來就是平視網，鏡頭一換（`cameraRig.js` 的 defend 模式由面板開關驅動）
       // 地上的東西就離開視線 ⇒ 改貼網面，網恆在視線前方。
