@@ -295,7 +295,14 @@ export function createGame({
       lastSetKind: null,   // §十-4：最後一次舉球檔位 {team, kind:'quick'|'shoot'|'high'}（快攻分類資料底）
       serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
-      callPid: null,     // W4 題5 OPP 要球：本波要球者（trust 2×/甜蜜區放寬的資料底）
+      // W4 題5 OPP 要球：本波要球者。
+      // ★ 2026-08-05 更正過期註解（稽核 08-03 存疑項覆核）★ 原文寫「trust 2×／甜蜜區放寬
+      // 的資料底」，但**trust 2× 從未實作**——全 `src/` 只有本檔用到 `callPid`，
+      // 唯一效果是下面扣球結算的**甜蜜區微放寬**（`CALL_SWEET_WIDEN`）。
+      // ⇒ 要球**不影響二傳把球舉給誰**（`ai.js` 一次都沒引用它）。
+      // E 路實測「授予後撐到二傳出手仍是原受控者只剩 55.5%」正是這個設計的必然結果，
+      // 不是 bug——但**與玩家對「⚡跟上！」這顆按鈕的預期不符**，已送裁（見下）。
+      callPid: null,
       // 段 4 組合獎金的資料底：`{ pid, team }`＝本波組合的配合者且他**實際起跳**了。
       // 由 ai.js 的 applyRouteCommit 寫（那裡才同時看得到 attackCombo 與 routeCommit），
       // settlePoint 讀。放 rally 而不是 aiState 的理由：獎金要在**得分結算**那一刻兌現，

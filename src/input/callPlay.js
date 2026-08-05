@@ -34,6 +34,11 @@ export const CALL_DESCS = {
 
 // 表現層規格（單一真相：面板與回饋讀同一份）。
 // `request` 已於 2026-08-01 隨舊語意刪除——不得再加回來。
+// ★ 2026-08-05（稽核 08-03 存疑項覆核）★ `replan` 這一支目前**沒有取用路徑**：
+// `approach.js` 的解析器恆回 `mode: 'command'`（「叫套路的人一定是 S」），
+// 08-03 也把 `ai.js applyReplanCall` 寫死的 `'replan'` 改回讀解析器的值。
+// **保留不刪**：它是 `callFeedbackOf` 的查表項，若哪天恢復「改判」語意（例如死球窗入口
+// 重開），只要解析器回 `'replan'` 就會自己活過來；刪掉反而要連文案一起重寫。
 export const CALL_MODES = {
   command: { icon: '⚡', word: '指令', color: '#ffd166', hint: '你是二傳——說了算' },
   replan:  { icon: '🔄', word: '改判', color: '#ffd166', hint: '一傳歪了——臨場換戰術' },
@@ -67,7 +72,12 @@ const REASON_TEXT = {
   // 實際觸發條件（approach.js:909-916）＝`commandMainId(points, ['left'], …)` 找不到人
   // ＝這一波沒有人跑左翼。**實測是最常見的單一失敗原因**（415 次／全體遠段波 27.8%，
   // tools/call-feasibility-probe.mjs n=1491）。
-  hasMain: '這一波沒有人跑左翼，交叉搭不起來',
+  // ★ 2026-08-05 修正我自己 08-04 造成的重複鍵 ★ 那天我以為 `hasMain` 沒有文案、
+  // 在本表下方又加了一個 `hasMain`——JS 物件**後者覆蓋前者**，等於把這條（更具體、
+  // 且附實測依據的）文案蓋掉了。已移除重複鍵，並把本條升級成**依戰術型別動態**：
+  // `COMBO_MAIN_KINDS = { cross:['left'], tandem:['right'], delay:['left','right'] }`
+  // ⇒ 原文「沒有人跑左翼」只對 cross 正確，叫夾塞時該講的是右翼。
+  hasMain: null, // 動態：依 type 講出缺的是哪一條線（見 reasonTextOf）
   mainKind: null, // 動態：要講出他實際被排到哪條線（見 reasonTextOf）
   // ★ 2026-08-03 更正 ★ 原文「一傳沒到位」讀的是**逐點的 main.tier**（approach.js:759），
   // 不是面板標題用的 `aiState.passTier`——實測有 1/1491 波標題印著「一傳到位」、
@@ -100,13 +110,6 @@ const REASON_TEXT = {
   // 78.7% 發生在一傳 ok/poor（整波根本不產生快攻線），我擺第一的那個只佔 21.3%。
   // ⇒ 改成不猜成因。一傳品質已經印在面板標題上，理由句只要陳述判定結果。
   hasQuick: '這一波沒有人跑快攻',
-  // ★ 2026-08-04 補漏 ★ `hasMain` 一直**沒有文案**，玩家遇到它時看到的是 fallback
-  // 「這球湊不出來」——最模糊的那一句。而它是真的會發生的：
-  // `COMBO_MAIN_KINDS = { cross:['left'], tandem:['right'], delay:['left','right'] }`
-  // ⇒ 場上沒有人在跑那條線就回它（實測：前排主攻跑的是 `left_inside` 而非 `left` 時，
-  // 叫交叉就會撞上）。句式對齊 `hasQuick`，同樣只陳述判定結果、不猜成因
-  // （08-03 兩度猜錯成因的教訓見上方註記）。
-  hasMain: '這一波沒有人跑得了主攻線',
   playsOff: '這個賽季還沒有戰術可以叫',
 };
 
@@ -122,10 +125,20 @@ export const ALL_CALL_REASONS = [
   'earlier', 'inWindow', 'launched',
 ];
 
-function reasonTextOf(reason, actualKind) {
+// 各戰術要求主攻者跑的線（鏡像 `approach.js` 的 COMBO_MAIN_KINDS，只為講人話用）。
+// 實測 `hasMain` 是最常見的單一失敗原因（415 次／全體遠段波 27.8%，
+// tools/call-feasibility-probe.mjs n=1491）⇒ 這句話玩家看得最多，值得講精確。
+const MAIN_LANE_TEXT = { cross: '左翼', tandem: '右翼', delay: '左右翼' };
+
+function reasonTextOf(reason, actualKind, type = null) {
   if (reason === 'mainKind') {
     const k = KIND_LABELS[actualKind] ?? actualKind;
     return k ? `你這球被排到「${k}」` : '你這球跑的不是那條線';
+  }
+  if (reason === 'hasMain') {
+    const lane = MAIN_LANE_TEXT[type];
+    return lane ? `這一波沒有人跑${lane}，${CALL_LABELS[type] ?? type}搭不起來`
+      : '這一波沒有人跑得了主攻線';
   }
   return REASON_TEXT[reason] ?? '這球湊不出來';
 }
@@ -145,7 +158,7 @@ export function callFeedbackOf(outcome, routes = null) {
   // 我看不出來為什麼我不能叫」——失敗的文案比成功的長得多（要講出哪一條沒過），
   // 卻用同一個量級的時間，讀不完。成功那條維持 1400（只有四個字）。
   return {
-    text: `${head}——${reasonTextOf(outcome.reason, actual)}`,
+    text: `${head}——${reasonTextOf(outcome.reason, actual, outcome.type)}`,
     color: '#ff8a8a',
     ms: 2800,
   };

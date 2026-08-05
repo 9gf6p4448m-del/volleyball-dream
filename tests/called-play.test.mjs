@@ -651,3 +651,30 @@ test('★鑑別力★ 拿掉任一句文案，上面那條護欄要能抓到', (
   assert.ok(card.text.includes('這球湊不出來'),
     'fallback 機制本身壞了＝上面那條護欄失去偵測能力');
 });
+
+// ★ 2026-08-05 護欄：REASON_TEXT 不得有重複鍵 ★
+// 起因是我自己踩的坑：08-04 以為 `hasMain` 沒有文案、又加了一個，
+// 而 JS 物件字面量的重複鍵**後者靜默覆蓋前者** ⇒ 把原本更具體、還附實測依據的那句蓋掉，
+// 而且 build 與所有測試都不會報錯（`ALL_CALL_REASONS` 護欄只檢查「查得到文案」，
+// 查得到的正是覆蓋後的那個）。這種錯只有掃原始碼抓得到。
+test('★防重複鍵★ callPlay.js 的 REASON_TEXT 每個鍵只能出現一次', () => {
+  const src = readFileSync(join(SRC, 'input', 'callPlay.js'), 'utf8')
+    .replace(/\r\n?/g, '\n');
+  const body = src.slice(src.indexOf('const REASON_TEXT = {'), src.indexOf('\n};', src.indexOf('const REASON_TEXT = {')));
+  const keys = [...body.matchAll(/^\s{2}([a-zA-Z][a-zA-Z0-9_]*)\s*:/gm)].map((m) => m[1]);
+  const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
+  assert.deepEqual([...new Set(dupes)], [],
+    `REASON_TEXT 有重複鍵（後者會靜默覆蓋前者）：${[...new Set(dupes)].join('／')}`);
+  assert.ok(keys.length >= 10, `只掃到 ${keys.length} 個鍵＝擷取範圍不對，這條護欄失去偵測能力`);
+});
+
+test('hasMain 依戰術型別講出缺的是哪一條線（交叉要左翼、夾塞要右翼）', () => {
+  const mk = (type) => callFeedbackOf({
+    type, mode: 'command', outcome: 'infeasible', reason: 'hasMain', mainId: 'A2', flightId: 1,
+  }).text;
+  assert.match(mk('cross'), /左翼/);
+  assert.match(mk('tandem'), /右翼/);
+  assert.match(mk('delay'), /左右翼/);
+  // 未知型別要有安全網，不得掉進 fallback「這球湊不出來」
+  assert.ok(!mk('__unknown__').includes('這球湊不出來'));
+});
