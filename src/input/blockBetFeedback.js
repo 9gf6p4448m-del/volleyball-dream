@@ -24,6 +24,8 @@
 import { AIR_TICKS } from '../sim/approach.js';
 import { BLOCK_HALF_WIDTH } from '../sim/blockBand.js';
 import { otherTeam, isFrontRow } from '../sim/rotation.js';
+import { blockPersonaOf } from '../sim/ai.js';
+import { BLOCK_PERSONA } from '../sim/blockRead.js';
 
 /**
  * 本方扣球觸球那一刻，對方是不是「賭了、賭錯了、留下空門」？
@@ -60,8 +62,21 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId) {
   //    量的是擊球點不是過網點——與量門檻的 `tools/segf-decoy-probe.mjs` 同一個座標系
   //    （誤歸因率 0.0% 那組數字就是在這個位置上量出來的）。
   const ballX = game.ball?.x ?? 0;
-  for (const a of airborne) {
-    if (Math.abs(a.x - ballX) <= BLOCK_HALF_WIDTH) return null;
+  const covered = airborne.some((a) => Math.abs(a.x - ballX) <= BLOCK_HALF_WIDTH);
+
+  // ★ 難度重校卷 題 E3（2026-08-05 Sawmah 裁定）：賭局敘事的另一半 ★
+  // 「賭錯→空門」有字卡、「賭中→牆在線上」卻靜默 ⇒ 玩家只看得見賭局的下行，
+  // 學不到「他是在賭、而且會賭中」。E1 之後賭中的牆是真的罩得下來（滯空涵蓋
+  // 9.4%→55.1%），這一瞬間值得講出來。
+  // 只對 commit 隊講「賭」：read 隊的牆罩到線是看球的正常反應，喊「賭中」是錯的敘事
+  // ——persona 是隊伍 DNA（情蒐可知），不是這一球的私有狀態，反作弊界線不動。
+  // 只在扣球者＝受控玩家時出卡（因果直連才帶「你」，比照甲卡的裁定 6 邏輯）；
+  // 之後真被攔到自有 BLOCK_TOUCH 字卡收尾，這張講的是「他讀中你的線」這件事本身。
+  if (covered) {
+    if (spikerId === playerId && blockPersonaOf(game, opp) === BLOCK_PERSONA.COMMIT) {
+      return { text: '他賭中了——牆罩在你的線上！', color: '#ffd166', ms: 1600 };
+    }
+    return null;
   }
 
   // ③ 玩家有沒有參與這一波——決定講不講「你」，或根本不講

@@ -14,7 +14,7 @@ import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
   applyRouteKinds, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
-  resolveCalledPlay, offeredCallTypes,
+  resolveCalledPlay, offeredCallTypes, AIR_TICKS,
 } from './approach.js';
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
@@ -1809,9 +1809,10 @@ function blockAimXBase(game, aiState, atkTeam, persona, opts) {
     if (hit) return { x: hit.x, contactTicks: hit.ticks };
   }
   // 段 2（裁定 2＋5）：commit 的**賭注方向**改讀二傳配分傾向，不再走 `blockCommitRead`。
-  // ⚠ `blockCommitRead` **沒有退場**——它仍是 commit 的**起跳訊號**（助跑下降沿，
-  //   見 blockPlanTargetX chase 段）。裁定 5 明文「位準早跳保留（招牌視覺）」，
-  //   改的只有「往哪裡賭」這一件事。
+  // ⚠ `blockCommitRead` **沒有退場**——它是 commit 起跳時鐘鎖不住時的**退路訊號**
+  //   （助跑下降沿，見 blockPlanTargetX chase 段）。主時鐘自 2026-08-05 題 E 裁定起
+  //   改吃球（球離二傳手後取樣 predictContactPoint 鎖存），卷一裁定 5 的「位準早跳」
+  //   經 Sawmah 同意重開——賭注方向仍只此一處。
   const t = blockSetterTendency(game, atkTeam, opts);
   return t == null ? null : { x: t.x, contactTicks: null };
 }
@@ -2053,18 +2054,55 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
     // ★★ 2026-07-30 起，兩種人格**不再共用起跳訊號**（v4 裁定書主題「甲」）★★
     // 上面那整段註解記錄的是舊制與它為什麼行不通，保留當歷史；現行分工是：
     //   read  ＝ 建計畫時鎖存的 `jumpAt`（球的預測擊球 tick，前置量 0）
-    //   commit＝ 助跑下降沿（原封不動，v3 裁定書 R3「commit 本輪不動」）
+    //   commit＝ 球離二傳手後取樣鎖存 `jumpAt`（同一條管線，見下）；下降沿只剩退路
     // read 改吃球的理由：起跳訊號的**來源不同就是人格差異**——read 讀球（等球出手看清楚，
     // 準但晚）、commit 賭中路（早，但可能賭錯）。原本要求兩者共用同一個可觀察事件，
     // 而實測證明**不存在**一個對兩人格都成立且指得對的事件（快攻沒有屬於真攻擊手的下降沿，
     // 兩翼的第一個下降沿指著中路誘餌）。
+    //
+    // ★★ 難度重校卷 題 E（2026-08-05 Sawmah 裁定 E1 時機形狀；重開卷一裁定5「位準早跳」）★★
+    // commit 的起跳時鐘也改吃球：球一離二傳的手（touches >= 2），在自己下一次步進的
+    // tick 取樣一次 `predictContactPoint` 鎖存 `jumpAt`——與 read 同一條管線、同樣前置量 0。
+    // **賭注（位置）一格不動** ⇒ 人格差異完整保留在「賭哪裡」：賭對＝人在線上、時間也對，
+    // 牆是真的罩下來；賭錯＝準時跳在沒球的地方——兩端從此都是幾何湧現，零新常數。
+    // 為什麼不修下降沿而是換時鐘（探針 tools/commit-overlap-probe.mjs，60 局 n=5960）：
+    // 舊制「賭對∩滯空涵蓋球到達」僅 4.31%；賭對的波 54% 下降沿根本沒響（等不到），
+    // 響了的落地距球到達 p50 61 tick（＝2.5 個 AIR_TICKS）——訊號層兩處都壞，錨點換球才有解。
+    // 取樣比 read 早（不加反應延遲）：他早就決定完了，站在賭注點上等的就是這顆球；
+    // 反作弊不變：球的拋物線是公開資訊（與 read 同授權層級），賭注端照舊拿不到 attackerId。
+    //
+    // ⚠ 純時鐘會漏掉快攻（首輪實跑 款3 警報器當場抓到：commit 快攻離地率 42%→17%）：
+    // 快攻在扣球窗上緣**之上**就被打走，predictContactPoint 對它偏晚 +8 tick（卷一已知），
+    // 而快攻飛行段只有 6 tick ⇒ 等時鐘＝球過網之後才起跳。所以下降沿不只是退路，
+    // 還是**提前跳的閘**：時鐘未到但下降沿響了、且「現在跳仍罩得住預測擊球」
+    // （jumpAt ≤ tick + AIR_TICKS，拿既有滯空窗當錨、零新常數）才提前起跳——
+    // 快攻（jumpAt−tick ≈ 23 ≤ 24）放行＝跟著真攻擊手拔；高球的誘餌邊沿
+    // （jumpAt−tick ≈ 46+ > 24）被擋下等時鐘＝不再被誘餌帶走。這正是「該吃第幾個
+    // 下降沿」那道老題（見上方歷史註解）的解：用球的到達可行性選邊沿，不用認人。
+    if (c.jumpAt == null && persona === BLOCK_PERSONA.COMMIT && r.touches >= 2) {
+      const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
+      if (hit) c.jumpAt = tick + hit.ticks;
+    }
     if (c.jumpAt != null) {
       if (tick >= c.jumpAt) {
         c.jumpTick = tick; // 本 tick 起算 air
         return c.x;
       }
+      // commit 提前跳的閘（read 不走：他的時鐘取樣於反應延遲之後，本來就不早跳）
+      if (persona === BLOCK_PERSONA.COMMIT && c.jumpAt <= tick + AIR_TICKS) {
+        const liveRead = blockCommitRead(game, atkTeam, {
+          ...opts,
+          outerLag: Math.round(reactionTicks(player) * BLOCK_COMMIT.OUTER_LAG_MUL),
+        });
+        if (liveRead) c.seen = true;
+        if (c.seen && liveRead == null) {
+          c.jumpTick = tick;
+          return c.x;
+        }
+      }
     } else {
-      // commit（含 blind 退路），以及 read 在 predictContactPoint 罕見回不出值時的退路
+      // 走到這裡＝還沒有起跳時鐘：二傳出手前的 commit（含 blind 退路，時鐘等球離手才鎖）、
+      // 取樣時 predictContactPoint 回不出值的 commit、以及 read 罕見回不出值的退路
       //
       // ★ 攔網時序卷 段 3（裁定 4）：外圍候選的**賭注品質降級** ★
       // 段 3 放寬了偵測深度讓兩翼進候選池——但「看得見位置」不等於「讀得穿時序」。

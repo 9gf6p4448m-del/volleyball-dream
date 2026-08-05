@@ -14,8 +14,14 @@ const TICK = 100;
 
 // 佈置：A 隊扣球，B 隊前排（rot 位置 2/3/4 ＝ B2/B3/B4）有人在攔網滯空中。
 // airT＝起跳後經過幾 tick；x＝那個人站在哪（球在 x=0）。
-function rig({ airT = 10, x = 3, blockUntil = TICK + 5, routes = [{ pid: 'A1' }, { pid: 'A3' }] } = {}) {
-  const g = createGame({ seed: 7 });
+function rig({
+  airT = 10, x = 3, blockUntil = TICK + 5,
+  routes = [{ pid: 'A1' }, { pid: 'A3' }], persona = null,
+} = {}) {
+  const g = createGame({
+    seed: 7,
+    ...(persona ? { aiProfiles: { B: { blockPersona: persona } } } : {}),
+  });
   g.tick = TICK;
   g.ball.x = 0;
   const a = g.actors.B2;
@@ -52,9 +58,28 @@ test('沒有人在攔網空中＝沒人賭 → 不出字卡', () => {
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
 });
 
-test('人在空中但就在球旁邊＝不是空門 → 不出字卡', () => {
+test('人在空中但就在球旁邊＝不是空門 → 不出字卡（read 隊：罩到線是正常反應，不喊賭）', () => {
   const { g, aiState } = rig({ x: BLOCK_HALF_WIDTH - 0.01 });
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
+});
+
+// ---------------- 題 E3（2026-08-05）：賭局敘事的另一半「賭中」 ----------------
+
+test('題E3 賭中：commit 隊、牆罩在球的線上、扣球者是玩家 → 「他賭中了」', () => {
+  const { g, aiState } = rig({ x: BLOCK_HALF_WIDTH - 0.01, persona: 'commit' });
+  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A1');
+  assert.ok(fb, 'commit 賭中的那一瞬間必須講出來（E3 的存在理由）');
+  assert.match(fb.text, /賭中/);
+});
+
+test('題E3 反面：同一佈置換成 read 隊 → 不出卡（read 罩到線不是賭，喊「賭中」是錯的敘事）', () => {
+  const { g, aiState } = rig({ x: BLOCK_HALF_WIDTH - 0.01, persona: 'read' });
+  assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
+});
+
+test('題E3 反面：commit 賭中但扣球者是隊友 → 不出卡（因果不直連，不帶「你」也不講）', () => {
+  const { g, aiState } = rig({ x: BLOCK_HALF_WIDTH - 0.01, persona: 'commit' });
+  assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A3'), null);
 });
 
 test('落地的攔網手不算「在空中」：blockUntil 仍在窗內但已超過 AIR_TICKS → 視同沒賭', () => {
