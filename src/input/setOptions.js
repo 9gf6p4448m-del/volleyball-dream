@@ -9,6 +9,7 @@
 // 12＝新生 baseline 10 開場帶「猶豫」、被你舉成功一次（+5）即亮——親手經營的體感；
 // 班底 20 要連續失誤（−6×2）才會跌進來。
 import { attackPointsOf, setAimFor } from '../sim/ai.js';
+import { isQuickKind } from '../sim/approach.js';
 import { effectiveTrust } from '../sim/trust.js';
 import { localToWorld, otherTeam, isBackRow } from '../sim/rotation.js';
 
@@ -81,7 +82,8 @@ export function setOptionsFor(game, aiState, setterId) {
       aim: localToWorld(team, a.lx, a.lz),
       t: a.t,
       trust,
-      hesitant: kind === 'quick' && trust < SET_HESITANT_BELOW,
+      // 快攻族一律標（含 B 快）——判準是「盲跳吃信任的時機球」，見 approach.isQuickKind
+      hesitant: isQuickKind(kind) && trust < SET_HESITANT_BELOW,
       tier,
     };
   });

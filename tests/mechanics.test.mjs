@@ -12,7 +12,7 @@ import { REACH_ACTION, reachRadiusFor, RECEIVE_REACH_H_RATIO } from '../src/sim/
 import {
   createPlayer, standingReach, blockReach, blockTopEdge,
 } from '../src/sim/player.js';
-import { AIR_TICKS } from '../src/sim/approach.js';
+import { AIR_TICKS, isQuickKind, tempoFor } from '../src/sim/approach.js';
 import { createIntent } from '../src/sim/intent.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'sim');
@@ -222,4 +222,21 @@ test('接球品質：到位程度為次要修正（走到位＜勉強搆，但�
   assert.ok(stretch / onpoint < 1.3, '到位修正應為次要（<30% 差距）');
   // 魚躍（dist 超過正常 reach）＝到位比例 clamp 到 1
   assert.equal(receiveQualityMul(reach * 1.8, reach, p), stretch);
+});
+
+// ★ 2026-08-05 護欄：快攻族的單一真相（稽核存疑項覆核）★
+// 卷五加了 `bquick` 之後，`setOptions.js` 的「猶豫」標與 `matchLoop.js` 的猶豫起跳動作
+// 兩處判定都只認 `'quick'` ⇒ **低信任的 B 快永遠不顯示猶豫**，與該功能
+// 「盲跳吃信任的時機球才標」的設計意圖不符。抽成 `isQuickKind` 之後用測試釘住，
+// 免得下次再加快攻線別時又漏掉下游。
+test('快攻族＝盲跳吃信任的時機球：A 快與 B 快同族，兩翼與後排不是', () => {
+  assert.ok(isQuickKind('quick'), 'A 快必須是快攻族');
+  assert.ok(isQuickKind('bquick'), 'B 快必須是快攻族（卷五加入，漏認過一次）');
+  for (const k of ['left', 'right', 'pipe', 'cross', 'tandem', 'dball', 'left_inside']) {
+    assert.ok(!isQuickKind(k), `${k} 看得見球再跳，不該算快攻族`);
+  }
+  // 與 sim 既有的節奏判定同源：快攻族恆為一速
+  for (const k of ['quick', 'bquick']) {
+    assert.equal(tempoFor(k), 'one', `${k} 的節奏應為一速（快攻族的定義本身）`);
+  }
 });

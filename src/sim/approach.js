@@ -310,9 +310,17 @@ const KIND_SALT = { left: 11, right: 23 };
 // 接了一傳的那個人吃罰則檔，其餘人維持本球的一傳品質檔）。
 // 'poor' 的規格字面就是「只剩兩翼高球」＝那一檔不得跑二速的平拉開／半快，
 // 沿用同一道三檔階梯、不另立判準。
+// 「快攻族」＝第一時間起跳、**盲跳吃信任的時機球**（A 快與 B 快同一檔節奏，只差位置）。
+// ★ 抽成 export 的單一真相（2026-08-05）★ 卷五加了 `bquick` 之後，下游有兩處判定
+// 只認 `'quick'` 而漏了它——`setOptions.js` 的「猶豫」標與 `matchLoop.js` 的猶豫起跳動作
+// ⇒ **低信任的 B 快永遠不會顯示猶豫**，與該功能「盲跳才標」的設計意圖不符。
+// 以後要再加快攻線別，改這一處即可，不必記得回頭巡下游。
+export const QUICK_KINDS = new Set(['quick', 'bquick']);
+export const isQuickKind = (kind) => QUICK_KINDS.has(kind);
+
 export function tempoFor(kind, { flightId = 0, seed = 0, index = 0, passTier = 'perfect' } = {}) {
   // 卷五：B 快與 A 快同一檔節奏（第一時間快球，只差位置）——見 setAimFor 的 bquick 註解
-  if (kind === 'quick' || kind === 'bquick') return 'one';
+  if (isQuickKind(kind)) return 'one';
   // ---- 段 C：夾塞的節奏＝二速（把段 A 留下的「弧線是半快、節奏是三速」不一致收掉）----
   //
   // 段 A 給 tandem 的舉球落點是 `t = 0.55`＝game.js 的 SHOOT_APEX 4.2 檔（半快弧），

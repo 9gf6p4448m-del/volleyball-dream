@@ -44,7 +44,7 @@ import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
 import { hitLeadTicks, seqDurTicks } from '../render/geoAnimator.js';
-import { approachRouteOf } from '../sim/approach.js';
+import { approachRouteOf, isQuickKind } from '../sim/approach.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
   lineKillDistance, SIG_LINE_M, timingVerdict,
@@ -1639,7 +1639,8 @@ function updateAssistAndPoses(s) {
     } else if (cue === 'takeoff' && s.earlyTakeoffKey !== early.key) {
       s.earlyTakeoffKey = early.key;
       const attacker = game.players[aiState.attackerId];
-      const hesitant = aiState.attackKind === 'quick'
+      // 快攻族一律用猶豫起跳動作（含 B 快）——與 setOptions 的「猶豫」標同一把尺
+      const hesitant = isQuickKind(aiState.attackKind)
         && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
       stage.matchView.triggerPose(aiState.attackerId, hesitant ? 'windupHesitant' : 'windup');
     }
@@ -1720,7 +1721,8 @@ function updateAssistAndPoses(s) {
       // 4.5B §8 遲疑/果斷：低 trust 快攻＝抬手一半跳得矮的遲疑版（W3 S 分配的
       // 表現層遺留——「猶豫」從面板標註長到身體語言上；門檻同 setOptions 猶豫線）
       const attacker = game.players[aiState.claimId];
-      const hesitant = aiState.attackKind === 'quick'
+      // 快攻族一律用猶豫起跳動作（含 B 快）——與 setOptions 的「猶豫」標同一把尺
+      const hesitant = isQuickKind(aiState.attackKind)
         && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
       stage.matchView.triggerPose(aiState.claimId, hesitant ? 'windupHesitant' : 'windup');
     }
