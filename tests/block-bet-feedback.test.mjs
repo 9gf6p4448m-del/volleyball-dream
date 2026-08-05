@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { createGame } from '../src/sim/game.js';
 import { AIR_TICKS } from '../src/sim/approach.js';
 import { BLOCK_HALF_WIDTH } from '../src/sim/blockBand.js';
-import { blockBetFeedbackOf, mbCallFeedbackOf } from '../src/input/blockBetFeedback.js';
+import { blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm } from '../src/input/blockBetFeedback.js';
 
 const TICK = 100;
 
@@ -33,7 +33,7 @@ function rig({
 }
 
 test('賭錯＋空門＋扣球者就是玩家 → 帶「你」的那張', () => {
-  const { g, aiState } = rig();
+  const { g, aiState } = rig({ persona: 'commit' });
   const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A1');
   assert.ok(fb, '應該要出字卡');
   assert.equal(fb.text, '他賭了、賭錯了——空門是你的！');
@@ -41,7 +41,7 @@ test('賭錯＋空門＋扣球者就是玩家 → 帶「你」的那張', () => 
 });
 
 test('扣球者是隊友、但玩家本波有跑助跑線 → 無歸因那張（不得寫成「你帶走了攔網手」）', () => {
-  const { g, aiState } = rig();
+  const { g, aiState } = rig({ persona: 'commit' });
   const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3');
   assert.ok(fb, '應該要出字卡');
   assert.equal(fb.text, '他賭了，賭錯了，空門！');
@@ -49,12 +49,12 @@ test('扣球者是隊友、但玩家本波有跑助跑線 → 無歸因那張（
 });
 
 test('扣球者是隊友、玩家本波沒跑助跑線 → 不出字卡（不對玩家沒參與的波播）', () => {
-  const { g, aiState } = rig({ routes: [{ pid: 'A3' }, { pid: 'A4' }] });
+  const { g, aiState } = rig({ persona: 'commit', routes: [{ pid: 'A3' }, { pid: 'A4' }] });
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A3'), null);
 });
 
 test('沒有人在攔網空中＝沒人賭 → 不出字卡', () => {
-  const { g, aiState } = rig({ blockUntil: TICK - 1 }); // 攔網窗已過，沒人起跳
+  const { g, aiState } = rig({ persona: 'commit', blockUntil: TICK - 1 }); // 攔網窗已過，沒人起跳
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
 });
 
@@ -85,8 +85,8 @@ test('題E3 反面：commit 賭中、扣球者是隊友、玩家也不是二傳 
 // ---------------- 題 E 收尾（08-05 試玩「玩 S 整場沒卡」）：二傳也算參與 ----------------
 
 test('玩家當二傳、隊友扣進空門 → 無歸因賭錯卡（S 反配空門是玩法本體，不能沒回饋）', () => {
-  const { g, aiState } = rig({ routes: [{ pid: 'A3' }, { pid: 'A4' }] }); // 玩家沒跑線
-  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3', 'A1'); // setterId＝玩家
+  const { g, aiState } = rig({ persona: 'commit', routes: [{ pid: 'A3' }, { pid: 'A4' }] }); // 玩家沒跑線
+  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3', { setterId: 'A1' }); // setterId＝玩家
   assert.ok(fb, '二傳配進空門必須有回饋');
   assert.equal(fb.text, '他賭了，賭錯了，空門！');
   assert.ok(!fb.text.includes('你'), '二傳版維持無歸因（線是扣球者選的，混合因果）');
@@ -96,7 +96,7 @@ test('玩家當二傳、commit 賭中罩住隊友 → 無歸因賭中卡', () =>
   const { g, aiState } = rig({
     x: BLOCK_HALF_WIDTH - 0.01, persona: 'commit', routes: [{ pid: 'A3' }, { pid: 'A4' }],
   });
-  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3', 'A1');
+  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3', { setterId: 'A1' });
   assert.ok(fb, '二傳配進賭中的牆必須有回饋');
   assert.match(fb.text, /賭中/);
   assert.ok(!fb.text.includes('你'), '二傳版維持無歸因');
@@ -106,14 +106,77 @@ test('玩家當二傳但對方是 read 隊、牆罩住 → 不出賭中卡（rea
   const { g, aiState } = rig({
     x: BLOCK_HALF_WIDTH - 0.01, persona: 'read', routes: [{ pid: 'A3' }, { pid: 'A4' }],
   });
-  assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A3', 'A1'), null);
+  assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A3', { setterId: 'A1' }), null);
+});
+
+test('read 隊的空門不出賭錯卡（他們不是在賭；收尾 2 起賭局卡家族整組鎖 commit）', () => {
+  const { g, aiState } = rig(); // 預設 read、空門、玩家親扣
+  assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
+});
+
+test('★防回歸★ ranRoute 走武裝時快照：opts 給了就不得再自讀 aiState（結算時 approach 已清）', () => {
+  // 快照 true、aiState 沒有玩家的線 → 仍要出無歸因卡（遞延結算的正典情境）
+  const a = rig({ persona: 'commit', routes: [{ pid: 'A3' }, { pid: 'A4' }] });
+  const fb = blockBetFeedbackOf(a.g, a.aiState, 'A1', 'A3', { ranRoute: true });
+  assert.ok(fb, '快照說有跑線就要出卡——自讀已清空的 approach 會讓跑線卡整類消失（探針實測 42→0）');
+  assert.equal(fb.text, '他賭了，賭錯了，空門！');
+  // 快照 false、aiState 卻有玩家的線 → 不出卡（快照優先，不得偷讀）
+  const b = rig({ persona: 'commit' }); // routes 含 A1
+  assert.equal(blockBetFeedbackOf(b.g, b.aiState, 'A1', 'A3', { ranRoute: false }), null);
+});
+
+// ---------------- 題 E 收尾 2：遞延結算狀態機 createBlockBetArm ----------------
+//
+// 前一版「觸球即評」上線後真人整場零卡（E1 後牆是球到達時才在空中，真人揮拍比預測早）。
+// 這批測試餵**生產端同形**的事件流（TOUCH／BLOCK_TOUCH／DEAD_BALL 字面形狀），
+// 釘死「武裝→球到網才評」的時序——與 mbCallFeedbackOf 的防恆假護欄同一個存在理由。
+
+test('武裝→球過網（z 變號）才結算，且只結算一次', () => {
+  const arm = createBlockBetArm();
+  assert.equal(arm.onEvent({ type: 'TOUCH', kind: 'set', team: 'A', playerId: 'A2' }, 'A', 5), null);
+  assert.equal(arm.onEvent({ type: 'TOUCH', kind: 'spike', team: 'A', playerId: 'A1' }, 'A', 6), null);
+  assert.equal(arm.onFrame(3.2), null); // 球還在我方半場：不評
+  assert.equal(arm.onFrame(1.1), null);
+  assert.deepEqual(arm.onFrame(-0.2),
+    { spikerId: 'A1', setterId: 'A2', flightId: 6, ranRoute: null });
+  assert.equal(arm.onFrame(-1.0), null); // 已結算，不重複
+});
+
+test('被攔回不過網：對方 BLOCK_TOUCH 立即結算（「賭中」那一類不得因等變號而漏掉）', () => {
+  const arm = createBlockBetArm();
+  arm.onEvent({ type: 'TOUCH', kind: 'spike', team: 'A', playerId: 'A1' }, 'A', 9);
+  arm.onFrame(2.0);
+  const p = arm.onEvent({ type: 'BLOCK_TOUCH', team: 'B', playerId: 'B2' }, 'A', 9);
+  assert.equal(p?.spikerId, 'A1');
+  assert.equal(arm.onFrame(-0.5), null); // 已結算，之後變號不再觸發
+});
+
+test('死球清空：武裝後死球，之後的變號不結算', () => {
+  const arm = createBlockBetArm();
+  arm.onEvent({ type: 'TOUCH', kind: 'spike', team: 'A', playerId: 'A1' }, 'A', 3);
+  arm.onEvent({ type: 'DEAD_BALL' }, 'A', 3);
+  arm.onFrame(2.0);
+  assert.equal(arm.onFrame(-1.0), null);
+});
+
+test('對方的 set 不覆蓋二傳者、對方的 spike 不武裝', () => {
+  const arm = createBlockBetArm();
+  arm.onEvent({ type: 'TOUCH', kind: 'set', team: 'A', playerId: 'A2' }, 'A', 1);
+  arm.onEvent({ type: 'TOUCH', kind: 'set', team: 'B', playerId: 'B3' }, 'A', 1);
+  arm.onEvent({ type: 'TOUCH', kind: 'spike', team: 'B', playerId: 'B4' }, 'A', 2);
+  arm.onFrame(1.0);
+  assert.equal(arm.onFrame(-1.0), null); // 對方 spike 沒武裝 ⇒ 變號不結算
+  arm.onFrame(2.0); // 球回到我方半場（逐幀餵，prevZ 跟著走——與 matchLoop 的餵法同形）
+  arm.onEvent({ type: 'TOUCH', kind: 'spike', team: 'A', playerId: 'A1' }, 'A', 3);
+  arm.onFrame(1.0);
+  assert.equal(arm.onFrame(-1.0)?.setterId, 'A2'); // 二傳者仍是我方那位
 });
 
 test('落地的攔網手不算「在空中」：blockUntil 仍在窗內但已超過 AIR_TICKS → 視同沒賭', () => {
-  const { g, aiState } = rig({ airT: AIR_TICKS + 1, blockUntil: TICK + 60 });
+  const { g, aiState } = rig({ persona: 'commit', airT: AIR_TICKS + 1, blockUntil: TICK + 60 });
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
   // 對照組：同一佈置只把 airT 收回窗內就要出卡（證明紅的原因是滯空窗，不是別的）
-  const inWindow = rig({ airT: AIR_TICKS, blockUntil: TICK + 60 });
+  const inWindow = rig({ persona: 'commit', airT: AIR_TICKS, blockUntil: TICK + 60 });
   assert.ok(blockBetFeedbackOf(inWindow.g, inWindow.aiState, 'A1', 'A1'));
 });
 

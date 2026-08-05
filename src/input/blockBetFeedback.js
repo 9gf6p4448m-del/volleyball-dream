@@ -37,11 +37,15 @@ import { BLOCK_PERSONA } from '../sim/blockRead.js';
  * @param {object} aiState  AI 協調層狀態（只讀 `approach.team`／`approach.routes`）
  * @param {string} playerId 受控玩家 id
  * @param {string} spikerId 這一擊的扣球者 id
- * @param {string|null} setterId 本波我方二傳觸球者 id（matchLoop 記錄）——題 E 收尾：
- *   玩家當 S 配球時也算參與（看穿賭注反配正是 S 的玩法，賭局回饋不能漏掉他）
+ * @param {{setterId?: string|null, ranRoute?: boolean|null}|null} opts 武裝時的參與快照：
+ *   `setterId`＝本波我方二傳觸球者（S 配球也算參與——反配正是 S 的玩法）；
+ *   `ranRoute`＝**扣球當下**玩家是否在助跑線上。遞延結算後不得在本函式內讀
+ *   aiState.approach 補判——球到網時助跑資料已被清掉，讀到的恆是 false
+ *   （08-05 探針實測：結算時自讀 ⇒ 跑線卡 42→0）。未提供時退回自讀（相容舊呼叫）。
  * @returns {{text:string,color:string,ms:number}|null} null＝不出字卡
  */
-export function blockBetFeedbackOf(game, aiState, playerId, spikerId, setterId = null) {
+export function blockBetFeedbackOf(game, aiState, playerId, spikerId, opts = null) {
+  const setterId = opts?.setterId ?? null;
   const me = game?.players?.[playerId];
   if (!me) return null;
   const opp = otherTeam(me.teamId);
@@ -88,19 +92,88 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId, setterId =
   }
 
   // ③ 玩家有沒有參與這一波——決定講不講「你」，或根本不講。
-  //    參與＝親扣／跑了助跑線／**當這一波的二傳**（題 E 收尾：S 反配空門正是玩法本體，
-  //    2026-08-05 試玩「玩 S 整場沒卡」抓到這個缺口）
+  //    參與＝親扣／跑了助跑線（武裝時快照，見 @param）／**當這一波的二傳**
+  //    （題 E 收尾：S 反配空門正是玩法本體，08-05 試玩抓到這個缺口）。
+  // ★ 題 E 收尾 2：賭錯卡也鎖 commit 隊 ★ 檔頭寫明這張卡講的是「commit 攔網手
+  //   真的在賭」；改到過網結算後 read 隊的牆「在空中但沒罩到」變成常態
+  //   （他們只是照球起跳，不是賭錯），不鎖的話字卡會洪水化＋敘事錯誤。
+  if (blockPersonaOf(game, opp) !== BLOCK_PERSONA.COMMIT) return null;
   if (spikerId === playerId) {
     return { text: '他賭了、賭錯了——空門是你的！', color: '#ffd166', ms: 1600 };
   }
-  const ap = aiState?.approach;
-  const ranRoute = ap?.team === me.teamId
-    && !!ap.routes?.some((r) => r.pid === playerId);
+  const ranRoute = opts?.ranRoute != null
+    ? opts.ranRoute === true
+    : (aiState?.approach?.team === me.teamId
+      && !!aiState.approach.routes?.some((r) => r.pid === playerId));
   if (ranRoute || (setterId != null && setterId === playerId)) {
     // 無歸因版：只說他賭錯，不說是誰造成的（誤歸因率沒過門檻，見檔頭）
     return { text: '他賭了，賭錯了，空門！', color: '#ffd166', ms: 1400 };
   }
   return null;
+}
+
+// ★ 題 E 收尾 2（2026-08-05 真人實測「攻擊手也沒卡」）：評估點遞延到「球到網」 ★
+//
+// ★ 為什麼觸球那一 tick 量不到 ★
+// E1 之後 commit 攔網手是「球到達時才在空中」（起跳時鐘＝predictContactPoint）。
+// AI 攻擊手的擊球 tick 與同一個預測一致，所以 headless 探針在觸球位置量得到
+// （51.2% 有人在空中）；**真人揮拍時機是自己的**——打早半拍，觸球瞬間牆根本還沒
+// 起跳，「他賭了」的偵測恆空，兩張卡對真人結構性全滅（08-05 攻擊手實測整場零卡）。
+// `tools/block-card-probe.mjs`：觸球位置無人在空中 48.8%、**過網位置只剩 17.2%**
+// （空門 59.3%／罩住 23.2%）。過網那一刻＝`tryBlock` 結算牆的同一位置與同一座標，
+// 是唯一與玩家看到的結果同座標系的量測點（02 §6.1 條 5 的活教材——探針在觸球位置
+// 全綠，真人在同一位置全滅，因為兩者的「觸球」不是同一個 tick）。
+//
+// ★ 為什麼抽成純狀態機（比照 mbCallFeedbackOf 的教訓）★
+// 「等球過網再評」是跨 tick 的時序邏輯，內聯在 matchLoop 的 UI 迴圈裡就沒有測試
+// 守得住它（前一版的「觸球即評」正是內聯判定，上線整場恆空才被真人抓到）。
+// 事件形狀直接吃 sim 的字面事件（TOUCH／BLOCK_TOUCH／DEAD_BALL），測試餵生產端
+// 同形的事件流就能釘死時序。
+//
+// 用法（matchLoop）：事件迴圈逐事件餵 `onEvent`、每幀餵一次 `onFrame(ball.z)`；
+// 兩者回傳非 null（{ spikerId, setterId, flightId }）＝「此刻就評」——這時再呼叫
+// `blockBetFeedbackOf`，game 當下的 tick／actors／ball 正是球到牆上的那一刻。
+export function createBlockBetArm() {
+  let setPid = null;   // 本波我方二傳觸球者
+  let pending = null;  // 我方扣球後、球還沒到網：{ spikerId, setterId, flightId }
+  let prevZ = null;    // 上一幀球的 z（變號＝過網，同 game.js 的 crossed 條件）
+  return {
+    // ctx＝武裝時的參與快照（spike 事件才需要）：{ ranRoute }——遞延結算後
+    // aiState.approach 已被清掉，這個布林只能在扣球當下取（見 blockBetFeedbackOf @param）
+    onEvent(e, myTeam, flightId, ctx = null) {
+      if (e.type === 'DEAD_BALL') { setPid = null; pending = null; prevZ = null; return null; }
+      if (e.type === 'TOUCH' && e.kind === 'set' && e.team === myTeam) {
+        setPid = e.playerId ?? null;
+        return null;
+      }
+      if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === myTeam) {
+        pending = {
+          spikerId: e.playerId, setterId: setPid, flightId,
+          ranRoute: ctx?.ranRoute ?? null,
+        };
+        return null;
+      }
+      // 對方牆碰到球＝球已經到牆上（被罩住的正典情境）：立即結算，不等 z 變號
+      //（被攔回的球可能永遠不過網，等變號會把「賭中」整類漏掉）
+      if (e.type === 'BLOCK_TOUCH' && e.team !== myTeam && pending) {
+        const p = pending;
+        pending = null;
+        return p;
+      }
+      return null;
+    },
+    onFrame(ballZ) {
+      const prev = prevZ;
+      prevZ = ballZ;
+      if (!pending || prev == null) return null;
+      if ((prev > 0) !== (ballZ > 0) && prev !== ballZ) {
+        const p = pending;
+        pending = null;
+        return p;
+      }
+      return null;
+    },
+  };
 }
 
 // ★ 2026-08-03 裁定乙第二步：玩家自己封線的結果字卡 ★

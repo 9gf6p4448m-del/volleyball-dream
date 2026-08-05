@@ -31,7 +31,7 @@ import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 // 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
 import { callOptionsFor, callFeedbackOf, CALL_MODES } from '../input/callPlay.js';
-import { blockBetFeedbackOf, mbCallFeedbackOf } from '../input/blockBetFeedback.js';
+import { blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm } from '../input/blockBetFeedback.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -1355,20 +1355,28 @@ function applyEvents(s, frameEvents, now) {
       s.counterArmedFlight = -1;
       stage.floatText.show('他改線了——他在讀你的暗號', '#ff9d7a', 2200);
     }
-    // 攔網時序卷 段 5 回饋層：本方扣球那一刻，對方 commit 攔網手賭錯留下空門 → 字卡。
-    // 防重播比照 `syncCallFeedback`：同一波（flightId）只播一次——一波內可能有多次
-    // 扣球事件（被攔回再扣），鍵記到 flightId 就夠，不會每次都喊。
-    // 題 E 收尾（2026-08-05 試玩回饋「玩 S 整場沒卡」）：記住本波我方的二傳觸球者，
-    // 讓「配球的人」也算參與——S 看穿賭注反配正是這個賭局的玩家側玩法，不能沒回饋。
-    if (e.type === 'TOUCH' && e.kind === 'set' && e.team === myTeam) {
-      s.blockBetSetPid = e.playerId;
-    }
-    if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === myTeam
-      && s.blockBetKey !== game.rally.flightId) {
-      const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, e.playerId, s.blockBetSetPid);
-      if (bet) {
-        s.blockBetKey = game.rally.flightId;
-        stage.floatText?.show(bet.text, bet.color, bet.ms);
+    // 攔網時序卷 段 5 回饋層（題 E 收尾 2 改遞延結算）：我方扣球武裝、**球到網那一刻**
+    // 才評「賭錯空門／賭中罩住」——E1 後 commit 是「球到達時才在空中」，真人揮拍比
+    // 預測早半拍，在觸球 tick 量恆空（08-05 攻擊手實測整場零卡）。時序狀態機抽在
+    // `createBlockBetArm`（純函式，測試餵生產端同形事件流）；此處只做接線與防重播
+    //（同一波 flightId 只播一次）。二傳者也算參與（S 反配是玩法本體）由狀態機自己記。
+    {
+      // 參與快照在扣球當下取——球到網時 approach 已清掉，結算時讀恆 false（探針實測 42→0）
+      const ctx = (e.type === 'TOUCH' && e.kind === 'spike' && e.team === myTeam)
+        ? {
+          ranRoute: s.aiState?.approach?.team === myTeam
+            && !!s.aiState.approach.routes?.some((r) => r.pid === s.controlledId),
+        }
+        : null;
+      const armed = (s.blockBetArm ??= createBlockBetArm())
+        .onEvent(e, myTeam, game.rally.flightId, ctx);
+      if (armed && s.blockBetKey !== armed.flightId) {
+        const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, armed.spikerId,
+          { setterId: armed.setterId, ranRoute: armed.ranRoute });
+        if (bet) {
+          s.blockBetKey = armed.flightId;
+          cards.push({ pri: 20, text: bet.text, color: bet.color, dur: bet.ms });
+        }
       }
     }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
@@ -1539,6 +1547,19 @@ function applyEvents(s, frameEvents, now) {
       playerName: e.playerId ? game.players[e.playerId]?.name : '',
     });
     if (heroCard) cards.push(heroCard);
+  }
+  // 題 E 收尾 2 幀端：球的 z 變號＝到網（可觀察物理，同 game.js crossed 條件）——
+  // 武裝中的賭局字卡在這一刻結算（事件端的 BLOCK_TOUCH 分支已涵蓋被攔回不過網的球）
+  {
+    const armed = s.blockBetArm?.onFrame(game.ball?.z ?? 0);
+    if (armed && s.blockBetKey !== armed.flightId) {
+      const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, armed.spikerId,
+        { setterId: armed.setterId, ranRoute: armed.ranRoute });
+      if (bet) {
+        s.blockBetKey = armed.flightId;
+        cards.push({ pri: 20, text: bet.text, color: bet.color, dur: bet.ms });
+      }
+    }
   }
   // flush：低優先先出（被疊排上推）、最高優先最後出＝停在基準位；全部都出、零丟卡
   if (cards.length) {

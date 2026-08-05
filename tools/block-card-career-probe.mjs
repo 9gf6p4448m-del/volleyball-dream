@@ -6,7 +6,7 @@
 // 跑法：node tools/block-card-career-probe.mjs [局數=10]
 import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
-import { blockBetFeedbackOf } from '../src/input/blockBetFeedback.js';
+import { blockBetFeedbackOf, createBlockBetArm } from '../src/input/blockBetFeedback.js';
 import {
   createCareer, createCareerPlayer, careerMatchSetup,
 } from '../src/career/careerState.js';
@@ -40,28 +40,57 @@ for (let run = 0; run < SETS; run += 1) {
     ?? Object.keys(game.players).find((pid) => game.players[pid]?.isPlayer);
   if (!meId) { console.log('找不到玩家角色，略過'); continue; }
   const ai = createAiState();
-  let lastSetPid = null;
+  // 2026-08-05 收尾 2 改版：改走與 matchLoop 同形的遞延結算路徑（createBlockBetArm）
+  // ——事件逐一餵 onEvent、每 tick 餵一次 onFrame(ball.z)，結算那一刻才呼叫
+  // blockBetFeedbackOf。量的就是「球到網那一刻」的回卡率。
+  const arm = createBlockBetArm();
+  let spikeMeta = null; // 本波扣球的分類（結算時歸類用）
   let guard = 0;
+  const bucket = (c, slot) => {
+    if (!c) return;
+    if (/賭中/.test(c.text)) slot.hit += 1; else slot.bet += 1;
+  };
+  const resolve = (p) => {
+    const card = blockBetFeedbackOf(game, ai, meId, p.spikerId,
+      { setterId: p.setterId, ranRoute: p.ranRoute });
+    if (!spikeMeta) return;
+    if (spikeMeta.kind === 'spiker') bucket(card, tally.cardWhenSpiker);
+    else if (spikeMeta.kind === 'route') bucket(card, tally.cardWhenRoute);
+    else if (spikeMeta.kind === 'setter') bucket(card, tally.cardWhenSetterOnly);
+  };
   while (game.phase !== 'set_over' && game.phase !== 'matchover' && guard < 400000) {
     guard += 1;
     const intents = aiCollectIntents(game, ai, []);
     for (const e of stepGame(game, intents)) {
-      if (e.type === 'TOUCH' && e.kind === 'set' && e.team === 'A') lastSetPid = e.playerId;
-      if (e.type === 'DEAD_BALL') lastSetPid = null;
+      let ctx = null;
       if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === 'A') {
         tally.spikes += 1;
-        const card = blockBetFeedbackOf(game, ai, meId, e.playerId);
-        const bucket = (c, slot) => {
-          if (!c) return;
-          if (/賭中/.test(c.text)) slot.hit += 1; else slot.bet += 1;
-        };
         const ranRoute = ai.approach?.team === 'A'
           && !!ai.approach.routes?.some((rt) => rt.pid === meId);
-        if (e.playerId === meId) { tally.meSpiker += 1; bucket(card, tally.cardWhenSpiker); }
-        else if (ranRoute) { tally.meRoute += 1; bucket(card, tally.cardWhenRoute); }
-        else if (lastSetPid === meId) { tally.meSetterOnly += 1; bucket(card, tally.cardWhenSetterOnly); }
-        else tally.other += 1;
+        ctx = { ranRoute }; // 武裝時快照（與 matchLoop 同形）
+        if (e.playerId === meId) { tally.meSpiker += 1; spikeMeta = { kind: 'spiker' }; }
+        else if (ranRoute) { tally.meRoute += 1; spikeMeta = { kind: 'route' }; }
+        else { spikeMeta = { kind: 'setterMaybe' }; }
       }
+      const armed = arm.onEvent(e, 'A', game.rally.flightId, ctx);
+      if (armed) {
+        if (spikeMeta?.kind === 'setterMaybe') {
+          if (armed.setterId === meId) { tally.meSetterOnly += 1; spikeMeta = { kind: 'setter' }; }
+          else { tally.other += 1; spikeMeta = null; }
+        }
+        resolve(armed);
+        spikeMeta = null;
+      }
+      if (e.type === 'DEAD_BALL') spikeMeta = null;
+    }
+    const armed = arm.onFrame(game.ball?.z ?? 0);
+    if (armed) {
+      if (spikeMeta?.kind === 'setterMaybe') {
+        if (armed.setterId === meId) { tally.meSetterOnly += 1; spikeMeta = { kind: 'setter' }; }
+        else { tally.other += 1; spikeMeta = null; }
+      }
+      resolve(armed);
+      spikeMeta = null;
     }
   }
 }
