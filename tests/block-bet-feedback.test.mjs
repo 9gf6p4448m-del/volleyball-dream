@@ -8,7 +8,9 @@ import assert from 'node:assert/strict';
 import { createGame } from '../src/sim/game.js';
 import { AIR_TICKS } from '../src/sim/approach.js';
 import { BLOCK_HALF_WIDTH } from '../src/sim/blockBand.js';
-import { blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm } from '../src/input/blockBetFeedback.js';
+import {
+  blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm, createBetCardGate,
+} from '../src/input/blockBetFeedback.js';
 
 const TICK = 100;
 
@@ -178,6 +180,47 @@ test('落地的攔網手不算「在空中」：blockUntil 仍在窗內但已超
   // 對照組：同一佈置只把 airT 收回窗內就要出卡（證明紅的原因是滯空窗，不是別的）
   const inWindow = rig({ persona: 'commit', airT: AIR_TICKS, blockUntil: TICK + 60 });
   assert.ok(blockBetFeedbackOf(inWindow.g, inWindow.aiState, 'A1', 'A1'));
+});
+
+// ---------------- 題 E 收尾 3：出卡節流閘 createBetCardGate ----------------
+//
+// 參數由 tools/bet-card-throttle-probe.mjs 量定（不節流 14.0 張/局 → 冷卻 6 剩 6.9）。
+// 這批測試守的是**形狀**（賭中/關鍵分免冷卻、賭錯要等、換局自動重置），不是那個數字。
+
+test('賭錯卡要等冷卻：連續賭錯只放行第一張，冷卻滿了才再放', () => {
+  const gate = createBetCardGate(6);
+  assert.equal(gate.allow({ rally: 3, hit: false }), true, '第一張一律放行');
+  assert.equal(gate.allow({ rally: 4, hit: false }), false);
+  assert.equal(gate.allow({ rally: 8, hit: false }), false, 'rally 差 5 < 6，仍要等');
+  assert.equal(gate.allow({ rally: 9, hit: false }), true, 'rally 差 6 ＝ 冷卻滿');
+});
+
+test('「他賭中了」不受冷卻——賭中是稀有且高訊息量的那一類（探針：每局僅 3.4 張）', () => {
+  const gate = createBetCardGate(6);
+  gate.allow({ rally: 3, hit: false });
+  assert.equal(gate.allow({ rally: 4, hit: true }), true);
+  assert.equal(gate.allow({ rally: 5, hit: true }), true);
+});
+
+test('關鍵分不受冷卻（局點那一球的賭局最該被看見）', () => {
+  const gate = createBetCardGate(6);
+  gate.allow({ rally: 40, hit: false });
+  assert.equal(gate.allow({ rally: 41, hit: false }), false);
+  assert.equal(gate.allow({ rally: 41, hit: false, keyPoint: true }), true);
+});
+
+test('★換局自動重置★ rally 變小（比分歸零）視為新局，不得整局靜默', () => {
+  const gate = createBetCardGate(6);
+  gate.allow({ rally: 42, hit: false }); // 上一局末
+  // 沒有這條，新局的 rally 0 會永遠 < 42+6 ⇒ 整局一張都出不來（漏呼叫 reset 的經典死法）
+  assert.equal(gate.allow({ rally: 0, hit: false }), true);
+  assert.equal(gate.allow({ rally: 1, hit: false }), false, '重置後照常冷卻');
+});
+
+test('免冷卻的卡也會重置冷卻計時（不會賭中之後緊接著又跳賭錯）', () => {
+  const gate = createBetCardGate(6);
+  assert.equal(gate.allow({ rally: 10, hit: true }), true);
+  assert.equal(gate.allow({ rally: 11, hit: false }), false);
 });
 
 // ---------------- 裁定乙第二步：玩家封線的結果字卡（2026-08-03）----------------

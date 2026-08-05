@@ -31,7 +31,9 @@ import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 // 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
 import { callOptionsFor, callFeedbackOf, CALL_MODES } from '../input/callPlay.js';
-import { blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm } from '../input/blockBetFeedback.js';
+import {
+  blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm, createBetCardGate,
+} from '../input/blockBetFeedback.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -1213,6 +1215,25 @@ function stepSim(s) {
 // W6.1 字卡同框整流（拍板 07-24 Q1-T2 修訂版：不丟卡）：本批次字卡先集中收單，
 // 迴圈尾一次 flush——依優先序低→高送出（floatText 疊排＝後出的停在最顯眼的基準位、
 // 先出的被上推），資訊零損失、同框重合疊字歸零。優先序：⚡45＞⭐40＞🧱/👆/🎭20＞PERFECT 10
+// 賭局字卡的共用出口（事件端與幀端都會結算，兩處必須同規則——分開寫過一次就漂移）。
+// `armed`＝createBlockBetArm 的結算回傳（null＝這一刻不評）。
+// 節流見 blockBetFeedback.js 的 createBetCardGate：賭中與關鍵分一律放行、賭錯冷卻。
+function showBetCard(s, armed, cards) {
+  const { game } = s;
+  if (!armed || s.blockBetKey === armed.flightId) return;
+  const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, armed.spikerId,
+    { setterId: armed.setterId, ranRoute: armed.ranRoute });
+  if (!bet) return;
+  s.blockBetKey = armed.flightId; // 這一波已評過（不論有沒有被節流掉，不重評）
+  const score = game.match?.score ?? { A: 0, B: 0 };
+  const pass = (s.betCardGate ??= createBetCardGate()).allow({
+    rally: (score.A ?? 0) + (score.B ?? 0),
+    keyPoint: keyPointOf(game),
+    hit: bet.kind === 'hit',
+  });
+  if (pass) cards.push({ pri: 20, text: bet.text, color: bet.color, dur: bet.ms });
+}
+
 function applyEvents(s, frameEvents, now) {
   const { game, stage } = s;
   const cards = []; // [{ pri, text, color, dur, onShown? }]
@@ -1370,14 +1391,7 @@ function applyEvents(s, frameEvents, now) {
         : null;
       const armed = (s.blockBetArm ??= createBlockBetArm())
         .onEvent(e, myTeam, game.rally.flightId, ctx);
-      if (armed && s.blockBetKey !== armed.flightId) {
-        const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, armed.spikerId,
-          { setterId: armed.setterId, ranRoute: armed.ranRoute });
-        if (bet) {
-          s.blockBetKey = armed.flightId;
-          cards.push({ pri: 20, text: bet.text, color: bet.color, dur: bet.ms });
-        }
-      }
+      showBetCard(s, armed, cards);
     }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
       s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
@@ -1550,17 +1564,7 @@ function applyEvents(s, frameEvents, now) {
   }
   // 題 E 收尾 2 幀端：球的 z 變號＝到網（可觀察物理，同 game.js crossed 條件）——
   // 武裝中的賭局字卡在這一刻結算（事件端的 BLOCK_TOUCH 分支已涵蓋被攔回不過網的球）
-  {
-    const armed = s.blockBetArm?.onFrame(game.ball?.z ?? 0);
-    if (armed && s.blockBetKey !== armed.flightId) {
-      const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, armed.spikerId,
-        { setterId: armed.setterId, ranRoute: armed.ranRoute });
-      if (bet) {
-        s.blockBetKey = armed.flightId;
-        cards.push({ pri: 20, text: bet.text, color: bet.color, dur: bet.ms });
-      }
-    }
-  }
+  showBetCard(s, s.blockBetArm?.onFrame(game.ball?.z ?? 0), cards);
   // flush：低優先先出（被疊排上推）、最高優先最後出＝停在基準位；全部都出、零丟卡
   if (cards.length) {
     cards.sort((a, b) => a.pri - b.pri);

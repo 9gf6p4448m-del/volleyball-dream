@@ -83,10 +83,10 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId, opts = nul
   if (covered) {
     if (blockPersonaOf(game, opp) !== BLOCK_PERSONA.COMMIT) return null;
     if (spikerId === playerId) {
-      return { text: '他賭中了——牆罩在你的線上！', color: '#ffd166', ms: 1600 };
+      return { kind: 'hit', text: '他賭中了——牆罩在你的線上！', color: '#ffd166', ms: 1600 };
     }
     if (setterId != null && setterId === playerId) {
-      return { text: '他賭中了——牆罩住那條線！', color: '#ffd166', ms: 1400 };
+      return { kind: 'hit', text: '他賭中了——牆罩住那條線！', color: '#ffd166', ms: 1400 };
     }
     return null;
   }
@@ -99,7 +99,7 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId, opts = nul
   //   （他們只是照球起跳，不是賭錯），不鎖的話字卡會洪水化＋敘事錯誤。
   if (blockPersonaOf(game, opp) !== BLOCK_PERSONA.COMMIT) return null;
   if (spikerId === playerId) {
-    return { text: '他賭了、賭錯了——空門是你的！', color: '#ffd166', ms: 1600 };
+    return { kind: 'miss', text: '他賭了、賭錯了——空門是你的！', color: '#ffd166', ms: 1600 };
   }
   const ranRoute = opts?.ranRoute != null
     ? opts.ranRoute === true
@@ -107,9 +107,45 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId, opts = nul
       && !!aiState.approach.routes?.some((r) => r.pid === playerId));
   if (ranRoute || (setterId != null && setterId === playerId)) {
     // 無歸因版：只說他賭錯，不說是誰造成的（誤歸因率沒過門檻，見檔頭）
-    return { text: '他賭了，賭錯了，空門！', color: '#ffd166', ms: 1400 };
+    return { kind: 'miss', text: '他賭了，賭錯了，空門！', color: '#ffd166', ms: 1400 };
   }
   return null;
+}
+
+// ★ 題 E 收尾 3（2026-08-05 Sawmah「加節流，看看會不會太少」）：出卡節流閘 ★
+//
+// 參數是**量出來的不是猜的**（`tools/bet-card-throttle-probe.mjs`，10 局真實 career
+// 對曜石、評估點與 matchLoop 同路徑）：不節流每局 **14.0 張**（賭錯 10.6／賭中 3.4）。
+//
+// 形狀＝「只節流賭錯、賭中一律放行」（探針的變體 B）：吵的是賭錯（每局 10.6），
+// 而賭中每局僅 3.4 且訊息量更高（他讀中你了＝該換線的訊號）。冷卻 6 rally 時
+// 每局 **6.9 張**（賭中 3.4 全保留／賭錯 3.5／最少的一局 5、最多 10）——
+// 總量砍一半，但沒有一局會低到「整局看不到賭局在發生」。
+//
+//   冷卻掃描（變體 B，每局張數）：0→14.0｜2→10.4｜3→8.7｜4→7.8｜**6→6.9**｜8→6.5｜12→6.1
+//   ⇒ 8 之後邊際效益趨平（賭中不受冷卻＝地板在 6.1），再拉長只是讓賭錯消失，不划算。
+//
+// 關鍵分（`keyPointOf`＝局點，沿用既有判定不另造）一律放行：那一球的賭局最該被看見。
+// 換局偵測＝`rally` 變小（比分歸零）⇒ 自動重置，不需外部呼叫 reset（漏呼叫就會整局靜默）。
+export const BET_CARD_COOLDOWN_RALLIES = 6;
+
+/**
+ * 出卡節流閘（純狀態機，與 UI 無關）。
+ * `rally` 用「本局已完成的 rally 數」＝`score.A + score.B`（每球得分制下逐值精確，
+ * 零新計數器；換局比分歸零 ⇒ 下方 `rally < last` 自動重置）。
+ */
+export function createBetCardGate(cooldown = BET_CARD_COOLDOWN_RALLIES) {
+  let last = null;
+  return {
+    allow({ rally, keyPoint = false, hit = false } = {}) {
+      const free = keyPoint || hit; // 關鍵分與「他賭中了」不受冷卻
+      if (last === null || rally < last || free || rally - last >= cooldown) {
+        last = rally; // 免冷卻的卡也重置冷卻＝不會連著兩球都跳字
+        return true;
+      }
+      return false;
+    },
+  };
 }
 
 // ★ 題 E 收尾 2（2026-08-05 真人實測「攻擊手也沒卡」）：評估點遞延到「球到網」 ★
