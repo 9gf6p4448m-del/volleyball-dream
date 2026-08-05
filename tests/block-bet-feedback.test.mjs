@@ -77,9 +77,36 @@ test('題E3 反面：同一佈置換成 read 隊 → 不出卡（read 罩到線�
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A1'), null);
 });
 
-test('題E3 反面：commit 賭中但扣球者是隊友 → 不出卡（因果不直連，不帶「你」也不講）', () => {
+test('題E3 反面：commit 賭中、扣球者是隊友、玩家也不是二傳 → 不出卡', () => {
   const { g, aiState } = rig({ x: BLOCK_HALF_WIDTH - 0.01, persona: 'commit' });
   assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A3'), null);
+});
+
+// ---------------- 題 E 收尾（08-05 試玩「玩 S 整場沒卡」）：二傳也算參與 ----------------
+
+test('玩家當二傳、隊友扣進空門 → 無歸因賭錯卡（S 反配空門是玩法本體，不能沒回饋）', () => {
+  const { g, aiState } = rig({ routes: [{ pid: 'A3' }, { pid: 'A4' }] }); // 玩家沒跑線
+  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3', 'A1'); // setterId＝玩家
+  assert.ok(fb, '二傳配進空門必須有回饋');
+  assert.equal(fb.text, '他賭了，賭錯了，空門！');
+  assert.ok(!fb.text.includes('你'), '二傳版維持無歸因（線是扣球者選的，混合因果）');
+});
+
+test('玩家當二傳、commit 賭中罩住隊友 → 無歸因賭中卡', () => {
+  const { g, aiState } = rig({
+    x: BLOCK_HALF_WIDTH - 0.01, persona: 'commit', routes: [{ pid: 'A3' }, { pid: 'A4' }],
+  });
+  const fb = blockBetFeedbackOf(g, aiState, 'A1', 'A3', 'A1');
+  assert.ok(fb, '二傳配進賭中的牆必須有回饋');
+  assert.match(fb.text, /賭中/);
+  assert.ok(!fb.text.includes('你'), '二傳版維持無歸因');
+});
+
+test('玩家當二傳但對方是 read 隊、牆罩住 → 不出賭中卡（read 不喊賭，二傳版同規）', () => {
+  const { g, aiState } = rig({
+    x: BLOCK_HALF_WIDTH - 0.01, persona: 'read', routes: [{ pid: 'A3' }, { pid: 'A4' }],
+  });
+  assert.equal(blockBetFeedbackOf(g, aiState, 'A1', 'A3', 'A1'), null);
 });
 
 test('落地的攔網手不算「在空中」：blockUntil 仍在窗內但已超過 AIR_TICKS → 視同沒賭', () => {

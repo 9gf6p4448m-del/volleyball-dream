@@ -37,9 +37,11 @@ import { BLOCK_PERSONA } from '../sim/blockRead.js';
  * @param {object} aiState  AI 協調層狀態（只讀 `approach.team`／`approach.routes`）
  * @param {string} playerId 受控玩家 id
  * @param {string} spikerId 這一擊的扣球者 id
+ * @param {string|null} setterId 本波我方二傳觸球者 id（matchLoop 記錄）——題 E 收尾：
+ *   玩家當 S 配球時也算參與（看穿賭注反配正是 S 的玩法，賭局回饋不能漏掉他）
  * @returns {{text:string,color:string,ms:number}|null} null＝不出字卡
  */
-export function blockBetFeedbackOf(game, aiState, playerId, spikerId) {
+export function blockBetFeedbackOf(game, aiState, playerId, spikerId, setterId = null) {
   const me = game?.players?.[playerId];
   if (!me) return null;
   const opp = otherTeam(me.teamId);
@@ -70,23 +72,31 @@ export function blockBetFeedbackOf(game, aiState, playerId, spikerId) {
   // 9.4%→55.1%），這一瞬間值得講出來。
   // 只對 commit 隊講「賭」：read 隊的牆罩到線是看球的正常反應，喊「賭中」是錯的敘事
   // ——persona 是隊伍 DNA（情蒐可知），不是這一球的私有狀態，反作弊界線不動。
-  // 只在扣球者＝受控玩家時出卡（因果直連才帶「你」，比照甲卡的裁定 6 邏輯）；
-  // 之後真被攔到自有 BLOCK_TOUCH 字卡收尾，這張講的是「他讀中你的線」這件事本身。
+  // 扣球者＝玩家 → 帶「你」（因果直連，比照甲卡的裁定 6 邏輯）；
+  // 玩家是本波二傳 → 無歸因版（配球的人看得到牆罩住那條線，但「線」是扣球者選的，
+  //   混合因果 ⇒ 不帶「你」——與乙卡同一條誤歸因紀律）。
+  // 之後真被攔到自有 BLOCK_TOUCH 字卡收尾，這張講的是「他讀中這條線」這件事本身。
   if (covered) {
-    if (spikerId === playerId && blockPersonaOf(game, opp) === BLOCK_PERSONA.COMMIT) {
+    if (blockPersonaOf(game, opp) !== BLOCK_PERSONA.COMMIT) return null;
+    if (spikerId === playerId) {
       return { text: '他賭中了——牆罩在你的線上！', color: '#ffd166', ms: 1600 };
+    }
+    if (setterId != null && setterId === playerId) {
+      return { text: '他賭中了——牆罩住那條線！', color: '#ffd166', ms: 1400 };
     }
     return null;
   }
 
-  // ③ 玩家有沒有參與這一波——決定講不講「你」，或根本不講
+  // ③ 玩家有沒有參與這一波——決定講不講「你」，或根本不講。
+  //    參與＝親扣／跑了助跑線／**當這一波的二傳**（題 E 收尾：S 反配空門正是玩法本體，
+  //    2026-08-05 試玩「玩 S 整場沒卡」抓到這個缺口）
   if (spikerId === playerId) {
     return { text: '他賭了、賭錯了——空門是你的！', color: '#ffd166', ms: 1600 };
   }
   const ap = aiState?.approach;
   const ranRoute = ap?.team === me.teamId
     && !!ap.routes?.some((r) => r.pid === playerId);
-  if (ranRoute) {
+  if (ranRoute || (setterId != null && setterId === playerId)) {
     // 無歸因版：只說他賭錯，不說是誰造成的（誤歸因率沒過門檻，見檔頭）
     return { text: '他賭了，賭錯了，空門！', color: '#ffd166', ms: 1400 };
   }

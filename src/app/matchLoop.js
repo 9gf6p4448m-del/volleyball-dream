@@ -1358,9 +1358,14 @@ function applyEvents(s, frameEvents, now) {
     // 攔網時序卷 段 5 回饋層：本方扣球那一刻，對方 commit 攔網手賭錯留下空門 → 字卡。
     // 防重播比照 `syncCallFeedback`：同一波（flightId）只播一次——一波內可能有多次
     // 扣球事件（被攔回再扣），鍵記到 flightId 就夠，不會每次都喊。
+    // 題 E 收尾（2026-08-05 試玩回饋「玩 S 整場沒卡」）：記住本波我方的二傳觸球者，
+    // 讓「配球的人」也算參與——S 看穿賭注反配正是這個賭局的玩家側玩法，不能沒回饋。
+    if (e.type === 'TOUCH' && e.kind === 'set' && e.team === myTeam) {
+      s.blockBetSetPid = e.playerId;
+    }
     if (e.type === 'TOUCH' && e.kind === 'spike' && e.team === myTeam
       && s.blockBetKey !== game.rally.flightId) {
-      const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, e.playerId);
+      const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, e.playerId, s.blockBetSetPid);
       if (bet) {
         s.blockBetKey = game.rally.flightId;
         stage.floatText?.show(bet.text, bet.color, bet.ms);
