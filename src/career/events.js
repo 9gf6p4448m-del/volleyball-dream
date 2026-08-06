@@ -95,6 +95,31 @@ export const EVENT_DEFS = [
       { speaker: '阿哲', text: '交叉就是中間那個先跳、把攔網拐走，你從他背後穿出來——前排的中間是你的幌子，別客氣。' },
       { speaker: '阿哲', text: '但先說清楚——球權我分。我叫了誰，那個人自己決定跑不跑；不跑我就改給別人，沒人會怪你。' },
     ],
+    // ★ 2026-08-06 試玩回饋（Sawmah 打 OPP 打到第 2 屆）★
+    // 原話：「我第一屆換到 OPP，第二屆開了戰術，是不是整套都沒我的事？換位置看到的文字還一樣。」
+    // 查證結果：①機制上 OPP **沒有**被排除（`delay` 的主攻線認 `right`，
+    //   approach.js `COMBO_MAIN_KINDS`），但他**沒有專屬戰術線**（`cross` 只認 `left`、
+    //   配合者恆為 `quick`＝MB） ②叫牌面板是 S 專屬（callPlay.js「非 S 一律空陣列」）
+    //   ⇒ 非 S 三個位置在死球窗都無事可做，那是「S vs 非S」的二分，不是針對 OPP
+    //   ③本事件四句台詞固定、完全不看 `currentRole`——這一條他說對了。
+    // 本次只補**文案層**：讓每個位置聽到「這套東西對你是什麼」。機制層的位置分歧
+    // 屬集訓卷（`docs/kickoffs/training-camp-discussion-brief.md` §二 已定案
+    // 「加成內容：依位置不同」，尚未實作）。
+    //
+    // 形狀沿用既有分歧先例（`heightAdvice.js`／`positionEvents.js` 都依 currentRole 分文案），
+    // 但**只追加一句**、不重寫四句 × 五位置：前四句是共同知識，追加句才是「你的部分」。
+    // ★ 每一句都必須與碼一致（對玩家說謊比不說更糟）★
+    //   OH ＝ `cross` 主攻只認 `left`／OPP ＝ 交叉走不到 `right`、`delay` 認 `right`，
+    //   且要球窗「⚡跟上」是 OPP 專屬（matchLoop W4 題5）／MB ＝ 配合者恆為 `quick`
+    //   ＋`bquick` 單人型是他的／L ＝ 一傳 tier 決定攻擊池（`perfect` 才有快攻，
+    //   ai.js `attackPointsOf`）／S ＝ 唯一拿得到叫牌清單的人。
+    roleLines: {
+      setter: { speaker: '阿哲', text: '你也是舉球的——那這套不是給你「點菜」用的，是你的球權。誰跑、誰當幌子，你決定。' },
+      outside: { speaker: '阿哲', text: '交叉那條線就是你的——中間先跳把牆拐走，你從他背後穿出來。我喊交叉，多半就是喊你。' },
+      opposite: { speaker: '阿哲', text: '你在右邊，交叉走不到你那條線——你的球是時間差：慢半拍進場，牆落地了你才起跳。想要球就自己喊，我聽得見。' },
+      middle: { speaker: '阿哲', text: '你不是被叫的那個——你是幌子。牆跟著你走，別人才有地方打。當然，偶爾我是真的給你，B快。' },
+      libero: { speaker: '阿哲', text: '你不進攻，但每一套都從你的一傳開始——一傳到位，快攻和交叉才叫得出來；一傳歪了，就只剩兩邊高球。' },
+    },
   },
   {
     id: 'teach-dive',
@@ -212,6 +237,22 @@ export function resolveEventsForRoster(evs, members) {
       ? { ...e, lines: e.altLines }
       : e
   ));
+}
+
+// 2026-08-06 試玩回饋：依**玩家當下位置**追加一句「這套東西對你是什麼」
+//（帶 `roleLines` 的事件才有，其餘原樣通過）。
+//
+// ★ 呼叫順序：必須排在 `resolveEventsForRoster` **之後** ★
+// 那一步會把整組 `lines` 換成 `altLines`（年級守衛）——先追加就會被整段覆蓋掉，
+// 玩家在前輩畢業的那些屆剛好一句都收不到。順序由 `tests/teach-call-role.test.mjs` 釘住。
+//
+// role＝`player.currentRole`；null／未知位置＝原樣（安全預設，比照上面 members 的處理）。
+export function resolveEventsForRole(evs, role) {
+  if (!role) return evs;
+  return evs.map((e) => {
+    const extra = e.roleLines?.[role];
+    return extra ? { ...e, lines: [...e.lines, extra] } : e;
+  });
 }
 
 // ---- W5 逐出台詞（B5 拍板：2 行極簡，被逐者一行＋隊長一行，平靜克制）----

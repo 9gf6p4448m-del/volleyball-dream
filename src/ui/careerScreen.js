@@ -21,7 +21,7 @@ import {
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
   graduationCeremonySegments, freshmenIntroLines, walkOnIntroLines,
-  resolveEventsForRoster, isOnceEvent, heightGuidanceEventFor,
+  resolveEventsForRoster, resolveEventsForRole, isOnceEvent, heightGuidanceEventFor,
 } from '../career/events.js';
 import { aceGrowthAt } from '../career/aceGrowth.js';
 import { clampHeightCm } from '../career/heightGrowth.js';
@@ -1837,9 +1837,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         const preEvs = [
           ...(heightEv ? [heightEv] : []),
           // 第 3 參數＝屆數（`when.seasonIndex` 條件用——teach-call 掛第 2 屆第一場賽前）
-          ...filterPlayedOnce(resolveEventsForRoster(
+          // 位置分歧（2026-08-06）排在年級守衛**之後**：守衛會整組換成 altLines，
+          // 先追加會被覆蓋掉（見 events.js resolveEventsForRole 檔頭）
+          ...filterPlayedOnce(resolveEventsForRole(resolveEventsForRoster(
             dueEvents(career, 'pre', store.seasonIndex?.() ?? 1), rosterNow?.members ?? null,
-          )),
+          ), player?.currentRole ?? null)),
           ...oldTeamPreEvents(career, rosterNow),
           ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
         ];
