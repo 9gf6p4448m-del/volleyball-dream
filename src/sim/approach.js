@@ -534,7 +534,24 @@ export const SET_TO_HIT_TICKS = { one: 33, two: 61, three: 82 };
 //   ③ 取「與 CROSS_PLAY_RATE 相同的 0.25」而不是「與交叉的**實效**佔比 17.5% 對齊
 //      （＝0.175）」：段 D（攔網分歧量測）要在**每一型**上各取樣本，
 //      同權重的骰子讓兩型的樣本數同量級，是段 D 的前提。
-export const TANDEM_PLAY_RATE = 0;
+// ★★ 2026-08-06 解封：重開條件已達成，且**上面那道「第一件要先確認的事」已實測** ★★
+// 觸發＝真人試玩回饋「我換到 OPP，第二屆開了戰術卻感覺都沒我的事」——查證後
+// OPP 確實沒有任何專屬戰術線（`cross` 只認 `left`、配合者恆為 `quick`＝MB），
+// 而 `tandem` 的主攻位**只認 `right`＝OPP 專屬**，它就是那條缺掉的線。
+//
+// 重開前的重驗（`tools/tandem-revival-probe.mjs`，400 局、同一支臂內比較，零 src 改動）：
+//   | | 07-31 判死刑時 | 2026-08-06 現行 |
+//   | 夾塞 淨得分   | 10.6% | **57.9%**（n=435） |
+//   | 無組合 right  | 57.9% | 57.9%（n=2078）⇒ **Δ 從 −47.3pp 收斂到 0.0pp** |
+//   | 夾塞 被攔死   | 24.6% | **1.6%**（無組合 right 2.5%） |
+//   | 攔死時攔網手**已落地** | **97.1%** | **0.0%** |
+// 最後一列就是關閉註解指定的那道檢查：`4010c26`（08-01 攔網時序卷 段 1）之後，
+// `game.js:1085` 在球員進入牆之前就把落地者濾掉 ⇒ 0.0% 不是統計巧合，是結構保證。
+// 「嚴格支配」已不存在（兩軸都不再輸），關閉理由整條消滅。
+//
+// ⚠ 誠實註記：夾塞現在是**與無組合 right 打平**，不是更強——它的價值是
+//   「OPP 有一條自己的戰術線」（角色識別），不是讓 OPP 變強。別拿它當強度旋鈕。
+export const TANDEM_PLAY_RATE = 0.25;
 const TANDEM_PLAY_SALT = 137;
 // 夾塞條件 3「節奏錯開」的門檻（tick）。取 AI.APPROACH_LEAD ＝ 12
 // （ai.js:51 原文「比精算早到 0.2s＝短暫引臂接起跳」）＝ sim 自己定義的
@@ -598,7 +615,9 @@ const COMBO_LINE = { cross: 'cross', tandem: 'tandem', delay: null };
 const COMBO_TEMPO = { cross: null, tandem: null, delay: DELAY_TEMPO };
 // 主攻者的起步偏移（段 B2 的 tempoGap）
 const COMBO_LEAD = { cross: CROSS_TEMPO_GAP, tandem: 0, delay: 0 };
-const COMBO_RATE = {
+// 匯出（2026-08-06）：測試改用「機率推導」判準——哪一型開著就驗哪一型，
+// 不再寫死型別名（夾塞開關兩次都靠人手改測試，絆線各響一次）。
+export const COMBO_RATE = {
   cross: CROSS_PLAY_RATE, tandem: TANDEM_PLAY_RATE, delay: DELAY_PLAY_RATE,
 };
 const COMBO_SALT = {

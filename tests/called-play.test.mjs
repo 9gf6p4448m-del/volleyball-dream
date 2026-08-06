@@ -26,7 +26,7 @@ import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 import { localToWorld } from '../src/sim/rotation.js';
 import {
   resolveCalledPlay, offeredCallTypes, firstFailedCheck, COMBO_TYPES, SOLO_CALL_TYPES,
-  applyRouteKinds, applySoloRoute, CALL_OFFERS_FACTORY_OFF_TYPES,
+  applyRouteKinds, applySoloRoute, CALL_OFFERS_FACTORY_OFF_TYPES, COMBO_RATE,
 } from '../src/sim/approach.js';
 import { attackPointsOf } from '../src/sim/ai.js';
 import {
@@ -307,8 +307,14 @@ test('面板選項池＝保守解讀②：出廠機率 0 的型別不列（切�
   const offered = offeredCallTypes();
   assert.ok(offered.length > 0, '一型都不列＝面板等於不存在');
   assert.ok(offered.includes('cross') && offered.includes('delay'));
-  assert.ok(!offered.includes('tandem'),
-    '夾塞出廠關閉（裁定丙）卻列進面板——Sawmah 裁定前一律照保守解讀②');
+  // ★ 2026-08-06 夾塞解封 ★ 判準改成**由機率推導**，不寫死型別名——規則本身
+  // （「出廠機率 0 的型別不列」）一格未動，動的只是哪一型現在是 0。
+  // 寫死名字的版本每次開關都要人手改，這次就是它把測試絆紅的。
+  for (const t of COMBO_TYPES) {
+    const rate = COMBO_RATE[t] ?? 0;
+    assert.equal(offered.includes(t), rate > 0,
+      `${t} 的出廠機率是 ${rate}，面板${rate > 0 ? '卻沒列' : '卻列了'}它`);
+  }
   assert.equal(CALL_OFFERS_FACTORY_OFF_TYPES, false, '切換旗標被改動＝解讀①上線，需 Sawmah 裁定');
   // 卷五：解析器認得的型別＝組合三型 ∪ 單人改線型（SOLO_CALL_TYPES）。
   // 單人型不吃「出廠機率 0 就不列」那道濾網——它本來就沒有自動觸發機率（只有玩家叫得出來）。
