@@ -48,7 +48,7 @@ import { CAMERA_TUNING } from '../render/cameraRig.js';
 import { hitLeadTicks, seqDurTicks } from '../render/geoAnimator.js';
 import { approachRouteOf, isQuickKind } from '../sim/approach.js';
 import {
-  trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey,
+  trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey, ohSignatureArms,
   lineKillDistance, SIG_LINE_M, timingVerdict,
 } from '../ui/signatureBeats.js';
 import {
@@ -1292,7 +1292,10 @@ function applyEvents(s, frameEvents, now) {
     if (e.type === 'TOUCH' && e.kind === 'spike' && e.team !== myTeam) {
       s.lastOppSpikerId = e.playerId; // MB 俯視鏡的對面攻擊手（他抬頭看你）
     }
-    if (e.type === 'BLOCK_DECEIVED' && e.spikerId === s.controlledId) {
+    // ★ 位置體檢 2026-08-06 裁定 C：補上位置檢查（判定抽到 signatureBeats.ohSignatureArms）★
+    // 檔頭寫明這是「OH 被騙的人」，但原本沒有任何 role 判斷＝任何位置都會起鏡。
+    // 抽成純函式的理由與 `mbCallFeedbackOf` 同一條：判定住在 UI 迴圈就沒有測試守得住。
+    if (ohSignatureArms(e, s.controlledId, game.players[s.controlledId]?.currentRole)) {
       s.pendingSig = armSignature('oh', { focusId: e.blockerId }); // 被騙的人入鏡
     }
     if (e.type === 'TOUCH' && e.kind === 'spike' && e.playerId === s.playerId && s.callLive

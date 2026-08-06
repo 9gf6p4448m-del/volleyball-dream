@@ -48,6 +48,26 @@ export function armSignature(kind, { focusId = null, mateId = null, flightId = n
   return { kind, focusId, mateId, flightId, ...extra };
 }
 
+/**
+ * OH 招牌演出（「假動作騙過攔網手」）的武裝判定。
+ *
+ * ★ 為什麼抽成純函式（2026-08-06 位置體檢裁定 C）★
+ * 本檔檔頭第一行就寫著這是「**OH** 被騙的人」，但判定原本內聯在 `matchLoop` 的事件
+ * 迴圈裡、**沒有任何 role 檢查** ⇒ 任何位置假動作騙過攔網都會起鏡，名實不符。
+ * 這與 `mbCallFeedbackOf` 那次「恆假整天沒人發現」是同一個病根：判定住在 UI 迴圈裡，
+ * 沒有測試守得住它。抽出來之後 `tests/signature-oh-role.test.mjs` 就能釘死。
+ *
+ * @param {object} e            sim 事件
+ * @param {string} controlledId 受控玩家 id
+ * @param {string|null} role    受控玩家的 `currentRole`
+ * @returns {boolean} 這一拍該不該武裝 OH 招牌演出
+ */
+export function ohSignatureArms(e, controlledId, role) {
+  return e?.type === 'BLOCK_DECEIVED'
+    && e.spikerId === controlledId
+    && role === 'outside';
+}
+
 // 逐事件追蹤：回傳新的 pending（null＝解除）。
 // 解除規則（07-27 試玩追修：MB 俯視鏡曾在「攔到→球回我方→重新組織打死」的
 // 不相干得分上播出）：**任何後續觸球**＝成因那一拍沒有直接終結——解除；
