@@ -366,8 +366,27 @@ const CROSS_SALT = 57;
 // 這條也讓既有的一傳品質分支規格維持原樣：勉強一傳仍然只剩兩翼高球
 // kind 標籤 2026-07-31 由 'cross' 改名為 'left_inside'（機率 CROSS_RATE 一格未動）：
 // 這條不是真交叉（見 §一 Q0 背景），'cross' 這個名字留給本卷稍後要做的真交叉。
-export function routeKindFor(kind, { flightId = 0, seed = 0, index = 0, passTier = 'perfect' } = {}) {
+// ★ 位置體檢 2026-08-06 裁定 B1：內切主動化 ★
+// `forcedCut` 非 null＝這條線**由外部指定**，不擲骰（true＝內切／false＝直線）。
+// 只有受控玩家會帶這個值（matchLoop 逐波寫 `aiState.cutCall`）⇒ AI 對局逐值不變。
+//
+// 為什麼玩家側**連預設都不擲骰**（Sawmah 2026-08-06 徵詢主對話後定案）：
+//   ①真實：真實排球沒有骰子，攻擊手每一球自己決定切不切。
+//   ②可學習：留著骰子的話，「我切了才被攔」與「遊戲替我切了才被攔」混在一起，
+//     玩家學不到因果——而這個機制唯一的樂趣就是學會「對誰該切」。
+//   ③實測支撐（`tools/inside-cut-probe.mjs`，150 局 ×2 種對手）：內切**不是**白給的強化，
+//     它依對手人格分兩邊——對 read 隊淨得分 49.7% vs 直線 58.0%（**−8.3pp**）、
+//     對 commit 隊 59.3% vs 48.5%（**+10.8pp**）。⇒ 玩家亂切會虧，讀對才賺，
+//     不需要另外配代價（對照：夾塞當年是兩軸皆輸才被關的）。
+// ⚠ 順帶更正上方註解的一句舊宣稱：「中間攔網手構造上搆不到」**只在 commit 下成立**
+//   （涵蓋率 22.9% vs 直線 32.0%）；對 read 隊完全相反（**65.8% vs 47.8%**）——
+//   read 是等球出手才反應，內切離中路更近反而更好補。那句是舊工作點寫的。
+export function routeKindFor(
+  kind,
+  { flightId = 0, seed = 0, index = 0, passTier = 'perfect', forcedCut = null } = {},
+) {
   if (kind !== 'left' || passTier !== 'perfect') return kind;
+  if (forcedCut != null) return forcedCut ? 'left_inside' : 'left';
   return hash01(flightId * 733 + index * 53 + CROSS_SALT + seed) < CROSS_RATE
     ? 'left_inside' : 'left';
 }
@@ -378,9 +397,17 @@ export function routeKindFor(kind, { flightId = 0, seed = 0, index = 0, passTier
 // src/input/setOptions.js 讀到的池不受影響）。
 // §7 D2：每個 point 可以自帶 `tier`（接一傳者的罰則檔），有就用它、沒有才吃
 // opts.passTier——「同一顆池、各線各自的檔位」，不是另開一條平行分支
+// `opts.cutFor`＝`{ pid, cut }`：那名球員的左翼線由外部指定（見 routeKindFor 的 forcedCut）。
+// 形狀比照 `replanCall`——**只當參數傳、不存進 sim 內部狀態**；null／pid 不在池裡＝原樣擲骰。
 export function applyRouteKinds(points, opts = {}) {
+  const cutFor = opts.cutFor ?? null;
   return points.map((pt, index) => {
-    const kind = routeKindFor(pt.kind, { ...opts, index, passTier: pt.tier ?? opts.passTier });
+    const kind = routeKindFor(pt.kind, {
+      ...opts,
+      index,
+      passTier: pt.tier ?? opts.passTier,
+      forcedCut: cutFor && cutFor.pid === pt.pid ? cutFor.cut === true : null,
+    });
     return kind === pt.kind ? pt : { ...pt, kind };
   });
 }

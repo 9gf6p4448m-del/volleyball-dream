@@ -389,7 +389,14 @@ function ensureFlightPlan(game, aiState) {
     // 順序不可調換——選完人再改線＝二傳瞄的落點與該人助跑的終點是兩個地方
     const points = applyRouteKinds(
       attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
-      { flightId: game.rally.flightId, seed: game.seed ?? 0, passTier: tier },
+      {
+        flightId: game.rally.flightId,
+        seed: game.seed ?? 0,
+        passTier: tier,
+        // 位置體檢裁定 B1：受控玩家的左翼線由他自己決定（matchLoop 逐波寫入）。
+        // null＝AI 對局 ⇒ 照舊擲骰、逐值不變。
+        cutFor: aiState.cutCall ?? null,
+      },
     );
     const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);
     aiState.attackerId = pick?.pid ?? null;
@@ -1148,7 +1155,10 @@ function replanWithoutRunners(game, aiState, team, skipIds, ledger) {
   // 都是本波已定案的協調層狀態）⇒ 同一顆池，不另闢真相
   const points = applyRouteKinds(
     attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
-    { flightId: r.flightId, seed: game.seed ?? 0, passTier: tier },
+    {
+      flightId: r.flightId, seed: game.seed ?? 0, passTier: tier,
+      cutFor: aiState.cutCall ?? null, // 同上：改判重建池時也要沿用玩家的決定
+    },
   ).filter((pt) => !skipIds.includes(pt.pid));
   if (!points.length) return; // 池子被掏空＝沒有別人可以改給，維持原案（不跑就不跑）
   const pick = pickAttackPoint(game, team, aiState.claimId, tier, points);

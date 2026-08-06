@@ -110,6 +110,11 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const boxScorePanel = createBoxScorePanel();
   // W4(P4) 題5 OPP 要球浮鈕（玩家=OPP 後排一傳起球時浮現；OH 不給——關卷）
   const callButton = createCallButton();
+  // 位置體檢裁定 B1（2026-08-06）：OH 的「切中路」窗——同型浮鈕、位置與配色錯開。
+  // 共用元件而非複製一份：兩顆鈕的競態處理（點一下即收、窗過失效）必須一致。
+  const cutButton = createCallButton({
+    label: '↘ 切中路', bottom: '30%', color: '#6ee7ff', bg: 'rgba(14,34,40,0.92)',
+  });
   // W4(P4) 附錄 B-3 封線影子（L 2.0 佈陣可視化——配套下達即現，純表現層）
   const blockShadow = createBlockShadow(ctx.scene);
   // 2026-08-04 試玩裁定：玩家自己的攔網涵蓋帶（看得見「我守得住多寬」；不畫球的預測落點）
@@ -124,7 +129,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, routeCue, pointBanner, setOverOverlay, setBreakOverlay,
-    boxScorePanel, callButton, blockShadow, blockReach, heroStamina, diegetic,
+    boxScorePanel, callButton, cutButton, blockShadow, blockReach, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
 }

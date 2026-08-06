@@ -291,6 +291,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
     dumpLive: false,
     callWindowUntil: 0,   // 浮鈕失效時刻（0.8s 牆鐘窗）
+    cutFlight: -1,        // B1：本波已開過切中路窗（每 flight 一次）
+    cutWindowUntil: 0,    // B1：切中路浮鈕失效時刻
     calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
     pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
@@ -1268,6 +1270,22 @@ function applyEvents(s, frameEvents, now) {
         dur: 2800,
       });
     }
+    // ★ 位置體檢裁定 B1（2026-08-06）：OH 的「切中路」窗 ★
+    // 一傳起球＋玩家是**前排 OH** ⇒ 浮鈕 0.8s（窗長與觸發時點沿用要球窗，不另立節奏）。
+    // 同一刻就把 `cutCall` 寫成「這波走直線」——**預設不擲骰**是本裁定的核心：
+    // 留著 30% 隨機的話，「我切了才被攔」與「遊戲替我切了才被攔」混在一起，玩家學不到
+    // 「對 commit 隊該切、對 read 隊別切」這件事（實測 −8.3pp／+10.8pp，見 approach.js）。
+    // ⚠ 必須趕在二傳觸球前寫入：`ensureFlightPlan` 讀 `cutCall` 決定線，晚了就來不及。
+    if (e.type === 'TOUCH' && e.touches === 1 && e.team === myTeam && !s.replay
+      && game.players[s.playerId]?.currentRole === 'outside'
+      && onCourt(game, s.playerId)
+      && isFrontRow(game.match.rotations[myTeam], s.playerId)
+      && s.cutFlight !== game.rally.flightId) {
+      s.cutFlight = game.rally.flightId;
+      s.aiState.cutCall = { pid: s.playerId, cut: false };
+      s.cutWindowUntil = now + 800;
+      stage.cutButton?.show(() => onCutTap(s));
+    }
     // W4 題5 OPP 要球窗：一傳起球＋玩家 OPP 後排→「⚡跟上！」浮鈕（0.8s；
     // OH 不加任何要球機制——§0 題5 關卷）；每 flight 一次
     if (e.type === 'TOUCH' && e.touches === 1 && e.team === myTeam && !s.replay
@@ -1472,6 +1490,8 @@ function applyEvents(s, frameEvents, now) {
       s.digReadResult = null; // 07-27 結果字卡狀態隨球清
       s.mbCommit = null;
       s.callLive = false; // 4.5B §3：死球＝要球兌現窗關（得手與否由 SCORE 分支結案）
+      s.aiState.cutCall = null; // B1：切中路的決定只管這一波（同「戰術只管一球」）
+      stage.cutButton?.hide();
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
@@ -1894,6 +1914,15 @@ function callHash01(n) {
   x ^= x >>> 16;
   return (x >>> 0) / 4294967296;
 }
+// B1：玩家按下「切中路」——把這一波的左翼線改成內切。
+// 防競態比照 onCallTap：窗已過（二傳已觸球）就不生效，避免「舉球落點已定、助跑卻改線」。
+function onCutTap(s) {
+  const { game, stage } = s;
+  if (game.phase !== 'rally' || game.rally.touches !== 1) return;
+  s.aiState.cutCall = { pid: s.playerId, cut: true };
+  stage.floatText.show('切中路——從快攻手背後穿出去', '#6ee7ff', 1200);
+}
+
 function onCallTap(s) {
   const { game, stage } = s;
   if (game.phase !== 'rally' || game.rally.touches !== 1) return; // 窗已過（防競態）
@@ -2082,6 +2111,11 @@ function frameStep(s, now) {
   if (stage.callButton?.isVisible()
     && (now > s.callWindowUntil || game.phase !== 'rally' || game.rally.touches !== 1)) {
     stage.callButton.hide();
+  }
+  // B1：切中路浮鈕同一組窗規則（沒按＝維持這一波的預設直線）
+  if (stage.cutButton?.isVisible()
+    && (now > s.cutWindowUntil || game.phase !== 'rally' || game.rally.touches !== 1)) {
+    stage.cutButton.hide();
   }
 
   // W4 附錄 B-4：ace 反讀注入（宿敵 ace＝本波攻擊手且玩家配套史被讀死——
