@@ -1397,6 +1397,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     root.appendChild(button('▶ 生涯', true, renderSlots));
     root.appendChild(button('快速比賽', false, showQuickRolePicker));
     root.appendChild(msgEl);
+    // 2026-08-07 Sawmah 指定：build 戳記固定在主選單右下角。
+    // 用途＝「我看不到新東西」時一秒分辨版本落差與邏輯問題（見 vite.config.js 的理由）。
+    // `typeof` 守衛：測試環境直接 import 本檔時沒有 vite define，不能讓它 ReferenceError。
+    root.appendChild(el('div', [
+      'position:fixed', 'right:10px', 'bottom:8px', 'font-size:11px',
+      `color:${COLOR.dim}`, 'letter-spacing:1px', 'opacity:0.75', 'pointer-events:none',
+    ], `build ${typeof __BUILD_ID__ === 'undefined' ? 'dev' : __BUILD_ID__}`));
   }
 
   // ---- W4(P4) 題2 選檔頁：三槽卡片＝讀存檔頭不解整包；刪檔二次確認；零槽間互通 ----

@@ -1,7 +1,14 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// 2026-08-07：build 戳記——真人回報「看不到新功能」時，第一件事要能分辨
+// 「跑的是舊版」還是「邏輯真的沒觸發」。沒有這個字串，那兩件事在對話裡分不開，
+// 08-07 為此來回獵了整輪（先誤判 SW 快取、再誤判位置閘，兩個都被實測推翻）。
+// 台北時間，格式 YYYY-MM-DD HH:mm；顯示在主選單右下角（careerScreen renderHome）。
+const BUILD_ID = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 16);
+
 export default defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   base: './', // 相對路徑：GitHub Pages 子路徑或任何靜態主機都能跑
   build: {
     rollupOptions: {
