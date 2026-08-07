@@ -1432,7 +1432,8 @@ function applyRouteCommit(game, aiState, excludeIds) {
   //   （ensureFlightPlan／replanWithoutRunners／applyReplanCall）的 `mainId` 恆等於
   //   `attackerId` ⇒ 兩人裡不是攻擊手的那個就是 partner。
   //   但玩家自己叫的夾塞不改球權（`applyTandemCall` 刻意不動 `attackerId`）⇒ 實測
-  //   **73.9%** 的波 `mainId !== attackerId`：功能上的誘餌是玩家（他跑夾塞線拉牆）、
+  //   **73.0%**（159 波裡 116 波、14 局 ±3.5pp；舊註解的「73.9%」是 tick 加權的污染值）
+  //   的波 `mainId !== attackerId`：功能上的誘餌是玩家（他跑夾塞線拉牆）、
   //   代碼上的受益者卻是 MB（AI，拿不到 `jumped`）⇒ 語意反了，玩家零回報。
   //   改成依「**這一波誰不是攻擊手**」判定，不寫死欄位名。
   //   ⚠ AI 路徑逐值不變 ⚠ 上面那條恆等式讓兩種寫法在自動排程上同值。

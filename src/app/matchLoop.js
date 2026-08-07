@@ -1245,7 +1245,7 @@ export function captureCutOutcome(s) {
 // 夾塞結算的鎖存端（形狀逐項比照 `captureCutOutcome`）。
 // ★ 2026-08-07 覆審 MEDIUM-4(a)：連 `mine` 一起鎖 ★ 「這球是不是你的」要在**結算當下**
 // 取樣：`attackerId` 是本波的協調層狀態，播字卡的那一幀（可能好幾個 tick 之後）
-// 讀到的已經不一定是同一波的值。實測夾塞按壓有 73.9% 的波球不是他的 ⇒ 文案必須分岔。
+// 讀到的已經不一定是同一波的值。實測夾塞按壓有 73.0% 的波球不是他的 ⇒ 文案必須分岔。
 export function captureTandemOutcome(s) {
   const oc = s.aiState?.tandemOutcome;
   if (!oc || oc.pid !== s.playerId || s.tandemFeedbackDone) return;
@@ -2070,8 +2070,13 @@ export function onCutTap(s) {
 // `canCallPlay` 已經先關掉整顆鈕）。這些一律**不寫文案**（死碼稽核的先例在
 // `CUT_FEEDBACK` 的 nopool）。
 //
-// ★ `decoy` 欄（覆審 MEDIUM-4a）★ 夾塞**不改球權**，實測按下去有 73.9% 的波球不是他的
-//   （92 波裡 68 波 `combo.mainId !== attackerId`）。那時他跑的是「把牆帶走」的線，
+// ★ `decoy` 欄（覆審 MEDIUM-4a）★ 夾塞**不改球權**，實測按下去有 73.0% 的波球不是他的
+//   （159 波裡 116 波 `combo.mainId !== attackerId`；生產組態 excludeIds=[PID] 逐波量、
+//   14 局 ±3.5pp。舊註解引用的「73.9%／92 波裡 68 波」是 tick 加權的污染值，勿再引用）。
+//   根因＝`tandemStateOf.open` 只問幾何、**不問球權**（掃該行段 attackerId 命中 0 次），
+//   而球給誰在按之前就由 pickAttackPoint 抽好了（ai.js:447）＋OPP 平均只拿兩成球權。
+//   ⇒ 這是鈕的設計不是 bug；鈕面兩態準度 95%，只按「這球你的」白跑率降到 7.0%。
+//   那時他跑的是「把牆帶走」的線，
 //   說「貼著快攻手身後打」是假的。有 `decoy` 的 key 在球不是他的時候改用那一句；
 //   沒有 `decoy` 的 key（失敗類）與球權無關，兩種情況同一句。
 export const TANDEM_FEEDBACK = {
