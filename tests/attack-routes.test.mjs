@@ -92,8 +92,24 @@ test('A2 交叉：只在一傳到位時出現（ok／poor 檔一律維持直線�
   }
 });
 
-test('A2 交叉：走 route 系統——tempo 為三速、且 applyRouteKinds 不改動其他欄位', () => {
-  assert.equal(tempoFor('left_inside', { flightId: 1, seed: 1, index: 0 }), 'three');
+// ★ 2026-08-07 Sawmah 裁定 A：內切也吃二速骰 ★ 本條原本釘死「left_inside 恆三速」，
+//   那正是裁定要推翻的規格——玩家按內切鈕會把 37.4% 的波從二速悄悄降成三速高球。
+//   新規格：**內切與直線共用同一顆節奏骰**（按鈕只改路線、不改節奏）。
+test('A2 內切：節奏與直線共用同一顆骰（裁定 A）、且 applyRouteKinds 不改動其他欄位', () => {
+  // 逐值同骰——這是修法本身，也是唯一能把「悄悄降速」擋回去的斷言
+  let two = 0;
+  for (let f = 0; f < 400; f += 1) {
+    const o = { flightId: f, seed: 5, index: 1 };
+    assert.equal(tempoFor('left_inside', o), tempoFor('left', o),
+      `flightId=${f}：內切與直線的節奏必須逐值相同（否則按鈕會偷擲一顆節奏骰）`);
+    if (tempoFor('left_inside', o) === 'two') two += 1;
+  }
+  assert.ok(Math.abs(two / 400 - TEMPO_TWO_RATE) < 0.08,
+    `內切的二速比例 ${(two / 400 * 100).toFixed(1)}% 偏離名目 ${TEMPO_TWO_RATE * 100}%`);
+  // 一傳不到位仍然只剩三速高球（這道閘不因裁定 A 放寬）
+  assert.notEqual(
+    tempoFor('left_inside', { flightId: 3, seed: 5, index: 1, passTier: 'poor' }), 'two',
+  );
   const g = createGame({ seed: 3 });
   const pts = attackPointsOf(g, 'A', 'A1', 'perfect');
   const mapped = applyRouteKinds(pts, { flightId: 1, seed: 1, passTier: 'perfect' });
@@ -107,6 +123,7 @@ test('A2 交叉：走 route 系統——tempo 為三速、且 applyRouteKinds �
   // 純函式：不得改動入參
   assert.deepEqual(attackPointsOf(g, 'A', 'A1', 'perfect'), pts);
 });
+
 
 // ---------------- ② pipe 在 route 系統內 ----------------
 
@@ -315,18 +332,41 @@ test('二速已解封：邊攻兩種節奏都出得到，比例由 TEMPO_TWO_RAT
 //   那不是「調參沒調好」，是定義本身在所有合法輸入下都不可能成立——
 //   再多的弧線調整、接觸模型更換都蓋不住（實測：換球體模型後 0% 落在窗內）。
 // 把 takeoffLead 改回任何非負值，這條測試就會紅在下面的行為斷言上（不是型別錯或空指標）。
-test('二速不變量：滯空窗必須涵蓋球的到達時刻（takeoffLead=+3 時代恆假的那條）', () => {
+// ★ 2026-08-07 裁定 A：本條由「只驗 left」擴成**掃過每一條能被指派二速的線** ★
+//   理由：只開 `tempoFor` 的骰、不給那條線自己的 SHOOT 弧的話，節奏標籤是二速
+//   （set+40 起跳）而舉球仍是 t=0.75 高球弧（82 tick 才到）⇒ 「擊得到」在物理上恆假
+//   ——與 takeoffLead=+3 時代是同一型的設計錯，且單驗 left 的版本看不見它。
+//   apex **由 aim.t 反查**（band 對照 game.js:685 的 rawT 分檔），不寫死 SHOOT_APEX：
+//   寫死的話，弧線分岔的線會被餵一條它實際上不會飛的彈道＝這條檢查失去鑑別力。
+//   修前實測（tools/inside-cut-tempo-probe.mjs 的 naive 臂）：left_inside 二速
+//   起跳→擊球 p50=32 tick、落在滯空窗內僅 18.4%；建了弧之後 p50=11、窗內 100.0%。
+test('二速不變量：每一條二速線的滯空窗都要涵蓋球的到達時刻（takeoffLead=+3 時代恆假的那條）', () => {
+  const TWO_KINDS = Object.keys(APPROACH).filter((k) => {
+    for (let f = 0; f < 200; f += 1) {
+      if (tempoFor(k, { flightId: f, seed: 5, index: 1 }) === 'two') return true;
+    }
+    return false;
+  });
+  for (const k of ['left', 'right', 'left_inside']) {
+    assert.ok(TWO_KINDS.includes(k), `二速線清單漏了 ${k}（實際＝${TWO_KINDS.join(',')}）`);
+  }
   const from = { x: 1.2, y: 2.69, z: 1.2 }; // 二傳名目站位＋站舉觸球高度（實測 p50）
-  const aim = setAimFor(null, 'A', null, 'left', 'two');
-  const to = localToWorld('A', aim.lx, aim.lz);
-  const v = velocityForApex(from, { x: to.x, y: 0.105, z: to.z }, TUNING.SHOOT_APEX);
-  const hit = predictContactPoint({ ...from, vx: v.vx, vy: v.vy, vz: v.vz }, AI.SPIKE_APPROACH_Y);
-  const flightTicks = hit.ticks;               // 二傳觸球 → 球到擊球高度
   const takeoff = -TEMPO.two.takeoffLead;      // 二傳觸球 → 起跳（負 lead ⇒ 觸球後起跳）
   const windowEnd = takeoff + AIR_TICKS;
-  assert.ok(takeoff <= flightTicks,
-    `二速起跳(${takeoff}) 晚於球到達(${flightTicks})：人還沒跳球就到了`);
-  assert.ok(flightTicks <= windowEnd,
-    `二速滯空窗 [${takeoff}, ${windowEnd}] 涵蓋不了球到達的 ${flightTicks} tick`
-    + `——人會在網前罰站 ${flightTicks - windowEnd} tick 後落地，球才到`);
+  for (const kind of TWO_KINDS) {
+    const aim = setAimFor(null, 'A', null, kind, 'two');
+    const to = localToWorld('A', aim.lx, aim.lz);
+    // apex 由 t 分檔（game.js:685 的同一組邊界），不假設這條線一定走 SHOOT_APEX
+    const apex = aim.t < 0.5 ? TUNING.QUICK_APEX
+      : aim.t < 0.65 ? TUNING.SHOOT_APEX : TUNING.SET_APEX;
+    const v = velocityForApex(from, { x: to.x, y: 0.105, z: to.z }, apex);
+    const hit = predictContactPoint({ ...from, vx: v.vx, vy: v.vy, vz: v.vz }, AI.SPIKE_APPROACH_Y);
+    const flightTicks = hit.ticks;             // 二傳觸球 → 球到擊球高度
+    assert.ok(takeoff <= flightTicks,
+      `${kind} 二速起跳(${takeoff}) 晚於球到達(${flightTicks})：人還沒跳球就到了`);
+    assert.ok(flightTicks <= windowEnd,
+      `${kind} 二速滯空窗 [${takeoff}, ${windowEnd}] 涵蓋不了球到達的 ${flightTicks} tick`
+      + `——人會在網前罰站 ${flightTicks - windowEnd} tick 後落地，球才到`
+      + `（弧線 apex=${apex}／t=${aim.t}）`);
+  }
 });

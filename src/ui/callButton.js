@@ -31,6 +31,17 @@ export function createCallButton({
     fn?.();
   });
 
+  // ★ 2026-08-07 裁定 B：兩態鈕 ★ 同一顆鈕在窗內可以換面（例如內切鈕的
+  // 「一般」與「球要給你了」）。用 `key` 做冪等閘＝逐 frame 呼叫也只在真的換態時
+  // 碰 DOM；`null`／不呼叫＝維持建構時的樣式，因此 OPP 的「⚡跟上！」逐值不變。
+  let variantKey = null;
+  const applyVariant = (v) => {
+    btn.textContent = v?.label ?? label;
+    btn.style.color = v?.color ?? color;
+    btn.style.background = v?.bg ?? bg;
+    btn.style.borderColor = v?.border ?? v?.color ?? color;
+  };
+
   return {
     show(handler) {
       onTap = handler;
@@ -42,6 +53,13 @@ export function createCallButton({
     },
     isVisible() {
       return btn.style.display !== 'none';
+    },
+    // v＝{ key, label, color, bg, border? }；傳 null 回到建構時的樣式
+    setVariant(v) {
+      const k = v?.key ?? null;
+      if (k === variantKey) return;
+      variantKey = k;
+      applyVariant(v);
     },
   };
 }

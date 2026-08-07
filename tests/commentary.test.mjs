@@ -10,10 +10,11 @@ const ME = 'A1';
 
 function makeGame({
   score = { A: 0, B: 0 }, servingTeam = 'A', phase = 'serve',
-  touches = 0, possession = null, flightId = 0,
+  touches = 0, possession = null, flightId = 0, aiProfiles = null,
 } = {}) {
   return {
     phase,
+    ...(aiProfiles ? { aiProfiles } : {}),
     players: {
       A1: { name: '小夢', teamId: 'A', currentRole: 'outside' },
       A2: { name: 'A隊2號', teamId: 'A', currentRole: 'setter' },
@@ -43,11 +44,25 @@ test('環境句（kind=ambient）：他隊發球顯示隊名；生涯開場 0:0 
   // 2026-08-07 情報層：**快速比賽的開場 0:0 改報對手攔網人格**（原本是「對方發球」）。
   // 這不是為了實作改測試——需求本身（Sawmah 裁定 D）明文「快速比賽也要看得到這個
   // 資訊，否則玩家在快速比賽永遠在盲按」，而快速比賽沒有任何賽前畫面可掛。
-  // 快速比賽不注入 aiProfiles ⇒ blockPersonaOf 回退 read ⇒ 這句恆為跟球型。
   const l0 = plain.line(makeGame({ servingTeam: 'B' }), null, ME, 0);
   assert.equal(l0.kind, 'ambient');
   assert.match(l0.text, /跟球型/);
   assert.doesNotMatch(l0.text, /read|commit/); // 裁定：不得直接印英文代號
+  // ★ 08-07 稽核修正：上面三條在**不注入 aiProfiles** 時 `blockPersonaOf` 恆回退 read
+  //   ⇒ 恆成立＝零鑑別力（本專案 feedback_zero_power_checks 第①條的形狀）。
+  //   真正要守的行為是「這句話讀得到對手的人格」——注入 commit 必須換一句話。
+  const commitLine = createCommentary().line(
+    makeGame({ servingTeam: 'B', aiProfiles: { B: { blockPersona: 'commit' } } }), null, ME, 0,
+  );
+  assert.match(commitLine.text, /賭攔型/, '注入 commit 人格後這句話沒有跟著變＝它根本沒讀 game');
+  assert.notEqual(commitLine.text, l0.text);
+  assert.doesNotMatch(commitLine.text, /read|commit/);
+  // ★ 08-07 稽核修正：條件寫 `score 0:0` ⇒ 第二、三局開局比分同樣是 0:0，會再播一次。
+  //   「這一場說一次」的閘掛在 commentary 實例上（matchStage 每場建一個）。
+  const sameMatch = createCommentary();
+  assert.match(sameMatch.line(makeGame({ servingTeam: 'B' }), null, ME, 0).text, /跟球型/);
+  assert.equal(sameMatch.line(makeGame({ servingTeam: 'B' }), null, ME, 0).text, '對方發球',
+    '第二局開局（比分同為 0:0）又播了一次賽前情報');
   // 比分不是 0:0 之後回到原本的發球隊環境句（既有行為，未動）
   const l1 = plain.line(makeGame({ servingTeam: 'B', score: { A: 1, B: 0 } }), null, ME, 0);
   assert.equal(l1.text, '對方發球');

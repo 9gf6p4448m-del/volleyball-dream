@@ -33,9 +33,27 @@ const ATTACK_LZ = 1.3; // 舉球目標深度（不在表上的 kind 的保底線
 // 落點不外推的話擊球點會被拉回中場（§4 借快攻低弧那次的失敗成因）。
 // 實測（tools/… 的彈道試算）：apex 4.2＋落點 -4.4 → 擊球點 lx -2.87、飛行 64 tick，
 // 對照高球（apex 5.2＋落點 -3）的 -2.15／83 tick——更外側、快 19 tick。
-const SHOOT = { left: -4.4, right: 4.4 };
+// ★ 2026-08-07 Sawmah 裁定 A：內切也吃二速骰 ★ left_inside 因此需要自己的半快弧。
+//   只開 `tempoFor` 的骰、不建這條弧的話，節奏標籤是二速（起跳＝set+40）而舉球仍走
+//   t=0.75 高球弧（飛行 82 tick）⇒ 起跳→擊球 p50 32 tick、落在滯空窗 AIR_TICKS=24
+//   內只有 **18.4%**（人早就落地了球才到）——與 TEMPO.two 當年 lead=+3 是同一型的
+//   「判斷式恆假」。實測見 tools/inside-cut-tempo-probe.mjs 的 naive 臂。
+//   本表兩格是**由 SHOOT_HIT 反推的**——內切的全部戰術價值是「擊球點離快攻點
+//   > BLOCK_HALF_WIDTH ⇒ 跟死快攻的中間攔網手構造上搆不到」。
+//   ★ 值的定案（Sawmah 08-07 裁定甲，600 局掃描 `tools/inside-cut-shoot-sweep.mjs`）★
+//   初版把 SHOOT_HIT 訂在 −1.3 是**對齊錯誤**：它抄的是三速版 setAimFor 的**參數**，
+//   但三速版的**實測**擊球點是 −0.99 ⇒ 二速版比三速版往外多了 0.3m，等於偷偷改了平衡。
+//   改對齊實測值 −1.0，SHOOT 依 left 那組的 hit/aim 比（2.9/4.4 ≈ 0.66）反推 1.0/0.66
+//   ≈ 1.52。掃描實測擊球 lx p50 ＝ **−1.01**（對齊成功）。
+//   代價實測（600 局／臂、同種子配對、對照組七臂全平）：對 read +0.3pp、對 commit
+//   −2.1pp，**皆在雜訊內** ⇒ 二速純粹只多一個節奏維度、零平衡代價。
+//   ⚠ 這一格是 trade-off 曲線上的點，往外移（−1.3／−2.0／−2.5）會逐步把「賭攔的牆
+//   放掉外側去追快攻、中路的縫才是錢」這個前提還回去：戰術落差（commit−read）
+//   −1.0 是 +9.0、現行往外到 −2.5 會翻號成 −8.3（內切變成打跟球的牆）。掃描表全文
+//   見 `docs/kickoffs/inside-cut-shoot-sweep-0807-raw.md`——要動這格先看那張表。
+const SHOOT = { left: -4.4, right: 4.4, left_inside: -1.52 };
 // 二速的名目擊球點（takeoffSpotFor 用）：不是落點本身，是上面試算出來的擊球點
-const SHOOT_HIT = { left: -2.9, right: 2.9 };
+const SHOOT_HIT = { left: -2.9, right: 2.9, left_inside: -1.0 };
 export function setAimFor(game, team, attackerId, kind, tempo = 'three') {
   if (tempo === 'two' && SHOOT[kind] !== undefined) {
     return { lx: SHOOT[kind], lz: 1.3, t: 0.55 };
@@ -301,7 +319,12 @@ export const AIR_TICKS = 24;
 // 起步 tick 算不出來（沒有二傳觸球預估）時的回落速度（m/s）：moveSpeed 的中位值
 const NOMINAL_SPEED = 4.0;
 
-const KIND_SALT = { left: 11, right: 23 };
+// ★ left_inside 與 left **共用同一顆鹽（11）** ★ 2026-08-07 裁定 A 的關鍵一格：
+//   內切是「同一條左翼球權的另一種幾何」，不是另一條線的節奏。共用鹽 ⇒ 同一波裡
+//   `tempoFor('left', …)` 與 `tempoFor('left_inside', …)` 逐值相同 ⇒ **按不按內切鈕
+//   都不改變這一波的節奏**，只改變路線。分開給鹽的話，玩家按鈕會連帶擲一顆新的節奏骰
+//   ＝把「路線決定」偷渡成「路線＋節奏雙決定」，那不是裁定要的東西。
+const KIND_SALT = { left: 11, right: 23, left_inside: 11 };
 
 // 這條線跑幾速：快攻恆一速、後排高球恆三速、邊攻由種子決定二速／三速。
 // 純 hash（吃 flightId＋池內序＋線別＋seed）＝同種子同球逐值相同，不耗 game rng
@@ -338,7 +361,11 @@ export function tempoFor(kind, { flightId = 0, seed = 0, index = 0, passTier = '
   // 也讓罰站變成常數 61 − 40 ＝ 21 tick（0.35s，07-23 硬線 0.5s 之內）而不隨屬性漂移。
   // ★ 沒有動任何弧線常數、沒有動 TEMPO 表 ★ 只是讓標籤說出這條線本來就在做的事。
   if (kind === 'tandem') return 'two';
-  if ((kind === 'left' || kind === 'right') && passTier !== 'poor') {
+  // ★ 2026-08-07 裁定 A：`left_inside` 加入這道骰 ★
+  // 舊制對 left_inside 直接落到最後一行 `return 'three'` ⇒ 玩家按內切鈕會把
+  // **37.4% 的波**從二速平拉開悄悄降成三速高球（畫面上只說「切進中路」），
+  // 等於把節奏還給對面的牆。共用 left 的鹽 ⇒ 按鈕本身不動節奏（見 KIND_SALT）。
+  if ((kind === 'left' || kind === 'right' || kind === 'left_inside') && passTier !== 'poor') {
     return hash01(flightId * 419 + index * 37 + KIND_SALT[kind] + seed) < TEMPO_TWO_RATE
       ? 'two' : 'three';
   }

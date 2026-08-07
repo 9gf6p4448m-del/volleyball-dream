@@ -63,6 +63,8 @@ function pickStaminaWinner(candidates, game) {
 export function createCommentary(opponentDef = null, revenge = []) {
   let beat = null;            // { text, until }——單槽，新節奏點直接蓋舊的
   let rallyStartFlight = 0;   // 本球起始 flight（拍數＝差值）
+  // 2026-08-07：賽前攔網情報「這一場說一次」（第二／三局開局比分同為 0:0，見下方用處）
+  let intelSaid = false;
   let streakTeam = null;      // 連得分追蹤
   let streakN = 0;
   let prevLeader = null;      // 領先隊（逆轉判定）
@@ -294,7 +296,11 @@ export function createCommentary(opponentDef = null, revenge = []) {
         // 而玩家完全不知道，於是他在快速比賽裡永遠在盲按內切。
         // 條件刻意寫成「開賽 0-0」而不是「沒有 opponentDef」：資料源是
         // `blockPersonaOf`（sim 的同一支回退邏輯），生涯若哪天沒給 trait 也照樣有這句。
-        if (me && score.A === 0 && score.B === 0) {
+        // ★ 2026-08-07 稽核修正：加 `!intelSaid` 一次性閘 ★ 只寫 `score 0:0` 的話，
+        //   第二局、第三局開局比分同樣是 0:0 ⇒ 同一句賽前情報會再播兩次。
+        //   閘掛在 commentary 實例上（matchStage 每場建一個）＝語意就是「這一場說一次」。
+        if (me && !intelSaid && score.A === 0 && score.B === 0) {
+          intelSaid = true;
           const intel = BLOCK_PERSONA_INTEL[blockPersonaOf(game, otherTeam(me.teamId))]
             ?? BLOCK_PERSONA_INTEL[BLOCK_PERSONA.READ];
           return {

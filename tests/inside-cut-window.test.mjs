@@ -8,20 +8,68 @@
 //   ⇒ **真人按的每一次都與沒按無法區分**，這顆鈕從上線到當天沒有真正生效過。
 // 因此 A 的守衛必須是「延遲 ≥150ms 之後才按，仍然生效」——只驗「按了會生效」
 // 會被 D=0 那一格矇混過去（那正是修復前唯一有效的時點）。
+//
+// ★ 2026-08-07 稽核修正：**版本無關化** ★
+// 舊版整檔用具名 import 拉 `cutStateOf`／`CUT_FEEDBACK`／`BLOCK_PERSONA_INTEL`，
+// 而這三個都是修復當次才新增的 export ⇒ 把本檔放到修復前（`5b455e2`）會在
+// **模組載入階段**就 `SyntaxError: does not provide an export named ...`，
+// 11 條一條都跑不到＝紅在旁枝錯誤、行為根本沒被驗到（`02 §6.1` 條 1）。
+// 改法：① 這三個一律走 namespace import（缺 export 時取到 undefined，不炸載入）
+//       ② 行為斷言用的「窗開著沒有」改吃**兩版都有的可觀察量**
+//          （`rally.possession/touches` ＋ `approachRouteOf` 的線別），
+//          不依賴 `cutStateOf` ⇒ 舊版跑得到、且紅在「按了沒生效」這個行為上。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createGame, stepGame, createDefaultTeams } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents, cutStateOf } from '../src/sim/ai.js';
-import { approachRouteOf, CROSS_RATE } from '../src/sim/approach.js';
-import { BLOCK_PERSONA, BLOCK_PERSONA_INTEL } from '../src/sim/blockRead.js';
-import { CUT_FEEDBACK } from '../src/app/matchLoop.js';
+import * as simAi from '../src/sim/ai.js';
+import { approachRouteOf, routeKindFor, CROSS_RATE } from '../src/sim/approach.js';
+import { isFrontRow } from '../src/sim/rotation.js';
+import * as blockRead from '../src/sim/blockRead.js';
+import * as matchLoop from '../src/app/matchLoop.js';
 import { myRouteFor } from '../src/input/myRoute.js';
+
+const { createAiState, aiCollectIntents, attackPointsOf } = simAi;
+const { BLOCK_PERSONA } = blockRead;
 
 const PID = 'A2'; // 預設隊型裡的前排 OH（與 cut-effectiveness-probe 同一名球員）
 // 人類反應下界 150ms ＝ 9 tick。取 30 tick（500ms）＝**遠超**該下界，
 // 且仍在實測窗長（開窗→二傳觸球 1386–1620ms）之內。
 const HUMAN_DELAY_TICKS = 30;
+
+// 「第二觸窗開著、而且這一波有我的左翼線可改」——**版本無關**的窗定義：
+// 只吃 `rally` 的可觀察量與這名球員當下的線別，不呼叫 `cutStateOf`。
+// 這不是把 `cutStateOf` 重刻一份（它另有 passTier 兩層檔位的判準，本函式沒有），
+// 而是規格層的「第二觸窗」——修復前後兩版都成立，所以拿它當注入時點才有鑑別力。
+function windowOpenish(game, ai) {
+  const me = game.players?.[PID];
+  const r = game.rally;
+  if (!me || game.phase !== 'rally' || !r) return false;
+  if (r.possession !== me.teamId || r.touches !== 1) return false;
+  if (ai.approach?.team !== me.teamId) return false;
+  if (approachRouteOf(ai.approach.routes, PID)?.kind !== 'left') return false;
+  // 一傳品質的兩層檔位（隊伍檔＋接一傳者的罰則檔）——**不重刻判準**：
+  // 直接問兩版都有的 `attackPointsOf`／`routeKindFor`「若我強制內切，它會給我什麼」，
+  // 與 `cutStateOf` 問的是同兩支函式。少了這一層，注入時點會落在
+  // 「按了必然無效」的波上，生效率被稀釋成 59.5%＝這條測試自己失去解析力。
+  const tier = ai.passTier ?? 'perfect';
+  const pt = attackPointsOf(game, me.teamId, ai.claimId, tier, ai.passReceiverId)
+    .find((p) => p.pid === PID);
+  if (!pt) return false;
+  return routeKindFor(pt.kind, { passTier: pt.tier ?? tier, forcedCut: true }) === 'left_inside';
+}
+
+// 修復當次才新增的 export——缺席時給一句說得出「少了什麼行為」的訊息，
+// 而不是 TypeError／載入期 SyntaxError（後者會讓整檔一條都跑不到）。
+function needCutState() {
+  assert.ok(typeof simAi.cutStateOf === 'function',
+    'sim 沒有 cutStateOf：這一版的內切窗沒有「唯一真相」可問，UI 只能自己記時間');
+  return simAi.cutStateOf;
+}
+function needFeedback() {
+  assert.ok(matchLoop.CUT_FEEDBACK, 'matchLoop 沒有匯出 CUT_FEEDBACK：這一版沒有內切結算回饋');
+  return matchLoop.CUT_FEEDBACK;
+}
 
 // 真實路徑：createGame → aiCollectIntents → stepGame，零 mock、零重刻判準。
 // injectAfter＝開窗後第幾 tick 寫 `aiState.cutCall`（null＝完全不按）。
@@ -40,14 +88,18 @@ function playSet({ seed, injectAfter = null, onWindow = null }) {
     }
     const intents = aiCollectIntents(game, ai, []);
     if (ai.cutCall) tally.everCalled = true;
-    const st = cutStateOf(game, ai, PID);
-    if (st.open && !w) {
+    if (windowOpenish(game, ai) && !w) {
       w = { openTick: guard, injected: false, closed: false };
       tally.windows += 1;
       if (onWindow) onWindow(game, ai);
     }
     const ev = stepGame(game, intents);
-    // 二傳觸球＝窗關：此刻結算這一波的線
+    // 二傳觸球＝窗關：此刻結算這一波的線，然後**收回這次的按壓**。
+    // ★ 收回這一步是版本中立的關鍵 ★ 修復前的版本沒有「窗一關就清 cutCall」那道閘
+    // （ai.js:373-374 是修復當次加的）⇒ 一次按壓會殘留到同一球的後續每一波、
+    // 把它們全部強制成內切 ⇒ 之後的波再也不是 'left'、窗再也不開，樣本從 42 掉到 3
+    // ＝這條測試會紅在「樣本不足」（旁枝）而不是「按了沒生效」（行為）。
+    // 這裡的清除模擬的是玩家「一波按一次」，兩版逐字相同。
     if (w && !w.closed && ev.some((e) => e.type === 'TOUCH' && e.touches === 2 && e.team === 'A')) {
       w.closed = true;
       if (w.injected) {
@@ -56,9 +108,14 @@ function playSet({ seed, injectAfter = null, onWindow = null }) {
         const key = `${oc?.outcome ?? 'none'}/${oc?.reason ?? 'null'}`;
         tally.outcomes[key] = (tally.outcomes[key] ?? 0) + 1;
       }
+      ai.cutCall = null;
+      w = null;
     }
     if (w && (ev.some((e) => e.type === 'DEAD_BALL')
-      || ev.some((e) => e.type === 'TOUCH' && e.touches === 3 && e.team === 'A'))) w = null;
+      || ev.some((e) => e.type === 'TOUCH' && e.touches === 3 && e.team === 'A'))) {
+      ai.cutCall = null;
+      w = null;
+    }
   }
   return { game, ai, tally };
 }
@@ -72,11 +129,13 @@ test('A 內切真實窗：延遲 500ms（30 tick，遠超人類反應 150ms）�
     injected += tally.injected;
     applied += tally.applied;
   }
-  assert.ok(injected >= 20, `樣本不足（injected=${injected}）＝這條測試沒有解析力`);
-  // 修復前這裡是 22.2%（＝CROSS_RATE 30% 自然骰的區間），遠低於門檻 ⇒ 本測試有鑑別力
-  const rate = applied / injected;
-  assert.ok(rate >= 0.95, `延遲 30 tick 的生效率 ${(rate * 100).toFixed(1)}%（injected=${injected}）`
+  // ★ 行為斷言排在樣本量斷言**之前**（02 §6.1 條 1）★ 反過來寫的話，舊版會先紅在
+  //   「樣本不足」這個旁枝理由上，真正要守的行為根本沒被驗到。
+  const rate = injected ? applied / injected : 0;
+  assert.ok(rate >= 0.95, `延遲 30 tick 的生效率 ${(rate * 100).toFixed(1)}%`
+    + `（applied=${applied}／injected=${injected}）`
     + `——修復前為 22.2%＝CROSS_RATE ${CROSS_RATE * 100}% 自然骰基準`);
+  assert.ok(injected >= 20, `樣本不足（injected=${injected}）＝這條測試沒有解析力`);
 });
 
 test('A 名目窗＝真實窗：`cutStateOf.open` 為真的每一 tick，按下去都生效', () => {
@@ -91,8 +150,10 @@ test('A 名目窗＝真實窗：`cutStateOf.open` 為真的每一 tick，按下�
   while (game.phase !== 'set_over' && checked < 12 && guard < 200000) {
     guard += 1;
     const intents = aiCollectIntents(game, ai, []);
-    const st = cutStateOf(game, ai, PID);
-    if (st.open && !doneThisWave) {
+    // 窗界吃版本無關的 `windowOpenish`（規格層的第二觸窗）——舊版沒有 cutStateOf，
+    // 用它當窗界會讓本條紅在「函式不存在」而不是「按了沒生效」。
+    const open = windowOpenish(game, ai);
+    if (open && !doneThisWave) {
       // 在「開著」的隨機一格（用 tick 取模製造分散，維持決定論）注入
       if (guard % 7 === 0) {
         ai.cutCall = { pid: PID, cut: true };
@@ -101,12 +162,15 @@ test('A 名目窗＝真實窗：`cutStateOf.open` 為真的每一 tick，按下�
           approachRouteOf(ai.approach?.routes, PID)?.kind, 'left_inside',
           `cutStateOf 說 open 卻沒生效（tick=${game.tick}）＝名目窗與真實窗又分岔了`,
         );
-        assert.equal(ai.cutOutcome?.outcome, 'applied');
+        // 新版另有 cutStateOf：它說 open 的每一格都必須與規格窗一致（名目＝真實）
+        if (typeof simAi.cutStateOf === 'function') {
+          assert.equal(ai.cutOutcome?.outcome, 'applied');
+        }
         checked += 1;
         doneThisWave = true;
       }
     }
-    if (!st.open) doneThisWave = false;
+    if (!open) doneThisWave = false;
     stepGame(game, intents);
   }
   assert.ok(checked >= 5, `只驗到 ${checked} 次＝樣本不足`);
@@ -123,8 +187,10 @@ test('A 決定論護欄：AI 對局（沒有人按）整場零觸發——cutCal
   while (game.phase !== 'set_over' && game.phase !== 'matchover' && guard < 400000) {
     guard += 1;
     const intents = aiCollectIntents(game, ai, []);
-    assert.equal(ai.cutCall, null);
-    assert.equal(ai.cutOutcome, null);
+    // 用 `== null`（涵蓋 undefined）：舊版根本沒有 cutOutcome 這個欄位，
+    // 嚴格比較會讓本條紅在「欄位不存在」而不是「有人預寫了指令」。
+    assert.ok(ai.cutCall == null, 'AI 對局出現 cutCall＝有人在 sim 內部預寫玩家指令');
+    assert.ok(ai.cutOutcome == null, 'AI 對局出現 cutOutcome＝結算被無條件觸發');
     stepGame(game, intents);
   }
   assert.ok(guard > 1000, '樣本不足');
@@ -132,6 +198,7 @@ test('A 決定論護欄：AI 對局（沒有人按）整場零觸發——cutCal
 
 // ════════ B：一傳不到位就不開窗 ════════
 test('B 一傳不到位＝不開窗：passTier 非 perfect 時 open=false、reason=pass', () => {
+  const cutStateOf = needCutState();
   const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seenPass = 0;
@@ -157,6 +224,7 @@ test('B 一傳不到位＝不開窗：passTier 非 perfect 時 open=false、reas
 });
 
 test('B 自己接一傳＝這條線降級＝不開窗（§7 D2 的第二層檔位）', () => {
+  const cutStateOf = needCutState();
   // `routeKindFor` 吃的是**這條線自己的** tier（`attackPointsOf` 對接一傳者
   // 套 worseTier）——只看隊伍層的 aiState.passTier 會漏掉這一整類。
   // 實測診斷輪：未生效的波裡有一大半正是「隊伍 perfect、但他自己接了一傳」。
@@ -189,6 +257,7 @@ test('B 自己接一傳＝這條線降級＝不開窗（§7 D2 的第二層檔�
 });
 
 test('B 球已舉出去＝窗關：touches 進到 2 之後 open=false、硬寫也不生效', () => {
+  const cutStateOf = needCutState();
   const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seen = 0;
@@ -209,6 +278,7 @@ test('B 球已舉出去＝窗關：touches 進到 2 之後 open=false、硬寫�
 
 // ════════ C：文案誠實化 ════════
 test('C 文案：名字保留「內切」、拿掉誤導的「從快攻手背後穿出去」', () => {
+  const CUT_FEEDBACK = needFeedback();
   const src = readFileSync(new URL('../src/app/matchLoop.js', import.meta.url), 'utf8');
   const stage = readFileSync(new URL('../src/app/matchStage.js', import.meta.url), 'utf8');
   // 那句描述的是 `cross`（真交叉：助跑穿過快攻手起跳點後方），不是 left_inside
@@ -225,12 +295,54 @@ test('C 文案：名字保留「內切」、拿掉誤導的「從快攻手背後
   assert.ok(!stage.includes("label: '↘ 切中路'"), 'matchStage 鈕面仍是舊叫法');
 });
 
-test('C 回饋覆蓋率：cutStateOf 能回的每一個 reason 都有對應文案（不得靜默）', () => {
-  // 「沒生效要說出原因」——漏一個 key 就會退回萬用句，玩家又分不出為什麼沒切成。
-  for (const reason of ['already', 'nowindow', 'pass', 'nopool', 'locked']) {
-    assert.ok(CUT_FEEDBACK[reason]?.text, `reason=${reason} 沒有文案`);
+// ★ 2026-08-07 稽核修正：本條原本只斷言「表裡有這幾個 key」＝**恆真檢查** ★
+//   那份清單是照著表抄的，表怎麼改它就怎麼對——`nopool` 那句從來印不出來，
+//   這條照樣綠（本專案 feedback_zero_power_checks 第①條的形狀）。
+//   改成把兩端接起來：**跑真實比賽，收集 `cutStateOf` 實際吐出來的 reason**，
+//   要求 ①每個實際會出現的 reason 都有文案（漏＝玩家看到萬用句）
+//        ②表裡不得留下實際不會出現的文案（＝死碼，這次刪掉的 nopool 就是它抓的）
+test('C 回饋覆蓋率：實跑收集到的每個 reason 都有文案，且表裡沒有印不出來的死文案', () => {
+  const CUT_FEEDBACK = needFeedback();
+  const cutStateOf = needCutState();
+  // reason 'done'（本來就走內切）在 applyCutCall 被記成 outcome 'applied'／文案 key 'already'
+  const KEY_OF = { done: 'already' };
+  const seen = new Set();
+  for (const seed of [500000, 507919, 515838]) {
+    const game = createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
+    const ai = createAiState();
+    let guard = 0;
+    while (game.phase !== 'set_over' && game.phase !== 'matchover' && guard < 400000) {
+      guard += 1;
+      const intents = aiCollectIntents(game, ai, []);
+      const me = game.players[PID];
+      const r = game.rally;
+      // 只在「這顆鈕的唯一觀眾」身上取樣：在場的前排 OH、我方第二觸窗內
+      // 取樣範圍＝**`onCutTap` 的觀眾**（不是「鈕看得見」的觀眾）：在場的前排 OH
+      // 在 rally 中的任何一格。刻意**不**限定 touches===1——鈕過期到下一個 rAF
+      // 收掉之間的那一格點下去，正是 'nowindow' 唯一的可達路徑（見 onCutTap）。
+      // 而 isFrontRow 這一格不能少：少了它會混進後排輪次，收到玩家永遠看不到的
+      // 'nopool'（前排 OH 恆在攻擊池裡 ⇒ 那一句印不出來，08-07 已刪）。
+      if (game.phase === 'rally' && game.match.rotations[me.teamId].includes(PID)
+        && isFrontRow(game.match.rotations[me.teamId], PID)) {
+        const st = cutStateOf(game, ai, PID);
+        if (!st.open && st.reason) seen.add(KEY_OF[st.reason] ?? st.reason);
+      }
+      stepGame(game, intents);
+    }
   }
-  assert.ok(CUT_FEEDBACK.applied?.text && CUT_FEEDBACK.missed?.text);
+  assert.ok(seen.size >= 3, `只收集到 ${seen.size} 種 reason＝樣本不足，這條沒有解析力`);
+  for (const reason of seen) {
+    assert.ok(CUT_FEEDBACK[reason]?.text,
+      `實跑會出現 reason=${reason}，但 CUT_FEEDBACK 沒有對應文案＝玩家會看到萬用句`);
+  }
+  // 'applied'＝成功、'missed'＝`??` 的預設臂，兩者不由 cutStateOf 的 reason 產生
+  const EXEMPT = new Set(['applied', 'missed']);
+  for (const key of Object.keys(CUT_FEEDBACK)) {
+    if (EXEMPT.has(key)) continue;
+    assert.ok(seen.has(key),
+      `CUT_FEEDBACK.${key} 在 40k+ 次實跑取樣裡從未被 cutStateOf 產生過＝死文案，該刪`
+      + `（實際收集到：${[...seen].sort().join('／')}）`);
+  }
   // 成功與失敗必須是**不同**的句子（假陽性回饋就是兩者混同造成的）
   assert.notEqual(CUT_FEEDBACK.applied.text, CUT_FEEDBACK.pass.text);
 });
@@ -245,7 +357,7 @@ test('C 重用既有 HUD：切成之後 routeCue 的線名立刻變「內切」�
   while (!checked && guard < 200000) {
     guard += 1;
     const intents = aiCollectIntents(game, ai, []);
-    if (cutStateOf(game, ai, PID).open) {
+    if (windowOpenish(game, ai)) {
       assert.equal(myRouteFor(game, ai, PID)?.kindLabel, '左翼');
       ai.cutCall = { pid: PID, cut: true };
       aiCollectIntents(game, ai, []);
@@ -259,6 +371,8 @@ test('C 重用既有 HUD：切成之後 routeCue 的線名立刻變「內切」�
 
 // ════════ D：情報層 ════════
 test('D 攔網人格情報：兩種人格都有中文語彙，且不印英文代號', () => {
+  const BLOCK_PERSONA_INTEL = blockRead.BLOCK_PERSONA_INTEL;
+  assert.ok(BLOCK_PERSONA_INTEL, 'blockRead 沒有 BLOCK_PERSONA_INTEL：這一版沒有攔網人格情報層');
   for (const persona of [BLOCK_PERSONA.READ, BLOCK_PERSONA.COMMIT]) {
     const it = BLOCK_PERSONA_INTEL[persona];
     assert.ok(it?.label && it.tag && it.hint, `${persona} 缺欄位`);

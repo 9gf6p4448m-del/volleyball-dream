@@ -294,6 +294,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // B1 內切：2026-08-07 起窗長不由 UI 記時（唯一真相＝sim 的 cutStateOf），
     // 這裡只留「這次的結算回饋播過了沒」。
     cutFeedbackDone: false,
+    // MEDIUM-2：sim 端 cutOutcome 的鎖存（壽命短於一個 rAF，見 captureCutOutcome）
+    cutOutcomeLatch: null,
     calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
     pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
@@ -1208,10 +1210,25 @@ function stepSim(s) {
     if (events.some((e) => e.type === 'DEAD_BALL')) {
       s.vcrLast = s.recorder.end() ?? s.vcrLast;
     }
+    // ★ 2026-08-07 MEDIUM-2：內切回饋的取樣點必須在**每個 sim tick** ★
+    //   `aiState.cutOutcome` 的壽命只有第二觸窗那幾 tick（ai.js:373-374 窗一結束就
+    //   清成 null），而 UI 一個 rAF 只讀一次 ⇒ 一幀跑 ≥2 個 sim tick 時（掉幀／
+    //   30Hz 螢幕上是必然）記錄與清除落在同一幀之內，浮字整個不見——內切**有生效**
+    //   但玩家一個字都沒看到。這裡只鎖存、不顯示（顯示留在幀端，維持單一出口）。
+    captureCutOutcome(s);
     s.accumulator -= SIM_DT;
     simSteps += 1;
   }
   return { frameEvents, simSteps };
+}
+
+// MEDIUM-2 的鎖存端：讀到屬於玩家、且這一波還沒播過的結算就存下來。
+// 只寫不清（清在幀端播出時與 `onCutTap` 重按時）——sim 把它清掉不代表玩家看過了。
+export function captureCutOutcome(s) {
+  const oc = s.aiState?.cutOutcome;
+  if (!oc || oc.pid !== s.playerId || s.cutFeedbackDone) return;
+  if (s.cutOutcomeLatch?.flightId === oc.flightId) return;
+  s.cutOutcomeLatch = oc;
 }
 
 // 事件應用：音效/播報/juice（定格、震動、慢動作）/得分原因面板/慶祝
@@ -1922,26 +1939,55 @@ function callHash01(n) {
 // ★ 拿掉「從快攻手背後穿出去」★ 那句描述的是 `cross`（`approach.js:75,153`，
 //   助跑真的穿過快攻手起跳點後方、在他另一側起跳）；`left_inside` 的人與球全程
 //   都在左半場、沒有越過二傳（`setOptions.js` 的 left_inside 正名段落）。
-// key ＝ `cutOutcome` 的 reason（成功時 reason 為 null ⇒ 落到 'applied'）。
+// key ＝ `cutOutcome` 的 reason（成功時 reason 為 null ⇒ 落到 'applied'），
+// 以及 `onCutTap` 對**過期鈕**直接取用的 `cutStateOf().reason`（見該函式）。
+//
+// ★ 2026-08-07 MEDIUM-1 稽核：`nopool` 已刪 ★ 實測（`tools/cut-feedback-reach-probe.mjs`
+//   的 observe 臂，快速比賽＋生涯各 12 局、**40,220 筆**第二觸窗內的 `cutStateOf` 觀測）
+//   在窗內只出現五種狀態：OPEN 41.9%／pass 30.9%／done 20.6%／locked 5.5%／nowindow 1.1%，
+//   **`nopool` 為 0**——這顆鈕的唯一觀眾是「在場的前排 OH」，而那個人恆在攻擊池裡
+//   ⇒ 那一句永遠印不出來。`cutStateOf` 的 'nopool' 分支本身留著（它是 sim 的防禦性
+//   回傳，有自己的單測），刪掉的只是這張表裡對應的**死文案**。
+//   `missed` 不是死碼：它是下方 `??` 的預設臂（reason 為未知值時的誠實保底）。
 export const CUT_FEEDBACK = {
   applied: { text: '內切——切進中路', color: '#6ee7ff' },
   already: { text: '這球本來就走內切', color: '#6ee7ff' },
   nowindow: { text: '來不及了——球已經舉出去', color: '#c8d6eb' },
   pass: { text: '一傳沒到位——這球只剩兩翼高球', color: '#c8d6eb' },
-  nopool: { text: '這一波沒有你的線', color: '#c8d6eb' },
   locked: { text: 'S 已經給你排了別條線', color: '#c8d6eb' },
   missed: { text: '沒切成', color: '#c8d6eb' },
+};
+
+// ★ 2026-08-07 裁定 B：「球要給你了」兩態鈕（純 UI，sim 零改動）★
+// 依據＝開窗那一刻 `aiState.attackerId` 已是已知量，與最終扣球者一致率 96.8%
+// （239/247；預測「給我」時 94.4% 準，預測「不給我」時 0/104 從沒變成他）。
+// 兩態刻意同一個色系＝同一顆鈕換面，不是第二顆鈕；「這球你的」態改為實心填底
+// （深字亮底）＝在夜賽場景裡的可見度階梯，與 OPP `⚡跟上！` 的體感對齊。
+export const CUT_BUTTON_STATES = {
+  idle: { key: 'idle', label: '↘ 內切', color: '#6ee7ff', bg: 'rgba(14,34,40,0.92)' },
+  mine: { key: 'mine', label: '↘ 內切・這球你的', color: '#062229', bg: '#6ee7ff', border: '#6ee7ff' },
 };
 
 // B1：玩家按下「內切」——把這一波的左翼線改成內切。
 // ★ 這裡**不報成功** ★ 真正生效與否由 sim 的 `applyCutCall` 下一 tick 結算，
 //   回饋在上方的 cutOutcome 分支發（`02 §6.1` 的同一條紀律：成功訊號要來自
 //   成功路徑本身，不能拿「我送出了指令」當「它生效了」的證據）。
-function onCutTap(s) {
+// ★ 2026-08-07 MEDIUM-1：窗已關掉才點到（鈕過期到下一個 rAF 收掉之間的那一格）
+//   舊制是 `return` **靜默什麼都不做**——玩家按了一顆看得見的鈕、畫面毫無反應。
+//   改成就地把 sim 給的關窗原因說出來。**仍然不寫 `cutCall`**：窗外寫進去會殘留到
+//   下一波（`ensureFlightPlan` 只在「不在第二觸窗」的規劃 tick 清它），變成玩家沒要求
+//   的強制內切——那是比靜默更糟的一種代勞。
+export function onCutTap(s) {
   // 窗界與 sim 用**同一份判準**（不再自己寫一份 touches===1）：兩份遲早漂開。
-  if (!cutStateOf(s.game, s.aiState, s.playerId).open) return;
+  const st = cutStateOf(s.game, s.aiState, s.playerId);
+  if (!st.open) {
+    const fb = CUT_FEEDBACK[st.reason] ?? CUT_FEEDBACK.missed;
+    s.stage.floatText.show(fb.text, fb.color, 1300);
+    return;
+  }
   s.aiState.cutCall = { pid: s.playerId, cut: true };
   s.cutFeedbackDone = false;
+  s.cutOutcomeLatch = null;
 }
 
 function onCallTap(s) {
@@ -2067,6 +2113,11 @@ function frameStep(s, now) {
   if (delta < 0) delta = 0;
 
   if (s.replay) {
+    // ★ 2026-08-07 MEDIUM-3：回放期間內切鈕必須先收 ★ 下面兩個內切區塊都排在這個
+    //   early-return 之後 ⇒ 窗內按 🎬（matchStage.js:312，全程常駐、無窗界）之後
+    //   sim 凍結、浮鈕留在畫面上而且 handler 仍然活著，玩家想看多久都行再回來按。
+    //   `hide()` 同時把 onTap 設回 null（callButton.js），所以連「按得到」都一併收掉。
+    if (stage.cutButton?.isVisible()) stage.cutButton.hide();
     runReplayFrame(s, now, delta);
     return;
   }
@@ -2146,14 +2197,23 @@ function frameStep(s, now) {
       && cutStateOf(game, s.aiState, s.playerId).open;
     if (cutOpen && !stage.cutButton.isVisible()) stage.cutButton.show(() => onCutTap(s));
     else if (!cutOpen && stage.cutButton.isVisible()) stage.cutButton.hide();
+    // ★ 裁定 B：兩態 ★ 逐 frame 問一次（`setVariant` 自帶冪等閘，同態不碰 DOM）。
+    // `attackerId` 在開窗那一刻就已定案，與最終扣球者一致率 96.8%——這顆鈕因此
+    // 能誠實地說「這球給你」，而不是等球舉出來才知道。
+    if (cutOpen) {
+      stage.cutButton.setVariant(s.aiState.attackerId === s.playerId
+        ? CUT_BUTTON_STATES.mine : CUT_BUTTON_STATES.idle);
+    }
   }
   // 內切結算回饋（C：文案誠實化）——**成敗由 sim 說了算**，不是按下去就報成功。
   // 舊制 `onCutTap` 無條件跳「切中路——從快攻手背後穿出去」：①那句描述的是交叉
   // （`cross`，S 叫的組合戰術），與內切不是同一條線，真人因此誤解；②約 30% 的波
   // 一傳非 perfect、按了必然無效，照樣報成功＝假陽性回饋。
-  const cutOc = s.aiState.cutOutcome;
+  // MEDIUM-2：讀**鎖存**而不是 sim 的即時值——後者的壽命短於一個 rAF（見 stepSim）。
+  const cutOc = s.cutOutcomeLatch;
   if (cutOc && cutOc.pid === s.playerId && !s.cutFeedbackDone) {
     s.cutFeedbackDone = true;
+    s.cutOutcomeLatch = null;
     const fb = CUT_FEEDBACK[cutOc.outcome === 'applied' ? (cutOc.reason ?? 'applied') : (cutOc.reason ?? 'missed')]
       ?? CUT_FEEDBACK.missed;
     stage.floatText.show(fb.text, fb.color, 1300);

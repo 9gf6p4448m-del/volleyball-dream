@@ -24,6 +24,7 @@
 //   （careerMatchSetup，與 balance-sim / block-width-probe 同構），雙方 AI 代打。
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createCareer, createCareerPlayer, careerMatchSetup } from '../src/career/careerState.js';
@@ -35,6 +36,8 @@ import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BASELINE = join(HERE, 'sim-hash-baseline.json');
+// 基準變更紀錄（--write 自動追加）——對不上時先查這裡是誰改的、為什麼
+const CHANGELOG = join(HERE, 'sim-hash-baseline-CHANGELOG.md');
 const args = process.argv.slice(2);
 const WRITE = args.includes('--write');
 const mi = args.indexOf('--matches');
@@ -136,7 +139,8 @@ const totalDigest = total.digest('hex').slice(0, 16);
 
 const snapshot = {
   note: 'Phase 5 §十 階段二：sim 行為逐值雜湊基準（2-B timing 幾何化併入後重立）。'
-    + '--write 只在拍板允許行為變更時用。',
+    + '--write 只在拍板允許行為變更時用，且必須帶 --reason="…"；'
+    + '每次改寫的 commit 與理由自動記到 tools/sim-hash-baseline-CHANGELOG.md。',
   seedBase: SEED_BASE,
   perOpponent: PER_OPPONENT,
   total: totalDigest,
@@ -152,8 +156,35 @@ for (const r of results) {
 console.log(`  ${'合計'.padEnd(12)} ${' '.repeat(13)}${totalDigest}`);
 
 if (WRITE) {
+  // ★ 2026-08-07：改寫基準必須留檔 ★ 起因是這支探針自 5630270（夾塞解封）與
+  // 4f6fff6（自由人 dig）兩次**已拍板**的行為變更之後就對不上，連續兩次沒人改寫
+  // ⇒ 它變成恆紅訊號，正在訓練使用者忽略它（本專案 feedback_zero_power_checks：
+  // 假警報的代價不是吵，是真故障那天看不見）。改寫本身很便宜，「查不到是誰改的」
+  // 才是它一再被擱置的原因——所以把 commit 與理由的登記做成**機械強制**。
+  const reasonArg = args.find((a) => a.startsWith('--reason='));
+  const reason = reasonArg ? reasonArg.slice('--reason='.length).trim() : '';
+  if (!reason) {
+    console.log('\n❌ --write 必須帶 --reason="這次為什麼允許行為變更"（會寫進 CHANGELOG）。');
+    process.exit(2);
+  }
+  let prevTotal = '（無舊基準）';
+  try { prevTotal = JSON.parse(readFileSync(BASELINE, 'utf8')).total ?? prevTotal; } catch { /* 首次建立 */ }
+  let head = '（不在 git 工作區）';
+  try {
+    head = execSync('git rev-parse --short HEAD', { cwd: HERE, encoding: 'utf8' }).trim();
+  } catch { /* 無 git 也照寫，只是少一欄 */ }
+  const stamp = new Date().toISOString().slice(0, 10);
+  const entry = `- ${stamp}　\`${head}\`　${prevTotal} → ${totalDigest}\n  ${reason}\n`;
+  let log = '';
+  try { log = readFileSync(CHANGELOG, 'utf8'); } catch {
+    log = '# sim-hash 基準變更紀錄\n\n'
+      + '每一次 `node tools/sim-hash-probe.mjs --write --reason="…"` 自動追加一列。\n'
+      + '對不上基準時先看這裡：查得到是哪個 commit、為什麼允許那次行為變更。\n\n';
+  }
+  writeFileSync(CHANGELOG, log + entry);
   writeFileSync(BASELINE, `${JSON.stringify(snapshot, null, 2)}\n`);
   console.log(`\n基準檔已寫入：${BASELINE}`);
+  console.log(`變更紀錄已追加：${CHANGELOG}\n${entry}`);
   process.exit(0);
 }
 
