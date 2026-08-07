@@ -308,6 +308,13 @@ export function createGame({
       // settlePoint 讀。放 rally 而不是 aiState 的理由：獎金要在**得分結算**那一刻兌現，
       // 而 game.js 讀不到 aiState；rally 又剛好與「一波」同壽命（死球即清，同 callPid）
       comboAssist: null,
+      // ★ 2026-08-08 顯示層可觀測旗標（OPP 夾塞可見度裁定）★ 純新增、只給 UI 讀：
+      // 唯一寫入點在 trust.js applyComboAssist——那裡在真正寫 trustDyn 的同一行旁
+      // 寫這個欄位，語意＝「這次入帳真的發生了、發給誰、哪個 flightId」。
+      // 不進 sim-hash 白名單（tools/sim-hash-probe.mjs 的 tickRecord 只挑固定欄位，
+      // rally 只列 11 個既有欄位，這個不在裡面），也不改變 comboAssist 本身或
+      // addTrustDyn 的任何寫入時機／值。
+      comboAssistCredit: null,
     },
     events: [], // 完整事件日誌（測試/回放用）
   };
@@ -1692,6 +1699,11 @@ function setupServePhase(state) {
   r.touchLockTick = -1;
   r.callPid = null; // 要球一波一效（死球即清）
   r.comboAssist = null; // 組合獎金候選同樣一波一效（另一個清空點在 ai.js：新的一波開帳時）
+  // ★ 不清 comboAssistCredit ★ 這裡與 settlePoint 同一個 tick 同步執行（非局末的一般
+  // 得分：settlePoint 的 else 分支直接呼叫本函式，不是隔幾個 tick 才跑）——若在這裡
+  // 清掉，會把 applyComboAssist 剛寫進去的值在同一 tick 內原地抹掉，UI 永遠讀不到
+  // （2026-08-08 debug 探針實測踩過：加了這行清空，14 局字卡與入帳全部雙雙歸零）。
+  // flightId 天然單調遞增，讀取端本來就要以 flightId 去重，不靠這裡清空來防重放。
 }
 
 // ---- 預設隊伍（測試/示範用；正式生涯隊伍由 Phase 2+ 資料驅動）----

@@ -303,6 +303,11 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // HIGH-1（覆審修）：字卡以「第二觸窗」為邊緣觸發，不用 flightId 當鍵（那個一波跳三次）
     tandemAssignArmed: true,
     tandemAssignPending: false, // null／'mine'／'decoy'
+    // 誘餌獎金入帳字卡（2026-08-08，OPP 夾塞可見度裁定）：見 captureComboAssistCredit。
+    // flightId 全場單調遞增，去重不需要額外的「播過了」旗標——記上一次消費過的
+    // flightId 就夠，同一個 flightId 只可能對應同一次入帳。
+    comboCreditLatch: null,
+    comboCreditSeenFlight: -1,
     calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
     pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
@@ -1227,6 +1232,9 @@ function stepSim(s) {
     // 相同——兩者的壽命都短於一個 rAF（`attackCombo` 在球飛出去那一刻就隨 approach 作廢）。
     captureTandemOutcome(s);
     captureTandemAssign(s);
+    // 誘餌獎金入帳（2026-08-08）：唯一入帳點在 trust.js applyComboAssist，只在死球那一
+    // tick（settlePoint）寫一次；理由同上——一幀可能跑過好幾個 tick，晚一步讀就錯過。
+    captureComboAssistCredit(s);
     s.accumulator -= SIM_DT;
     simSteps += 1;
   }
@@ -1282,6 +1290,25 @@ export function captureTandemAssign(s) {
   s.tandemAssignArmed = false;
   // MEDIUM-4(a)：74% 的波球不是他的——那時他跑的是「拉牆的線」，不是「打的線」
   s.tandemAssignPending = s.aiState.attackerId === s.playerId ? 'mine' : 'decoy';
+}
+
+// ★ 2026-08-08 Sawmah 裁定：誘餌獎金真的入帳時出一張字卡 ★ 「跑了誘餌線」與「被登記
+// 為候選」都不算——本函式只認 trust.js applyComboAssist 實際寫入 trustDyn 的那一刻
+// （state.rally.comboAssistCredit，見 game.js/trust.js 的新增欄位）。三階段漏斗
+// （跑線 114／候選 64／入帳 10）裡，字卡的張數必須等於最後那個數字，不是前兩個。
+//
+// ★ 只給玩家自己（裁定 2 的同一條）★ `credit.pid !== s.playerId` 直接 return——隊友
+// 或對手入帳時，這裡不會武裝，flush 端自然不會出卡。
+//
+// ★ 去重 ★ flightId 全場單調遞增、只在 settlePoint 那一 tick 被賦一次值，用「上一次
+// 消費過的 flightId」擋重複武裝即可，不需要像夾塞結算那樣另外維護一個「播過了」旗標
+// （那裡的欄位在窗內會 churn 好幾次，這裡的欄位一波至多寫一次）。
+export function captureComboAssistCredit(s) {
+  const credit = s.game?.rally?.comboAssistCredit;
+  if (!credit || credit.pid !== s.playerId) return;
+  if (s.comboCreditSeenFlight === credit.flightId) return;
+  s.comboCreditSeenFlight = credit.flightId;
+  s.comboCreditLatch = credit;
 }
 
 // 事件應用：音效/播報/juice（定格、震動、慢動作）/得分原因面板/慶祝
@@ -2271,6 +2298,7 @@ function frameStep(s, now) {
     s.tandemAssignPending = false;
     s.tandemOutcomeLatch = null;
     s.cutOutcomeLatch = null;
+    s.comboCreditLatch = null; // 誘餌獎金字卡同型同壽命——進回放即作廢，理由同上兩行
     runReplayFrame(s, now, delta);
     return;
   }
@@ -2414,6 +2442,13 @@ function frameStep(s, now) {
         : `🤝 這球是${KIND_LABELS.tandem}——球不給你，你去把牆帶走`,
       '#c792ea', 1300,
     );
+  }
+  // ★ 2026-08-08 誘餌獎金入帳字卡 ★ 讀鎖存（理由同上——`captureComboAssistCredit` 已經
+  // 在 sim tick 端把「這球我真的入帳了」鎖住）。不出數字：信任是隱藏數值，講出 +1
+  // 反而顯得薄；文案風格對齊 `TANDEM_FEEDBACK`。幅度／入帳三條件一律沒動，這裡純顯示。
+  if (s.comboCreditLatch) {
+    s.comboCreditLatch = null;
+    stage.floatText.show('🧱 牆被你帶走了——二傳記住了', '#c792ea', 1300);
   }
   // 內切結算回饋（C：文案誠實化）——**成敗由 sim 說了算**，不是按下去就報成功。
   // 舊制 `onCutTap` 無條件跳「切中路——從快攻手背後穿出去」：①那句描述的是交叉

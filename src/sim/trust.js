@@ -87,6 +87,12 @@ export function applyComboAssist(state, scorerId, scored) {
   if (!a || a.pid === scorerId) return;
   if (a.team !== state.rally.lastTouchTeam) return; // 跨隊殘帳（不該發生）不發
   addTrustDyn(state, a.pid, TRUST_DYN.COMBO_ASSIST);
+  // ★ 2026-08-08 顯示層可觀測旗標（OPP 夾塞可見度裁定）★ 純新增讀取用欄位，記「這次
+  // 入帳真的發生了、發給誰」——trustDyn 全遊戲只在換人面板顯示且是加總後的數字，
+  // +1 在那裡等於隱形，UI 端要靠這個旗標才知道「入帳」這件事發生過。
+  // 不改變上面 addTrustDyn 的寫入時機或值，也不是第二條寫入路徑（沒有另一個地方
+  // 會寫 trustDyn，這行只是把「剛剛寫過了」這件事另外記一份給 UI 讀）。
+  state.rally.comboAssistCredit = { pid: a.pid, flightId: state.rally.flightId };
 }
 
 // 分配當下的有效 trust＝baseline＋場內動態（夾限 0–100）
