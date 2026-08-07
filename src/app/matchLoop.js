@@ -11,7 +11,7 @@ import {
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
-  callFeasibilityOf,
+  callFeasibilityOf, cutStateOf,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow, isFrontRow } from '../sim/rotation.js';
@@ -291,8 +291,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // W4 題3/題5：二次球真值字卡追蹤（實際出手才立旗）＋OPP 要球窗
     dumpLive: false,
     callWindowUntil: 0,   // 浮鈕失效時刻（0.8s 牆鐘窗）
-    cutFlight: -1,        // B1：本波已開過切中路窗（每 flight 一次）
-    cutWindowUntil: 0,    // B1：切中路浮鈕失效時刻
+    // B1 內切：2026-08-07 起窗長不由 UI 記時（唯一真相＝sim 的 cutStateOf），
+    // 這裡只留「這次的結算回饋播過了沒」。
+    cutFeedbackDone: false,
     calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
     pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
@@ -1270,25 +1271,19 @@ function applyEvents(s, frameEvents, now) {
         dur: 2800,
       });
     }
-    // ★ 位置體檢裁定 B1（2026-08-06）：OH 的「切中路」窗 ★
-    // 一傳起球＋玩家是**前排 OH** ⇒ 浮鈕 0.8s（窗長與觸發時點沿用要球窗，不另立節奏）。
+    // ★ 位置體檢裁定 B1（2026-08-06）：OH 的「內切」窗 ★
     // ★ 2026-08-07 Sawmah 改判：開窗時**不預寫** `cutCall` ★
     //   原設計在開窗當下寫 `{ cut:false }`＝把玩家身上原有的 30% 自動內切骰子拿掉，
     //   於是「不按＝永遠直線」——真人實測回報的是**球路比改動前更單調**，那顆鈕的
     //   存在反而讓沒按的人變差。改判後：不按＝回到 `CROSS_RATE` 30% 擲骰（與 AI 同路徑、
-    //   等同改動前的體驗），按了＝這一波接管成內切。鈕的定位從「唯一的切來源」
-    //   變成「接管這一球」。
-    //   ⚠ 代價（已知並接受）：「我切了才被攔」與「遊戲替我切了才被攔」會再度混在一起，
-    //   可學習性打折——那條要靠賽前情報標出對手攔網人格來補，不是靠拿掉骰子。
-    if (e.type === 'TOUCH' && e.touches === 1 && e.team === myTeam && !s.replay
-      && game.players[s.playerId]?.currentRole === 'outside'
-      && onCourt(game, s.playerId)
-      && isFrontRow(game.match.rotations[myTeam], s.playerId)
-      && s.cutFlight !== game.rally.flightId) {
-      s.cutFlight = game.rally.flightId;
-      s.cutWindowUntil = now + 800;
-      stage.cutButton?.show(() => onCutTap(s));
-    }
+    //   等同改動前的體驗），按了＝這一波接管成內切。
+    // ★ 2026-08-07 修 bug：開窗**不再掛在 TOUCH 事件上、也不再自帶 800ms 計時器** ★
+    //   舊制在此一次性 `show()` 並記 `cutWindowUntil = now + 800`，但 sim 端的線在
+    //   開窗後**一個 tick** 就被 `ensureFlightPlan` 鎖死（實測 D=1 生效率 22.2%
+    //   ＝自然骰基準）⇒ 名目 800ms、真實 16.7ms，真人按的每一次都無效。
+    //   現在窗由 sim 的 `cutStateOf` 逐 frame 決定（見下方浮鈕窗管理），
+    //   **名目窗＝真實窗**；順帶解掉「一傳不到位照樣跳鈕」（passTier 要到 TOUCH 的
+    //   下一 tick 才算得出來，掛在事件上根本讀不到）。
     // W4 題5 OPP 要球窗：一傳起球＋玩家 OPP 後排→「⚡跟上！」浮鈕（0.8s；
     // OH 不加任何要球機制——§0 題5 關卷）；每 flight 一次
     if (e.type === 'TOUCH' && e.touches === 1 && e.team === myTeam && !s.replay
@@ -1493,7 +1488,11 @@ function applyEvents(s, frameEvents, now) {
       s.digReadResult = null; // 07-27 結果字卡狀態隨球清
       s.mbCommit = null;
       s.callLive = false; // 4.5B §3：死球＝要球兌現窗關（得手與否由 SCORE 分支結案）
-      s.aiState.cutCall = null; // B1：切中路的決定只管這一波（同「戰術只管一球」）
+      // B1：內切的決定只管這一波（sim 端的 ensureFlightPlan 也有兩個清空點；
+      // 這裡是死球時的即時收尾，讓浮鈕與回饋旗同一拍歸零）
+      s.aiState.cutCall = null;
+      s.aiState.cutOutcome = null;
+      s.cutFeedbackDone = false;
       stage.cutButton?.hide();
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
@@ -1917,13 +1916,32 @@ function callHash01(n) {
   x ^= x >>> 16;
   return (x >>> 0) / 4294967296;
 }
-// B1：玩家按下「切中路」——把這一波的左翼線改成內切。
-// 防競態比照 onCallTap：窗已過（二傳已觸球）就不生效，避免「舉球落點已定、助跑卻改線」。
+// 內切回饋文案（2026-08-07 C：文案誠實化）。
+// ★ 名字保留「內切」（Sawmah 裁定 2）★ 遊戲脈絡裡二傳第一屆給的就是內切，
+//   交叉攻擊是第二屆才學到的組合戰術——要改的是誤導的**描述**，不是名字。
+// ★ 拿掉「從快攻手背後穿出去」★ 那句描述的是 `cross`（`approach.js:75,153`，
+//   助跑真的穿過快攻手起跳點後方、在他另一側起跳）；`left_inside` 的人與球全程
+//   都在左半場、沒有越過二傳（`setOptions.js` 的 left_inside 正名段落）。
+// key ＝ `cutOutcome` 的 reason（成功時 reason 為 null ⇒ 落到 'applied'）。
+export const CUT_FEEDBACK = {
+  applied: { text: '內切——切進中路', color: '#6ee7ff' },
+  already: { text: '這球本來就走內切', color: '#6ee7ff' },
+  nowindow: { text: '來不及了——球已經舉出去', color: '#c8d6eb' },
+  pass: { text: '一傳沒到位——這球只剩兩翼高球', color: '#c8d6eb' },
+  nopool: { text: '這一波沒有你的線', color: '#c8d6eb' },
+  locked: { text: 'S 已經給你排了別條線', color: '#c8d6eb' },
+  missed: { text: '沒切成', color: '#c8d6eb' },
+};
+
+// B1：玩家按下「內切」——把這一波的左翼線改成內切。
+// ★ 這裡**不報成功** ★ 真正生效與否由 sim 的 `applyCutCall` 下一 tick 結算，
+//   回饋在上方的 cutOutcome 分支發（`02 §6.1` 的同一條紀律：成功訊號要來自
+//   成功路徑本身，不能拿「我送出了指令」當「它生效了」的證據）。
 function onCutTap(s) {
-  const { game, stage } = s;
-  if (game.phase !== 'rally' || game.rally.touches !== 1) return;
+  // 窗界與 sim 用**同一份判準**（不再自己寫一份 touches===1）：兩份遲早漂開。
+  if (!cutStateOf(s.game, s.aiState, s.playerId).open) return;
   s.aiState.cutCall = { pid: s.playerId, cut: true };
-  stage.floatText.show('切中路——從快攻手背後穿出去', '#6ee7ff', 1200);
+  s.cutFeedbackDone = false;
 }
 
 function onCallTap(s) {
@@ -2115,10 +2133,30 @@ function frameStep(s, now) {
     && (now > s.callWindowUntil || game.phase !== 'rally' || game.rally.touches !== 1)) {
     stage.callButton.hide();
   }
-  // B1：切中路浮鈕同一組窗規則（沒按＝維持這一波的預設直線）
-  if (stage.cutButton?.isVisible()
-    && (now > s.cutWindowUntil || game.phase !== 'rally' || game.rally.touches !== 1)) {
-    stage.cutButton.hide();
+  // ★ 內切浮鈕窗（2026-08-07 重做）★ 顯示與否**逐 frame 問 sim**（`cutStateOf`），
+  // 不再自己記時間：那個 800ms 計時器與 sim 真正的死線差了 47 倍，是本次 bug 的形狀。
+  // 條件裡的位置檢查（前排 OH、在場）留在 UI 層——sim 不管「這顆鈕給誰看」。
+  // `!s.aiState.cutCall`＝按過就不再跳（sim 要到下一 tick 才把線改掉，少這一條會閃一格）。
+  if (stage.cutButton && !s.replay) {
+    const meNow = game.players[s.playerId];
+    const cutOpen = !!meNow && meNow.currentRole === 'outside'
+      && onCourt(game, s.playerId)
+      && isFrontRow(game.match.rotations[meNow.teamId], s.playerId)
+      && !s.aiState.cutCall
+      && cutStateOf(game, s.aiState, s.playerId).open;
+    if (cutOpen && !stage.cutButton.isVisible()) stage.cutButton.show(() => onCutTap(s));
+    else if (!cutOpen && stage.cutButton.isVisible()) stage.cutButton.hide();
+  }
+  // 內切結算回饋（C：文案誠實化）——**成敗由 sim 說了算**，不是按下去就報成功。
+  // 舊制 `onCutTap` 無條件跳「切中路——從快攻手背後穿出去」：①那句描述的是交叉
+  // （`cross`，S 叫的組合戰術），與內切不是同一條線，真人因此誤解；②約 30% 的波
+  // 一傳非 perfect、按了必然無效，照樣報成功＝假陽性回饋。
+  const cutOc = s.aiState.cutOutcome;
+  if (cutOc && cutOc.pid === s.playerId && !s.cutFeedbackDone) {
+    s.cutFeedbackDone = true;
+    const fb = CUT_FEEDBACK[cutOc.outcome === 'applied' ? (cutOc.reason ?? 'applied') : (cutOc.reason ?? 'missed')]
+      ?? CUT_FEEDBACK.missed;
+    stage.floatText.show(fb.text, fb.color, 1300);
   }
 
   // W4 附錄 B-4：ace 反讀注入（宿敵 ace＝本波攻擊手且玩家配套史被讀死——

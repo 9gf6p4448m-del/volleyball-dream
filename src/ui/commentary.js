@@ -4,6 +4,10 @@
 // 優先序：可操作提示（發球/選攻擊區）＞ 事件節奏點（TTL）＞ 環境句（拍數/開場敵情）
 
 import { serverId } from '../sim/match.js';
+import { otherTeam } from '../sim/rotation.js';
+import { blockPersonaOf } from '../sim/ai.js';
+// 情報層（2026-08-07）：攔網人格的中文語彙——與 BLOCK_PERSONA 同處，不另立第二份
+import { BLOCK_PERSONA, BLOCK_PERSONA_INTEL } from '../sim/blockRead.js';
 
 const BEAT_TTL = 2200;        // 一般節奏點顯示時長（ms）
 const STREAK_TTL = 3000;      // 敘事節奏點（連得分/追平/逆轉）顯示時長
@@ -283,6 +287,20 @@ export function createCommentary(opponentDef = null, revenge = []) {
         }
         if (opponentDef && score.A === 0 && score.B === 0) {
           return { text: `對手 ${opponentDef.name}：${opponentDef.trait}`, kind: 'ambient' };
+        }
+        // ★ 2026-08-07 情報層：快速比賽的攔網人格出口 ★
+        // 生涯有賽前對手卡（careerScreen 的 intel 區）可以放這條情報，**快速比賽沒有
+        // 任何賽前畫面**——`matchConfig.js` 不注入 aiProfiles ⇒ 對手恆為跟球型，
+        // 而玩家完全不知道，於是他在快速比賽裡永遠在盲按內切。
+        // 條件刻意寫成「開賽 0-0」而不是「沒有 opponentDef」：資料源是
+        // `blockPersonaOf`（sim 的同一支回退邏輯），生涯若哪天沒給 trait 也照樣有這句。
+        if (me && score.A === 0 && score.B === 0) {
+          const intel = BLOCK_PERSONA_INTEL[blockPersonaOf(game, otherTeam(me.teamId))]
+            ?? BLOCK_PERSONA_INTEL[BLOCK_PERSONA.READ];
+          return {
+            text: `對面的牆是${intel.label}——${intel.tag}。${intel.hint}`,
+            kind: 'ambient',
+          };
         }
         return { text: `${teamLabel(game, game.match.servingTeam, controlledId)}發球`, kind: 'ambient' };
       }

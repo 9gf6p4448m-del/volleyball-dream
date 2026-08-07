@@ -13,7 +13,7 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
-  applyRouteKinds, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
+  applyRouteKinds, routeKindFor, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
   resolveCalledPlay, offeredCallTypes, AIR_TICKS,
 } from './approach.js';
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
@@ -215,6 +215,16 @@ export function createAiState() {
     //   降級」，所以失敗也要留下逐條原因（reason＝第一個沒過的 check）。
     //   純由 replanCall＋可觀察量重算 ⇒ 不進錄影白名單。
     callOutcome: null,
+    // ---- 內切窗（2026-08-07）----
+    // cutCall（玩家寫、sim 讀的指令槽，與 replanCall 同性質）：{ pid, cut:true }
+    //   壽命＝這一波的第二觸窗（清空點：ensureFlightPlan 的死球分支與「窗已結束」分支）。
+    //   ★ 與 replanCall 同樣算不出來 ⇒ 必須進 rallyTape 的 PLAYER_AI_FIELDS ★
+    // cutOutcome（回饋層的唯一真相，範式同 callOutcome）：
+    //   { flightId, pid, outcome:'applied'|'missed', reason }
+    //   reason 的代碼由 `cutStateOf` 定義（already／nowindow／pass／nopool／locked）。
+    //   由 sim 產生機器碼、文案在 app 層——「沒生效要說出原因」的資料面。
+    cutCall: null,
+    cutOutcome: null,
     // Phase 5 W1 §7 D2：本波接一傳的人（attackPointsOf 的罰則對象）。
     // 與 attackerId／passTier 同壽命、同重算範式（純由 rally.lastToucherId 推得）＝
     // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
@@ -274,6 +284,12 @@ export function aiCollectIntents(game, aiState, excludeIds = []) {
   // 輸入（replanCall）由 UI 層寫、在此消費：走的是 digBias／attackerId 同一條
   // 「玩家透過協調層下指令」的路，因此同樣要進 rallyTape 的 PLAYER_AI_FIELDS。
   applyReplanCall(game, aiState);
+  // 內切窗（2026-08-07）：玩家的內切決定在此消費。排在 `ensureFlightPlan` **之後**
+  // ——舊制把它塞進 ensureFlightPlan 的 `cutFor`，而那一步逐 flightId 只跑一次
+  // ⇒ 玩家真正的死線是「開窗後一個 tick」（實測 D=1 生效率 22.2%＝自然骰基準）。
+  // 排在 applyReplanCall 之後：S 的指令優先於攻擊手的自主改線（同一 tick 撞上時，
+  // 面板承諾的是 S 那份，兩者衝突要讓面板贏）；applyCutCall 會偵測到線已被改走並誠實回報。
+  applyCutCall(game, aiState);
   // 叫戰術重做卷 段 1：受控玩家「不跑就改組織」。掛在 applyReplanCall **之後**、
   // 走位（decideOne）**之前**——理由與上一行逐字相同：改判要在同一個 tick 內生效，
   // 否則這一 tick 的人還照舊線跑＝提示與跑位分岔一格。
@@ -311,6 +327,9 @@ function ensureFlightPlan(game, aiState) {
     // ⇒ 沒有任何指令需要跨死球存活。
     aiState.callOutcome = null;
     aiState.replanCall = null; // 遠段改判只在第二觸窗內有效，死球即作廢
+    // 內切的決定與它的結算同壽命（另一個清空點＝下方「窗已結束」分支）
+    aiState.cutCall = null;
+    aiState.cutOutcome = null;
     aiState.routeCommit = null; // 段 1 記帳與助跑線同壽命（清空點之一）
     // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
     aiState.blockPlan = null;
@@ -349,6 +368,10 @@ function ensureFlightPlan(game, aiState) {
   if (!(r.possession === team && r.touches === 1)) {
     aiState.jumpSetRoll = null;
     aiState.jumpSet = false;
+    // 內切「只管這一波」（matchLoop 註解的原話）——舊制只在死球清，於是一顆球裡
+    // 按過一次之後，同一 rally 的**後續每一波**都被強制內切。窗一結束就作廢。
+    aiState.cutCall = null;
+    aiState.cutOutcome = null;
   }
 
   // 落點方已用完三次觸球（如扣球掛網彈回本側）→ 依規則不得再觸，全隊放球讓它落地
@@ -936,9 +959,144 @@ function replanContextOf(game, aiState) {
   // 都是本波已定案的協調層狀態）⇒ 同一顆池，不另闢真相
   const points = applyRouteKinds(
     attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
-    { flightId: r.flightId, seed: game.seed ?? 0, passTier: tier },
+    {
+      flightId: r.flightId,
+      seed: game.seed ?? 0,
+      passTier: tier,
+      // 2026-08-07：池子每次重建都要沿用玩家已按下的內切決定，否則 S 的改判／
+      // 段 1 的重組織會把它悄悄洗掉（ensureFlightPlan:398 一直都這樣做，這裡漏了）
+      cutFor: aiState.cutCall ?? null,
+    },
   );
   return { team, tier, points };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 內切窗（2026-08-07 Sawmah 裁定：修，不退）
+// ════════════════════════════════════════════════════════════════
+//
+// ★ 本函式是「內切現在按不按得到」的**單一真相** ★
+// UI 用它決定浮鈕顯不顯示、`applyCutCall` 用它決定生不生效
+// ⇒ **名目窗與真實窗在構造上相等**。這正是本次 bug 的修法本身。
+//
+// ★ 修前是什麼樣（實測，不是推論）★
+//   舊制：UI 自己記一個 800ms 計時器，sim 卻在 `ensureFlightPlan` 的 `cutFor` 消費
+//   ——而那一步逐 flightId 只跑一次，開窗後**下一個 tick（16.7ms）**就把線鎖死。
+//   `tools/cut-effectiveness-probe.mjs`：D=0 生效 66.4%／D=1（+16.7ms）22.2%／
+//   D=5（+83ms）22.2%——D≥1 逐位等同 `CROSS_RATE` 30% 自然骰。
+//   人類反應 ≥150ms ⇒ **真人按的每一次都與沒按無法區分**（這顆鈕從上線就沒生效過）。
+//
+// ★ 窗的真實邊界是什麼（實測）★
+//   `left`／`left_inside` 都是三速 ⇒ `routeTicks` 給的 `startTick === setTick`
+//   ＝攻擊手在**二傳觸球那一刻才起步**，在那之前他站在助跑起點等。
+//   ⇒ 物理上「還來得及改線」的邊界＝二傳尚未觸球（`r.touches === 1`）。
+//   實測開窗→二傳觸球間隔（同一支探針，快速比賽＋生涯各 12 局）：
+//   **最短 1386ms／中位 1486ms／最長 1620ms**——遠寬於名目的 800ms。
+//   最晚可改線 tick 的助跑品質掃描見 `tools/cut-deadline-probe.mjs`。
+//
+// 回傳 `{ open, reason, kind }`：
+//   open   ＝按下去會真的改變這一波的線
+//   reason ＝關窗原因（UI 與回饋文案共用同一組代碼，不另立第二套）
+//     'nowindow' 不在第二觸窗（還沒起球／球已經舉出去了）
+//     'pass'     這條線的一傳檔位不是 perfect ⇒ `routeKindFor` 第一道閘就原樣返回＝按了必無效
+//     'nopool'   這一波沒有你的線（後排／不在攻擊池）
+//     'done'     你這一波本來就跑內切（`CROSS_RATE` 自然骰已經切了）
+//     'locked'   S 已經把你的線改成別的（交叉／夾塞等組合線）
+export function cutStateOf(game, aiState, playerId) {
+  const shut = (reason) => ({ open: false, reason, kind: null });
+  const r = game?.rally;
+  const team = game?.players?.[playerId]?.teamId ?? null;
+  if (game?.phase !== 'rally' || !r || !team) return shut('nowindow');
+  if (r.possession !== team || r.touches !== 1) return shut('nowindow');
+  if (aiState?.approach?.team !== team || !aiState.approach.routes) return shut('nowindow');
+  const route = approachRouteOf(aiState.approach.routes, playerId);
+  if (!route) return shut('nopool');
+  if (route.kind === 'left_inside') return { open: false, reason: 'done', kind: route.kind };
+  if (route.kind !== 'left') return { open: false, reason: 'locked', kind: route.kind };
+  // ★ B：一傳不到位就不開窗 ★ `routeKindFor:390` 的 `passTier !== 'perfect'` 直接
+  // 原樣返回 ⇒ 那些波按了必然無效，舊制卻照樣跳鈕、照樣報成功＝假陽性回饋。
+  //
+  // ⚠ 這裡吃的是**這條線自己的檔位**，不是隊伍的 `aiState.passTier` ⚠
+  //   §7 D2：接一傳的那個人這一球只剩降級路線（`attackPointsOf` 的
+  //   `worseTier(passTier, D2_PASSER_TIER)`）——而 OH 自己接一傳是家常便飯。
+  //   實測（`tools/cut-deadline-probe.mjs` 的診斷輪）：只看隊伍檔位的話，
+  //   未生效的波裡有一大半是「隊伍 perfect、但 A2 自己接了一傳所以線是 poor」。
+  //   兩層檔位是同一個 bug 的兩張臉，一起關掉。
+  // 判準**不重刻**：直接問 `routeKindFor`「若我強制內切，它會給我什麼」。
+  //   （抄一份 `passTier !== 'perfect'` 進來＝第二份真相，本專案已為同型分岔踩過坑。）
+  const tier = aiState.passTier ?? 'perfect';
+  const pt = attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId)
+    .find((p) => p.pid === playerId);
+  if (!pt) return shut('nopool');
+  if (routeKindFor(pt.kind, { passTier: pt.tier ?? tier, forcedCut: true }) !== 'left_inside') {
+    return shut('pass');
+  }
+  return { open: true, reason: null, kind: route.kind };
+}
+
+// 消費玩家的內切決定。**AI 對局恆為 no-op**：`aiState.cutCall` 只有 matchLoop
+// （受控玩家按鈕）會寫，AI vs AI 一律 null ⇒ 第一行就 return，逐值零漂移。
+//
+// 重建範式逐項抄 `applyReplanCall`（那支已經在做同一件事：在第二觸窗內把 approach
+// 整份重算）。三個差別，都是刻意的：
+//   ① **不重跑 `pickAttackPoint`**——內切是攻擊手改自己的線，不是改「S 要給誰」。
+//      （`pickAttackPoint` 只吃 pid／trust，不吃 kind ⇒ 早按晚按對選人本來就同值。）
+//   ② **不重跑 `planCombination`**——組合是兩人之間的關係，攻擊手不該單方面拆掉它；
+//      S 已經排了組合線時走 'locked' 誠實回報，不硬改。
+//   ③ 沿用既有的 `aiState.approach.setTick`（時間錨點不因改線而重估）。
+function applyCutCall(game, aiState) {
+  const call = aiState.cutCall;
+  if (!call || call.cut !== true) return; // ★ AI 對局的零漂移保證就是這一行 ★
+  const r = game.rally;
+  const flightId = r?.flightId ?? null;
+  // 同一個 flight 只結算一次（flightId 在窗內 churn 時會再結一次，冪等）
+  if (aiState.cutOutcome && aiState.cutOutcome.flightId === flightId) return;
+  const record = (outcome, reason = null) => {
+    aiState.cutOutcome = { flightId, pid: call.pid, outcome, reason };
+  };
+  const st = cutStateOf(game, aiState, call.pid);
+  if (!st.open) {
+    // 'done'＝他要的內切本來就成立（自然骰已經切了）⇒ 對玩家而言是成功，不是失敗
+    if (st.reason === 'done') record('applied', 'already');
+    else record('missed', st.reason);
+    return;
+  }
+  const team = aiState.landingTeam;
+  const tier = aiState.passTier ?? 'perfect';
+  const combo = aiState.attackCombo;
+  // ★ 順序：組合先落地、內切後套 ★ 與 `ensureFlightPlan`（applyRouteKinds → 組合）
+  //   刻意相反，理由是這裡的組合**已經是既定事實**（S 這一波排好的），而內切是
+  //   之後才進來的攻擊手決定。照 ensureFlightPlan 的順序寫的話，
+  //   `applyComboRoutes` 會拿規劃當時存下的 `combo.mainKind`（例如 delay 型的 'left'）
+  //   把剛改好的 left_inside 蓋回去——實測診斷輪裡確實踩到了這一格。
+  //   反過來寫之後：組合真的換了線（cross／tandem）⇒ kind 已不是 'left'
+  //   ⇒ `routeKindFor` 原樣返回＝組合贏（`cutStateOf` 也會先回 'locked'）；
+  //   組合只換節奏（delay）⇒ kind 仍是 'left' ⇒ 內切生效。兩種都對。
+  //   其餘人的 kind 在兩種順序下逐值相同（非 'left' 的線 routeKindFor 一律原樣返回，
+  //   其他 OH 左線吃的 hash 三個輸入 flightId／index／seed 也都沒動）。
+  const nextPoints = applyRouteKinds(
+    applyComboRoutes(
+      attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
+      combo,
+    ),
+    { flightId: r.flightId, seed: game.seed ?? 0, passTier: tier, cutFor: call },
+  );
+  const routes = approachRoutesFor(team, nextPoints, {
+    setTick: aiState.approach.setTick,
+    flightId: r.flightId,
+    seed: game.seed ?? 0,
+    passTier: tier,
+    speedOf: (pid) => moveSpeed(game.players[pid]),
+    combo,
+  });
+  aiState.approach = { team, setTick: aiState.approach.setTick, routes };
+  // 攻擊線／節奏由**寫回後**的池決定（同 ensureFlightPlan／applyReplanCall 的教訓：
+  // 否則二傳瞄的落點與該人助跑的終點會是兩個地方）。他不是本波攻擊手時維持原值。
+  aiState.attackKind =
+    nextPoints.find((pt) => pt.pid === aiState.attackerId)?.kind ?? aiState.attackKind;
+  aiState.attackTempo =
+    approachRouteOf(routes, aiState.attackerId)?.tempo ?? aiState.attackTempo;
+  record('applied');
 }
 
 // ★ 2026-08-03 Sawmah 裁定乙：湊不出來的戰術**當場不列** ★

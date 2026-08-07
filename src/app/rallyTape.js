@@ -32,6 +32,9 @@ export const TAPE_VERSION = 2;
 // 卷五（2026-08-02 裁定 1）：`calledPlay`（路徑甲・死球窗）已隨入口退場而移除。
 const PLAYER_AI_FIELDS = [
   'digBias', 'blockCall', 'attackerId', 'attackKind', 'counterRead', 'replanCall',
+  // 2026-08-07：內切指令槽與 replanCall 同性質（玩家寫、重演算不出來）。
+  // 上線時漏登記，於是重播裡玩家按過的內切會消失＝重演與當場不同一顆球。
+  'cutCall',
 ];
 
 // 發球前保留的 tick 數（1 秒）：更早的等哨時間逐秒重照快照丟掉——一顆球的戲

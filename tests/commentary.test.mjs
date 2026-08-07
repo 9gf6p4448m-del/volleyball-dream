@@ -40,7 +40,16 @@ test('可操作提示（kind=action）：輪到我發球／舉球給我，永遠
 
 test('環境句（kind=ambient）：他隊發球顯示隊名；生涯開場 0:0 顯示敵情', () => {
   const plain = createCommentary();
-  const l1 = plain.line(makeGame({ servingTeam: 'B' }), null, ME, 0);
+  // 2026-08-07 情報層：**快速比賽的開場 0:0 改報對手攔網人格**（原本是「對方發球」）。
+  // 這不是為了實作改測試——需求本身（Sawmah 裁定 D）明文「快速比賽也要看得到這個
+  // 資訊，否則玩家在快速比賽永遠在盲按」，而快速比賽沒有任何賽前畫面可掛。
+  // 快速比賽不注入 aiProfiles ⇒ blockPersonaOf 回退 read ⇒ 這句恆為跟球型。
+  const l0 = plain.line(makeGame({ servingTeam: 'B' }), null, ME, 0);
+  assert.equal(l0.kind, 'ambient');
+  assert.match(l0.text, /跟球型/);
+  assert.doesNotMatch(l0.text, /read|commit/); // 裁定：不得直接印英文代號
+  // 比分不是 0:0 之後回到原本的發球隊環境句（既有行為，未動）
+  const l1 = plain.line(makeGame({ servingTeam: 'B', score: { A: 1, B: 0 } }), null, ME, 0);
   assert.equal(l1.text, '對方發球');
   assert.equal(l1.kind, 'ambient');
 

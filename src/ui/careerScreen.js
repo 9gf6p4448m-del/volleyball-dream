@@ -44,6 +44,8 @@ import {
 import { readSlotHeads } from '../career/saveSlots.js';
 import { groupPool } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
+// 情報層（2026-08-07）：攔網人格的中文語彙——與 BLOCK_PERSONA 同處，不另立第二份
+import { BLOCK_PERSONA, BLOCK_PERSONA_INTEL } from '../sim/blockRead.js';
 import { createRecruitPortrait, pickJoinLine } from '../render/recruitPortrait.js';
 import { createBeatStage } from '../render/beatStage.js';
 import {
@@ -776,10 +778,32 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       card.appendChild(el('div', [
         'font-size:12px', `color:${COLOR.dim}`, 'text-align:center', 'line-height:1.5',
       ], def.trait));
-      // 情報行：王牌亮相／被挖走無王牌／情蒐警告／舊隊情結
+      // 情報行：攔網人格／王牌亮相／被挖走無王牌／情蒐警告／舊隊情結
       const intel = el('div', [
         'display:flex', 'flex-direction:column', 'gap:2px', 'align-items:center',
       ]);
+      // ★ 2026-08-07 情報層：這隊的牆是哪一種 ★
+      // `blockPersona` 上線以來畫面上零顯示，玩家因此在「要不要內切」上只能亂按
+      // ——而那個決定的收益**依人格分兩邊**（inside-cut-probe 150 局：對 read 隊
+      // −8.3pp／對 commit 隊 +10.8pp）。標籤與 hint 的單一真相在
+      // `sim/blockRead.js` 的 BLOCK_PERSONA_INTEL（與人格常數同一處，不會漂開）。
+      // 讀 `def.ai?.blockPersona` 而不是 `blockPersonaOf`：那支要 game 物件，
+      // 而這裡是**賽前**、game 還沒建出來；同一份資料的上游就是這個欄位
+      //（`careerMatchSetup` 也是從它組出 aiProfiles 的）。未標示＝跟球型（sim 的回退值）。
+      {
+        const intelDef = BLOCK_PERSONA_INTEL[def.ai?.blockPersona]
+          ?? BLOCK_PERSONA_INTEL[BLOCK_PERSONA.READ];
+        intel.appendChild(el(
+          'div',
+          ['font-size:12.5px', 'font-weight:800', `color:${COLOR.cyan}`],
+          `🧱 他們的牆：${intelDef.label}（${intelDef.tag}）`,
+        ));
+        intel.appendChild(el(
+          'div',
+          ['font-size:11.5px', `color:${COLOR.dim}`, 'text-align:center', 'line-height:1.5'],
+          intelDef.hint,
+        ));
+      }
       // W4(P4) 題6：宿敵標記（隊級 rival 旗標——情蒐數據面的宿敵感；
       // 宿敵 ace 人設選定落檔後此行語意由劇情輪補強）
       if (def.rival) {

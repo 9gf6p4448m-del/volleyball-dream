@@ -124,6 +124,35 @@ export function digForBlock(block) {
 
 export const BLOCK_PERSONA = { READ: 'read', COMMIT: 'commit' };
 
+// ---- 攔網人格的玩家語彙（2026-08-07 情報層）----
+//
+// ★ 放在人格常數**正旁邊**＝標籤不可能與定義漂開 ★（KIND_LABELS 的同一個範式；
+//   本專案已經為「同一件事兩個地方各寫一份」踩過坑。）
+// 純字串資料，零 DOM／零 rng ⇒ 不違反 `src/sim` 的架構鐵律。
+//
+// ★ 為什麼要有這張表 ★ `blockPersona` 從上線到 2026-08-07 為止**畫面上零顯示**
+//   （`src/ui/`、`src/app/` 全域零命中）。唯一的線索是敵情文案那句「中路是他們的
+//   天下」——那是設計端自己記的 commit 暗號，從沒告訴過玩家怎麼讀。
+//   ⇒ 玩家在「要不要內切」這個決定上只能亂按，而實測它**不是白給的強化**
+//   （`tools/inside-cut-probe.mjs`，150 局 ×2 種對手）：
+//     內切對 read 隊淨得分 −8.3pp、對 commit 隊 +10.8pp。讀對才賺、亂切會虧。
+//   一個「必須讀對手才會賺」的決定，卻不給讀的管道＝那個決定不成立。
+//
+// ⚠ 不得直接印英文 read／commit ⚠ 用中文排球語彙，而且**要把「該不該內切」講出來**
+//   ——只標人格而不連到決定，等於換一個玩家看不懂的代號。
+export const BLOCK_PERSONA_INTEL = {
+  [BLOCK_PERSONA.COMMIT]: {
+    label: '賭攔型',
+    tag: '中間死跟快攻',
+    hint: '他一跳就回不來——內切從他讓出來的縫穿進去',
+  },
+  [BLOCK_PERSONA.READ]: {
+    label: '跟球型',
+    tag: '看球出手才動',
+    hint: '他等你出手才補位——內切等於往他手上送，這種牆走直線比較賺',
+  },
+};
+
 export const BLOCK_COMMIT = {
   // 朝網位移門檻（m／tick）：與 src/input/blockRead.js 的 APPROACH_EPS 同值同語意
   //（玩家面板判「這個人正在助跑」用的就是這把尺）
