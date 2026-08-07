@@ -11,13 +11,13 @@ import {
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
-  callFeasibilityOf, cutStateOf,
+  callFeasibilityOf, cutStateOf, tandemStateOf,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow, isFrontRow } from '../sim/rotation.js';
 import { NEAR_NET_Z } from '../input/matchControls.js'; // 攔網帶寬度＝與自動跳攔同一把尺
 import {
-  setPanelTitle, setPreviewTitle, setStageOf, setEtaOf, SET_HESITANT_BELOW,
+  setPanelTitle, setPreviewTitle, setStageOf, setEtaOf, SET_HESITANT_BELOW, KIND_LABELS,
 } from '../input/setOptions.js';
 import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
@@ -296,6 +296,13 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     cutFeedbackDone: false,
     // MEDIUM-2：sim 端 cutOutcome 的鎖存（壽命短於一個 rAF，見 captureCutOutcome）
     cutOutcomeLatch: null,
+    // 夾塞窗（2026-08-07，OPP）：三個欄位逐項對應上面內切的兩個，外加「被排進夾塞」
+    // 字卡的去重鍵與待播旗（裁定 2：三種來源共用一個出口）
+    tandemFeedbackDone: false,
+    tandemOutcomeLatch: null,
+    // HIGH-1（覆審修）：字卡以「第二觸窗」為邊緣觸發，不用 flightId 當鍵（那個一波跳三次）
+    tandemAssignArmed: true,
+    tandemAssignPending: false, // null／'mine'／'decoy'
     calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
     pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
@@ -1216,6 +1223,10 @@ function stepSim(s) {
     //   30Hz 螢幕上是必然）記錄與清除落在同一幀之內，浮字整個不見——內切**有生效**
     //   但玩家一個字都沒看到。這裡只鎖存、不顯示（顯示留在幀端，維持單一出口）。
     captureCutOutcome(s);
+    // 夾塞（2026-08-07）：結算回饋與「我被排進夾塞了」字卡的取樣點，理由與上一行逐字
+    // 相同——兩者的壽命都短於一個 rAF（`attackCombo` 在球飛出去那一刻就隨 approach 作廢）。
+    captureTandemOutcome(s);
+    captureTandemAssign(s);
     s.accumulator -= SIM_DT;
     simSteps += 1;
   }
@@ -1229,6 +1240,48 @@ export function captureCutOutcome(s) {
   if (!oc || oc.pid !== s.playerId || s.cutFeedbackDone) return;
   if (s.cutOutcomeLatch?.flightId === oc.flightId) return;
   s.cutOutcomeLatch = oc;
+}
+
+// 夾塞結算的鎖存端（形狀逐項比照 `captureCutOutcome`）。
+// ★ 2026-08-07 覆審 MEDIUM-4(a)：連 `mine` 一起鎖 ★ 「這球是不是你的」要在**結算當下**
+// 取樣：`attackerId` 是本波的協調層狀態，播字卡的那一幀（可能好幾個 tick 之後）
+// 讀到的已經不一定是同一波的值。實測夾塞按壓有 73.9% 的波球不是他的 ⇒ 文案必須分岔。
+export function captureTandemOutcome(s) {
+  const oc = s.aiState?.tandemOutcome;
+  if (!oc || oc.pid !== s.playerId || s.tandemFeedbackDone) return;
+  if (s.tandemOutcomeLatch?.flightId === oc.flightId) return;
+  s.tandemOutcomeLatch = { ...oc, mine: s.aiState.attackerId === s.playerId };
+}
+
+// ★ 2026-08-07 Sawmah 裁定 2：字卡只給跑線的人 ★
+// 玩家**自己被排進夾塞**時出一張浮字卡——「這球是夾塞」這件事原本只寫在腳下常駐
+// 提示條裡（`routeCue`），真人試玩回報「畫面上沒字說這球是夾塞」。
+//
+// ★ 取樣點在 combo **排程成立的當下** ★ 三種來源（自己按的／S 叫的／25% 自動骰）
+// 全都寫同一個 `aiState.attackCombo` ⇒ 讀它就三條路一次覆蓋，不必在三個地方各接一次線
+//（同一件事寫在三處遲早分岔，本專案已為此踩過坑）。
+//
+// ★★ 2026-08-07 覆審 HIGH-1：去重鍵原本用 `rally.flightId`，一波出三張 ★★
+//   `flightId` **每次擊球就 +1**（game.js:715/866/1131…），而 `attackCombo` 活到死球或
+//   下一個第二觸窗才清（ai.js 兩個清空點）⇒ 舉球／扣球／攔網三個 flight 各觸發一次。
+//   實測 77/77 波皆為 3 張（間隔約 1.4s／1.0s、flightId 連號），而 `floatText.js:14`
+//   的 `MAX_LIVE = 3` 會被這三張塞滿，把同框的「Perfect!」與得分原因整批擠掉。
+//   改成**以第二觸窗為邊緣觸發**：出窗即重新武裝、窗內只認第一次。
+//   為什麼不改用 `approach.setTick` 當鍵：那個值在窗內 flightId churn 時會被重算，
+//   而「一張卡對應一個決策窗」本來就是窗的語意，用旗標比用鍵更貼合。
+export function captureTandemAssign(s) {
+  const r = s.game?.rally;
+  // 窗界＝我方第二觸窗（combo 只在這裡排程）。一離開就重新武裝＝下一波再給一次機會。
+  if (s.game?.phase !== 'rally' || r?.touches !== 1) {
+    s.tandemAssignArmed = true;
+    return;
+  }
+  if (!s.tandemAssignArmed) return;
+  const combo = s.aiState?.attackCombo;
+  if (!combo || combo.type !== 'tandem' || combo.mainId !== s.playerId) return;
+  s.tandemAssignArmed = false;
+  // MEDIUM-4(a)：74% 的波球不是他的——那時他跑的是「拉牆的線」，不是「打的線」
+  s.tandemAssignPending = s.aiState.attackerId === s.playerId ? 'mine' : 'decoy';
 }
 
 // 事件應用：音效/播報/juice（定格、震動、慢動作）/得分原因面板/慶祝
@@ -1511,6 +1564,11 @@ function applyEvents(s, frameEvents, now) {
       s.aiState.cutOutcome = null;
       s.cutFeedbackDone = false;
       stage.cutButton?.hide();
+      // 夾塞同壽命（sim 端的 ensureFlightPlan 也有兩個清空點；這裡是死球的即時收尾）
+      s.aiState.tandemCall = null;
+      s.aiState.tandemOutcome = null;
+      s.tandemFeedbackDone = false;
+      stage.tandemButton?.hide();
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
@@ -1990,6 +2048,87 @@ export function onCutTap(s) {
   s.cutOutcomeLatch = null;
 }
 
+// ★ 2026-08-07 Sawmah 裁定：OPP 的夾塞窗（比照內切主動化）★
+// 文案表的 key ＝ `tandemStateOf` 吐出來的 reason，加上 `applied`（成功）與 `missed`
+//（`??` 的預設臂）。
+//
+// ★★ 這張表被**兩條路徑**取用，兩條的 key 集合不同（覆審 MEDIUM-3 的病灶）★★
+//   ① `onTandemTap`（窗已關才點到）用的是 `tandemStateOf` 的**原始 reason**
+//      ⇒ 會出現 `done`
+//   ② 幀端結算回饋用的是 `applyTandemCall` 記下的 outcome/reason，那支把 `done`
+//      **映成** `already` ⇒ 會出現 `already`，不會出現 `done`
+//   兩個 key 都印得出來，**兩個都要有文案**。原本只寫了 `already`，於是實跑 433 次
+//   `done` 全部落到 `?? missed` 的「沒排成」——按下去明明本來就排了夾塞，畫面卻說失敗
+//   （假陰性）。稽核測試也要分兩條路各收一份 reason 集合，不得用一張 KEY_OF 映走。
+//
+// ★ 只列實際印得出來的 ★ 實測 `tools/tandem-window-probe.mjs`（快速比賽＋生涯第 2 屆
+// 各 12 局、253,466 筆前排 OPP 的逐 tick 取樣）在窗內只出現五種狀態：
+//   OPEN 9.3%／nowindow 81.7%／tier 5.1%／locked 1.6%／partner 1.2%／done 1.0%
+// **沒有出現過**：nopool（前排 OPP 恆在攻擊池裡；後排輪次才有，鈕有 isFrontRow 閘）、
+// mainKind（他的線恆為 right）、lane／depth／stagger／notCrossing（四條幾何只吃 kind，
+// 對 tandem×quick 恆為真）、roll（force 之下只有 comboScale===0 擋得住，而 UI 的
+// `canCallPlay` 已經先關掉整顆鈕）。這些一律**不寫文案**（死碼稽核的先例在
+// `CUT_FEEDBACK` 的 nopool）。
+//
+// ★ `decoy` 欄（覆審 MEDIUM-4a）★ 夾塞**不改球權**，實測按下去有 73.9% 的波球不是他的
+//   （92 波裡 68 波 `combo.mainId !== attackerId`）。那時他跑的是「把牆帶走」的線，
+//   說「貼著快攻手身後打」是假的。有 `decoy` 的 key 在球不是他的時候改用那一句；
+//   沒有 `decoy` 的 key（失敗類）與球權無關，兩種情況同一句。
+export const TANDEM_FEEDBACK = {
+  applied: {
+    text: '夾塞——貼著快攻手身後打',
+    decoy: '夾塞排好了——這球不給你，你去把牆帶走',
+    color: '#c792ea',
+  },
+  already: {
+    text: '這球本來就排了夾塞',
+    decoy: '這球本來就排了夾塞——球不是你的，你是拉牆的那個',
+    color: '#c792ea',
+  },
+  // ①路徑專屬：`onTandemTap` 讀原始 reason，`done` 不會被映成 `already`
+  done: {
+    text: '這球本來就排了夾塞',
+    decoy: '這球本來就排了夾塞——球不是你的，你是拉牆的那個',
+    color: '#c792ea',
+  },
+  nowindow: { text: '來不及了——球已經舉出去', color: '#c8d6eb' },
+  tier: { text: '一傳沒到位——這球跑不了戰術', color: '#c8d6eb' },
+  locked: { text: 'S 已經排了別的組合', color: '#c8d6eb' },
+  partner: { text: '快攻手不在這一波——沒人可以夾', color: '#c8d6eb' },
+  missed: { text: '沒排成', color: '#c8d6eb' },
+};
+
+// 依「這球是不是他的」挑句子（沒有 decoy 欄＝兩種情況同一句）。
+// 單獨抽出來的理由與 `mbCallFeedbackOf` 同一條：判定住在 UI 迴圈就沒有測試守得住。
+export function tandemFeedbackText(key, mine) {
+  const fb = TANDEM_FEEDBACK[key] ?? TANDEM_FEEDBACK.missed;
+  return { text: (!mine && fb.decoy) ? fb.decoy : fb.text, color: fb.color };
+}
+
+// 兩態鈕（比照 `CUT_BUTTON_STATES`）：夾塞**不改球權**，所以「這球給不給你」要另外說。
+// 資料源同樣是開窗當下已定案的 `aiState.attackerId`。
+export const TANDEM_BUTTON_STATES = {
+  idle: { key: 'idle', label: '🤝 夾塞', color: '#c792ea', bg: 'rgba(30,18,44,0.92)' },
+  mine: { key: 'mine', label: '🤝 夾塞・這球你的', color: '#1c0f28', bg: '#c792ea', border: '#c792ea' },
+};
+
+// 玩家按下「夾塞」——把這一波排成「OPP 貼在 MB 快攻身後」的兩人組合。
+// 紀律逐項同 `onCutTap`：①這裡不報成功（成敗由 sim 的 `applyTandemCall` 下一 tick 結算）
+// ②窗已關才點到＝就地把 sim 給的關窗原因說出來，不靜默 ③窗外絕不寫 `tandemCall`
+//（窗外寫進去會殘留到下一波＝玩家沒要求的強制夾塞）。
+export function onTandemTap(s) {
+  const st = tandemStateOf(s.game, s.aiState, s.playerId);
+  if (!st.open) {
+    // ★ 這裡吃的是**原始 reason**（不經 applyTandemCall 的 done→already 映射）★
+    const fb = tandemFeedbackText(st.reason, s.aiState.attackerId === s.playerId);
+    s.stage.floatText.show(fb.text, fb.color, 1300);
+    return;
+  }
+  s.aiState.tandemCall = { pid: s.playerId };
+  s.tandemFeedbackDone = false;
+  s.tandemOutcomeLatch = null;
+}
+
 function onCallTap(s) {
   const { game, stage } = s;
   if (game.phase !== 'rally' || game.rally.touches !== 1) return; // 窗已過（防競態）
@@ -2118,6 +2257,7 @@ function frameStep(s, now) {
     //   sim 凍結、浮鈕留在畫面上而且 handler 仍然活著，玩家想看多久都行再回來按。
     //   `hide()` 同時把 onTap 設回 null（callButton.js），所以連「按得到」都一併收掉。
     if (stage.cutButton?.isVisible()) stage.cutButton.hide();
+    if (stage.tandemButton?.isVisible()) stage.tandemButton.hide(); // 夾塞鈕同理
     runReplayFrame(s, now, delta);
     return;
   }
@@ -2188,9 +2328,18 @@ function frameStep(s, now) {
   // 不再自己記時間：那個 800ms 計時器與 sim 真正的死線差了 47 倍，是本次 bug 的形狀。
   // 條件裡的位置檢查（前排 OH、在場）留在 UI 層——sim 不管「這顆鈕給誰看」。
   // `!s.aiState.cutCall`＝按過就不再跳（sim 要到下一 tick 才把線改掉，少這一條會閃一格）。
+  // ★ 2026-08-07 裁定 3（Sawmah 拍板「資格統一到第二屆」）：內切也吃 `canCallPlay` ★
+  // ⚠ **登記在案的耦合**（覆審 LOW-6，本行刻意不改，只留痕）⚠
+  //   `canCallPlay = 技術閘 ∧ (game.comboScale > 0)`（matchConfig.js:183），而內切走的是
+  //   `CROSS_RATE`／`forcedCut`（approach.js:413-421），與 `comboScale` **毫無關係**。
+  //   現況無害：兩道閘恆同時開關（第 2 屆同時給技術與 comboScale）。
+  //   風險：日後若出現「教過但 comboScale=0」的賽制（練習賽／集訓對打），OH 會**靜默**
+  //   失去內切——沒有任何錯誤訊息，只是鈕不見了。真的做出那種賽制時，這一行要拆成
+  //   「技術閘」與「世界閘」兩個布林（夾塞留 canCallPlay、內切只吃技術閘）。
   if (stage.cutButton && !s.replay) {
     const meNow = game.players[s.playerId];
     const cutOpen = !!meNow && meNow.currentRole === 'outside'
+      && s.gates.canCallPlay
       && onCourt(game, s.playerId)
       && isFrontRow(game.match.rotations[meNow.teamId], s.playerId)
       && !s.aiState.cutCall
@@ -2204,6 +2353,54 @@ function frameStep(s, now) {
       stage.cutButton.setVariant(s.aiState.attackerId === s.playerId
         ? CUT_BUTTON_STATES.mine : CUT_BUTTON_STATES.idle);
     }
+  }
+  // ★ 夾塞浮鈕窗（2026-08-07）★ 形狀逐項比照上面的內切窗：逐 frame 問 sim
+  // （`tandemStateOf`），不自己記時間。位置檢查（前排 OPP、在場）留在 UI 層。
+  // ★ `s.gates.canCallPlay` 這道技術閘 ★ 語意是兩件事共用一個布林（matchConfig.js:183）：
+  //   ①這個球員學會叫戰術了沒（技術傳授事件 `teach-call`，第 2 屆 group-1 賽前）
+  //   ②這場比賽有沒有組合攻擊（`game.comboScale`，第 2 屆起才 > 0）
+  //   兩顆鈕（內切／夾塞）**同吃這一道**——Sawmah 裁定「資格統一到第二屆」。
+  if (stage.tandemButton && !s.replay) {
+    const meNow = game.players[s.playerId];
+    const tandemOpen = !!meNow && meNow.currentRole === 'opposite'
+      && s.gates.canCallPlay
+      && onCourt(game, s.playerId)
+      && isFrontRow(game.match.rotations[meNow.teamId], s.playerId)
+      && !s.aiState.tandemCall
+      && tandemStateOf(game, s.aiState, s.playerId).open;
+    if (tandemOpen && !stage.tandemButton.isVisible()) {
+      stage.tandemButton.show(() => onTandemTap(s));
+    } else if (!tandemOpen && stage.tandemButton.isVisible()) stage.tandemButton.hide();
+    // 夾塞不改球權（`⚡ 跟上！` 才是球權鈕）⇒ 「這球給不給你」得另外說
+    if (tandemOpen) {
+      stage.tandemButton.setVariant(s.aiState.attackerId === s.playerId
+        ? TANDEM_BUTTON_STATES.mine : TANDEM_BUTTON_STATES.idle);
+    }
+  }
+  // 夾塞結算回饋（讀鎖存，理由同下方內切那一段）
+  const tandemOc = s.tandemOutcomeLatch;
+  if (tandemOc && tandemOc.pid === s.playerId && !s.tandemFeedbackDone) {
+    s.tandemFeedbackDone = true;
+    s.tandemOutcomeLatch = null;
+    const key = tandemOc.outcome === 'applied'
+      ? (tandemOc.reason ?? 'applied') : (tandemOc.reason ?? 'missed');
+    // MEDIUM-4(a)：`mine` 是**結算當下**鎖存的，不是這一幀重問的（見 captureTandemOutcome）
+    const fb = tandemFeedbackText(key, tandemOc.mine);
+    stage.floatText.show(fb.text, fb.color, 1300);
+  }
+  // ★ 裁定 2：被排進夾塞的人才看得到的字卡 ★ 三種來源（自己叫／S 叫／自動骰）共用
+  // 這一個出口（取樣在 `captureTandemAssign`）。自己按出來的那一波會與上面的結算回饋
+  // 同框——那是刻意的：一句講「你按的生效了」、一句講「這球是夾塞」，floatText 自帶疊排。
+  // MEDIUM-4(a)：74% 的波球不是他的 ⇒ 那時講的是「拉牆」，不是「打」。
+  if (s.tandemAssignPending) {
+    const mine = s.tandemAssignPending === 'mine';
+    s.tandemAssignPending = false;
+    stage.floatText.show(
+      mine
+        ? `🤝 這球是${KIND_LABELS.tandem}——貼著快攻手身後打`
+        : `🤝 這球是${KIND_LABELS.tandem}——球不給你，你去把牆帶走`,
+      '#c792ea', 1300,
+    );
   }
   // 內切結算回饋（C：文案誠實化）——**成敗由 sim 說了算**，不是按下去就報成功。
   // 舊制 `onCutTap` 無條件跳「切中路——從快攻手背後穿出去」：①那句描述的是交叉

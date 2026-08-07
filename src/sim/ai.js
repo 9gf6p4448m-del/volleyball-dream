@@ -15,6 +15,7 @@ import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
   applyRouteKinds, routeKindFor, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
   resolveCalledPlay, offeredCallTypes, AIR_TICKS,
+  evaluateCombination, firstFailedCheck,
 } from './approach.js';
 import { ACTION_PHASE, actionPhaseAt } from './actionPhase.js';
 import {
@@ -225,6 +226,17 @@ export function createAiState() {
     //   由 sim 產生機器碼、文案在 app 層——「沒生效要說出原因」的資料面。
     cutCall: null,
     cutOutcome: null,
+    // ---- 夾塞窗（2026-08-07；集訓卷 2b 解封的後半場）----
+    // 與上面那一組**同型不同事**：內切是 OH 改自己的線（單人），夾塞是 OPP 與 MB 的
+    // 兩人配合（`attackCombo`）。欄位形狀刻意逐項比照，理由與 callButton 共用元件相同
+    // ——兩個窗的競態處理（一波一次、窗一關就作廢、AI 對局零漂移）必須一致。
+    // tandemCall（玩家寫、sim 讀）：{ pid }
+    //   壽命＝這一波的第二觸窗（清空點：ensureFlightPlan 的死球分支與「窗已結束」分支）。
+    //   ★ 算不出來 ⇒ 必須進 rallyTape 的 PLAYER_AI_FIELDS ★
+    // tandemOutcome：{ flightId, pid, outcome:'applied'|'missed', reason }
+    //   reason 的代碼由 `tandemStateOf` 定義；文案在 app 層（sim 不產生給人看的字串）。
+    tandemCall: null,
+    tandemOutcome: null,
     // Phase 5 W1 §7 D2：本波接一傳的人（attackPointsOf 的罰則對象）。
     // 與 attackerId／passTier 同壽命、同重算範式（純由 rally.lastToucherId 推得）＝
     // VCR v2 重演時跟其餘 AI 狀態一起被逐 tick 重建，不需要進錄影白名單
@@ -290,6 +302,11 @@ export function aiCollectIntents(game, aiState, excludeIds = []) {
   // 排在 applyReplanCall 之後：S 的指令優先於攻擊手的自主改線（同一 tick 撞上時，
   // 面板承諾的是 S 那份，兩者衝突要讓面板贏）；applyCutCall 會偵測到線已被改走並誠實回報。
   applyCutCall(game, aiState);
+  // 夾塞窗（2026-08-07）：玩家（OPP）的夾塞決定在此消費。排在 `applyCutCall` **之後**
+  // ——兩者理論上互斥（同一個受控玩家不可能同時是 OH 與 OPP），但真的兩個欄位都有值時
+  // 順序必須確定：夾塞重建池時帶 `cutFor: aiState.cutCall` ⇒ 後跑的它會保住前者的改線，
+  // 反過來排的話 applyCutCall 會拿還沒成立的組合去算。
+  applyTandemCall(game, aiState);
   // 叫戰術重做卷 段 1：受控玩家「不跑就改組織」。掛在 applyReplanCall **之後**、
   // 走位（decideOne）**之前**——理由與上一行逐字相同：改判要在同一個 tick 內生效，
   // 否則這一 tick 的人還照舊線跑＝提示與跑位分岔一格。
@@ -330,6 +347,9 @@ function ensureFlightPlan(game, aiState) {
     // 內切的決定與它的結算同壽命（另一個清空點＝下方「窗已結束」分支）
     aiState.cutCall = null;
     aiState.cutOutcome = null;
+    // 夾塞的決定與它的結算同壽命（另一個清空點＝下方「窗已結束」分支）
+    aiState.tandemCall = null;
+    aiState.tandemOutcome = null;
     aiState.routeCommit = null; // 段 1 記帳與助跑線同壽命（清空點之一）
     // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
     aiState.blockPlan = null;
@@ -372,6 +392,9 @@ function ensureFlightPlan(game, aiState) {
     // 按過一次之後，同一 rally 的**後續每一波**都被強制內切。窗一結束就作廢。
     aiState.cutCall = null;
     aiState.cutOutcome = null;
+    // 夾塞同理「只管這一波」：窗一結束就作廢，否則同一 rally 的後續每一波都被強制夾塞
+    aiState.tandemCall = null;
+    aiState.tandemOutcome = null;
   }
 
   // 落點方已用完三次觸球（如扣球掛網彈回本側）→ 依規則不得再觸，全隊放球讓它落地
@@ -1099,6 +1122,129 @@ function applyCutCall(game, aiState) {
   record('applied');
 }
 
+// ════════════════════════════════════════════════════════════
+// 夾塞窗（2026-08-07 Sawmah 裁定：OPP 前排比照 OH 內切主動化）
+// ════════════════════════════════════════════════════════════
+//
+// ★ 為什麼要有這一支 ★ 08-06 集訓卷裁定 2b 把夾塞（`TANDEM_PLAY_RATE`）解封，
+// 價值定位是「**OPP 有一條只有他能打的線**」——但玩家操 OPP 時對這條線零決定權：
+// 只能等 25% 自動骰或等 S 叫。真人試玩回報的就是這件事。
+//
+// ★ 與內切的兩個差別（同型不同事，不得互相覆寫）★
+//   ① 內切改的是**一條線**（`routeKindFor` 的 forcedCut）；夾塞改的是**兩人的關係**
+//      （`attackCombo`），所以這裡走的是 `evaluateCombination(type:'tandem', force:true)`
+//      而不是 cutFor。
+//   ② 內切的 force 只跳過 `CROSS_RATE` 的骰子；夾塞的 force 只跳過 `COMBO_RATE.tandem`
+//      的骰子，**世界閘 `comboScale` 一樣關得掉它**（approach.js:878-884 的裁定不動）。
+//
+// ★ 這顆鈕**不改球權** ★ 「球給我打」是另一顆鈕（`⚡ 跟上！`／`rally.callPid`）。
+// 夾塞只把這一波的兩條線排成夾塞；球最後給誰仍由 `pickAttackPoint` 的 trust 決定
+// （鈕面的兩態會誠實地說「這球你的」沒有）。兩件事合併＝OPP 用戰術鈕偷球權。
+//
+// 回傳 `{ open, reason }`：
+//   open   ＝按下去這一波會真的排成夾塞
+//   reason ＝關窗原因（機器碼；文案在 app 層，sim 不產生給人看的字串）
+//     'nowindow' 不在第二觸窗（還沒起球／球已經舉出去了）
+//     'done'     這一波本來就已經排了你的夾塞（自動骰／S 叫的都算）⇒ 對玩家是成功
+//     'locked'   本波已經有**別的**組合（S 排的交叉／時間差等）——組合是兩人之間的
+//                關係，攻擊手不該單方面把它拆掉（與 cutStateOf 的 'locked' 同一條紀律）
+//     'nopool'   這一波沒有你的線（後排輪次／不在攻擊池）
+//     其餘       `evaluateCombination` 的 checks 第一個沒過的條件名
+//                （mainKind／tier／partner／lane／depth／stagger／notCrossing／roll）
+//                ——**不重刻判準**：夾塞成不成立由那支函式說了算，這裡只轉述。
+function tandemPlanOf(game, aiState, playerId) {
+  const shut = (reason) => ({ open: false, reason, points: null, combo: null });
+  const r = game?.rally;
+  const team = game?.players?.[playerId]?.teamId ?? null;
+  if (game?.phase !== 'rally' || !r || !team) return shut('nowindow');
+  if (r.possession !== team || r.touches !== 1) return shut('nowindow');
+  if (aiState?.approach?.team !== team || !aiState.approach.routes) return shut('nowindow');
+  // 本波已經有組合：是我的夾塞＝按了也是同一條線（'done'）；別型／別人的＝'locked'
+  const cur = aiState.attackCombo;
+  if (cur) {
+    return shut(cur.type === 'tandem' && cur.mainId === playerId ? 'done' : 'locked');
+  }
+  const tier = aiState.passTier ?? 'perfect';
+  // 池用**與 ensureFlightPlan 逐字相同的**三個輸入重建（同一顆池，不另闢真相）
+  const points = applyRouteKinds(
+    attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
+    {
+      flightId: r.flightId,
+      seed: game.seed ?? 0,
+      passTier: tier,
+      cutFor: aiState.cutCall ?? null,
+    },
+  );
+  if (!points.some((pt) => pt.pid === playerId)) return shut('nopool');
+  const ev = evaluateCombination(points, playerId, {
+    team,
+    flightId: r.flightId,
+    seed: game.seed ?? 0,
+    passTier: tier,
+    type: 'tandem',
+    force: true, // 玩家明確要跑 ⇒ 跳過觸發骰（世界閘 comboScale 仍然擋得住）
+    comboScale: game.comboScale ?? 1,
+  });
+  if (!ev.combo) return shut(firstFailedCheck(ev.checks));
+  return { open: true, reason: null, points, combo: ev.combo };
+}
+
+// `tandemPlanOf` 的薄封裝（範式同 `planCombination` 之於 `evaluateCombination`）：
+// UI 只該看得到「開不開、為什麼」，池與組合是消費端（applyTandemCall）的內部事。
+export function tandemStateOf(game, aiState, playerId) {
+  const p = tandemPlanOf(game, aiState, playerId);
+  return { open: p.open, reason: p.reason };
+}
+
+// 消費玩家的夾塞決定。**AI 對局恆為 no-op**：`aiState.tandemCall` 只有 matchLoop
+// （受控玩家按鈕）會寫，AI vs AI 一律 null ⇒ 第一行就 return，逐值零漂移。
+//
+// 寫回範式逐項抄 `applyCutCall`（它抄的又是 `applyReplanCall`），三個刻意的差別：
+//   ① **不重跑 `pickAttackPoint`**——這顆鈕不改球權（見上方說明）。
+//   ② 組合由 `tandemPlanOf` 一次算完並帶回來，不在這裡重算：重算＝同一份判斷寫兩遍，
+//      而「窗說開、按下去卻不成立」正是那種分岔的產物。
+//   ③ 沿用既有的 `aiState.approach.setTick`（時間錨點不因排戰術而重估）。
+function applyTandemCall(game, aiState) {
+  const call = aiState.tandemCall;
+  if (!call || !call.pid) return; // ★ AI 對局的零漂移保證就是這一行 ★
+  const r = game.rally;
+  const flightId = r?.flightId ?? null;
+  // 同一個 flight 只結算一次（flightId 在窗內 churn 時會再結一次，冪等）
+  if (aiState.tandemOutcome && aiState.tandemOutcome.flightId === flightId) return;
+  const record = (outcome, reason = null) => {
+    aiState.tandemOutcome = { flightId, pid: call.pid, outcome, reason };
+  };
+  const plan = tandemPlanOf(game, aiState, call.pid);
+  if (!plan.open) {
+    // 'done'＝這一波本來就排了他的夾塞 ⇒ 對玩家而言是成功，不是失敗
+    if (plan.reason === 'done') record('applied', 'already');
+    else record('missed', plan.reason);
+    return;
+  }
+  const team = aiState.landingTeam;
+  const tier = aiState.passTier ?? 'perfect';
+  const { points, combo } = plan;
+  // 只改涉及的兩人（主攻＝玩家、配合者＝MB 快攻），其餘 point 同一個物件參照
+  const comboPoints = applyComboRoutes(points, combo);
+  const routes = approachRoutesFor(team, comboPoints, {
+    setTick: aiState.approach.setTick,
+    flightId: r.flightId,
+    seed: game.seed ?? 0,
+    passTier: tier,
+    speedOf: (pid) => moveSpeed(game.players[pid]),
+    combo,
+  });
+  aiState.attackCombo = combo;
+  aiState.approach = { team, setTick: aiState.approach.setTick, routes };
+  // 攻擊線／節奏由**寫回後**的池決定（同 ensureFlightPlan／applyCutCall 的教訓：
+  // 否則二傳瞄的落點與該人助跑的終點會是兩個地方）。他不是本波攻擊手時維持原值。
+  aiState.attackKind =
+    comboPoints.find((pt) => pt.pid === aiState.attackerId)?.kind ?? aiState.attackKind;
+  aiState.attackTempo =
+    approachRouteOf(routes, aiState.attackerId)?.tempo ?? aiState.attackTempo;
+  record('applied');
+}
+
 // ★ 2026-08-03 Sawmah 裁定乙：湊不出來的戰術**當場不列** ★
 // 為什麼現在可以列（而 `callPlay.js:47-49` 的裁定 E 曾禁止「預先變灰」）：
 // 那條禁令的理由是「變灰＝**預判**一傳品質＝作弊」，而它成立於**死球窗入口還在**
@@ -1278,17 +1424,37 @@ function applyRouteCommit(game, aiState, excludeIds) {
   // 起跳這件事發生過就發生過了，之後球飛到對面、possession 一換，上面的守衛就會讓
   // 本函式整個 return——那正是我們要保住這筆登記活到 settlePoint 的那段時間。
   //
-  // 為什麼是 partnerId 不是 mainId：裁定「獎勵跟角色走，不跟位置走」——S 舉給 OH 時
-  // MB 是配合者、舉給快攻時 OH 是配合者，誰帶走牆誰拿。得分者（mainId）拿的是既有的
-  // KILL，不重複賺（trust.js applyComboAssist 另有一道 pid === scorerId 的防守性閘）。
+  // 規則原話：「**誰帶走牆誰拿**」——得分者拿的是既有的 KILL，不重複賺
+  //（trust.js applyComboAssist 另有一道 pid === scorerId 的防守性閘）。
   //
+  // ★★ 2026-08-07 覆審 MEDIUM-4(b)（Sawmah 裁定丙：按原意修正，誘餌是誰就給誰）★★
+  //   舊碼寫死 `attackCombo.partnerId`。那在 AI 路徑上**恰好等於**誘餌，因為自動排程
+  //   （ensureFlightPlan／replanWithoutRunners／applyReplanCall）的 `mainId` 恆等於
+  //   `attackerId` ⇒ 兩人裡不是攻擊手的那個就是 partner。
+  //   但玩家自己叫的夾塞不改球權（`applyTandemCall` 刻意不動 `attackerId`）⇒ 實測
+  //   **73.9%** 的波 `mainId !== attackerId`：功能上的誘餌是玩家（他跑夾塞線拉牆）、
+  //   代碼上的受益者卻是 MB（AI，拿不到 `jumped`）⇒ 語意反了，玩家零回報。
+  //   改成依「**這一波誰不是攻擊手**」判定，不寫死欄位名。
+  //   ⚠ AI 路徑逐值不變 ⚠ 上面那條恆等式讓兩種寫法在自動排程上同值。
+  //   ★ 這件事**不能拿 `tools/sim-hash-probe.mjs` 當證據** ★ 那支跑的是 AI vs AI
+  //     （excludeIds 為空）⇒ 護欄 C 第一行就 return、`comboAssist` 根本不會被寫，
+  //     雜湊不動是必然的，對這條改動零鑑別力。真正的背書在 `tests/` 的夾塞窗層那一檔
+  //     （`tandem-call-` 開頭三檔中帶「窗」的那支）E 組：受控玩家在場、獎金真的發得
+  //     出來，逐筆比對受益者是不是 partnerId。
+  //     （檔名在此刻意不寫全：`tests/purity.test.mjs` 的 DOM 禁令會掃到那支檔名裡的
+  //       瀏覽器全域字樣，寫全會讓純度護欄誤報。）
+  //   ⚠ 幅度／加成值一格未動 ⚠ 這是把 bug 改回原設計，不是新規則。
+  const combo = aiState.attackCombo;
+  // 兩人裡不是本波攻擊手、而且**真的起跳了**的那個。把 `jumped` 併進 find 而不是
+  // 先挑人再檢查：組合兩人都不是攻擊手時（球被改給第三人），誰跑了就算誰的。
+  const decoyId = combo
+    ? [combo.mainId, combo.partnerId].find((pid) => pid && pid !== aiState.attackerId
+      && ledger.entries.find((e) => e.pid === pid)?.jumped) ?? null
+    : null;
   // ⚠ 受益者只可能是受控玩家 ⚠ 上面的護欄 C 讓 routeCommit 只記 excludeIds，
-  // 所以 AI 配合者永遠沒有 `jumped` 可讀＝拿不到獎金。這是刻意的：AI 隊友「跑不跑」
+  // 所以 AI 誘餌永遠沒有 `jumped` 可讀＝拿不到獎金。這是刻意的：AI 隊友「跑不跑」
   // 不是一個決定（見護欄 C 的說明），沒有決定就沒有獎勵的對象。
-  const partnerId = aiState.attackCombo?.partnerId ?? null;
-  if (partnerId && ledger.entries.find((e) => e.pid === partnerId)?.jumped) {
-    r.comboAssist = { pid: partnerId, team };
-  }
+  if (decoyId) r.comboAssist = { pid: decoyId, team };
 
   // ---- 裁定 1A：S 當場改組織 ----
   // 窗界＝與路徑甲／乙同一個規劃窗（第二觸窗）。出了窗球已經在飛向攻擊手，

@@ -117,6 +117,14 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const cutButton = createCallButton({
     label: '↘ 內切', bottom: '30%', color: '#6ee7ff', bg: 'rgba(14,34,40,0.92)',
   });
+  // 2026-08-07 Sawmah 裁定（OPP 前排比照 OH 內切主動化）：夾塞窗。
+  // ★ bottom 另開一格（22%）★ OPP 前排時 `⚡ 跟上！`（38%）與這顆會同時亮，
+  //   撞在同一個 bottom 上就會疊成一顆。字面也刻意分得開：
+  //   「跟上」＝球給我打（球權），「夾塞」＝兩人配合跑線（戰術）——兩件不同的事。
+  //   名稱取自 `KIND_LABELS.tandem`，同一條線不得有兩種叫法。
+  const tandemButton = createCallButton({
+    label: '🤝 夾塞', bottom: '22%', color: '#c792ea', bg: 'rgba(30,18,44,0.92)',
+  });
   // W4(P4) 附錄 B-3 封線影子（L 2.0 佈陣可視化——配套下達即現，純表現層）
   const blockShadow = createBlockShadow(ctx.scene);
   // 2026-08-04 試玩裁定：玩家自己的攔網涵蓋帶（看得見「我守得住多寬」；不畫球的預測落點）
@@ -131,7 +139,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, routeCue, pointBanner, setOverOverlay, setBreakOverlay,
-    boxScorePanel, callButton, cutButton, blockShadow, blockReach, heroStamina, diegetic,
+    boxScorePanel, callButton, cutButton, tandemButton,
+    blockShadow, blockReach, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
 }
