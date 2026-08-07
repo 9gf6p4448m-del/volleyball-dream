@@ -22,8 +22,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, stepGame } from '../src/sim/game.js';
-import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import {
+  createAiState, aiCollectIntents, cutStateOf, tandemStateOf,
+} from '../src/sim/ai.js';
 import { createRallyRecorder, createRallyPlayer, TAPE_VERSION } from '../src/app/rallyTape.js';
+import { approachRouteOf } from '../src/sim/approach.js';
 
 // 全 AI（零玩家覆寫）：tests/approach.test.mjs 的 runSet() 已證明這樣跑一整局
 // 就會自然打出 routes.length>=2 的 Transition 拉開（quick/wing/back 三檔分得開）。
@@ -67,16 +70,18 @@ function snapshotPositions(game) {
 // 介面沒有這個 getter（本輪硬性限制不得改 src/app/rallyTape.js，故不加）。
 // breakApproach=true＝突變測試專用：每步算完後把 aiState.approach 打成 null，
 // 模擬「協調層狀態沒被正確重建」的情境，證明下面的比對真的抓得到。
-// dropPlayerCall=true＝**段 E 的鑑別力對照臂**：模擬「PLAYER_AI_FIELDS 沒有把
-// replanCall 列進去」的那個版本，證明白名單那個欄位真的在承重，不是「反正重算也會
-// 一樣」。（卷五 2026-08-02：`calledPlay` 隨死球窗入口退場，對照臂只剩 replanCall。）
+// dropField=<欄位名>＝**段 E 的鑑別力對照臂**：模擬「PLAYER_AI_FIELDS 沒有把這個
+// 欄位列進去」的那個版本，證明白名單那個欄位真的在承重，不是「反正重算也會一樣」。
+// ★ 2026-08-07 覆審②：原本只覆蓋 replanCall，這裡改吃欄位名，供 cutCall／tandemCall
+// 共用同一套鑑別力驗證（見下方 PLAYER_CALL_SPECS）——三個玩家指令欄位同性質，
+// 只驗一個會漏掉另外兩個從出廠就沒有牙齒。
 function replayWithApproachTrace(tape, {
-  breakApproach = false, breakCombo = false, dropPlayerCall = false,
+  breakApproach = false, breakCombo = false, dropField = null,
 } = {}) {
   assert.equal(tape.v, TAPE_VERSION);
   const state = structuredClone(tape.snapshot);
   const aiState = structuredClone(tape.ai);
-  if (dropPlayerCall) { aiState.replanCall = null; }
+  if (dropField) { aiState[dropField] = null; }
   let controlled = null;
   const intents = [];
   const events = [];
@@ -86,7 +91,7 @@ function replayWithApproachTrace(tape, {
   for (const st of tape.steps) {
     if (st.a) {
       const patch = structuredClone(st.a);
-      if (dropPlayerCall) { delete patch.replanCall; }
+      if (dropField) { delete patch[dropField]; }
       Object.assign(aiState, patch);
     }
     if (st.c !== undefined) controlled = st.c;
@@ -185,36 +190,83 @@ test('突變測試：重演時 aiState.attackCombo 沒被正確重建，比對�
 // 綠燈本身沒有證明力，會變紅的那個對照臂才有。
 // 卷五（2026-08-02）：注入點從死球窗（`phase === 'serve'`）搬到球內第二觸窗
 // （`touches === 1` 且 approach 已排好）——死球窗入口整條退場後那裡沒有輸入通道。
-function playOneRallyWithCall(seed, type = 'cross') {
+//
+// ★★ 2026-08-07 覆審②：`cutCall`／`tandemCall` 與 `replanCall` 同性質（玩家寫、
+// 重演算不出來），卻只有 replanCall 有這一組鑑別力對照臂驗過——`tandemCall` 上線時
+// 零測試覆蓋。三者只在「窗界怎麼問」「call 長什麼樣」「效果寫進 combo 還是 approach」
+// 不同，收斂成一張表，錄製／挑球/drop 的流程本身三者共用一份，不重刻三套邏輯。★★
+const OH_PID = 'A2';  // 預設隊型裡的前排 OH（內切窗）
+const OPP_PID = 'A4'; // 預設隊型裡的前排 OPP（夾塞窗）
+
+const PLAYER_CALL_SPECS = {
+  replanCall: {
+    pidOf(game) {
+      return game.match.rotations.A.find((id) => game.players[id].currentRole === 'setter');
+    },
+    // ⚠ `replanCall` 是一次性指令（消費即清），而 `cross` 常常湊不出來（infeasible）
+    //   ⇒ 只注入一次的話多數球會空手而回。窗界成立就按，叫成一次為止——這也是真實
+    //   操作：S 每一波組織都可以再按一次。
+    windowOpen(game, ai, pid) {
+      return game.phase === 'rally' && game.rally.touches === 1
+        && game.rally.possession === game.players[pid].teamId
+        && ai.approach?.routes && !ai.replanCall;
+    },
+    call(pid) { return { type: 'cross', callerId: pid }; },
+    applied(ai) { return ai.callOutcome?.outcome === 'command'; },
+    compareKey: 'combo',
+    effectSeenIn(truth, from) { return truth.combo.slice(from).some(Boolean); },
+  },
+  cutCall: {
+    pidOf() { return OH_PID; },
+    windowOpen(game, ai, pid) { return !ai.cutCall && cutStateOf(game, ai, pid).open; },
+    call(pid) { return { pid, cut: true }; },
+    applied(ai) { return ai.cutOutcome?.outcome === 'applied' && !ai.cutOutcome.reason; },
+    compareKey: 'approach',
+    // cutCall 改的是一條線（不是兩人的組合關係）⇒ 效果落在 approach.routes 的
+    // kind（'left' → 'left_inside'），不是 combo——比對鍵因此與另外兩個不同。
+    effectSeenIn(truth, from) {
+      return truth.approach.slice(from)
+        .some((a) => approachRouteOf(a?.routes, OH_PID)?.kind === 'left_inside');
+    },
+  },
+  tandemCall: {
+    pidOf() { return OPP_PID; },
+    windowOpen(game, ai, pid) { return !ai.tandemCall && tandemStateOf(game, ai, pid).open; },
+    call(pid) { return { pid }; },
+    applied(ai) { return ai.tandemOutcome?.outcome === 'applied' && !ai.tandemOutcome.reason; },
+    compareKey: 'combo',
+    effectSeenIn(truth, from) {
+      return truth.combo.slice(from).some((c) => c?.type === 'tandem' && c.mainId === OPP_PID);
+    },
+  },
+};
+
+// 錄一顆球，窗一開就按（不成立就下一 tick 再試，成一次為止）。三個欄位共用同一個
+// 迴圈骨架（逐項比照舊版 `playOneRallyWithCall`，只把「怎麼判窗」「call 長怎樣」
+// 外部化到 PLAYER_CALL_SPECS）。
+function playOneRallyWithPlayerCall(seed, field) {
+  const spec = PLAYER_CALL_SPECS[field];
   const game = createGame({ seed, setTarget: 25 });
   const ai = createAiState();
   const rec = createRallyRecorder();
-  const setterA = game.match.rotations.A.find((id) => game.players[id].currentRole === 'setter');
   const truth = {
-    intents: [], events: [], approach: [], combo: [], pos: [], outcomes: [],
+    intents: [], events: [], approach: [], combo: [], pos: [], applied: false,
   };
   let guard = 0;
   let injected = false;
   while (guard < 20000) {
     guard += 1;
     if (game.phase === 'serve') rec.begin(game, ai);
-    // 玩家在球內遠段窗按下改判（S＝指令，無 trust 骰 ⇒ 對照臂的差異純粹來自「有沒有錄」）。
-    // 條件＝ai.js 的 applyReplanCall 窗界：我方持球、touches===1、approach 已排好。
     // 注入排在 rec.step **之前**，卷帶錄的才是「這一 tick 開始時玩家已下的指令」。
-    // ⚠ `replanCall` 是一次性指令（消費即清），而 `cross` 常常湊不出來（infeasible）
-    //   ⇒ 只注入一次的話多數球會空手而回。改成**窗界成立就按，叫成一次為止**——
-    //   這也是真實操作：S 每一波組織都可以再按一次。
-    if (!injected && game.phase === 'rally' && game.rally.touches === 1
-      && game.rally.possession === game.players[setterA].teamId
-      && ai.approach?.routes && !ai.replanCall) {
-      ai.replanCall = { type, callerId: setterA };
+    if (!injected) {
+      const pid = spec.pidOf(game);
+      if (pid && spec.windowOpen(game, ai, pid)) ai[field] = spec.call(pid);
     }
-    if (ai.callOutcome?.outcome === 'command') injected = true;
     rec.step(game, ai, null, []);
     const intents = aiCollectIntents(game, ai, []);
+    if (!injected && spec.applied(ai)) { injected = true; truth.applied = true; }
     truth.approach.push(structuredClone(ai.approach));
     truth.combo.push(structuredClone(ai.attackCombo ?? null));
-    truth.outcomes.push(structuredClone(ai.callOutcome ?? null));
     truth.intents.push(structuredClone(intents));
     const events = stepGame(game, intents);
     truth.pos.push(snapshotPositions(game));
@@ -224,21 +276,21 @@ function playOneRallyWithCall(seed, type = 'cross') {
   return { tape: rec.end(), truth, endState: game };
 }
 
-// 找一顆「玩家的叫牌真的生效」的球——找不到的話下面兩條測試都會空洞成立
-function pickCalledRally() {
-  for (let seed = 11; seed <= 60; seed += 1) {
-    const r = playOneRallyWithCall(seed);
+// 找一顆「玩家的叫牌真的生效」的球——找不到的話下面的測試都會空洞成立
+function pickCalledRally(field, { maxSeed = 150 } = {}) {
+  const spec = PLAYER_CALL_SPECS[field];
+  for (let seed = 11; seed <= maxSeed; seed += 1) {
+    const r = playOneRallyWithPlayerCall(seed, field);
     const from = r.truth.combo.length - r.tape.steps.length;
     if (from < 0) continue;
-    const ok = r.truth.outcomes.slice(from).some((o) => o?.outcome === 'command');
-    if (ok && r.truth.combo.slice(from).some(Boolean)) return { ...r, from, seed };
+    if (r.truth.applied && spec.effectSeenIn(r.truth, from)) return { ...r, from, seed, field };
   }
   return null;
 }
 
 test('段 E 前置：真的錄得到一顆「玩家叫牌生效」的球（否則下面兩條空洞成立）', () => {
-  const picked = pickCalledRally();
-  assert.ok(picked, '50 個 seed 都錄不到玩家叫牌生效的球');
+  const picked = pickCalledRally('replanCall');
+  assert.ok(picked, '150 個 seed 都錄不到玩家叫牌生效的球');
   // ★ 卷五裁定 2（2026-08-02）：戰術只管一球 ★ `replanCall` 是**消費即清**的一次性
   // 指令（applyReplanCall 進門就把它設 null），所以它一定以 diff 的形式出現在某一步，
   // 不會像段 3 的 calledPlay 那樣沉進 baseline。判準因此收回「出現在某一步」。
@@ -248,7 +300,7 @@ test('段 E 前置：真的錄得到一顆「玩家叫牌生效」的球（否�
 });
 
 test('⑧ VCR：玩家指定的組合可逐值重演（approach／combo／座標全等）', () => {
-  const picked = pickCalledRally();
+  const picked = pickCalledRally('replanCall');
   assert.ok(picked);
   const run = replayWithApproachTrace(picked.tape);
   assert.deepEqual(run.combo, picked.truth.combo.slice(picked.from),
@@ -257,16 +309,26 @@ test('⑧ VCR：玩家指定的組合可逐值重演（approach／combo／座標
   assert.deepEqual(run.pos, picked.truth.pos.slice(picked.from));
 });
 
-test('⑧ 鑑別力：把 replanCall 移出白名單（＝沒錄玩家輸入的版本），重演必須轉紅', () => {
-  const picked = pickCalledRally();
-  assert.ok(picked);
-  const broken = replayWithApproachTrace(picked.tape, { dropPlayerCall: true });
-  assert.throws(
-    () => assert.deepEqual(broken.combo, picked.truth.combo.slice(picked.from)),
-    assert.AssertionError,
-    'replanCall 不錄也重演得出來＝它根本不需要進白名單，或這條測試沒有牙齒',
-  );
-});
+// ★★ 2026-08-07 覆審②：三個玩家指令欄位各跑一次鑑別力對照臂 ★★
+// 只驗 replanCall 一個會漏掉另外兩個從出廠就沒有牙齒的事實（08-07 覆審就是這樣抓到
+// tandemCall 零覆蓋的）。三條都要能在該欄位被移出白名單時變紅。
+for (const field of ['replanCall', 'cutCall', 'tandemCall']) {
+  test(`⑧ 鑑別力：把 ${field} 移出白名單（＝沒錄玩家輸入的版本），重演必須轉紅`, () => {
+    const spec = PLAYER_CALL_SPECS[field];
+    const picked = pickCalledRally(field);
+    assert.ok(picked, `找不到 ${field} 生效的球（150 個 seed 內）`);
+    const broken = replayWithApproachTrace(picked.tape, { dropField: field });
+    assert.throws(
+      () => assert.deepEqual(
+        broken[spec.compareKey],
+        picked.truth[spec.compareKey].slice(picked.from),
+      ),
+      assert.AssertionError,
+      `${field} 不錄也重演得出來（${spec.compareKey} 逐值仍相同）`
+      + '＝它根本不需要進白名單，或這條測試沒有牙齒',
+    );
+  });
+}
 
 test('突變測試：重演時 aiState.approach 沒被正確重建，比對必須轉紅', () => {
   const { tape, truth } = playOneRallyAllAi(11);

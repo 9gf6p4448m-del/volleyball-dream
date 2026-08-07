@@ -2258,6 +2258,14 @@ function frameStep(s, now) {
     //   `hide()` 同時把 onTap 設回 null（callButton.js），所以連「按得到」都一併收掉。
     if (stage.cutButton?.isVisible()) stage.cutButton.hide();
     if (stage.tandemButton?.isVisible()) stage.tandemButton.hide(); // 夾塞鈕同理
+    // ★ 08-07 補：字卡鎖存不因進入回放而作廢 ★ pending／latch 若在 stepSim 鎖存後、
+    // 同幀還沒播出時玩家按了 🎬，回放期間下面兩個消費區塊（:2381/:2395 一帶）整段被
+    // 這個 early-return 跳過，鎖存會存活到回放結束才補跳一張已經過時好幾秒的字卡。
+    // 進回放即作廢——玩家已經在看重播了，那張字卡描述的時刻已經過去。
+    // `cutOutcomeLatch` 是同型的既有缺陷（不是本批引入），一併處理，不留第二個同型坑。
+    s.tandemAssignPending = false;
+    s.tandemOutcomeLatch = null;
+    s.cutOutcomeLatch = null;
     runReplayFrame(s, now, delta);
     return;
   }

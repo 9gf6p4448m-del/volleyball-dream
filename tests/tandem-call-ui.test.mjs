@@ -194,6 +194,24 @@ test('回放期間：replay 分支必須在 return 之前收掉夾塞鈕', () =>
   assert.match(SRC, /if \(stage\.tandemButton && !s\.replay\) \{/);
 });
 
+// ════════ 回放：字卡鎖存不因進回放而作廢（2026-08-07 覆審③）════════
+test('回放期間：進 replay 分支必須在 return 之前把字卡鎖存清成 null／false', () => {
+  // 病灶：字卡在 stepSim 鎖存後、同幀還沒播出時玩家按下 🎬，`if (s.replay)` 這個
+  // early-return 排在下面兩個消費區塊（幀端讀 tandemOutcomeLatch／tandemAssignPending
+  // 那兩段）**之前**⇒ 鎖存活過整段回放，回放結束後才補跳一張已經過時好幾秒的字卡。
+  // 修法：進 replay 分支當下就地作廢，不等消費端。
+  const i = SRC.indexOf('if (s.replay) {');
+  assert.ok(i > 0, 'frameStep 的 replay 分支不見了');
+  const branch = SRC.slice(i, SRC.indexOf('runReplayFrame(s, now, delta);', i));
+  assert.match(branch, /s\.tandemAssignPending\s*=\s*false;/,
+    '回放分支沒有清 tandemAssignPending＝stepSim 鎖存後、還沒播出時進回放，回放結束後會補跳一張過時的字卡');
+  assert.match(branch, /s\.tandemOutcomeLatch\s*=\s*null;/,
+    '回放分支沒有清 tandemOutcomeLatch＝夾塞結算回饋會拖到回放結束才補播');
+  // cutOutcomeLatch 是同型的既有缺陷（不是本批引入），2026-08-07 順手一起修
+  assert.match(branch, /s\.cutOutcomeLatch\s*=\s*null;/,
+    '回放分支沒有清 cutOutcomeLatch＝內切結算回饋同樣會拖到回放結束才補播（同型舊缺陷未修）');
+});
+
 // ════════ 裁定 1：技術閘統一到第二屆 ════════
 test('★裁定 1★ 內切鈕與夾塞鈕都吃 s.gates.canCallPlay（改回舊行為就轉紅）', () => {
   // 內切鈕原本**完全沒有閘**（第 1 屆就按得到）——這條就是那件事的守衛。

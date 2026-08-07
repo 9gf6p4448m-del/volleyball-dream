@@ -291,12 +291,24 @@ test('C 只管這一波：窗一結束 sim 就把 tandemCall 清掉（不跨波�
 // 治具：受控玩家的走位由 AI 代打（真人在測試裡不會動），但 `excludeIds` 仍非空
 // ⇒ `applyRouteCommit` 真的會記帳。兩次 `aiCollectIntents` 的分工：
 //   第一次帶 [pid]＝觸發記帳；第二次帶 []＝取十二人份 intent 餵 sim。
+//
+// ★★ 2026-08-07 覆審①修正：以「波」為單位計數，不是以「tick」★★
+// 舊版判「有沒有新發放」用 `a !== prev`（`a` = `game.rally.comboAssist`）。但
+// `ai.js:1457` 的 `r.comboAssist = { pid, team }` **每個記帳 tick 都重建新物件**
+// （同一個 decoyId 也不例外），所以 `a !== prev` 對「同一波的發放持續了幾個 tick」
+// 完全恆真──實測 E1 的「619 筆」其實只有 **18 個不同的波**、E2 過濾後只有 **7 個**。
+// 修法：改用 `ai.routeCommit` 的物件參照當「波」的鍵——`ai.js:1380-1385` 的注解
+// 自己講得很白：`routeCommit` 只在「新的一波開帳」時才整份重建（`r.comboAssist = null`
+// 也是同一行清的），其餘 tick 原物件原封不動地重複使用，窗內不會 churn（不重蹈
+// `flightId` 每次擊球 +1 的覆轍）。同一波內只認第一次出現的 pid──`replanWithoutRunners`
+// 理論上可能在同一波內換一次誘餌，此時 pid 改變也要算一次新發放。
 function playWithControlled(seed, pid, { press = false } = {}) {
   const tandemStateOf = needTandemState();
   const game = createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   const grants = [];
-  let prev = null;
+  let prevWave = null;
+  let prevGrantPid = null;
   let guard = 0;
   while (game.phase !== 'set_over' && game.phase !== 'matchover' && guard < 400000) {
     guard += 1;
@@ -304,15 +316,29 @@ function playWithControlled(seed, pid, { press = false } = {}) {
     aiCollectIntents(game, ai, [pid]);
     const intents = aiCollectIntents(game, ai, []);
     const a = game.rally.comboAssist;
-    if (a && a !== prev) {
+    // ⚠ 只在「真的換了一顆非 null 的新帳」時重置 ⚠ `ai.routeCommit` 在死球／來球分支
+    // （ai.js ensureFlightPlan）會被清成 null，但 `game.rally.comboAssist` **不在那兩個
+    // 分支的清空清單裡**（它只在 applyRouteCommit 重開帳那一行才清）——兩者不同步。
+    // 若這裡改成 `ai.routeCommit !== prevWave`（含 null）：routeCommit 變 null 的那一
+    // tick 會把 `prevGrantPid` 也重置成 null，而 `comboAssist` 這時還沒被清（stale，
+    // 上一波的殘值）⇒ 誤判成「新發放」，把 attackCombo／attackerId 全為 null 的殘影
+    // 錯記成一筆（實測 debug：出現 pid='A3' 但 attackCombo/attackerId/routeCommit
+    // 皆為 null 的假發放）。這在真實產品路徑無害（沒人在死球窗讀 comboAssist，settlePoint
+    // 消費的是本波已結清的值），純粹是本治具逐 tick 硬讀才會踩到——排除法：只認非 null
+    // 的換帳。
+    if (ai.routeCommit && ai.routeCommit !== prevWave) {
+      prevWave = ai.routeCommit;
+      prevGrantPid = null; // 新的一波開帳＝上一波的候選作廢（同 ai.js:1382-1385 的規則）
+    }
+    if (a && a.pid !== prevGrantPid) {
       grants.push({
         pid: a.pid,
         partnerId: ai.attackCombo?.partnerId ?? null,
         mainId: ai.attackCombo?.mainId ?? null,
         attackerId: ai.attackerId ?? null,
       });
+      prevGrantPid = a.pid;
     }
-    prev = a;
     stepGame(game, intents);
   }
   return grants;
@@ -326,7 +352,12 @@ test('E ★AI 路徑逐值同舊★ 沒人按夾塞時，獎金受益者恆等�
     ...playWithControlled(507919, 'A3'),
     ...playWithControlled(515838, 'A6'),
   ];
-  assert.ok(grants.length >= 10, `獎金發放樣本只有 ${grants.length} 筆＝這條沒有解析力`);
+  // ★ 門檻依實測真值重訂（2026-08-07，debug 後 2026-08-08 修正一次）★ 這三個 seed 是
+  // 固定的（零 rng 分岔），波數因此是決定論值：修好「換帳只認非 null」那個假發放
+  // 之後，3 個 seed 實測合計 **9 波**（治具腳本已刪，數字取自實跑輸出，非估算）。
+  // 門檻訂在 6（留給日後平衡微調的餘裕，但仍能守住「發放收窄到只剩一兩個持續 tick
+  // 的波」不會被錯放行）。
+  assert.ok(grants.length >= 6, `獎金發放樣本只有 ${grants.length} 波＝這條沒有解析力`);
   for (const g of grants) {
     assert.equal(g.mainId, g.attackerId,
       `自動排程竟出現 mainId(${g.mainId})≠attackerId(${g.attackerId})＝前提被打破`);
@@ -345,9 +376,14 @@ test('E ★裁定丙★ 玩家自己叫的夾塞：獎金發給實際跑誘餌�
     ...playWithControlled(515838, 'A4', { press: true }),
   ];
   const mine = grants.filter((g) => g.mainId === 'A4' && g.attackerId !== 'A4' && g.pid === 'A4');
-  assert.ok(mine.length >= 3,
-    `玩家跑了夾塞誘餌線卻只拿到 ${mine.length} 次獎金`
-    + `（總發放 ${grants.length} 筆：${grants.map((g) => `${g.pid}/main=${g.mainId}/atk=${g.attackerId}`).slice(0, 8).join('，')}）`
+  // ★ 門檻依實測真值重訂（2026-08-07，debug 後 2026-08-08 修正一次）★ 以波為單位
+  // 重算、且修好假發放之後，這三個固定 seed 合計總發放 **7 波、全部符合「mine」**
+  // （這三個 seed 沒有出現「A4 剛好也是本波攻擊手」的樣本，故 mine===total）。
+  // 門檻訂在 4，留給日後平衡微調的餘裕，但仍能守住「這條路徑萎縮到只剩一兩波」
+  // 不會被錯放行。
+  assert.ok(mine.length >= 4,
+    `玩家跑了夾塞誘餌線卻只拿到 ${mine.length} 波獎金`
+    + `（總發放 ${grants.length} 波：${grants.map((g) => `${g.pid}/main=${g.mainId}/atk=${g.attackerId}`).slice(0, 8).join('，')}）`
     + '——舊碼寫死 partnerId 時這裡恆為 0');
   // 反面：受益者不得是本波的攻擊手（他拿的是既有的 KILL，不重複賺）
   for (const g of grants) {
