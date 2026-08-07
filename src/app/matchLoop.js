@@ -1272,17 +1272,20 @@ function applyEvents(s, frameEvents, now) {
     }
     // ★ 位置體檢裁定 B1（2026-08-06）：OH 的「切中路」窗 ★
     // 一傳起球＋玩家是**前排 OH** ⇒ 浮鈕 0.8s（窗長與觸發時點沿用要球窗，不另立節奏）。
-    // 同一刻就把 `cutCall` 寫成「這波走直線」——**預設不擲骰**是本裁定的核心：
-    // 留著 30% 隨機的話，「我切了才被攔」與「遊戲替我切了才被攔」混在一起，玩家學不到
-    // 「對 commit 隊該切、對 read 隊別切」這件事（實測 −8.3pp／+10.8pp，見 approach.js）。
-    // ⚠ 必須趕在二傳觸球前寫入：`ensureFlightPlan` 讀 `cutCall` 決定線，晚了就來不及。
+    // ★ 2026-08-07 Sawmah 改判：開窗時**不預寫** `cutCall` ★
+    //   原設計在開窗當下寫 `{ cut:false }`＝把玩家身上原有的 30% 自動內切骰子拿掉，
+    //   於是「不按＝永遠直線」——真人實測回報的是**球路比改動前更單調**，那顆鈕的
+    //   存在反而讓沒按的人變差。改判後：不按＝回到 `CROSS_RATE` 30% 擲骰（與 AI 同路徑、
+    //   等同改動前的體驗），按了＝這一波接管成內切。鈕的定位從「唯一的切來源」
+    //   變成「接管這一球」。
+    //   ⚠ 代價（已知並接受）：「我切了才被攔」與「遊戲替我切了才被攔」會再度混在一起，
+    //   可學習性打折——那條要靠賽前情報標出對手攔網人格來補，不是靠拿掉骰子。
     if (e.type === 'TOUCH' && e.touches === 1 && e.team === myTeam && !s.replay
       && game.players[s.playerId]?.currentRole === 'outside'
       && onCourt(game, s.playerId)
       && isFrontRow(game.match.rotations[myTeam], s.playerId)
       && s.cutFlight !== game.rally.flightId) {
       s.cutFlight = game.rally.flightId;
-      s.aiState.cutCall = { pid: s.playerId, cut: false };
       s.cutWindowUntil = now + 800;
       stage.cutButton?.show(() => onCutTap(s));
     }
