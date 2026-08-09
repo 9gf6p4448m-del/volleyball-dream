@@ -209,8 +209,15 @@ test('E2⑤零效果：開記帳與不開記帳，同種子的比賽結果逐值
     assert.equal(on.tick, off.tick, `${role}：局長被記帳擾動了`);
   }
   // 鑑別力：記帳臂真的記到東西了（否則「沒擾動」只是因為那段程式碼根本沒跑）
-  const probe = playWithCapture({ role: 'outside', seed: 1000, capture: true });
-  assert.ok(Object.values(probe.tally).reduce((a, b) => a + b, 0) > 0);
+  // ★ 2026-08-09：單一種子 → 整組 SEEDS ★ 原本只抽 seed 1000＋outside 一組，
+  // 而「這一組有沒有組合攻擊」本來就會隨任何 sim 改動漂移——二傳 dig 懲罰拿掉之後
+  // （`ai.js` arbitrate 檔 A）它剛好落空，這道守衛就倒了。**同檔其他更強的守衛
+  // （comboWindows>90、creditedWindows>28、runnerArm>18）全部照常通過**＝組合攻擊沒被打死，
+  // 倒的只是這個單點抽樣。改跑整組種子後它與同檔其他測試同一形狀，也不再靠運氣。
+  const probed = SEEDS.reduce((sum, seed) => sum
+    + Object.values(playWithCapture({ role: 'outside', seed, capture: true }).tally)
+      .reduce((a, b) => a + b, 0), 0);
+  assert.ok(probed > 0, `記帳臂在 ${SEEDS.length} 個種子上都是空集合＝零效果的比對沒有鑑別力`);
 });
 
 // ════════════════════════════════════════════════════════════

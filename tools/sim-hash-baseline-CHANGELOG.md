@@ -29,3 +29,5 @@
   裁定 A（內切也吃 35% 二速骰＋left_inside 專屬半快弧，approach.js 的 SHOOT／SHOOT_HIT／KIND_SALT／tempoFor）——AI 的 OH 也走這條線，行為變動是預期的、非 bug。停手條件實測見 tools/inside-cut-tempo-probe.mjs；平衡位移見 tools/inside-cut-probe.mjs。★同時把兩筆歷史未登記的變更（5630270 夾塞解封、4f6fff6 自由人 dig）一併結清★
 - 2026-08-07　`1713ed2`　2591a36996f57f3c → 36a13a6cc2c2c23c
   裁定甲：SHOOT.left_inside 由 -2.0 改為 -1.52、SHOOT_HIT 由 -1.3 改為 -1.0，把二速內切的擊球點對齊三速版的實測值 -0.99（初版抄了三速的參數而非實測值，往外多 0.3m）。600 局掃描 tools/inside-cut-shoot-sweep.mjs：read +0.3pp／commit -2.1pp 皆在雜訊內
+- 2026-08-09　`949942b`　36a13a6cc2c2c23c → b5c3c5ca36828c40
+  檔 A：拿掉二傳在殺球 dig 上的 zoneDist ×3 懲罰（Sawmah 2026-08-09 裁定）。直線被救起 1.1%→14.7%、直線−斜線贏球率落差 +16.1pp→−2.0pp；配對同種子的生涯奪冠率差全在噪音內（−1.0/+0.0/+2.0pp）。AI vs AI 對局必然走 arbitrate 的 formationExempt=false 分支，故此基準變動是預期之內的行為變更。
