@@ -5,7 +5,7 @@ import {
   careerStage, opponentById, normalizeCareerPlayer, resolveForfeit, applyPoaching,
   applySeasonRoster, graduatingAces, currentGrade,
 } from '../career/careerState.js';
-import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, applyOffseasonTraining } from '../career/growth.js';
+import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
 import {
   ensureStarterRoster, rosterCount, openSlots, totalGains, ROLE_ABBR, ROSTER_GROWTH,
   OUR_TEAM_NAME,
@@ -19,7 +19,7 @@ import {
   recruitCurrentGrade, recruitTargetGone, waitingOf,
 } from '../career/recruitment.js';
 import {
-  dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS, OFFSEASON_TRAINING_LINES,
+  dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS,
   graduationCeremonySegments, freshmenIntroLines, walkOnIntroLines,
   resolveEventsForRoster, resolveEventsForRole, isOnceEvent, heightGuidanceEventFor,
 } from '../career/events.js';
@@ -30,6 +30,10 @@ import {
 } from '../career/heightAdvice.js';
 import { showHeightRitual } from './heightRitual.js';
 import { showGraduationRitual } from './graduationRitual.js';
+import { showTrainingCamp } from './trainingCamp.js';
+import {
+  chemistryPairsOf, isCampPending, clearCampPending, departedMatesOf,
+} from '../career/trainingCamp.js';
 import {
   positionTalkFor, transferCandidates, transferAskLines, transferTalkFor,
   interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV,
@@ -136,6 +140,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     'min-height:20px', 'font-size:14px', `color:${COLOR.red}`, 'text-align:center',
   ]);
   const setMsg = (text) => { msgEl.textContent = text ?? ''; };
+
+  // 集訓覆蓋層是否已開（覆審 HIGH-1 的中斷復原有兩個呼叫端，防重入疊兩層）
+  let campOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -1584,6 +1591,20 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const player = store.loadPlayer();
     if (!career || !player) { renderSlots(); return; } // 槽空/壞檔→回選檔頁（W4 題2）
     normalizeCareerPlayer(player); // 跨版本存檔補正（顯示與開賽同一套語意）
+    // ★ 集訓中斷復原（2026-08-09 覆審 HIGH-1）★ advanceSeason 已落檔（屆數已推進）
+    // 但集訓沒做完——手機殺 PWA／重整都會走到這裡。屆間鏈掛在「進入下一屆」鈕上、
+    // 不會再跑第二次，沒有這一段的話該屆的屬性特訓與**一生一次**的默契選擇會永久消失
+    // （搬家前的舊碼是同步套用屆間訓練營的耐力 +2 再 savePlayer，被殺仍保得住）。
+    // 旗標由 advanceSeason 同一次 RMW 寫下、集訓完成時清掉 ⇒ 沒做完就一直在。
+    // ★ 覆蓋層已開著就不重入（第三輪覆審 MEDIUM）★ 這一格是 runTrainingCamp 那道
+    // 重入守衛的**對稱面**：守衛早退時會呼叫 onDone 把控制權交出去，而這裡的 onDone
+    // 就是 renderCareer ⇒ 兩邊都不擋的話會無限遞迴。改由呼叫端先看旗標＝這條路徑
+    // 不可能重入；campOpen 時照常往下渲染生涯視圖（覆蓋層在 body 上、蓋在它上面），
+    // 集訓收掉時 onDone 會再 render 一次。
+    if (!campOpen && isCampPending(player, store.seasonIndex?.() ?? 1)) {
+      runTrainingCamp(player, career, () => renderCareer());
+      return;
+    }
     // W4(P4) Q8 局間存檔：合法離場（存檔離開）＝豁免棄賽判定；殘檔（比賽已結算或
     // 對不上 pending）＝清掉——不留「已結束比賽的假續玩入口」
     const mid = store.loadMidMatch?.() ?? null;
@@ -1653,6 +1674,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
       `${OUR_TEAM_NAME}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
+    // 屆間養成卷 E3（08-09）：默契計數顯示——非零才出現（第 1 屆 comboScale=0，
+    // 計數結構上恆為 0 ⇒ 不需要任何屆數閘）。零效果，文案如實呈現計數。
+    const chemBox = chemistrySection(player);
+    if (chemBox) root.appendChild(chemBox);
     root.appendChild(rosterSection(career)); // W2 名冊（唯讀隊友卡入口）
     root.appendChild(recruitSection()); // W4 招募進度（五條進度×空位並列）
     const stage = careerStage(career);
@@ -1746,10 +1771,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
           // W2(P4)：advanceSeason 已在存檔內揭曉身高——必須重載 player，
           // 拿閉包舊物件直接 savePlayer 會把新身高蓋回去（timeline 倒退）
           const freshPlayer = store.loadPlayer() ?? player;
-          // W7.1 屆間訓練營（#6 拍板 C）：主角耐力 +2（上限 80）——寫檔後接對話尾播
-          const trained = applyOffseasonTraining(freshPlayer);
-          freshPlayer.attributes = trained.attributes;
-          store.savePlayer(freshPlayer);
+          // 覆審 LOW-2：loadPlayer 不過 normalize ⇒ 玩家在集訓什麼都沒選時，
+          // `updated === player`、`updated.chemistry` 是 undefined，會被寫回存檔。
+          // 下次 renderCareer 雖然會自癒，但那是髒寫——在源頭補正。
+          normalizeCareerPlayer(freshPlayer);
           const continueChain = () => {
             const seqs = [];
             // A3 跨帶檢查：長高跨進新身高帶＝教練追加動態評語（接在儀式演出後）
@@ -1766,7 +1791,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             // 4.5A 小白事件一・入學宣言（第 3 屆開幕限定；轉 L 玩家＝前輩自由人追加）
             const n2Intro = n2OpeningLines({ freshmen: adv.freshmen ?? [], player: freshPlayer });
             if (n2Intro.length) seqs.push({ lines: n2Intro });
-            const opener = [...(SEASON_OPENERS[openerKey] ?? []), ...OFFSEASON_TRAINING_LINES];
+            // 屆間養成卷 E6（08-09）：屆間訓練營那一句（「這個冬天沒白練…耐力 +2」）
+            // 隨靜默事件一起被集訓吸收——現在耐力 +2 是玩家在集訓面板上**選**的，
+            // 沒選也可能發生，開幕台詞不能替他宣告；那句話改由集訓面板當場回饋。
+            const opener = [...(SEASON_OPENERS[openerKey] ?? [])];
             if (opener.length) seqs.push({ lines: opener });
             // W3(P4)：屆間鏈尾端接轉位教練談話（旗標 open 才觸發，無談話＝直接回賽程）
             // W4 題1：賽季中請調已用掉＝當屆屆間不談（talkAllowed 於換屆前捕捉）
@@ -1781,11 +1809,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
             else finish();
           };
           // W2(P4) 「你長高了」儀式演出（暗場聚光/身高尺/模型即時長高/參數刻度）
-          if (adv.heightReveal) {
-            showHeightRitual({ player: freshPlayer, reveal: adv.heightReveal, onDone: continueChain });
-          } else {
-            continueChain();
-          }
+          const afterCamp = () => {
+            if (adv.heightReveal) {
+              showHeightRitual({
+                player: freshPlayer, reveal: adv.heightReveal, onDone: continueChain,
+              });
+            } else {
+              continueChain();
+            }
+          };
+          // ★ 屆間養成卷 E4／E5／E6／E7（2026-08-09）：集訓 ★
+          // 掛點＝advanceSeason **之後**（默契候選要吃畢業後的名冊）、身高儀式之前——
+          // 位置就是先前那個靜默的「耐力 +2」所在，時序一格未動，只是從靜默變成有演出
+          // 與選擇的一格。高中章固定三屆 ⇒ 這條鏈恰好跑兩次（seasonIndex 2 與 3）。
+          // 待辦旗標由 advanceSeason 同一次 RMW 寫下（覆審 HIGH-1）；這裡被殺掉，
+          // 重開時 renderCareer 會照旗標補跑一次（本函式的第二個呼叫端）。
+          runTrainingCamp(freshPlayer, career, afterCamp);
           });
         }),
       }));
@@ -1870,9 +1909,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
           // 第 3 參數＝屆數（`when.seasonIndex` 條件用——teach-call 掛第 2 屆第一場賽前）
           // 位置分歧（2026-08-06）排在年級守衛**之後**：守衛會整組換成 altLines，
           // 先追加會被覆蓋掉（見 events.js resolveEventsForRole 檔頭）
-          ...filterPlayedOnce(resolveEventsForRole(resolveEventsForRoster(
-            dueEvents(career, 'pre', store.seasonIndex?.() ?? 1), rosterNow?.members ?? null,
-          ), player?.currentRole ?? null)),
+          ...filterPlayedOnce(resolveEventsForRole(resolveEventsForRoster([
+            dueEvents(career, 'pre', store.seasonIndex?.() ?? 1),
+            // ★ 屆間養成卷 E5 的安全網（08-09）★ 叫戰術的正規教學點已搬進第一次集訓，
+            // 但「更新版本時存檔剛好停在集訓之後」的在途舊檔，那條屆間鏈跑的是舊碼、
+            // 集訓根本沒出現過 ⇒ 只掛集訓會讓那些存檔**永遠**學不到，覆蓋率從 100% 掉下來。
+            // 補在**原本的掛點**（第 2 屆第一場賽前）上：時機不晚於搬家前、覆蓋率只會
+            // ≥ 舊值。正常流程下集訓已經教完並入帳，這裡取回的是空陣列（不會重播）。
+            dueEvents(career, 'camp', store.seasonIndex?.() ?? 1),
+          ].flat(), rosterNow?.members ?? null), player?.currentRole ?? null)),
           ...oldTeamPreEvents(career, rosterNow),
           ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
         ];
@@ -2142,6 +2187,96 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     closeBtn.style.alignSelf = 'center';
     overlay.appendChild(closeBtn);
     document.body.appendChild(overlay);
+  }
+
+  // ---- 屆間養成卷 E4／E5／E6／E7（2026-08-09）：集訓（兩個呼叫端共用）----
+  // ① 屆間鏈：advanceSeason 之後、身高儀式之前（正常流程）
+  // ② renderCareer 的中斷復原（覆審 HIGH-1）：advanceSeason 已落檔、集訓沒做完
+  // 技術補修（E5）＝把 moment 'camp' 的教學事件在集訓演出後播出：事件表是真相源，
+  // 這裡不重刻一份「第幾次教什麼」的清單。
+  // ★ 函式宣告刻意放在檔案後段（advanceSeason 呼叫點之後）★ offseason-chemistry 的
+  // 佈線守衛用**文字位置**守「集訓必須排在 advanceSeason 之後」；宣告提升讓上面的
+  // 呼叫端照樣用得到。
+  function runTrainingCamp(freshPlayer, careerNow, onDone) {
+    // 重入防護：覆蓋層已經開著就別再開一層（renderCareer 可能被別的路徑再叫一次）。
+    // ★ 早退也要把控制權交出去（第三輪覆審 MEDIUM）★ 純 `return` 會讓守衛 fail 成
+    // **死路**：屆間鏈那個呼叫端的 onDone 是整條後續（身高儀式→新生入學→開幕台詞→
+    // 遞補入隊儀式→轉位談話），靜默丟掉就再也接不回來。onDone 對屆間鏈是「往前走」，
+    // 不會回頭；renderCareer 那個呼叫端則在上面先看過 campOpen（不會走到這裡）。
+    if (campOpen) { onDone?.(); return; }
+    campOpen = true;
+    const campSeason = store.seasonIndex?.() ?? 2;
+    const campCareer = store.loadCareer() ?? careerNow;
+    const campRoster = store.loadRoster?.() ?? null;
+    const campEvs = filterPlayedOnce(resolveEventsForRole(resolveEventsForRoster(
+      dueEvents(campCareer, 'camp', campSeason), campRoster?.members ?? null,
+    ), freshPlayer?.currentRole ?? null));
+    showTrainingCamp({
+      player: freshPlayer,
+      seasonIndex: campSeason,
+      members: campRoster?.members ?? [],
+      techPending: campEvs.length > 0,
+      techNames: campEvs
+        .map((e) => TECH_DEFS.find((t) => t.key === e.effect?.unlock)?.name)
+        .filter(Boolean),
+      // fireEvents 會把 unlock 入帳並落檔（與 pre／post 事件共用同一段泛型程式碼）
+      playTech: (done) => fireEvents(campEvs, campCareer, freshPlayer, done),
+      onDone: (updated) => {
+        campOpen = false;
+        freshPlayer.attributes = updated.attributes;
+        freshPlayer.chemistry = updated.chemistry;
+        // ★ 清旗標與集訓成果同一次 savePlayer ★（覆審 HIGH-1）——分兩筆寫的話，
+        // 中間被殺會留下「成果已入帳、待辦還在」＝下次重開再領一次。
+        // 寫失敗＝旗標留著＝下次重開重跑集訓（寧可再選一次，不要靜默吞掉）。
+        clearCampPending(freshPlayer);
+        if (!store.savePlayer(freshPlayer)) {
+          setMsg('⚠ 存檔寫入失敗——集訓結果可能未保存');
+        }
+        onDone();
+      },
+    });
+  }
+
+  // ---- 屆間養成卷 E3（2026-08-09 題三裁定）：默契計數 ----
+  // 位置＝生涯畫面（不是賽後）：這是**跨場累積**的數字，賽後單場頁放它會讓玩家
+  // 以為是這一場的成績；生涯畫面本來就是「你現在是什麼樣子」的地方，侵入性也最小
+  //（只多一個區塊，不動 growthSection 也不動賽後結算頁）。
+  // ★ 角色中立（條件 2）★ 只講「配合了 N 次」，不講誰是主攻誰是誘餌——玩家主動叫
+  // 夾塞時 73.0% 的波球不是他打的，角色化文案在對角身上七成時間是錯的。
+  // ★ 不得暗示已有作用 ★ 本卷默契零效果，這裡如實呈現計數（量測先於參數，刻意如此）。
+  // 回傳 null＝沒有非零配對＝整區不顯示。
+  function chemistrySection(player) {
+    const rosterNow = store.loadRoster?.() ?? null;
+    // ★ 校友一起查（覆審 HIGH-2）★ 默契有屆數閘，計數從第 2 屆才長；OH／OPP／S 的
+    // 頭號對象阿岩（A6）在第 2 屆末畢業 ⇒ 只查現役必然在第 3 屆渲染出「你和 A6」。
+    // 畢業生**應該**留在列表裡（那是敘事），要修的是名字查不到，不是把人濾掉。
+    // ★ 被逐出的招募生也一起查（第三輪覆審 MEDIUM）★ 他們落在 recruitment.expelled、
+    // 不在 alumni；而招募生可以是欄中／邊攻＝載體對得上的位置，逐出前已累積默契。
+    const recruitNow = store.loadRecruitment?.() ?? null;
+    const pairs = chemistryPairsOf(player, rosterNow?.members ?? [],
+      departedMatesOf(rosterNow, recruitNow));
+    if (!pairs.length) return null;
+    const box = el('div', [
+      'display:flex', 'flex-direction:column', 'gap:6px', `background:${COLOR.card}`,
+      'border-radius:14px', 'padding:12px 16px', 'width:min(340px, 92vw)', 'margin-top:4px',
+    ]);
+    box.appendChild(el('div', [
+      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px',
+    ], '默契'));
+    for (const p of pairs) {
+      const row = el('div', [
+        'display:flex', 'justify-content:space-between', 'align-items:center', 'gap:10px',
+      ]);
+      row.appendChild(el('div', ['font-size:14px', `color:${COLOR.text}`, 'text-align:left'],
+        `你和 ${p.name}`));
+      row.appendChild(el('div', [
+        'font-size:14px', 'font-weight:800', `color:${COLOR.gold}`, 'white-space:nowrap',
+      ], `配合了 ${p.count} 次`));
+      box.appendChild(row);
+    }
+    box.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'line-height:1.45',
+      'text-align:left'], '一次＝你和他一起跑成一次組合攻擊（交叉／夾塞／時間差）。'));
+    return box;
   }
 
   // stage 3 成長區：點數/上場表現/屬性加點（次要）/技術解鎖（主要）

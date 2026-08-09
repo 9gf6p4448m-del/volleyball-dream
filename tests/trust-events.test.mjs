@@ -131,7 +131,8 @@ test('事件表：宣告式條件觸發、once 不重複、未知條件鍵安全
   // 事件表健全性：id 唯一、對話非空、moment 合法
   assert.equal(new Set(EVENT_DEFS.map((e) => e.id)).size, EVENT_DEFS.length);
   for (const e of EVENT_DEFS) {
-    assert.ok(['pre', 'post'].includes(e.moment));
+    // 'camp'（2026-08-09 屆間養成卷 E5）＝屆間集訓；teach-call 從賽前搬到第一次集訓
+    assert.ok(['pre', 'post', 'camp'].includes(e.moment));
     assert.ok(e.lines.length > 0 && e.lines.every((l) => l.speaker && l.text));
   }
 });

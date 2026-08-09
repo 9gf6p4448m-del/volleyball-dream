@@ -202,6 +202,15 @@ export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside
   player.height = height;
   // 志願登記（W2 只落欄位；轉位事件＝W3——該位置驗證開放時優先觸發）
   player.aspiration = aspiration;
+  // 屆間養成卷 E1（2026-08-09 題二裁定軸二甲）：默契＝**配對關係值**，「屬於你們之間」。
+  // ★ 不掛在 `player.trust` 底下 ★ trust 是「舉球員對我」的單向值（sim/trust.js），
+  // 語意不同，挪用即違反單一真相源（裁定書 §2-2 do-not-touch 1）。
+  //   pairs   ＝ { 隊友id: 累計次數 }——你和他共同完成組合攻擊的次數（賽末由 matchCareer 入帳）
+  //   focusId ＝ 第二次集訓選定的默契對象；★本卷零效果，沒有任何消費端讀它★
+  player.chemistry = { pairs: {}, focusId: null };
+  // 屆間養成卷（覆審 HIGH-1）：「這屆集訓還沒做完」的落檔待辦。null＝沒有待辦；
+  // 由 careerStore.advanceSeason 與屆數推進同一次 RMW 寫入、集訓完成時清掉。
+  player.campPending = null;
   return player;
 }
 
@@ -358,6 +367,16 @@ export function normalizeCareerPlayer(player) {
   // 舊存檔無此欄＝未受教＝鎖，與新生涯的顯式 0 同值，兩者行為一致）
   for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive', 'callPlay']) t[k] = t[k] ?? 0;
   t.feintUses = t.feintUses ?? 0;
+  // ⑤屆間養成卷 E1（2026-08-09）：默契欄缺席＝空紀錄。舊存檔讀出來是 undefined
+  // （serializePlayer 是整個物件 JSON.stringify、deserializePlayer 不驗未知欄位），
+  // 呼叫端一律走這條補正，不得靠各自 `?? {}`（會漂移成好幾份預設值）
+  const ch = player.chemistry ?? (player.chemistry = {});
+  if (typeof ch.pairs !== 'object' || ch.pairs === null) ch.pairs = {};
+  if (ch.focusId === undefined) ch.focusId = null;
+  // ⑥集訓待辦（覆審 HIGH-1）：只認數字（＝待辦所屬的屆數），其餘一律視為「沒有待辦」。
+  // 舊存檔無此欄＝undefined＝沒有待辦——那是對的：升版前已走過屆間鏈的存檔，
+  // 靜默的耐力 +2 當時就已經入帳，補跑集訓會變成第二次領。
+  if (typeof player.campPending !== 'number') player.campPending = null;
   return player;
 }
 

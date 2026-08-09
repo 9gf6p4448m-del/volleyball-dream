@@ -4,7 +4,7 @@
 // W2–W5 把 runtime 邏輯搬上 v2 鍵後再收斂。
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
-import { advanceSeason, PLAYER_TRUST_FLOOR } from './careerState.js';
+import { advanceSeason, PLAYER_TRUST_FLOOR, normalizeCareerPlayer } from './careerState.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -13,6 +13,7 @@ import {
   pendingWaiting, recruitTargetGone, waitingOf,
 } from './recruitment.js';
 import { positionFlagsOf, markPositionReady, approvePositionOpen } from './positionFlags.js';
+import { markCampPending } from './trainingCamp.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
   SCHEMA_VERSION,
@@ -243,9 +244,19 @@ export function createCareerStore(storage, slot = 1) {
           recruited: [...(rec.recruited ?? []), ...admittedKeys],
           ...(restWaiting.length || rec.waiting ? { waiting: restWaiting } : {}),
         };
+        // 屆間養成卷（覆審 HIGH-1）：集訓待辦與屆數推進**同一次 RMW**落檔。
+        // 分兩筆寫會留下「seasonIndex 已推進、待辦還沒寫」的縫，在那一格被殺＝
+        // 該屆集訓（屬性特訓＋一生一次的默契選擇）永久消失。集訓完成時由
+        // careerScreen 清旗標（clearCampPending），與集訓成果同一次 savePlayer。
+        // ★ 順手補正跨版本欄位（第三輪覆審／原 LOW-2 的行為面）★ 舊檔（Phase 3 前，
+        // 無 `chemistry`）在集訓什麼都沒選時，careerScreen 會把讀出來的 player 原樣寫回，
+        // 把 `chemistry: undefined` 固化進存檔。補在**屆間這一次落檔**＝任何消費端
+        // （含中途被殺後重開的那條復原路徑）讀到的都已經是完整形狀，不倚賴 UI 那一行。
+        const advancedPlayer = markCampPending(revealed.player, nextIndex);
+        if (advancedPlayer) normalizeCareerPlayer(advancedPlayer);
         return {
           ...prev,
-          player: revealed.player,
+          player: advancedPlayer,
           roster: turnover.roster,
           lineup,
           recruitment,

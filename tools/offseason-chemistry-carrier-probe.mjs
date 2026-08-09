@@ -221,3 +221,77 @@ console.log('\n════ ⑥ 比分自檢（治具沒壞的證據：比分要
 for (const { arm, a } of res) {
   console.log(`  ${arm.label.padEnd(13)} 累計 ${a.ptsFor}:${a.ptsAgainst}（${SETS} 局）`);
 }
+
+// ════════════════════════════════════════════════════════════
+// ⑦ 對象唯一化掃描（2026-08-09 屆間養成卷第一步交付／驗收 3）
+// ════════════════════════════════════════════════════════════
+// 上面 ①–⑥ 是 08-08 的載體可行性量測，**一格未動**（同種子同輸出）。
+// 這一節是交付後追加：把**正式的**記帳函式 `captureChemistryPair`（matchLoop，
+// app 層純觀察）掛進同一條真實路徑，逐個第二觸窗檢查「恰好記一組配對」。
+// 不重抄一份判斷式——重抄的探針是循環論證，不得用於否證（`02 §6.1` 條 4）。
+const { captureChemistryPair } = await import('../src/app/matchLoop.js');
+
+function uniquenessScan(opts, seedOffset) {
+  const { make } = careerGameFactory({ ...opts, seed: seedOffset });
+  const game = make();
+  const ai = createAiState();
+  const s = { game, aiState: ai, playerId: ME, chemistryTally: {}, chemistryWindow: null };
+  const out = { windows: 0, comboWindows: 0, credited: 0, doubles: 0, ghosts: 0 };
+  const sum = () => Object.values(s.chemistryTally).reduce((x, y) => x + y, 0);
+  let inWindow = false;
+  let last = null;
+  let guard = 0;
+  while (game.phase !== 'set_over' && game.phase !== 'matchover' && guard < MAX_TICKS) {
+    guard += 1;
+    const intents = aiCollectIntents(game, ai);
+    const open = game.phase === 'rally' && game.rally?.touches === 1;
+    if (open) {
+      inWindow = true;
+      last = { combo: ai.attackCombo ?? null };
+    } else if (inWindow) {
+      inWindow = false;
+      const before = sum();
+      captureChemistryPair(s);
+      const d = sum() - before;
+      out.windows += 1;
+      if (last.combo) out.comboWindows += 1;
+      if (d >= 1) out.credited += 1;
+      if (d >= 2) out.doubles += 1;              // ★雙發＝驗收 3 失敗★
+      if (d >= 1 && !last.combo) out.ghosts += 1; // 無組合卻記帳＝自行重判成立與否
+      last = null;
+      stepGame(game, intents);
+      continue;
+    }
+    captureChemistryPair(s);
+    stepGame(game, intents);
+  }
+  captureChemistryPair(s);
+  out.tally = { ...s.chemistryTally };
+  return out;
+}
+
+console.log('\n════ ⑦ 對象唯一化掃描（驗收 3；走正式的 captureChemistryPair）════');
+console.log('位置          第二觸窗 其中有組合 記帳窗數 ★雙發★ ★無組合卻記★ 配對明細');
+let dblTotal = 0;
+let ghostTotal = 0;
+let credTotal = 0;
+for (const arm of ARMS) {
+  const acc = { windows: 0, comboWindows: 0, credited: 0, doubles: 0, ghosts: 0, tally: {} };
+  for (let i = 0; i < SETS; i += 1) {
+    const r = uniquenessScan(arm, 1000 + i * 101);
+    for (const k of ['windows', 'comboWindows', 'credited', 'doubles', 'ghosts']) acc[k] += r[k];
+    for (const [pid, n] of Object.entries(r.tally)) acc.tally[pid] = (acc.tally[pid] ?? 0) + n;
+  }
+  dblTotal += acc.doubles;
+  ghostTotal += acc.ghosts;
+  credTotal += acc.credited;
+  console.log(
+    `${arm.label.padEnd(13)}${String(acc.windows).padStart(9)}${String(acc.comboWindows).padStart(11)}`
+    + `${String(acc.credited).padStart(9)}${String(acc.doubles).padStart(8)}`
+    + `${String(acc.ghosts).padStart(14)}  `
+    + (Object.entries(acc.tally).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${v}`).join(' ') || '—'),
+  );
+}
+console.log(`\n  合計：記帳 ${credTotal} 筆／雙發 ${dblTotal} 次／無組合卻記 ${ghostTotal} 次`);
+console.log(`  判定：${dblTotal === 0 && ghostTotal === 0 ? '✅ 對象唯一化成立' : '❌ 違反唯一化（S4）'}`
+  + `（鑑別力：記帳 ${credTotal} 筆 > 0 ⇒ 這個 0 不是「根本沒記到東西」）`);

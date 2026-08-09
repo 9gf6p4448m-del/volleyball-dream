@@ -6,6 +6,12 @@ dev-dist/
 
 # 治具產生的季末存檔（本機測試用，不入庫）
 tools/w6-save*.json
+# 例外：saveA 是 2026-07-24（W6 時期）產出的**真實舊格式**存檔，tests/offseason-chemistry
+# 拿它驗「Phase 3 前的存檔讀進來不炸」——它含 W6 當時的 schema 形狀（無 roster.alumni／
+# 無 career.seasons／player 無 chemistry），這些是今天的治具**再也產不出來的**東西
+# （`node tools/w6-fixture.mjs` 跑出來的是今天的格式）。不入庫的話乾淨 clone 上那條
+# 測試會靜默 skip，驗收 6 的證據就消失了。內容全是虛構人名與數值，無敏感資料。
+!tools/w6-saveA.json
 
 # subagent 量測用的暫存探針（不進版控）
 tools/_tmp_*.mjs

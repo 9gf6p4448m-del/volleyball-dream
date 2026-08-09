@@ -308,6 +308,13 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // flightId 就夠，同一個 flightId 只可能對應同一次入帳。
     comboCreditLatch: null,
     comboCreditSeenFlight: -1,
+    // 屆間養成卷 E2（2026-08-09）：默契配對記帳（{隊友id: 次數}）。
+    // ★ 落在 app 層＝純觀察 ★ 裁定書 do-not-touch 7 要求「sim 判定路徑一個位元組不改」，
+    // 記在這裡才結構性滿足它（也避開 season-combo-gate 的 SEASON-SCAN 鐵律）。
+    // 真相源仍是 `aiState.attackCombo`（sim 自寫），本層不重判組合成立與否。
+    // 續玩接回同 feintsUsed／lOverrides 範式。
+    chemistryTally: careerCtx?.resumeMid?.chemistry ?? {},
+    chemistryWindow: null, // 第二觸窗內的鎖存（出窗才結算，見 captureChemistryPair）
     calledFlight: -1,     // 本 flight 已出現過浮鈕（每波一次）
     pendingCallIntent: false, // tap → 下一 sim tick 注入 'call' Intent（VCR 同錄）
     attackDecidingSince: -1,    // 讀攔網 slow 檔的上色計時起點
@@ -1235,6 +1242,9 @@ function stepSim(s) {
     // 誘餌獎金入帳（2026-08-08）：唯一入帳點在 trust.js applyComboAssist，只在死球那一
     // tick（settlePoint）寫一次；理由同上——一幀可能跑過好幾個 tick，晚一步讀就錯過。
     captureComboAssistCredit(s);
+    // 默契配對記帳（2026-08-09）：同樣要逐 sim tick 取樣——`attackCombo` 與 `claimId`
+    // 的壽命都短於一個 rAF（前者隨 approach 作廢、後者在 touches===2 就被改寫成攻擊手）
+    captureChemistryPair(s);
     s.accumulator -= SIM_DT;
     simSteps += 1;
   }
@@ -1309,6 +1319,62 @@ export function captureComboAssistCredit(s) {
   if (s.comboCreditSeenFlight === credit.flightId) return;
   s.comboCreditSeenFlight = credit.flightId;
   s.comboCreditLatch = credit;
+}
+
+// ════════════════════════════════════════════════════════════════
+// 屆間養成卷 E2（2026-08-09 題三裁定）：默契配對記帳——**純觀察，零判定**
+// ════════════════════════════════════════════════════════════════
+// 載體＝「你與他共同完成一次組合攻擊」，兩種成立方式、單一概念：
+//   (a) 玩家跑在組合的兩條線之一（不分終結者或誘餌）→ 對象＝**另一條線的跑者**
+//   (b) 玩家是本波舉球者、且該波組合成立      → 對象＝**誘餌**（`partnerId`，恆為欄中）
+// (b) 選誘餌不選終結者：終結者線是 `trust` 已覆蓋的事（二傳更常給誰球），
+// 記在那裡即與 trust 重疊；誘餌關係目前零機制覆蓋。
+//
+// ★ 對象唯一化（題三條件 3）★ 每次合格事件只記**一組**配對，寫成 if/else 而不是
+// 兩個獨立 if——(a)(b) 的互斥是結構保證的（二傳被 `attackPointsOf` 排除出攻擊池，
+// ai.js:755 ⇒ 舉球者不可能同時是 mainId／partnerId），但互斥要寫在程式碼裡看得見，
+// 不能只活在註解裡：日後那條結構前提變了，這裡仍然只發一組。
+//
+// ★ 去重＝第二觸窗的邊緣觸發、且在**窗關閉時**結算 ★
+// 現成範式是 `captureTandemAssign`，但它 latch 的是窗內看到的**第一個** combo——
+// 照抄會記到被覆寫掉的舊組合：combo 在窗內仍會被 `applyTandemCall`（玩家按夾塞）／
+// `applyReplanCall`（S 遠段叫牌，可能寫 null）／`replanWithoutRunners`（沒人跑，改組織）
+// 改寫。所以這裡每 tick 覆蓋同一個鎖存，出窗才結算＝記到的是**真的跑出去的那一組**。
+// 不用 `flightId` 當去重鍵（一波橫跨三個 flight，2026-08-07 已為此出過三張字卡），
+// 也不用物件 identity（窗內重新規劃會產生新物件、值卻相同）。
+//
+// ★ 玩家 id 用 `s.playerId` 不用 `s.controlledId` ★ 帶位接管會讓後者漂移到隊友身上。
+export function captureChemistryPair(s) {
+  const r = s.game?.rally;
+  // 窗界＝第二觸窗（組合只在這裡排程）。一離開就結算——包含死球／換球權那一刻。
+  if (s.game?.phase !== 'rally' || r?.touches !== 1) {
+    flushChemistryWindow(s);
+    return;
+  }
+  // 窗內逐 tick 覆寫（最後一次寫的才是真的跑出去的那一組；null＝這一波沒有組合）
+  s.chemistryWindow = {
+    combo: s.aiState?.attackCombo ?? null,
+    setterId: s.aiState?.claimId ?? null, // 只在本窗內有效（touches===2 就被改寫）
+  };
+}
+
+// 窗關閉：把鎖存結算成 0 或 1 組配對。無組合、對象取不到、對象不在我方名冊＝不記。
+export function flushChemistryWindow(s) {
+  const w = s.chemistryWindow;
+  if (!w) return;
+  s.chemistryWindow = null;
+  const combo = w.combo;
+  if (!combo) return;
+  const me = s.playerId;
+  let mateId = null;
+  if (combo.mainId === me) mateId = combo.partnerId;        // (a) 玩家跑主線
+  else if (combo.partnerId === me) mateId = combo.mainId;   // (a) 玩家跑誘餌線
+  else if (w.setterId === me) mateId = combo.partnerId;     // (b) 玩家是本波舉球者
+  if (!mateId || mateId === me) return;
+  // 我方名冊守衛：對象不在同隊（或 id 查不到）＝不記，不要猜
+  const myTeam = s.game?.players?.[me]?.teamId ?? null;
+  if (!myTeam || s.game.players[mateId]?.teamId !== myTeam) return;
+  s.chemistryTally[mateId] = (s.chemistryTally[mateId] ?? 0) + 1;
 }
 
 // 事件應用：音效/播報/juice（定格、震動、慢動作）/得分原因面板/慶祝
@@ -1918,6 +1984,7 @@ function settleIfOver(s) {
         careerCtx: s.careerCtx, game, playerId: s.playerId,
         feintsUsed: s.feintsUsedThisMatch,
         lOverrides: s.lOverrideTally, // W4 Q9：L 改判記帳（box 第四欄）
+        chemistry: s.chemistryTally, // 屆間養成卷 E2：默契配對次數（賽末一次寫回 Player）
       });
       if (!saveOk) stage.floatText.show('⚠ 戰績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
       // W4(P4) Q5＋4.6 §3-2：最後一球（勝負點）落典藏牆四槽。
@@ -2245,6 +2312,21 @@ function endOpeningShow(s) {
   }
 }
 
+// 生涯層專屬欄位不進 sim 快照（2026-08-09 覆審 LOW-1）。
+// 病灶：`careerTeams` 直接把生涯主角**那個物件**塞進 teams.A（careerState.js:403），
+// 於是 `game.players.A2` 就是 careerPlayer 本人 ⇒ 整包被 dump 快照進局間存檔
+// （實測 role=outside／libero／setter 三種都會）。sim 從不讀這些欄位（`grep chemistry
+// src/sim` 零命中），但快照留的是**寫檔當下的舊值**——日後有人去讀就拿到過期資料。
+// 在 dump 上剔除（不是在建 sim player 時）：dump 已經是 JSON 深拷貝，動它對 sim
+// 判定路徑零影響（do-not-touch 7：一個位元組不改）。
+const CAREER_ONLY_PLAYER_FIELDS = ['chemistry', 'campPending'];
+export function stripCareerFieldsFromDump(dump) {
+  for (const p of Object.values(dump?.players ?? {})) {
+    for (const k of CAREER_ONLY_PLAYER_FIELDS) delete p[k];
+  }
+  return dump;
+}
+
 // 局間存檔離開（Q8 必配）：整包 sim state JSON 快照落槽位 mid key → 返回生涯。
 // 續玩＝runMatch 以快照為 game 直接開機（phase 仍為 set_break＝「從局間 huddle 前恢復」）
 function saveMidAndQuit(s) {
@@ -2253,7 +2335,8 @@ function saveMidAndQuit(s) {
     savedAtSet: s.game.series.setIndex,
     feintsUsed: s.feintsUsedThisMatch,
     lOverrides: { ...s.lOverrideTally }, // W4 Q9：改判 tally 隨局間存檔續玩接回
-    game: JSON.parse(JSON.stringify(s.game)),
+    chemistry: { ...s.chemistryTally }, // 屆間養成卷 E2：默契 tally 同上（同一範式）
+    game: stripCareerFieldsFromDump(JSON.parse(JSON.stringify(s.game))),
   });
   if (!ok) {
     s.stage.floatText.show('⚠ 局間存檔失敗（儲存空間不可用）', '#ff8a8a', 2600);

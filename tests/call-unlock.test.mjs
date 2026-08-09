@@ -84,9 +84,12 @@ test('①-b 第 1 屆即使已學會（舊存檔情境）：世界閘照樣關�
 test('②第 2 屆走完傳授事件（teach-call）後：閘門開啟', () => {
   const s2 = seasonTwoCareer();
   const player = createCareerPlayer('測試');
-  // 真實觸發路徑：第 2 屆第一場（group-1）賽前 dueEvents 應吐出 teach-call
-  const ev = dueEvents(s2, 'pre', 2).find((e) => e.id === 'teach-call');
-  assert.ok(ev, '第 2 屆 group-1 賽前應觸發 teach-call');
+  // 真實觸發路徑（2026-08-09 E5 搬家）：第一次集訓（moment 'camp'、第 2 屆）吐出 teach-call
+  const ev = dueEvents(s2, 'camp', 2).find((e) => e.id === 'teach-call');
+  assert.ok(ev, '第 2 屆集訓應觸發 teach-call');
+  // 舊掛點（第 2 屆 group-1 賽前）不得殘留＝真的搬走了，不是兩邊都發
+  assert.ok(!dueEvents(s2, 'pre', 2).some((e) => e.id === 'teach-call'),
+    '賽前那個舊掛點應已淨空（08-09 搬進集訓）');
   assert.equal(ev.effect.unlock, 'callPlay');
   // 入帳＝careerScreen.fireEvents 的泛型那一行（`techniques[e.effect.unlock] = 1`），
   // 與 tip/pipe/dive 共用同一段程式碼，本次未新增分支
@@ -104,17 +107,21 @@ test('③第 2 屆但還沒學會：技術閘仍生效 ⇒ 叫不出（兩道閘
   assert.equal(gatesOfCareer(s2, player, 2).canCallPlay, true);
 });
 
-test('②-b 傳授位置：第 1 屆全程不觸發（group-1／group-2 賽前都不給）', () => {
+test('②-b 傳授位置：第 1 屆全程不觸發（賽前、賽後、第一屆的集訓查詢都不給）', () => {
+  // 2026-08-09 E5：掛點改成 moment 'camp'＋第 2 屆 ⇒ 這一條的三個「不給」全部改查
+  // 'camp' 口徑。用 'pre' 查會因為 moment 不符而**恆為真**，那是零鑑別力的斷言。
   const career = createCareer({ seed: 123, playerName: '測試' });
-  assert.ok(!dueEvents(career, 'pre', 1).some((e) => e.id === 'teach-call'),
-    '第 1 屆 group-1 賽前不給');
+  assert.ok(!dueEvents(career, 'camp', 1).some((e) => e.id === 'teach-call'),
+    '第 1 屆不給（屆數閘：第 1 屆世界上沒有組合攻擊）');
   const afterG1 = recordResult(career, {
     matchId: 'group-1', won: true, scoreFor: 25, scoreAgainst: 20,
   });
-  assert.ok(!dueEvents(afterG1, 'pre', 1).some((e) => e.id === 'teach-call'),
-    '第 1 屆 group-2 賽前也不給（08-01 從這裡搬走）');
+  assert.ok(!dueEvents(afterG1, 'camp', 1).some((e) => e.id === 'teach-call'),
+    '第 1 屆打完一場後仍不給');
   // 省略第 3 參數＝視同第 1 屆（保守預設）：舊呼叫端不會誤發
-  assert.ok(!dueEvents(seasonTwoCareer(), 'pre').some((e) => e.id === 'teach-call'));
+  assert.ok(!dueEvents(seasonTwoCareer(), 'camp').some((e) => e.id === 'teach-call'));
+  // 鑑別力：同一個 career 明確傳第 2 屆就給 ⇒ 上面三個 false 來自屆數，不是 moment 打錯字
+  assert.ok(dueEvents(seasonTwoCareer(), 'camp', 2).some((e) => e.id === 'teach-call'));
 });
 
 test('④快速比賽不受影響：叫戰術一律可用（與 trust／暫停／換人同款）', () => {
@@ -193,9 +200,11 @@ test('⑤-b 舊存檔實測：tools/w6-saveA.json（W6 時期真實存檔）載�
 test('教學鏈資料形狀：teach-call 進表、一次性去重、技術頁與學招預告查得到名字', () => {
   const ev = EVENT_DEFS.find((e) => e.id === 'teach-call');
   assert.ok(ev, 'teach-call 應在 EVENT_DEFS');
-  assert.equal(ev.moment, 'pre');
-  // 08-01 搬家：第 1 屆 group-2（暫置）→ 第 2 屆 group-1（過渡；最終歸宿是集訓）
-  assert.deepEqual(ev.when, { seasonIndex: 2, matchId: 'group-1' });
+  assert.equal(ev.moment, 'camp');
+  // 08-01 搬家：第 1 屆 group-2（暫置）→ 第 2 屆 group-1 賽前（過渡）
+  // 08-09 附表 A 裁定甲（七項只搬叫戰術一項）：→ **第一次集訓**，指名債償清。
+  // `matchId` 拿掉＝不掛在任何一場比賽上 ⇒ 覆蓋率 100%（下一條測試實跑驗）
+  assert.deepEqual(ev.when, { seasonIndex: 2 });
   assert.equal(ev.effect.unlock, 'callPlay');
   assert.ok(ev.lines.some((l) => l.speaker === '阿哲'), '二傳＝手勢的收訊端，由他教');
   // 年級守衛：搬到第 2 屆後大山（A3）已畢業 ⇒ MB 那句改由阿岩（A6）講，
@@ -206,10 +215,53 @@ test('教學鏈資料形狀：teach-call 進表、一次性去重、技術頁與
   assert.ok(isOnceEvent('teach-call'), '一次性事件（跨屆不重播）');
   // TECH_DEFS 有名字＝生涯技術頁列得出來、matchLoop 學招預告字卡查得到
   assert.ok(TECH_DEFS.some((t) => t.key === 'callPlay' && t.name === '叫戰術'));
-  // pre 傳授不進學招預告（既有規則：進場前已播完），不與同場賽後的 teach-dive 打架
+  // 集訓傳授不進學招預告（既有規則：預告只看 moment 'post'），不與同場賽後的 teach-dive 打架
   assert.ok(!upcomingTeach({ results: [] }, 'group-2').includes('callPlay'));
   assert.deepEqual(upcomingTeach({ results: [] }, 'group-2'), ['dive']);
 });
+
+// ★ E5 覆蓋率（2026-08-09 附表 A 裁定甲的硬約束）★
+// 舊掛點是「第 2 屆第一場 group-1 **賽前**」＝100%（每個生涯都會走到第一場）。
+// 搬進集訓後必須仍是 100%——集訓是屆間鏈的必經節點，且 `when` 只剩屆數、
+// 不看勝負／不看賽程 ⇒ 任何第 1 屆走法（全勝／全敗／混合）進到第 2 屆都拿得到。
+// 這裡實跑六種第 1 屆走法各自 advanceSeason 一次驗，不是讀 `when` 推論。
+test('⑥E5 覆蓋率：任何第 1 屆走法進到第 2 屆集訓都拿得到叫戰術（100%）', () => {
+  const outcomes = [
+    { label: '全勝', won: () => true },
+    { label: '全敗', won: () => false },
+    { label: '隔場勝', won: (i) => i % 2 === 0 },
+    { label: '首場敗其餘勝', won: (i) => i > 0 },
+  ];
+  let covered = 0;
+  for (const seed of [1, 123, 777]) {
+    for (const o of outcomes) {
+      let c = createCareer({ seed, playerName: '覆蓋' });
+      c.schedule.forEach((e, i) => {
+        c = recordResult(c, {
+          matchId: e.id, won: o.won(i), scoreFor: o.won(i) ? 25 : 20, scoreAgainst: o.won(i) ? 20 : 25,
+        });
+      });
+      const s2 = advanceSeason(c, { seasonIndex: 2 });
+      const evs = dueEvents(s2, 'camp', 2).map((e) => e.id);
+      assert.ok(evs.includes('teach-call'),
+        `seed ${seed}／${o.label}：第 2 屆集訓沒給叫戰術（覆蓋率破了）`);
+      covered += 1;
+    }
+  }
+  assert.equal(covered, 12, '樣本數自檢：12 條走法都驗過了');
+  // 鑑別力對照：同一批走法停在第 1 屆時一律不給（否則上面的 100% 只是「恆真」）
+  let c1 = createCareer({ seed: 123, playerName: '覆蓋' });
+  assert.ok(!dueEvents(c1, 'camp', 1).some((e) => e.id === 'teach-call'));
+  c1 = recordEventAll(c1);
+  assert.ok(!dueEvents(c1, 'camp', 1).some((e) => e.id === 'teach-call'));
+});
+
+function recordEventAll(career) {
+  return career.schedule.reduce(
+    (c, e) => recordResult(c, { matchId: e.id, won: true, scoreFor: 25, scoreAgainst: 20 }),
+    career,
+  );
+}
 
 test('佈線守衛：遠段改判吃 gates.canCallPlay（未受教＝不出現）', () => {
   // ★ 卷五（2026-08-02 裁定 1）：死球窗建鈕那半段隨路徑甲退場 ★

@@ -68,19 +68,21 @@ export const EVENT_DEFS = [
   // MB 補一句「交叉＝我當幌子」＝把誘餌的角色從隊友嘴裡講出來（同 teach-dive 的傳承節拍）。
   // 2026-08-01 搬到第 2 屆後這句改由**阿岩**（A6，第 2 屆的中間；大山 A3 第 1 屆末已畢業）講，
   // 並加 elderId 年級守衛——阿岩若被逐出／不在現役名冊，改播阿哲代述的 altLines。
-  // moment 'pre'＝進場前教完、當場就用得到；且 pre 傳授不進 upcomingTeach 預告
-  // （既有規則），不會與同場賽後的 teach-dive 預告打架。
+  // moment 'camp'＝屆間集訓（advanceSeason 之後、下屆開打之前）；集訓與 pre 傳授一樣
+  // 不進 upcomingTeach 預告（那條只看 moment 'post'），不會與同場賽後的 teach-dive 打架。
   {
     id: 'teach-call',
-    moment: 'pre',
-    // ★ 位置（2026-08-01 搬家；c5419ce 已註明第 1 屆 group-2 是**暫置、會搬家**）★
-    // 裁定乙：第 1 屆＝純個人能力的比賽，雙方都沒有組合攻擊 ⇒ 那一屆教了也用不出來，
-    // 教學鏈不該在那裡卡一課空的。改掛**第 2 屆第一場賽前**（seasonIndex 2＋group-1）
-    // ——第 2 屆整個比賽升級，開賽第一課正是「這一球大家跑什麼，先講好」。
-    // ⚠ 這仍是**過渡位置** ⚠ 最終歸宿是第 2 屆的「集訓」（解鎖載體，另一卷設計中、
-    // 尚未實作）；集訓做好後這一條再搬一次，屆時只動 when（unlock／lines 不變）。
-    // 一次性旗標（ONCE_EVENT_IDS）照舊 ⇒ 第 1 屆已學過的舊存檔不會在第 2 屆重播。
-    when: { seasonIndex: 2, matchId: 'group-1' },
+    moment: 'camp',
+    // ★★ 位置（2026-08-09 屆間養成卷 E5：指名債已償還）★★
+    // 歷程：第 1 屆 group-2（c5419ce 暫置）→ 第 2 屆 group-1 賽前（08-01 裁定乙）
+    //      → **第一次集訓**（08-09 附表 A 裁定甲：七項技術只搬「叫戰術」一項，其餘留原地）。
+    // 為什麼是這裡：舊值＝第 2 屆第一場**賽前**，而第一次集訓（advanceSeason 後
+    // seasonIndex=2）就在它的正上游一步 ⇒ 時序幾乎不動、覆蓋率同為 100%
+    //（集訓是屆間鏈的必經節點，不看勝負、不看賽程），但敘事從「第二屆第一場賽前
+    // 突然有人教你」變成「集訓時教你怎麼叫球」——第一年學基本功、第二年學配合。
+    // `matchId` 因此拿掉：集訓不掛在任何一場比賽上，只掛屆數。
+    // 一次性旗標（ONCE_EVENT_IDS）照舊 ⇒ 先前已學過的舊存檔不會在集訓重播。
+    when: { seasonIndex: 2 },
     effect: { unlock: 'callPlay' },
     elderId: 'A6',
     lines: [
@@ -335,7 +337,8 @@ export function isOnceEvent(id) {
 }
 
 // 取當下應觸發的事件（依表序；已觸發者不重複）。
-// moment 'pre'＝出戰前（條件看下一場）；'post'＝賽後回到生涯畫面（條件看最後一場）
+// moment 'pre'＝出戰前（條件看下一場）；'post'＝賽後回到生涯畫面（條件看最後一場）；
+// 'camp'＝屆間集訓（2026-08-09 E5；advanceSeason 之後、下屆開打之前，只看屆數）
 // seasonIndex（2026-08-01）：career 物件本身不帶屆數（每屆重建 schedule/results），
 // 由呼叫端（careerScreen 讀 store.seasonIndex()）供給——`when.seasonIndex` 條件用。
 // 省略＝1＝第 1 屆：與 careerStore.seasonIndex() 的 `?? 1` 同一個保守方向，
@@ -573,7 +576,7 @@ function matchesWhen(when, { career, last, next, seasonIndex = 1 }) {
   for (const [key, val] of Object.entries(when)) {
     switch (key) {
       // 第幾屆（2026-08-01）：值由呼叫端供給（career 物件每屆重建、自己不記屆數）。
-      // 教學鏈搬家用——例：teach-call 掛第 2 屆第一場賽前
+      // 教學鏈搬家用——例：teach-call 掛第 2 屆的集訓（moment 'camp'，08-09 起無 matchId）
       case 'seasonIndex':
         if (seasonIndex !== val) return false;
         break;

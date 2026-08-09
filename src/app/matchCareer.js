@@ -21,7 +21,9 @@ export function markMatchStarted(careerCtx) {
 // - 局終當下呼叫一次（先落檔再顯示結算畫面——點擊返回前進度已保住）
 // - stage 3：從事件日誌統計表現→成長點數；假動作熟練度場終一次累積
 // - 情蒐入庫：這場對手看到的我（宿敵同 id 跨賽段累積——「他們記得你」）
-export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0, lOverrides = null }) {
+export function settleCareerMatch({
+  careerCtx, game, playerId, feintsUsed = 0, lOverrides = null, chemistry = null,
+}) {
   const myTeam = game.players[playerId].teamId; // 生涯主角固定 A 隊
   const other = myTeam === 'A' ? 'B' : 'A';
   const s = game.match.score;
@@ -62,9 +64,23 @@ export function settleCareerMatch({ careerCtx, game, playerId, feintsUsed = 0, l
   const settledBefore = (careerCtx.store.loadCareer?.() ?? careerCtx.career)
     .results.some((r) => r.matchId === careerCtx.matchEntry.id);
   let saveOk = true;
+  // 屆間養成卷 E2（2026-08-09）：默契配對次數賽末入帳（記帳在 matchLoop，sim 零改動）。
+  // ★ settledBefore 防重入 ★ 它是累加器，重複結算會灌水——與招募 progress 同一道閘。
+  const chemGain = (!settledBefore && chemistry)
+    ? Object.entries(chemistry).filter(([, n]) => (n ?? 0) > 0)
+    : [];
+  if (chemGain.length) {
+    const ch = careerCtx.player.chemistry ?? (careerCtx.player.chemistry = {});
+    const pairs = { ...(ch.pairs ?? {}) };
+    for (const [pid, n] of chemGain) pairs[pid] = (pairs[pid] ?? 0) + n;
+    ch.pairs = pairs;
+    if (ch.focusId === undefined) ch.focusId = null;
+  }
   if (feintsUsed > 0) {
     careerCtx.player.techniques.feintUses =
       (careerCtx.player.techniques.feintUses ?? 0) + feintsUsed;
+  }
+  if (feintsUsed > 0 || chemGain.length) {
     saveOk = careerCtx.store.savePlayer(careerCtx.player) && saveOk;
   }
   const scouted = mergeScouting(
