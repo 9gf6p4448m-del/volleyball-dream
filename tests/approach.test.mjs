@@ -115,6 +115,15 @@ function runSet(seed) {
           if (r.kind === 'quick') {
             assert.ok(isFrontRow(rot, r.pid), '快攻線只給前排 MB');
             lz.quick.push(d);
+          } else if (r.kind === 'bquick') {
+            // ★ 2026-08-09 補分類（AI 開始自動排 B 快之後）★ 沿用本治具既有的處理範式：
+            // 新線種掉進最後的 else 會被當成「後排攻擊線」而紅——**那是分類過時，不是行為變了**。
+            // B 快必然是前排 MB：`SOLO_MAIN_KINDS.bquick = ['quick']` ⇒ 只有本來就在跑 A 快
+            // 的人升級得了，而 A 快在上一個分支已被斷言「只給前排 MB」。
+            // 這裡的斷言**比 else 分支更嚴**（else 只要求後排，這裡要求前排），沒有放寬。
+            // ★ 刻意不併進 lz.quick ★ B 快的助跑起點 lz 3.0 ≠ A 快貼網，混進去會糊掉
+            // 下面「MB 貼網／兩翼四步外／後排最遠」三檔分離的斷言——那條要驗的是 A 快的貼網。
+            assert.ok(isFrontRow(rot, r.pid), 'B 快只給前排 MB');
           } else if (r.kind === 'left' || r.kind === 'right' || r.kind === 'left_inside'
             || r.kind === 'cross' || r.kind === 'tandem') {
             // §5 A2：left_inside（內切，舊稱 cross）也是前排 OH 的線，離網深度與 left 同一檔

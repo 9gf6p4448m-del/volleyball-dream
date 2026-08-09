@@ -13,7 +13,8 @@ import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from 
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
-  applyRouteKinds, routeKindFor, routePhaseAt, planCombination, applyComboRoutes, applySoloRoute,
+  applyRouteKinds, routeKindFor, routePhaseAt, planCombination, planSoloPlay,
+  applyComboRoutes, applySoloRoute,
   resolveCalledPlay, offeredCallTypes, AIR_TICKS,
   evaluateCombination, firstFailedCheck,
 } from './approach.js';
@@ -465,8 +466,19 @@ function ensureFlightPlan(game, aiState) {
       comboScale: game.comboScale ?? 1,
     });
     aiState.attackCombo = combo;
-    // 只改涉及的兩人；沒有組合時 comboPoints === points（同一個陣列參照）
-    const comboPoints = applyComboRoutes(points, combo);
+    // ★★ 2026-08-09：組合沒成立時再骰一次單人型（B 快）★★
+    // 優先序＝組合贏：三型的互斥結構與既有機率一格未動，B 快只吃它們讓出來的波，
+    // 所以這條加進來不會稀釋 cross／tandem／delay 的發生率（測試有守）。
+    // `planSoloPlay` 要求 `attackerId` 本人就是跑 A 快的那個 ⇒ 球本來就要給他，
+    // 白跑率結構上恆為 0（夾塞的教訓，見該函式檔頭）。
+    const solo = combo ? null : planSoloPlay(points, aiState.attackerId, {
+      flightId: game.rally.flightId,
+      seed: game.seed ?? 0,
+      comboScale: game.comboScale ?? 1,
+    });
+    aiState.attackSolo = solo;
+    // 只改涉及的人；兩者皆無時 comboPoints === points（同一個陣列參照）
+    const comboPoints = applySoloRoute(applyComboRoutes(points, combo), solo);
     // 攻擊線由**寫回後**的池決定——否則二傳瞄的落點（setAimFor(attackKind)）
     // 與該人助跑的終點會是兩個地方（§5 A2 的順序教訓，這裡是它的組合版）。
     // combo 為 null 時 find 取回的就是 pick 那一筆＝逐值等同舊寫法 `pick?.kind ?? null`

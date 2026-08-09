@@ -1049,6 +1049,40 @@ export function applyComboRoutes(points, combo) {
 
 // 單人型的線寫回池——**只動那一個人**，其餘 point 原樣（同一個物件參照）。
 // 純函式、不改入參（與 applyComboRoutes 同範式）。
+// ════════════════════════════════════════════════════════════════
+// B 快的自動排程（2026-08-09 Sawmah 裁定：「接上 AI 排程，讓台詞成真」）
+// ════════════════════════════════════════════════════════════════
+// 為什麼要有它：`bquick` 從 `83892ec`（08-02）落地起就**只有玩家當 S 才叫得出來**，
+// 那個 commit 的訊息自己寫著「AI 永遠抽不到 B 快」。於是玩家站 MB 時 B 快恆為 0——
+// AI 不排、他也沒有面板可以要。而遊戲裡二傳阿哲對 MB 說過這句：
+//   「當然，偶爾我是真的給你，B快。」（`career/callPlayBrief.js`）
+// ★ 那句台詞就是規格 ★ 這支函式是讓它成真的那一半（另一半是 MB 的浮鈕）。
+//
+// ★ 為什麼不塞進 `COMBO_TYPES` ★ 兩個硬理由：① `tests/combo-play.test.mjs` 明文
+// 深比對鎖死 `['cross','tandem','delay']` ② 單人型的回傳形狀是 `{mainId,kind}`、
+// 沒有 `partnerId`，硬塞進 combo 形狀會讓 `applyComboRoutes` 的 `pt.pid === undefined`
+// 恆假＝**靜默失效**（不報錯、線也沒改到）。故另開一條單人骰，三型互斥結構一格未動。
+//
+// ★★ 為什麼要求「已選中的攻擊手本人就是跑 A 快的那個」★★ 這是本函式最重要的一條，
+// 直接記取夾塞的教訓：夾塞的窗只問幾何、不問球權，於是玩家按了之後 **73% 的波球不是
+// 他打的**（他在跑誘餌線）。B 快若照抄那個形狀——把池子裡任何一個跑 quick 的人改成
+// bquick——那個人多半不是 `attackerId`，結果就是「MB 跑了一條 B 快的線但球不會來」，
+// 白跑率從出廠就是高的。這裡改成**只在球本來就要給他時才升級他的線**，
+// 白跑率結構上恆為 0，不必靠任何防禦性程式碼。代價是發生率比「任意 quick 跑者」低，
+// 那是對的取捨：玩家要的是真的拿到球，不是多跑一條線。
+export const BQUICK_PLAY_RATE = 0.25; // ＝ CROSS_PLAY_RATE／TANDEM_PLAY_RATE 同值域（起始值，待量測後調）
+const BQUICK_PLAY_SALT = 211; // 與 cross 91／tandem 137／delay 173 不相撞
+
+export function planSoloPlay(points, mainId, opts = {}) {
+  const { flightId = 0, seed = 0, comboScale = 1 } = opts;
+  const scale = comboScale ?? 1;
+  if (!(scale > 0)) return null; // 世界規則閘：這場沒有戰術（同 evaluateCombination 的 scale）
+  const pt = (points ?? []).find((p) => p.pid === mainId);
+  if (!pt || !SOLO_MAIN_KINDS.bquick.includes(pt.kind)) return null; // 球不給他就不升級他的線
+  if (hash01(flightId * 1097 + BQUICK_PLAY_SALT + seed) >= BQUICK_PLAY_RATE * scale) return null;
+  return { mainId, kind: SOLO_LINE.bquick };
+}
+
 export function applySoloRoute(points, solo) {
   if (!solo) return points;
   return points.map((pt) => (

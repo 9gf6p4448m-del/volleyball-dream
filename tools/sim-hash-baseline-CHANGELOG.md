@@ -31,3 +31,5 @@
   裁定甲：SHOOT.left_inside 由 -2.0 改為 -1.52、SHOOT_HIT 由 -1.3 改為 -1.0，把二速內切的擊球點對齊三速版的實測值 -0.99（初版抄了三速的參數而非實測值，往外多 0.3m）。600 局掃描 tools/inside-cut-shoot-sweep.mjs：read +0.3pp／commit -2.1pp 皆在雜訊內
 - 2026-08-09　`949942b`　36a13a6cc2c2c23c → b5c3c5ca36828c40
   檔 A：拿掉二傳在殺球 dig 上的 zoneDist ×3 懲罰（Sawmah 2026-08-09 裁定）。直線被救起 1.1%→14.7%、直線−斜線贏球率落差 +16.1pp→−2.0pp；配對同種子的生涯奪冠率差全在噪音內（−1.0/+0.0/+2.0pp）。AI vs AI 對局必然走 arbitrate 的 formationExempt=false 分支，故此基準變動是預期之內的行為變更。
+- 2026-08-09　`57247e6`　b5c3c5ca36828c40 → 9097de00aca1087b
+  B 快接上 AI 自動排程（Sawmah 2026-08-09 裁定：讓那句「偶爾我是真的給你，B快」成真）。planSoloPlay 只在組合未成立、且已選中的攻擊手本人就是跑 A 快的那個時才升級他的線 ⇒ 白跑率結構上為 0。起始率 0.25＝COMBO_RATE.cross 同值域。實測第 2/3 屆規劃點 7.8% 排出 B 快、第 1 屆 comboScale 閘住為 0。
