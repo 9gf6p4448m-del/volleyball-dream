@@ -150,3 +150,21 @@ test('鈕：回饋文案沒有 decoy 分版（有的話代表它被改成不改�
   assert.ok(!block.includes('decoy'),
     '夾塞要 decoy 版是因為它 73% 白跑；B 快按成功＝球一定給他，只有一種真相要講');
 });
+
+test('鈕：matchStage 有真的把 bquickButton 匯出（定義了沒 return＝鈕永遠不出現）', () => {
+  // ★ 真人抓到的出廠 bug ★ 上線版定義了 createCallButton、matchLoop 也接好開窗，
+  // 但 return 清單漏了它 ⇒ stage.bquickButton 恆 undefined ⇒ 鈕在生涯與快速比賽
+  // 都一次沒出現過。sim 端探針（bquickStateOf 811/811）量不到這一層——
+  // 這條測試守的就是那個縫：三顆浮鈕誰在 return 清單缺席都要當場紅。
+  const stage = readFileSync(new URL('../src/app/matchStage.js', import.meta.url), 'utf8');
+  // 主 return 的錨＝'handlers, matchView'（createMatchStage 的回傳物件第一行）；
+  // lastIndexOf('return {') 會抓到檔案裡別的內部函式的 return，取錯段
+  const anchor = stage.indexOf('handlers, matchView');
+  assert.ok(anchor > 0, '找不到 matchStage 主 return 的錨——結構變了就更新本測試');
+  const ret = stage.slice(anchor, stage.indexOf('};', anchor));
+  for (const btn of ['callButton', 'cutButton', 'tandemButton', 'bquickButton']) {
+    assert.match(ret, new RegExp(`\b${btn}\b`), `${btn} 不在 matchStage 的 return 清單`);
+  }
+  const loop = readFileSync(new URL('../src/app/matchLoop.js', import.meta.url), 'utf8');
+  assert.match(loop, /stage\.bquickButton\.show\(/, 'matchLoop 沒有任何地方 show 這顆鈕');
+});

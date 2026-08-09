@@ -148,7 +148,12 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
     aimMarker, landingMarker, floatText, routeCue, pointBanner, setOverOverlay, setBreakOverlay,
-    boxScorePanel, callButton, cutButton, tandemButton,
+    // ★ 2026-08-09 深夜補：bquickButton 上線時漏了這一行 ★ 定義了鈕、matchLoop 也
+    // 接好了開窗，但沒進 return ⇒ stage.bquickButton 恆 undefined ⇒ 鈕從上線起
+    // 一次都沒出現過（真人在生涯與快速比賽都看不到才抓到）。sim 端探針量的是
+    // bquickStateOf 的窗（811/811 開）——**量測位置不含 UI 佈線**，同日 camp-reminder
+    // 才寫過「價值全在接線上」的教訓，八小時後在自己手上重演。
+    boxScorePanel, callButton, cutButton, tandemButton, bquickButton,
     blockShadow, blockReach, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
   };
