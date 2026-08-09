@@ -897,6 +897,17 @@ function updateDecisions(s, now) {
   const setDeciding =
     !!setZones && setZones.length > 0 &&
     game.ball.y > 1.8 && !controls.setPending();
+  // ★ 2026-08-09 OPP 補舉提示 ★ isSetMoment 放行了「S 接第一球、claim 指到我」的
+  // 補位情形（matchControls 檔頭有理由）——但面板開了玩家也未必知道**為什麼**輪到他。
+  // S 本人不出卡（他天天舉球）；非 S 的補位每波出一張，去重鍵＝flightId。
+  // 實測背景：S 接第一球 0.88 次/局，玩家不補＝100% 落地失分。
+  if (setDeciding && game.players[s.playerId]?.currentRole !== 'setter') {
+    const fid = game.rally?.flightId;
+    if (fid != null && s.coverSetHintFlight !== fid) {
+      s.coverSetHintFlight = fid;
+      stage.floatText.show('🙌 二傳接了一傳——這球換你舉！', '#ffd166', 1400);
+    }
+  }
   // 4.6 追修（07-28 試玩）：分配窗兩段式——遠段唯讀、近段才可下指令。
   // ★ 卷五裁定 3（2026-08-02）：判準從空間換成**時間** ★
   //   ETA 的取點與換算**整段在 `setEtaOf` 裡**（單一真相，UI 不自己算一份）——

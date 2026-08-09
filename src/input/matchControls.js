@@ -616,13 +616,26 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     // ---- 二傳分配決策（W3 S 玩法：玩家＝現任舉球員）----
     // 是否輪到玩家舉球：我方第二擊、這球 claim 給我、我是現任舉球員。
     // 範式同 isAttackMoment——決策時刻由 AI 協調層的呼叫鎖定判定，不另闢真相
+    //
+    // ★ 2026-08-09 Sawmah 裁定：OPP 補舉時同樣開面板 ★
+    // S 接了第一球時，協調層**指定 OPP 補舉第二球**（ai.js 的 claim 鏈：S 用掉第一觸
+    // 就找 opposite）——AI 對局 168/168 全由 OPP 補、零漏接；但真人坐 OPP 時
+    // 完全不知道這回事（無提示、無面板），實測不補＝100% 落地失分。
+    // 修法＝不再問「你是不是二傳」，改問「**這球是不是 claim 給你的舉球職責**」：
+    // claim 鏈只會在兩種情況把第二觸給你——你是 S、或你是 S 接球後的指定補位。
+    // 兩種都該開面板；hint 由 matchLoop 出字卡（僅補位那種，S 本人不需要被提醒）。
     isSetMoment(game) {
       const me = game.players[playerId];
       const r = game.rally;
       if (game.phase !== 'rally' || r.possession !== me.teamId || r.touches !== 1) return false;
-      if (me.currentRole !== 'setter') return false;
       if (lastAiState?.claimId !== playerId) return false;
-      return true;
+      if (me.currentRole === 'setter') return true;
+      // 補舉情形：第一觸是我方二傳用掉的、而 claim 鏈把第二觸指到我頭上。
+      // 不寫死 currentRole==='opposite'——判準跟著 claim 鏈走（單一真相），
+      // 它指誰就是誰；今天它指 OPP，哪天 claim 鏈改了這裡不會變成第二份過期真相。
+      const firstToucher = game.players[r.lastToucherId];
+      return !!firstToucher && firstToucher.teamId === me.teamId
+        && firstToucher.currentRole === 'setter';
     },
     // 目前可分配的選項池（一傳品質分支）；非舉球時刻回傳 null
     setOptions(game) {
