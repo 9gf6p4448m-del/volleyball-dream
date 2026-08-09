@@ -717,6 +717,22 @@ function arbitrate(game, team, landing, excludeId, formationExempt = false) {
     const role = game.players[pid].currentRole;
     const frontMb = role === 'middle' && isFrontRow(rot, pid);
     if (formationExempt && (role === 'setter' || frontMb)) continue;
+    // ★★ 2026-08-09 Sawmah 裁定：前排不撲「乾淨重扣」★★
+    // 真人回報：「對方扣球我方沒攔到，卻在三米線前魚躍」——實測前場魚躍 59% 是
+    // 對方重扣直接打進來、68% 落在離網 1–2m 的攔網手區域，而撲的 100% 是前排球員
+    // （前排基準位就壓在三米線上，重扣落短時 zoneDist 恆由前排勝出）。
+    // 真實排球裡，穿過攔網的重扣落在三米線內＝得分——前排的人剛落地/在轉身，
+    // 不會有人來得及轉頭撲那顆球；會被前排救起的是**擦手球**與**吊球**，那兩類保留：
+    //   · 擦手球：tryBlock 碰到就把 profile 改成 'arc'（game.js 三處 BLOCK_TOUCH 旁）
+    //     ⇒ `profile === 'spike'` 在指派當下**本身就等於「攔網完全沒碰到」**，
+    //     不必另立 blockTouched 旗標（第二份真相）
+    //   · 吊球：`lastSpikeZone === 'tip'`（它的救援本來就靠前排前壓）
+    // 條件成立＝前排整排排除 ⇒ 指派給後排（搆得到就救、搆不到＝乾淨 kill）。
+    // 前排 S ×3／前排 MB ×1.8 的既有懲罰對這類球被本排除涵蓋；其他球型照舊。
+    if (!formationExempt && isFrontRow(rot, pid)
+      && game.rally?.profile === 'spike' && game.rally.lastSpikeZone !== 'tip') {
+      continue;
+    }
     // ★★ 2026-08-09 Sawmah 裁定（檔 A）：二傳在**殺球 dig** 上的 ×3 懲罰整個拿掉 ★★
     //
     // 觸發＝真人試玩「打 OH 選直線幾乎都能得分」。歸因翻了三次才落地，記在這裡免得有人

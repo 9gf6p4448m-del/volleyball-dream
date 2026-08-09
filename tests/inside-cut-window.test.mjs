@@ -124,7 +124,10 @@ function playSet({ seed, injectAfter = null, onWindow = null }) {
 test('A 內切真實窗：延遲 500ms（30 tick，遠超人類反應 150ms）才按，生效率 100%', () => {
   let injected = 0;
   let applied = 0;
-  for (const seed of [500000, 507919, 515838]) {
+  // 2026-08-09：3 → 4 個 seed——前排不撲乾淨重扣的 arbitrate 改動讓 rally 流漂移，
+  // 注入樣本掉到 19（差 1 個過線）。行為斷言（生效率）全程綠，純樣本問題，
+  // 補一個 seed、門檻一格未動。
+  for (const seed of [500000, 507919, 515838, 523757]) {
     const { tally } = playSet({ seed, injectAfter: HUMAN_DELAY_TICKS });
     injected += tally.injected;
     applied += tally.applied;
@@ -307,7 +310,10 @@ test('C 回饋覆蓋率：實跑收集到的每個 reason 都有文案，且表�
   // reason 'done'（本來就走內切）在 applyCutCall 被記成 outcome 'applied'／文案 key 'already'
   const KEY_OF = { done: 'already' };
   const seen = new Set();
-  for (const seed of [500000, 507919, 515838]) {
+  // 2026-08-09：3 → 4 個 seed——前排不撲乾淨重扣的 arbitrate 改動讓 rally 流漂移，
+  // 注入樣本掉到 19（差 1 個過線）。行為斷言（生效率）全程綠，純樣本問題，
+  // 補一個 seed、門檻一格未動。
+  for (const seed of [500000, 507919, 515838, 523757]) {
     const game = createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
     const ai = createAiState();
     let guard = 0;

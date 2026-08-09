@@ -130,10 +130,13 @@ test('B 球已舉出去＝窗關：touches 進到 2 之後 open=false、reason=n
 
 test('B 一傳不到位＝不開窗（reason=tier），硬寫也不生效且誠實回報', () => {
   const tandemStateOf = needTandemState();
-  // ★ 本條獨用 seed 500000 ★ 它要的是「A4 沒被自動骰排進夾塞」的乾淨窗（掃描：500000
-  // 下 A4 夾塞恰為 0、tier 窗 670 tick），與檔內其他測試要的「A4 常被排進」互相衝突，
-  // 不能共用 536000——第一個窗就會 reason='done' 而炸在 open===true 上。
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  // ★ 本條獨用 seed ★ 它要的是「A4 沒被自動骰排進夾塞」的乾淨窗，與檔內其他測試
+  // 要的「A4 常被排進」互相衝突，不能共用 536000。
+  // 2026-08-09 第三次換 seed（500000→516000）：前排不撲乾淨重扣的 arbitrate 改動
+  // 又讓 rally 流漂移。掃描條件＝openish∧perfect 時 open 窗 tick ≥6 且零異常 reason
+  //（516000＝879 tick 全 open）。這檔的 seed 敏感性是已知債——窗測試依賴特定 rally
+  // 形態，每次動防守指派都要重掃；要根治得把測試改成合成 rally（另開工）。
+  const game = createGame({ seed: 516000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seen = 0;
   let guard = 0;
