@@ -179,6 +179,44 @@ export function campPlanFor(seasonIndex) {
   };
 }
 
+// ---- 離場前的未完成清單（2026-08-09 試玩前補強）----
+//
+// ★ 為什麼需要 ★ 舊碼的耐力 +2 是**無條件發**的；本卷改成玩家自己按，於是多出一條
+// 舊碼沒有的失敗路徑：整個冬天沒按任何一格就按「▶ 結束集訓」，畫面不會攔、不會提醒，
+// 那一屆的加值就這樣過去了。默契更嚴重——它一生只有這一次（第二次集訓限定）。
+//
+// ★ 為什麼「有可選項才提醒」★ 耐力練到上限 80 之後那格本來就不能按，
+// 這時再喊「你還沒練」就是一個恆真的假警報——訓練玩家忽略這個提醒，
+// 真的漏掉那天他就看不見了（`feedback-zero-power-checks` 的第①條）。
+// 同理默契：名冊湊不出對象（畢業／逐出）時那格本來就是空的，不算未完成。
+//
+// ★ 不擋路，只提醒 ★ 回傳清單，要不要放行由 UI 決定（現制＝二次確認）。
+// 玩家有權決定「就這樣結束這個冬天」，但不得在**不知情**的狀況下結束。
+//
+// @param {boolean} o.attrTrained 這次集訓有沒有按過屬性特訓（UI 的當次狀態——
+//   集訓成果要等 onDone 才落檔，中途被殺會整個重來，所以這裡沒有可讀的持久欄位）
+export function pendingCampSlots({ player, plan, members = [], attrTrained = false }) {
+  const out = [];
+  if (!attrTrained && campAttrOptions(player).some((o) => o.ready)) {
+    out.push({
+      key: 'attr',
+      label: '屬性特訓',
+      note: '這個冬天的加值還沒領——結束就是跳過這一屆。',
+    });
+  }
+  if (plan?.hasChemistry && !player?.chemistry?.focusId) {
+    const role = player?.currentRole ?? 'outside';
+    if (chemistryCandidates({ role, members }).length) {
+      out.push({
+        key: 'chemistry',
+        label: '默契',
+        note: '最後一個冬天——挑人這件事只有這一次，結束後不會再問。',
+      });
+    }
+  }
+  return out;
+}
+
 // 集訓開場演出台詞（沿 graduationRitual 的形狀：{speaker,text} 逐句點擊推進）
 export const CAMP_OPENING_LINES = {
   1: [

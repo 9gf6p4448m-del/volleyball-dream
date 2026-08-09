@@ -5,6 +5,8 @@
 // resolveEventsForRoster 範式：誰在隊、誰開口）。
 // UI 掛點＝careerScreen 屆間鏈尾端；接受的存檔面＝careerStore.applyPositionChange。
 
+import { callPlayBriefFor } from './callPlayBrief.js';
+
 // libero＝工單 §8 AL 槽建隊特例（已落地：defaultLineup L 特例＋careerMatchSetup
 // liberos 通道＋applyPositionChange 放行）——候選齊四位置
 export const TALK_CANDIDATES = ['setter', 'middle', 'opposite', 'libero'];
@@ -23,7 +25,11 @@ export function positionTalkFor({ flags, player, members }) {
   return {
     role,
     offerLines: offerLinesFor(role, asp === role),
-    acceptLines: acceptLinesFor(role, members ?? []),
+    // 尾端補「叫戰術對新位置是什麼」——已學會才補，見 callPlayBrief.js 的理由
+    acceptLines: [
+      ...acceptLinesFor(role, members ?? []),
+      ...callPlayBriefFor({ role, player }),
+    ],
     declineLines: DECLINE_LINES,
   };
 }
@@ -206,7 +212,11 @@ export function transferTalkFor({ role, player, members }) {
   return {
     role,
     offerLines,
-    acceptLines: acceptLinesFor(role, members ?? []),
+    // 賽季中請調也是同一條補課路（兩個入口二選一，漏掉一個就有一半的人補不到）
+    acceptLines: [
+      ...acceptLinesFor(role, members ?? []),
+      ...callPlayBriefFor({ role, player }),
+    ],
     declineLines: DECLINE_LINES,
   };
 }

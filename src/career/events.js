@@ -4,6 +4,7 @@
 import { nextMatch } from './careerState.js';
 import { opponentById } from './opponents.js';
 import { HEIGHT_HONESTY_THRESHOLD_CM } from './heightGrowth.js';
+import { CALL_PLAY_ROLE_LINES } from './callPlayBrief.js';
 
 // 命名工程定案（07-25）：speaker 具名——我方隊長＝大山（MB）、二傳＝阿哲；
 // 各校角色對應 opponents.js squad 具名（王牌稱號偶爾入台詞，不逐句喊）
@@ -124,13 +125,11 @@ export const EVENT_DEFS = [
     //   玩家第 2 屆換到 OPP 只會看到一顆沒人介紹過的紫色鈕。
     //   OPP 那句原文說「你的球是時間差…想要球就自己喊」＝寫在夾塞還關著的時代
     //   （`TANDEM_PLAY_RATE = 0`，08-06 才解封），現在他有專屬線了，那句已過期。
-    roleLines: {
-      setter: { speaker: '阿哲', text: '你也是舉球的——那這套不是給你「點菜」用的，是你的球權。誰跑、誰當幌子，你決定。' },
-      outside: { speaker: '阿哲', text: '交叉那條線就是你的——中間先跳把牆拐走，你從他背後穿出來，我喊交叉多半就是喊你。還有一條不用等我：一傳起來的時候你自己按內切，從外面切進中路，那一下你說了算。' },
-      opposite: { speaker: '阿哲', text: '你在右邊，交叉走不到你那條線——你的是夾塞：貼在中間那個的正後方跑，牆被他吃住，你從同一條路再打一次。一傳起來想跑就自己按夾塞，別等我喊。' },
-      middle: { speaker: '阿哲', text: '你不是被叫的那個——你是幌子。牆跟著你走，別人才有地方打。當然，偶爾我是真的給你，B快。' },
-      libero: { speaker: '阿哲', text: '你不進攻，但每一套都從你的一傳開始——一傳到位，快攻和交叉才叫得出來；一傳歪了，就只剩兩邊高球。' },
-    },
+    // ★★ 2026-08-09：這五句搬到 `callPlayBrief.js`（**內容一字未改**）★★
+    // 因為它多了第二個消費端——轉位接受對話的補課（`positionEvents.callPlayBriefFor`）：
+    // 本事件是 once ＋掛在第一次集訓，播的是**當下**那個位置的句子，於是第 3 屆才轉任 OPP
+    // 的玩家永遠聽不到夾塞那段，卻看得到那顆 🤝 鈕。文案只留一份，不在兩處各抄一遍。
+    roleLines: CALL_PLAY_ROLE_LINES,
   },
   {
     id: 'teach-dive',

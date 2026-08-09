@@ -14,7 +14,7 @@ import { createRitualStage, tween } from '../render/ritualStage.js';
 import {
   campPlanFor, campAttrOptions, applyCampAttrTraining,
   chemistryCandidates, recordChemistryFocus, chemistryEmptyNote,
-  CAMP_OPENING_LINES,
+  pendingCampSlots, CAMP_OPENING_LINES,
 } from '../career/trainingCamp.js';
 import { OFFSEASON_TRAINING_LINES } from '../career/events.js';
 import { ROLE_ABBR } from '../career/roster.js';
@@ -22,6 +22,7 @@ import { ROLE_ABBR } from '../career/roster.js';
 const COLOR = {
   text: '#eef2fa', dim: '#9fb0cc', gold: '#ffd166', cyan: '#6ee7ff',
   card: 'rgba(18,24,40,0.85)',
+  warn: '#ffb4a2', // 未完成提醒（暖橘，不用純紅——這不是錯誤，是「你還沒領」）
 };
 
 function el(tag, styles, text) {
@@ -223,6 +224,9 @@ export function showTrainingCamp({
     ]);
     const attrMsg = el('div', ['font-size:12px', `color:${COLOR.gold}`, 'min-height:17px'], '');
     let attrDone = false;
+    // 「▶ 結束集訓」那顆鈕的未完成提示要跟著每一次選擇更新；鈕在本函式尾端才建得出來，
+    // 所以先擺一個 no-op，等它建好再指派（選擇 handler 只在渲染完成後才跑得到）。
+    let refreshDone = () => {};
     const opts = campAttrOptions(cur);
     const paintAttrs = () => {
       grid.replaceChildren();
@@ -238,6 +242,7 @@ export function showTrainingCamp({
             ? (OFFSEASON_TRAINING_LINES[0]?.text ?? `${o.name} +${o.gain}`)
             : `${o.name} +${o.gain}`;
           paintAttrs();
+          refreshDone();
         }));
       }
     };
@@ -285,6 +290,7 @@ export function showTrainingCamp({
                 cur = recordChemistryFocus(cur, m.id);
                 chemMsg.textContent = `這個冬天，你跟 ${m.name} 一起練。`;
                 paintChem();
+                refreshDone();
               },
             ));
           }
@@ -301,8 +307,65 @@ export function showTrainingCamp({
       'font-weight:800', 'cursor:pointer', 'touch-action:manipulation', 'width:100%',
       `background:rgba(40,34,14,0.9);color:${COLOR.gold}`, 'margin-top:4px',
     ], '▶ 結束集訓');
-    done.addEventListener('pointerdown', (e) => { e.stopPropagation(); finish(); });
+    // 未完成提示：鈕面直接說剩幾項（判定留在資料層 pendingCampSlots，測試驗得到同一支）
+    const pendingNow = () => pendingCampSlots({
+      player: cur, plan, members, attrTrained: attrDone,
+    });
+    refreshDone = () => {
+      const pend = pendingNow();
+      done.textContent = pend.length
+        ? `▶ 結束集訓（還有 ${pend.length} 項沒做：${pend.map((p) => p.label).join('、')}）`
+        : '▶ 結束集訓';
+      done.style.background = pend.length ? 'rgba(52,30,22,0.9)' : 'rgba(40,34,14,0.9)';
+      done.style.color = pend.length ? COLOR.warn : COLOR.gold;
+    };
+    refreshDone();
+    done.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      const pend = pendingNow();
+      if (!pend.length) { finish(); return; }
+      confirmLeave(pend);
+    });
     body.appendChild(done);
+  }
+
+  // ---- 沒做完就要離場的二次確認（不擋路，只確保他知道自己在放棄什麼）----
+  // z-index 40＝壓在集訓覆蓋層（39）之上；退出路徑只有兩條，兩條都明寫在鈕面上。
+  function confirmLeave(pend) {
+    const ov = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:rgba(2,4,9,0.82)', 'padding:24px 16px',
+      'font-family:system-ui,sans-serif',
+    ]);
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #4a3a2c',
+      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+      'flex-direction:column', 'gap:8px', 'align-items:stretch', 'text-align:left',
+    ]);
+    card.appendChild(el('div', [
+      'font-size:17px', 'font-weight:800', `color:${COLOR.warn}`, 'letter-spacing:1px',
+    ], '這個冬天還沒過完'));
+    for (const p of pend) {
+      card.appendChild(el('div', [
+        'font-size:13px', `color:${COLOR.text}`, 'line-height:1.6',
+      ], `· ${p.label}：${p.note}`));
+    }
+    const btn = (label, primary, onTap) => {
+      const b = el('button', [
+        'min-height:44px', 'border-radius:12px', 'border:1px solid #2c3a58', 'font-size:14px',
+        'font-weight:800', 'cursor:pointer', 'touch-action:manipulation', 'width:100%',
+        primary
+          ? `background:rgba(40,34,14,0.9);color:${COLOR.gold}`
+          : `background:rgba(30,40,64,0.9);color:${COLOR.dim}`,
+      ], label);
+      b.addEventListener('pointerdown', (e) => { e.stopPropagation(); onTap(); });
+      return b;
+    };
+    card.appendChild(btn('← 回去選', true, () => ov.remove()));
+    card.appendChild(btn('就這樣結束這個冬天', false, () => { ov.remove(); finish(); }));
+    ov.appendChild(card);
+    document.body.appendChild(ov);
   }
 
   runOpening();
