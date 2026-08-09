@@ -60,9 +60,13 @@ import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
+// ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
+// （屆間養成卷）與 events.js 的訓練營台詞寫「耐力／控球」——同一個屬性兩種叫法。
+// 統一到後者。注意**不含**比賽中的 HUD「體力條」與播報的「體力」：那是逐球消耗的
+// 即時計量，與這裡的屬性（它的基準值）是兩件事，不是同名分岔。
 const ATTR_LABELS = {
   ...Object.fromEntries(GROWABLE_ATTRS.map((a) => [a.key, a.name])),
-  control: '控制', stamina: '體力',
+  control: '控球', stamina: '耐力',
 };
 const GROWABLE_KEYS = new Set(GROWABLE_ATTRS.map((a) => a.key));
 const GRADE_LABEL = { 1: '一年級', 2: '二年級', 3: '三年級' };
@@ -1124,7 +1128,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         '信任影響舉球分配——高信任拿更多攻擊球權（逐出隊友會讓全隊信任下降）'));
     }
 
-    // 屬性列：可成長六項附成長量與 85 上限刻度；控制/體力灰顯（不開放成長）
+    // 屬性列：可成長六項附成長量與 85 上限刻度；控球/耐力灰顯（不開放成長）
     const gains = totalGains(member);
     const attrBox = el('div', ['display:flex', 'flex-direction:column', 'gap:5px', 'margin-top:2px']);
     for (const [key, label] of Object.entries(ATTR_LABELS)) {
