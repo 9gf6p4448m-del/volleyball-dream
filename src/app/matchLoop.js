@@ -41,7 +41,9 @@ import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
 import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
-import { RECRUIT_CONDS, progressOf, featGainFor } from '../career/recruitment.js';
+import {
+  RECRUIT_CONDS, progressOf, featGainFor, recruitTargetGone,
+} from '../career/recruitment.js';
 import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
@@ -586,10 +588,18 @@ function buildRecruitWatch(careerCtx, playerId) {
   const opponentId = careerCtx?.matchEntry?.opponentId;
   const rec = careerCtx?.store?.loadRecruitment?.();
   if (!opponentId || !rec || !playerId) return [];
+  const seasonIndex = careerCtx?.seasonIndex ?? 1;
   const watch = [];
   for (const [key, cond] of Object.entries(RECRUIT_CONDS)) {
     if (cond.opponentId !== opponentId || !cond.feat) continue;
     if (rec.recruited.includes(key)) continue;
+    // ★ 2026-08-09 Sawmah 裁定：對象已畢業＝字卡乾脆不跳 ★
+    // 真人第 3 屆兩度看到「⭐ 招募條件達成」卻賽後零入隊——字卡端與入隊端
+    // （`settleRecruitJoins`）本來就不是同一份判準：入隊端查 `recruitTargetGone`，
+    // 這裡沒查。12 個招募對象裡 7 個會中途畢業、其中 6 個帶 feat 軸 ⇒ 畢業後
+    // 字卡照發是常態不是邊角。修在監看清單這一層（而不是發卡那一層）：
+    // 人都畢業了，整場比賽根本不必監看他。progress 照舊保留（「歷史就是歷史」）。
+    if (recruitTargetGone(key, seasonIndex)) continue;
     const base = progressOf(rec, key).feat;
     if (base >= cond.feat.count) continue;
     watch.push({ key, cond, base, fired: false });
@@ -2164,7 +2174,8 @@ export function onCutTap(s) {
 // ★ 只列實際印得出來的 ★ 實測 `tools/tandem-window-probe.mjs`（快速比賽＋生涯第 2 屆
 // 各 12 局、253,466 筆前排 OPP 的逐 tick 取樣）在窗內只出現五種狀態：
 //   OPEN 9.3%／nowindow 81.7%／tier 5.1%／locked 1.6%／partner 1.2%／done 1.0%
-// **沒有出現過**：nopool（前排 OPP 恆在攻擊池裡；後排輪次才有，鈕有 isFrontRow 閘）、
+// **沒有出現過**（2026-08-09 前提部分失效）：~~nopool~~——前排二傳恢復 dig 懲罰後
+// rally 流改變，實跑**會**出現 nopool 了（D 覆蓋率測試抓到的），文案已補在表裡。其餘照舊：
 // mainKind（他的線恆為 right）、lane／depth／stagger／notCrossing（四條幾何只吃 kind，
 // 對 tandem×quick 恆為真）、roll（force 之下只有 comboScale===0 擋得住，而 UI 的
 // `canCallPlay` 已經先關掉整顆鈕）。這些一律**不寫文案**（死碼稽核的先例在
@@ -2184,6 +2195,12 @@ export const TANDEM_FEEDBACK = {
     text: '夾塞——貼著快攻手身後打',
     decoy: '夾塞排好了——這球不給你，你去把牆帶走',
     color: '#c792ea',
+  },
+  nopool: {
+    // 2026-08-09 補（原判「不會出現」，前排二傳恢復 dig 懲罰後實跑出現了）：
+    // 這一波攻擊池裡沒有他的右線——多半因為他自己接了一傳（D2 降級）
+    text: '這一波沒有你的線——先把球接好',
+    color: '#9fb0cc',
   },
   already: {
     text: '這球本來就排了夾塞',

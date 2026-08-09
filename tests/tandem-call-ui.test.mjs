@@ -23,7 +23,11 @@ function stubStage() {
   const shown = [];
   return { shown, stage: { floatText: { show: (text, color) => shown.push({ text, color }) } } };
 }
-const newGame = (seed = 500000) =>
+// ★ 2026-08-09 預設 seed 500000 → 512000 ★ 前排二傳恢復 dig 懲罰（ai.js arbitrate）
+// 之後 rally 流漂移，原 seed 下 A4 被排進自動骰夾塞的次數歸零（掃描：500000/507919 皆 0，
+// 512000 修一半又漏 B 隊樣本，改掃「A4 夾塞≥2 ∧ B 隊夾塞≥2 ∧ tier 窗≥2」三條件同時滿足的 seed → 536000：15／12／1152）。多 seed 對照確認夾塞整體沒被壓死（20 seed：20.9%→17.4%），
+// 純粹是單點 seed 的樣本歸零。行為斷言一格未動。
+const newGame = (seed = 536000) =>
   createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
 
 // ════════ 過期鈕：不得靜默 ════════
@@ -79,8 +83,12 @@ test('死文案：TANDEM_FEEDBACK 不得出現實跑印不出來的 key', () => 
   // ★ 覆審 MEDIUM-3：`done` 必須在清單裡 ★ 這張表被兩條路徑取用，key 集合不同：
   //   `onTandemTap` 讀原始 reason（會出現 done）／幀端結算讀 applyTandemCall 的映射
   //   （done→already）。原本只寫 already，於是實跑 433 次 done 全落到「沒排成」＝假陰性。
+  // ★ 2026-08-09 補 'nopool' ★ 原判「不會出現」（前排 OPP 恆在攻擊池），前排二傳
+  // 恢復 dig 懲罰後 rally 流改變，window 檔的 D 覆蓋率測試實跑抓到 nopool 出現
+  // ⇒ 「當時量出來的結論」過期，白名單跟著實測走（不是放寬——D 條與本條互為上下界：
+  // 實跑出現的必須有文案、表裡有的必須實跑可達，兩條一起把表夾在剛剛好）。
   const ALLOWED = new Set([
-    'applied', 'already', 'done', 'nowindow', 'tier', 'locked', 'partner', 'missed',
+    'applied', 'already', 'done', 'nowindow', 'tier', 'locked', 'partner', 'missed', 'nopool',
   ]);
   for (const key of Object.keys(TANDEM_FEEDBACK)) {
     assert.ok(ALLOWED.has(key), `TANDEM_FEEDBACK.${key} 不在實測可達清單裡＝死文案`);
@@ -97,9 +105,11 @@ test('死文案：TANDEM_FEEDBACK 不得出現實跑印不出來的 key', () => 
   for (const key of ['nowindow', 'tier', 'locked', 'partner', 'missed']) {
     assert.equal(TANDEM_FEEDBACK[key].decoy, undefined, `${key} 的失敗原因與球權無關`);
   }
-  // 幾何四條（lane／depth／stagger／notCrossing）恆為真、nopool／mainKind／roll 在
+  // 幾何四條（lane／depth／stagger／notCrossing）恆為真、mainKind／roll 在
   // 前排 OPP 身上實測 0 次 ⇒ 一律不得有文案（有＝抄表抄出來的死碼）
-  for (const dead of ['lane', 'depth', 'stagger', 'notCrossing', 'nopool', 'mainKind', 'roll', 'hasMain']) {
+  // ★ 2026-08-09 nopool 移出死碼清單 ★ 它在 ALLOWED 那段的理由同一件事：
+  // 前排二傳恢復 dig 懲罰後 window 檔 D 覆蓋率實跑抓到 nopool 出現，原判過期。
+  for (const dead of ['lane', 'depth', 'stagger', 'notCrossing', 'mainKind', 'roll', 'hasMain']) {
     assert.equal(TANDEM_FEEDBACK[dead], undefined, `${dead} 在實跑取樣裡是 0——留著就是死碼`);
   }
   // 繁體中文、不得混進英文機器碼

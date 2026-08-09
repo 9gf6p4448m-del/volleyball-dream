@@ -41,7 +41,7 @@ function windowOpenish(game, ai) {
 // ════════ A：窗說開，按下去就必生效 ════════
 test('A 名目窗＝真實窗：`tandemStateOf.open` 為真的每一 tick，按下去都排成夾塞', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let checked = 0;
   let guard = 0;
@@ -110,7 +110,7 @@ test('A 延遲 500ms（30 tick，遠超人類反應 150ms）才按，仍然生�
 // ════════ B：關窗的三種情形 ════════
 test('B 球已舉出去＝窗關：touches 進到 2 之後 open=false、reason=nowindow', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seen = 0;
   let guard = 0;
@@ -130,6 +130,9 @@ test('B 球已舉出去＝窗關：touches 進到 2 之後 open=false、reason=n
 
 test('B 一傳不到位＝不開窗（reason=tier），硬寫也不生效且誠實回報', () => {
   const tandemStateOf = needTandemState();
+  // ★ 本條獨用 seed 500000 ★ 它要的是「A4 沒被自動骰排進夾塞」的乾淨窗（掃描：500000
+  // 下 A4 夾塞恰為 0、tier 窗 670 tick），與檔內其他測試要的「A4 常被排進」互相衝突，
+  // 不能共用 536000——第一個窗就會 reason='done' 而炸在 open===true 上。
   const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seen = 0;
@@ -161,7 +164,7 @@ test('B 一傳不到位＝不開窗（reason=tier），硬寫也不生效且誠�
 
 test('B S 已經排了別的組合＝不開窗（reason=locked），不得單方面拆掉別人的組合', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seen = 0;
   let guard = 0;
@@ -183,7 +186,7 @@ test('B S 已經排了別的組合＝不開窗（reason=locked），不得單方
 
 test('B 本波本來就是我的夾塞＝reason=done，按下去記成成功（already）不是失敗', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let seen = 0;
   let guard = 0;
@@ -209,7 +212,7 @@ test('B 本波本來就是我的夾塞＝reason=done，按下去記成成功（a
 // ════════ C：位置與決定論 ════════
 test('C 非 OPP 位置拿不到窗：同一波拿前排 OH 去問，永遠 open=false', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let sampled = 0;
   let oppOpen = 0;
@@ -234,7 +237,7 @@ test('C 非 OPP 位置拿不到窗：同一波拿前排 OH 去問，永遠 open=
 test('C 決定論護欄：AI 對局（沒有人按）整場零觸發——tandemCall／tandemOutcome 恆為 null', () => {
   // 這條轉紅代表有人在 sim 內部預寫了玩家指令，那會讓 AI 對局漂移。
   // 逐值不變的正式證據＝tools/sim-hash-probe.mjs；本測試是它的常駐廉價版。
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let guard = 0;
   while (game.phase !== 'set_over' && game.phase !== 'matchover' && guard < 400000) {
@@ -249,7 +252,7 @@ test('C 決定論護欄：AI 對局（沒有人按）整場零觸發——tandem
 
 test('C 只管這一波：窗一結束 sim 就把 tandemCall 清掉（不跨波強制夾塞）', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
+  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
   const ai = createAiState();
   let checked = 0;
   let pressed = false;
