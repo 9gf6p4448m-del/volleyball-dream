@@ -1,4 +1,5 @@
-// stage 7 平衡治具 — 無頭生涯模擬：量測六場勝率曲線（盲調終結者）
+// stage 7 平衡治具 — 無頭生涯模擬：量測全賽程勝率曲線（盲調終結者）
+// 2026-08-09 循環賽卷起一屆＝八場（小組 3＋八強循環 3＋準決＋決賽）
 // 用法：node tools/balance-sim.mjs [runs=100]
 // 模型：玩家 A2 由 AI 代打（近似基準——真人有讀攔網/假動作/魚躍，應優於此線）；
 // 成長照實際規則：每場 gp 由表現實算、平均灑點；技術照傳授時程；
@@ -202,6 +203,12 @@ function hash01(n) {
 }
 
 // 傳授時程（events.js teach-* 的鏡像）：場次索引完成後解鎖（跨屆冪等——已學不重覆）
+// ★ 2026-08-09 循環賽卷：索引照新賽程重排 ★ 場次序＝group×3、循環×3、準決、決賽
+// （`schedule.js buildSchedule`）⇒ 飄浮發球仍掛「國賽第一場（national-qf）打完」＝索引 3。
+// 跳發走 `TEACH_BEFORE_FINAL`：發在**決賽之前**（`mi === FINAL_INDEX`）。
+// 已知的鏡像偏差（改制前就有，本卷未動）：production 的 `teach-jump` 掛「國賽對天鷹
+// 那一場的賽前」，第 2 屆天鷹在**準決賽** ⇒ 真實遊戲第 2 屆會早一場給跳發，
+// 治具則一律等到決賽前才給 ⇒ 治具的第 2 屆準決賽略被低估。
 const TEACH_AFTER = {
   0: ['tip'],
   1: ['dive'],
@@ -521,7 +528,18 @@ function applySubTrustMirror(lineup, events, myTeam, playerId) {
   return { ...lineup, trust };
 }
 
-const matchIds = ['group-1', 'group-2', 'group-3', 'national-qf', 'national-sf', 'national-final'];
+// ★ 2026-08-09 循環賽卷：六場 → 八場 ★ 國賽八強改 4 隊單循環（`national-qf`／
+// `national-rr2`／`national-rr3`，打滿三場前二名晉級）＋準決＋決賽。
+// 循環場的 id 固定、對手逐屆抽籤 ⇒ 這幾個鍵的「勝率」語意是「循環第 N 輪的勝率」，
+// 不是「對某一隊的勝率」（第 1 屆固定＝鐵霧／青嵐／黑松，第 2 屆起才會換人）。
+const matchIds = [
+  'group-1', 'group-2', 'group-3',
+  'national-qf', 'national-rr2', 'national-rr3',
+  'national-sf', 'national-final',
+];
+const SF_INDEX = matchIds.indexOf('national-sf');
+const FINAL_INDEX = matchIds.indexOf('national-final');
+const NATIONAL_INDEX = matchIds.indexOf('national-qf'); // 國賽段起點（results 切片用）
 const wins = Object.fromEntries(matchIds.map((id) => [id, 0]));
 const margins = Object.fromEntries(matchIds.map((id) => [id, []]));
 let champions = 0;
@@ -555,8 +573,9 @@ const perSeason = Array.from({ length: SEASONS }, () => ({
   // 原本只有第 1 屆有決賽帶（`reachedFinal` 被包在 `if (season === 1)` 裡）⇒
   // 四個逐屆候選方案量出來的決賽帶**全是 38%**，對「逐屆」方案零解析力。
   reachedFinal: 0,
-  // natWinsSum＝國賽三場的累計勝場數（0–3）總和 ⇒ 除以 RUNS 得平均。
-  // ★這是**連續量**，解析力遠優於「三連勝」的二元奪冠率★——奪冠率在現行難度下
+  // natWinsSum＝國賽段（循環 3＋準決＋決賽）累計勝場數（**0–5**，循環賽卷 08-09 起）
+  // 總和 ⇒ 除以 RUNS 得平均。
+  // ★這是**連續量**，解析力遠優於二元的奪冠率★——奪冠率在現行難度下
   // 已逼近地板（RUNS=100 的配對 SE ±6pp > 錨 3a 的 3pp 目標間距，排不出方案優劣）。
   natWinsSum: 0,
 }));
@@ -656,6 +675,9 @@ for (let run = 0; run < RUNS; run += 1) {
       titlesAtStart,
       wins: Object.fromEntries(matchIds.map((id) => [id, 0])),
       champion: 0,
+      // played（2026-08-09 循環賽卷）：本屆實打場數——STOP_ON_ELIM 臂下「沒打」與
+      // 「打了但輸」在 wins 表裡都是 0，分不出止步在哪一段。招募探針要用它。
+      played: 0,
     };
     runSeasons.push(rec);
     if (!byTitles.has(titlesAtStart)) {
@@ -671,7 +693,7 @@ for (let run = 0; run < RUNS; run += 1) {
       // G1（見 STOP_ON_ELIM 定義處）：止步就收工，與 production 的 nextMatch 一致。
       // 放在迴圈頂端＝連帶讓下面的 TEACH_BEFORE_FINAL 也跟著不發（沒打到決賽就學不到）。
       if (STOP_ON_ELIM && careerStage(career) === 'eliminated') break;
-      if (mi === 5) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
+      if (mi === FINAL_INDEX) for (const k of TEACH_BEFORE_FINAL) player.techniques[k] = 1;
       const entry = career.schedule[mi];
       // seasonIndex 補接（07-30 批4 送裁項 2）：漏傳＝VD_SEASONS 跨屆臂永遠打第 1 屆
       // 對手（量不到 ace 成長／畢業換臉）；單屆預設 season=1 行為逐值不變
@@ -749,13 +771,14 @@ for (let run = 0; run < RUNS; run += 1) {
       if (season === 1) {
         if (won) wins[entry.id] += 1;
         margins[entry.id].push(s.A - s.B);
-        if (mi === 4 && careerStage(career) !== 'eliminated') reachedFinal += won ? 1 : 0;
+        if (mi === SF_INDEX && careerStage(career) !== 'eliminated') reachedFinal += won ? 1 : 0;
       }
       // 題 B：逐屆決賽帶（與上面第 1 屆那行同判準，只是不限屆——第 1 屆兩者必然一致，
       // 可當自驗閘：輸出的「第 1 屆決賽帶」應逐值等於既有的總決賽帶）
-      if (mi === 4 && careerStage(career) !== 'eliminated') {
+      if (mi === SF_INDEX && careerStage(career) !== 'eliminated') {
         perSeason[season - 1].reachedFinal += won ? 1 : 0;
       }
+      rec.played += 1;
       if (won) {
         perSeason[season - 1].wins[entry.id] += 1;
         tGroup.wins[entry.id] += 1;
@@ -804,10 +827,18 @@ for (let run = 0; run < RUNS; run += 1) {
         matchId: entry.id, won, scoreFor: s.A, scoreAgainst: s.B,
       });
     }
-    // 冠軍線：六場全部真實串接下，國賽三連勝才算
-    const natWins = career.results.slice(3).filter((r) => r.won).length;
+    // ★★ 冠軍線＝直接問 production 的 `careerStage`（2026-08-09 覆審 H2）★★
+    // 舊版寫「國賽三連勝」（natWins === 3）＝當時國賽恰好三場、三連勝⇔奪冠；循環賽卷
+    // 一度改成「決賽有勝場」——那把**晉級門檻整個拿掉**了：本治具預設 `STOP_ON_ELIM`
+    // 為 false（「打好打滿」取樣），循環 0 勝的生涯照樣把準決／決賽打完，於是
+    // 「決賽勝率」與「奪冠率」逐值相同。冠軍必須是**真實路徑**：循環前二 ∧ 準決勝 ∧
+    // 決賽勝——而那顆判準已經存在，就是 `careerStage`（止步條件排在 champion 之前）。
+    // 治具不自己再寫一份，避免兩份判準漂移。
+    const isChampion = careerStage(career) === 'champion';
+    // natWins＝國賽段（循環 3＋準決＋決賽）累計勝場 0–5 的連續量指標
+    const natWins = career.results.slice(NATIONAL_INDEX).filter((r) => r.won).length;
     perSeason[season - 1].natWinsSum += natWins; // 題 B：連續量指標（見 perSeason 定義處）
-    if (natWins === 3) {
+    if (isChampion) {
       perSeason[season - 1].champions += 1;
       tGroup.champions += 1;
       rec.champion = 1;
@@ -880,7 +911,10 @@ for (let run = 0; run < RUNS; run += 1) {
       if (FIXED_SCHED) career = { ...career, schedule: structuredClone(schedule0) };
     }
   }
-  jsonRuns.push({ seed: seed0, seasons: runSeasons });
+  // joins（2026-08-09 循環賽卷）：逐生涯的招募入隊紀錄 [{key, season}]——
+  // 「這條生涯第 1 屆招到人了嗎／三屆全零嗎」只能逐生涯算，聚合的 joinStats 答不了。
+  // joinLog 到這一行已經填滿（所有屆跑完），下面那個彙總迴圈才把它併進 joinStats。
+  jsonRuns.push({ seed: seed0, seasons: runSeasons, joins: joinLog.map((j) => ({ ...j })) });
   for (const j of joinLog) {
     joinStats[j.key] = joinStats[j.key] ?? { joined: 0, seasonSum: 0 };
     joinStats[j.key].joined += 1;
@@ -895,7 +929,7 @@ for (let run = 0; run < RUNS; run += 1) {
         const r = first.find((x) => x.matchId === id);
         return [id, r ? (r.won ? 1 : 0) : null];
       })),
-      champion: first.slice(3).filter((r) => r.won).length === 3 ? 1 : 0,
+      champion: runSeasons[0].champion, // 與 perSeason 同一顆判準（careerStage）
     });
   }
   rosterEndSizeSum += roster.members.length + 1; // ＋玩家 1 席（rosterCount 語義）
@@ -937,7 +971,7 @@ if (PLAYER_ROLE === 'libero') {
     + `｜rally 續命 ${(lBox.rallySaves / a2.games).toFixed(2)}`);
 }
 console.log(`\n決賽帶（真實連勝踏進決賽）：${pct(reachedFinal)}`);
-console.log(`奪冠率（國賽三連勝）：${pct(champions)}`);
+console.log(`奪冠率（循環前二 ∧ 準決勝 ∧ 決賽勝＝careerStage 判定）：${pct(champions)}`);
 const totalMatches = RUNS * SEASONS * matchIds.length;
 console.log(`逆轉哨兵（落後≥5 後翻盤，全 ${totalMatches} 場）：樣本 ${deficit5} 場、翻盤 ${comeback5}`
   + `（${deficit5 > 0 ? Math.round((comeback5 / deficit5) * 100) : 0}%）`);
@@ -966,12 +1000,13 @@ if (SEASONS > 1) {
     console.log(`第 ${s + 1} 屆  ${row}  奪冠 ${pct(perSeason[s].champions)}`);
   }
   // 題 B（Sawmah 2026-08-03 拍板）：奪冠率解析力不足 ⇒ 逐屆補兩個指標。
-  // 決賽帶＝真實連勝踏進決賽；國賽勝場＝三場累計勝場數平均（0–3，連續量、解析力最好）。
+  // 決賽帶＝真實連勝踏進決賽；國賽勝場＝國賽段累計勝場數平均
+  // （循環賽卷 08-09 起是 **0–5**：循環 3＋準決＋決賽；連續量、解析力最好）。
   console.log(`\n=== 逐屆驗收指標（題 B：奪冠率的 SE 蓋過錨 3a 的 3pp 目標間距）===`);
   for (let s = 0; s < SEASONS; s += 1) {
     const band = pct(perSeason[s].reachedFinal).padStart(4);
     const nw = (perSeason[s].natWinsSum / RUNS).toFixed(2);
-    console.log(`第 ${s + 1} 屆  決賽帶 ${band}　國賽勝場 ${nw}/3`);
+    console.log(`第 ${s + 1} 屆  決賽帶 ${band}　國賽勝場 ${nw}/5`);
   }
   console.log(`（自驗閘：第 1 屆決賽帶應逐值等於上方總計的 ${pct(reachedFinal)}）`);
   // Q2 覆蓋率（難度重校卷 2026-08-03）：TITLE_LEVEL_BONUS 只在 titles>0 時生效，

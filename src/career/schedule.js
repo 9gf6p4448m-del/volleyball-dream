@@ -37,6 +37,164 @@ export function groupPool() {
   return OPPONENTS.map((o) => o.id);
 }
 
+// ═══ 2026-08-09 循環賽卷：國賽八強＝4 隊單循環 ═══
+// 為什麼改：真人連兩屆止步八強 ⇒ 一屆只打 4 場（滿貫 6 場），而招募條件半數綁在
+// 「打得贏八強之後的場次」上 ⇒ 止步者第 1 屆招不到任何人 ⇒「打不好→招不到人→
+// 隊不變強→還是打不好」的死鎖。改成循環賽後，止步者 4→6 場（+50%）：成長點、
+// 招募機會、教學觸發全部跟著變多，而**不必把對手弄弱**。
+//
+// ★ 為什麼第一場的 id 仍叫 `national-qf` ★（刻意保留，非疏漏）
+//   它是「進國賽的第一場」這個語意的載體：`events.js` 的全國賽字卡（`nationals`）與
+//   飄浮發球傳授（`teach-float`）都掛在它上面，`matchSeed` 也吃 id。改名等於同時動
+//   事件鏈、場次種子與一票測試，卻換不到任何行為差異——語意由新的 `round:'rr'` 欄位
+//   承載，id 只是鍵。**判斷是不是淘汰賽一律看 `round`，不要看 id 字面**。
+// ★ 舊存檔零遷移 ★ 舊賽程項沒有 `round` 欄位 ⇒ `round !== 'rr'` ⇒ 走原本的
+//   「國賽一敗即止步」，行為逐值不變（`careerState.careerStage`）。
+export const RR_MATCH_IDS = ['national-qf', 'national-rr2', 'national-rr3'];
+export const RR_LABELS = ['八強循環①', '八強循環②', '八強循環③'];
+// 循環組的固定席：鐵霧＝既有八強對手（敘事錨——「八強第一戰是鐵霧」不動）
+export const RR_ANCHOR_ID = 'iron-mist';
+export const RR_ADVANCE = 2; // 前二名晉級準決賽
+
+// 循環組抽籤（決定論；回傳 2 隊——連同鐵霧與玩家湊成 4 隊）
+// 池：全對手 −鐵霧（已入席）−**當屆準決賽與決賽對手**。
+//   為什麼排除淘汰賽兩隊：賽制上不可能——準決賽對手來自**另一個八強組**，一支隊
+//   不會既在你的循環組裡、又在你晉級後的另一半籤表等你。順帶保住宿敵三幕的份量
+//   （決賽那一場的「最後才遇到」不被提前用掉）。
+//   ★ 有兩處程式碼靠這條排除活著（放寬前必看，2026-08-09 覆審 L2）★
+//     ① `rivalArc.js` 的 `playedRivalNationalThisSeason`：用 `startsWith('national-')`
+//        判「本屆國賽實戰過天鷹沒有」，會連循環場一起命中
+//     ② `roundRobinTable` 的淨得分 tiebreak：循環場恆 bo1 才讓 scoreFor 是「分」；
+//        天鷹進得來的話那一場會升 bo3（`matchFormatOf`），單位就混了
+// 保底：優先抽**本屆小組沒遇過**的隊（同一屆不想連打同一隊三次）；不足時才回頭抽
+//   小組已有的隊——排序鍵是「是否已在小組」在前、seed hash 在後，全程決定論。
+// ★ 第 1 屆的循環組是**刻意恆定**的（2026-08-09 覆審 M3；實測 3000 seeds 逐值相同）★
+//   第 1 屆小組固定＝北原／白浪／曜石（教學鏈綁定），池扣掉鐵霧與淘汰賽兩隊之後
+//   剛好只剩青嵐與黑松兩支「小組沒遇過」的隊 ⇒ 前置鍵直接把它們排到最前，hash 這一段
+//   在第 1 屆是死碼。這與「第 1 屆＝故事模板」的既有設計一致，不是抽籤壞掉。
+//   **難度校正請注意**：因此第 1 屆循環第三場恆為黑松（level 67，治具實跑勝率 5–8%），
+//   等於每個玩家的第一屆都被排了一場幾乎必敗的硬仗——要調第 1 屆難度就是調這裡。
+//   第 2 屆起小組改輪抽，池的組成才會變，hash 路徑才真的參與。
+export function drawRoundRobinOpponents({ seed, seasonIndex = null, groupIds = [] }) {
+  const koIds = new Set(nationalLadderFor(seasonIndex).slice(1).map((m) => m.opponentId));
+  const inGroup = new Set(groupIds ?? []);
+  const pool = OPPONENTS
+    .map((o) => o.id)
+    .filter((id) => id !== RR_ANCHOR_ID && !koIds.has(id));
+  const picks = [...pool].sort((a, b) => {
+    const ga = inGroup.has(a) ? 1 : 0;
+    const gb = inGroup.has(b) ? 1 : 0;
+    if (ga !== gb) return ga - gb;
+    return hash32(seed, `rr-draw:${a}`) - hash32(seed, `rr-draw:${b}`);
+  }).slice(0, 2);
+  // 兩支抽籤隊依 level 升冪（鐵霧恆在第一場——見 RR_MATCH_IDS 註）
+  picks.sort((a, b) => (opponentById(a)?.level ?? 0) - (opponentById(b)?.level ?? 0));
+  return picks;
+}
+
+// 國賽段賽程項：循環 3 場（打滿、輸球不止步）＋淘汰賽 2 場（準決/決賽照舊）
+export function nationalLegFor({ seed, seasonIndex = null, groupIds = [] }) {
+  const ladder = nationalLadderFor(seasonIndex);
+  const rrOpponents = [
+    RR_ANCHOR_ID,
+    ...drawRoundRobinOpponents({ seed, seasonIndex, groupIds }),
+  ];
+  return [
+    ...rrOpponents.map((opponentId, i) => ({
+      id: RR_MATCH_IDS[i],
+      stage: 'national',
+      round: 'rr', // ★ 唯一的「這是循環場」判準（id 字面不算）★
+      opponentId,
+      label: RR_LABELS[i],
+    })),
+    // 淘汰賽段：準決賽＋決賽（id/label/對手全部照舊——宿敵三幕結構不動）
+    ...ladder.slice(1).map((m) => ({ ...m })),
+  ];
+}
+
+// 循環組名次表（純函式、決定論）——玩家以 RR_PLAYER_ID 入表。
+// ★ 對手互戰怎麼判 ★ 那 3 場玩家不在場，沒有任何真實資料可用 ⇒ 用**強度**判：
+//   level 高者勝（同 level 用 seed hash）。刻意不擲骰：擲骰會讓「我到底晉不晉級」
+//   取決於一個玩家看不見也影響不了的隨機數，那是最糟的一種難度。
+// ★ tiebreak ★ 勝場 → 同勝場群內的互勝場數（mini-league）→ **淨得分** → seed hash。
+//   四者都是純量鍵 ⇒ 全序、可重現、不會有比較器不遞移的坑。
+//   ★ 為什麼一定要有「淨得分」這一層（2026-08-09 覆審 M1）★
+//     三隊互相咬成一個環時（A>B>C>A），mini 會全部相等 ⇒ 直接掉進 hash，
+//     於是「我到底晉不晉級」由一個玩家看不見也影響不了的數決定——那正是本檔上面
+//     那段「刻意不擲骰」承諾要避免的事，只是換了個地方發生。實測（枚舉 300 條生涯
+//     × 8 種勝負）有 16.3% 的組合，晉級邊界是被 hash 決定的。
+//     淨得分用 `results` 裡現成的 `scoreFor/scoreAgainst`——那是玩家**真的打出來**的分。
+//   ★ 對手互戰沒有比分，淨得分記 0 ★ 那 3 場是強度推導出來的、本來就沒有分數可用；
+//     編一個出來會讓「看得見的資料」與「編的資料」混在同一個鍵裡。因此對手的淨得分
+//     只來自他與玩家的那一場（取玩家該場淨得分的相反數）。
+//   ★ 單位一致性 ★ 循環場恆為 bo1（`matchFormatOf` 只對天鷹升 bo3，而天鷹抽不進
+//     循環組）⇒ scoreFor/scoreAgainst 恆為「分」。若哪天放寬抽籤池讓天鷹進得來，
+//     這個鍵會變成「局數差與分數差混算」，要一起處理。
+export const RR_PLAYER_ID = '__player__';
+
+function rrBeats(a, b, seed) {
+  const la = opponentById(a)?.level ?? 0;
+  const lb = opponentById(b)?.level ?? 0;
+  if (la !== lb) return la > lb;
+  return hash32(seed, `rr-h2h:${a}`) > hash32(seed, `rr-h2h:${b}`);
+}
+
+// { table:[{id,wins,played}...]（名次序）, complete:boolean, playerRank:number }
+export function roundRobinTable({ seed, schedule, results }) {
+  const rr = (schedule ?? []).filter((m) => m.round === 'rr');
+  if (!rr.length) return null;
+  const teams = [RR_PLAYER_ID, ...rr.map((m) => m.opponentId)];
+  const wins = new Map(teams.map((id) => [id, 0]));
+  const played = new Map(teams.map((id) => [id, 0]));
+  const beat = new Map(teams.map((id) => [id, new Set()]));
+  const diff = new Map(teams.map((id) => [id, 0])); // 淨得分（只累計有真實比分的場次）
+  const note = (winner, loser) => {
+    wins.set(winner, wins.get(winner) + 1);
+    beat.get(winner).add(loser);
+    played.set(winner, played.get(winner) + 1);
+    played.set(loser, played.get(loser) + 1);
+  };
+  // ★ 4 隊單循環的標準輪次表 ★ 第 i 輪＝玩家對 rr[i] 的對手，**另外兩隊同輪互打**
+  //   （3 輪恰好把 3 組對手配對用完一次）。這樣名次板才會隨玩家的進度逐輪長出來——
+  //   若把對手互戰一次全算完，玩家打完第一場時看到的是「別人都打完 3 場、我 1 場」。
+  const opps = rr.map((m) => m.opponentId);
+  for (let i = 0; i < rr.length; i += 1) {
+    const r = (results ?? []).find((x) => x.matchId === rr[i].id);
+    if (!r) continue; // 這一輪還沒打＝整輪（含對手互戰）都不入表
+    if (r.won) note(RR_PLAYER_ID, opps[i]);
+    else note(opps[i], RR_PLAYER_ID);
+    const d = (r.scoreFor ?? 0) - (r.scoreAgainst ?? 0);
+    diff.set(RR_PLAYER_ID, diff.get(RR_PLAYER_ID) + d);
+    diff.set(opps[i], diff.get(opps[i]) - d);
+    const rest = opps.filter((_, j) => j !== i);
+    if (rest.length === 2) {
+      const [a, b] = rest;
+      if (rrBeats(a, b, seed)) note(a, b);
+      else note(b, a);
+    }
+  }
+  const rows = teams.map((id) => ({
+    id,
+    wins: wins.get(id),
+    played: played.get(id),
+    mini: [...beat.get(id)].filter((o) => wins.get(o) === wins.get(id)).length,
+    diff: diff.get(id),
+    tie: hash32(seed, `rr-rank:${id}`),
+  }));
+  // ★ 最後一層 hash 兜底的誠實標註（2026-08-09 二輪覆審 M1 餘量）★
+  // 勝場→對戰小分→淨得分三層都平手時仍由 hash 決定——枚舉 29,160 組勝負×分差，
+  // 玩家晉級邊界落到這一層的佔 **0.31%**（一輪修復前是 16.3%）。裁定＝可接受：
+  // 真實排球積分規則在「積分、局數比、得失分比全同」時就是抽籤，這一層與抽籤等價；
+  // 要再收斂只能引入更多玩家看不見的量，反而違背本段檔頭的承諾。
+  rows.sort((a, b) => (b.wins - a.wins) || (b.mini - a.mini)
+    || (b.diff - a.diff) || (a.tie - b.tie));
+  return {
+    table: rows,
+    complete: rr.every((m) => (results ?? []).some((r) => r.matchId === m.id)),
+    playerRank: rows.findIndex((r) => r.id === RR_PLAYER_ID) + 1,
+  };
+}
+
 // FNV-1a（與 careerState.matchSeed 同慣例）：seed × 字串 → 決定論排序鍵
 function hash32(seed, str) {
   let h = ((seed >>> 0) ^ 0x811c9dc5) >>> 0;
@@ -81,6 +239,9 @@ export function drawGroupOpponents({ seed, invitedId = null, prevGroupIds = null
 // （舊存檔賽程無 format 欄位；label/opponentId 是本檔資料約定，決定論）。
 // 拍板映射：冠軍戰（決賽）＝bo5、關鍵戰（準決賽＋宿敵場）＝bo3、其餘＝bo1；
 // 宿敵＝天鷹（題6 拍板：sky-hawk ace 同屆宿敵）——小組抽到天鷹也算關鍵戰
+// 2026-08-09 循環賽卷：循環場的 label 不在映射表裡 ⇒ 一律 bo1，**但天鷹守衛照舊生效**
+// （天鷹被抽進循環組＝那一場升 bo3）。既有守衛語意一字未改，這裡只是記一筆它現在
+// 多罩到一種場合。
 export const RIVAL_TEAM_ID = 'sky-hawk';
 export function matchFormatOf(entry) {
   if (!entry) return 1;
@@ -90,8 +251,11 @@ export function matchFormatOf(entry) {
   return 1;
 }
 
-// 整份賽程（輪抽小組＋固定國賽）；invited 旗標落在賽程項上（UI 顯邀請徽章、存檔即公開）
+// 整份賽程（輪抽小組＋國賽循環組＋淘汰賽）；invited 旗標落在賽程項上
+// （UI 顯邀請徽章、存檔即公開）
 // seasonIndex＝目標屆數（宿敵保底階梯用；省略＝預設階梯＝既有行為不變）
+// 2026-08-09 循環賽卷：一屆 6 → **8** 項（小組 3＋循環 3＋準決＋決賽）；
+// 止步循環組者實打 6 場、滿貫 8 場
 export function buildSchedule({ seed, invitedId = null, prevGroupIds = null, seasonIndex = null }) {
   const group = drawGroupOpponents({ seed, invitedId, prevGroupIds });
   return [
@@ -102,6 +266,6 @@ export function buildSchedule({ seed, invitedId = null, prevGroupIds = null, sea
       label: '',
       ...(invitedId && oppId === invitedId ? { invited: true } : {}),
     })),
-    ...nationalLadderFor(seasonIndex).map((m) => ({ ...m })),
+    ...nationalLegFor({ seed, seasonIndex, groupIds: group }),
   ];
 }

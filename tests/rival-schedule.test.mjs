@@ -52,9 +52,10 @@ test('三屆快進：advanceSeason 帶屆數＝天鷹掛點逐屆正確（1 決�
   let career = createCareer({ seed: 777 });
   assert.equal(entryOf(career.schedule, 'national-final').opponentId, RIVAL_TEAM_ID);
   // 打完第 1 屆（全敗淘汰即可）→ 進第 2 屆
+  // 循環賽卷（08-09）：八強改循環——輸球不止步，要打滿三場才收季
   for (const m of career.schedule) {
+    if (m.stage === 'national' && m.round !== 'rr') break; // 淘汰賽打不到（循環沒進前二）
     career = recordResult(career, { matchId: m.id, won: false, scoreFor: 0, scoreAgainst: 25 });
-    if (m.stage === 'national') break; // 國賽首敗＝淘汰
   }
   const s2 = advanceSeason(career, { seasonIndex: 2 });
   assert.notEqual(s2, career);
@@ -63,8 +64,8 @@ test('三屆快進：advanceSeason 帶屆數＝天鷹掛點逐屆正確（1 決�
   // 打完第 2 屆 → 進第 3 屆：天鷹回決賽
   let c2 = s2;
   for (const m of c2.schedule) {
+    if (m.stage === 'national' && m.round !== 'rr') break;
     c2 = recordResult(c2, { matchId: m.id, won: false, scoreFor: 0, scoreAgainst: 25 });
-    if (m.stage === 'national') break;
   }
   const s3 = advanceSeason(c2, { seasonIndex: 3 });
   assert.equal(entryOf(s3.schedule, 'national-final').opponentId, RIVAL_TEAM_ID);

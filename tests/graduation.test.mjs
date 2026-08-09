@@ -26,8 +26,10 @@ function endSeason(career) {
   for (const m of c.schedule) {
     if (m.stage === 'group') c = recordResult(c, { matchId: m.id, won: true, scoreFor: 25, scoreAgainst: 10 });
   }
-  const qf = c.schedule.find((m) => m.id === 'national-qf');
-  c = recordResult(c, { matchId: qf.id, won: false, scoreFor: 20, scoreAgainst: 25 });
+  // 循環賽卷（08-09）：八強改 4 隊單循環——輸一場不止步，三場打滿沒進前二才收季
+  for (const m of c.schedule.filter((x) => x.round === 'rr')) {
+    c = recordResult(c, { matchId: m.id, won: false, scoreFor: 20, scoreAgainst: 25 });
+  }
   return c;
 }
 

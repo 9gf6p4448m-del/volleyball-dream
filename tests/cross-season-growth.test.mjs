@@ -79,9 +79,13 @@ test('settleCareerMatch：第 2 屆同名場次隊友成長不被第 1 屆 log �
   settle(); // 第 1 屆 group-1
   assert.equal(store.loadRoster().members[0].growth.log.length, 1);
 
-  // 收掉第 1 屆（餘場直接記結果；國賽一敗＝止步）→ 推進第 2 屆
+  // 收掉第 1 屆（餘場直接記結果；循環賽卷 08-09：八強循環三場打滿才止步）→ 推進第 2 屆
   career = store.loadCareer();
-  for (const [id, won] of [['group-2', true], ['group-3', true], ['national-qf', false]]) {
+  const rest = [
+    ['group-2', true], ['group-3', true],
+    ...career.schedule.filter((m) => m.round === 'rr').map((m) => [m.id, false]),
+  ];
+  for (const [id, won] of rest) {
     career = recordResult(career, { matchId: id, won, scoreFor: won ? 15 : 8, scoreAgainst: won ? 8 : 15 });
   }
   store.saveCareer(career);

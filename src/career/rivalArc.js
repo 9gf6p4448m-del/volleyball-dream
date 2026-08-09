@@ -37,6 +37,11 @@ function hasFacedRival(career) {
 }
 
 // 本屆國賽是否實戰過天鷹（旁觀版守衛：打過＝賽後版已播，不掛旁觀）
+// ★ 隱性耦合（2026-08-09 覆審 L2）★ `startsWith('national-')` 現在也會命中**八強循環**
+// 的三場（`national-qf`／`national-rr2`／`national-rr3`）。目前之所以仍然正確，唯一的
+// 理由是天鷹**抽不進循環組**（`schedule.js drawRoundRobinOpponents` 排除當屆淘汰賽兩隊）。
+// 要放寬那個抽籤池之前，先回來看這一行——否則「循環組撞到天鷹並打輸」會被當成
+// 「幕次已實戰」而把旁觀播報吃掉，三幕鏈就斷一環。
 function playedRivalNationalThisSeason(career) {
   return (career.results ?? []).some(
     (r) => r.opponentId === RIVAL_TEAM_ID && String(r.matchId).startsWith('national-'),

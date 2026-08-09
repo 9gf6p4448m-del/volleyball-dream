@@ -27,7 +27,8 @@ const ATTR_MAX = 85;
 // 一隊可掛多名招募對象（A3 強隊第二人／A1 新隊雙招牌）。既有 5 隊 recruitKey 沿用
 // opponentId 本身＝舊存檔 progress/recruited 鍵零遷移；新增鍵用 `{oppId}-2` 等。
 // wins＝對該隊累計勝場（缺項＝不檢查——A3 第二人拍板走純壯舉軸，避開 wins 同質）；
-// feat＝個人壯舉（跨場累積）；stage＝須在此場次擊敗。
+// feat＝個人壯舉（跨場累積）；stage＝須在此場次擊敗——2026-08-09 起可給**字串或字串陣列**
+// （陣列＝任一場次擊敗即算；天鷹的「淘汰賽舞台」跨準決/決賽兩個掛點就靠它）。
 // 壯舉軸的事件層定義（替代定義的歸因見 W4 結案快照偏差表）：
 //   digMatch：單場「dig」（敵方扣球後的第一時間 receive/dive）達 perMatch 次＝1 場達標
 //   blockKill：攔網得分（BLOCK_TOUCH 後我隊直接得分）——事件流無「快攻」標記，
@@ -36,21 +37,49 @@ const ATTR_MAX = 85;
 //     ——SERVE 事件無式樣欄位，以「接發品質」近似「接起強發」（頂住鐵霧發球輪＝壯舉本意）
 //   W6 新增三型（單場統計 ≥ perMatch＝1 場達標，皆走 matchStatsFor 既有欄位）：
 //   blockKillMatch＝單場攔網得分×N／aceMatch＝單場 ACE×N／killMatch＝單場殺球×N
+// ★★ 2026-08-09 循環賽卷：門檻對準新賽程重算 ★★
+// 判準＝**結構上限**（cap）：對象畢業前，玩家最多能遇到那支隊幾次。`wins` 門檻高於
+// cap ＝這條路恆不可達；門檻**等於** cap ＝要求「窗口內每一場全勝」，實務上也接近不可達。
+// cap 由賽程層決定論展開量出（探針：止步循環臂 300 條生涯，取**最小值**不取平均）：
+//   改制前（單淘汰）止步者 cap：north-tech 2／obsidian 1／gale-shore 1／
+//     gale-shore-2 1／black-pine 1／black-pine-2 1／sky-hawk 0
+//     ⇒ 12 條裡有 7 條的門檻打不到，止步者第 1 屆招募率實測 0/40。
+//   改制後（八強循環）止步者 cap：north-tech 3／white-wave 3／gale-shore 3／
+//     gale-shore-2 3／black-pine 3／black-pine-2 2／iron-mist 2／obsidian 1／sky-hawk 0
+//     ⇒ 賽程改制本身就修好 5 條；剩下兩條（obsidian／sky-hawk）門檻在下面調。
 export const RECRUIT_CONDS = {
+  // cap 3（改制前 2＝不可達）：level 52 最弱隊，三戰全勝仍是合理挑戰 ⇒ 門檻不動
   'north-tech': { opponentId: 'north-tech', role: 'setter', wins: 3 },
   'white-wave': {
     opponentId: 'white-wave', role: 'libero', wins: 2,
     feat: { type: 'digMatch', perMatch: 3, count: 3, label: '單場救起 3 記重扣' },
   },
   obsidian: {
-    opponentId: 'obsidian', role: 'middle', wins: 2,
+    // ★ 改動（08-09）：wins 2 → 1 ★ 詹子曜是**三年級**（`recruitTargetGone` 第 2 屆起
+    // 已畢業）⇒ 窗口只有第 1 屆；而第 1 屆止步者對曜石的 cap ＝**1**（小組第三場，
+    // 準決賽打不到）。原本的 wins 2 對止步者是恆不可達的死條件，且它跟賽制無關——
+    // 改制前就壞了，改制後 cap 依然是 1（曜石是淘汰賽隊、抽不進循環組）。
+    opponentId: 'obsidian', role: 'middle', wins: 1,
     feat: { type: 'blockKill', count: 5, label: '攔死其攻擊' },
   },
   'iron-mist': {
+    // cap 2＝門檻 2（窗口內要全勝 level 64）：偏緊但**沒有變差**（改制前也是 2），
+    // 且第 2 屆多了「鐵霧被抽進小組」的加場機會（cap 均 2.22）⇒ 本卷不動，留待難度卷
     opponentId: 'iron-mist', role: 'opposite', wins: 2,
     feat: { type: 'strongReceive', quality: 0.8, count: 8, label: '穩穩接起其發球' },
   },
-  'sky-hawk': { opponentId: 'sky-hawk', role: 'outside', wins: 1, stage: 'national-final' },
+  // ★ 改動（08-09）：`stage` 由單一場次 → 場次清單（準決賽∪決賽）★ 原本寫死
+  // `national-final`，三重矛盾疊在一起：
+  //   ①天鷹在第 2 屆掛**準決賽**（`nationalLadderFor`）⇒ 該屆決賽對手是曜石，
+  //     就算打進決賽也記不到 stageCleared＝**該屆結構上沒有窗口**（schedule.js 早有註記）
+  //   ②王勝翔二年級 ⇒ 第 3 屆已畢業
+  //   ⇒ 實際窗口只剩「第 1 屆決賽擊敗天鷹」＝第 1 屆奪冠（治具實測奪冠率 1%）。
+  // 改成「在**淘汰賽舞台**上擊敗天鷹」：敘事（他要在畢業前站上大場面）與資料同源，
+  // 且不再依賴天鷹當屆掛哪一輪。小組輪抽撞到天鷹不算——那不是他要的舞台。
+  'sky-hawk': {
+    opponentId: 'sky-hawk', role: 'outside', wins: 1,
+    stage: ['national-sf', 'national-final'],
+  },
   // W6 A3 強隊第二人（純壯舉軸；數值待 C2 治具複核）
   'obsidian-2': {
     opponentId: 'obsidian', role: 'middle',
@@ -75,7 +104,12 @@ export const RECRUIT_CONDS = {
     feat: { type: 'blockKill', count: 4, label: '攔死其攻擊' },
   },
   'black-pine-2': {
-    opponentId: 'black-pine', role: 'opposite', wins: 2,
+    // ★ 改動（08-09）：wins 2 → 1 ★ 戴柏毅二年級 ⇒ 窗口＝第 1、2 屆；改制前止步者對
+    // 黑松的 cap ＝**1**（黑松只在小組輪抽出現，第 1 屆的小組是固定模板）⇒ 恆不可達
+    // （這就是任務書點名的那條）。改制後 cap ＝2（黑松進了循環組抽籤池），但門檻 2
+    // ＝要求「兩次相遇對 level 67 全勝」⇒ 仍然貼在天花板上。放到 1，讓它是
+    // 「贏過黑松一次＋接起 5 記強發」——與同級的 `black-pine`（wins 1＋壯舉）同構。
+    opponentId: 'black-pine', role: 'opposite', wins: 1,
     feat: { type: 'strongReceive', quality: 0.8, count: 5, label: '穩穩接起其發球' },
   },
 };
@@ -206,6 +240,13 @@ export function progressOf(recruitment, recruitKey) {
   };
 }
 
+// stage 軸的場次集合（字串或字串陣列皆可；缺項＝不檢查）——單一真相，
+// accrueRecruitProgress 與 UI 進度說明共用，勿在呼叫端各自 `Array.isArray` 一次
+export function stageIdsOf(cond) {
+  if (!cond?.stage) return [];
+  return Array.isArray(cond.stage) ? cond.stage : [cond.stage];
+}
+
 // 賽末累加（不可變）：勝場＋壯舉＋stage 軸（僅在指定場次擊敗才記）。
 // W6：同隊多招募對象＝逐鍵各自累加（wins 軸同步、feat 軸各算各的）；
 // 非招募對象（無條件定義）原樣返回。
@@ -219,7 +260,8 @@ export function accrueRecruitProgress(recruitment, {
     const entry = {
       wins: prev.wins + (won ? 1 : 0),
       feat: prev.feat + featGainFor(events, playerId, myTeam, cond),
-      stageCleared: prev.stageCleared || !!(cond.stage && won && matchId === cond.stage),
+      stageCleared: prev.stageCleared
+        || !!(won && stageIdsOf(cond).includes(matchId)),
     };
     rec = { ...rec, progress: { ...(rec.progress ?? {}), [key]: entry } };
   }

@@ -1,13 +1,17 @@
 // Phase 2 資料層 — 生涯狀態（純函式；零 three.js/DOM/存檔 IO）
 // 存讀在 careerStore.js；本檔只管 career 物件的建立/推進/序列化。
 // 生涯結構（phase2-decisions-RESOLVED.md 第 1 題）：
-// 地區賽小組循環（保底 3 場，輸球不中斷）→ 全國賽單淘汰（輸球＝止步、全勝＝冠軍）
+// 地區賽小組循環（保底 3 場，輸球不中斷）→ 全國賽八強 4 隊單循環（保底 3 場，
+// 輸球不中斷；前二名晉級）→ 準決賽／決賽單淘汰（輸球＝止步、決賽勝＝冠軍）
+// ——八強循環為 2026-08-09「循環賽卷」改制，理由見 schedule.js 該段註解
 import { createPlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { createDefaultTeams } from '../sim/game.js';
 import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
-import { buildSchedule } from './schedule.js';
+import {
+  buildSchedule, nationalLegFor, roundRobinTable, RR_ADVANCE,
+} from './schedule.js';
 import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 import { initialHeightState } from './heightGrowth.js';
 import { withAceGrowth } from './aceGrowth.js';
@@ -15,16 +19,22 @@ import { withAceGrowth } from './aceGrowth.js';
 // v1（僅小組 3 場）→ v2（全國賽入賽程）→ v3（成長點數 growthPoints）；deserialize 自動遷移
 export const CAREER_VERSION = 3;
 
-// 完整賽程模板：小組單循環 3 場（輸球照樣打下一場）＋全國賽三輪（單淘汰）。
-// 準決賽刻意再遇小組對手曜石體中——宿敵種子（stage 5 scouting 記憶）掛這裡
-const SCHEDULE_TEMPLATE = [
-  { id: 'group-1', stage: 'group', opponentId: 'north-tech', label: '' },
-  { id: 'group-2', stage: 'group', opponentId: 'white-wave', label: '' },
-  { id: 'group-3', stage: 'group', opponentId: 'obsidian', label: '' },
-  { id: 'national-qf', stage: 'national', opponentId: 'iron-mist', label: '八強' },
-  { id: 'national-sf', stage: 'national', opponentId: 'obsidian', label: '準決賽' },
-  { id: 'national-final', stage: 'national', opponentId: 'sky-hawk', label: '決賽' },
-];
+// 第 1 屆小組賽固定模板（教學鏈綁定這三隊的場次——見 schedule.js 檔頭的設計偏差註）
+const SEASON1_GROUP = ['north-tech', 'white-wave', 'obsidian'];
+
+// 完整賽程：小組單循環 3 場（輸球照樣打下一場）＋全國賽（八強 4 隊單循環 3 場 →
+// 前二名晉級準決賽 → 決賽）。準決賽刻意再遇小組對手曜石體中——宿敵種子
+// （stage 5 scouting 記憶）掛這裡。
+// 2026-08-09 循環賽卷：國賽段改由 `nationalLegFor` 生成（循環組要抽籤 ⇒ 吃 seed），
+// 所以第 1 屆賽程不再是一份靜態常數表，而是「固定小組 ＋ 決定論國賽段」。
+function season1Schedule(seed) {
+  return [
+    ...SEASON1_GROUP.map((opponentId, i) => ({
+      id: `group-${i + 1}`, stage: 'group', opponentId, label: '',
+    })),
+    ...nationalLegFor({ seed, seasonIndex: 1, groupIds: SEASON1_GROUP }),
+  ];
+}
 
 export function opponentName(opponentId) {
   return opponentById(opponentId)?.name ?? opponentId;
@@ -37,26 +47,70 @@ export function createCareer({ seed, playerName = '小夢' } = {}) {
     version: CAREER_VERSION,
     seed: seed >>> 0,
     playerName,
-    schedule: SCHEDULE_TEMPLATE.map((m) => ({ ...m })),
+    schedule: season1Schedule(seed >>> 0),
     results: [], // { matchId, opponentId, won, scoreFor, scoreAgainst, gp?, stats? }
     growthPoints: 0, // 未分配的成長點數（stage 3；花點結果落在 Player 上）
   };
 }
 
+// 本屆循環組戰況（未採用循環制的舊存檔＝null）。UI 名次板與 careerStage 共用同一份
+export function nationalGroupTable(career) {
+  return roundRobinTable({
+    seed: career.seed, schedule: career.schedule, results: career.results,
+  });
+}
+
+// 晉級判準的**單一定義**（前二名）——careerStage 與任何呼叫端都走這一顆，
+// 不要在別處再寫一次 `rank <= 2`
+function rrAdvanced(table) {
+  return !!table && table.playerRank > 0 && table.playerRank <= RR_ADVANCE;
+}
+
 // 生涯階段（由結果衍生，不存欄位——避免狀態不同步）：
 // group＝小組賽進行中；national＝小組完賽、全國賽進行中；
-// eliminated＝全國賽落敗止步；champion＝決賽勝
+// eliminated＝止步；champion＝決賽勝
+// ★ 2026-08-09 循環賽卷：止步語意分兩段 ★
+//   ・循環組（`round === 'rr'`）＝**輸球不止步**，三場打滿後看名次（前二晉級）
+//   ・淘汰賽（準決/決賽，以及沒有 `round` 欄位的舊存檔國賽場）＝一敗即止步
+//   舊存檔的國賽項全部沒有 `round` ⇒ 整段走淘汰賽分支 ⇒ 行為逐值不變、零遷移。
+// ★★ 檢查順序是這個函式的正確性核心，動之前先讀完這段（2026-08-09 覆審 H1）★★
+// **所有止步條件一律排在 champion 之前**。原因：這些條件不是互斥的——一份存檔可以
+// 同時「循環三敗」與「national-final 有一筆勝場」（手改存檔、匯入的壞檔、或任何繞過
+// `nextMatch` 直接呼叫 `recordResult` 的路徑）。champion 若先判，那份存檔會被讀成奪冠，
+// `advanceSeason` 還會照發 `titles`＋1 ⇒ 對手全屬性 +3 的衛冕難度也跟著發出去。
+// 覆審探針實測：循環三敗後硬記準決＋決賽勝 → 舊順序回 champion／titles=1。
 export function careerStage(career) {
-  const stageOf = (matchId) => career.schedule.find((m) => m.id === matchId)?.stage;
-  if (career.results.some((r) => !r.won && stageOf(r.matchId) === 'national')) return 'eliminated';
-  if (career.results.some((r) => r.matchId === 'national-final' && r.won)) return 'champion';
+  const entryOf = (matchId) => career.schedule.find((m) => m.id === matchId);
+  // ① 淘汰賽敗（含舊存檔無 round 欄位的國賽場）＝止步
+  const koLoss = career.results.some((r) => {
+    const e = entryOf(r.matchId);
+    return !r.won && e?.stage === 'national' && e.round !== 'rr';
+  });
+  if (koLoss) return 'eliminated';
   const groupDone = career.schedule
     .filter((m) => m.stage === 'group')
     .every((m) => career.results.some((r) => r.matchId === m.id));
-  return groupDone ? 'national' : 'group';
+  // ② 循環組打滿而未進前二＝這一屆到此為止（賽打完了才止步，不是輸一場就回家）
+  const rr = nationalGroupTable(career);
+  if (groupDone && rr && rr.complete && !rrAdvanced(rr)) return 'eliminated';
+  // ③ 走到這裡才輪得到奪冠；另加 groupDone 守衛——小組沒打完卻有決賽勝場的存檔
+  //    是壞資料，讓它回 'group' 從缺的那一場續打，比宣告冠軍安全
+  // ★ 2026-08-09 二輪覆審補洞：champion 還要求**循環組完賽且晉級** ★
+  //   一輪修復只把「循環三敗＋硬記決賽勝」擋掉了；二輪探針找到殘餘路徑——
+  //   循環組**完全沒打**（0/3）＋直接記 national-final 勝 ⇒ 條件②的 `rr.complete`
+  //   不成立、擋不住 ⇒ 舊寫法照樣回 champion。冠軍必須走完整條路：
+  //   循環打滿、名次前二，才輪得到看決賽勝場。舊存檔（無 rr、rr===null）沿
+  //   `!rr` 分支照舊判定，行為逐值不變。
+  const rrOk = !rr || (rr.complete && rrAdvanced(rr));
+  if (groupDone && rrOk && career.results.some((r) => r.matchId === 'national-final' && r.won)) {
+    return 'champion';
+  }
+  if (!groupDone) return 'group';
+  return 'national';
 }
 
-// 下一場：小組賽依序保底 3 場；全國賽逐輪推進、落敗或奪冠＝null（生涯弧線收束）
+// 下一場：小組賽依序保底 3 場；循環組保底 3 場（輸球照打）；
+// 淘汰賽逐輪推進、落敗/未晉級/奪冠＝null（生涯弧線收束）
 export function nextMatch(career) {
   const stage = careerStage(career);
   if (stage === 'eliminated' || stage === 'champion') return null;
@@ -83,7 +137,8 @@ export function matchSeed(career, matchId) {
 
 // W5 賽季輪迴（拍板 07-23：難度綁成就不綁屆數）：季末（奪冠/止步）→ 進入下一屆。
 // 保留：名冊成長/招募進度/宿敵記憶/技巧/已播事件（全在 career 之外或 spread 保留）；
-// 重置：賽程與戰績（新一屆六場）；seed 決定論衍生（同存檔重演一致、每屆場次種子不同）。
+// 重置：賽程與戰績（新一屆八場：小組 3＋循環 3＋準決＋決賽）；seed 決定論衍生
+// （同存檔重演一致、每屆場次種子不同）。
 // 止步＝對手維持原強度（你帶著成長回來——失敗的回報是變強重來，不是更難）；
 // 奪冠＝titles+1 → 衛冕屆對手升級（TITLE_LEVEL_BONUS×titles——全國都在研究衛冕軍）。
 export const TITLE_LEVEL_BONUS = 3; // 每座冠軍讓對手全屬性 +3（平衡幅度 W6 複核）
@@ -650,7 +705,7 @@ export function deserializeCareer(json) {
       version: 2,
       seed: raw.seed,
       playerName: raw.playerName,
-      schedule: SCHEDULE_TEMPLATE.map((m) => ({ ...m })),
+      schedule: season1Schedule(raw.seed >>> 0),
       results: raw.results,
     };
   }

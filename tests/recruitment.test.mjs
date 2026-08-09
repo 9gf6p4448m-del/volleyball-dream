@@ -112,12 +112,18 @@ test('accrueRecruitProgress：跨賽季（多場）累積、永不重置', () =>
   assert.deepEqual(progressOf(rec, 'white-wave'), { wins: 2, feat: 2, stageCleared: false });
 });
 
-test('stage 軸：僅在指定場次擊敗才記、輸球不記', () => {
+test('stage 軸：僅在指定場次（清單內任一）擊敗才記、輸球不記', () => {
   const base = { opponentId: 'sky-hawk', won: true };
   const atFinal = accrueRecruitProgress(EMPTY_REC, { ...base, matchId: 'national-final' });
   assert.equal(progressOf(atFinal, 'sky-hawk').stageCleared, true);
+  // 08-09：stage 軸接受場次清單——第 2 屆天鷹掛準決賽，那一場擊敗一樣算
+  const atSf = accrueRecruitProgress(EMPTY_REC, { ...base, matchId: 'national-sf' });
+  assert.equal(progressOf(atSf, 'sky-hawk').stageCleared, true);
+  // 循環組/小組撞到天鷹不算——那不是「淘汰賽舞台」
   const elsewhere = accrueRecruitProgress(EMPTY_REC, { ...base, matchId: 'group-1' });
   assert.equal(progressOf(elsewhere, 'sky-hawk').stageCleared, false);
+  const inRr = accrueRecruitProgress(EMPTY_REC, { ...base, matchId: 'national-rr2' });
+  assert.equal(progressOf(inRr, 'sky-hawk').stageCleared, false);
   const lost = accrueRecruitProgress(EMPTY_REC, {
     opponentId: 'sky-hawk', matchId: 'national-final', won: false,
   });

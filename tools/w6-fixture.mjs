@@ -42,8 +42,14 @@ function buildSaveB() {
   const storage = memStorage();
   const store = createCareerStore(storage);
   let career = createCareer({ seed: 777001, playerName: '阿夢' });
-  // 小組全勝、八強止步＝賽季結束（advanceSeason 可推進）
-  for (const [id, won] of [['group-1', true], ['group-2', true], ['group-3', true], ['national-qf', false]]) {
+  // 小組全勝、八強循環三場全敗＝賽季結束（advanceSeason 可推進）
+  // 循環賽卷（08-09）：循環組輸球不止步，三場要打滿才收季——只記 national-qf 一敗
+  // 會停在 stage 'national'，advanceSeason 直接 no-op、這份 fixture 就沒用了
+  const script = [
+    ...career.schedule.filter((m) => m.stage === 'group').map((m) => [m.id, true]),
+    ...career.schedule.filter((m) => m.round === 'rr').map((m) => [m.id, false]),
+  ];
+  for (const [id, won] of script) {
     career = recordResult(career, {
       matchId: id, won, scoreFor: won ? 15 : 9, scoreAgainst: won ? 9 : 15,
     });

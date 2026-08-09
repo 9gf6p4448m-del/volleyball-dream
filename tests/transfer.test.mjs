@@ -76,12 +76,14 @@ test('決定論＋台詞分版：同輸入同輸出；表現/志願各自分版'
 test('B1：advanceSeason 清除當屆轉位旗標、非轉位事件保留——「每屆一次」的屆界要真的存在', () => {
   let c = createCareer({ seed: 5, playerName: '測' });
   c = { ...c, events: [...(c.events ?? []), TRANSFER_ASKED_EV, TRANSFER_USED_EV, 'story-anchor'] };
-  // 打完一屆（小組全勝＋八強敗＝止步，可進 advanceSeason）
+  // 打完一屆（小組全勝＋八強循環全敗＝止步，可進 advanceSeason）
+  // 循環賽卷（08-09）：循環組輸球不止步，三場要打滿
   for (const m of c.schedule) {
     if (m.stage === 'group') c = recordResult(c, { matchId: m.id, won: true, scoreFor: 25, scoreAgainst: 10 });
   }
-  const qf = c.schedule.find((m) => m.id === 'national-qf');
-  c = recordResult(c, { matchId: qf.id, won: false, scoreFor: 20, scoreAgainst: 25 });
+  for (const m of c.schedule.filter((x) => x.round === 'rr')) {
+    c = recordResult(c, { matchId: m.id, won: false, scoreFor: 20, scoreAgainst: 25 });
+  }
   const next = advanceSeason(c);
   // 行為斷言（修復前紅在這裡）：新屆入口不得被上屆旗標鎖死
   assert.deepEqual(seasonTransferState(next), { asked: false, used: false },

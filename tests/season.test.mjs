@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createCareer, createCareerPlayer, recordResult, advanceSeason, careerStage,
-  matchSeed, careerMatchSetup, TITLE_LEVEL_BONUS, opponentById,
+  matchSeed, careerMatchSetup, TITLE_LEVEL_BONUS, opponentById, nextMatch,
 } from '../src/career/careerState.js';
 import { ensureStarterRoster } from '../src/career/roster.js';
 import { createCareerStore } from '../src/career/careerStore.js';
@@ -21,13 +21,16 @@ function fakeStorage() {
   };
 }
 
-// 打完整一屆（全勝＝champion／首場全國賽輸＝eliminated）
+// 打完整一屆（全勝＝champion／小組全勝但八強循環全敗＝eliminated）
+// 循環賽卷（08-09）：不能再「輸一場就 break」——循環組輸球不止步，要打到
+// nextMatch 回 null 為止（＝賽季真的結束的唯一判準）
 function playSeason(career, { champion }) {
   let c = career;
-  for (const m of c.schedule) {
+  for (;;) {
+    const m = nextMatch(c);
+    if (!m) break;
     const won = champion || m.stage === 'group';
     c = recordResult(c, { matchId: m.id, won, scoreFor: won ? 25 : 20, scoreAgainst: won ? 20 : 25 });
-    if (!won) break; // 全國賽輸＝止步，賽季結束
   }
   return c;
 }
@@ -38,7 +41,7 @@ test('advanceSeason：止步→重置賽程戰績、seed 決定論衍生、title
   assert.equal(careerStage(ended), 'eliminated');
   const s2 = advanceSeason(ended);
   assert.equal(s2.results.length, 0);
-  assert.equal(s2.schedule.length, 6);
+  assert.equal(s2.schedule.length, 8); // 循環賽卷（08-09）：一屆八場
   assert.notEqual(s2.seed, ended.seed);
   assert.deepEqual(advanceSeason(ended), s2); // 決定論：同輸入同輸出
   assert.equal(s2.titles ?? 0, 0); // 止步不加冠
@@ -112,12 +115,13 @@ test('招募跨屆累積（驗收條款）：第二屆再勝同隊 → progress.
     events: [{ type: 'SCORE', team: 'A' }],
     scoutTally: {},
   };
-  const settleAll = () => { // 打完一屆：小組全勝、八強輸（止步）
+  // 循環賽卷（08-09）：止步要打滿循環三場——不是輸一場就結束
+  const settleAll = () => { // 打完一屆：小組全勝、八強循環三場全輸（打滿才止步）
     let career = store.loadCareer();
-    for (const mid of ['group-1', 'group-2', 'group-3', 'national-qf']) {
+    for (const mid of ['group-1', 'group-2', 'group-3', 'national-qf', 'national-rr2', 'national-rr3']) {
       career = store.loadCareer();
       const matchEntry = career.schedule.find((m) => m.id === mid);
-      const g = mid === 'national-qf'
+      const g = matchEntry.stage === 'national'
         ? { ...game, match: { score: { A: 20, B: 25 }, winner: 'B' } }
         : game;
       settleCareerMatch({

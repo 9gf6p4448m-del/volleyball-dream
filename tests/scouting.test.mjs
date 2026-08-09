@@ -107,8 +107,9 @@ test('mergeScouting 跨場累積＋careerMatchSetup 注入（宿敵記憶）', (
   c = mergeScouting(c, 'obsidian', tally); // 小組＋再遇＝累積
   assert.equal(c.scouting.obsidian.zones.line, 10);
   assert.equal(c.scouting.obsidian.feints, 6);
-  // 走完前四場 → 下一場 national-sf 曜石：setup 應帶 scoutRead（read 0.7）
-  for (const won of [true, true, true, true]) {
+  // 走完前六場（小組 3＋八強循環 3，循環賽卷 08-09）→ 下一場 national-sf 曜石：
+  // setup 應帶 scoutRead（read 0.7）
+  for (const won of [true, true, true, true, true, true]) {
     c = recordResult(c, {
       matchId: nextMatch(c).id, won, scoreFor: 25, scoreAgainst: 20,
     });
@@ -128,12 +129,15 @@ test('宿敵差分對話：小組勝/敗曜石決定 national-sf 賽前事件變
   const play = (matchId, won) => (c) => recordResult(c, {
     matchId, won, scoreFor: won ? 25 : 20, scoreAgainst: won ? 20 : 25,
   });
+  // 循環賽卷（08-09）：要走到 national-sf 賽前，得先打完八強循環三場
+  const rrWins = (c) => c.schedule.filter((m) => m.round === 'rr')
+    .reduce((acc, m) => play(m.id, true)(acc), c);
   let cW = createCareer({ seed: 1 });
-  for (const f of [play('group-1', true), play('group-2', true), play('group-3', true), play('national-qf', true)]) cW = f(cW);
+  for (const f of [play('group-1', true), play('group-2', true), play('group-3', true), rrWins]) cW = f(cW);
   const preW = dueEvents(cW, 'pre').map((e) => e.id);
   assert.ok(preW.includes('rematch-won') && !preW.includes('rematch-lost'));
   let cL = createCareer({ seed: 1 });
-  for (const f of [play('group-1', true), play('group-2', true), play('group-3', false), play('national-qf', true)]) cL = f(cL);
+  for (const f of [play('group-1', true), play('group-2', true), play('group-3', false), rrWins]) cL = f(cL);
   const preL = dueEvents(cL, 'pre').map((e) => e.id);
   assert.ok(preL.includes('rematch-lost') && !preL.includes('rematch-won'));
 });

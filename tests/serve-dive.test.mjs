@@ -137,7 +137,7 @@ test('存檔正名遷移：powerServe→jumpServe、stage3 前存檔全鎖、缺
   assert.equal(taught.techniques.jumpServe, 1, 'v:2 標記後跳發不受遷移影響');
 });
 
-test('故事傳授鏈：六場六招、輸贏都教、假動作提前到小組第三場（拍板 07-22）', () => {
+test('故事傳授鏈：八場六招、輸贏都教、假動作提前到小組第三場（拍板 07-22）', () => {
   let c = createCareer({ seed: 1 });
   const teachOf = (moment) => dueEvents(c, moment).filter((e) => e.effect?.unlock);
   const playAndTeach = (matchId, won, expectTechs) => {
@@ -153,6 +153,10 @@ test('故事傳授鏈：六場六招、輸贏都教、假動作提前到小組�
   playAndTeach('group-3', true, ['pipe', 'feint']);   // 曜石雙授：pipe＋假動作
   // 假動作在 scouting 讀取生效（QF read 0.5/SF 0.7）之前已到手——時序矛盾已修
   playAndTeach('national-qf', true, ['floatServe']);
+  // 循環賽卷（08-09）：八強改 4 隊單循環——飄浮仍掛國賽第一場（national-qf），
+  // 之後多了兩場循環賽，賽後皆無傳授
+  playAndTeach('national-rr2', true, []);
+  playAndTeach('national-rr3', true, []);
   playAndTeach('national-sf', true, []);              // 準決賽賽後不再有傳授
   const preFinal = dueEvents(c, 'pre').filter((e) => e.effect?.unlock);
   assert.deepEqual(preFinal.map((e) => e.effect.unlock), ['jumpServe']); // 決賽前隊長授跳發

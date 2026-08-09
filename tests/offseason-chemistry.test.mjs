@@ -430,12 +430,15 @@ function freshSave(seed = 77) {
   return { store, storage };
 }
 
-// 把當屆打完（小組全勝、國賽首輪止步）——advanceSeason 的前置條件
+// 把當屆打完（小組全勝、八強循環三場全敗＝止步）——advanceSeason 的前置條件
+// 循環賽卷（08-09）：循環組輸球不止步，三場都得打完
 function finishSeason(store) {
   let c = store.loadCareer();
-  for (const [id, won] of [
-    ['group-1', true], ['group-2', true], ['group-3', true], ['national-qf', false],
-  ]) {
+  const ids = [
+    ...c.schedule.filter((m) => m.stage === 'group').map((m) => [m.id, true]),
+    ...c.schedule.filter((m) => m.round === 'rr').map((m) => [m.id, false]),
+  ];
+  for (const [id, won] of ids) {
     c = recordResult(c, {
       matchId: id, won, scoreFor: won ? 25 : 8, scoreAgainst: won ? 8 : 25,
     });

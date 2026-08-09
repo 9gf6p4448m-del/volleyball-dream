@@ -40,7 +40,7 @@ test('schema v2 骨架：頂層鍵一次補齊、四系統結構定實、Phase 4
   // 賽季：序號起始 1（線性多賽季，第 4 題拍板）；現行生涯資料歸戶
   assert.equal(save.season.index, 1);
   assert.equal(save.season.seed, 7);
-  assert.equal(save.season.schedule.length, 6);
+  assert.equal(save.season.schedule.length, 8); // 循環賽卷（08-09）：一屆八場
   // Phase 4 預留：空物件、不猜內容
   assert.deepEqual(save.career, {});
   assert.deepEqual(save.story, {});

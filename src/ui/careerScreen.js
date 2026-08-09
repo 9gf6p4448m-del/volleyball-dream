@@ -3,7 +3,7 @@
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
   careerStage, opponentById, normalizeCareerPlayer, resolveForfeit, applyPoaching,
-  applySeasonRoster, graduatingAces, currentGrade,
+  applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
 import {
@@ -46,7 +46,7 @@ import {
   finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
 } from '../career/careerFinale.js';
 import { readSlotHeads } from '../career/saveSlots.js';
-import { groupPool } from '../career/schedule.js';
+import { groupPool, RR_PLAYER_ID, RR_ADVANCE } from '../career/schedule.js';
 import { updateTrust } from '../sim/trust.js';
 // 情報層（2026-08-07）：攔網人格的中文語彙——與 BLOCK_PERSONA 同處，不另立第二份
 import { BLOCK_PERSONA, BLOCK_PERSONA_INTEL } from '../sim/blockRead.js';
@@ -1363,7 +1363,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         if (cond.feat) {
           parts.push(`${cond.feat.label} ${Math.min(p.feat, cond.feat.count)}/${cond.feat.count}`);
         }
-        if (cond.stage) parts.push(`在決賽擊敗 ${p.stageCleared ? '✓' : '—'}`);
+        // 08-09：stage 軸改成場次清單（準決賽∪決賽）⇒ 文案不能再寫死「決賽」
+        if (cond.stage) parts.push(`在淘汰賽擊敗 ${p.stageCleared ? '✓' : '—'}`);
         row.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:left',
           'line-height:1.4'], parts.join('・')));
       }
@@ -1701,7 +1702,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       root.appendChild(t);
     }
 
-    // 賽程列（兩區共用）：勝負／下一場／鎖定／止步後不再進行
+    // 循環賽卷（08-09）：本屆八強循環戰況（舊存檔無循環組＝null，整段不渲染）
+    const rrTable = nationalGroupTable(career);
+
+    // 賽程列（三區共用）：勝負／下一場／鎖定／止步後不再進行
     const rowFor = (m) => {
       const result = career.results.find((r) => r.matchId === m.id);
       const isNext = next?.id === m.id;
@@ -1726,6 +1730,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '—');
       } else if (m.stage === 'national' && stage === 'group') {
         status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '🔒');
+      } else if (m.stage === 'national' && m.round !== 'rr' && rrTable && !rrTable.complete) {
+        // 循環賽卷（08-09）：淘汰賽在循環組打完之前一律上鎖——「打得完才知道去不去得了」
+        // `rrTable &&` 不可省：舊存檔沒有循環組（rrTable 為 null），那邊的國賽列要維持
+        // 原本的「未開打」，不能因為這條新規則整排變成鎖頭
+        status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '🔒');
       } else {
         status = el('div', ['font-size:14px', `color:${COLOR.dim}`], '未開打');
       }
@@ -1740,10 +1749,47 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
       'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
     ], '地區賽・小組循環'));
     for (const m of career.schedule.filter((x) => x.stage === 'group')) list.appendChild(rowFor(m));
-    list.appendChild(el('div', [
-      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:8px',
-    ], '全國賽・單淘汰'));
-    for (const m of career.schedule.filter((x) => x.stage === 'national')) list.appendChild(rowFor(m));
+    // 循環賽卷（08-09）：國賽分兩區顯示——循環組（打滿 3 場、前二晉級）與淘汰賽。
+    // 舊存檔沒有 round 欄位 ⇒ rrRows 為空 ⇒ 只出現一個「全國賽・單淘汰」區＝原樣
+    const rrRows = career.schedule.filter((x) => x.round === 'rr');
+    const koRows = career.schedule.filter((x) => x.stage === 'national' && x.round !== 'rr');
+    if (rrRows.length) {
+      list.appendChild(el('div', [
+        'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:8px',
+      ], `全國賽・八強循環（前 ${RR_ADVANCE} 名晉級）`));
+      for (const m of rrRows) list.appendChild(rowFor(m));
+      // 名次板：有任何循環戰績才出現（開打前是空表，沒有資訊量）
+      if (rrTable && career.results.some((r) => rrRows.some((m) => m.id === r.matchId))) {
+        const board = el('div', [
+          `background:${COLOR.card}`, 'border-radius:12px', 'padding:8px 14px',
+          'display:flex', 'flex-direction:column', 'gap:4px',
+        ]);
+        rrTable.table.forEach((row, i) => {
+          const me = row.id === RR_PLAYER_ID;
+          const line = el('div', [
+            'display:flex', 'justify-content:space-between', 'font-size:13px',
+            `color:${me ? COLOR.gold : (i < RR_ADVANCE ? COLOR.cyan : COLOR.dim)}`,
+            me ? 'font-weight:700' : 'font-weight:400',
+          ]);
+          line.appendChild(el('div', [], `${i + 1}. ${me ? OUR_TEAM_NAME : opponentName(row.id)}`));
+          // 淨得分要顯示出來：同勝場時它就是晉級與否的判準（roundRobinTable 的 tiebreak），
+          // 不顯示的話玩家會看到「一樣 2 勝，為什麼是我出局」而找不到答案
+          line.appendChild(el('div', [], `${row.wins} 勝 ${row.played - row.wins} 敗　`
+            + `${row.diff > 0 ? '+' : ''}${row.diff}`));
+          board.appendChild(line);
+        });
+        list.appendChild(board);
+        list.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:left',
+          'line-height:1.4', 'padding:0 14px'],
+        `同勝場時比淨得分（右欄）——前 ${RR_ADVANCE} 名晉級準決賽`));
+      }
+    }
+    if (koRows.length) {
+      list.appendChild(el('div', [
+        'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:8px',
+      ], '全國賽・單淘汰'));
+      for (const m of koRows) list.appendChild(rowFor(m));
+    }
     root.appendChild(list);
 
     // W5 賽季輪迴：季末（奪冠/止步）→ 進入下一屆——名冊/招募/技巧/宿敵全保留。
@@ -1868,9 +1914,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
       '全國都在研究衛冕軍——來年的對手，會更強'));
     } else if (stage === 'eliminated') {
-      const lost = career.results.find((r) => !r.won &&
-        career.schedule.find((m) => m.id === r.matchId)?.stage === 'national');
-      const lostLabel = career.schedule.find((m) => m.id === lost?.matchId)?.label ?? '全國賽';
+      // 循環賽卷（08-09）：止步點只認**淘汰賽**的那一敗——循環組輸球不止步，
+      // 沒有淘汰賽敗績而走到這裡＝循環打滿沒進前二，那句要講「八強循環」不是某一場
+      const lost = career.results.find((r) => {
+        const m = career.schedule.find((x) => x.id === r.matchId);
+        return !r.won && m?.stage === 'national' && m.round !== 'rr';
+      });
+      const lostLabel = lost
+        ? (career.schedule.find((m) => m.id === lost.matchId)?.label ?? '全國賽')
+        : '八強循環';
       root.appendChild(el('div', [
         'font-size:20px', 'font-weight:800', `color:${COLOR.red}`, 'margin-top:8px',
       ], `止步${lostLabel}`));

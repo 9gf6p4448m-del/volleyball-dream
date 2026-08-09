@@ -132,8 +132,11 @@ test('幕三賽後：坦白勝敗皆成立、條件句組落台詞、馬振羽�
 
 test('止步旁觀版：未實戰天鷹且止步＝觸發；實戰過/奪冠/已入帳＝不觸發', () => {
   // 第 1 屆八強敗＝止步且未遇天鷹 → 幕一旁觀
+  // 循環賽卷（08-09）：止步＝八強循環三場打滿沒進前二
   let c = playUpTo(createCareer({ seed: 9 }), 'national-qf');
-  c = recordResult(c, { matchId: 'national-qf', won: false, scoreFor: 0, scoreAgainst: 25 });
+  for (const m of c.schedule.filter((x) => x.round === 'rr')) {
+    c = recordResult(c, { matchId: m.id, won: false, scoreFor: 0, scoreAgainst: 25 });
+  }
   const watch = rivalSpectatorEvents({ career: c, seasonIndex: 1 });
   assert.equal(watch[0].id, 'rival-act1-watch');
   assert.ok(watch[0].lines.some((l) => l.text.includes('莊敬嶺')));
@@ -149,7 +152,9 @@ test('止步旁觀版：未實戰天鷹且止步＝觸發；實戰過/奪冠/已
   assert.equal(rivalSpectatorEvents({ career: { ...c, events: ['rival-act1-watch'] }, seasonIndex: 1 }).length, 0);
   // 第 3 屆旁觀含馬振羽一句
   let c3 = playUpTo(seasonCareer(3), 'national-qf');
-  c3 = recordResult(c3, { matchId: 'national-qf', won: false, scoreFor: 0, scoreAgainst: 25 });
+  for (const m of c3.schedule.filter((x) => x.round === 'rr')) {
+    c3 = recordResult(c3, { matchId: m.id, won: false, scoreFor: 0, scoreAgainst: 25 });
+  }
   const w3 = rivalSpectatorEvents({ career: c3, seasonIndex: 3 });
   assert.ok(w3[0].lines.some((l) => l.speaker.includes('馬振羽')));
 });

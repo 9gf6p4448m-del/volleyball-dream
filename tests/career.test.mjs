@@ -35,14 +35,24 @@ function playThrough(career, outcomes) {
 
 // ---- careerState（stage 1 基礎）----
 
-test('createCareer：小組 3 場＋全國賽 3 輪、初始結構完整', () => {
+test('createCareer：小組 3 場＋八強循環 3 場＋準決＋決賽、初始結構完整', () => {
   const c = createCareer({ seed: 42, playerName: '測試員' });
   assert.equal(c.version, CAREER_VERSION);
-  assert.equal(c.schedule.length, 6);
+  assert.equal(c.schedule.length, 8); // 循環賽卷（08-09）：6 → 8
   assert.deepEqual(c.schedule.filter((m) => m.stage === 'group').map((m) => m.opponentId),
     ['north-tech', 'white-wave', 'obsidian']);
-  assert.deepEqual(c.schedule.filter((m) => m.stage === 'national').map((m) => m.opponentId),
-    ['iron-mist', 'obsidian', 'sky-hawk']); // 準決賽再遇曜石＝宿敵鉤子
+  // 循環組＝鐵霧（固定席）＋抽籤 2 隊；淘汰賽對手不入抽籤池（見 drawRoundRobinOpponents 註）
+  assert.deepEqual(c.schedule.filter((m) => m.round === 'rr').map((m) => m.id),
+    ['national-qf', 'national-rr2', 'national-rr3']);
+  assert.equal(c.schedule.find((m) => m.id === 'national-qf').opponentId, 'iron-mist');
+  for (const m of c.schedule.filter((x) => x.round === 'rr')) {
+    assert.ok(!['obsidian', 'sky-hawk'].includes(m.opponentId),
+      `淘汰賽對手 ${m.opponentId} 不得同時出現在循環組（賽制上不可能）`);
+  }
+  assert.deepEqual(
+    c.schedule.filter((m) => m.stage === 'national' && m.round !== 'rr').map((m) => m.opponentId),
+    ['obsidian', 'sky-hawk'], // 準決賽再遇曜石＝宿敵鉤子
+  );
   assert.equal(c.results.length, 0);
   assert.equal(careerStage(c), 'group');
 });
@@ -58,17 +68,38 @@ test('小組賽輸球不中斷：連輸三場照樣晉級全國賽', () => {
   assert.deepEqual(careerRecord(c), { wins: 0, losses: 3, played: 3 });
 });
 
-test('全國賽單淘汰：八強落敗＝止步、沒有下一場', () => {
+// 循環賽卷（08-09）核心行為：循環組輸球**不**止步——三場打滿才看名次
+test('八強循環：第一場落敗照樣有下一場（輸球不止步）', () => {
   const c = playThrough(createCareer({ seed: 2 }), [true, true, true, false]);
+  assert.equal(careerStage(c), 'national');
+  assert.equal(nextMatch(c).id, 'national-rr2');
+});
+
+test('八強循環：三場全敗＝打滿才止步（實打 6 場，不是 4 場）', () => {
+  const c = playThrough(createCareer({ seed: 2 }), [true, true, true, false, false, false]);
+  assert.equal(careerStage(c), 'eliminated');
+  assert.equal(nextMatch(c), null);
+  assert.equal(c.results.length, 6);
+});
+
+test('八強循環：三場全勝＝晉級準決賽', () => {
+  const c = playThrough(createCareer({ seed: 2 }), [true, true, true, true, true, true]);
+  assert.equal(careerStage(c), 'national');
+  assert.equal(nextMatch(c).id, 'national-sf');
+});
+
+test('淘汰賽仍是單淘汰：準決賽落敗＝止步、沒有下一場', () => {
+  const c = playThrough(createCareer({ seed: 2 }), [true, true, true, true, true, true, false]);
   assert.equal(careerStage(c), 'eliminated');
   assert.equal(nextMatch(c), null);
 });
 
 test('全國賽全勝＝冠軍收束', () => {
-  const c = playThrough(createCareer({ seed: 3 }), [true, false, true, true, true, true]);
+  const c = playThrough(createCareer({ seed: 3 }),
+    [true, false, true, true, true, true, true, true]);
   assert.equal(careerStage(c), 'champion');
   assert.equal(nextMatch(c), null);
-  assert.deepEqual(careerRecord(c), { wins: 5, losses: 1, played: 6 });
+  assert.deepEqual(careerRecord(c), { wins: 7, losses: 1, played: 8 });
 });
 
 test('recordResult：不可變更新、帶入 opponentId、重複記錄原樣返回', () => {
@@ -81,11 +112,11 @@ test('recordResult：不可變更新、帶入 opponentId、重複記錄原樣返
   assert.throws(() => recordResult(c, { matchId: 'nope', won: true, scoreFor: 0, scoreAgainst: 0 }), /賽程/);
 });
 
-test('matchSeed：決定論、六場彼此相異、不同生涯種子相異', () => {
+test('matchSeed：決定論、八場彼此相異、不同生涯種子相異', () => {
   const c = createCareer({ seed: 99 });
   const seeds = c.schedule.map((m) => matchSeed(c, m.id));
   assert.deepEqual(seeds, c.schedule.map((m) => matchSeed(c, m.id)));
-  assert.equal(new Set(seeds).size, 6);
+  assert.equal(new Set(seeds).size, 8);
   assert.notEqual(matchSeed(c, 'group-1'), matchSeed(createCareer({ seed: 100 }), 'group-1'));
   for (const s of seeds) assert.ok(Number.isInteger(s) && s > 0);
 });
@@ -109,7 +140,7 @@ test('v1 存檔遷移：舊小組賽程換完整模板、戰績保留', () => {
   });
   const c = deserializeCareer(v1);
   assert.equal(c.version, CAREER_VERSION);
-  assert.equal(c.schedule.length, 6);
+  assert.equal(c.schedule.length, 8);
   assert.equal(c.results.length, 1);
   assert.equal(c.growthPoints, 4); // v3 遷移：既往 1 場追認 4 點
   assert.equal(careerStage(c), 'group');

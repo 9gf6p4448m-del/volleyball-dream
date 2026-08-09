@@ -68,8 +68,11 @@ test('幕三：坦白段 confess 燈光帶、馬振羽句邊光單人、阿哲�
 });
 
 test('止步旁觀＝stands 看台遠景（事件級宣告）', () => {
+  // 循環賽卷（08-09）：止步＝八強循環三場打滿沒進前二（不再是「輸一場」）
   let c = playUpTo(createCareer({ seed: 13 }), 'national-qf');
-  c = recordResult(c, { matchId: 'national-qf', won: false, scoreFor: 20, scoreAgainst: 25 });
+  for (const m of c.schedule.filter((x) => x.round === 'rr')) {
+    c = recordResult(c, { matchId: m.id, won: false, scoreFor: 20, scoreAgainst: 25 });
+  }
   const evs = rivalSpectatorEvents({ career: c, seasonIndex: 1 });
   assert.equal(evs.length, 1);
   assert.equal(evs[0].camera, 'stands');
