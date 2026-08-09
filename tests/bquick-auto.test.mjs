@@ -163,7 +163,10 @@ test('鈕：matchStage 有真的把 bquickButton 匯出（定義了沒 return＝
   assert.ok(anchor > 0, '找不到 matchStage 主 return 的錨——結構變了就更新本測試');
   const ret = stage.slice(anchor, stage.indexOf('};', anchor));
   for (const btn of ['callButton', 'cutButton', 'tandemButton', 'bquickButton']) {
-    assert.match(ret, new RegExp(`\b${btn}\b`), `${btn} 不在 matchStage 的 return 清單`);
+    // 用 includes 不用 RegExp——第一版把 word boundary 寫進 template literal，
+    // `\b` 被解析成退格字元(\x08) ⇒ 斷言恆假、紅在「callButton 不在」這種不可能
+    // 的訊息上。字串包含對這個用途就足夠了，不值得為它踩跳脫坑。
+    assert.ok(ret.includes(btn), `${btn} 不在 matchStage 的 return 清單`);
   }
   const loop = readFileSync(new URL('../src/app/matchLoop.js', import.meta.url), 'utf8');
   assert.match(loop, /stage\.bquickButton\.show\(/, 'matchLoop 沒有任何地方 show 這顆鈕');
