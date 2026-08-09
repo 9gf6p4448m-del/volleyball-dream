@@ -11,7 +11,7 @@ import {
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
-  callFeasibilityOf, cutStateOf, tandemStateOf,
+  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { landedCourtTeam, isBackRow, isFrontRow } from '../sim/rotation.js';
@@ -1238,6 +1238,7 @@ function stepSim(s) {
     // 夾塞（2026-08-07）：結算回饋與「我被排進夾塞了」字卡的取樣點，理由與上一行逐字
     // 相同——兩者的壽命都短於一個 rAF（`attackCombo` 在球飛出去那一刻就隨 approach 作廢）。
     captureTandemOutcome(s);
+    captureBquickOutcome(s);
     captureTandemAssign(s);
     // 誘餌獎金入帳（2026-08-08）：唯一入帳點在 trust.js applyComboAssist，只在死球那一
     // tick（settlePoint）寫一次；理由同上——一幀可能跑過好幾個 tick，晚一步讀就錯過。
@@ -1662,6 +1663,11 @@ function applyEvents(s, frameEvents, now) {
       s.aiState.tandemOutcome = null;
       s.tandemFeedbackDone = false;
       stage.tandemButton?.hide();
+      // B 快同壽命（2026-08-09）
+      s.aiState.bquickCall = null;
+      s.aiState.bquickOutcome = null;
+      s.bquickFeedbackDone = false;
+      stage.bquickButton?.hide();
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
@@ -2204,6 +2210,47 @@ export function tandemFeedbackText(key, mine) {
   return { text: (!mine && fb.decoy) ? fb.decoy : fb.text, color: fb.color };
 }
 
+// ★ 2026-08-09 B 快回饋 ★ 與夾塞的關鍵差別：**沒有 decoy 分版**。
+// 夾塞要兩套文案是因為它不改球權（按了 73% 的波球不是他打的）；B 快是要球型的鈕，
+// 按成功＝球一定給他 ⇒ 只有一種真相要講。**這個「少一半文案」正是設計正確的證據**，
+// 不是漏寫——哪天有人替它補上 decoy 版，代表它已經被改成不改球權了，那要重新裁定。
+export const BQUICK_FEEDBACK = {
+  applied: { text: 'B 快——從二傳背後穿出去', color: '#ffd166' },
+  already: { text: '這球本來就給你 B 快', color: '#ffd166' },
+  nopool: { text: '這一波沒有你的快攻線——一傳沒到位', color: '#9fb0cc' },
+  locked: { text: '二傳已經排了組合——這球有別的跑法', color: '#9fb0cc' },
+  playsOff: { text: '還沒學會叫戰術', color: '#9fb0cc' },
+  nowindow: { text: '來不及了——球已經舉出去', color: '#9fb0cc' },
+  missed: { text: '沒趕上', color: '#9fb0cc' },
+};
+
+export function bquickFeedbackText(key) {
+  const fb = BQUICK_FEEDBACK[key] ?? BQUICK_FEEDBACK.missed;
+  return { text: fb.text, color: fb.color };
+}
+
+// 單態鈕（不像內切／夾塞需要兩態）——理由同上：要球型的鈕沒有「這球給不給你」的懸念。
+export function onBquickTap(s) {
+  const st = bquickStateOf(s.game, s.aiState, s.playerId);
+  if (!st.open) {
+    // ★ 吃**原始 reason** ★（不經 applyBquickCall 的 done→already 映射），同 onTandemTap
+    const fb = bquickFeedbackText(st.reason);
+    s.stage.floatText.show(fb.text, fb.color, 1300);
+    return;
+  }
+  s.aiState.bquickCall = { pid: s.playerId };
+  s.bquickFeedbackDone = false;
+  s.bquickOutcomeLatch = null;
+}
+
+// 逐 sim tick 取樣（理由同 captureTandemOutcome：outcome 的壽命短於一個 rAF）
+export function captureBquickOutcome(s) {
+  const oc = s.aiState?.bquickOutcome;
+  if (!oc || oc.pid !== s.playerId || s.bquickFeedbackDone) return;
+  if (s.bquickOutcomeLatch?.flightId === oc.flightId) return;
+  s.bquickOutcomeLatch = { ...oc };
+}
+
 // 兩態鈕（比照 `CUT_BUTTON_STATES`）：夾塞**不改球權**，所以「這球給不給你」要另外說。
 // 資料源同樣是開窗當下已定案的 `aiState.attackerId`。
 export const TANDEM_BUTTON_STATES = {
@@ -2373,6 +2420,7 @@ function frameStep(s, now) {
     //   `hide()` 同時把 onTap 設回 null（callButton.js），所以連「按得到」都一併收掉。
     if (stage.cutButton?.isVisible()) stage.cutButton.hide();
     if (stage.tandemButton?.isVisible()) stage.tandemButton.hide(); // 夾塞鈕同理
+    if (stage.bquickButton?.isVisible()) stage.bquickButton.hide(); // B 快鈕同理
     // ★ 08-07 補：字卡鎖存不因進入回放而作廢 ★ pending／latch 若在 stepSim 鎖存後、
     // 同幀還沒播出時玩家按了 🎬，回放期間下面兩個消費區塊（:2381/:2395 一帶）整段被
     // 這個 early-return 跳過，鎖存會存活到回放結束才補跳一張已經過時好幾秒的字卡。
@@ -2500,6 +2548,31 @@ function frameStep(s, now) {
       stage.tandemButton.setVariant(s.aiState.attackerId === s.playerId
         ? TANDEM_BUTTON_STATES.mine : TANDEM_BUTTON_STATES.idle);
     }
+  }
+  // ★ 2026-08-09 B 快窗（MB）★ 資格與另外兩顆同吃 `s.gates.canCallPlay`（裁定「資格
+  // 統一到第二屆」）。**刻意不加 isFrontRow**：`bquickStateOf` 已經用「這一波有沒有
+  // 你的 quick 線」把後排與一傳不到位一起吃掉了，在這裡再補一道等於第二份真相，
+  // 而且會誤縮窗（藍圖明文警告過這個抄錯點）。
+  if (stage.bquickButton && !s.replay) {
+    const meNow = game.players[s.playerId];
+    const bquickOpen = !!meNow && meNow.currentRole === 'middle'
+      && s.gates.canCallPlay
+      && onCourt(game, s.playerId)
+      && !s.aiState.bquickCall
+      && bquickStateOf(game, s.aiState, s.playerId).open;
+    if (bquickOpen && !stage.bquickButton.isVisible()) {
+      stage.bquickButton.show(() => onBquickTap(s));
+    } else if (!bquickOpen && stage.bquickButton.isVisible()) stage.bquickButton.hide();
+  }
+  // B 快結算回饋（讀鎖存，理由同夾塞／內切那兩段）
+  const bquickOc = s.bquickOutcomeLatch;
+  if (bquickOc && bquickOc.pid === s.playerId && !s.bquickFeedbackDone) {
+    s.bquickFeedbackDone = true;
+    s.bquickOutcomeLatch = null;
+    const key = bquickOc.outcome === 'applied'
+      ? (bquickOc.reason ?? 'applied') : (bquickOc.reason ?? 'missed');
+    const fb = bquickFeedbackText(key);
+    s.stage.floatText.show(fb.text, fb.color, 1300);
   }
   // 夾塞結算回饋（讀鎖存，理由同下方內切那一段）
   const tandemOc = s.tandemOutcomeLatch;

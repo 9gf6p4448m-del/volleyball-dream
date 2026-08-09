@@ -125,6 +125,15 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const tandemButton = createCallButton({
     label: '🤝 夾塞', bottom: '22%', color: '#c792ea', bg: 'rgba(30,18,44,0.92)',
   });
+  // 2026-08-09 Sawmah 裁定（MB 的專屬鈕）：B 快窗。
+  // ★ bottom 再開一格（14%）★ 22%／30%／38% 都占了；MB 只會與自己這顆同時亮
+  //   （另外三顆分屬 OH／OPP），但位置仍錯開＝日後任何一顆改位不會疊在一起。
+  // ★ 字面刻意與另外兩顆分得開 ★「要」＝球給我打（動球權，同 `⚡ 跟上！`），
+  //   「內切」「夾塞」都是改自己跑的線、不動球權。鈕面不得讓玩家誤以為只是換條路跑。
+  //   名稱取自 `KIND_LABELS.bquick`，同一條線不得有兩種叫法（pipe 那次的同型教訓）。
+  const bquickButton = createCallButton({
+    label: '🖐 要 B 快', bottom: '14%', color: '#ffd166', bg: 'rgba(40,34,14,0.92)',
+  });
   // W4(P4) 附錄 B-3 封線影子（L 2.0 佈陣可視化——配套下達即現，純表現層）
   const blockShadow = createBlockShadow(ctx.scene);
   // 2026-08-04 試玩裁定：玩家自己的攔網涵蓋帶（看得見「我守得住多寬」；不畫球的預測落點）

@@ -308,6 +308,11 @@ export function aiCollectIntents(game, aiState, excludeIds = []) {
   // 順序必須確定：夾塞重建池時帶 `cutFor: aiState.cutCall` ⇒ 後跑的它會保住前者的改線，
   // 反過來排的話 applyCutCall 會拿還沒成立的組合去算。
   applyTandemCall(game, aiState);
+  // B 快窗（2026-08-09）：玩家（MB）的「要 B 快」在此消費。排在最後＝三顆鈕撞在
+  // 同一 tick 時它最後寫，但實務上撞不到——三顆鈕的窗互斥於位置（OH／OPP／MB）。
+  // 排在 applyTandemCall 之後的理由同該行：組合要先成立，`bquickStateOf` 才讀得到
+  // `attackCombo` 並誠實回報 'locked'（S 排了組合就不讓攻擊手單方面拆）。
+  applyBquickCall(game, aiState);
   // 叫戰術重做卷 段 1：受控玩家「不跑就改組織」。掛在 applyReplanCall **之後**、
   // 走位（decideOne）**之前**——理由與上一行逐字相同：改判要在同一個 tick 內生效，
   // 否則這一 tick 的人還照舊線跑＝提示與跑位分岔一格。
@@ -351,6 +356,9 @@ function ensureFlightPlan(game, aiState) {
     // 夾塞的決定與它的結算同壽命（另一個清空點＝下方「窗已結束」分支）
     aiState.tandemCall = null;
     aiState.tandemOutcome = null;
+    // B 快同壽命（2026-08-09）——三個清空點一次補齊，見下方「窗已結束」分支的教訓
+    aiState.bquickCall = null;
+    aiState.bquickOutcome = null;
     aiState.routeCommit = null; // 段 1 記帳與助跑線同壽命（清空點之一）
     // 同理：死球之後沒有攻擊要攔，攔網鎖定與起算事件都作廢
     aiState.blockPlan = null;
@@ -396,6 +404,11 @@ function ensureFlightPlan(game, aiState) {
     // 夾塞同理「只管這一波」：窗一結束就作廢，否則同一 rally 的後續每一波都被強制夾塞
     aiState.tandemCall = null;
     aiState.tandemOutcome = null;
+    // ★ B 快同理，而且我在 2026-08-09 上線當天**真的踩了這一格** ★
+    // 探針實測：漏清的話按一次之後同一 rally 每一波都繼續要球——
+    // 15 次按壓變成 25 次生效＋293 次「沒趕上」。上面那條內切的教訓逐字重演了一次。
+    aiState.bquickCall = null;
+    aiState.bquickOutcome = null;
   }
 
   // 落點方已用完三次觸球（如扣球掛網彈回本側）→ 依規則不得再觸，全隊放球讓它落地
@@ -1278,6 +1291,99 @@ function applyTandemCall(game, aiState) {
     comboPoints.find((pt) => pt.pid === aiState.attackerId)?.kind ?? aiState.attackKind;
   aiState.attackTempo =
     approachRouteOf(routes, aiState.attackerId)?.tempo ?? aiState.attackTempo;
+  record('applied');
+}
+
+// ════════════════════════════════════════════════════════════════
+// B 快窗（2026-08-09 Sawmah 裁定：MB 的專屬鈕＝「要 B 快」）
+// ════════════════════════════════════════════════════════════════
+//
+// 為什麼是這顆鈕：第 2 屆解鎖叫戰術時，OH 拿到內切鈕（+7.6 次決定/局）、
+// OPP 拿到夾塞鈕（+10.7）、S 拿到叫戰術面板（+29.6），**MB 拿到 0**。
+// 而 MB 每局 28.5 次互動裡 69% 壓在攔網賭局那一種上，那個面板 08-01 起已擴散到
+// 前排全員 ⇒ 不再是他的身分。他缺的不是球權數字，是「只有他能下的決定」。
+//
+// ★★ 這顆鈕**會要球**（同 `⚡ 跟上！`，不同於內切與夾塞）★★ 三顆鈕的語意刻意分開：
+//   「↘ 內切」＝我改我自己的線（不動球權）
+//   「🤝 夾塞」＝我跑那條配合線（不動球權——實測 73% 的波球不是他打的）
+//   「🖐 要 B 快」＝**把這球給我，我打 B 快**（動球權）
+// 選要球型而不是改線型是本卷最關鍵的取捨：MB 的抱怨是「球權很少、體驗很少」，
+// 給他一顆只改線的鈕＝再造一個 73% 白跑的夾塞。要球型**白跑率結構上為 0**。
+//
+// reason 與內切共用同一組代碼語意：
+//   'nowindow' 不在第二觸窗　'playsOff' 這場沒有戰術（第 1 屆）
+//   'nopool'   這一波你沒有快攻線（後排／一傳不到位／不在攻擊池）
+//   'done'     你這一波本來就跑 B 快（AI 二傳已經給了）
+//   'locked'   S 已排了組合，攻擊手不單方面拆掉兩人之間的關係（同 applyCutCall 差別②）
+export function bquickStateOf(game, aiState, playerId) {
+  const shut = (reason) => ({ open: false, reason });
+  const r = game?.rally;
+  const team = game?.players?.[playerId]?.teamId ?? null;
+  if (game?.phase !== 'rally' || !r || !team) return shut('nowindow');
+  if (r.possession !== team || r.touches !== 1) return shut('nowindow');
+  // 世界規則閘：與 planSoloPlay／resolveCalledPlay 同一個旗標，不另立第二份真相
+  if ((game.comboScale ?? 1) <= 0) return shut('playsOff');
+  if (aiState?.approach?.team !== team || !aiState.approach.routes) return shut('nowindow');
+  const route = approachRouteOf(aiState.approach.routes, playerId);
+  if (!route) return shut('nopool');
+  if (route.kind === 'bquick') return { open: false, reason: 'done' };
+  // ★ 只有本來就跑得動 A 快的人才要得動 B 快 ★（`SOLO_MAIN_KINDS.bquick = ['quick']`）
+  // 這一條同時吃掉「後排」與「一傳不到位」——兩者都讓 attackPointsOf 不給他 quick，
+  // 所以**不得**在這裡重刻一份一傳檔位判斷（那是第二份真相，本專案累犯型錯誤）。
+  if (route.kind !== 'quick') return shut('nopool');
+  if (aiState.attackCombo) return shut('locked');
+  return { open: true, reason: null };
+}
+
+// 消費玩家的 B 快要求。**AI 對局恆為 no-op**（`bquickCall` 只有 matchLoop 會寫）。
+// 重建範式逐項抄 `applyCutCall`，兩個刻意的差別：
+//   ① 用 `applySoloRoute` 而不是 `cutFor`（B 快是單人型，不走 routeKindFor 那條）
+//   ② **改球權**：`attackerId = call.pid`——這就是「要」與「改線」的差別本身
+function applyBquickCall(game, aiState) {
+  const call = aiState.bquickCall;
+  if (!call) return; // ★ AI 對局的零漂移保證就是這一行 ★
+  const r = game.rally;
+  const flightId = r?.flightId ?? null;
+  if (aiState.bquickOutcome && aiState.bquickOutcome.flightId === flightId) return;
+  const record = (outcome, reason = null) => {
+    aiState.bquickOutcome = { flightId, pid: call.pid, outcome, reason };
+  };
+  const st = bquickStateOf(game, aiState, call.pid);
+  if (!st.open) {
+    if (st.reason === 'done') record('applied', 'already');
+    else record('missed', st.reason);
+    return;
+  }
+  const team = aiState.landingTeam;
+  const tier = aiState.passTier ?? 'perfect';
+  const solo = { mainId: call.pid, kind: 'bquick' };
+  // 順序逐字對齊 ensureFlightPlan：applyRouteKinds 先、單人型後
+  //（反過來寫會讓 routeKindFor 拿舊 kind 重算，把剛升級的 bquick 蓋回去）
+  const nextPoints = applySoloRoute(
+    applyRouteKinds(
+      attackPointsOf(game, team, aiState.claimId, tier, aiState.passReceiverId),
+      {
+        flightId: r.flightId,
+        seed: game.seed ?? 0,
+        passTier: tier,
+        cutFor: aiState.cutCall ?? null,
+      },
+    ),
+    solo,
+  );
+  const routes = approachRoutesFor(team, nextPoints, {
+    setTick: aiState.approach.setTick,
+    flightId: r.flightId,
+    seed: game.seed ?? 0,
+    passTier: tier,
+    speedOf: (pid) => moveSpeed(game.players[pid]),
+    combo: null,
+  });
+  aiState.approach = { team, setTick: aiState.approach.setTick, routes };
+  aiState.attackerId = call.pid; // ★ 要球：與另外兩顆鈕的差別就在這一行 ★
+  aiState.attackSolo = solo;
+  aiState.attackKind = nextPoints.find((pt) => pt.pid === call.pid)?.kind ?? aiState.attackKind;
+  aiState.attackTempo = approachRouteOf(routes, call.pid)?.tempo ?? aiState.attackTempo;
   record('applied');
 }
 

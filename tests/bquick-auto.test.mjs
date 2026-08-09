@@ -111,3 +111,42 @@ test('③ 組合優先：ai.js 只在 combo 為 null 時才骰 solo（靜態接�
   assert.match(m[1], /combo\s*\?\s*null\s*:/,
     'solo 必須掛在「combo 為 null」的條件下，否則三型的既有機率會被稀釋');
 });
+
+// ════════════════════════════════════════════════════════════
+// 「🖐 要 B 快」浮鈕（MB 專屬；2026-08-09 Sawmah 裁定）
+// ════════════════════════════════════════════════════════════
+// ★ 這顆鈕與另外兩顆的差別是**會要球** ★ 內切／夾塞都只改自己跑的線：
+// 實測白跑率 45.1%／73.0%。要球型的鈕白跑率結構上為 0——本段守的就是那個「結構上」。
+test('鈕：AI 對局零漂移——沒有 bquickCall 時 applyBquickCall 是 no-op', () => {
+  const src = readFileSync(new URL('../src/sim/ai.js', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf('function applyBquickCall'));
+  const body = fn.slice(0, fn.indexOf('\n}\n'));
+  assert.match(body.split('\n').slice(1, 4).join('\n'), /if \(!call\) return;/,
+    '第一行就要在沒有指令時返回——那是 AI vs AI 逐值不變的唯一保證');
+});
+
+test('鈕：指令與結算有三個清空點（漏一個＝按一次之後整個 rally 都在要球）', () => {
+  // ★ 這條是實際踩過才補的 ★ 上線當天漏了「窗已結束」那個清空點，探針量到
+  // 15 次按壓變成 25 次生效＋293 次「沒趕上」——內切當年一字不差的同型錯誤。
+  const ai = readFileSync(new URL('../src/sim/ai.js', import.meta.url), 'utf8');
+  const loop = readFileSync(new URL('../src/app/matchLoop.js', import.meta.url), 'utf8');
+  const clears = (s) => (s.match(/aiState\.bquickCall = null/g) ?? []).length
+    + (s.match(/s\.aiState\.bquickCall = null/g) ?? []).length;
+  assert.equal(clears(ai), 2, 'sim 端要有兩個清空點（死球＋窗已結束），與 cutCall／tandemCall 同');
+  assert.ok(clears(loop) >= 1, 'matchLoop 死球收尾也要清一次（浮鈕與回饋旗同一拍歸零）');
+});
+
+test('鈕：指令槽有登記進 rallyTape（否則重播會吃掉玩家按過的 B 快）', () => {
+  const tape = readFileSync(new URL('../src/app/rallyTape.js', import.meta.url), 'utf8');
+  assert.match(tape, /'bquickCall'/,
+    '玩家寫、重演算不出來的欄位一律要進 PLAYER_AI_FIELDS——內切／夾塞都為此絆過線');
+});
+
+test('鈕：回饋文案沒有 decoy 分版（有的話代表它被改成不改球權了）', () => {
+  const loop = readFileSync(new URL('../src/app/matchLoop.js', import.meta.url), 'utf8');
+  const start = loop.indexOf('export const BQUICK_FEEDBACK');
+  assert.ok(start > 0, '找不到 BQUICK_FEEDBACK');
+  const block = loop.slice(start, loop.indexOf('};', start));
+  assert.ok(!block.includes('decoy'),
+    '夾塞要 decoy 版是因為它 73% 白跑；B 快按成功＝球一定給他，只有一種真相要講');
+});
