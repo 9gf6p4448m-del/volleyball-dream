@@ -140,11 +140,72 @@ test('receive 檔：landingMarker 收到橘色與 predictContactPoint(ball, rece
   assert.equal(colors.at(-1).hex, 0xff9f45, 'receive 檔＝橘色（不得挪用紅色出界警示）');
 });
 
+// ════════ 第三觸攻擊手（2026-08-11 擴充）════════
+//
+// PID='A1' 本來是二傳，這裡刻意沿用同一個受控者當「第三觸攻擊手」——證明本分支
+// 沒有角色限制（2026-08-11 main 裁定），只要 `lastToucherId` 不是他自己（球是隊友
+// 舉的），二傳一樣能被 claim 為第三觸攻擊手。
+
+test('★第三觸★ spike 檔：landingMarker 收到綠色與 predictContactPoint(ball, spikeHandY) 逐值相同的點', () => {
+  const { s, game, stage } = baseSession({
+    rallyOver: { touches: 2, lastToucherId: 'A2_someone_else' },
+  });
+  const player = game.players[PID];
+  const spikeHandY = spikeReach(player, 1);
+  game.ball.y = spikeHandY + 1.0; // 明確高於 spikeHandY 本身
+  const expected = predictContactPoint({ ...game.ball }, spikeHandY);
+  assert.notDeepEqual(expected, predictLanding({ ...game.ball }), '夾具本身要有鑑別力');
+
+  updateAssistAndPoses(s);
+
+  const shows = stage.landingMarker.calls.filter((c) => c.fn === 'show');
+  const colors = stage.landingMarker.calls.filter((c) => c.fn === 'setColor');
+  assert.deepEqual(shows.at(-1).point, { x: expected.x, z: expected.z });
+  assert.equal(colors.at(-1).hex, 0x5ee08a, '第三觸 spike 檔沿用同一組顏色＝綠色');
+});
+
+test('★第三觸★ receive 檔：landingMarker 收到橘色與 predictContactPoint(ball, receiveHandY) 逐值相同的點', () => {
+  const { s, game, stage } = baseSession({
+    rallyOver: { touches: 2, lastToucherId: 'A2_someone_else' },
+  });
+  const receiveHandY = RECEIVE_HANDPOINT_H_RATIO * heightOf(game);
+  game.ball.y = receiveHandY + 0.3; // 明確高於 receiveHandY 本身、且不越過 spike 門檻
+  const expected = predictContactPoint({ ...game.ball }, receiveHandY);
+  assert.notDeepEqual(expected, predictLanding({ ...game.ball }), '夾具本身要有鑑別力');
+
+  updateAssistAndPoses(s);
+
+  const shows = stage.landingMarker.calls.filter((c) => c.fn === 'show');
+  const colors = stage.landingMarker.calls.filter((c) => c.fn === 'setColor');
+  assert.deepEqual(shows.at(-1).point, { x: expected.x, z: expected.z });
+  assert.equal(colors.at(-1).hex, 0xff9f45, '第三觸 receive 檔＝橘色');
+});
+
+test('★第三觸★ 真閘門：自舉自扣（lastToucherId===受控者）⇒ 落回現行 predictLanding 落地圈', () => {
+  const { s, game, stage } = baseSession({
+    rallyOver: { touches: 2, lastToucherId: PID }, // 這球是自己剛舉的
+  });
+  const player = game.players[PID];
+  const spikeHandY = spikeReach(player, 1);
+  game.ball.y = spikeHandY + 1.0; // 球高明明落在 spike 範圍
+  const expectedLanding = predictLanding({ ...game.ball });
+
+  updateAssistAndPoses(s);
+
+  const shows = stage.landingMarker.calls.filter((c) => c.fn === 'show');
+  assert.deepEqual(shows.at(-1).point, expectedLanding,
+    '玩家手上沒有 attackZones() 給的攻擊區可點，不得顯示相遇點圈');
+});
+
 // ════════ null 通道：現行落點圈邏輯一字不動 ════════
 
-test('null 通道（非我方第二觸）：改吃現行 predictLanding 落點圈，不受本批改動影響', () => {
-  // touches=2＝第三觸，contactAssistFor 內部第②條 null 條件成立
-  const { s, game, stage } = baseSession({ rallyOver: { touches: 2 } });
+// 2026-08-11 改夾具（不改斷言意圖）：原用 `touches: 2` 代表「非我方第二觸」，但擴充
+// 第三觸攻擊手分支後 `touches===2` 本身變成合法窗口（`baseSession` 預設 claimId=PID
+// 且 PID 就是本波唯一候選攻擊手，會合法觸發新分支）。這條測試守的理由「不在任何
+// contactAssist 支援的窗口內就吃現行 predictLanding 落點圈」依然成立，只是不能再用
+// touches===2 表達「窗外」——改用 touches===3（四擊上限，規則上沒有下一觸）維持原意圖。
+test('null 通道（非我方任何觸球窗口）：改吃現行 predictLanding 落點圈，不受本批改動影響', () => {
+  const { s, game, stage } = baseSession({ rallyOver: { touches: 3 } });
   const expectedLanding = predictLanding({ ...game.ball });
   const isOut = landedCourtTeam(expectedLanding.x, expectedLanding.z) === null;
 

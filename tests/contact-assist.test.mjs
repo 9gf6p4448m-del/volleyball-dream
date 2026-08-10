@@ -225,12 +225,17 @@ test('null①：game.phase !== "rally"（死球/發球等）不顯示', () => {
   }), null);
 });
 
+// 2026-08-11 改夾具（不改斷言意圖）：此測試原用 `touches: 2` 代表「不是我方第二觸」，
+// 但擴充第三觸攻擊手分支後，`touches===2` 本身變成合法窗口（見本檔另一個測試區塊）
+// ——同一個球員的 id 若被 claim 為第三觸攻擊手，不再回 null。這條測試守的理由「不在
+// 第二觸窗內就不顯示 spike/set/receive 三檔那組邏輯」依然成立，只是不能再用 touches===2
+// 表達「窗外」；改用 touches===3（已達四擊上限、規則上不存在下一觸）維持同一個意圖。
 test('null②：球不是我方的第二觸（touches!==1 或 possession 不是本隊）不顯示', () => {
   const player = makePlayer();
-  const notSecondTouch = makeGame({ touches: 2, ball: { y: spikeFloor + 1 } });
+  const notSecondTouch = makeGame({ touches: 3, ball: { y: spikeFloor + 1 } });
   assert.equal(contactAssistFor({
     game: notSecondTouch, player, actor: ACTOR, tuning: TUNING, claimId: PID,
-  }), null, 'touches===2＝第三觸，不是我方第二觸');
+  }), null, 'touches===3＝已達四擊上限，不是我方第二觸也不是第三觸窗');
   const otherTeamBall = makeGame({ possession: 'B', touches: 1, ball: { y: spikeFloor + 1 } });
   assert.equal(contactAssistFor({
     game: otherTeamBall, player, actor: ACTOR, tuning: TUNING, claimId: PID,
@@ -257,4 +262,114 @@ test('null④：該球員不是二傳不顯示', () => {
   assert.equal(contactAssistFor({
     game, player, actor: ACTOR, tuning: TUNING, claimId: PID,
   }), null);
+});
+
+// ════════ 第三觸攻擊手（2026-08-11 擴充；效益背景見檔頭）════════
+//
+// 規格：我方 possession ＋ claimId===player.id ＋ touches===2（下一觸是第三次，與
+// 上面二傳分支「touches===1＝下一觸是第二次」同一種推導）。第三觸依規則必須過網，
+// 沒有「舉給隊友」這一檔，只有兩檔：spike（能扣，門檻與二傳分支同一條物理公式
+// spikeHandY−spikeR，查證見檔頭③——不是 matchControls.js 的 SALVAGE_Y）／receive
+// （錯過扣球窗的安全球）。
+//
+// 刻意用非二傳角色（outside）當主要 fixture，證明本分支**沒有角色限制**——二傳被
+// 仲裁補位當第三觸攻擊手（`ai.js:556` 的 `arbitrate()` 有機會落到二傳身上）是合法
+// 情境，2026-08-11 main 明確裁定不得加 `currentRole!=='setter'` 排除它（加了會製造
+// 「圈承諾按不到的動作」同型 bug 的反面：該顯示卻不顯示）。
+
+function callAttacker(ballY, over = {}) {
+  const player = makePlayer({ currentRole: 'outside', ...over.player });
+  const game = makeGame({
+    touches: 2, ball: { y: ballY, ...over.ball }, ...over.gameOver,
+  });
+  if ('lastToucherId' in over) game.rally.lastToucherId = over.lastToucherId;
+  return contactAssistFor({
+    game, player, actor: ACTOR, tuning: TUNING,
+    claimId: 'claimId' in over ? over.claimId : PID,
+  });
+}
+
+test('★第三觸★ spike 檔：ball.y 剛高於 spikeFloor（嚴格大於，與二傳分支同一條公式）', () => {
+  const r = callAttacker(spikeFloor + 0.01);
+  assert.equal(r.tier, 'spike');
+});
+
+test('★第三觸★ spike 檔邊界：ball.y 恰等於 spikeFloor ⇒ 不算 spike，直接降到 receive（無 set 檔可退）', () => {
+  const r = callAttacker(spikeFloor);
+  assert.equal(r.tier, 'receive', '第三觸沒有「舉給隊友」這一檔，門檻沒過直接是 receive');
+});
+
+test('★第三觸★ receive 檔：低於 spikeFloor', () => {
+  const r = callAttacker(spikeFloor - 0.5);
+  assert.equal(r.tier, 'receive');
+});
+
+test('★第三觸★ 位置：spike 檔的 point 逐值等於 predictContactPoint(ball, spikeHandY)', () => {
+  const ball = {
+    x: 0.8, y: spikeHandY + 1.0, z: 2.9, vx: 0.2, vy: -2.8, vz: -1.6,
+  };
+  const player = makePlayer({ currentRole: 'outside' });
+  const game = makeGame({ touches: 2, ball });
+  const r = contactAssistFor({
+    game, player, actor: ACTOR, tuning: TUNING, claimId: PID,
+  });
+  assert.equal(r.tier, 'spike');
+  const expected = predictContactPoint(ball, spikeReach(player, 1));
+  assert.notDeepEqual(expected, predictLanding(ball),
+    '測試夾具本身必須讓相遇點與落地點不同，否則這條測試沒有鑑別力');
+  assert.deepEqual(r.point, { x: expected.x, z: expected.z });
+});
+
+test('★第三觸★ 位置：receive 檔的 point 逐值等於 predictContactPoint(ball, receiveHandY)', () => {
+  const ball = {
+    x: -0.4, y: receiveHandY + 0.3, z: 3.0, vx: -0.1, vy: -2.0, vz: -1.2,
+  };
+  const player = makePlayer({ currentRole: 'outside' });
+  const game = makeGame({ touches: 2, ball });
+  const r = contactAssistFor({
+    game, player, actor: ACTOR, tuning: TUNING, claimId: PID,
+  });
+  assert.equal(r.tier, 'receive');
+  const expected = predictContactPoint(ball, receiveHandY);
+  assert.notDeepEqual(expected, predictLanding(ball),
+    '測試夾具本身必須讓相遇點與落地點不同，否則這條測試沒有鑑別力');
+  assert.deepEqual(r.point, { x: expected.x, z: expected.z });
+});
+
+test('★第三觸★ 觸發條件：球權不在我方不顯示', () => {
+  const r = callAttacker(spikeFloor + 1, { gameOver: { possession: 'B' } });
+  assert.equal(r, null);
+});
+
+test('★第三觸★ 觸發條件：claimId 沒指到這名球員不顯示（含未傳＝undefined 的安全預設）', () => {
+  assert.equal(callAttacker(spikeFloor + 1, { claimId: 'someoneElse' }), null, 'claim 指到別人');
+  assert.equal(callAttacker(spikeFloor + 1, { claimId: undefined }), null,
+    '★claimId 未傳不得當成「沒人 claim 所以放行」——預設值要往安全方向倒★');
+});
+
+test('★第三觸★ 觸發條件：touches!==2 不落入本分支（非二傳的球員在 touches===1 落回二傳分支 ⇒ null）', () => {
+  const player = makePlayer({ currentRole: 'outside' });
+  const game = makeGame({ touches: 1, ball: { y: spikeFloor + 1 } });
+  const r = contactAssistFor({
+    game, player, actor: ACTOR, tuning: TUNING, claimId: PID, passTier: 'perfect',
+  });
+  assert.equal(r, null, 'touches===1 是二傳分支的窗，outside 球員不是二傳 ⇒ null');
+});
+
+test('★第三觸★ 二傳也能是攻擊手（無角色限制，仲裁補位的合法情境，2026-08-11 main 裁定不得排除）', () => {
+  const r = callAttacker(spikeFloor + 1, { player: { currentRole: 'setter' } });
+  assert.equal(r.tier, 'spike');
+});
+
+// ════════ 真閘門：自舉自扣不得顯示（比照 matchControls.js isAttackMoment 的
+// `lastToucherId===playerId ⇒ false`；2026-08-11 main 指出的漏洞）════════
+
+test('★第三觸★ 真閘門：這球是自己剛舉的（lastToucherId===player.id）⇒ 不得顯示', () => {
+  const r = callAttacker(spikeFloor + 1, { lastToucherId: PID });
+  assert.equal(r, null, '自舉自扣：玩家手上沒有 attackZones() 給的攻擊區可點，圈不得承諾');
+});
+
+test('★第三觸★ lastToucherId 是別人（正常舉球給隊友的情境）⇒ 正常顯示', () => {
+  const r = callAttacker(spikeFloor + 1, { lastToucherId: 'A1_setter' });
+  assert.equal(r.tier, 'spike');
 });
