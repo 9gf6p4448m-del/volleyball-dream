@@ -14,6 +14,7 @@ import {
   callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
+import { contactAssistFor } from './contactAssist.js';
 import { landedCourtTeam, isBackRow, isFrontRow } from '../sim/rotation.js';
 import { NEAR_NET_Z } from '../input/matchControls.js'; // 攔網帶寬度＝與自動跳攔同一把尺
 import {
@@ -1795,8 +1796,13 @@ function applyEvents(s, frameEvents, now) {
   }
 }
 
+// 二次球相遇點圈的三檔顏色（`contactAssist.js` 回傳的 tier → 顯示色）。
+// ★ 紅色 0xff5b5b 保留給下面「預測出界」原意，不得挪用★——本專案剛付過「一個判準
+// 兼任兩個問題」的學費，橘色是特地為 receive 檔另挑的，不與出界警示撞色。
+const CONTACT_ASSIST_COLOR = { spike: 0x5ee08a, set: 0xffd166, receive: 0xff9f45 };
+
 // 操作輔助與動作觸發：落點圈／「這球歸你」光圈／起跳與攔網姿勢／AI 先跳後揮
-function updateAssistAndPoses(s) {
+export function updateAssistAndPoses(s) {
   const { game, aiState, stage } = s;
   // 操作輔助：來球落點圈（每個 flight 只預測一次，唯讀取用 sim 純函式）
   if (s.config.assistOn && game.phase === 'rally') {
@@ -1804,7 +1810,26 @@ function updateAssistAndPoses(s) {
       s.assistFlight = game.rally.flightId;
       s.assistLanding = predictLanding(game.ball);
     }
-    if (s.assistLanding && s.assistLanding.z > 0) {
+    // 二次球相遇點（本批新增）：受控者是本波二傳、且 claim 指到他時，這顆圈該畫的
+    // 是「球墜到手點高度那一刻」而不是落地點——落地圈與真正該站的點差 0.72m 中位數，
+    // 是 13.4%「人到了卻搆不到」的根因（見 contactAssist.js 檔頭）。前後排／任何一傳
+    // 品質都會顯示，差別在 contactAssistFor 內部：綠色 spike 檔只在 `setOptions.js:93`
+    // 的🎯二次球鈕真的會出現時才給（前排＋一傳 perfect），否則降到 set 檔——綠圈不得
+    // 承諾一顆玩家手上根本按不到的鈕。
+    // ★ 逐幀重算、不比照 assistLanding 做 flight 級快取 ★：tier 由球的「當前高度」
+    // 決定，同一波球會隨下墜從 spike→set→receive 逐檔切換，快取住第一幀的結果
+    // 會讓圈永遠停在最初那一檔，不會跟著球降下來。
+    const controlledPlayer = game.players[s.controlledId];
+    const assist = controlledPlayer
+      ? contactAssistFor({
+        game, player: controlledPlayer, tuning: TUNING,
+        claimId: aiState.claimId, passTier: aiState.passTier,
+      })
+      : null;
+    if (assist) {
+      stage.landingMarker.setColor(CONTACT_ASSIST_COLOR[assist.tier]);
+      stage.landingMarker.show(assist.point);
+    } else if (s.assistLanding && s.assistLanding.z > 0) {
       // 紅圈＝預測出界（別碰它！）；青圈＝界內來球
       const isOut = landedCourtTeam(s.assistLanding.x, s.assistLanding.z) === null;
       stage.landingMarker.setColor(isOut ? 0xff5b5b : 0x6ee7ff);
