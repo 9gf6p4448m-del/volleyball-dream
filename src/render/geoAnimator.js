@@ -180,11 +180,20 @@ const SEQUENCES = {
   // 那一套提前量機制），所以解鎖幀落在觸球之前；觸球那一幀正好是擊球幀。
   // 跳躍弧不再綁在序列上（見 createGeoAnimator 的 air）——段落換手時身體高度連續。
   //
-  // 段①：dur 只涵蓋「蹬伸離地→擺成引臂」這一拍；跳躍弧另由 airDur 宣告＝0.75s
-  // （改制前 windup 的整段弧，逐值不變，誘餌與早跳路徑的滯空長度不受影響）。
+  // 段①：dur 只涵蓋「蹬伸離地→擺成引臂」這一拍；跳躍弧另由 airDur 宣告。
   // 播完自動接段②（chain，同 land→landSoft 的自動接續機制）。
+  // ★ 2026-08-11 起跳滯空「看不到」修正 ★ 真人回報「跳太早卻拿到軟墊球，不知道為
+  // 什麼」。玩家點攻擊區＝chooseAttack 當下起跳（matchControls.js:604 jumpAt=now），
+  // 放開起跳後 JUMP_WINDOW_MS=900ms（同檔 :70）內沒等到球才降級成 receive
+  // （:398-404，降級邏輯與 900 這個數值本身不動）——但畫面這裡原本 airDur=0.75s，
+  // 比降級判定早 150ms 落地：玩家在 sim 真正判他「跳太早」之前，肉眼已經看完整套
+  // 起跳→滯空→落地，落地後動作回待命，真正的降級判定與軟墊球回饋要再等 150ms 才
+  // 出現——「起跳」與「拿到墊球」兩件事之間夾了一段站著不動的空白，因果斷線。
+  // 修（純表現層，同 1c23497 手法：jump 峰高／段①節奏不動，只把獨立的滯空弧
+  // airDur 對齊真相時鐘）＝0.75→0.9（＝JUMP_WINDOW_MS 900ms）：玩家肉眼看見自己
+  // 滯空多久，落地那一刻正好卡在 sim 判定降級的同一時間點。
   windup: {
-    dur: 0.1, jump: 0.5, airDur: 0.75, land: false, chain: 'spikeHold',
+    dur: 0.1, jump: 0.5, airDur: 0.9, land: false, chain: 'spikeHold',
     keys: [{ at: 0, p: 'windup' }, { at: 1, p: 'spikeWind' }],
   },
   // 段②：滯空引臂 hold。sustain:'air'＝觸發當下由 air 算出的**剩餘滯空時間**——

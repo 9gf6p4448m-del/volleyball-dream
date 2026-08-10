@@ -599,7 +599,8 @@ test('W2-1 三段式：滯空多久 hold 多久——段②撐到落地才鬆手
   const rig = mkRig();
   const anim = createGeoAnimator(rig);
   anim.trigger('windup');
-  // windup 的跳躍弧全長 0.75s（airDur）：整段滯空期間都不得回到閒置
+  // windup 的跳躍弧全長 0.9s（airDur，2026-08-11 對齊 JUMP_WINDOW_MS）：
+  // 整段滯空期間都不得回到閒置
   for (let i = 0; i < 42; i += 1) anim.update(TICK, 0);
   assert.ok(!anim.isIdle(), '滯空期間不得回站姿（誘餌的假動作也吃這條）');
   assert.equal(anim.peek().type, 'spikeHold');
@@ -694,6 +695,38 @@ test('W2-1 三段式：既有跳躍序列的弧逐值不變（block/serveJump/ov
       assert.ok(y <= want + 1e-9, `${type} 第 ${i} tick 的跳躍分量不得高於原式（${y.toFixed(4)} vs ${want.toFixed(4)}）`);
     }
   }
+});
+
+// 2026-08-11：起跳滯空「看不到」修正（見 SEQUENCES.windup 檔頭註解）。玩家點攻擊區
+// 當下起跳，放開後 JUMP_WINDOW_MS=900ms 內沒等到球才降級成 receive（matchControls.js，
+// 900 與降級邏輯本身不動）。畫面這裡把跳躍弧的 airDur 從 0.75s 對齊到 0.9s——本測試
+// 沿用上一條「弧逐值不變」的形狀，守住兩件事：①弧本身仍是同一條 jump·sin(π·t/airDur)
+// ②舊基準 45 tick（0.75s）那一刻人**不得**已經落地——這正是本次要修掉的「肉眼提早
+// 落地、與 sim 真正判定降級的時間點脫鉤」。
+test('起跳滯空對齊 JUMP_WINDOW_MS：windup 的跳躍弧全長 0.9s（900ms），不再提早落地', () => {
+  const JUMP_WINDOW_S = 0.9; // ＝ matchControls.js JUMP_WINDOW_MS(900) / 1000
+  const jump = 0.5; // SEQUENCES.windup.jump，本次修正未動
+
+  const anim = createGeoAnimator(mkRig());
+  anim.trigger('windup');
+  const n = Math.round(JUMP_WINDOW_S * 60); // 54 tick
+  let peak = 0;
+  for (let i = 1; i <= n; i += 1) {
+    const y = anim.update(TICK, 0);
+    peak = Math.max(peak, y);
+    const t = Math.min((i * TICK) / JUMP_WINDOW_S, 1);
+    const want = jump * Math.sin(t * Math.PI);
+    assert.ok(y <= want + 1e-9,
+      `windup 第 ${i} tick 的跳躍分量不得高於 jump·sin(π·t/0.9)（${y.toFixed(4)} vs ${want.toFixed(4)}）`);
+  }
+  assert.ok(peak > 0.3, `滯空弧應明顯騰空（實際峰值 ${peak.toFixed(2)}）`);
+
+  // 鑑別力：45 tick（舊 airDur=0.75s 的落地點，也是 JUMP_WINDOW_MS 900ms 的一半路程）
+  // 此刻必須仍在滯空——若 airDur 改回 0.75s，這裡會先落地（current 回 null）而炸掉。
+  const anim2 = createGeoAnimator(mkRig());
+  anim2.trigger('windup');
+  for (let i = 0; i < 45; i += 1) anim2.update(TICK, 0);
+  assert.ok(!anim2.isIdle(), '45 tick（900ms 之前）人仍應在滯空——落地不得早於 JUMP_WINDOW_MS');
 });
 
 // ---- Phase 5 W2-6：攔網演出姿勢鏈重做（張臂寬回窄＋揮臂式節奏＋graze 視覺）----
