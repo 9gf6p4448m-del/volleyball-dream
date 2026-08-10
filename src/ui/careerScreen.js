@@ -335,7 +335,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
       ], '🔁 教練談話——轉位'));
       card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'],
-        `轉任${roleLabel(talk.role)}：位置玩法即刻生效，讓出的主攻位由隊上補位。婉拒不扣任何東西——下一個屆間教練會再問。`));
+        // 「讓出的主攻位」是 OH 單向轉出時代的寫法——轉過一次之後你讓出的就不是主攻位了，
+        // 08-10 開放回任 OH 後更會講反（回任是把主攻位要回來）。改成不預設你現在站哪
+        `轉任${roleLabel(talk.role)}：位置玩法即刻生效，你原本的位置由隊上補位。婉拒不扣任何東西——下一個屆間教練會再問。`));
       card.appendChild(button(`✓ 接受——轉任${roleLabel(talk.role)}`, true, () => {
         overlay.remove();
         if (store.applyPositionChange?.(talk.role)) {

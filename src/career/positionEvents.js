@@ -6,10 +6,17 @@
 // UI 掛點＝careerScreen 屆間鏈尾端；接受的存檔面＝careerStore.applyPositionChange。
 
 import { callPlayBriefFor } from './callPlayBrief.js';
+import { isRoleSelectable } from './positionFlags.js';
 
 // libero＝工單 §8 AL 槽建隊特例（已落地：defaultLineup L 特例＋careerMatchSetup
 // liberos 通道＋applyPositionChange 放行）——候選齊四位置
 export const TALK_CANDIDATES = ['setter', 'middle', 'opposite', 'libero'];
+
+// 2026-08-10 Sawmah 裁定「開放轉回 OH」：轉位不再是單行道。
+// ★兩個池刻意分開★ 教練主動談話（positionTalkFor）＝「你被看見了，來換位置」，
+// 回任 OH 不屬於這種語意——真人是自己想通了才回去的，讓教練每個屆間勸你「回主攻嗎」
+// 反而像在趕人（志願＝OH 的玩家幾乎每屆都會被問一次）。回任只走玩家主動的請調入口。
+export const TRANSFER_CANDIDATES = [...TALK_CANDIDATES, 'outside'];
 
 const nameOf = (members, id, fallback) => members?.find((m) => m.id === id)?.name ?? fallback;
 
@@ -20,7 +27,7 @@ export function positionTalkFor({ flags, player, members }) {
   const cur = player.currentRole ?? 'outside';
   const asp = player.aspiration;
   const order = [...new Set([asp, ...TALK_CANDIDATES])].filter((r) => TALK_CANDIDATES.includes(r));
-  const role = order.find((r) => r !== cur && flags?.[r] === 'open');
+  const role = order.find((r) => r !== cur && isRoleSelectable(flags, r));
   if (!role) return null;
   return {
     role,
@@ -67,6 +74,19 @@ function offerLinesFor(role, aspMatch) {
       { speaker: '教練', text: '你接球的判斷，全隊沒人比得上——包括小守。' },
       { speaker: '教練', text: '不能得分的位置，是把全隊的分都扛在背上的位置。' },
       { speaker: '教練', text: '轉自由人——要不要接？' },
+    ];
+  }
+  if (role === 'outside') {
+    // 回任＝這條路唯一的「回頭」。語氣要與其他四個分岔不同：那四個是「你被看見了」，
+    // 這個是「你自己知道要什麼了」——不能寫成升遷，也不能寫成降級（08-10 裁定的語意）
+    return aspMatch ? [
+      { speaker: '教練', text: '你登記志願那天寫的是主攻。中間繞了這麼一圈，我一直記著。' },
+      { speaker: '教練', text: '別的位置你都站過了——現在的你回去打左翼，看到的東西跟一年級那個不一樣。' },
+      { speaker: '教練', text: '回主攻。這次不是出道，是回來——要不要接？' },
+    ] : [
+      { speaker: '教練', text: '你在場上，眼睛老是往左邊那條線飄。以為我沒看到？' },
+      { speaker: '教練', text: '回去打主攻不是退步。走過一圈再回來的人，比沒走過的清楚自己要什麼。' },
+      { speaker: '教練', text: '轉回主攻——要不要接？' },
     ];
   }
   // opposite
@@ -134,6 +154,16 @@ function acceptLinesFor(role, members) {
     }
     return base;
   }
+  if (role === 'outside') {
+    // 回任：被取代者＝你離開之後接下左翼的人（多半就是當初 applyPositionChange
+    // 補進來的那名補位員——名冊直查，與 OPP 分支同範式）。缺人時退回泛稱。
+    const oh = members.find((m) => m.role === 'outside');
+    return [
+      { speaker: oh?.name ?? '隊友', text: '左邊那條線……你要回來啦。' },
+      { speaker: oh?.name ?? '隊友', text: '你走的時候我接下這個位置，接得很勉強，我自己知道。還你。' },
+      { speaker: oh?.name ?? '隊友', text: '不過我不會站太遠。哪一球你打軟了，我立刻上來——這次換我盯著你。' },
+    ];
+  }
   // opposite：被取代者＝現任 OPP（補位員或招募生——名冊直查；縫隙 1 層次一）
   const opp = members.find((m) => m.role === 'opposite');
   return [
@@ -169,7 +199,7 @@ export function transferCandidates({ flags, player, career }) {
   if (st.asked || st.used) return [];
   if ((career?.results?.length ?? 0) < TRANSFER_MIN_MATCHES) return [];
   const cur = player?.currentRole ?? 'outside';
-  return TALK_CANDIDATES.filter((r) => r !== cur && flags?.[r] === 'open');
+  return TRANSFER_CANDIDATES.filter((r) => r !== cur && isRoleSelectable(flags, r));
 }
 
 // 屆間教練談話是否放行（二選一互斥：賽季中轉位用掉＝當屆屆間不再談）
@@ -178,7 +208,11 @@ export function interSeasonTalkAllowed(career) {
 }
 
 // 2026-08-03 Sawmah 命名裁定：OPP 一律叫「舉對」（原為「主攻對角」，與位置選單的名字對不上）
-const ROLE_LABEL = { setter: '舉球員', middle: '攔中', opposite: '舉對', libero: '自由人' };
+// outside 於 08-10「開放轉回 OH」後才需要（在此之前 OH 不可能是轉位目的地）；
+// 名稱與 heightAdvice 的 ROLE_NAME 對齊，避免同名分岔
+const ROLE_LABEL = {
+  setter: '舉球員', middle: '攔中', opposite: '舉對', libero: '自由人', outside: '主攻手',
+};
 
 // 教練反問開場（場景拍板：教練會反問、依表現分版；performanceGood＝當屆勝率 ≥ 5 成）
 export function transferAskLines(career) {

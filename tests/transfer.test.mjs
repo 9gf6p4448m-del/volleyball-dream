@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   transferCandidates, transferAskLines, transferTalkFor, seasonTransferState,
   interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV, TRANSFER_MIN_MATCHES,
+  TALK_CANDIDATES,
 } from '../src/career/positionEvents.js';
 import { createCareer, recordResult, advanceSeason } from '../src/career/careerState.js';
 
@@ -46,6 +47,41 @@ test('gate 三條件：位置 open／打滿 3 場／每屆一次——缺一即�
   assert.ok(!transferCandidates({
     flags: FLAGS_ALL_OPEN, player: { currentRole: 'setter' }, career: careerWith(3),
   }).includes('setter'));
+});
+
+// 2026-08-10 Sawmah 裁定「開放轉回 OH」（真人試玩：第三屆想從 S 轉回 OH，選單只有 MB/L/OPP）。
+// 修復前紅在第一條 includes——OH 從來不在候選池常數裡，不是被哪條規則剔除的
+test('回任 OH：轉出去之後回得來——請調選單列得出主攻手', () => {
+  const roles = transferCandidates({
+    flags: FLAGS_ALL_OPEN, player: { currentRole: 'setter' }, career: careerWith(3),
+  });
+  assert.ok(roles.includes('outside'), 'OH 不入旗標系統 ≠ 不能回任');
+  assert.deepEqual(roles, ['middle', 'opposite', 'libero', 'outside'], 'OH 排最後、現任 S 不列');
+  // OH 不受三態旗標管（出道位的工程與驗收隨遊戲本體出廠）：旗標全 locked 也回得去
+  assert.deepEqual(
+    transferCandidates({ flags: {}, player: { currentRole: 'libero' }, career: careerWith(3) }),
+    ['outside'],
+  );
+  // 現任 OH 不列自己（沿現制的「不列現任位置」）
+  assert.ok(!transferCandidates({
+    flags: FLAGS_ALL_OPEN, player: PLAYER, career: careerWith(3),
+  }).includes('outside'));
+  // 教練主動談話的池不動（回任只走玩家主動的請調——兩個池刻意分開）
+  assert.ok(!TALK_CANDIDATES.includes('outside'));
+});
+
+test('回任 OH 的台詞自成一版：不得沿用「舉對」分支，位置名不得漏字', () => {
+  const members = [
+    { id: 'G9', name: '林替身', role: 'outside' },
+    { id: 'G8', name: '別的人', role: 'opposite' },
+  ];
+  const t = transferTalkFor({ role: 'outside', player: { currentRole: 'setter' }, members });
+  assert.ok(t.offerLines.some((l) => l.text.includes('主攻手')), 'ROLE_LABEL 缺 outside＝畫面直接吐英文 role');
+  assert.ok(t.acceptLines.some((l) => l.speaker === '林替身'), '被取代者＝現任主攻');
+  assert.ok(!t.acceptLines.some((l) => l.text.includes('右翼')), 'fallthrough 到 opposite＝台詞說錯位置');
+  // 名冊裡沒有其他 OH（理論上不會發生）也不得炸，退回泛稱
+  const bare = transferTalkFor({ role: 'outside', player: { currentRole: 'setter' }, members: [] });
+  assert.ok(bare.acceptLines.every((l) => l.speaker === '隊友'));
 });
 
 test('當屆二選一互斥：used＝屆間談話不觸發；婉拒（僅 asked）＝屆間談話照常', () => {

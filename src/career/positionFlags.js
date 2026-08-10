@@ -65,3 +65,13 @@ export function isPositionOpen(flags, pos) {
   assertPosition(pos);
   return (flags?.[pos] ?? 'locked') === 'open';
 }
+
+// 「這個位置能不能當轉位目的地」——轉位清單（positionEvents）唯一該問的問題。
+// ★OH 不在 FLAG_POSITIONS★：它是出道位，玩法工程與試玩驗收隨遊戲本體出廠，
+// 從來就沒有 locked/ready 這兩個狀態可言 ⇒ 恆可選（2026-08-10 Sawmah 裁定「開放轉回 OH」；
+// 在此之前 OH 只能單向轉出，轉走的人回不去）。判斷寫在本檔而不是讓呼叫端各自 special-case——
+// 旗標的語意只有這個檔知道，散出去就會有第三個消費端忘記 OH 這個例外。
+export function isRoleSelectable(flags, role) {
+  if (role === 'outside') return true;
+  return isPositionOpen(flags, role);
+}
