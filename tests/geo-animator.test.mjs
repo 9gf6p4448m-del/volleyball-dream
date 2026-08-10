@@ -677,8 +677,12 @@ test('W2-1 三段式：沒有起跳段的冷觸發仍自帶跳躍（退路不得
 });
 
 test('W2-1 三段式：既有跳躍序列的弧逐值不變（block/serveJump/overheadJump 零影響）', () => {
-  // 跳躍弧改成獨立狀態後，非 airborne 的序列必須逐值等於「jump·sin(π·t/dur)」原式
-  for (const [type, jump, dur] of [['blockJump', 0.34, 0.7], ['serveJump', 0.55, 0.85], ['overheadJump', 0.32, 0.62]]) {
+  // 跳躍弧改成獨立狀態後，非 airborne 的序列必須逐值等於「jump·sin(π·t/airDur)」原式
+  // ★ 2026-08-10 更新期望值：blockJump 的弧長 0.7 → 0.4 ★ 這不是放寬——當年這條守的
+  // 是「W2-1 三段式重構零行為變更」，那個前提已被新裁定取代：攔網弧改為對齊 sim 的
+  // 滯空模型 sin(π·airT/24)＝0.4s（真人回報「結算時人還在蹲」，1c23497）。
+  // 弧「形狀」的守恆本身不變，只是 blockJump 的時長基準換成 airDur。
+  for (const [type, jump, dur] of [['blockJump', 0.34, 0.4], ['serveJump', 0.55, 0.85], ['overheadJump', 0.32, 0.62]]) {
     const anim = createGeoAnimator(mkRig());
     anim.trigger(type);
     const n = Math.round(dur * 60);
