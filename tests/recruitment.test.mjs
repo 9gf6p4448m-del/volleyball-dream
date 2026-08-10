@@ -60,6 +60,14 @@ test('featGainFor blockKill：攔網直接得分計數、被接起不計', () =>
   assert.equal(featGainFor(teammate, 'A2', 'A', cond), 0);
 });
 
+// 守衛（08-11 使用者裁定）：這兩個門檻是**依窗口局數**訂的（obsidian 窗口 1 局、
+// black-pine 窗口保底均值 3.15 局，λ=0.4×窗口局數的 Poisson 推真人達成率）——
+// 改動前先重算窗口局數再訂門檻，不要無意識改回舊值。
+test('RECRUIT_CONDS 門檻守衛：obsidian/black-pine 的 blockKill count 對齊窗口（08-11）', () => {
+  assert.equal(RECRUIT_CONDS.obsidian.feat.count, 1, 'obsidian 窗口僅 1 局，門檻對齊為 1');
+  assert.equal(RECRUIT_CONDS['black-pine'].feat.count, 2, 'black-pine 窗口均值 3.15 局，門檻對齊為 2');
+});
+
 test('featGainFor strongReceive：敵發後第一觸、品質達標才計', () => {
   const cond = RECRUIT_CONDS['iron-mist'];
   const good = [serve('B', 'B1'), touch('A', 'A2', 'receive', 0.9), score('A')];
