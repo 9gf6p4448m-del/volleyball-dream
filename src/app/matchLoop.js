@@ -48,7 +48,7 @@ import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
 import { CAMERA_TUNING } from '../render/cameraRig.js';
 import { hitLeadTicks, seqDurTicks } from '../render/geoAnimator.js';
-import { approachRouteOf, isQuickKind } from '../sim/approach.js';
+import { approachRouteOf, isQuickKind, TEMPO, SET_TO_HIT_TICKS } from '../sim/approach.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey, ohSignatureArms,
   lineKillDistance, SIG_LINE_M, timingVerdict,
@@ -1892,7 +1892,15 @@ function updateAssistAndPoses(s) {
       // 快攻族一律用猶豫起跳動作（含 B 快）——與 setOptions 的「猶豫」標同一把尺
       const hesitant = isQuickKind(aiState.attackKind)
         && attacker && effectiveTrust(game, attacker) < SET_HESITANT_BELOW;
-      stage.matchView.triggerPose(aiState.attackerId, hesitant ? 'windupHesitant' : 'windup');
+      // ★ 2026-08-10 快攻滯空修正 ★ hangTicks＝起跳→擊球的名目 tick 數，讓跳躍弧的
+      // 頂點落在擊球那一刻。一速 14+33=47（原本固定弧頂在 22.5 tick ⇒ 擊球時人已
+      // 掉到 0.22m＝真人看到的「貼地打」）；二速 −40+61=21 ⇒ 低於弧的既有下限
+      // ⇒ 逐值不變、零回歸。三速不走本路徑（earlyTakeoffCue 排除）。
+      const hang = TEMPO[early.route.tempo]
+        ? TEMPO[early.route.tempo].takeoffLead + SET_TO_HIT_TICKS[early.route.tempo]
+        : null;
+      stage.matchView.triggerPose(aiState.attackerId, hesitant ? 'windupHesitant' : 'windup',
+        hang != null && hang > 0 ? { hangTicks: hang } : null);
     }
   }
   // Phase 5 W2 核心-2（假動作全員演出，B-2＋B-3）：aiState.approach.routes 是

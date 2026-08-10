@@ -458,8 +458,29 @@ export function createGeoAnimator(rig) {
         // 冷觸發退路：沒有前一段的弧可沿用（玩家沒起跳就出手／段①已落地）才自己開一條
         if (!air) air = { jump: seq.jump, dur: seq.airDur ?? seq.dur, t: 0 };
       } else if (seq.jump > 0) {
-        const airDur = seq.airDur ?? seq.dur;
-        air = { jump: seq.jump, dur: airDur, t: airProg != null ? Math.min(airProg, cap) * airDur : 0 };
+        // ★ 2026-08-10 快攻貼地扣球修正 ★ 跳躍弧原本固定 airDur=0.75s（45 tick），
+        // 頂點恆在第 22.5 tick——二/三速「起跳→擊球」剛好 21/22 tick＝踩在頂點
+        // （0.49m），但**一速快攻要 37-47 tick**＝擊球時人已掉到弧的 82-96%、只剩
+        // 0.22m，疊上猶豫/體力係數剩 0.12-0.16m ⇒ 真人看到的「貼地把球打出去」。
+        // 修法＝呼叫端可傳 `opts.hangTicks`（起跳→預計擊球的 tick 數），弧長改為
+        // 「頂點落在擊球那一刻」：airDur = 2×hangTicks/60，下限取 seq.airDur（二/三速
+        // 傳進來 2×21/60=0.7 < 0.75 ⇒ 取 0.75＝**逐值不變、天然零回歸**）、上限 1.4s
+        // 防極端值把人吊在空中。未傳＝行為完全照舊。
+        // ★ 同修：還在空中的重觸發不重錨 ★ fallback 路徑（matchLoop 的 hitPoint 倒數）
+        // 會對同一人再觸發一次 windup：舊行為在 airProg>0.5 時把身體瞬間拉回頂點
+        // （畫面上「空中彈一下」），拉長弧之後更會把弧改短。改為：人還在弧上
+        // （airProg<1）＝姿勢照播、弧不動；弧已播完（airProg>=1，二速 fallback 重開
+        // 新弧的既有「意外正確」路徑）＝照舊重錨。
+        if (air && airProg != null && airProg < 1) {
+          // 弧保持原樣
+        } else {
+          const hangSec = opts?.hangTicks != null ? (2 * opts.hangTicks) / 60 : null;
+          const baseDur = seq.airDur ?? seq.dur;
+          const airDur = hangSec != null
+            ? Math.min(Math.max(hangSec, baseDur), 1.4)
+            : baseDur;
+          air = { jump: seq.jump, dur: airDur, t: airProg != null ? Math.min(airProg, cap) * airDur : 0 };
+        }
       } else {
         air = null; // 落地/非跳躍動作接手＝弧結束（改制前「jump 0 的序列 jumpY=0」同義）
       }

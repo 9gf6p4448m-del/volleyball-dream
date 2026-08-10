@@ -164,9 +164,9 @@ export async function createMatchView(scene, quality, game, initialControlledId,
 
   return {
     count: Object.keys(units).length,
-    triggerPose(playerId, type) {
+    triggerPose(playerId, type, opts = null) {
       const u = units[playerId];
-      if (u) setPose(u, type);
+      if (u) setPose(u, type, opts); // opts 穿透（2026-08-10 快攻滯空修正：hangTicks）
     },
     // 07-29 擊球動作提前觸發（matchLoop 依 aiState.contactPoint 倒數呼叫）：讓擊球
     // 關鍵幀落在 sim 的觸球那一 tick，而不是觸球後 0.2–0.3s。與 triggerPose 的差別
