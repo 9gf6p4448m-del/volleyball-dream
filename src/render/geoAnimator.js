@@ -235,11 +235,21 @@ const SEQUENCES = {
   //   1    blockUp    ：落地前收回待命牆姿
   // 上擺幅度沿用既有 blendKeys 線性插值（LOAD→JUMP 之間是連續漸變，不是瞬間甩臂）＝
   // 底稿 §49-51 警告的「有控制的擺臂」而非亂甩；四幀時間點與時長本身不動，只調過 POSES。
-  blockJump: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.22, p: 'blockUp' }, { at: 0.45, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
+  // ★ 2026-08-10 攔網「畫面在蹲、sim 已結算」修正 ★ 真人回報攔網手「偶爾完全沒起跳」，
+  // 量測（30 局 n=3296 次 sim 起跳）：動畫觸發對齊率 100%（沒有漏觸發），但**弧形對不上**
+  // ——本序列原 dur 0.7s＝42 tick、弧頂 21 tick，而 sim 的滯空模型（player.js blockTopEdge）
+  // 是 sin(π·airT/24)：24 tick 落地、弧頂 12。渲染弧比 sim 慢 1.75 倍，再加 blockLoad
+  // 蹲姿佔掉開頭 13 tick（sim 零預備當場起跳）⇒ 結算那一刻動畫離地 p50 僅 0.119m、
+  // 30% 樣本 <0.05m＝「看起來根本沒跳」。
+  // 修＝**弧與姿勢都對齊 sim**：airDur 0.4s（＝AIR_TICKS 24 tick，弧頂 12＝同一個 sin，
+  // read airT p50=7 → 0.79、commit p50=14 → 0.97，由同構保證、不靠常數湊——反事實臂
+  // 實測過「只縮不對齊」會讓 commit 反而變差）；姿勢 dur 縮到 0.5、蹲（blockLoad）壓到
+  // 前 10%（≈2.5 tick）與 sim 的零預備相稱。jump 高度與四關鍵幀語意（底稿 §80-89）不動。
+  blockJump: { dur: 0.5, airDur: 0.4, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.1, p: 'blockUp' }, { at: 0.35, p: 'blockPunch' }, { at: 1, p: 'blockUp' }] },
   // W2 補課④：graze（擦手）版——同一套蹲→蹬→滯空→落地節奏，中段換成較保守的
   // blockTouch（見 POSES 註解），讓玩家分得出「攔死」與「指尖擦到」兩種畫面。
   // 三態的第三態 clean 沒有觸球事件、本來就不觸發任何演出，維持不變
-  blockJumpGraze: { dur: 0.7, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.22, p: 'blockUp' }, { at: 0.45, p: 'blockTouch' }, { at: 1, p: 'blockUp' }] },
+  blockJumpGraze: { dur: 0.5, airDur: 0.4, jump: 0.34, land: true, keys: [{ at: 0, p: 'blockLoad' }, { at: 0.1, p: 'blockUp' }, { at: 0.35, p: 'blockTouch' }, { at: 1, p: 'blockUp' }] },
   // Phase 5 W1 §2-2/2-4：助跑三步節奏（雙臂後擺→前一步壓低，**jump 0＝腳不離地**）。
   // 取代 4.7 的兩關鍵幀版（0.28s／走過去然後拔起）——步相由 update() 的 stepPhase()
   // 另外驅動腿部（見 STEP_AMP_3/4），這裡的 keys 只管手臂/軀幹的蓄勢→交棒 windup。
