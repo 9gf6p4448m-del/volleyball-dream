@@ -39,3 +39,9 @@ export const SERVE_PERIOD = 6;
 // 攔網半寬必須維持**單一真相**——sim 的 TUNING 與玩家面板（`input/attackZones.js`）
 // 共用同一把尺，那是既有設計，有測試守著（`reach-volume.test.mjs` 的「陷阱 1」）。
 export const CONVERGE_T = 1.0;
+
+// 一傳的名目落點（隊伍視角座標；二傳站位）。★2026-08-11 從 `ai.js` 搬來當單一事實源★
+// 理由與上面那段同構：`game.js` 要用它算「這一傳離二傳點多遠」（爆接／poor 一傳卷），
+// 而 game.js **不能 import ai.js**（單向依賴：ai.js 反過來 import game.js）。
+// `ai.js` 改成 re-export，五個既有取用點一格不動。
+export const SETTER_SPOT = { lx: 1.2, lz: 1.2 };

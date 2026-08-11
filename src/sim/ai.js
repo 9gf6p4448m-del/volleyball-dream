@@ -3,7 +3,7 @@
 //   個體層：待命 → 判來球 → 移動到位 → 執行動作 → 回位
 // 原則：寧可有人搶錯，不可兩人互讓（呼叫鎖定以 flightId 為鍵，天然不可撤銷、不打架）
 // 難度＝堪打等級：動作正確、不玩心理戰、不打刁鑽落點（強度調參 Phase 2+）
-import { BALL, COURT, SIM_DT } from './constants.js';
+import { BALL, COURT, SIM_DT, SETTER_SPOT } from './constants.js';
 import { serverId } from './match.js';
 import {
   otherTeam, basePosition, localToWorld, isFrontRow, isBackRow, positionOf, TEAM_SIDE,
@@ -71,7 +71,7 @@ export const AI = {
   // 量級來源同 routeCue 的原註解：sim 判「走到定點了」的死區量級
   //（approach.js `TAKEOFF.SETTLE` 0.25＝離起跳點多近算到位）。
   AT_START_M: 0.3,
-  SETTER_SPOT: { lx: 1.2, lz: 1.2 },    // 一傳目標（隊伍視角）
+  SETTER_SPOT,                          // 一傳目標（隊伍視角）——單一事實源在 constants.js
   BLOCK_LZ: 0.6,          // 攔網站位深度
   BLOCK_SPREAD: 1.5,      // 攔網分工間距：中前正對球、兩翼各偏一個間距（不疊人）
   BLOCK_SCHEME_SHIFT: 0.9, // W4 附錄 B-1：L 配套封線站位偏移（封直線往邊線/封斜線往內）

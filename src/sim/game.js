@@ -1,11 +1,11 @@
 // Phase 1 比賽模擬組裝層 — 模擬核心唯一入口（純 JS、零 three.js/DOM）
 // 鐵律：stepGame 只吃 Intent（玩家/AI/網路同型，不知來源）；固定步長；隨機只走種子 PRNG
-import { SIM_DT, COURT, BALL, CONVERGE_T } from './constants.js';
+import { SIM_DT, COURT, BALL, CONVERGE_T, SETTER_SPOT } from './constants.js';
 import { createBall, stepBall } from './ball.js';
 import { createMatch, serverId, pointTo, isFourHits } from './match.js';
 import {
   TEAM_SIDE, otherTeam, basePosition, servePosition,
-  isBackRow, isInFrontZone, landedCourtTeam,
+  isBackRow, isInFrontZone, landedCourtTeam, localToWorld,
 } from './rotation.js';
 import {
   createPlayer, spikeReach, blockReach, blockTopEdge, moveSpeed, feintMasteryMul,
@@ -19,7 +19,7 @@ import { AIR_TICKS } from './approach.js';
 import {
   BLOCK_HALF_WIDTH, buildBand, bandContact, overBlockerHands, classifyBlockContact,
 } from './blockBand.js';
-import { velocityForApex, spikeVelocity } from './flight.js';
+import { velocityForApex, spikeVelocity, predictLanding } from './flight.js';
 import { seedRng, rand } from './rng.js';
 import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rotationRules.js';
 import { applyAttackOutcome, applyComboAssist } from './trust.js';
@@ -360,6 +360,13 @@ export function createGame({
       deceiveP: 0,       // H3：當前扣球夾帶的騙敵機率（攔網結算用）
       lastSpikeZone: null, // 本波扣球的線路分類（line/cross/middle/tip；情蒐讀取用）
       lastSetKind: null,   // §十-4：最後一次舉球檔位 {team, kind:'quick'|'shoot'|'high'}（快攻分類資料底）
+      // ★ 2026-08-11 爆接／poor 一傳卷：本波一傳離二傳站位多遠（公尺；無一傳＝null）★
+      // 為什麼住在 sim 而不是走 Intent：`ai.js` 的 `passTierOf` 目前自己算一次，
+      // 而**輸入層有能力漏傳** ⇒ 玩家側會天然逃脫懲罰。量測住在 sim ＝
+      // **雙方對稱是結構保證，不是紀律保證**。消費端（分檔門檻）仍留在 ai.js，
+      // 因為那要用二傳身高算可及半徑——量測一份、消費兩處、解析度不同，不是兩份真相。
+      passOffset: null,
+      passTeam: null,      // 這個 offset 是誰的一傳（換方持球時要清）
       serveStyle: null,  // 本球發球式（'float'＝飄浮：接發品質懲罰；過首觸即無效）
       touchLockTick: -1, // 每 tick 至多一次觸球（先到先得，順序＝Intent 陣列序，決定論）
       // W4 題5 OPP 要球：本波要球者。
@@ -632,7 +639,12 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   const team = player.teamId;
   // §十-4：換方持球＝上一拍舉球檔位失效（快攻分類只認同一波持球內的舉球，
   // 防跨波/跨 possession 殘留把普通扣球誤分成快攻）
-  if (team !== rally.possession) rally.lastSetKind = null;
+  if (team !== rally.possession) {
+    rally.lastSetKind = null;
+    // 換方持球＝上一隊的爛一傳與你無關（清空點三處：這裡、發球、死球結算）
+    rally.passOffset = null;
+    rally.passTeam = null;
+  }
   // 觸球數屬於持球方：非持球方的觸球（如攔網回彈落在對側）從 1 起算，
   // 不得繼承前一隊的計數——共用計數器曾把防守方第一觸誤記成第 4 擊
   const newCount = team === rally.possession ? rally.touches + 1 : 1;
@@ -763,6 +775,18 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   }
   ball.vx = v.vx; ball.vy = v.vy; ball.vz = v.vz;
   ball.px = ball.x; ball.py = ball.y; ball.pz = ball.z;
+
+  // ★ 爆接／poor 一傳卷 階段 A：純記帳（本階段零消費者，行為必須逐值不變）★
+  // 第一觸＝一傳 ⇒ 量它會落到離二傳站位多遠。取樣時點是**觸球當下的乾淨彈道**，
+  // 與 `ai.js` 現行 `ensureFlightPlan` 的取樣（晚 1 tick 以上）不同——階段 B 讓
+  // `passTierOf` 改吃這一份時，邊界附近的檔位會翻幾格，屆時要驗 tier 分佈仍在
+  // 87.0/8.0/4.9 ±1pp。
+  if (newCount === 1) {
+    const land = predictLanding(ball);
+    const spot = localToWorld(team, SETTER_SPOT.lx, SETTER_SPOT.lz);
+    rally.passOffset = land ? Math.hypot(land.x - spot.x, land.z - spot.z) : null;
+    rally.passTeam = team;
+  }
 
   // stage 5 情蒐統計：扣球線路/假動作進 intent 分佈（跨場累積由生涯層收走）
   if (intent.action === 'spike') {
@@ -912,6 +936,9 @@ function performServe(state, intent, ev) {
   // 跳發也記式樣（原本只記 float）——接發懲罰要吃得到跳發，否則跳發只是自己球快、
   // 對接發方毫無額外難度（07-23 補：跳發跳飄都更難接）
   rally.serveStyle = power ? 'power' : float ? 'float' : null;
+  // 清空點之二（爆接卷）：發球＝新的一波，上一波的一傳偏移作廢
+  rally.passOffset = null;
+  rally.passTeam = null;
   // 情蒐統計：發球風格偏好
   const stal = scoutTallyOf(state, player.id).serves;
   stal.total += 1;
@@ -1324,6 +1351,10 @@ function settlePoint(state, winner, reason, ev) {
   // stage 4 信任動態歸因：攻擊直接定勝負的球——殺進＝＋、打出界＝−（連續加碼）
   // 只認乾淨歸因（最後觸球＝扣球）；攔網回彈等混合責任不記帳
   const r = state.rally;
+  // 清空點之三（爆接卷）：死球＝這一波結束。三處缺一都會讓上一波的一傳偏移
+  // 殘留到下一波（本專案已因「清空點漏一處」踩過三次，見 ai.js:400-411 的逐字紀錄）
+  r.passOffset = null;
+  r.passTeam = null;
   if (r.profile === 'spike' && r.lastToucherId) {
     // W4 題5：要球者的信任雙倍下注——要了球又是這記攻擊的歸因者＝升降幅同倍放大
     const mul = r.callPid === r.lastToucherId ? TUNING.CALL_TRUST_MUL : 1;
