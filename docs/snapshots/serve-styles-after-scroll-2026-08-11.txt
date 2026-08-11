@@ -1,0 +1,3 @@
+float  n=1532 ACE   7.1% 失誤   3.0% 勝率  30.7% | 一傳 perfect 73.0%/ok 6.6%/poor 20.4% | 分tier勝率 perfect 25%(n=1004) ok 33%(n=94) poor 29%(n=279) | 飛行 -t | 接爆失分 0.0% | 失誤因 {"OUT":46}
+power  n=1504 ACE  15.5% 失誤  14.5% 勝率  38.0% | 一傳 perfect 37.6%/ok 3.1%/poor 59.4% | 分tier勝率 perfect 27%(n=396) ok 37%(n=35) poor 36%(n=622) | 飛行 -t | 接爆失分 3.4% | 失誤因 {"BALL_IN":182,"OUT":36}
+normal n=1462 ACE   0.0% 失誤   0.0% 勝率  26.7% | 一傳 perfect 83.1%/ok 8.3%/poor 8.6% | 分tier勝率 perfect 26%(n=1209) ok 40%(n=121) poor 24%(n=132) | 飛行 -t | 接爆失分 0.0% | 失誤因 {}

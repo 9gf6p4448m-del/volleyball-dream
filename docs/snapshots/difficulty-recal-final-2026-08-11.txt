@@ -1,0 +1,81 @@
+
+=== 勝率曲線（100 次生涯模擬；臂＝多局制（賽程推導）；A2=AI 代打基準）===
+group-1          勝率  76%  平均分差 2.9
+group-2          勝率  73%  平均分差 2.8
+group-3          勝率  63%  平均分差 1.1
+national-qf      勝率  20%  平均分差 -3.7
+national-rr2     勝率  96%  平均分差 7.4
+national-rr3     勝率  89%  平均分差 4.3
+national-sf      勝率  60%  平均分差 0.7
+national-final   勝率   7%  平均分差 -2.0
+A2 場均（身高體感代理）：殺球 6.37｜吊球 0.15｜ACE 0.10｜攔網得分 0.26（A2 個人／每局——非全隊值；7.2 查證 07-30：全隊每局 ≈2.17 在真實帶 1.5–2.5 內，勿再拿本欄與全隊對照值比，A-8）
+
+決賽帶（真實連勝踏進決賽）：60%
+奪冠率（循環前二 ∧ 準決勝 ∧ 決賽勝＝careerStage 判定）：7%
+逆轉哨兵（落後≥5 後翻盤，全 2400 場）：樣本 574 場、翻盤 76（13%）
+
+=== 跨屆勝率（VD_SEASONS=3，每屆 100 條生涯）===
+第 1 屆   76%  73%  63%  20%  96%  89%  60%   7%  奪冠 7%
+第 2 屆   96%  63%  27%  43%  89%  86%  17%  16%  奪冠 16%
+第 3 屆   86%  86%  47%  34%  95%  41%  53%   5%  奪冠 5%
+
+=== 逐屆驗收指標（題 B：奪冠率的 SE 蓋過錨 3a 的 3pp 目標間距）===
+第 1 屆  決賽帶  60%　國賽勝場 2.72/5
+第 2 屆  決賽帶  17%　國賽勝場 2.51/5
+第 3 屆  決賽帶  53%　國賽勝場 2.28/5
+（自驗閘：第 1 屆決賽帶應逐值等於上方總計的 60%）
+
+=== TITLE_LEVEL_BONUS 覆蓋率（Q2）===
+屆槽：30/300（10.0%）的屆開頭 titles>0
+生涯：23/100（23.0%）的生涯三屆內至少觸發過一次
+
+=== 衛冕曲線（依屆初 titles 分組；TITLE_LEVEL_BONUS 收斂性）===
+titles=0（ 270 屆）  86%  74%  47%  32%  93%  74%  44%  10%  奪冠  10%
+titles=1（  30 屆）  87%  77%  37%  37%  97%  53%  37%   7%  奪冠   7%
+
+=== 屆末換血（F1／G6；production careerStore.advanceSeason 鏡像）===
+屆界 200 次｜畢業 594 人次（2.97/屆）｜新生 386 人次（1.93/屆）
+等候名單遞補 1 人次（0.01/屆）｜來投保底觸發 14 次（7.0% 的屆界）
+
+=== 招募跨屆流動（打好打滿＝上緣；逐出未建模）===
+north-tech       入隊率  66%  平均入隊屆 3.0
+white-wave       入隊率  14%  平均入隊屆 2.6
+obsidian         入隊率  29%  平均入隊屆 1.0
+iron-mist        入隊率  13%  平均入隊屆 2.0
+sky-hawk         入隊率  22%  平均入隊屆 1.7
+obsidian-2       入隊率   6%  平均入隊屆 1.2
+iron-mist-2      入隊率   1%  平均入隊屆 2.0
+sky-hawk-2       入隊率  91%  平均入隊屆 1.3
+gale-shore       入隊率  99%  平均入隊屆 2.1
+gale-shore-2     入隊率 100%  平均入隊屆 1.3
+black-pine       入隊率   2%  平均入隊屆 3.0
+black-pine-2     入隊率  32%  平均入隊屆 2.0
+名冊終量平均 10.8/12（含玩家）
+
+=== 逐對手勝率（分母＝實打場數；賽制不同 ⇒ 逐場次分列，不得合併）===
+第 1 屆（實打 747 場）
+  north-tech   合計   76/100   group-1 76/100
+  white-wave   合計  162/200   group-2 73/100　national-rr3 89/100
+  obsidian     合計  123/187   group-3 63/100　national-sf 60/87
+  gale-shore   合計   96/100   national-rr2 96/100
+  iron-mist    合計   20/100   national-qf 20/100
+  sky-hawk     合計    7/60    national-final 7/60
+  自驗閘：byOpponent 合計 747 ＝ career.results 記帳 747 ✅
+第 2 屆（實打 703 場）
+  north-tech   合計   94/105   group-1 15/15　national-rr2 79/90
+  white-wave   合計   99/108   group-2 17/20　national-rr2 5/5　national-rr3 77/83
+  obsidian     合計   30/39    group-2 14/22　national-final 16/17
+  gale-shore   合計  107/111   group-1 81/85　group-2 15/15　national-rr2 5/5　national-rr3 6/6
+  iron-mist    合計   51/117   group-2 8/17　national-qf 43/100
+  black-pine   合計   34/111   group-2 9/26　group-3 22/74　national-rr3 3/11
+  sky-hawk     合計   22/112   group-3 5/26　national-sf 17/86
+  自驗閘：byOpponent 合計 703 ＝ career.results 記帳 703 ✅
+第 3 屆（實打 714 場）
+  north-tech   合計   96/110   group-1 76/89　national-rr2 20/21
+  white-wave   合計  103/115   group-1 3/4　group-2 56/64　group-3 19/19　national-rr2 14/15　national-rr3 11/13
+  obsidian     合計   70/84    group-2 4/4　group-3 13/19　national-sf 53/61
+  gale-shore   合計  104/108   group-1 7/7　group-2 25/26　national-rr2 61/64　national-rr3 11/11
+  iron-mist    合計   41/118   group-2 1/3　group-3 6/15　national-qf 34/100
+  black-pine   合計   26/106   group-2 0/3　group-3 7/27　national-rr3 19/76
+  sky-hawk     合計    7/73    group-3 2/20　national-final 5/53
+  自驗閘：byOpponent 合計 714 ＝ career.results 記帳 714 ✅
