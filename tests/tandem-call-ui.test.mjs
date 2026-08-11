@@ -30,6 +30,15 @@ function stubStage() {
 const newGame = (seed = 536000) =>
   createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
 
+// ★ 2026-08-11 量測參數：自動骰夾塞那兩條改吃 seed 序列（AI.BLOCK_RETRACT_ON_POOR 1→0）★
+// 動的是**取樣量**，不是任何行為判準。全域率先驗過（協定步驟 1，40 局／2900+ 波 A/B）：
+// 「A4 當 main 的自動骰夾塞波」佔第二觸窗波數 —— 舊旗標（=1）**1.46%**（42/2879）、
+// 新旗標（=0）**1.36%**（40/2951）⇒ 差異在雜訊內，現象**沒有被壓死**；
+// 536000 這一局的期望值只有 ≈1.0 次，骰到 0 就整條測試失去解析力（＝樣本漂移，
+// 不是行為迴歸）。與其再挑一顆「剛好會過」的 seed（2026-08-09 已經因此重挑過一次），
+// 改成跨 8 局取樣：期望值 ≈8 次，下一次 rally 流位移也活得下來。
+const AUTO_TANDEM_SEEDS = [536000, 537000, 538000, 539000, 540000, 541000, 542000, 543000];
+
 // ════════ 過期鈕：不得靜默 ════════
 test('過期鈕：窗已關時按下去要說出原因，且絕不寫 tandemCall', () => {
   const game = newGame();
@@ -122,23 +131,27 @@ test('死文案：TANDEM_FEEDBACK 不得出現實跑印不出來的 key', () => 
 // ★ 覆審 MEDIUM-3 的行為面 ★ 上面那條只看表；這條走**真的按下去**那條路：
 // 本波本來就排了他的夾塞（reason='done'）時按鈕，畫面不得說「沒排成」。
 test('★MEDIUM-3★ reason=done 按下去不得顯示「沒排成」（假陰性）', () => {
-  const game = newGame();
-  const ai = createAiState();
   let checked = 0;
-  let guard = 0;
-  while (game.phase !== 'set_over' && guard < 400000 && checked < 3) {
-    guard += 1;
-    const st = tandemStateOf(game, ai, PID);
-    if (st.reason === 'done') {
-      const { shown, stage } = stubStage();
-      onTandemTap({ game, aiState: ai, playerId: PID, stage });
-      assert.equal(shown.length, 1);
-      assert.notEqual(shown[0].text, TANDEM_FEEDBACK.missed.text,
-        'reason=done（本來就排了夾塞）卻顯示「沒排成」＝假陰性回饋');
-      assert.match(shown[0].text, /本來就排了夾塞/);
-      checked += 1;
+  // 取樣跨 8 局（AUTO_TANDEM_SEEDS，理由見檔頭常數）——行為斷言一格未動
+  for (const seed of AUTO_TANDEM_SEEDS) {
+    if (checked >= 3) break;
+    const game = newGame(seed);
+    const ai = createAiState();
+    let guard = 0;
+    while (game.phase !== 'set_over' && guard < 400000 && checked < 3) {
+      guard += 1;
+      const st = tandemStateOf(game, ai, PID);
+      if (st.reason === 'done') {
+        const { shown, stage } = stubStage();
+        onTandemTap({ game, aiState: ai, playerId: PID, stage });
+        assert.equal(shown.length, 1);
+        assert.notEqual(shown[0].text, TANDEM_FEEDBACK.missed.text,
+          'reason=done（本來就排了夾塞）卻顯示「沒排成」＝假陰性回饋');
+        assert.match(shown[0].text, /本來就排了夾塞/);
+        checked += 1;
+      }
+      stepGame(game, aiCollectIntents(game, ai, []));
     }
-    stepGame(game, aiCollectIntents(game, ai, []));
   }
   assert.ok(checked >= 2, `樣本不足（${checked}）＝這條沒有解析力`);
 });
@@ -293,18 +306,28 @@ test('★裁定 2★ 三種來源都出卡：自己叫／S 叫／25% 自動骰',
     sources.add('setter');
   }
   // ---- ③ 25% 自動骰（完全不碰任何指令欄位）----
+  // 取樣跨 8 局（AUTO_TANDEM_SEEDS，理由見檔頭常數）：這一臂**完全被動**，
+  // 只能等自動骰把 A4 排進夾塞，因此它是三臂裡唯一吃全域率的——單局期望值 ≈1.0 次。
   {
-    const game = newGame();
-    const ai = createAiState();
-    const s = { game, aiState: ai, playerId: PID };
-    let guard = 0;
-    while (guard < 400000 && !s.tandemAssignPending && game.phase !== 'set_over') {
-      guard += 1;
-      stepGame(game, aiCollectIntents(game, ai, []));
-      captureTandemAssign(s);
+    let pending = null;
+    let lastAi = null;
+    for (const seed of AUTO_TANDEM_SEEDS) {
+      if (pending) break;
+      const game = newGame(seed);
+      const ai = createAiState();
+      lastAi = ai;
+      const s = { game, aiState: ai, playerId: PID };
+      let guard = 0;
+      while (guard < 400000 && !s.tandemAssignPending && game.phase !== 'set_over') {
+        guard += 1;
+        stepGame(game, aiCollectIntents(game, ai, []));
+        captureTandemAssign(s);
+      }
+      pending = s.tandemAssignPending;
+      assert.equal(ai.tandemCall, null, '自動骰那一臂竟然寫了指令欄位＝樣本被污染');
     }
-    assert.ok(s.tandemAssignPending, '自動骰排出來的夾塞沒有出字卡＝只有自己按的才看得到');
-    assert.equal(ai.tandemCall, null, '自動骰那一臂竟然寫了指令欄位＝樣本被污染');
+    assert.ok(pending, '自動骰排出來的夾塞沒有出字卡＝只有自己按的才看得到');
+    assert.equal(lastAi.tandemCall, null, '自動骰那一臂竟然寫了指令欄位＝樣本被污染');
     sources.add('auto');
   }
   assert.equal(sources.size, 3);

@@ -231,30 +231,42 @@ test('B 自己接一傳＝這條線降級＝不開窗（§7 D2 的第二層檔�
   // `routeKindFor` 吃的是**這條線自己的** tier（`attackPointsOf` 對接一傳者
   // 套 worseTier）——只看隊伍層的 aiState.passTier 會漏掉這一整類。
   // 實測診斷輪：未生效的波裡有一大半正是「隊伍 perfect、但他自己接了一傳」。
-  const game = createGame({ seed: 500000, teams: createDefaultTeams(), setTarget: 25 });
-  const ai = createAiState();
+  //
+  // ★ 2026-08-11 量測參數：單局 → seed 序列（AI.BLOCK_RETRACT_ON_POOR 1→0 之後）★
+  // 動的是**取樣量**，不是任何行為判準（open/reason/missed 四條斷言一格未動）。
+  // 全域率先驗過（協定步驟 1，40 局／2900+ 波的 A/B）：本條的取樣情境
+  //「A2 自己接一傳 ∧ 隊伍 perfect ∧ 他的線是 left」佔第二觸窗波數 ——
+  // 舊旗標（=1）**2.64%**（76/2879）、新旗標（=0）**2.78%**（82/2951）
+  // ⇒ 全域率不但沒被壓死、還微升，是 500000 這一局（59 波、期望 ≈1.6 次）骰到 0
+  //   ＝樣本漂移不是行為迴歸。8 局的期望值 ≈13 次，遠離下限 2。
+  const SEEDS = [500000, 501000, 502000, 503000, 504000, 505000, 506000, 507000];
   let seen = 0;
-  let guard = 0;
-  while (game.phase !== 'set_over' && seen < 5 && guard < 400000) {
-    guard += 1;
-    const intents = aiCollectIntents(game, ai, []);
-    if (ai.approach?.team === 'A' && game.rally.touches === 1
-      && ai.passTier === 'perfect' && ai.passReceiverId === PID
-      && approachRouteOf(ai.approach.routes, PID)?.kind === 'left') {
-      const st = cutStateOf(game, ai, PID);
-      assert.equal(st.open, false, '接一傳者的線已降級，卻仍然開窗');
-      assert.equal(st.reason, 'pass');
-      // 硬寫進去也不得生效，且要誠實回報 missed（不是靜默失敗）
-      ai.cutCall = { pid: PID, cut: true };
-      aiCollectIntents(game, ai, []);
-      assert.notEqual(approachRouteOf(ai.approach?.routes, PID)?.kind, 'left_inside');
-      assert.equal(ai.cutOutcome?.outcome, 'missed');
-      assert.equal(ai.cutOutcome?.reason, 'pass');
-      ai.cutCall = null;
-      ai.cutOutcome = null;
-      seen += 1;
+  for (const seed of SEEDS) {
+    if (seen >= 5) break;
+    const game = createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
+    const ai = createAiState();
+    let guard = 0;
+    while (game.phase !== 'set_over' && seen < 5 && guard < 400000) {
+      guard += 1;
+      const intents = aiCollectIntents(game, ai, []);
+      if (ai.approach?.team === 'A' && game.rally.touches === 1
+        && ai.passTier === 'perfect' && ai.passReceiverId === PID
+        && approachRouteOf(ai.approach.routes, PID)?.kind === 'left') {
+        const st = cutStateOf(game, ai, PID);
+        assert.equal(st.open, false, '接一傳者的線已降級，卻仍然開窗');
+        assert.equal(st.reason, 'pass');
+        // 硬寫進去也不得生效，且要誠實回報 missed（不是靜默失敗）
+        ai.cutCall = { pid: PID, cut: true };
+        aiCollectIntents(game, ai, []);
+        assert.notEqual(approachRouteOf(ai.approach?.routes, PID)?.kind, 'left_inside');
+        assert.equal(ai.cutOutcome?.outcome, 'missed');
+        assert.equal(ai.cutOutcome?.reason, 'pass');
+        ai.cutCall = null;
+        ai.cutOutcome = null;
+        seen += 1;
+      }
+      stepGame(game, intents);
     }
-    stepGame(game, intents);
   }
   assert.ok(seen >= 2, `樣本不足（${seen}）——這一類在實測裡佔未生效波的大半，不該掃不到`);
 });

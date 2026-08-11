@@ -18,6 +18,16 @@ const { createAiState, aiCollectIntents } = simAi;
 const PID = 'A4';  // 預設隊型裡的 OPP（DEFAULT_LINEUP 第 4 格）
 const OH = 'A2';   // 預設隊型裡的前排 OH——「非 OPP 位置拿不到窗」用它取樣
 
+// ★ 2026-08-11 量測參數：單局 → seed 序列（AI.BLOCK_RETRACT_ON_POOR 1→0 之後）★
+// 這是**取樣量**不是行為判準。全域率先驗過（協定步驟 1，40 局／2900+ 波的 A/B）：
+// 「A4 當 main 的自動骰夾塞波」佔第二觸窗波數 —— 舊旗標（=1）**1.46%**（42/2879）、
+// 新旗標（=0）**1.36%**（40/2951），兩者在雜訊內 ⇒ 現象**沒有被壓死**，
+// 純粹是 536000 這一局的期望值（74 波 × 1.36% ≈ 1.0 次）骰到 0。
+// 同型前例＝本檔 2026-08-09 那次 500000→536000（rally 流一漂移單點 seed 就歸零）。
+// 改法一律是「加樣本」而不是「換一顆剛好會過的 seed」：8 局的期望值 ≈ 8 次，
+// 骰到 <1 次的機率可忽略，且對下一次 rally 流位移也活得下來。
+const AUTO_TANDEM_SEEDS = [536000, 537000, 538000, 539000, 540000, 541000, 542000, 543000];
+
 function needTandemState() {
   assert.ok(typeof simAi.tandemStateOf === 'function',
     'sim 沒有 tandemStateOf：這一版的夾塞窗沒有「唯一真相」可問，UI 只能自己記時間');
@@ -189,25 +199,29 @@ test('B S 已經排了別的組合＝不開窗（reason=locked），不得單方
 
 test('B 本波本來就是我的夾塞＝reason=done，按下去記成成功（already）不是失敗', () => {
   const tandemStateOf = needTandemState();
-  const game = createGame({ seed: 536000, teams: createDefaultTeams(), setTarget: 25 });
-  const ai = createAiState();
   let seen = 0;
-  let guard = 0;
-  while (game.phase !== 'set_over' && seen < 2 && guard < 400000) {
-    guard += 1;
-    const intents = aiCollectIntents(game, ai, []);
-    if (ai.attackCombo?.type === 'tandem' && ai.attackCombo.mainId === PID
-      && game.rally.touches === 1) {
-      assert.equal(tandemStateOf(game, ai, PID).reason, 'done');
-      ai.tandemCall = { pid: PID };
-      aiCollectIntents(game, ai, []);
-      assert.equal(ai.tandemOutcome?.outcome, 'applied');
-      assert.equal(ai.tandemOutcome?.reason, 'already');
-      ai.tandemCall = null;
-      ai.tandemOutcome = null;
-      seen += 1;
+  // 取樣跨 8 局（AUTO_TANDEM_SEEDS，理由見檔頭常數）——行為斷言一格未動
+  for (const seed of AUTO_TANDEM_SEEDS) {
+    if (seen >= 2) break;
+    const game = createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
+    const ai = createAiState();
+    let guard = 0;
+    while (game.phase !== 'set_over' && seen < 2 && guard < 400000) {
+      guard += 1;
+      const intents = aiCollectIntents(game, ai, []);
+      if (ai.attackCombo?.type === 'tandem' && ai.attackCombo.mainId === PID
+        && game.rally.touches === 1) {
+        assert.equal(tandemStateOf(game, ai, PID).reason, 'done');
+        ai.tandemCall = { pid: PID };
+        aiCollectIntents(game, ai, []);
+        assert.equal(ai.tandemOutcome?.outcome, 'applied');
+        assert.equal(ai.tandemOutcome?.reason, 'already');
+        ai.tandemCall = null;
+        ai.tandemOutcome = null;
+        seen += 1;
+      }
+      stepGame(game, intents);
     }
-    stepGame(game, intents);
   }
   assert.ok(seen >= 1, `樣本不足（${seen}）——自動骰 25% 該掃得到`);
 });
