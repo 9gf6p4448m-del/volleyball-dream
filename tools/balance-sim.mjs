@@ -10,7 +10,7 @@
 // 注意：治具「打好打滿」（止步後國賽照打取數據）＝wins 軸入隊率是上緣；逐出未建模。
 import {
   createCareer, createCareerPlayer, careerMatchSetup, recordResult, nextMatch,
-  mergeScouting, careerStage, advanceSeason,
+  mergeScouting, careerStage, advanceSeason, PLAYER_TRUST_FLOOR,
 } from '../src/career/careerState.js';
 import { buildStarterMembers, applyRosterGrowth, openSlots } from '../src/career/roster.js';
 import {
@@ -82,6 +82,19 @@ if (process.env.VD_PLAYER_PERFECT === '1') AI.PLAYER_PERFECT_RECV = 1;
 // 上下限勝率差＝改判價值空間（附錄 A5：初擬 8-15%，輸出實測供 Sawmah 裁定不強湊）
 const PLAYER_ROLE = process.env.VD_ROLE ?? 'outside';
 const L_MODE = process.env.VD_L_MODE ?? null;
+// ★ 難度重校卷 · 階段 0（2026-08-11）：VD_ROLE_RAMP＝**每屆轉位**臂 ★
+//   VD_ROLE_RAMP="middle,setter,opposite" ＝第 1 屆 MB、第 2 屆 S、第 3 屆 OPP。
+// 為什麼一定要有這支臂：`VD_ROLE` 是「單一角色從頭跑到尾」——屬性與位置技術一路
+// 累積在同一格。但真人的實際生涯是**每屆都轉位**（他第 1 屆 MB、第 2 屆 S、
+// 第 3 屆 OPP）⇒ 治具現有的全部基線講的都是另一種玩家，拿去對難度錨就是量錯對象。
+// 長度不足的屆沿用最後一項（同 VD_LEVEL_RAMP 的封頂慣例）；未給＝維持 VD_ROLE 行為。
+const ROLE_RAMP = (process.env.VD_ROLE_RAMP ?? '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+// 屆 → 角色。無 ramp 時恆回 PLAYER_ROLE ⇒ 不帶 VD_ROLE_RAMP 的臂逐值不變。
+function roleForSeason(season) {
+  if (!ROLE_RAMP.length) return PLAYER_ROLE;
+  return ROLE_RAMP[Math.min(season, ROLE_RAMP.length) - 1];
+}
 // W4(P4) Q8 多局制（工單 §10）：
 // VD_BO=3|5＝全部場次強制多局（體力曲線臂：bo5 五局打滿情境）；
 // VD_MULTISET=1＝生涯場依 matchFormatOf 自動賽制（決賽 bo5／準決・宿敵 bo3——
@@ -503,6 +516,44 @@ function applyTurnoverMirror({
   };
 }
 
+// ── 每屆轉位鏡像（`careerStore.applyPositionChange` 的無 store 版）─────────────
+// production 權威路徑＝`careerStore.js:362-397`（單次 RMW），四步逐條照抄：
+//   ① player.currentRole 改寫（naturalRole／身高／志願不動）
+//   ② trust.floorShare＝轉 S 時 0、其餘 PLAYER_TRUST_FLOOR（甲2 拍板：分配者沒有保底對象）
+//   ③ buildDeficitFillIns 補新角色造成的名冊缺額（usedNames 含 alumni；seed＝當屆 career.seed
+//      ＝production 的 `prev.season.seed`——RMW 讀的是轉位當下那一屆的種子）
+//   ④ defaultLineup 新對位，trust **跟人沿用**（prevTrust 有值才覆寫）、新補位員 FRESHMAN_TRUST
+// ★ 角色沒變＝直接 return（嚴格 no-op）★ 這不是效能考量而是**自驗閘的成立條件**：
+// `VD_ROLE_RAMP="outside,outside,outside"` 必須與不給該環境變數逐值相同，
+// `VD_ROLE_RAMP="setter,setter,setter"` 必須與 `VD_ROLE=setter` 逐值相同——
+// 這兩條過不了就代表鏡像寫錯了（production 的轉位對「轉成同一個位置」也不是恆等：
+// fillIns 為空但 defaultLineup 會把 trust 重排，所以治具端要靠這道 early return 保證）。
+function applyRoleChangeMirror({
+  player, roster, lineup, role, seed,
+}) {
+  if (player.currentRole === role) return { roster, lineup, fillIns: [] };
+  player.currentRole = role;
+  player.trust.floorShare = role === 'setter' ? 0 : PLAYER_TRUST_FLOOR;
+  const alumni = roster.alumni ?? [];
+  const usedNames = [
+    ...roster.members.map((m) => m.fullName),
+    ...alumni.map((a) => a.member?.fullName),
+  ].filter(Boolean);
+  const fillIns = buildDeficitFillIns({
+    seed, members: roster.members, usedNames, alumni, playerRole: role,
+  });
+  const members = [...roster.members, ...fillIns];
+  const nextLineup = defaultLineup(members, 'A2', role);
+  const prevTrust = lineup?.trust ?? {};
+  for (const id of Object.keys(nextLineup.trust)) {
+    if (prevTrust[id] !== undefined) nextLineup.trust[id] = prevTrust[id];
+  }
+  for (const f of fillIns) {
+    if (nextLineup.trust[f.id] !== undefined) nextLineup.trust[f.id] = FRESHMAN_TRUST;
+  }
+  return { roster: { ...roster, members }, lineup: nextLineup, fillIns };
+}
+
 // G11 後半：賽末換人信任演化（`matchCareer.js:114-138` 的鏡像；純由 events 導出）。
 // 被換下 −1、被換上且本場有建功（殺球/吊球/攔網得分/ACE）+2；主控不計；夾限 0–100。
 // 治具基準臂 A 隊零換人 ⇒ 恆 no-op；VD_MANAGE 臂與屆末換血包一起才會咬合。
@@ -578,6 +629,17 @@ const perSeason = Array.from({ length: SEASONS }, () => ({
   // ★這是**連續量**，解析力遠優於二元的奪冠率★——奪冠率在現行難度下
   // 已逼近地板（RUNS=100 的配對 SE ±6pp > 錨 3a 的 3pp 目標間距，排不出方案優劣）。
   natWinsSum: 0,
+  // ★ 難度重校卷 · 階段 0（2026-08-11）：逐對手聚合 ★
+  // 為什麼非有不可：錨之一是「**對天鷹**勝率 ≤20%」，但治具只印 matchId，而小組第三席
+  // 與國賽循環席的隊伍**逐 seed／逐屆都不同**（`schedule.js:210-236` drawGroupOpponents
+  // ＋保底債）⇒ 拿 `group-3 勝率` 當「對某隊勝率」是量錯位置，錨根本驗不到。
+  // 結構＝{ opponentId: { played, won, byMatch: { matchId: {played, won} } } }。
+  // ★ byMatch 不得合併成一個數 ★ 賽制不同（小組 bo1／準決 bo3／決賽 bo5），
+  // 混在一起的「勝率」沒有單位；報表逐場次列印且**必印分母**。
+  byOpponent: {},
+  // 自驗閘的獨立分母：屆末 `career.results.length`（production 自己的記帳，
+  // 與 byOpponent 的累加是兩條路）——兩者不等即代表逐對手聚合漏記或重複記。
+  resultCountSum: 0,
 }));
 // F1／G6 換血量測（TURNOVER 臂才累積；純記帳）：屆界次數、畢業人次、新生人次、
 // 等候名單遞補人次、來投保底觸發屆數
@@ -619,14 +681,19 @@ for (let run = 0; run < RUNS; run += 1) {
   const joinLog = [];
   // W3(P4) 位置臂：正式轉位鏈同款（currentRole＋trustFloor 語意＋缺額補位員＋新對位
   // 預設陣）；玩家=L 時 defaultLineup 產 libero='A2'、careerMatchSetup 走 liberos 通道
-  if (PLAYER_ROLE !== 'outside') {
-    player.currentRole = PLAYER_ROLE;
-    if (PLAYER_ROLE === 'setter') player.trust.floorShare = 0; // 甲2：分配者無保底對象
+  // ROLE_RAMP 臂：第 1 屆的角色＝ramp 首項（無 ramp ⇒ roleForSeason 恆回 PLAYER_ROLE）。
+  // 這一段**刻意不改用 applyRoleChangeMirror**：建檔時的補位員在此拿
+  // DEFAULT_TEAMMATE_TRUST（lineup 現算），改走鏡像會變成 FRESHMAN_TRUST ⇒
+  // 既有 VD_ROLE 臂的全部基線會漂移。自驗閘要的正是「ramp 首項＝VD_ROLE 逐值相同」。
+  const role1 = roleForSeason(1);
+  if (role1 !== 'outside') {
+    player.currentRole = role1;
+    if (role1 === 'setter') player.trust.floorShare = 0; // 甲2：分配者無保底對象
     const usedNames = roster.members.map((m) => m.fullName).filter(Boolean);
     roster.members.push(...buildDeficitFillIns({
-      seed: career.seed, members: roster.members, usedNames, alumni: [], playerRole: PLAYER_ROLE,
+      seed: career.seed, members: roster.members, usedNames, alumni: [], playerRole: role1,
     }));
-    lineup = defaultLineup(roster.members, 'A2', PLAYER_ROLE);
+    lineup = defaultLineup(roster.members, 'A2', role1);
   }
   if (USE_FULL_ROSTER) {
     // 招募臂：R1 曜石 MB／R2 鐵霧 OPP／R3 天鷹 OH（決定論生成，同正式入隊路徑）；
@@ -652,7 +719,7 @@ for (let run = 0; run < RUNS; run += 1) {
   // 治具原本 lineup=null ⇒ `careerState.js:522-524` 每場現算 defaultLineup、trust 全 20。
   // 這裡改成建檔時落一份預設陣持有——第 1 屆先發序與現算逐位等價
   // （招募生一律排在名冊末尾、進不了 defaultStarters＝F2），差別在 trust 有主可跟。
-  if (TURNOVER && !lineup) lineup = defaultLineup(roster.members, 'A2', PLAYER_ROLE);
+  if (TURNOVER && !lineup) lineup = defaultLineup(roster.members, 'A2', role1);
   // ── 跨屆歸因臂的「第 1 屆初值」快照（只在有開臂時才複製，基準臂零成本）──
   // 玩家：屬性／技術兩份分開存（VD_NO_PCARRY／VD_NO_TCARRY 各自獨立可測）
   const player0 = (NO_PCARRY || NO_TCARRY)
@@ -667,6 +734,8 @@ for (let run = 0; run < RUNS; run += 1) {
   // 賽程：第 1 屆賽程項（VD_FIXED_SCHED 逐屆沿用）
   const schedule0 = FIXED_SCHED ? structuredClone(career.schedule) : null;
   // 招募：第 1 屆的 starter 名單 id（VD_NO_RCARRY 只留這些人）
+  // ROLE_RAMP 的屆界補位員之後會補登進來——他們是**轉位缺額補位員不是招募生**，
+  // 被 VD_NO_RCARRY 掃掉會讓 ramp 臂的名冊憑空少人（兩臂疊用時才咬合）。
   const starterIds = new Set(roster.members.map((m) => m.id));
   const runSeasons = [];
   for (let season = 1; season <= SEASONS; season += 1) {
@@ -678,6 +747,12 @@ for (let run = 0; run < RUNS; run += 1) {
       // played（2026-08-09 循環賽卷）：本屆實打場數——STOP_ON_ELIM 臂下「沒打」與
       // 「打了但輸」在 wins 表裡都是 0，分不出止步在哪一段。招募探針要用它。
       played: 0,
+      // opponents（階段 0，2026-08-11）：{ matchId: opponentId }——**逐屆逐 seed 的對手
+      // 名單本來就不同**（小組輪抽＋保底債、國賽循環抽籤），沒有這一欄就無法回答
+      // 「對天鷹勝率多少」這種以隊伍為單位的錨。零成本：entry.opponentId 當場就在手上。
+      opponents: {},
+      // resultCount（自驗閘用）：屆末的 career.results.length＝production 自己記的實打場數
+      resultCount: 0,
     };
     runSeasons.push(rec);
     if (!byTitles.has(titlesAtStart)) {
@@ -728,6 +803,9 @@ for (let run = 0; run < RUNS; run += 1) {
           // 先發欄，就證明「挖角進來的人根本沒上場」（defaultStarters 依名冊序取首位）
           // G7 驗證用：玩家身高逐屆是否真的揭曉（治具原本三屆不動，見屆界的 G7 修復註）
           + ` 我身高=${Math.round((player.height?.current ?? 0) * 100)}`
+          // ROLE_RAMP 臂的觀測窗：印的是**真的交給 sim 的那份 setup 裡的 A2**，
+          // 不是治具自己的變數——轉位有沒有落到模擬層看這一欄
+          + ` 我位置=${setup.teams.A.find((p) => p.id === 'A2')?.currentRole ?? '?'}`
           + ` 先發=${setup.teams.A.map((p) => p.id).join(',')}`
           + ` 名冊=${roster.members.length}`);
       }
@@ -779,6 +857,18 @@ for (let run = 0; run < RUNS; run += 1) {
         perSeason[season - 1].reachedFinal += won ? 1 : 0;
       }
       rec.played += 1;
+      rec.opponents[entry.id] = entry.opponentId;
+      // 逐對手聚合（階段 0）：opponentId → 合計，並保留逐場次分項（賽制不同不得合併）
+      const bo = perSeason[season - 1].byOpponent;
+      bo[entry.opponentId] = bo[entry.opponentId] ?? { played: 0, won: 0, byMatch: {} };
+      const oppAgg = bo[entry.opponentId];
+      oppAgg.byMatch[entry.id] = oppAgg.byMatch[entry.id] ?? { played: 0, won: 0 };
+      oppAgg.played += 1;
+      oppAgg.byMatch[entry.id].played += 1;
+      if (won) {
+        oppAgg.won += 1;
+        oppAgg.byMatch[entry.id].won += 1;
+      }
       if (won) {
         perSeason[season - 1].wins[entry.id] += 1;
         tGroup.wins[entry.id] += 1;
@@ -792,7 +882,7 @@ for (let run = 0; run < RUNS; run += 1) {
         a2.aces += stats.aces;
         a2.blocks += stats.blockPoints;
         a2.games += 1;
-        if (PLAYER_ROLE === 'libero') {
+        if (roleForSeason(1) === 'libero') { // lBox 只在 season===1 累積 ⇒ 判準用第 1 屆角色
           const lb = boxScoreLFor(g.events, 'A2');
           lBox.digs += lb.digs;
           lBox.assistDigs += lb.assistDigs;
@@ -838,6 +928,9 @@ for (let run = 0; run < RUNS; run += 1) {
     // natWins＝國賽段（循環 3＋準決＋決賽）累計勝場 0–5 的連續量指標
     const natWins = career.results.slice(NATIONAL_INDEX).filter((r) => r.won).length;
     perSeason[season - 1].natWinsSum += natWins; // 題 B：連續量指標（見 perSeason 定義處）
+    // 自驗閘的獨立分母（`advanceSeason` 每屆把 results 清空 ⇒ 這就是本屆實打場數）
+    rec.resultCount = career.results.length;
+    perSeason[season - 1].resultCountSum += rec.resultCount;
     if (isChampion) {
       perSeason[season - 1].champions += 1;
       tGroup.champions += 1;
@@ -865,7 +958,11 @@ for (let run = 0; run < RUNS; run += 1) {
           endingSeason: season,
           oldSeed: seedBeforeAdvance,
           newSeed: career.seed,
-          playerRole: PLAYER_ROLE,
+          // ★ 轉位在換血**之後** ★ production 的順序是：屆界 RMW（畢業／遞補／來投／
+          // 新生／預設陣重排，此時 currentRole 還是**剛結束那一屆**的角色）→ 新一屆的
+          // 教練談話事件被接受 → `applyPositionChange`。所以這裡傳 roleForSeason(season)
+          // （結束的那一屆），新角色的缺額補位員留給下面的 applyRoleChangeMirror。
+          playerRole: roleForSeason(season),
         }));
         // 換血量測（純記帳，不進模擬）：證明這條路真的有咬合，並量 G6 兩條分支的觸發率
         turnoverStats.boundaries += 1;
@@ -878,6 +975,21 @@ for (let run = 0; run < RUNS; run += 1) {
           if (!joinLog.some((j) => j.key === key)) joinLog.push({ key, season: season + 1 });
         }
         noteMembers(roster.members); // 新生／來投者的「入隊當下」快照（VD_NO_MCARRY 用）
+      }
+      // ── ROLE_RAMP 臂：屆界轉位（`careerStore.applyPositionChange` 鏡像）──
+      // 位置在 TURNOVER 換血之後（見上方 playerRole 註）；未給 VD_ROLE_RAMP 時
+      // roleForSeason 恆回 PLAYER_ROLE＝player.currentRole ⇒ 鏡像 early return，整段 no-op。
+      if (ROLE_RAMP.length) {
+        let rampFillIns;
+        ({ roster, lineup, fillIns: rampFillIns } = applyRoleChangeMirror({
+          player,
+          roster,
+          lineup,
+          role: roleForSeason(season + 1),
+          seed: career.seed, // ＝新一屆的種子（production 轉位讀 prev.season.seed）
+        }));
+        for (const f of rampFillIns) starterIds.add(f.id); // 轉位補位員不是招募生（VD_NO_RCARRY）
+        noteMembers(roster.members); // 「入隊當下」快照（VD_NO_MCARRY 用）
       }
       // ★ G7 保真度修復（掛 VD_FAITHFUL，與 F1 同一組屆界鏡像）★
       // production 在同一次 RMW 揭曉下一屆身高（`careerStore.js:227`
@@ -921,7 +1033,15 @@ for (let run = 0; run < RUNS; run += 1) {
     joinStats[j.key].seasonSum += j.season;
   }
   if (PAIRED_FILE) {
-    // 第 1 屆語義（與 wins/champions 一致）：逐場勝負 ＋ 是否奪冠
+    // ★★ 2026-08-11 實測警告：本區塊在 VD_SEASONS>1 下**兩個欄位不同座標系** ★★
+    // `advanceSeason` 每屆把 `career.results` 清空（`careerState.js:172`）⇒ 跑到這一行時
+    // `career.results` 裡是**最後一屆**的成績，不是第 1 屆；而下面的 `champion` 取的是
+    // `runSeasons[0]`＝**第 1 屆**。實測（RUNS=20、VD_LEVEL_RAMP="0,2,4"）：wins 各列逐值
+    // 等於 paired-analysis 的「第 3 屆」，Δ奪冠率則恆為 +0.0pp——而 Δ奪冠率正是本報表
+    // 用 ** 粗體標出的頭條指標 ⇒ **ramp 類的臂會拿到「頭條全 0」的假自驗**。
+    // ★ 本次刻意不改這裡的語意 ★ 單屆臂（VD_SEASONS=1）下兩者都是第 1 屆、完全正確，
+    // 既有基準全部掛在這個語意上。跨屆一律改用 `VD_JSON` ＋ `tools/paired-analysis.mjs`
+    //（逐屆各自配對，見該檔檔頭）。下面另有一行執行期警告，避免只讀輸出的人踩到。
     const first = career.results.slice(0, matchIds.length);
     perRun.push({
       seed: career.seed,
@@ -941,7 +1061,8 @@ const armName = [
   USE_MANAGE ? '體力＋自動管理' : USE_STAMINA ? '體力＋無管理' : null,
   USE_MOMENTUM ? '氣勢' : null,
   HEIGHT_CM ? `身高${HEIGHT_CM}` : null,
-  PLAYER_ROLE !== 'outside' ? `位置${PLAYER_ROLE}${L_MODE ? `·${L_MODE}` : ''}` : null,
+  ROLE_RAMP.length ? `逐屆轉位[${ROLE_RAMP.join('→')}]${L_MODE ? `·${L_MODE}` : ''}`
+    : PLAYER_ROLE !== 'outside' ? `位置${PLAYER_ROLE}${L_MODE ? `·${L_MODE}` : ''}` : null,
   FORCE_BO ? `bo${FORCE_BO} 強制` : MULTISET ? '多局制（賽程推導）' : null,
   USE_CALL ? '要球近似' : null,
   USE_RIVAL ? '宿敵反讀' : null,
@@ -965,7 +1086,7 @@ console.log(`A2 場均（身高體感代理）：殺球 ${(a2.kills / a2.games).
   + `｜ACE ${(a2.aces / a2.games).toFixed(2)}｜攔網得分 ${(a2.blocks / a2.games).toFixed(2)}`
   + `（A2 個人／每局——非全隊值；7.2 查證 07-30：全隊每局 ≈2.17 在真實帶 1.5–2.5 內，`
   + `勿再拿本欄與全隊對照值比，A-8）`);
-if (PLAYER_ROLE === 'libero') {
+if (roleForSeason(1) === 'libero') { // 同上：本欄是第 1 屆的個人數據
   console.log(`A2 L 三欄場均（契約=boxScoreL）：起球 ${(lBox.digs / a2.games).toFixed(2)}`
     + `｜助攻一傳 ${(lBox.assistDigs / a2.games).toFixed(2)}`
     + `｜rally 續命 ${(lBox.rallySaves / a2.games).toFixed(2)}`);
@@ -1048,6 +1169,33 @@ if (SEASONS > 1) {
   }
 }
 
+// ═══ 逐對手勝率（難度重校卷 · 階段 0，2026-08-11）═══════════════════════════
+// 為什麼要有這一節：錨之一是「**對天鷹**勝率 ≤20%」。既有報表只有 matchId 一個軸，
+// 而**同一個 matchId 逐 seed／逐屆的對手不同**（小組輪抽＋保底債＝`schedule.js:210-236`
+// drawGroupOpponents；國賽循環席逐屆抽籤）⇒ 拿 `group-3 勝率` 當「對某隊的勝率」
+// 是量錯位置，那個錨用舊報表根本驗不到。
+// ★ 逐場次列印、不合併成一個數 ★ 賽制不同（小組 bo1／準決 bo3／決賽 bo5），
+// 混在一起的百分比沒有單位；每一格都印分母（`勝/實打`），不印裸百分比。
+console.log('\n=== 逐對手勝率（分母＝實打場數；賽制不同 ⇒ 逐場次分列，不得合併）===');
+for (let s = 0; s < SEASONS; s += 1) {
+  const bo = perSeason[s].byOpponent;
+  const known = OPPONENTS.map((o) => o.id).filter((id) => bo[id]);
+  const ids = [...known, ...Object.keys(bo).filter((id) => !known.includes(id))];
+  const playedSum = ids.reduce((n, id) => n + bo[id].played, 0);
+  console.log(`第 ${s + 1} 屆（實打 ${playedSum} 場）`);
+  for (const id of ids) {
+    const o = bo[id];
+    const detail = matchIds.filter((m) => o.byMatch[m])
+      .map((m) => `${m} ${o.byMatch[m].won}/${o.byMatch[m].played}`).join('　');
+    console.log(`  ${id.padEnd(12)} 合計 ${String(o.won).padStart(4)}/${String(o.played).padEnd(5)}`
+      + ` ${detail}`);
+  }
+  // 自驗閘：本節的累加 vs production 自己的記帳（`career.results.length`，兩條獨立路徑）
+  const ok = playedSum === perSeason[s].resultCountSum;
+  console.log(`  自驗閘：byOpponent 合計 ${playedSum} ${ok ? '＝' : '≠'} `
+    + `career.results 記帳 ${perSeason[s].resultCountSum} ${ok ? '✅' : '🔴 逐對手聚合漏記或重複記'}`);
+}
+
 // VD_JSON：逐 run／逐屆結果落檔（跨屆歸因的配對分析用；各臂 seed 序列相同 ⇒ 同索引即配對）
 if (JSON_OUT) {
   const { writeFileSync } = await import('node:fs');
@@ -1061,6 +1209,11 @@ if (JSON_OUT) {
 if (PAIRED_FILE) {
   const { existsSync, readFileSync, writeFileSync } = await import('node:fs');
   const label = `${armName}｜RUNS=${RUNS}｜VD_HEIGHT=${HEIGHT_CM ?? '基準'}｜VD_ROLE=${PLAYER_ROLE}`;
+  if (SEASONS > 1) {
+    console.log('\n🔴 VD_PAIRED 在 VD_SEASONS>1 下不可用：wins 各列是**最後一屆**、'
+      + '奪冠率是**第 1 屆**（座標系不同，見本檔 perRun 區塊註）。'
+      + '\n   跨屆請改用：VD_JSON=<路徑> 各跑一次，再 node tools/paired-analysis.mjs <基準> <本次>');
+  }
   if (!existsSync(PAIRED_FILE)) {
     writeFileSync(PAIRED_FILE, `${JSON.stringify({ label, matchIds, perRun }, null, 2)}
 `);
