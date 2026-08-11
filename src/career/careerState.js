@@ -22,6 +22,20 @@ export const CAREER_VERSION = 3;
 // 第 1 屆小組賽固定模板（教學鏈綁定這三隊的場次——見 schedule.js 檔頭的設計偏差註）
 const SEASON1_GROUP = ['north-tech', 'white-wave', 'obsidian'];
 
+// ★★ 2026-08-11 難度重校卷：第 1 屆循環組改明文模板 ★★
+// 舊狀態＝抽籤的結構性死碼：池扣掉鐵霧（固定席）與淘汰賽兩隊（曜石／天鷹）之後只剩
+// 北原·白浪·青嵐·黑松，而排序鍵「小組沒遇過的優先」讓青嵐與黑松**必中**，再依 level
+// 升冪把**黑松 67 推到第三場** ⇒ 每個玩家的第 1 屆都被排了一場幾乎必敗的硬仗
+// （`schedule.js:71-77` 已自陳「實測 3000 seeds 逐值相同、要調第 1 屆難度就是調這裡」）。
+// ★病灶的量測（`docs/snapshots/difficulty-recal-baseline-2026-08-11.txt`）★
+//   第 1 屆國賽路徑：qf 鐵霧 14%／rr2 青嵐 91%／**rr3 黑松 12%**／sf 曜石 11%
+//   ⇒ 循環三場只穩贏一場、拿不到前二 ⇒ **決賽帶僅 11%、奪冠 0%**（違反錨 1「個位數」）。
+//   ⚠ 掃描證實**不是決賽打不贏**：把天鷹第 1 屆降到 66（比黑松還弱）決賽帶仍是 11%、
+//     戰績 0/11→1/11（n=11 分不出）⇒ **瓶頸在進不進得去決賽，不在決賽本身**。
+// 使用者裁定（08-11）：換成較弱的對手。白浪 57 取代黑松 67（小組已遇過一次＝再戰敘事）。
+// ⚠ 副作用要一起看：黑松因此不出現在第 1 屆 ⇒ 該隊的招募窗少一屆，改動後要驗 joinStats。
+const SEASON1_RR = ['gale-shore', 'white-wave'];
+
 // 完整賽程：小組單循環 3 場（輸球照樣打下一場）＋全國賽（八強 4 隊單循環 3 場 →
 // 前二名晉級準決賽 → 決賽）。準決賽刻意再遇小組對手曜石體中——宿敵種子
 // （stage 5 scouting 記憶）掛這裡。
@@ -32,7 +46,9 @@ function season1Schedule(seed) {
     ...SEASON1_GROUP.map((opponentId, i) => ({
       id: `group-${i + 1}`, stage: 'group', opponentId, label: '',
     })),
-    ...nationalLegFor({ seed, seasonIndex: 1, groupIds: SEASON1_GROUP }),
+    ...nationalLegFor({
+      seed, seasonIndex: 1, groupIds: SEASON1_GROUP, rrOverride: SEASON1_RR,
+    }),
   ];
 }
 

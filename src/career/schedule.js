@@ -93,11 +93,15 @@ export function drawRoundRobinOpponents({ seed, seasonIndex = null, groupIds = [
 }
 
 // 國賽段賽程項：循環 3 場（打滿、輸球不止步）＋淘汰賽 2 場（準決/決賽照舊）
-export function nationalLegFor({ seed, seasonIndex = null, groupIds = [] }) {
+// `rrOverride`＝跳過抽籤、直接指定循環組的兩支非固定席（第 1 屆故事模板用；
+// 給了就不抽——與 `SEASON1_GROUP` 走同一條「第 1 屆是明文模板」的既有設計）
+export function nationalLegFor({
+  seed, seasonIndex = null, groupIds = [], rrOverride = null,
+}) {
   const ladder = nationalLadderFor(seasonIndex);
   const rrOpponents = [
     RR_ANCHOR_ID,
-    ...drawRoundRobinOpponents({ seed, seasonIndex, groupIds }),
+    ...(rrOverride ?? drawRoundRobinOpponents({ seed, seasonIndex, groupIds })),
   ];
   return [
     ...rrOpponents.map((opponentId, i) => ({

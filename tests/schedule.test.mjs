@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   drawGroupOpponents, buildSchedule, groupPool, NATIONAL_LADDER,
-  drawRoundRobinOpponents, roundRobinTable, RR_PLAYER_ID, RR_ADVANCE,
+  drawRoundRobinOpponents, roundRobinTable, RR_PLAYER_ID, RR_ADVANCE, nationalLegFor,
 } from '../src/career/schedule.js';
 import {
   createCareer, advanceSeason, recordResult, careerStage, opponentById,
@@ -104,6 +104,40 @@ test('第 1 屆故事模板不動：createCareer 小組恆為北原→白浪→�
   }
 });
 
+// ★ 2026-08-11 難度重校卷：第 1 屆循環組也是明文模板（不再抽籤）★
+// 舊狀態是抽籤的**結構性死碼**：池扣掉鐵霧與淘汰賽兩隊後只剩北原·白浪·青嵐·黑松，
+// 排序鍵「小組沒遇過的優先」讓青嵐與黑松必中、升冪再把**黑松 67 推到第三場**。
+// 治具實測那條路：qf 鐵霧 14%／rr2 青嵐 91%／**rr3 黑松 12%**／sf 曜石 11%
+// ⇒ 決賽帶僅 11%、奪冠 **0%**（違反錨 1「第一屆奪冠個位數」）。
+// ⚠ 掃描證實瓶頸**不在決賽**：天鷹第 1 屆降到 66 仍是決賽帶 11%、戰績 0/11→1/11。
+// 使用者裁定：換成較弱的對手（白浪 57 取代黑松 67）。
+// **這條守衛擋的是「有人把它改回抽籤」**——那會讓黑松自動回到第三場。
+test('第 1 屆循環組是明文模板：恆為鐵霧→青嵐→白浪，黑松不出現在第 1 屆', () => {
+  for (const seed of [1, 42, 777, 123456789]) {
+    const c = createCareer({ seed, playerName: '測' });
+    const rr = c.schedule.filter((m) => m.round === 'rr');
+    assert.deepEqual(
+      rr.map((m) => m.opponentId),
+      ['iron-mist', 'gale-shore', 'white-wave'],
+      `seed=${seed} 的第 1 屆循環組跑掉了（改回抽籤會讓黑松回到第三場）`,
+    );
+    // 反向對照：整個第 1 屆賽程都不該出現黑松（它的招募窗因此少一屆，是已知代價）
+    assert.equal(
+      c.schedule.some((m) => m.opponentId === 'black-pine'), false,
+      `seed=${seed} 的第 1 屆出現了黑松`,
+    );
+  }
+});
+
+test('第 2 屆起循環組仍走抽籤（第 1 屆的明文模板不得外溢）', () => {
+  const ended = endSeason(createCareer({ seed: 777, playerName: '測' }));
+  const s2 = advanceSeason(ended, { seasonIndex: 2 });
+  const rr = s2.schedule.filter((m) => m.round === 'rr').map((m) => m.opponentId);
+  assert.equal(rr[0], 'iron-mist', '鐵霧固定席不變');
+  // 第 2 屆的另兩席由抽籤決定 ⇒ 不該與第 1 屆模板逐值相同（否則模板洩漏到後面幾屆）
+  assert.notDeepEqual(rr, ['iron-mist', 'gale-shore', 'white-wave']);
+});
+
 test('advanceSeason：第 2 屆起輪抽（決定論）；invitedId 進賽程；titles 邏輯不變', () => {
   const ended = endSeason(createCareer({ seed: 777, playerName: '測' }));
   const s2a = advanceSeason(ended, { invitedId: 'sky-hawk' });
@@ -197,9 +231,18 @@ test('循環組名次表：勝場排序、前二晉級、對手互戰由強度�
 // ---- 覆審 M4：晉級／止步的角落（1 勝、2 勝、三隊成環的 tiebreak）----
 // 全部用第 1 屆賽程：循環組恆為 鐵霧／青嵐／黑松（drawRoundRobinOpponents 註明的
 // 「刻意恆定」），對手互戰由 level 決定 ⇒ 名次可以逐值預期，不靠隨機湊。
+// ★ 角落測試守的是**名次計算**（勝場／淨得分／成環），與「第 1 屆會遇到誰」無關 ★
+// 原本直接吃 `createCareer` 的第 1 屆賽程 ⇒ 2026-08-11 難度卷把第 1 屆循環組改成明文
+// 模板（黑松 67 換成白浪 57）時，這五條全紅——紅的原因是治具的對手變了，不是名次
+// 計算壞了。改成用明文對手組建賽程 ⇒ 與模板解耦，日後再動模板不會誤傷這批斷言。
+const CORNER_RR = ['gale-shore', 'black-pine']; // 鐵霧（固定席）＋這兩隊＝原本的角落治具
 function rrCase(seed, script) {
   const c = createCareer({ seed, playerName: '角落' });
-  const rr = c.schedule.filter((m) => m.round === 'rr');
+  const schedule = [
+    ...c.schedule.filter((m) => m.stage === 'group'),
+    ...nationalLegFor({ seed, seasonIndex: 1, rrOverride: CORNER_RR }),
+  ];
+  const rr = schedule.filter((m) => m.round === 'rr');
   const results = rr.map((m) => {
     const [won, margin] = script[m.opponentId];
     return {
@@ -209,7 +252,7 @@ function rrCase(seed, script) {
       scoreAgainst: won ? 25 - margin : 25,
     };
   });
-  const t = roundRobinTable({ seed, schedule: c.schedule, results });
+  const t = roundRobinTable({ seed, schedule, results });
   return { t, me: t.table.find((x) => x.id === RR_PLAYER_ID) };
 }
 
