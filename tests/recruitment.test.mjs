@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, featGainFor, accrueRecruitProgress,
   conditionMet, buildRecruitMember, nextRecruitId, settleRecruitJoins, recruitGradeOf,
+  altProgressOf,
 } from '../src/career/recruitment.js';
 import {
   DEFAULT_STARTERS, defaultStarters, defaultLineup, validateLineup, checkRoleStructure,
@@ -103,7 +104,10 @@ test('accrueRecruitProgress：勝場計數、敗場不計、其他隊進度不�
   });
   rec = accrueRecruitProgress(rec, { opponentId: 'north-tech', matchId: 'group-1', won: false });
   assert.equal(progressOf(rec, 'north-tech').wins, 1);
-  assert.deepEqual(progressOf(rec, 'white-wave'), { wins: 0, feat: 0, stageCleared: false });
+  // alts＝08-11 替代路徑軸的進度（缺鍵＝{}，與 wins/feat 同一條正規化慣例）
+  assert.deepEqual(progressOf(rec, 'white-wave'), {
+    wins: 0, feat: 0, stageCleared: false, alts: {},
+  });
 });
 
 test('accrueRecruitProgress：跨賽季（多場）累積、永不重置', () => {
@@ -117,7 +121,9 @@ test('accrueRecruitProgress：跨賽季（多場）累積、永不重置', () =>
       events: digs3, playerId: 'A2', myTeam: 'A',
     });
   }
-  assert.deepEqual(progressOf(rec, 'white-wave'), { wins: 2, feat: 2, stageCleared: false });
+  assert.deepEqual(progressOf(rec, 'white-wave'), {
+    wins: 2, feat: 2, stageCleared: false, alts: {},
+  });
 });
 
 test('stage 軸：僅在指定場次（清單內任一）擊敗才記、輸球不記', () => {
@@ -140,11 +146,15 @@ test('stage 軸：僅在指定場次（清單內任一）擊敗才記、輸球�
 
 test('progressOf：半殘條目缺鍵補 0（不產生 NaN、不整條回退）', () => {
   const rec = { progress: { 'white-wave': { wins: 2 } }, recruited: [] };
-  assert.deepEqual(progressOf(rec, 'white-wave'), { wins: 2, feat: 0, stageCleared: false });
+  assert.deepEqual(progressOf(rec, 'white-wave'), {
+    wins: 2, feat: 0, stageCleared: false, alts: {},
+  });
   const accrued = accrueRecruitProgress(rec, {
     opponentId: 'white-wave', matchId: 'group-2', won: true,
   });
-  assert.deepEqual(progressOf(accrued, 'white-wave'), { wins: 3, feat: 0, stageCleared: false });
+  assert.deepEqual(progressOf(accrued, 'white-wave'), {
+    wins: 3, feat: 0, stageCleared: false, alts: {},
+  });
 });
 
 test('conditionMet：三軸缺一不可、缺項不檢查', () => {
@@ -357,4 +367,44 @@ test('settleCareerMatch：招募進度賽末累加、同場重入不重複累加
   // 局終畫面重入：recordResult 冪等、招募 progress 也不得重複累加
   settleCareerMatch({ careerCtx, game, playerId: 'A2' });
   assert.equal(progressOf(store.loadRecruitment(), 'north-tech').wins, 1);
+});
+
+// ★端到端守衛：本場位置是從 sim player 撈的（08-11 第三輪覆審 HIGH-1）★
+// 綁位置的替代軸要靠 `settleCareerMatch` 把 `game.players[playerId].currentRole` 傳進
+// `accrueRecruitProgress`。實測拿掉那一行時**全套 1267 測仍然全綠**，而玩二傳的人會打完
+// 整個三年、`alts` 永遠是 {}——這批改動要修的病一字不差地回來，只是這次沒有任何紅燈。
+// 先前的 wiring 測試把 role 當參數直接餵進 `buildRecruitWatch`，繞過了「role 從哪來」。
+test('settleCareerMatch：替代軸的位置來自 sim player，不是憑空預設', () => {
+  const rally = () => [
+    { type: 'SERVE', team: 'B', playerId: 'B1' },
+    touch('A', 'A5', 'receive', 0.8),
+    touch('A', 'A2', 'set', 0.9),
+    touch('A', 'A4', 'spike', 1),
+    { type: 'DEAD_BALL' },
+    score('A'),
+  ];
+  const events = Array.from({ length: 17 }, rally).flat(); // iron-mist-2 助攻軸 17×2
+  const settleAs = (currentRole) => {
+    const store = readyStore();
+    const career = store.loadCareer();
+    // 鐵霧在第 1 屆賽程裡的那一場（招募鍵 iron-mist-2 掛在同一個 opponentId 上）
+    const matchEntry = career.schedule.find((m) => m.opponentId === 'iron-mist');
+    assert.ok(matchEntry, '賽程裡沒有鐵霧＝這個測試的前提沒成立');
+    settleCareerMatch({
+      careerCtx: {
+        store, career, player: store.loadPlayer(), matchEntry,
+      },
+      game: {
+        players: { A2: { teamId: 'A', currentRole } },
+        match: { score: { A: 5, B: 3 }, winner: 'A' },
+        events,
+        scoutTally: {},
+      },
+      playerId: 'A2',
+    });
+    return altProgressOf(store.loadRecruitment(), 'iron-mist-2', 'assistMatch');
+  };
+  assert.equal(settleAs('setter'), 1, '二傳打出 17 助攻＝該場記進替代軸');
+  // 反向對照：同一份事件流，位置不同就不記（證明讀的真的是 sim player 的位置）
+  assert.equal(settleAs('outside'), 0, '主攻手不該靠助攻軸推進');
 });

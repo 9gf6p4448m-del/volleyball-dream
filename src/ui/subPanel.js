@@ -7,6 +7,13 @@ import { matchStatsFor } from '../career/growth.js';
 import { ROLE_ABBR } from '../career/roster.js';
 import { STAMINA } from '../sim/stamina.js';
 
+// 面板「接 %」的到位門檻。★刻意**不**共用招募的 `STRONG_RECEIVE_QUALITY`★
+// （08-11 第三輪覆審）：那是招募平衡旋鈕，為了某個招募槽調它，會靜默改掉一個換人
+// 決策用的統計；而且兩者數的東西不同——招募只算「敵方發球後的第一觸」，這裡算所有
+// receive/dive。取 0.75 是為了與賽後數據頁的 `recvGood`（`boxScore.js:51`）同一條線，
+// 否則真人的 0.70 檔（按了但沒抓到 Perfect）會出現「面板 100%、賽後 30%」的矛盾。
+const RECV_GOOD_POWER = 0.75;
+
 // W7 C2④ 回場鈕（matchLoop）與本檔換人面板共用同一套對位合法性判定
 export const roleSwapOk = (a, b) => a === b
   || (a === 'setter' && b === 'opposite') || (a === 'opposite' && b === 'setter');
@@ -18,7 +25,9 @@ function staminaColor(v) {
   return '#60ffa0';
 }
 
-// 本場微指標：攻＝殺球/出手、接＝高品質接發占比（≥0.8 同 strongReceive 門檻）、信任＝基準＋場內動態
+// 本場微指標：攻＝殺球/出手、接＝到位接球占比（門檻 `RECV_GOOD_POWER`，見上方——
+// 08-11 前這裡寫死 0.8 且註解宣稱與 strongReceive 同門檻，那句話已不成立）、
+// 信任＝基準＋場內動態
 function statLine(game, id) {
   const p = game.players[id];
   const s = matchStatsFor(game.events, id, p.teamId);
@@ -27,7 +36,7 @@ function statLine(game, id) {
   for (const e of game.events) {
     if (e.type === 'TOUCH' && e.playerId === id && (e.kind === 'receive' || e.kind === 'dive')) {
       recv += 1;
-      if ((e.power ?? 0) >= 0.8) good += 1;
+      if ((e.power ?? 0) >= RECV_GOOD_POWER) good += 1;
     }
   }
   const atk = s.spikes ? `攻 ${s.kills + s.tipKills}/${s.spikes}` : '攻 —';

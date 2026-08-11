@@ -44,6 +44,7 @@ import { upcomingTeach } from '../career/events.js';
 import { TECH_DEFS } from '../career/growth.js';
 import {
   RECRUIT_CONDS, progressOf, featGainFor, recruitTargetGone,
+  altFeatsFor, altGainsFor, conditionMet, matchRoleOf,
 } from '../career/recruitment.js';
 import { opponentById } from '../career/opponents.js';
 import { HUDDLE } from '../render/huddleLayout.js';
@@ -354,7 +355,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     assistFlight: -1,
     assistLanding: null,
     // W6 壯舉達成字卡（新增採納 3）：本場對手未達成的 feat 條件清單，死球增量檢查
-    recruitWatch: buildRecruitWatch(careerCtx, playerId),
+    recruitWatch: buildRecruitWatch(careerCtx, playerId, matchRoleOf(game, playerId)),
     pendingSubLines: [], // 面板開著時累積的換人對話，關板一次播（teachDialog z 序在面板下）
     // W7 C1②：主角低體力教練建議——每場最多一次
     staminaAdviceShown: false,
@@ -585,7 +586,9 @@ function requestTimeoutBoost(s, team, boost) {
 
 // W6 壯舉字卡監看清單：只收本場對手、有 feat 軸、未招募且尚未達標的招募槽；
 // wins/stage 軸不在此列（完成點在賽末，入隊儀式已涵蓋該節拍）
-function buildRecruitWatch(careerCtx, playerId) {
+// export＝接線驗收用（`tests/recruit-alt-path-wiring.test.mjs` 直接呼叫真正的這兩支，
+// 沿 `updateAssistAndPoses` 的既有慣例——字卡的價值全在接線上，源碼掃描驗不到）
+export function buildRecruitWatch(careerCtx, playerId, role = null) {
   const opponentId = careerCtx?.matchEntry?.opponentId;
   const rec = careerCtx?.store?.loadRecruitment?.();
   if (!opponentId || !rec || !playerId) return [];
@@ -601,9 +604,34 @@ function buildRecruitWatch(careerCtx, playerId) {
     // 字卡照發是常態不是邊角。修在監看清單這一層（而不是發卡那一層）：
     // 人都畢業了，整場比賽根本不必監看他。progress 照舊保留（「歷史就是歷史」）。
     if (recruitTargetGone(key, seasonIndex)) continue;
-    const base = progressOf(rec, key).feat;
-    if (base >= cond.feat.count) continue;
-    watch.push({ key, cond, base, fired: false });
+    // ★條件早就成立的槽不再監看（08-11 第二輪覆審 N1，這是我自己引進的倒退）★
+    // 舊碼用「base feat 已達標＝整槽退出監看」短路，改成逐軸過濾之後，**達標但卡在
+    // 名冊滿編等候名單**的槽會在往後每一場重新彈「⭐ 招募條件達成」——正是 08-09
+    // 真人被騙的那個現象（字卡照發、賽後零入隊），成因從「畢業」換成「滿編」。
+    if (conditionMet(rec, key)) continue;
+    // 08-11 替代路徑卷：監看清單要連 altFeats 一起收——否則走替代軸的玩家達成當下
+    // 不會彈卡（進度照樣累加，但畫面不說＝「系統改寫了玩家的操作卻沒告訴他」那一族）。
+    // 逐軸各帶自己的 base；已達標的軸不必監看。
+    const p = progressOf(rec, key);
+    // isBase＝原壯舉軸（進度存在 progress.feat，不在 alts 底下）。用顯式旗標而不是
+    // 拿物件識別去比對 cond.feat——後者在任何人複製一次 cond 之後就會靜默失效
+    // 只監看「這個位置走得到」的替代軸（`altFeatsFor`）——監看清單與判定端、顯示端
+    // 共用同一支過濾器，否則會對著一條玩家根本累加不了的軸等一輩子
+    const axes = [
+      { f: cond.feat, base: p.feat, isBase: true },
+      ...altFeatsFor(cond, role).map((f) => ({ f, base: p.alts[f.type] ?? 0, isBase: false })),
+    ].filter((a) => a.base < a.f.count);
+    if (!axes.length) continue;
+    // 這張卡只驗壯舉軸，wins 的完成點在賽末——所以卡面要把「還缺什麼」講出來
+    // （`needStage` 目前**沒有任何槽觸發**：12 槽裡唯一帶 stage 的 sky-hawk 沒有 feat 軸、
+    // 根本不進監看清單；留著是前瞻性防禦，不是已驗過的路徑）
+    // （08-11 覆審 HIGH）：08-09 真人已被「⭐ 招募條件達成」騙過一次（字卡照發、
+    // 賽後零入隊），替代軸讓這張卡變頻繁之後，那個誇大會被放大成常態。
+    const remainWins = cond.wins == null ? 0 : Math.max(0, cond.wins - p.wins);
+    const needStage = !!cond.stage && !p.stageCleared;
+    watch.push({
+      key, cond, axes, fired: false, remainWins, needStage,
+    });
   }
   return watch;
 }
@@ -611,17 +639,32 @@ function buildRecruitWatch(careerCtx, playerId) {
 // 死球時增量檢查：本場 feat 增量＋既有進度過門檻＝當場彈卡（一場一卡不重複；
 // 純 UI 演出——真正的進度累加仍在賽末 settleCareerMatch，不在此寫入）。
 // W6.1 T2：改走同框節流佇列——被更高優先字卡擠掉時不標 fired，下個死球重驗再出（不丟失）
-function checkRecruitFeats(s, cards) {
+export function checkRecruitFeats(s, cards) {
   if (!s.recruitWatch.length) return;
   const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
+  const role = matchRoleOf(s.game, s.playerId);
   for (const w of s.recruitWatch) {
     if (w.fired) continue;
-    const gain = featGainFor(s.game.events, s.playerId, myTeam, w.cond);
-    if (w.base + gain >= w.cond.feat.count) {
+    const featGain = featGainFor(s.game.events, s.playerId, myTeam, w.cond);
+    const altGains = altGainsFor(s.game.events, s.playerId, myTeam, w.cond, role);
+    // 一場一卡（沿用原節拍）：任一軸先達標就發那一軸的卡，卡面寫的是**真正達成的那條路**
+    const hit = w.axes.find((a) => {
+      const gain = a.isBase ? featGain : (altGains[a.f.type] ?? 0);
+      return a.base + gain >= a.f.count;
+    });
+    if (hit) {
       const def = opponentById(w.cond.opponentId);
+      // 還缺的軸如實寫進卡面；全都到位了才敢說「招募條件達成」
+      const lacks = [];
+      if (w.remainWins > 0) {
+        lacks.push(w.remainWins === 1 ? '還需贏下這場' : `還差 ${w.remainWins} 勝`);
+      }
+      if (w.needStage) lacks.push('還需在淘汰賽擊敗');
+      const head = lacks.length ? '壯舉達成' : '招募條件達成';
+      const tail = lacks.length ? `（${lacks.join('・')}）` : '';
       cards.push({
         pri: 40,
-        text: `⭐ 招募條件達成：${def?.name ?? ''}・${w.cond.feat.label}`,
+        text: `⭐ ${head}：${def?.name ?? ''}・${hit.f.label}${tail}`,
         color: '#ffd166',
         dur: 1600,
         onShown: () => { w.fired = true; },

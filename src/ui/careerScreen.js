@@ -17,6 +17,7 @@ import {
 import {
   RECRUIT_CONDS, RECRUIT_TRUST, progressOf, conditionMet, settleRecruitJoins,
   recruitCurrentGrade, recruitTargetGone, waitingOf,
+  altFeatsOf, altFeatAvailableTo, altFeatRoleOf,
 } from '../career/recruitment.js';
 import {
   dueEvents, recordEvent, oldTeamPreEvents, EXPEL_LINES, SEASON_OPENERS,
@@ -1289,6 +1290,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
   function recruitSection() {
     const rec = store.loadRecruitment();
     const roster = store.loadRoster();
+    // 08-11：替代軸綁位置 ⇒ 進度列只列**你這個位置走得到**的路。列出走不到的路
+    // ＝畫面承諾了判定端不會給的東西（本專案 08-11 才立的通則：提示的語意必須綁
+    // 「那個動作真的做得到」的同一個判準）
+    const myRole = store.loadPlayer()?.currentRole ?? null;
     const box = el('div', [
       'display:flex', 'flex-direction:column', 'gap:8px', `background:${COLOR.card}`,
       'border-radius:14px', 'padding:12px 16px', 'width:min(340px, 92vw)', 'margin-top:4px',
@@ -1363,7 +1368,25 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
         const parts = [];
         if (cond.wins != null) parts.push(`勝場 ${Math.min(p.wins, cond.wins)}/${cond.wins}`);
         if (cond.feat) {
-          parts.push(`${cond.feat.label} ${Math.min(p.feat, cond.feat.count)}/${cond.feat.count}`);
+          // 08-11 替代路徑卷：壯舉軸是 OR（feat 或任一 altFeat）⇒ 進度列要把替代路徑
+          // 寫出來，否則「玩二傳／自由人推不動招募」只修了一半——另一半是玩家看不到路。
+          // 用「或」串接、與 conditionMet 的 OR 語意逐字對應（提示的語意必須綁真正的判準）
+          // 列出條件：原軸永遠列；替代軸列「你這個位置走得到的」，外加**已經有進度
+          // 的**（08-11 第二輪覆審 N5：轉位之後那些進度會從畫面消失、卻仍計入
+          // conditionMet ⇒ 玩家看到「條件達成」卻找不到是哪一條達成的）。後者標明
+          // 需要回到哪個位置才會繼續累加。
+          const altLines = altFeatsOf(cond).map((f) => {
+            const cur = Math.min(p.alts[f.type] ?? 0, f.count);
+            const usable = altFeatAvailableTo(f, myRole);
+            if (!usable && cur <= 0) return null;
+            const need = usable ? '' : `（需${ROLE_ABBR[altFeatRoleOf(f)] ?? ''}）`;
+            return `${f.label} ${cur}/${f.count}${need}`;
+          }).filter(Boolean);
+          const feats = [
+            `${cond.feat.label} ${Math.min(p.feat, cond.feat.count)}/${cond.feat.count}`,
+            ...altLines,
+          ];
+          parts.push(feats.join(' 或 '));
         }
         // 08-09：stage 軸改成場次清單（準決賽∪決賽）⇒ 文案不能再寫死「決賽」
         if (cond.stage) parts.push(`在淘汰賽擊敗 ${p.stageCleared ? '✓' : '—'}`);

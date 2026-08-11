@@ -7,6 +7,8 @@ import { opponentById } from './opponents.js';
 import { buildLibero } from './careerState.js';
 import { aceGrowthAt } from './aceGrowth.js';
 import { matchStatsFor } from './growth.js';
+import { countSetAssistKills } from './boxScore.js';
+import { boxScoreLFor } from './boxScoreL.js';
 import { openSlots } from './roster.js';
 import { ATTRIBUTE_KEYS } from '../sim/player.js';
 
@@ -21,6 +23,12 @@ export const EXPEL_PER_SEASON_LIMIT = 1;
 // 生成屬性夾限：上限與隊友成長天花板一致（roster.js ROSTER_GROWTH.ATTR_CAP＝85）
 const ATTR_MIN = 30;
 const ATTR_MAX = 85;
+
+// 「接起強發」的品質門檻（08-11 由 0.8 降到 0.70）——**單一事實源**：招募條件與
+// 換人面板的「接發到位率」共用這個常數。分開寫死的下場是 08-11 覆審抓到的那個縫：
+// 招募判準降到 0.70 之後，`subPanel` 還停在 0.8 ⇒ 玩家接出 0.70 的球，招募進度照加、
+// 面板卻顯示「接 0%」，等於畫面與判準各說各話。
+export const STRONG_RECEIVE_QUALITY = 0.7;
 
 // ---- 條件模板（W4 任務書 §1 拍板表＋W6 擴池；三軸缺項＝不檢查）----
 // W6 鍵結構：recruitKey → { opponentId, role, wins?, feat?, stage? }——
@@ -47,12 +55,39 @@ const ATTR_MAX = 85;
 //   改制後（八強循環）止步者 cap：north-tech 3／white-wave 3／gale-shore 3／
 //     gale-shore-2 3／black-pine 3／black-pine-2 2／iron-mist 2／obsidian 1／sky-hawk 0
 //     ⇒ 賽程改制本身就修好 5 條；剩下兩條（obsidian／sky-hawk）門檻在下面調。
+// ★★ 2026-08-11 替代路徑卷（使用者裁定）★★
+// 病灶：9 條 feat 軸裡攻擊向 6、防守接發向 3、**組織向 0** ⇒ 玩二傳或自由人的人推不動
+// 大半招募，而且遊戲沒說。修法＝`altFeats`（替代路徑 OR）：原條件一字不動，另外接受
+// 一組替代軸，**feat 與任一 altFeat 達成即算**（`conditionMet`）。攻擊型玩家零影響。
+//   `assistMatch`＝單場助攻（我舉→隊友扣得分）≥ perMatch 的場次數——**綁二傳**
+//   `saveMatch`＝單場起球（`boxScoreLFor().digs`＝第一觸 receive/dive，含接發與防守起球）
+//     ≥ perMatch 的場次數——**綁自由人**（為什麼一定要綁：見下面 `AXIS_ROLE`）
+// ★門檻是逐槽量出來的，不是拍的★（`tools/recruit-axis-distribution-probe.mjs`，
+// 2453–2480 場/情境、3 個 seed 家族、經驗達成率 40–60%）。
+// ★★這些百分比都是治具數字，兩條軸的偏差方向**相反**，不要一句話帶過★★
+//   `assistMatch`＝**上界**：治具 AI 二傳幾乎每一球都舉（探針自己標了這一條），真人
+//     走位不到位時球會落給保底自動舉、那些場次不記在玩家頭上 ⇒ 真人必然更低。
+//     `count 3` 的三槽（white-wave／black-pine／gale-shore-2＝窗口內幾乎每場都要達標）
+//     對這個偏差最敏感。
+//   `saveMatch`＝**方向未知、可能偏低**：治具 AI 的魚躍是擲骰節流（`ai.js:89`
+//     `DIVE_RATE=0.16`），真人版**不擲骰、判到就撲**（`matchControls.js:509-511` 註解
+//     自陳「機率會變『角色不聽話』」）⇒ 真人會把 AI 骰掉的那批也撲到。
+// **兩條都在真人試玩取樣前當作待驗，不要拿去當難度基準。****每一槽的 perMatch 都對齊
+// 那一槽自己的窗口**——同一個「單場 N 次」在 bo5 決賽比小組賽好過 2–3 倍（小組 18–22
+// vs 決賽 63.2），這是 `218130e`「門檻與窗口不相稱」的同族陷阱，變數換成該場的局數。
+// ⇒ **要改任何一個 perMatch，先重跑那支探針看該槽的窗口，不要只調數字**。
 export const RECRUIT_CONDS = {
   // cap 3（改制前 2＝不可達）：level 52 最弱隊，三戰全勝仍是合理挑戰 ⇒ 門檻不動
   'north-tech': { opponentId: 'north-tech', role: 'setter', wins: 3 },
   'white-wave': {
     opponentId: 'white-wave', role: 'libero', wins: 2,
     feat: { type: 'digMatch', perMatch: 3, count: 3, label: '單場救起 3 記重扣' },
+    // 原軸（敵方扣球後的救球）自由人走得到、二傳走不到（S 每場起球均 0.66、
+    // P(單場≥3)=4.4%，窗口 3.19 場要湊 3 場＝量級 10⁻⁵）⇒ 補一條二傳的路。
+    // 窗口均 3.19 場，治具上界 48%（見下方「這些百分比是上界」）
+    altFeats: [
+      { type: 'assistMatch', perMatch: 18, count: 3, label: '單場助攻 18 次' },
+    ],
   },
   obsidian: {
     // ★ 改動（08-09）：wins 2 → 1 ★ 詹子曜是**三年級**（`recruitTargetGone` 第 2 屆起
@@ -67,12 +102,32 @@ export const RECRUIT_CONDS = {
     // ≈1-e^-0.4≈33%。**改這裡之前，先重算窗口局數再訂門檻，不要只調數字**。
     opponentId: 'obsidian', role: 'middle', wins: 1,
     feat: { type: 'blockKill', count: 1, label: '攔死其攻擊' },
+    // 替代路徑（窗口均 1.48 場／L 1.37）：治具上界 40%（助攻）／46%（起球）
+    altFeats: [
+      { type: 'assistMatch', perMatch: 19, count: 2, label: '單場助攻 19 次' },
+      { type: 'saveMatch', perMatch: 10, count: 1, label: '單場起球 10 次' },
+    ],
   },
   'iron-mist': {
     // cap 2＝門檻 2（窗口內要全勝 level 64）：偏緊但**沒有變差**（改制前也是 2），
     // 且第 2 屆多了「鐵霧被抽進小組」的加場機會（cap 均 2.22）⇒ 本卷不動，留待難度卷
+    // ★ 改動（08-11，使用者裁定）：quality 0.8 → 0.70 ★ 接發品質**不是連續分佈，是離散
+    // 點質量**：真人只產得出 {1.00, 0.70, 0.60, 0.50} 四個值（`matchControls.js:198/468/
+    // 472/514`）、治具 AI 恆 0.75（`ai.js:1773`）。⇒ 門檻 0.8 的真實語意是「**只認完美
+    // 接發**」（唯一 ≥0.8 的取值是 1.00），而 0.8→0.75 對真人是**零效果改動**（0.75 是
+    // 治具值、真人產不出來）。真正會改變行為的切點只有 ≤0.70（納入「按了但沒抓到
+    // Perfect 窗」）。**改這個數字前先看那張取值表，別在 0.71~0.79 之間微調——那整段是空的**。
+    // ★誠實標註：真人 1.00 與 0.70 各佔多少比例，程式裡沒有分佈模型 ⇒ 放寬後的達成率
+    // 無法給數字，只能說方向是對的（治具端 0.60~0.75 逐值相同，量不出這一刀）★
     opponentId: 'iron-mist', role: 'opposite', wins: 2,
-    feat: { type: 'strongReceive', quality: 0.8, count: 8, label: '穩穩接起其發球' },
+    feat: {
+      type: 'strongReceive', quality: STRONG_RECEIVE_QUALITY, count: 8, label: '穩穩接起其發球',
+    },
+    // 接發軸對二傳是**結構性恆 0**（`ai.js:719` 的接發仲裁直接排除 setter；治具 2480 場
+    // 逐場為 0）⇒ 放寬 quality 對 S 是零效果，要給的是另一條路。窗口均 2.23 場，上界 43%
+    altFeats: [
+      { type: 'assistMatch', perMatch: 17, count: 2, label: '單場助攻 17 次' },
+    ],
   },
   // ★ 改動（08-09）：`stage` 由單一場次 → 場次清單（準決賽∪決賽）★ 原本寫死
   // `national-final`，三重矛盾疊在一起：
@@ -90,20 +145,42 @@ export const RECRUIT_CONDS = {
   'obsidian-2': {
     opponentId: 'obsidian', role: 'middle',
     feat: { type: 'blockKillMatch', perMatch: 2, count: 1, label: '單場攔死其攻擊 2 次' },
+    // 替代路徑（窗口均 1.79 場／L 1.61）：治具上界 40%（助攻）／43%（起球）
+    altFeats: [
+      { type: 'assistMatch', perMatch: 20, count: 2, label: '單場助攻 20 次' },
+      { type: 'saveMatch', perMatch: 4, count: 2, label: '單場起球 4 次' },
+    ],
   },
   'iron-mist-2': {
     opponentId: 'iron-mist', role: 'outside',
     feat: { type: 'aceMatch', perMatch: 2, count: 1, label: '單場對其 ACE 2 記' },
+    // 替代路徑（窗口均 2.23 場）：治具上界 43%（助攻）／43%（起球）
+    altFeats: [
+      { type: 'assistMatch', perMatch: 17, count: 2, label: '單場助攻 17 次' },
+      { type: 'saveMatch', perMatch: 5, count: 2, label: '單場起球 5 次' },
+    ],
   },
   'sky-hawk-2': {
     opponentId: 'sky-hawk', role: 'opposite',
     feat: { type: 'killMatch', perMatch: 5, count: 1, label: '單場轟其 5 記殺球' },
+    // 替代路徑（窗口均 1.46 場／L 1.29，且 12.5% 的生涯根本打不到天鷹）：
+    // 治具上界 41%（助攻）／43%（起球）。★門檻看起來特別高是因為窗口全在淘汰賽（bo3/bo5）
+    // ——局數多、單場統計自然膨脹，不是這一槽比較嚴★
+    altFeats: [
+      { type: 'assistMatch', perMatch: 31, count: 2, label: '單場助攻 31 次' },
+      { type: 'saveMatch', perMatch: 13, count: 1, label: '單場起球 13 次' },
+    ],
   },
   // W6 A1/A5 新隊雙招牌（wins 1-2 低門檻＋壯舉軸——配指定邀請＝一屆內看得到進度）
   'gale-shore': { opponentId: 'gale-shore', role: 'setter', wins: 2 },
   'gale-shore-2': {
     opponentId: 'gale-shore', role: 'outside', wins: 1,
     feat: { type: 'killMatch', perMatch: 4, count: 1, label: '單場轟 4 記殺球' },
+    // 替代路徑（窗口均 3.18 場）：治具上界 60%（助攻）／58%（起球）
+    altFeats: [
+      { type: 'assistMatch', perMatch: 17, count: 3, label: '單場助攻 17 次' },
+      { type: 'saveMatch', perMatch: 8, count: 1, label: '單場起球 8 次' },
+    ],
   },
   'black-pine': {
     // ★ 改動（08-11，使用者裁定）：feat.count 4 → 2 ★ 同 obsidian，病灶是**門檻與
@@ -114,6 +191,11 @@ export const RECRUIT_CONDS = {
     // 先重算窗口局數再訂門檻，不要只調數字**。
     opponentId: 'black-pine', role: 'middle', wins: 1,
     feat: { type: 'blockKill', count: 2, label: '攔死其攻擊' },
+    // 替代路徑（窗口均 3.23 場）：治具上界 44%（助攻）／47%（起球）
+    altFeats: [
+      { type: 'assistMatch', perMatch: 16, count: 3, label: '單場助攻 16 次' },
+      { type: 'saveMatch', perMatch: 4, count: 3, label: '單場起球 4 次' },
+    ],
   },
   'black-pine-2': {
     // ★ 改動（08-09）：wins 2 → 1 ★ 戴柏毅二年級 ⇒ 窗口＝第 1、2 屆；改制前止步者對
@@ -121,8 +203,15 @@ export const RECRUIT_CONDS = {
     // （這就是任務書點名的那條）。改制後 cap ＝2（黑松進了循環組抽籤池），但門檻 2
     // ＝要求「兩次相遇對 level 67 全勝」⇒ 仍然貼在天花板上。放到 1，讓它是
     // 「贏過黑松一次＋接起 5 記強發」——與同級的 `black-pine`（wins 1＋壯舉）同構。
+    // ★ 改動（08-11）：quality 0.8 → 0.70 ★ 理由同 `iron-mist`（離散點質量，0.8＝只認完美）
     opponentId: 'black-pine', role: 'opposite', wins: 1,
-    feat: { type: 'strongReceive', quality: 0.8, count: 5, label: '穩穩接起其發球' },
+    feat: {
+      type: 'strongReceive', quality: STRONG_RECEIVE_QUALITY, count: 5, label: '穩穩接起其發球',
+    },
+    // 同 iron-mist：接發軸對二傳結構性恆 0。窗口均 2.09 場，上界 51%
+    altFeats: [
+      { type: 'assistMatch', perMatch: 16, count: 2, label: '單場助攻 16 次' },
+    ],
   },
 };
 
@@ -222,10 +311,22 @@ function countStrongReceives(events, playerId, myTeam, quality) {
   return n;
 }
 
-// 本場壯舉進度增量（依對手條件的 feat 軸；無 feat 軸＝0）
-export function featGainFor(events, playerId, myTeam, cond) {
-  const f = cond?.feat;
+// 替代軸綁定的位置（★08-11 對抗覆審 HIGH★）：`saveMatch` 的判準是「第一觸起球」，
+// 而治具實測 **OH 每場 12.84 次起球，比自由人臂的 7.08 還高**（自由人只在後排輪次
+// 上場）⇒ 不綁位置的話，這條「給自由人的替代路徑」對主攻手近乎恆真，實測讓 4 個槽
+// 從 0% 跳到 33/50/92/33%＝把那些槽的壯舉軸實質廢掉。
+// ★這個病靠「調高門檻」修不好★：要調到 OH 打不到，自由人只會更打不到（7.08 < 12.84）
+// ——門檻與位置是兩個問題，用一個數字回答必然顧此失彼。
+// assistMatch 同理綁二傳：替代路徑的用意是「用你這個位置的方式證明自己」，不是通用捷徑。
+const AXIS_ROLE = { assistMatch: 'setter', saveMatch: 'libero' };
+
+// 單一壯舉軸的本場增量（feat 與 altFeats 共用同一個判定器——兩份判定器＝兩套語意，
+// 遲早分岔）。未知軸型回 0。
+// `role`＝玩家本場的 currentRole；綁位置的軸在位置不符時一律 0。**role 缺值也是 0**
+// （安全預設往「不承諾」倒——寧可漏發也不要送出玩家其實走不到的路）。
+function gainOfAxis(events, playerId, myTeam, f, role) {
   if (!f || !events) return 0;
+  if (AXIS_ROLE[f.type] && role !== AXIS_ROLE[f.type]) return 0;
   if (f.type === 'blockKill') return matchStatsFor(events, playerId, myTeam).blockPoints;
   if (f.type === 'strongReceive') return countStrongReceives(events, playerId, myTeam, f.quality);
   if (f.type === 'digMatch') return countDigs(events, playerId, myTeam) >= f.perMatch ? 1 : 0;
@@ -235,7 +336,58 @@ export function featGainFor(events, playerId, myTeam, cond) {
   }
   if (f.type === 'aceMatch') return matchStatsFor(events, playerId, myTeam).aces >= f.perMatch ? 1 : 0;
   if (f.type === 'killMatch') return matchStatsFor(events, playerId, myTeam).kills >= f.perMatch ? 1 : 0;
+  // 08-11 替代路徑軸（二傳／自由人）
+  if (f.type === 'assistMatch') {
+    return countSetAssistKills(events, playerId, myTeam) >= f.perMatch ? 1 : 0;
+  }
+  if (f.type === 'saveMatch') return boxScoreLFor(events, playerId).digs >= f.perMatch ? 1 : 0;
   return 0;
+}
+
+// 本場壯舉進度增量（依對手條件的 feat 軸；無 feat 軸＝0）。原 feat 軸不綁位置。
+export function featGainFor(events, playerId, myTeam, cond) {
+  return gainOfAxis(events, playerId, myTeam, cond?.feat, null);
+}
+
+// 替代軸清單（缺項＝空陣列——呼叫端不必各自 `?? []`）
+export function altFeatsOf(cond) {
+  return cond?.altFeats ?? [];
+}
+
+// 這條替代軸是不是「這個位置走得到的路」——判定端（gainOfAxis）與顯示端
+// （careerScreen 的進度列）共用這一支。**兩邊各寫一份＝畫面遲早承諾走不到的路**
+// 未知軸型一律 false（安全預設往「不承諾」倒）：`gainOfAxis` 對認不得的型別回 0，
+// 若這裡反而回 true，畫面就會對所有位置承諾一條判定端永遠給 0 的路——軸型打錯字
+// （`assistMach`）就是這樣靜默生效的。`tests/recruit-alt-path.test.mjs` 另有型別守衛。
+export function altFeatAvailableTo(f, role) {
+  return !!AXIS_ROLE[f?.type] && role === AXIS_ROLE[f.type];
+}
+
+// 這條替代軸屬於哪個位置（顯示層用來說「（需二傳）」；未知軸型＝null）
+export function altFeatRoleOf(f) {
+  return AXIS_ROLE[f?.type] ?? null;
+}
+
+// 本場位置的**單一取得路徑**（賽末累加 `matchCareer` 與賽中字卡 `matchLoop` 共用）。
+// 收斂而不是各自寫一份：這個值漏掉時整個替代路徑會靜默失效（軸恆 0、玩家打完三年
+// `alts` 仍是 {}），而漏掉的地方越多、能靜默的入口就越多。
+export function matchRoleOf(game, playerId) {
+  return game?.players?.[playerId]?.currentRole ?? null;
+}
+
+// 該位置走得到的替代軸（顯示層用；role 缺值＝一條都不列，與判定端同一個安全預設）
+export function altFeatsFor(cond, role) {
+  return altFeatsOf(cond).filter((f) => altFeatAvailableTo(f, role));
+}
+
+// 本場替代軸增量：回傳 { [axisType]: gain }（鍵＝軸型而非索引——存檔看得懂，
+// 且日後調換 altFeats 順序不會把進度對錯欄）。`role` 缺值時綁位置的軸一律 0。
+export function altGainsFor(events, playerId, myTeam, cond, role = null) {
+  const out = {};
+  for (const f of altFeatsOf(cond)) {
+    out[f.type] = gainOfAxis(events, playerId, myTeam, f, role);
+  }
+  return out;
 }
 
 // ---- 進度資料層（save.recruitment：progress 跨賽季累積、永不重置）----
@@ -245,11 +397,21 @@ export function featGainFor(events, playerId, myTeam, cond) {
 // W6：progress 鍵＝recruitKey（既有 5 隊鍵值同 opponentId，舊存檔零遷移）
 export function progressOf(recruitment, recruitKey) {
   const p = recruitment?.progress?.[recruitKey];
+  // alts＝替代軸進度 { [axisType]: n }；08-11 前的存檔沒有這個鍵 ⇒ 回退 {}（零遷移，
+  // 且與 wins/feat 同一條「缺鍵補 0、不是整條回退」的正規化慣例）
+  const alts = {};
+  for (const [k, v] of Object.entries(p?.alts ?? {})) alts[k] = v ?? 0;
   return {
     wins: p?.wins ?? 0,
     feat: p?.feat ?? 0,
     stageCleared: !!p?.stageCleared,
+    alts,
   };
+}
+
+// 某條替代軸的已累積進度（缺鍵＝0）
+export function altProgressOf(recruitment, recruitKey, axisType) {
+  return progressOf(recruitment, recruitKey).alts[axisType] ?? 0;
 }
 
 // stage 軸的場次集合（字串或字串陣列皆可；缺項＝不檢查）——單一真相，
@@ -263,21 +425,39 @@ export function stageIdsOf(cond) {
 // W6：同隊多招募對象＝逐鍵各自累加（wins 軸同步、feat 軸各算各的）；
 // 非招募對象（無條件定義）原樣返回。
 export function accrueRecruitProgress(recruitment, {
-  opponentId, matchId, won, events = null, playerId = null, myTeam = null,
+  opponentId, matchId, won, events = null, playerId = null, myTeam = null, role = null,
 }) {
   let rec = recruitment;
   for (const [key, cond] of Object.entries(RECRUIT_CONDS)) {
     if (cond.opponentId !== opponentId) continue;
     const prev = progressOf(rec, key);
+    const gains = altGainsFor(events, playerId, myTeam, cond, role);
+    const alts = { ...prev.alts };
+    for (const [type, g] of Object.entries(gains)) {
+      // 零增量且從未累積過＝不在存檔裡長出這個鍵（玩主攻手的人不該因為經過這些對手，
+      // 就在存檔裡多出一堆恆 0 的替代軸欄位；`progressOf` 對缺鍵本來就回 0）
+      if (!g && alts[type] == null) continue;
+      alts[type] = (alts[type] ?? 0) + g;
+    }
     const entry = {
       wins: prev.wins + (won ? 1 : 0),
       feat: prev.feat + featGainFor(events, playerId, myTeam, cond),
       stageCleared: prev.stageCleared
         || !!(won && stageIdsOf(cond).includes(matchId)),
+      alts,
     };
     rec = { ...rec, progress: { ...(rec.progress ?? {}), [key]: entry } };
   }
   return rec;
+}
+
+// 壯舉軸是否達成：原 feat **或**任一 altFeat（08-11 替代路徑卷）。
+// 只有壯舉這一軸走 OR——wins 與 stage 不在此列（那兩軸對所有位置一律可達，
+// 沒有「二傳算不到」的問題，放寬會變成無差別降門檻）。
+function featAxisMet(cond, p) {
+  if (!cond.feat) return true; // 無壯舉軸＝不檢查（altFeats 亦不獨立成軸）
+  if (p.feat >= cond.feat.count) return true;
+  return altFeatsOf(cond).some((f) => (p.alts[f.type] ?? 0) >= f.count);
 }
 
 // 條件是否全數達成（三軸缺項＝不檢查；W6 起 wins 亦可缺——A3 第二人純壯舉軸）
@@ -286,7 +466,7 @@ export function conditionMet(recruitment, recruitKey) {
   if (!cond) return false;
   const p = progressOf(recruitment, recruitKey);
   return (cond.wins == null || p.wins >= cond.wins)
-    && (!cond.feat || p.feat >= cond.feat.count)
+    && featAxisMet(cond, p)
     && (!cond.stage || !!p.stageCleared);
 }
 

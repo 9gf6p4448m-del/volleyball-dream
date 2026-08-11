@@ -8,7 +8,7 @@ import { matchStatsFor, growthPointsFor } from '../career/growth.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
 import { buildTeamBox, buildAceBox, buildMentorFeed } from '../career/boxScore.js';
 import { applyRosterGrowth } from '../career/roster.js';
-import { accrueRecruitProgress } from '../career/recruitment.js';
+import { accrueRecruitProgress, matchRoleOf } from '../career/recruitment.js';
 import { scanChaseLost, actingLiberoFor } from '../career/n2Arc.js';
 
 // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
@@ -125,6 +125,8 @@ export function settleCareerMatch({
       events: game.events,
       playerId,
       myTeam,
+      // 08-11 替代路徑卷：綁位置的替代軸（助攻＝二傳、起球＝自由人）要知道本場位置
+      role: matchRoleOf(game, playerId),
     })) && saveOk;
   }
   // W6 換人信任事件（新增採納 6）：被換下＝−1（輕微）、被換上且本場有建功

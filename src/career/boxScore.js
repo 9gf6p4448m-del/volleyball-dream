@@ -81,6 +81,53 @@ export function buildTeamBox(events, players, teamId) {
   return rows;
 }
 
+// 助攻（08-11 招募替代軸）：玩家舉球 → 我方**隊友**扣球 → 該波我方得分且最後觸球
+// 正是那記扣球。被攔下（BLOCK_TOUCH 蓋掉 lastTouch）不算；自舉自扣不算（`!== playerId`
+// ——那是二次球，已由 buildTeamBox 的 dumpKills 記在別的帳上）。
+// ★歸因慣例逐條沿用本檔既有碼，不另立一套★：set→spike 配對同 `buildMentorFeed`
+// （pendingSet 只在 SCORE 清）、得分歸屬同 `buildTeamBox`（SCORE 前最後觸球者）。
+// ★訂門檻的探針直接 import 本函式★（`tools/recruit-axis-distribution-probe.mjs`）——
+// 第一版探針自己抄了一份，抄的正是上面那個歸因 bug，於是門檻是拿錯的定義校準的。
+// **改這裡的語意等於讓 recruitment.js 的助攻門檻失去校準**，要改就要重跑那支探針。
+export function countSetAssistKills(events, playerId, teamId) {
+  let n = 0;
+  let lastTouch = null;
+  let attacker = null;
+  let pendingSet = false;
+  for (const e of events ?? []) {
+    if (e.type === 'SERVE') {
+      lastTouch = { pid: e.playerId, team: e.team, kind: 'serve' };
+    } else if (e.type === 'TOUCH') {
+      if (e.playerId === playerId && e.kind === 'set' && e.team === teamId) {
+        pendingSet = true;
+        attacker = null;
+      } else if (pendingSet && e.team === teamId && e.kind === 'spike'
+        && e.playerId && e.playerId !== playerId) {
+        attacker = e.playerId;
+        pendingSet = false;
+      } else {
+        // ★任何插進來的觸球都打斷這條配對★（08-11 覆審 MEDIUM）：舊版只在 SCORE 清
+        // `attacker`，於是「我舉→隊友扣→被救起→**別人舉**→同一人再扣得分」會把功勞
+        // 記給我，而那球其實是別人舉的。長 rally 越多灌得越兇，與「助攻」的字面語意不符。
+        pendingSet = false;
+        attacker = null;
+      }
+      lastTouch = { pid: e.playerId, team: e.team, kind: e.kind };
+    } else if (e.type === 'BLOCK_TOUCH') {
+      pendingSet = false;
+      attacker = null;
+      lastTouch = { pid: e.playerId, team: e.team, kind: 'block' };
+    } else if (e.type === 'SCORE') {
+      if (e.team === teamId && lastTouch && lastTouch.team === teamId
+        && lastTouch.kind === 'spike' && attacker && lastTouch.pid === attacker) n += 1;
+      lastTouch = null;
+      attacker = null;
+      pendingSet = false;
+    }
+  }
+  return n;
+}
+
 // 對手 ace 單人記帳（Q9：餵情蒐的宿敵感數據面）：aceId＝對面王牌的 pid（呼叫端由
 // 名冊對映）；回傳該 pid 的 box row（無觸球＝零值 row）
 export function buildAceBox(events, players, acePid, oppTeamId) {
