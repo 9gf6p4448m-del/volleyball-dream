@@ -9,7 +9,9 @@ import {
   otherTeam, basePosition, localToWorld, isFrontRow, isBackRow, positionOf, TEAM_SIDE,
 } from './rotation.js';
 import { standingReach, spikeReach, moveSpeed } from './player.js';
-import { predictLanding, predictContactPoint, spikeVelocity, heightAtNet } from './flight.js';
+import {
+  predictLanding, predictContactPoint, predictNetCrossing, spikeVelocity, heightAtNet,
+} from './flight.js';
 import { createIntent } from './intent.js';
 import {
   approachRoutesFor, approachStartOf, approachRouteOf, setAimFor, TAKEOFF,
@@ -2470,6 +2472,47 @@ function blockAimOptsOf(aiState) {
   return { passTier: aiState.passTier ?? null, setterSpotLx: AI.SETTER_SPOT.lx };
 }
 
+// ★★ 慢速／非典型彈道校正（2026-08-11，爆接卷第三擊被攔率案）★★
+//
+// ★ 病根 ★ 攔網手的**時鐘與瞄準都錨在擊球點**（`predictContactPoint`：攻擊手會在
+//   第幾 tick、在哪個 x 把球打走），而攔網的結算**全部發生在網面上**
+//   （`game.js stepRally` 判過網、`tryBlock` 取過網那一 tick 的 `b.x`）。
+//   兩者只有在「擊球→過網」很短時才近似相等——**那是一個沒有人寫下來的前提：彈道典型**。
+//   實測（RUNS=200，探針 blown-block-probe.mjs）：
+//     典型扣球 擊球→過網 p50 8 tick；「救起來、有人從中路慢慢打過去」p50 15、p95 32。
+//   後者的下場是牆按擊球時鐘準時拔起，球卻晚 7–24 tick 才到：
+//     過網時牆上一個人都沒有 15.3%（一般爛一傳只有 0.4%）、帶內率 58.7%（vs 75.1%）。
+//   ⇒ 不是攔網太弱，是**時鐘對不上這顆球**。
+//
+// ★ 修法 ★ 球**真的被打出來之後**（`profile === 'spike'` ＝ tryBlock 自己的同一道閘），
+//   「它會在第幾 tick、從哪個 x 過網」就是可算的公開物理（`predictNetCrossing`，
+//   與 sim 判過網同一套 stepBall、同一條述詞）。此時攔網手改用這個量：
+//     ① 時鐘：球到得比我的滯空還遠 ⇒ **再等一下**（只延後，永不提前，見下方 tooEarly）
+//     ② 瞄準：改瞄**過網點**而不是擊球點（結算就在那條線上）
+//   兩者都不是特判——判準是「這顆球飛多久」，慢球／非典型彈道一律適用，
+//   典型球（p50 6 tick 就到）連閘門都碰不到，逐值不變。
+//
+// ★ 為什麼不是「加強攔網」★ 校正只在**球已經朝我飛來**時生效，而此時剩下的移動時間
+//   由球自己決定：典型快球只剩 1–2 tick（頂多 0.18m），慢球才給得出補位的時間——
+//   幅度天然跟著「這顆球有多不典型」走，零強度旋鈕。
+//
+// 回傳 `{ x, y, ticks }`（球會在幾 tick 後、從哪裡過到**我方**）或 null（沒這個量）。
+function blockInboundCrossing(game, team) {
+  if (game.rally.profile !== 'spike') return null; // 球還沒被打出來＝過網點不可導
+  // 球還在對方半場才算「朝我飛來」（我方半場在 z 符號 +TEAM_SIDE[team] 側）
+  if (TEAM_SIDE[team] * game.ball.z >= 0) return null;
+  return predictNetCrossing(game.ball);
+}
+
+// 「現在跳的話，球到的時候我的手還在上面嗎」——**只用來延後，不用來提前**。
+// 門檻＝`AIR_TICKS / 2`：`player.js blockTopEdge` 的頂邊是 sin(π·t/AIR_TICKS)，
+// 峰值就在 t = AIR_TICKS/2 ⇒「起跳到球過網剛好一個半波」＝手在最高點迎球。
+// **零新常數**（沿用既有滯空窗與既有的頂邊曲線），也沿用了本檔既有的同款語彙
+//（commit 提前跳的閘 `c.jumpAt <= tick + AIR_TICKS`＝「現在跳仍罩得住」）。
+function blockJumpTooEarly(inbound) {
+  return inbound != null && inbound.ticks > AIR_TICKS / 2;
+}
+
 function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
   const r = game.rally;
   const atkTeam = r.possession;
@@ -2635,13 +2678,18 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
       const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
       if (hit) c.jumpAt = tick + hit.ticks;
     }
+    // ★ 慢速／非典型彈道校正（見 blockInboundCrossing 檔頭）★
+    // 球已經打出來、正朝我方飛時才有這個量；沒有＝一切照舊。
+    const inbound = blockInboundCrossing(game, team);
+    // 只延後、不提前：訊號說跳了，但球還遠到「我落地它才到」⇒ 這一 tick 不跳，繼續跟。
+    const tooEarly = blockJumpTooEarly(inbound);
     if (c.jumpAt != null) {
-      if (tick >= c.jumpAt) {
+      if (tick >= c.jumpAt && !tooEarly) {
         c.jumpTick = tick; // 本 tick 起算 air
         return c.x;
       }
       // commit 提前跳的閘（read 不走：他的時鐘取樣於反應延遲之後，本來就不早跳）
-      if (persona === BLOCK_PERSONA.COMMIT && c.jumpAt <= tick + AIR_TICKS) {
+      if (!tooEarly && persona === BLOCK_PERSONA.COMMIT && c.jumpAt <= tick + AIR_TICKS) {
         const liveRead = blockCommitRead(game, atkTeam, {
           ...opts,
           outerLag: Math.round(reactionTicks(player) * BLOCK_COMMIT.OUTER_LAG_MUL),
@@ -2667,7 +2715,7 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
         outerLag: Math.round(reactionTicks(player) * BLOCK_COMMIT.OUTER_LAG_MUL),
       });
       if (liveRead) c.seen = true;
-      if (r.touches >= 2 && c.seen && liveRead == null) {
+      if (r.touches >= 2 && c.seen && liveRead == null && !tooEarly) {
         c.jumpTick = tick;
         return c.x;
       }
@@ -2675,6 +2723,23 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
     // `blind` ＝ 沒鎖定任何人的退路計畫：**不得改瞄**。
     // 他賭了中路卻沒賭中，代價就該由他自己付；容許事後跟著人跑＝把 commit 偷偷變成 read。
     if (c.blind) return c.x;
+    // ★ 慢速／非典型彈道校正 ②：**還在等的這段時間，就走到球會過網的地方** ★
+    //
+    // 條件刻意是 `tooEarly`（＝校正 ① 正把我按在地上）而不是「只要 inbound 就改瞄」：
+    //   時間是這條規則的全部內容。腳還在地上、球還遠 ⇒ 我看得到它會從哪裡過網，
+    //   也真的走得過去；一旦近到可以跳（tooEarly 轉偽），瞄準就交還給既有的那條路，
+    //   起跳後更是完全不能橫移（AIR 段 `return c.x`）。
+    // ⚠ 這不是「改瞄」而是「跟球」，所以**不付重新踩定的代價**（REPLANT_TICKS 的語意是
+    //   「換了一個人跟＝重心壓在錯的方向」；球被打出來之後只有一顆球，沒有第二個人可換）。
+    //   位移仍受 `moveIntent` 的單 tick 上限約束 ⇒ 球給多少時間就補多少位，不會瞬移。
+    //
+    // ★ 實測擇路（RUNS=40 四臂，探針 blown-block-probe.mjs；被攔率 爆接／poor／perfect）★
+    //   基準                 20.61 / 36.23 / 23.65
+    //   只改瞄（不看時間）     17.69 / 30.80 / 19.44 ← **全面變差**：典型球在起跳前一兩格
+    //                        才換瞄準點，人來不及動、牆的分工卻整個重排，尾巴反而變厚
+    //   改瞄＋付重新踩定      22.28 / 36.58 / 24.06 ← 12 tick 的凍結把剩下的時間吃光＝等於沒做
+    //   **本式（等的時候跟球）31.44 / 37.47 / 26.76**
+    if (inbound && tooEarly) { c.x = inbound.x; return c.x; }
     const live = blockAimX(game, aiState, atkTeam, persona, { ...opts, blockerId: playerId });
     if (!live) return c.x; // 這一刻讀不出新的瞄準點：守住既有目標，不亂動
     // §2.4-e 改判要付重新踩定的代價（**不做加速度／慣性模型**：移動從來不是瓶頸，

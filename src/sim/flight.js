@@ -75,6 +75,32 @@ export function predictLanding(ball, maxTicks = 900) {
   return null;
 }
 
+// 過網點預測：球從**現在**起飛到網面（z=0）時的水平位置、高度與剩餘 tick。
+//
+// ★ 為什麼要有這一支（2026-08-11 慢速彈道校正卷）★
+// 攔網的結算完全發生在網面上：`game.js stepRally` 判過網用的是「z 正負翻越」、
+// `tryBlock` 取的是**過網那一 tick 的 `b.x`／`b.y`**。而攔網手的時鐘與瞄準原本
+// 都錨在 `predictContactPoint`（攻擊手會在哪裡、第幾 tick 擊到球）——那是**擊球點**，
+// 不是過網點。兩者只在「擊球→過網」很短（典型扣球實測 p50 8 tick）時才近似相等；
+// 球慢（中路搶救式出手，實測 p50 15、p95 32 tick）就整個對不上。
+// 本函式讓「球會在第幾 tick、從哪個 x 過網」變成可算的量——**球已經被打出來之後**，
+// 這是場上每個人都看得見的公開物理（與 `predictLanding`／`predictContactPoint` 同一
+// 套 `stepBall`，單一公式來源，不另手刻拋物線）。
+//
+// ⚠ 判過網的述詞逐字抄 `stepRally`：`(prevZ > 0) !== (b.z > 0) && prevZ !== b.z`
+//   ——同一件事只有一種判法，兩邊分岔就會出現「AI 以為會過、sim 說沒過」。
+// 先落地（不過網）或超過上限 → null＝沒有這個量，呼叫端須回落既有行為。
+export function predictNetCrossing(ball, maxTicks = 900) {
+  const b = { ...ball };
+  for (let i = 1; i <= maxTicks; i += 1) {
+    const prevZ = b.z;
+    stepBall(b, SIM_DT);
+    if ((prevZ > 0) !== (b.z > 0) && prevZ !== b.z) return { x: b.x, y: b.y, ticks: i };
+    if (b.y <= BALL.RADIUS + 1e-9) return null; // 先觸地＝這一球不會過網
+  }
+  return null;
+}
+
 // 接觸點預測（走位深度）：球下墜途中「墜到接球舒適高度 contactY」時的水平位置——
 // 接球者瞄這個點才會真的站在球正下方（而非瞄地板落點、球墜落期間人被拋在後方）。
 // 用同一套 stepBall 物理，找第一次「由上墜破 contactY 且正在下墜」的 tick。

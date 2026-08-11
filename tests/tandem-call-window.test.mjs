@@ -423,7 +423,18 @@ test('D 回饋覆蓋率：兩條路徑各自的 reason 都有文案，且表裡�
   const tandemStateOf = needTandemState();
   const TANDEM_FEEDBACK = matchLoop.TANDEM_FEEDBACK;
   assert.ok(TANDEM_FEEDBACK, 'matchLoop 沒有匯出 TANDEM_FEEDBACK：這一版沒有夾塞結算回饋');
-  const SEEDS = [500000, 507919, 515838];
+  // ★ 2026-08-11 取樣量：臂① 3 顆 seed → 60 顆（**同一條等差數列**，起點與公差
+  //   500000／7919 一格未動——不是「換一顆剛好會過的 seed」，是把原本那條數列拉長）★
+  //   直接原因：`partner`（「這一波沒有人跑快攻可以搭」）是**每局 3–10% 的稀有事件**，
+  //   舊的 3 顆裡剛好有一顆（507919）骰得到，rally 流一漂移就整組歸零——本檔 08-07／08-09
+  //   已經為同一型踩過兩次（見 AUTO_TANDEM_SEEDS 的檔頭）。
+  //   實測密度（60 局同一條數列，慢速彈道攔網時鐘修復前／後）：**6/60 → 2/60**
+  //   （Fisher p≈0.27＝兩者都只是稀有，不是被壓死）。60 顆的期望值 ≥2，且對下一次
+  //   rally 流位移活得下來。**行為斷言一格未動**（每個文案 key 都要在實跑裡出現過）。
+  const SEEDS = Array.from({ length: 60 }, (_, i) => 500000 + i * 7919);
+  // 臂②（真的按下去）不吃 `partner`——它要的 `already`／`done→already` 映射每局都出現，
+  // 8 顆已經比舊的 3 顆更有餘裕；不跟著拉到 60 是為了不讓這條測試多跑一倍時間。
+  const LATCH_SEEDS = SEEDS.slice(0, 8);
 
   // ---- 臂 ①：`onTandemTap` 路徑（純觀察，不寫任何指令欄位）----
   const tapSeen = new Set();
@@ -448,7 +459,7 @@ test('D 回饋覆蓋率：兩條路徑各自的 reason 都有文案，且表裡�
   // ---- 臂 ②：`applyTandemCall` 路徑（真的按下去，讀它記了什麼）----
   // 一波按一次（不論窗開不開），把 outcome→文案 key 的實際映射收集起來。
   const latchSeen = new Set();
-  for (const seed of SEEDS) {
+  for (const seed of LATCH_SEEDS) {
     const game = createGame({ seed, teams: createDefaultTeams(), setTarget: 25 });
     const ai = createAiState();
     let guard = 0;
