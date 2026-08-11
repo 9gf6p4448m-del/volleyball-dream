@@ -25,6 +25,7 @@ import { isRotationLegal, isRotationOrderLegal, cancelFaultPoints } from './rota
 import { applyAttackOutcome, applyComboAssist } from './trust.js';
 import {
   STAMINA, drainStamina, recoverStamina, staminaPerfMul, staminaRecvMul,
+  staminaServeScatterMul,
 } from './stamina.js';
 
 // §十-1 末段：可及體的球半徑膨脹量——**階段一唯一的行為變更**。
@@ -959,7 +960,10 @@ function performServe(state, intent, ev) {
   const target = scatterTarget(
     state, intent.aim, player.attributes.serve, 'serve', 0,
     (power ? TUNING.POWER_SERVE_SCATTER : float ? TUNING.FLOAT_SCATTER : 1)
-      * momentumScatterMul(state, team), // W7 B1：氣勢進發球散佈
+      * momentumScatterMul(state, team) // W7 B1：氣勢進發球散佈
+      // 疲勞→發球準度（`stamina.js` 有完整理由）：滿體力恆 1＝三式數字逐值不變，
+      // 掉檔之後才開始不準，且**越吃體力的式子受影響越大**
+      * staminaServeScatterMul(state, player, power ? 'power' : float ? 'float' : 'stand'),
   );
   const apex = Math.max(
     power ? TUNING.POWER_SERVE_APEX
