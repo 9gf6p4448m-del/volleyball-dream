@@ -1508,6 +1508,55 @@ function settlePoint(state, winner, reason, ev) {
 // - trust 場內動態（trustDyn）：跨局延續（同一場比賽的連續敘事）；subLog 同（回歸弧跨局成立）
 // - 換人/暫停額度：每局重置（FIVB per set）；發球序/違序監看隨新局重建
 // - 發球權：各局交替（奇 A 偶 B，決定論）；決勝局 target＝15（deciderTarget）
+// 教學局分步關卡（2026-08-13）：**死球時合法重排站位與發球權**，比分與局勢不動。
+//
+// ★ 為什麼需要它 ★ 教學局六步各自需要不同的情境（扣球要前排、攔網要對面進攻＝我方發球、
+// 發球要站 1 號位）。現行形式是「站在真比賽裡等機會出現」，真人實測要等太久
+// （`docs/kickoffs/tutorial-drill-stage-kickoff.md` §一）。這個函式讓每一步開打前
+// 把場景擺好，情境**結構上必然發生**——改的是建局參數，不是物理或 AI 決策。
+//
+// ★ 三者必須一起改 ★ `match.rotations`／`serveSeq`／`match.servingTeam`。
+// 只改 rotations 會被 `performServe` 的違序防線（見下方 7.7 那段）記成 ROTATION_FAULT、
+// 賽末依 7.7.2 追溯扣分——那是「rotations 被未經預檢的路徑改動」的最後防線，
+// 本函式就是那個「經過預檢的路徑」。手續照 `startNextSet` 的同一份清單。
+//
+// ★ 只在死球（serve/set_over 之外的非 rally 相位）呼叫 ★ rally 進行中換站位會讓
+// actors 與 rotations 脫節。回傳 false ＝沒做事（呼叫端據此判斷）。
+export function restageRotation(state, { rotations, servingTeam } = {}) {
+  if (!state || state.phase === 'rally' || state.phase === 'set_over') return false;
+  if (!rotations?.A || !rotations?.B || !servingTeam) return false;
+  // ★ 先把自由人換回來 ★ 場上的 rotations 是「liberoId 佔住 replacedId 的格子」
+  // （見下方自由人自動換入那段）。直接沿用會留下一個**先發六人以外**的 id，
+  // 而下面清掉配對之後 setupServePhase 會拿它去查 actors ⇒ undefined 當場炸。
+  // 換回來只是把佔位還原，六人的相對次序不變（自由人本來就佔著那一格）。
+  const restore = (team, order) => {
+    const lib = state.liberos?.[team];
+    if (!lib || lib.replacedId == null) return [...order];
+    return order.map((id) => (id === lib.liberoId ? lib.replacedId : id));
+  };
+  state.match.rotations = { A: restore('A', rotations.A), B: restore('B', rotations.B) };
+  state.match.servingTeam = servingTeam;
+  // 發球序跟著重登記（nextIdx 歸零＝以新序的 1 號位為下一棒），否則違序防線會誤報
+  // ★ 用還原後的那份登記發球序 ★ 拿原始 rotations 會把自由人登記成發球棒次，
+  // 而他隨即會被換出場 ⇒ 下一棒對不上 ⇒ 違序防線誤報
+  state.serveSeq = {
+    A: { order: [...state.match.rotations.A], nextIdx: 0 },
+    B: { order: [...state.match.rotations.B], nextIdx: 0 },
+  };
+  state.rotationFault = { A: null, B: null };
+  // 自由人配對歸零：先發全回場，setupServePhase 依新輪轉重新換入（同 startNextSet 的處理；
+  // 不歸零的話舊配對會與新站位打架，換出來的是站錯位置的陣容）
+  if (state.liberos) {
+    for (const team of ['A', 'B']) {
+      if (state.liberos[team]) {
+        state.liberos[team].replacedId = null;
+        state.liberos[team].hold = false;
+      }
+    }
+  }
+  return true;
+}
+
 export function startNextSet(state) {
   const s = state.series;
   if (!s || state.phase !== 'set_break') return false;

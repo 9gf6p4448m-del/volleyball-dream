@@ -7,7 +7,7 @@
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
 import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout,
-  startNextSet, applyLiberoRecall, TUNING,
+  startNextSet, applyLiberoRecall, restageRotation, TUNING,
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
@@ -42,7 +42,7 @@ import {
 import {
   settlePractice,
   createTutorialState, advanceTutorial, tutorialRows, tutorialSettle, currentTutorialDrill,
-  tutorialCoachLine, tutorialVerdictLine,
+  tutorialCoachLine, tutorialVerdictLine, tutorialStageFor,
   TUTORIAL_RELEASE_LINE, TUTORIAL_FINISH_LINE,
 } from '../career/practiceMatch.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -747,16 +747,24 @@ export function updateTutorial(s, now) {
   }
   if (!s.tutorialGreeted) {
     s.tutorialGreeted = true;
-    say(tutorialCoachLine(currentTutorialDrill(s.tutorial)));
+    s.tutorialRestageDue = true; // 第一步的場景也要擺（不是只有換步才擺）
+    say(tutorialCoachLine(currentTutorialDrill(s.tutorial), 0));
   }
+  // 一球打完了沒（rally → 非 rally 的那一幀）。重試判定要的是「這一球結束了」，
+  // 不是「現在沒在打」——後者每一幀都成立，會讓每幀都算一次失敗
+  const isRally = s.game.phase === 'rally';
+  const rallyEnded = s.tutorialWasRally === true && !isRally;
+  s.tutorialWasRally = isRally;
   const step = advanceTutorial(s.tutorial, {
-    events: s.game.events, playerId: s.playerId, myTeam, tick: s.game.tick,
+    events: s.game.events, playerId: s.playerId, myTeam, tick: s.game.tick, rallyEnded,
   });
   s.tutorial = step.state;
   if (step.change) {
+    // 換步／重試／放行都要重擺場景——但擺得成要等死球（見 applyTutorialStage）
+    s.tutorialRestageDue = true;
     const nextLine = step.state.done
       ? TUTORIAL_FINISH_LINE
-      : tutorialCoachLine(currentTutorialDrill(step.state));
+      : tutorialCoachLine(currentTutorialDrill(step.state), step.state.attempts ?? 0);
     if (step.change === 'release') {
       say(TUTORIAL_RELEASE_LINE, TUTORIAL_RELEASE_TTL);
       s.tutorialNextLine = { at: now + TUTORIAL_RELEASE_TTL, text: nextLine };
@@ -765,8 +773,23 @@ export function updateTutorial(s, now) {
       s.tutorialNextLine = null;
     }
   }
+  if (s.tutorialRestageDue && applyTutorialStage(s)) s.tutorialRestageDue = false;
   refreshTutorialHud(s);
   return !!step.change && step.state.done;
+}
+
+// 把當前這一步需要的場景擺好（站位＋發球權）。回 false＝這一幀擺不成（rally 中／
+// 這一步沒有指定場景），呼叫端保留 `tutorialRestageDue` 下一幀再試。
+// ★ 判定與表格全在 career/practiceMatch.js ★ 這裡只負責「什麼時候擺」。
+export function applyTutorialStage(s) {
+  if (!s?.tutorial || s.tutorial.done) return false;
+  const drill = currentTutorialDrill(s.tutorial);
+  if (!drill) return false;
+  const myTeam = s.game.players?.[s.playerId]?.teamId ?? 'A';
+  // `match?.` ＝這一幀擺不成就回 false（本函式的契約），不是防禦性程式碼
+  const stage = tutorialStageFor(drill.id, s.game.match?.rotations, s.playerId, myTeam);
+  if (!stage) return false;
+  return restageRotation(s.game, stage);
 }
 const TUTORIAL_RELEASE_TTL = 2600; // 「這個之後再說」那句的停留時間，講完接下一步
 

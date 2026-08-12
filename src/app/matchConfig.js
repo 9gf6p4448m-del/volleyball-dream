@@ -74,6 +74,10 @@ export function isSimpleMode(params) {
   return params?.get('classic') !== '1';
 }
 
+// 教學局的局分：高到「比分不可能先於六步結束」。★ 不是無限大 ★ 留一個真的上限，
+// 萬一收局訊號壞掉時局還是收得掉（不會變成永遠打不完的殭屍局）。
+export const TUTORIAL_SET_TARGET = 999;
+
 export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quickRole = null }) {
   const seedParam = Number.parseInt(params.get('seed'), 10);
   // 種子優先序：?seed=（重現/測試）→ 生涯場次種子（生涯種子×場次 id 決定論導出）→ 開局隨機
@@ -143,8 +147,14 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   const boParam = Number.parseInt(params.get('bo'), 10);
   const bestOf = [3, 5].includes(boParam) ? boParam
     : careerCtx ? matchFormatOf(careerCtx.matchEntry) : 1;
+  // 教學局不靠比分結束——六步走完才收局（`matchLoop.endTutorialSet`）。
+  // ★ 為什麼要拉高局分 ★ 分步關卡卷（2026-08-13）改成「沒做到就再擺一次同樣的場景」、
+  // 且重試次數不限（Sawmah 題 3 裁定）⇒ 一步可能燒掉很多球，25 分會**先**到，
+  // 局在教學結束前就結束了。實測（`tools/tutorial-stage-probe.mjs 50`）：25 分時
+  // 50 場有 7 場沒走完六步。拉高到 TUTORIAL_SET_TARGET 讓收局權完全回到六步身上。
+  const effectiveTarget = careerSetup?.practice?.tutorial ? TUTORIAL_SET_TARGET : setTarget;
   const gameOptions = {
-    seed, setTarget, liberos, stamina,
+    seed, setTarget: effectiveTarget, liberos, stamina,
     ...(bestOf > 1 ? { series: { bestOf } } : {}),
     momentum: true, // W7 B1 團隊氣勢（生涯/快速比賽一律啟用）
     ...(careerSetup ? {

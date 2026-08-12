@@ -483,11 +483,74 @@ export function tutorialDrills() {
 // 放行不算完成（`cleared:false`，結算面板照實顯示 ⏭），只是把課帶著往下走。
 export const TUTORIAL_STALL_TICKS = 60 * 180; // 3 分鐘（sim 固定 60Hz，見 sim/constants.js）
 
+// ════════════════════════════════════════════════════════════════
+// 每一步的「場景」＝（玩家槽位, 發球方）——分步關卡卷 2026-08-13
+// ════════════════════════════════════════════════════════════════
+// 卷宗＝`docs/kickoffs/tutorial-drill-stage-kickoff.md`（Sawmah 三題全依建議）。
+//
+// ★ 起因 ★ 真人實測：接球那一步好了，但「扣球要等我換到前排、攔網也要等我們得分
+// 發球的時候才有機會攔」。兩個都是結構性的等待：
+//   - 後排攻擊需 `techniques.pipe >= 1`，第一屆新人 `pipe: 0`（careerState.js:267）
+//     ⇒ 玩家在後排時系統結構上不會舉給他
+//   - 對方要先接我方發球才會組織進攻 ⇒ 想攔網得先讓我方拿到發球權
+//
+// ★ 槽位編號 ★ index＝rotations 陣列索引，位置＝index+1（rotation.js:41-44）。
+//   後排＝位置 1/5/6＝index 0/4/5；前排＝位置 2/3/4＝index 1/2/3。
+//   index 0（位置 1）是發球者。
+export const TUTORIAL_DRILL_STAGE = {
+  // 後排非發球者＋對面發球 ⇒ 球就是發給你（沿用前一輪已生效的安排）
+  'tut-receive': { slot: 5, serving: 'B' },
+  // 前排位置 4（主攻慣位）＋對面發球 ⇒ 我方接發後舉給前排的你
+  'tut-handle': { slot: 3, serving: 'B' },
+  // ★ 發球方是 A（我方）★ 我方發球 ⇒ 對面接發進攻 ⇒ 你站前排中間才有球可攔
+  'tut-block': { slot: 2, serving: 'A' },
+  // 位置 1＝發球者本人
+  'tut-serve': { slot: 0, serving: 'A' },
+  // 我方完整接—舉—攻：對面發球，你在前排收尾
+  'tut-three': { slot: 3, serving: 'B' },
+  // 前排＋餵球偏置（DRILL_BIAS['tut-point']=['feedPlayer']）⇒ 打得下來
+  'tut-point': { slot: 3, serving: 'B' },
+};
+
+// 把輪轉序旋轉到「玩家落在 slot」。★ 用旋轉不用交換 ★ 旋轉保持六人的相對次序，
+// 那正是 FIVB 7.7 要求的東西；交換兩個人會製造真正的違序。
+// 認不得玩家／長度不對一律回 null＝不重排（同 DRILL_BIAS「認不得就別動」的紀律）。
+export function rotationWithPlayerAt(order = [], playerId = null, slot = 0) {
+  const n = order?.length ?? 0;
+  if (n === 0 || !Number.isInteger(slot) || slot < 0 || slot >= n) return null;
+  const idx = order.indexOf(playerId);
+  if (idx < 0) return null;
+  // result[i] = order[(k+i) % n]，要 result[slot] === playerId ⇒ k = (idx - slot + n) % n
+  const k = ((idx - slot) % n + n) % n;
+  return order.map((_, i) => order[(k + i) % n]);
+}
+
+/**
+ * 這一步該擺成什麼場景。回 null＝這一步沒有指定場景（不重排）。
+ * @param drillId    科目 id
+ * @param rotations  現在的 { A, B }（只動玩家那一隊，對面原樣帶過去）
+ * @param playerId   玩家的 sim 端 id
+ * @param myTeam     玩家在哪一隊（'A'／'B'）
+ */
+export function tutorialStageFor(drillId, rotations, playerId, myTeam = 'A') {
+  const want = TUTORIAL_DRILL_STAGE[drillId];
+  if (!want || !rotations?.[myTeam]) return null;
+  const mine = rotationWithPlayerAt(rotations[myTeam], playerId, want.slot);
+  if (!mine) return null;
+  const other = myTeam === 'A' ? 'B' : 'A';
+  return {
+    rotations: { [myTeam]: mine, [other]: [...(rotations[other] ?? [])] },
+    // 表裡的 'A'＝我方、'B'＝對面（教學局玩家恆在 A，但不寫死——換邊時仍然對）
+    servingTeam: want.serving === 'A' ? myTeam : other,
+  };
+}
+
 export function createTutorialState(tick = 0) {
   return {
     index: 0,          // 現在練第幾步（＝TUTORIAL_DRILL_IDS 的索引）
     startEvent: 0,     // 這一步開始時 events 的長度（切片起點）
     startTick: tick,   // 這一步開始時的 game.tick（卡太久的計時基準）
+    attempts: 0,       // 這一步失敗重試過幾次（提示逐次變詳細的依據）
     log: [],           // 已走完的步：{ id, label, count, target, cleared }
     done: false,       // 六步都走完了（＝教學局該收局）
   };
@@ -516,7 +579,9 @@ function currentCount(state, { events = [], playerId, myTeam }) {
  *   cleared：那一步是真的做到（true）還是被放行（false）
  *   收局訊號＝回傳的 `state.done`（六步都離開了）
  */
-export function advanceTutorial(state, { events = [], playerId, myTeam, tick = 0 } = {}) {
+export function advanceTutorial(
+  state, { events = [], playerId, myTeam, tick = 0, rallyEnded = false } = {},
+) {
   const st = state ?? createTutorialState();
   const def = currentTutorialDrill(st);
   if (!def) return { state: st, change: null, drill: null, cleared: false };
@@ -525,6 +590,19 @@ export function advanceTutorial(state, { events = [], playerId, myTeam, tick = 0
   // ★ 先判完成再判逾時 ★ 兩者同一幀成立時算「做到了」——同一顆球既完成了科目又
   // 剛好壓線超時，記成放行會把玩家真的做到的事寫成沒做到
   if (!cleared && (tick - (st.startTick ?? 0)) < TUTORIAL_STALL_TICKS) {
+    // ★ 重試（分步關卡卷 2026-08-13）★ 一球打完而這一步沒做到＝再擺一次同樣的場景。
+    // **不推進 index、不寫 log、不動比分**——重試不吃掉進度（驗收 A4）。
+    // 次數不限（Sawmah 題 3 裁定），提示改由 attempts 決定詳細程度。
+    if (rallyEnded) {
+      return {
+        state: {
+          ...st, attempts: (st.attempts ?? 0) + 1, startEvent: events.length, startTick: tick,
+        },
+        change: 'retry',
+        drill: def,
+        cleared: false,
+      };
+    }
     return { state: st, change: null, drill: def, cleared: false };
   }
   const nextIndex = st.index + 1;
@@ -533,6 +611,7 @@ export function advanceTutorial(state, { events = [], playerId, myTeam, tick = 0
       index: nextIndex,
       startEvent: events.length,
       startTick: tick,
+      attempts: 0, // 換一步就歸零（提示從第一級重新開始）
       log: [...st.log, {
         id: def.id, label: def.label, count: Math.min(count, def.target), target: def.target, cleared,
       }],
@@ -601,11 +680,28 @@ export function tutorialSettle(state) {
 }
 
 // ---- 教練喊話（台詞是規格：每句都由科目定義本身組出來）----
-export function tutorialCoachLine(drill) {
+//
+// ★ 提示逐次變詳細（分步關卡卷 2026-08-13，Sawmah 題 3 裁定）★ 重試次數越多講得越具體：
+//   第 0 次（第一球）＝科目名＋第一句提示
+//   第 1 次＝換成「再來一次」＋第二句提示（沒有第二句就重複第一句）
+//   第 2 次起＝把該科目**所有**提示一次講完（手指該怎麼動全部攤開）
+// ★ 台詞仍然全部由 `def.hints` 組出來 ★ 不另外寫一份「詳細版文案」——兩份文案就是
+// 兩份規格，下次改操作時一定有一份沒跟上（2026-08-13 那場事故就是這樣來的）。
+export function tutorialCoachLine(drill, attempts = 0) {
   const def = drillDefOf(drill);
   if (!def) return '';
-  const hint = def.hints?.[0] ?? '';
-  return `教練：現在練——${def.label}${hint ? `。${hint}` : ''}`;
+  const hints = def.hints ?? [];
+  const n = Math.max(0, attempts | 0);
+  if (n === 0) {
+    const hint = hints[0] ?? '';
+    return `教練：現在練——${def.label}${hint ? `。${hint}` : ''}`;
+  }
+  if (n === 1) {
+    const hint = hints[1] ?? hints[0] ?? '';
+    return `教練：再來一次——${def.label}${hint ? `。${hint}` : ''}`;
+  }
+  const all = hints.join('；');
+  return `教練：慢慢來，這次跟著我做——${def.label}${all ? `。${all}` : ''}`;
 }
 export const TUTORIAL_RELEASE_LINE = '教練：這個急不來，等等再說——先往下走。';
 export const TUTORIAL_FINISH_LINE = '教練：好，今天到這裡——收工！';
