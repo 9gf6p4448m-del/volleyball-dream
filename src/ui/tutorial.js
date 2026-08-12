@@ -1,5 +1,5 @@
 // 首次操作教學卡：顯示一次（localStorage 記憶），點任意處關閉
-const FLAG = 'vd-tutorial-v10'; // 版本號變更＝更新後重新顯示一次
+const FLAG = 'vd-tutorial-v11'; // 版本號變更＝更新後重新顯示一次（v11：修魚躍過時句）
 
 // simple＝簡化操作模式（預設）：只教進攻決策；classic 模式教全手動
 export function showTutorialOnce(simple = true) {
@@ -15,7 +15,7 @@ export function showTutorialOnce(simple = true) {
        （<span style="color:#60ffa0">綠＝空檔</span>、<span style="color:#ff5b5b">紅✋＝被封</span>；按A滑B＝假動作）<br>
        🧱 <b>攔網</b>：對方要扣→自己沿網卡位${isTouch ? '，站到位自動起跳' : '、<b>K</b>起跳封他'}<br>
        🏐 <b>發球</b>：輪你發球→面板選球路與落點<br>
-       🤿 <b>魚躍</b>：右側大鈕亮起＝搆得到→拍下去飛身救球<br>
+       🤿 <b>魚躍</b>：來不及跑到？站著搆不到的球會<b>自動飛身撲救</b><br>
        💡 隊友扣球時該站哪掩護？——打著打著你會懂的</div>`
     : `<div>${isTouch ? '<b>左半螢幕</b>走位；<b>右側大鈕</b>蓄力/拖曳瞄準/放開出手' : '<b>WASD</b>走位；<b>J/滑鼠</b>蓄力出手、<b>K</b>攔網'}</div>`;
 

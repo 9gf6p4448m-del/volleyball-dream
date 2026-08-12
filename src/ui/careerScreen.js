@@ -59,6 +59,7 @@ import {
 import { createRitualStage } from '../render/ritualStage.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
+import { showHowToPlay } from './howToPlay.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 // ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
@@ -1457,6 +1458,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     // W4(P4) 題2：生涯入口收斂為選檔頁（進生涯前一層）——繼續/新生涯/匯入都在槽卡片上
     root.appendChild(button('▶ 生涯', true, renderSlots));
     root.appendChild(button('快速比賽', false, showQuickRolePicker));
+    // 2026-08-12：常駐「怎麼玩」——`tutorial.js` 是開場一次性卡片（看過就再也不出現），
+    // 忘了就查不到。這裡是可以隨時回來翻的那一份（生涯畫面底部也有同一個入口）。
+    root.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));
     root.appendChild(msgEl);
     // 2026-08-07 Sawmah 指定：build 戳記固定在主選單右下角。
     // 用途＝「我看不到新東西」時一秒分辨版本落差與邏輯問題（見 vite.config.js 的理由）。
@@ -2013,6 +2017,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px', 'flex-wrap:wrap']);
     ioRow.appendChild(smallButton('返回選檔', renderSlots)); // 生涯的上一層＝選檔頁（W4 題2）
     ioRow.appendChild(smallButton('📊 生涯數據', showCareerTotals)); // W4 Q9 累積頁
+    // 2026-08-12：怎麼玩（與主選單同一頁）——查玩法不必先退出生涯
+    ioRow.appendChild(smallButton('❓ 怎麼玩', () => showHowToPlay()));
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
     // 4.5B §2-3：招牌演出開關（全域偏好；off 只省演出，真值字卡不受影響）
     const prefLabel = () => `🎬 演出：${loadPresentationPref(window.localStorage) === 'off' ? '關' : '開'}`;
