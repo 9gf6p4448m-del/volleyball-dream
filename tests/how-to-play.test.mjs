@@ -10,7 +10,8 @@
 //   兩週多。同型的錯誤在這份長很多的說明頁只會更容易發生，用機械檢查釘住。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HOW_TO_PLAY } from '../src/ui/howToPlay.js';
+import { HOW_TO_PLAY, sectionsFor } from '../src/ui/howToPlay.js';
+import { CLASSIC_ONLY_TERMS } from '../src/career/practiceMatch.js';
 
 // ── 極簡 DOM 替身（沿 recruit-alt-path-wiring.test.mjs 的形狀）──
 function fakeDom() {
@@ -124,8 +125,11 @@ test('每個分頁都點得動，而且點進去有內容（不是空殼）', as
     await openFromHome();
     assert.equal(tapByText(document.body, tab.title), true, `頁籤「${tab.title}」點不動`);
     const texts = allTexts(document.body);
-    // 這一頁每個 section 的標題與每一條 term/desc 都要真的出現在畫面上
-    for (const sec of tab.sections) {
+    // 這一頁每個 section 的標題與每一條 term/desc 都要真的出現在畫面上。
+    // ★ 2026-08-13 起以 sectionsFor 為準 ★ classic 專屬段落在預設（簡化）模式下
+    // **本來就不該渲染**——`openFromHome` 走的是零參數的 showHowToPlay ⇒ 預設 simple。
+    // 那些段落另有專屬測試（「classic 模式看得到那些段落」）在守，沒有漏掉。
+    for (const sec of sectionsFor(tab, true)) {
       assert.ok(texts.includes(sec.heading), `「${tab.title}」的「${sec.heading}」沒渲染`);
       for (const item of sec.items) {
         assert.ok(texts.includes(item.term), `「${sec.heading}」的「${item.term}」沒渲染`);
@@ -177,6 +181,43 @@ test('生涯畫面也有同一個入口（存檔中途想查玩法，不必退�
 const everyLine = () => HOW_TO_PLAY.flatMap(
   (t) => t.sections.flatMap((s) => s.items.flatMap((i) => [i.term, i.desc])),
 );
+
+// ── 模式分岔守衛（2026-08-13 真人試玩事故：整頁照 classic 模式寫，而沒人在玩 classic）──
+
+test('★文案守衛★ 預設（簡化）模式下的每一句，都不得出現 classic 專屬詞彙', () => {
+  for (const tab of HOW_TO_PLAY) {
+    for (const sec of sectionsFor(tab, true)) {
+      for (const item of sec.items) {
+        for (const term of CLASSIC_ONLY_TERMS) {
+          const line = `${item.term}｜${item.desc}`;
+          assert.ok(!line.includes(term),
+            `「${tab.title}／${sec.heading}」出現 classic 專屬詞「${term}」：${line}`);
+        }
+      }
+    }
+  }
+});
+
+test('★反向對照★ classic 模式看得到那些段落（證明不是把它們刪光了事）', () => {
+  const classicOnly = HOW_TO_PLAY.flatMap((t) => t.sections.filter((s) => s.mode === 'classic'));
+  assert.ok(classicOnly.length > 0, 'classic 專屬段落被刪光了——那不是分模式，是砍內容');
+  const lines = classicOnly.flatMap((s) => s.items.map((i) => `${i.term}｜${i.desc}`));
+  assert.ok(lines.some((l) => CLASSIC_ONLY_TERMS.some((t) => l.includes(t))),
+    'classic 段落裡連一個蓄力鈕的說明都沒有 ⇒ 上面那條守衛守的是空氣');
+});
+
+test('★反向對照★ 守衛真的分得出兩種模式（同一頁兩邊段落數不同）', () => {
+  const basics = HOW_TO_PLAY.find((t) => t.id === 'basics');
+  assert.notEqual(sectionsFor(basics, true).length, sectionsFor(basics, false).length,
+    '簡化與經典看到的段落一樣多 ⇒ mode 欄位沒有生效');
+});
+
+test('sectionsFor：未標 mode 的段落兩種模式都看得到', () => {
+  const tab = { sections: [{ heading: 'a' }, { heading: 'b', mode: 'classic' }, { heading: 'c', mode: 'simple' }] };
+  assert.deepEqual(sectionsFor(tab, true).map((s) => s.heading), ['a', 'c']);
+  assert.deepEqual(sectionsFor(tab, false).map((s) => s.heading), ['a', 'b']);
+  assert.deepEqual(sectionsFor(null, true), []);
+});
 
 test('四個分頁都在，而且每一頁都不是空的', () => {
   assert.deepEqual(HOW_TO_PLAY.map((t) => t.id), ['basics', 'roles', 'screen', 'career']);

@@ -60,6 +60,20 @@ export function buildQuickSetup(role) {
 // - params：URLSearchParams（或任何有 .get(name) 的物件）
 // - careerCtx：{ career, player, matchEntry, store } 或 null（快速比賽）
 // - randomSeed：快速比賽無 ?seed= 時用的種子——隨機化住在呼叫端（main），sim 內仍決定論
+// 簡化操作模式（預設）：接發/舉球/防守/走位/發球全自動，玩家只做進攻決策（讀攔網選攻擊區）。
+// `?classic=1` 回到全手動操作（蓄力鈕那一套）。
+//
+// ★ 單一真相源 ★ 「現在是不是簡化模式」只准有這一個定義，任何要**對玩家描述操作**的
+// 地方（`ui/howToPlay.js` 的怎麼玩頁、`ui/tutorial.js` 的開場卡）都必須問這個函式，
+// 不得自己再判一次 `classic`。
+//
+// 2026-08-13 這條紀律是被事故逼出來的：怎麼玩頁與教學局六科目的台詞是照 classic 模式
+// 寫的，但沒有人在玩 classic（`matchStage.js:68` 在 simpleMode 下**根本不建立**那顆
+// 蓄力鈕）⇒ 教學文字整套在教一顆畫面上不存在的按鈕，真人試玩才抓到。
+export function isSimpleMode(params) {
+  return params?.get('classic') !== '1';
+}
+
 export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quickRole = null }) {
   const seedParam = Number.parseInt(params.get('seed'), 10);
   // 種子優先序：?seed=（重現/測試）→ 生涯場次種子（生涯種子×場次 id 決定論導出）→ 開局隨機
@@ -72,9 +86,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     ? Math.min(Math.max(pointsParam, 5), 25)
     : 25;
 
-  // 簡化操作模式（預設）：接發/舉球/防守/走位/發球全自動，玩家只做進攻決策（讀攔網選攻擊區）
-  // ?classic=1 回到全手動操作
-  const simpleMode = params.get('classic') !== '1';
+  const simpleMode = isSimpleMode(params);
   // ?autopilot=1：決定論代打（重構等值驗證治具）——只代發球（唯一等輸入的環節），
   // 決策鎖 game.tick 不碰牆鐘；其餘全靠零輸入的自動保底路徑（皆 tick 決定論）
   const autopilot = params.get('autopilot') === '1';

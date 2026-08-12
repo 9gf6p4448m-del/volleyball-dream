@@ -274,13 +274,13 @@ export const DRILL_DEFS = {
     label: '跑到位置，接起 1 球',
     target: 1,
     hints: [
-      // matchControls.js:824-841 readMove（鍵盤→世界座標）；:212-217 觸控只認左 40% 螢幕
-      '左半邊螢幕推方向（電腦 WASD），走到球落下來的地方',
-      // matchControls.js:153-209 蓄力/放開；:177-199 Perfect＝球下墜且進可及範圍那一刻放開
-      '球到手邊、正在往下掉的那一刻放開右邊大鈕——那是 Perfect 一傳',
-      // ★ 魚躍是自動的：matchStage.js:606-608 已撤掉常駐手動鈕，matchControls.js:488-518 自動觸發
+      // input/matchControls.js:824-841 readMove（鍵盤→世界座標）；:213-217 觸控左 40% 為搖桿區
+      '手機在螢幕左側按下去拖方向（電腦 WASD），走到球落下來的地方',
+      // input/matchControls.js:464-470 到位自動接（timing 0.6）——玩家不按任何鈕
+      '走到位就會自動接起來——一傳是反射，不用按任何東西',
+      // ★ 魚躍是自動的：input/matchControls.js:488-518 自動觸發（限 simpleMode）
       // 這句刻意不提任何按鈕（`hintViolations` 守衛在測試裡逐句檢查）
-      '搆不到的球會自動魚躍撲救——這件事不用你動手',
+      '搆不到的球會自動魚躍撲救——這件事也不用你動手',
     ],
     count: (ev, pid, team) => {
       let n = 0;
@@ -296,10 +296,10 @@ export const DRILL_DEFS = {
     label: '把球送出去 1 次（舉球或扣球）',
     target: 1,
     hints: [
-      // actionButtons.js:3-5,41-44 鈕面標籤隨情境變（發球／扣球／舉球／墊球）
-      '球起來之後輪到你出手時，右邊那顆鈕會自己變成「舉球」或「扣球」',
-      // matchControls.js:153-209 按住蓄力→拖曳瞄準→放開出手；:177-199 甜蜜區
-      '一樣是按住蓄力、拖曳瞄準、放開——蓄力別壓到底，過頭球會飄掉',
+      // ui/zonePanel.js:14-18 螢幕下緣置中的選區面板；app/matchLoop.js:1136-1151 chooseAttack
+      '舉球給你時，畫面下方會跳出攻擊面板、時間放慢——點你要打的那一區就出手',
+      // render/diegeticUi.js:214-225 疊在隊友身上的熱點；app/matchLoop.js:1305-1321 舉球分配
+      '換你舉球時，隊友身上會浮出可以點的記號——點誰就舉給誰',
     ],
     count: (ev, pid, team) => {
       let n = 0;
@@ -318,8 +318,10 @@ export const DRILL_DEFS = {
       // matchControls.js:280-290 貼網 |z| < 2.2 才算攔網
       '先貼著網站好——離網太遠就不算攔網',
       '沿著網橫移，卡在他要打的那條線上',
-      // matchControls.js:120,141-148,577 K 鍵/攔網鈕一點即出（不蓄力）；手機站到位自動起跳
-      'K 鍵或攔網鈕一點就跳，不用蓄力；手機版站到位會自動起跳',
+      // input/matchControls.js:519-527 手機站到位自動起跳（限 simpleMode）；:120,141-148 K 鍵
+      // ★ 不寫「攔網鈕」★ 那顆鈕在 ui/actionButtons.js:34，simpleMode 下不建立
+      //（app/matchStage.js:68）——教學局恆為 simpleMode，寫了就是教一顆不存在的鈕
+      '手機不用按，貼網卡到位就會自己起跳（電腦按 K）',
     ],
     count: countBlockTouches,
   },
@@ -330,10 +332,11 @@ export const DRILL_DEFS = {
     hints: [
       // matchControls.js:739-747 serveZones 四落點；matchLoop.js:1218-1241
       '輪到你發球時，先從面板挑落點：深左／深中／深右／短球',
-      // matchControls.js:153-209 按住蓄力→放開出手；:177-199 甜蜜區（超蓄品質劣化）
+      // input/matchControls.js:715-726 serveNow（timing 由球路寫死，不讀蓄力）；
+      // app/matchLoop.js:1343 選完面板直接發出去——沒有第二個動作
       // ★ 刻意不提發球三式 ★ 飄浮／跳發要先學會（growth.TECH_DEFS 的 floatServe／
       // jumpServe），第一屆開場的新人只有普通發球——講一個他面板上沒有的選擇＝說謊
-      '再按住右邊大鈕蓄力、放開出手——蓄力有甜蜜區，壓到底反而會飄',
+      '點下去就發出去了——這一步只有選落點，沒有別的動作',
     ],
     count: (ev, pid, team) => {
       let n = 0;
@@ -621,12 +624,36 @@ export function tutorialVerdictLine(settled) {
 // 撤掉了常駐手動鈕），任何提到魚躍卻教人去按東西的句子都是錯的。
 // ★ 判準寫成「提到魚躍的句子必須說它是自動的、且不得提到鈕」★ 而不是「不准出現按字」
 // ——「不用按任何東西」是對的，單看關鍵字會誤殺。
+// classic 模式（`?classic=1`）專屬的操作詞彙。★ 這些東西在 simpleMode 下不存在 ★
+// ——`app/matchStage.js:68` 明文 `actionButtons = simpleMode ? null : createActionButtons()`，
+// 而 `simpleMode` 預設為真（`app/matchConfig.js` `isSimpleMode`）。教學局與怎麼玩頁
+// 面對的都是預設模式的玩家，講到這些字就是在教畫面上不存在的操作。
+//
+// ★ 為什麼是「詞彙黑名單」而不是「檢查有沒有標行號」★ 2026-08-13 事故的教訓：原本的
+// 防線是「每句台詞旁邊標 `檔案:行號`」，但那些行號指向 `src/app/matchControls.js`
+// ——**那個路徑不存在**（真檔在 `src/input/`）。標記存在不等於對得上，而**沒有東西
+// 在檢查它**。詞彙是機械可判的，行號不是。
+export const CLASSIC_ONLY_TERMS = ['蓄力', '拖曳瞄準', '大鈕', '攔網鈕', '甜蜜區', '超蓄'];
+
+// 涵蓋範圍（`02 §6.1` 第 7 條：先寫下分母再說涵蓋到哪）——
+// 全庫有 16 個檔案出現這些詞，其中**只有 4 個是對玩家講操作**的文案來源：
+//   ✅ `career/practiceMatch.js` 六科目 hints ← 本函式，由 tests 逐句掃
+//   ✅ `ui/howToPlay.js` HOW_TO_PLAY          ← 同一份黑名單，由 tests 掃 simple 段落
+//   ✅ `ui/tutorial.js`                        ← 已自帶 simple/classic 分支（唯一原本就對的）
+//   ⚠ `ui/scoreboard.js` hintFor()            ← 函式頭自註「classic 舊版操作提示」，
+//      是**樣板字串不是資料**，掃不到；未涵蓋。要動它時請一併確認模式分支。
+// 其餘 12 個是實作端（`input/`、`sim/`、`render/`、`actionButtons`、`touchUi` 等），
+// 那裡出現這些字是**應該的**——機制本身還在，只是 simpleMode 下沒有入口。
 export function hintViolations(text) {
   const s = String(text ?? '');
-  if (!s.includes('魚躍')) return [];
   const out = [];
-  if (!s.includes('自動')) out.push('提到魚躍卻沒說它是自動的');
-  if (s.includes('鈕')) out.push('提到魚躍卻指向某顆鈕（魚躍沒有鈕）');
+  for (const t of CLASSIC_ONLY_TERMS) {
+    if (s.includes(t)) out.push(`提到 classic 模式專屬的「${t}」——simpleMode 下沒有這個東西`);
+  }
+  if (s.includes('魚躍')) {
+    if (!s.includes('自動')) out.push('提到魚躍卻沒說它是自動的');
+    if (s.includes('鈕')) out.push('提到魚躍卻指向某顆鈕（魚躍沒有鈕）');
+  }
   return out;
 }
 

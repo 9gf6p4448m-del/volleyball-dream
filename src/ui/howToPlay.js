@@ -10,6 +10,15 @@
 //
 // ★ 內容與渲染分開 ★ `HOW_TO_PLAY` 是純資料（可被測試逐句檢查），`showHowToPlay`
 // 只負責畫。文案守衛測試（`tests/how-to-play.test.mjs`）吃的是前者。
+//
+// ★ 2026-08-13：上面那條「文案鐵則」失效過一次，代價是整頁「基本操作」★
+// 標了 `檔案:行號` 不等於對得上——那些行號指向 `src/app/matchControls.js`，
+// 而**真檔在 `src/input/`**，路徑從一開始就是錯的，所以沒有人能照著去更新。
+// 更根本的是漏了「模式」這一維：整頁照 classic 模式的蓄力鈕寫，而預設是 simpleMode，
+// 那顆鈕在 `matchStage.js:68` 根本不會被建立。真人試玩才抓到（「我們現在哪有蓄力拖曳」）。
+// ⇒ 現在每個段落可標 `mode:'simple'|'classic'`，未標＝兩者皆適用；
+//   模式判定一律問 `matchConfig.isSimpleMode`（單一真相源），不得自己再判一次。
+import { isSimpleMode } from '../app/matchConfig.js';
 
 const COLOR = {
   text: '#eef2fa', dim: '#9fb0cc', gold: '#ffd166', cyan: '#6ee7ff',
@@ -27,7 +36,8 @@ function el(tag, css, text) {
 // ════════════════════════════════════════════════════════════════
 // 內容層（純資料）
 // ════════════════════════════════════════════════════════════════
-// 形狀：[{ id, title, sections: [{ heading, items: [{ term, desc }] }] }]
+// 形狀：[{ id, title, sections: [{ heading, mode?, items: [{ term, desc }] }] }]
+//   mode ＝ 'simple'｜'classic'｜省略（兩種模式都顯示）。
 //   term ＝畫面上那個東西的**原文**（鈕面字、鍵位、顏色），desc ＝它到底做什麼。
 //   term 一律照抄程式碼裡的字串——同一條線不得有兩種叫法（`callButton` 檔頭的紀律）。
 
@@ -41,9 +51,9 @@ export const HOW_TO_PLAY = [
         items: [
           {
             // matchControls.js:824-841 readMove（鍵盤/搖桿→世界座標）；
-            // :212-217 觸控只認左 40% 螢幕（右側留給出手鈕，防誤觸）
-            term: 'WASD／方向鍵・左半螢幕搖桿',
-            desc: '手機推左半邊螢幕、電腦按 WASD。右半邊是出手區，不吃走位。',
+            // :213-217 觸控只認左 40% 螢幕（點在那裡就是搖桿原點，拖曳出方向）
+            term: 'WASD／方向鍵・左側螢幕搖桿',
+            desc: '手機在螢幕左側按下去就是搖桿（按哪就以哪為原點，拖出方向）、電腦按 WASD。',
           },
           {
             // matchControls.js:320-323 manualOwned；:336-346 發球前歸位；:348-378 rally 中帶位
@@ -56,17 +66,39 @@ export const HOW_TO_PLAY = [
         heading: '出手',
         items: [
           {
-            // actionButtons.js:3-5,41-44 標籤隨情境；matchControls.js:153-209 蓄力/拖曳/放開
+            // matchControls.js:464-470 到位自動接（timing 0.6）；:471-474 自由人讀對＝1.0
+            term: '接球不用按任何東西',
+            desc: '走到球落點就會自動接起來——一傳是反射不是瞄準。接得好不好看你有沒有站到位，不是看你按什麼。',
+          },
+          {
+            // zonePanel.js:14-18 螢幕下緣置中；matchLoop.js:1136-1151 chooseAttack（timing＝zone.power）
+            term: '攻擊面板',
+            desc: '舉球給你時畫面下方會跳出選區面板，時間放慢，點你要打的那一區就出手。威力由選區決定。',
+          },
+          {
+            // diegeticUi.js:214-225 疊在隊友身上的熱點；matchLoop.js:1305-1321 舉球分配
+            term: '舉球是點隊友',
+            desc: '換你舉球時，隊友身上會浮出可以點的記號——點誰就舉給誰。',
+          },
+        ],
+      },
+      {
+        heading: '出手（經典模式 ?classic=1）',
+        mode: 'classic',
+        items: [
+          {
+            // actionButtons.js:3-5,41-44 標籤隨情境；matchControls.js:167-209 蓄力/拖曳/放開
+            // ★ 這一整段只活在 classic ★ matchStage.js:68 在 simpleMode 下不建立 actionButtons
             term: '右側大鈕（或 J 鍵）',
             desc: '按住蓄力、拖曳瞄準、放開出手。鈕面的字會隨情境變成發球／扣球／舉球／墊球。',
           },
           {
-            // matchControls.js:177-199 甜蜜區 0.7–1.05、超蓄 >1.15 品質劣化
+            // matchControls.js:177,166 甜蜜區與超蓄 >1.15 品質劣化
             term: '蓄力別過頭',
             desc: '蓄力條有甜蜜區，一路壓到底反而會讓球飄掉。',
           },
           {
-            // matchControls.js:177-199：放開瞬間球恰在可及範圍且下墜＝timing 1.0（散佈減半）
+            // matchControls.js:178-198：放開瞬間球恰在可及範圍且下墜＝timing 1.0（散佈減半）
             term: 'Perfect 接球',
             desc: '接球時在球正好落進你手可及範圍、而且正在往下掉的瞬間放開，散佈砍半。',
           },
@@ -76,9 +108,11 @@ export const HOW_TO_PLAY = [
         heading: '攔網',
         items: [
           {
-            // matchControls.js:120,141-148,577 K 鍵/攔網鈕一點即出（不蓄力）
-            term: 'K 鍵／攔網鈕',
-            desc: '一點就跳，不用蓄力。手機版站到位會自動起跳。',
+            // matchControls.js:120,141-148 K 鍵一點即出（不蓄力）；:519-527 手機站到位自動起跳
+            // ★ 不寫「攔網鈕」★ 那顆鈕在 actionButtons.js:34，simpleMode 下不存在（matchStage.js:68）
+            // ★ 連「不用蓄力」都不寫 ★ 否定句一樣會讓人去找那個不存在的東西
+            term: 'K 鍵／站到位自動跳',
+            desc: '電腦按 K 一點就跳；手機不用按，貼網卡到位就會自己起跳。',
           },
           {
             // matchControls.js:280-290 貼網 |z| < 2.2 才攔得到
@@ -280,7 +314,12 @@ export const HOW_TO_PLAY = [
         ],
       },
       {
-        heading: '手指上的蓄力圈',
+        // ★ 只有 classic 看得到 ★ touchUi.js:27-38 的蓄力圈讀 controls.uiState().charge，
+        // 而 charge 只由滑鼠 pointerdown（matchControls.js:219-223）或 beginAction()
+        // （只有 actionButtons.js 會呼叫，simpleMode 不建立）設起來 ⇒ 觸控＋預設模式恆為 null，
+        // 這個圈畫面上根本不會出現。
+        heading: '手指上的蓄力圈（經典模式 ?classic=1）',
+        mode: 'classic',
         items: [
           {
             // touchUi.js:30-33：藍 110,231,255／綠 96,255,160 甜蜜區／紅 255,91,91 超蓄
@@ -558,7 +597,22 @@ export const HOW_TO_PLAY = [
 // 分頁式（手機優先）：頁籤橫向可捲、內容區直向捲；點「關閉」回原畫面。
 // 沿 careerScreen.js showCareerTotals 的覆蓋層形狀（z-index 36／safe center／明鈕關閉——
 // U1 07-30 拍板移除「點任意處關閉」，此處比照）。
-export function showHowToPlay() {
+// 這一頁該顯示哪些段落（純函式，可測）。
+// `mode` 未標＝兩種模式都適用；標了就只在該模式出現。
+// ★ 為什麼要有這個維度 ★ 2026-08-13 事故：整頁「基本操作」是照 classic 模式的蓄力鈕寫的，
+// 但 simpleMode 下那顆鈕根本不會被建立（`matchStage.js:68`）⇒ 說明頁在教一個
+// 畫面上不存在的東西。分模式之後，玩家只會看到自己那一套。
+export function sectionsFor(tab, simple = true) {
+  const want = simple ? 'simple' : 'classic';
+  return (tab?.sections ?? []).filter((s) => s.mode == null || s.mode === want);
+}
+
+// simple 預設值走 `matchConfig.isSimpleMode` 這個單一真相源——不得在這裡自己再判一次
+// `classic`（那正是兩份文案各自猜模式、猜錯了也沒人知道的原因）。
+// `globalThis.location?.` ＝測試的假 DOM 沒有 location（不是防禦性程式碼，是真的會 undefined）
+export function showHowToPlay(
+  simple = isSimpleMode(new URLSearchParams(globalThis.location?.search ?? '')),
+) {
   const overlay = el('div', [
     'position:fixed', 'inset:0', 'z-index:37', 'display:flex', 'flex-direction:column',
     'align-items:center', 'justify-content:flex-start', 'overflow:hidden',
@@ -597,7 +651,7 @@ export function showHowToPlay() {
       tabs[i].style.cssText = tabCss(on);
     }
     body.replaceChildren();
-    for (const sec of HOW_TO_PLAY[index].sections) {
+    for (const sec of sectionsFor(HOW_TO_PLAY[index], simple)) {
       const card = el('div', [
         `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
         'padding:11px 15px', 'text-align:left', 'display:flex', 'flex-direction:column',

@@ -18,7 +18,7 @@ import {
   DRILL_DEFS, TUTORIAL_DRILL_IDS, TUTORIAL_STALL_TICKS, TUTORIAL_INVITE_EVENT_ID,
   createTutorialState, advanceTutorial, currentTutorialDrill, tutorialRows,
   tutorialSettle, tutorialDrills, tutorialCoachLine, tutorialVerdictLine,
-  tutorialInviteDue, hintViolations, settlePractice,
+  tutorialInviteDue, hintViolations, CLASSIC_ONLY_TERMS, settlePractice,
 } from '../src/career/practiceMatch.js';
 import { updateTutorial, refreshTutorialHud, endTutorialSet } from '../src/app/matchLoop.js';
 
@@ -241,8 +241,41 @@ test('★反向對照★ 守衛真的攔得下壞句子（否則上面那條全�
   assert.ok(hintViolations('搆不到的時候按魚躍鈕撲救').length >= 1);
   assert.ok(hintViolations('魚躍要自己找那顆鈕按').includes('提到魚躍卻指向某顆鈕（魚躍沒有鈕）'));
   assert.ok(hintViolations('魚躍要抓時機').includes('提到魚躍卻沒說它是自動的'));
-  assert.deepEqual(hintViolations('攔網用 K 鍵或攔網鈕一點就跳'), [],
-    '沒提到魚躍的句子不得被誤殺——攔網真的有鈕');
+  // ★ 2026-08-13 更正 ★ 這裡原本斷言「攔網用 K 鍵或攔網鈕一點就跳」是合法句，
+  // 理由寫「攔網真的有鈕」——**那個前提是錯的**：`ui/actionButtons.js:34` 的攔網鈕
+  // 只在 `!simpleMode` 建立（`app/matchStage.js:68`），而教學局恆為 simpleMode。
+  // 真人試玩就是被這類句子誤導的。改成正例＝現在真正做得到的操作。
+  // （這是**加嚴**不是降標：同一句話從「放行」變成「攔下」。）
+  assert.ok(hintViolations('攔網用 K 鍵或攔網鈕一點就跳').length >= 1,
+    'classic 專屬的「攔網鈕」必須被攔下');
+  assert.deepEqual(hintViolations('貼網卡到位就會自己起跳（電腦按 K）'), [],
+    'simpleMode 真的做得到的操作不得被誤殺');
+});
+
+test('★文案守衛★ classic 專屬詞彙：教學局所有台詞都不得出現（真人試玩抓到的那批）', () => {
+  const lines = TUTORIAL_DRILL_IDS.flatMap((id) => [
+    ...(DRILL_DEFS[id].hints ?? []), DRILL_DEFS[id].label, tutorialCoachLine(DRILL_DEFS[id]),
+  ]);
+  for (const t of lines) {
+    for (const term of CLASSIC_ONLY_TERMS) {
+      assert.ok(!t.includes(term), `台詞出現 classic 專屬詞「${term}」：${t}`);
+    }
+  }
+});
+
+test('★反向對照★ 那批真人抓到的原句，現在會被守衛攔下（證明守衛守得到東西）', () => {
+  // 這五句是 2026-08-13 之前實際上線的原文，逐句取自當時的 DRILL_DEFS。
+  // 若哪天有人把它們搬回去，這條會紅。
+  const shipped = [
+    '球到手邊、正在往下掉的那一刻放開右邊大鈕——那是 Perfect 一傳',
+    '一樣是按住蓄力、拖曳瞄準、放開——蓄力別壓到底，過頭球會飄掉',
+    'K 鍵或攔網鈕一點就跳，不用蓄力；手機版站到位會自動起跳',
+    '再按住右邊大鈕蓄力、放開出手——蓄力有甜蜜區，壓到底反而會飄',
+    '按住蓄力、拖曳瞄準、放開出手。鈕面的字會隨情境變成發球／扣球／舉球／墊球。',
+  ];
+  for (const t of shipped) {
+    assert.ok(hintViolations(t).length >= 1, `這句上線過而且是錯的，守衛卻放行：${t}`);
+  }
 });
 
 test('賽末評語：三段門檻與 completedCount 同源，且不得承諾任何獎勵', () => {
