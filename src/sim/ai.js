@@ -2983,8 +2983,34 @@ export function serveTargetPidOf(game, team) {
   return best?.pid ?? null;
 }
 
+// 練習賽指名發球（2026-08-13）：**這一場固定發給誰**的顯式隊伍參數。
+// ★ 為什麼不併進 aiProfileOf ★ 同 blockPersonaOf 的理由（見上）：那裡回的是一組機率，
+// 這裡是一個具體對象，語意不同；且 aiProfileOf 的回傳形狀有既有測試在 deepEqual。
+//
+// ★ 為什麼要有這個參數 ★ 練習賽的「餵球給要練的人」原本借道 trust——把玩家 trust 拉高，
+// 讓 serveTargetPidOf 挑中他。但那個函式回答的是「對方最該被吃掉 transition 的**攻擊手**」，
+// 不是「我要練接發的人」，**同名不同義**：它的候選池 attackPointsOf 需要 techniques.pipe >= 1，
+// 而生涯新人 pipe=0（careerState.js:267）⇒ 教學局玩家永遠選不到（實測 200 場 4727 個發球
+// 回合，指名次數 0）。訓練要餵球給誰是**教練的決定**，不該由攻擊威脅評估代答。
+// 未注入＝null＝完全走原路徑（快速比賽／正式賽零改變，sim-hash 不動）。
+export function forcedServeTargetPidOf(game, team) {
+  return game.aiProfiles?.[team]?.serveTargetPid ?? null;
+}
+
 function serveTarget(game, team) {
   const { score } = game.match;
+  // 指名優先於四區循環與 SERVE_TARGET_RATE 骰子——教練餵球是 100% 的，不是一半。
+  // ★ 仍受後排限制 ★ 對象在前排時**回落原路徑**而不是硬發過去：前排的接發責任區在
+  // lz≈3（網前），瞄那裡＝短發球，那是工單 §10 明列不做的 D3。前排輪次練不到接發是
+  // 這個機制的已知邊界（見 practiceMatch.js `serveToPlayer` 那段）。
+  const forced = forcedServeTargetPidOf(game, team);
+  if (forced != null) {
+    const opp = otherTeam(team);
+    const rot = game.match.rotations[opp] ?? [];
+    if (isBackRow(rot, forced)) {
+      return basePosition(opp, positionOf(rot, forced));
+    }
+  }
   // 針對率：一半的球指名、一半維持既有的四區循環——兩種發球都要看得見才叫「戰術」，
   // 全部指名等於落點恆定（對方每球都知道發給誰）。**未依治具校準**（工單 §11 禁止）
   const roll = hash01(score.A * 53 + score.B * 149 + 401 + (game.seed ?? 0));

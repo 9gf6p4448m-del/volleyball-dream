@@ -915,6 +915,34 @@ export const DRILL_BIAS = {
   'tut-block': ['noTip'],
 };
 
+// 接發類科目：開場就把玩家排進後排（2026-08-13）。
+//
+// ★ 為什麼光有指名發球還不夠 ★ `serveTargetPid` 只在玩家**後排**時生效——前排的接發
+// 責任區在網前（lz≈3），瞄那裡＝短發球，工單 §10 明列不做。而 `defaultLineup` 的
+// rotationStart 恆為 0（lineup.js:75），玩家落在哪一格看名冊順序 ⇒ 常常開場就在前排，
+// 得先輪好幾球才輪得到他接。教學局第一步就卡在這裡（真人回報：打到第三球還 0/1）。
+//
+// ★ 為什麼是位置 6（最後一格）而不是位置 1 ★ 位置 1 是首發球者——排在那裡的話他第一球
+// 是發球、沒得接。位置 6 同樣後排，但第一球輪不到他發，對面發過來就是他接。
+//
+// ★ 實測（`node tools/tut-receive-probe.mjs 200`，200 個 seed 各跑一場完整教學局）★
+// 「玩家拿到第一次 receive/dive 要打幾球」三段對照：
+//   修前（借道 trust）        平均 5.45／中位數 4／90 百分位 7／最壞 27
+//   只加 serveTargetPid       平均 4.52／中位數 4／90 百分位 6／最壞 7
+//   ＋本函式（後排開場）      平均 2.06／中位數 2／90 百分位 3／最壞 3
+// 中間那一段是這一手存在的理由：光有指名參數，中位數一球都沒降。
+//
+// 認不得玩家（不在先發序裡）一律回 null＝不動輪轉，同 DRILL_BIAS「認不得就別給偏置」。
+export function receiveFirstRotationStart(starters = [], playerId = null) {
+  const n = starters?.length ?? 0;
+  if (n === 0) return null;
+  const idx = starters.indexOf(playerId);
+  if (idx < 0) return null;
+  // effectiveOrder：order[i] = starters[(k+i) % n]（lineup.js:144-149）。
+  // 要 order[n-1] === playerId ⇒ (k + n - 1) % n === idx ⇒ k = (idx + 1) % n。
+  return (idx + 1) % n;
+}
+
 // 科目清單 → 建隊參數配置（純函式，可測）。無科目＝零偏置（每個旗標都 false／null）。
 export function practiceBiasFor(drills = []) {
   const on = new Set();
@@ -1059,8 +1087,16 @@ export function practiceMatchSetup({
   const anchorWhite = members.find((m) => m.id === squads.white.anchorId) ?? null;
   if (!anchorWhite) throw new Error('practiceMatchSetup：白隊錨不在名冊');
   const teamDive = player.techniques?.dive ?? 0;
+  // 接發類科目才動輪轉起點（理由見 receiveFirstRotationStart 上方）——★ 只動紅隊 ★，
+  // 且只是這一場的建隊參數，不寫回 save.lineup.rotationStart（同 trust 的處理）。
+  const rotStart = bias.serveToPlayer
+    ? receiveFirstRotationStart(squads.red.lineup?.starters ?? [], player.id) : null;
+  const redSquad = rotStart == null ? squads.red : {
+    ...squads.red,
+    lineup: { ...squads.red.lineup, rotationStart: rotStart },
+  };
   const red = buildSquadSide({
-    squad: squads.red,
+    squad: redSquad,
     teamId: 'A',
     anchorPerson: null,
     playerObj: me,
@@ -1087,6 +1123,10 @@ export function practiceMatchSetup({
         ...(bias.standServe ? { jumpServeRate: 0, floatServeRate: 0 } : {}),
         // 不吊球（攔網科目）：aiProfileOf 的預設是 AI.TIP_RATE，這裡顯式歸零
         ...(bias.noTip ? { tipRate: 0 } : {}),
+        // 指名發給玩家（接發／魚躍／教學局第一步）：★ 顯式參數，不再借道 trust ★
+        // 舊路徑（拉高 trust 讓 serveTargetPidOf 挑中他）對 techniques.pipe=0 的生涯新人
+        // 結構上恆為 0——理由與實測數字寫在 sim/ai.js `forcedServeTargetPidOf` 上方。
+        ...(bias.serveToPlayer ? { serveTargetPid: player.id } : {}),
       },
     },
     // 組合攻擊屆數閘：與正式賽同一條規則（第 1 屆 0／第 2 屆起 1）——練習賽不是特例場

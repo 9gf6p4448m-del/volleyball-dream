@@ -41,7 +41,16 @@ export function createPracticeHud() {
       if (!rows?.length) { root.style.display = 'none'; return; }
       if (headline) title.textContent = headline;
       list.replaceChildren();
-      for (const r of rows) {
+      // 教學局：只畫「現在練」那一列與它的操作提示，其餘收成一行計數（2026-08-13）。
+      // ★ 為什麼收合 ★ 六個科目 × 每列一行 ＋ 當前步的三行提示，在手機橫向會從左上
+      // 一路蓋到球場左側（真人截圖實證）。一次只練一步的介面，不需要把還沒輪到的五步
+      // 攤在畫面上——它們既不能提前做，也不是「我還差什麼」的答案。
+      // ★ 只收合教學局 ★ 判準＝有沒有任何一列帶 phase（紅白對抗賽的 rows 不帶），
+      // 那邊科目只有 2–3 個、本來就不高，收了反而看不到全貌。
+      const isTutorial = rows.some((r) => r.phase != null);
+      const shown = isTutorial ? rows.filter((r) => r.phase === 'current') : rows;
+      const restCount = isTutorial ? rows.length - shown.length : 0;
+      for (const r of shown) {
         const phase = r.phase ?? (r.achieved ? 'done' : 'todo');
         const line = document.createElement('div');
         line.textContent = phase === 'current'
@@ -62,6 +71,17 @@ export function createPracticeHud() {
           ].join(';');
           list.appendChild(tip);
         }
+      }
+      // 收合列：讓玩家知道「後面還有」，但不佔六行。已走完的步數也一起講，
+      // 否則只看到「還有 4 步」會不知道自己前進了沒。
+      if (restCount > 0) {
+        const done = rows.filter((r) => r.phase === 'done' || r.phase === 'passed').length;
+        const rest = document.createElement('div');
+        rest.textContent = `　（已完成 ${done}／共 ${rows.length} 步）`;
+        rest.style.cssText = [
+          'font-size:10px', 'line-height:1.6', 'color:#8ea3c4', 'white-space:nowrap',
+        ].join(';');
+        list.appendChild(rest);
       }
       root.style.display = 'flex';
     },
