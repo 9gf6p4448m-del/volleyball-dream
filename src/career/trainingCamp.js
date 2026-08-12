@@ -62,6 +62,13 @@ export const CAMP_ATTR_KEYS = ATTRIBUTE_KEYS.filter(
 // `gain`／`cap` 為 null ＝**尚未拍板**，UI 呈現為「尚未開放」且不可選。
 // 嚴禁自填常數——耐力那格的 2／80 是既有拍板值（growth.js OFFSEASON），
 // 直接引用而不重寫；控球那格沒有拍板值，就讓它空著。
+//
+// ★ 2026-08-12 練習賽卷：控球格的留白由「紅白賽全科目完成」兌現 ★
+// kickoff 題 3 甲：「全完成 ⇒ 控球格開放」——把這個現況債變成設計的一部分。
+// 幅度 +2／上限 75 與耐力格同幅（`OFFSEASON.STAMINA_GAIN` 2／`STAMINA_CAP` 80），
+// 上限低 5 是因為主角出廠 control 就是 68（`createCareerPlayer`）＝全隊最高。
+// ★ 留白仍在 ★ `gain`/`cap` 依然寫 null——**沒有解鎖時行為逐值不變**（既有測試
+// 驗的就是那個 throw 與「尚未開放」），解鎖值走下面的 CAMP_CONTROL_UNLOCKED 疊上去。
 export const CAMP_ATTR_TRAINING = {
   stamina: {
     name: '耐力',
@@ -73,17 +80,42 @@ export const CAMP_ATTR_TRAINING = {
     name: '控球',
     gain: null,
     cap: null,
-    desc: '手上的準度（一傳／舉球／處理球）——幅度與上限尚未拍板',
+    desc: '手上的準度（一傳／舉球／處理球）——紅白賽科目全完成才開放',
   },
 };
 
-// 屬性特訓的可選項（含「為什麼不能選」的理由，UI 直接顯示，不靜默）
-export function campAttrOptions(player) {
+// 控球格解鎖後的幅度／上限（練習賽全科目完成才生效）
+export const CAMP_CONTROL_UNLOCKED = { gain: 2, cap: 75 };
+
+// 這次集訓的屬性特訓名額：練習賽完成 ≥2 科 ⇒ 兩項（kickoff 題 3 甲）；否則一項。
+// ★ 判準吃的是「完成數」不是「有沒有打」★ 打了但一科都沒過＝照常一項。
+export const CAMP_ATTR_PICKS_BONUS_AT = 2;
+export function campAttrPicks(practice) {
+  return (practice?.completed ?? 0) >= CAMP_ATTR_PICKS_BONUS_AT ? 2 : 1;
+}
+
+// 某一格在本次集訓的實際幅度／上限（單一入口：顯示端與套用端共用，防兩份定義漂移）
+function attrDefOf(key, unlockControl) {
+  const base = CAMP_ATTR_TRAINING[key] ?? { name: key, gain: null, cap: null, desc: '' };
+  if (key === 'control' && unlockControl) return { ...base, ...CAMP_CONTROL_UNLOCKED };
+  return base;
+}
+
+// 屬性特訓的可選項（含「為什麼不能選」的理由，UI 直接顯示，不靜默）。
+// @param o.unlockControl 練習賽全科目完成＝控球格開放（缺省 false＝既有行為逐值不變）
+export function campAttrOptions(player, { unlockControl = false } = {}) {
   return CAMP_ATTR_KEYS.map((key) => {
-    const def = CAMP_ATTR_TRAINING[key] ?? { name: key, gain: null, cap: null, desc: '' };
+    const def = attrDefOf(key, unlockControl);
     const value = player?.attributes?.[key] ?? 0;
     if (def.gain == null || def.cap == null) {
-      return { key, ...def, value, ready: false, reason: '尚未開放——幅度待定' };
+      return {
+        key,
+        ...def,
+        value,
+        ready: false,
+        // 「為什麼不能選」要說對事：控球格現在有一條明路，不再是無限期待定
+        reason: key === 'control' ? '尚未開放——紅白賽科目全完成才開' : '尚未開放——幅度待定',
+      };
     }
     if (value >= def.cap) {
       return { key, ...def, value, ready: false, reason: `已達上限 ${def.cap}` };
@@ -94,8 +126,8 @@ export function campAttrOptions(player) {
 
 // 套用屬性特訓（不可變；與 growth.applyOffseasonTraining 逐值等價——耐力那格
 // 的數值來源就是同一個 OFFSEASON 常數，不另立第二份）
-export function applyCampAttrTraining(player, key) {
-  const def = CAMP_ATTR_TRAINING[key];
+export function applyCampAttrTraining(player, key, { unlockControl = false } = {}) {
+  const def = attrDefOf(key, unlockControl);
   if (!CAMP_ATTR_KEYS.includes(key)) {
     throw new Error(`applyCampAttrTraining：${key} 不在集訓屬性池`);
   }
@@ -175,8 +207,17 @@ export function campPlanFor(seasonIndex) {
     ordinal,
     seasonIndex,
     hasChemistry: seasonIndex >= CAMP_SEASONS.SECOND,
+    // 紅白對抗賽（練習賽卷 2026-08-12 題五）：兩次集訓都有一場（第一屆開場的教學局
+    // 是另一個掛點、不走集訓面板）
+    hasPractice: seasonIndex >= CAMP_SEASONS.FIRST,
     title: ordinal === 1 ? '第一次集訓' : '第二次集訓',
   };
+}
+
+// 這屆的紅白賽打過了沒（判準＝存檔裡那筆紀錄是不是**這一屆**的）。
+// ★ 屆數要對得上 ★ 上一屆的成績不得讓這一屆的格子看起來已經打完（同 isCampPending）。
+export function practicePlayedIn(practice, seasonIndex) {
+  return (practice?.seasonIndex ?? 0) === seasonIndex && seasonIndex >= CAMP_SEASONS.FIRST;
 }
 
 // ---- 離場前的未完成清單（2026-08-09 試玩前補強）----
@@ -195,9 +236,25 @@ export function campPlanFor(seasonIndex) {
 //
 // @param {boolean} o.attrTrained 這次集訓有沒有按過屬性特訓（UI 的當次狀態——
 //   集訓成果要等 onDone 才落檔，中途被殺會整個重來，所以這裡沒有可讀的持久欄位）
-export function pendingCampSlots({ player, plan, members = [], attrTrained = false }) {
+export function pendingCampSlots({
+  player, plan, members = [], attrTrained = false,
+  practice = null, practicePlayed = false, practiceOffered = false,
+}) {
   const out = [];
-  if (!attrTrained && campAttrOptions(player).some((o) => o.ready)) {
+  // 紅白賽（練習賽卷 2026-08-12）：一屆一場、打完就過——沒打就是把這一屆的
+  // 屬性特訓名額與控球格一起放掉。
+  // ★ 兩道閘都是「有可選項才提醒」的同一條理由 ★
+  //   `practicePlayed`＝打過了就沒得做；`practiceOffered`＝呼叫端沒接開打入口時
+  //   （舊呼叫端／測試治具）畫面上根本沒有那顆鈕，喊「你還沒打」是叫玩家去按不存在的東西。
+  if (plan?.hasPractice && practiceOffered && !practicePlayed) {
+    out.push({
+      key: 'practice',
+      label: '紅白對抗賽',
+      note: '這一屆只有這一場——打完的科目決定屬性特訓的名額與控球格。',
+    });
+  }
+  if (!attrTrained
+    && campAttrOptions(player, { unlockControl: !!practice?.unlockControl }).some((o) => o.ready)) {
     out.push({
       key: 'attr',
       label: '屬性特訓',

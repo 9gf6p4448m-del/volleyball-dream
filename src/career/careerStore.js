@@ -14,6 +14,7 @@ import {
 } from './recruitment.js';
 import { positionFlagsOf, markPositionReady, approvePositionOpen } from './positionFlags.js';
 import { markCampPending } from './trainingCamp.js';
+import { normalizePractice } from './practiceMatch.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
   SCHEMA_VERSION,
@@ -282,6 +283,18 @@ export function createCareerStore(storage, slot = 1) {
     seasonIndex() {
       const save = loadSave();
       return save?.season?.index ?? 1;
+    },
+    // 練習賽卷（2026-08-12）：屆間紅白對抗賽的成績（`practiceRecordOf` 的形狀）。
+    // ★ 讀出來一律過 normalizePractice ★ 舊存檔沒有這個鍵、手改的存檔可能只有半組欄位；
+    // 逐鍵回退讓呼叫端拿到的恆是完整形狀（不用各自 `?? 0`，那會漂移成好幾份預設值）。
+    loadPractice() {
+      return normalizePractice(loadSave()?.practice ?? null);
+    },
+    savePractice(record) {
+      return writeSave((prev) => ({
+        ...(prev ?? createSaveV2({})),
+        practice: normalizePractice(record),
+      }));
     },
     // W4 招募：整包 recruitment 讀寫（{progress, recruited}）；賽末累加走 RMW
     loadRecruitment() {

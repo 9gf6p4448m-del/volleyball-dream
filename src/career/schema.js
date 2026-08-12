@@ -34,6 +34,10 @@ export function createSaveV2({ career = null, player = null, prev = null } = {})
     // careerStage 一律由 results 衍生（careerState.careerStage()）——Phase 2 拍板
     // 「不存衍生狀態防不同步」，schema 不設此欄位
     season: career ? seasonFromCareer(career, prev) : emptySeason(),
+    // 練習賽卷（2026-08-12）：屆間紅白對抗賽的成績（`practiceMatch.practiceRecordOf` 的形狀）。
+    // ★ 刻意不進 TOP_KEYS ★ 那份清單是「缺了就 throw」的必要鍵；把新鍵加進去會讓
+    // 所有既有存檔在讀檔當下炸掉。缺鍵回退由 `normalizePractice` 逐鍵處理＝零遷移。
+    practice: prev?.practice ?? null,
     // Phase 4 預留：內容本週不定型，保持空物件（不要猜）
     career: prev?.career ?? {},
     story: prev?.story ?? {},

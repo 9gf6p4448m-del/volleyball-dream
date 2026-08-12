@@ -27,11 +27,15 @@
 //
 // ★ 這一條紀律不變 ★ 判不到的科目仍然寧可不喊（例如「走位」沒有 MOVE 事件，
 // 見下方 `tut-receive` 的處理）——復活的判準是**事件流真的有那個欄位**，不是想要。
+import { createPlayer } from '../sim/player.js';
 import { matchStatsFor } from './growth.js';
 import { countSetAssistKills } from './boxScore.js';
 import { boxScoreLFor } from './boxScoreL.js';
 import { buildDeficitFillIns } from './graduation.js';
-import { defaultLineup, validateLineup, checkRoleStructure } from './lineup.js';
+import {
+  defaultLineup, validateLineup, checkRoleStructure, effectiveOrder, trustOf,
+} from './lineup.js';
+import { buildLibero, normalizeCareerPlayer, alliedAiProfileOf } from './careerState.js';
 
 // ════════════════════════════════════════════════════════════════
 // 一、事件流掃描器（只補既有計數器沒有的那幾種；其餘一律重用）
@@ -385,6 +389,24 @@ export function drillsFor({ player, seasonIndex = 2, techniques = [], flags = {}
   return out;
 }
 
+// 「這屆新學到的技術」的近似（呼叫端＝集訓面板；2026-08-12 練習賽卷）。
+//
+// ★ 誠實紀錄：存檔裡沒有「哪一屆學會的」這個欄位 ★
+// 技術解鎖只寫 `player.techniques[key] = 1`，教學事件只記「觸發過沒」（`career.events`），
+// 兩邊都沒有屆數戳記。真的要精確，得新增一個 per-屆快照欄位——那是存檔 schema 的改動，
+// 不在本批範圍。
+// 近似法：取 `TECH_DRILL_ORDER`（＝`growth.TECH_DEFS` 宣告序）**末端**的 n 項已解鎖技術。
+// 依據：教學鏈的時程本身由淺入深（吊球最早、飄浮＝八強後、跳發＝決賽前、叫戰術＝
+// 第 2 屆集訓），宣告序末端≒最近學的。失準的後果是「科目喊到一項舊技術」，
+// 不會喊到沒學過的東西（來源恆為已解鎖集合）。
+export function recentTechniquesOf(player, n = DRILLS_MAX) {
+  const t = player?.techniques ?? {};
+  return TECH_DRILL_ORDER
+    .filter(({ tech }) => (t[tech] ?? 0) >= 1)
+    .slice(-n)
+    .map(({ tech }) => tech);
+}
+
 // 教學局六步（第一屆開場；固定清單、順序即教學順序）。
 // 這批**只做資料與判定**——「暫停等待玩家完成這一步」的流程控制不在本檔。
 export const TUTORIAL_DRILL_IDS = [
@@ -587,5 +609,260 @@ export function splitSquads({
     white: buildSquad({
       id: 'white', squad: white, anchor: whiteAnchor, seed: seed + 1, usedNames,
     }),
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 七、餵球式情境偏置（kickoff 題 8）——★全部在建隊參數層，零 sim 改動★
+// ════════════════════════════════════════════════════════════════
+// 科目制的隱藏弱點：喊「成功叫 2 次戰術」，但球運不好時窗口根本沒開幾次 ⇒ 想練練不到。
+// 真實訓練的本質是**教練餵球**——把要練的情境高頻製造出來。
+//
+// ★ 每條偏置底下都寫「為了哪類科目、機制依據哪一行」★ 只有兩種東西可以動：
+//   ① 建隊時每個人的 `trust`（`sim/player.js:61` 的 `trust.fromSetter`）
+//   ② `aiProfiles`（`createGame({ aiProfiles })`，讀取端 `sim/ai.js` 的 `aiProfileOf`）
+// 這兩樣都是 sim 出廠就吃的注入參數，與 `careerMatchSetup` 走同一條路。
+//
+// ────────────────────────────────────────────────────────────────
+// ★★ 誠實紀錄：「指名發給玩家」與「二傳優先舉給玩家」是**同一根槓桿** ★★
+// ────────────────────────────────────────────────────────────────
+// kickoff 題 8 把這兩條寫成兩件事，實作上它們共用 `trust`：
+//   · 舉球分配：`sim/ai.js` 的 `attackPointsOf` 以 `effectiveTrust` 當權重。
+//   · 針對性發球：`sim/ai.js` 的 `serveTargetPidOf`（D2-SERVE 區塊）挑的是
+//     「對方**後排**攻擊手裡 effectiveTrust 最高的那一個」——**沒有 targetId 注入介面**
+//     （`scoutRead` 是攔網讀線用的，跟發球目標無關）。所以要白隊發給玩家，唯一的
+//     參數層做法就是讓玩家成為紅隊後排 trust 最高的攻擊手。
+// 兩個旗標仍分開留著（`serveToPlayer`／`feedPlayer`），因為它們**回答的是不同的問題**
+// ——日後 sim 真的開了發球目標注入介面，只要改 `serveToPlayer` 那一條的實作即可。
+// ⚠ 已知限制：`AI.SERVE_TARGET_RATE` 只有一半的發球會指名（另一半走四區循環），
+// 且玩家在前排輪次時不是候選——這是 sim 的既有規則，偏置不改它。
+//
+// ────────────────────────────────────────────────────────────────
+// ★★ 實測（2026-08-12，6 局／同一組 seed，紅隊扣球歸屬）★★
+// ────────────────────────────────────────────────────────────────
+//   對照（無偏置）            玩家扣球佔比 31.6%（65/206）
+//   只把玩家 trust 拉到 85    33.3%（63/189）  ← **幾乎沒動**
+//   ＋紅隊隊友 trust 壓到 10  37.1%（73/197）  ← 現行設定
+//   ＋紅隊隊友 trust 壓到 5   42.1%（82/195）
+// 為什麼只拉玩家沒用：出廠名冊裡隊友 trust 全是 20、玩家 40 ＋還有 0.27 的球權地板
+// （`PLAYER_TRUST_FLOOR`）——他**本來就已經是**分配的第一順位，把 40 換成 85 只是把
+// 「已經很大」變成「更大一點」。餵球要有感，得動的是**差距**，不是他自己的絕對值。
+// 這就是為什麼 `mateTrust` 存在：不是為了讓隊友變爛，是為了讓「今天球先給要練的人」
+// 這件事在分配權重上真的成立。
+//
+// ★★ 同一次實測的誠實結果：`serveToPlayer` 在出廠名冊上是**零位移** ★★
+//   玩家接球數 49 → 49（逐值相同）。原因同上——`serveTargetPidOf` 挑的是「對方後排
+//   攻擊手裡 trust 最高的那個」，而玩家出廠就是。所以這條偏置的實際身分是**保證**
+//   而不是改變：它保的是「就算某個隊友的 trust 靠 `换人信任事件` 一路長到超過玩家
+//   （lineup.trust 每場可 +2，三屆下來過 40 完全可能），紅白賽這一場也一定發給你」。
+//   ⚠ 不得因為它現在量不出差別就宣稱它有效——這一行就是留給下一個人看的。
+export const PRACTICE_FEED_TRUST = 85;
+// 紅隊隊友在餵球場的 trust 上限。值＝`lineup.FRESHMAN_TRUST`（10）的同一個量級：
+// 「今天大家先當新生，球優先給要練的那個人」。★ 只壓紅隊 ★ 白隊是對手，
+// 把對手調笨不是訓練、是放水。★ 只是這一場的建隊參數 ★ 不寫回 lineup.trust。
+export const PRACTICE_MATE_TRUST = 10;
+
+// 科目 id → 偏置旗標。★ 以 id 對表，不靠字串猜 ★ 與 `drillGainFor` 同一條紀律：
+// 認不得的科目一律拿不到偏置，不會有人手捏一個 id 就把白隊調弱。
+export const DRILL_BIAS = {
+  // 接發／魚躍類 ⇒ 白隊發球指名發給玩家（機制見上方 serveTargetPidOf 那段）
+  dive: ['serveToPlayer'],
+  'basic-libero': ['serveToPlayer'],
+  'tut-receive': ['serveToPlayer'],
+  // 殺球／吊球／pipe 類 ⇒ 紅隊二傳優先舉給玩家（`attackPointsOf` 的 trust 權重）
+  tip: ['feedPlayer'],
+  'pipe-kill': ['feedPlayer'],
+  'basic-attack': ['feedPlayer'],
+  'tut-handle': ['feedPlayer'],
+  'tut-point': ['feedPlayer'],
+  points: ['feedPlayer'],
+  // 叫戰術／B 快類 ⇒ 白隊全站發（`aiProfileOf` 的 jumpServeRate／floatServeRate）
+  // ⇒ 紅隊一傳品質高 ⇒ perfect 窗口高頻開 ⇒ 叫戰術／組合攻擊真的排得出來
+  'call-play': ['standServe'],
+  // 攔網類 ⇒ 白隊不吊球（`aiProfileOf` 的 tipRate；讀取端 `sim/ai.js:2908`）
+  // ⇒ 少吊多扣 ⇒ 攔網手真的有球可以碰
+  'basic-middle': ['noTip'],
+  'tut-block': ['noTip'],
+};
+
+// 科目清單 → 建隊參數配置（純函式，可測）。無科目＝零偏置（每個旗標都 false／null）。
+export function practiceBiasFor(drills = []) {
+  const on = new Set();
+  for (const d of drills ?? []) {
+    const def = drillDefOf(d); // 認不得的科目不得偷偷開偏置（同 drillGainFor 的紀律）
+    if (!def) continue;
+    for (const k of DRILL_BIAS[def.id] ?? []) on.add(k);
+  }
+  const serveToPlayer = on.has('serveToPlayer');
+  const feedPlayer = on.has('feedPlayer');
+  const feedOn = serveToPlayer || feedPlayer;
+  return {
+    serveToPlayer,
+    feedPlayer,
+    standServe: on.has('standServe'),
+    noTip: on.has('noTip'),
+    // 兩條偏置共用的那根槓桿（見上方誠實紀錄）：null＝不動 trust
+    playerTrust: feedOn ? PRACTICE_FEED_TRUST : null,
+    mateTrust: feedOn ? PRACTICE_MATE_TRUST : null, // 紅隊隊友的上限（差距才是有感的來源）
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 八、練習賽建隊（career 層；形狀與 careerMatchSetup 對齊，供 resolveMatchConfig 吃）
+// ════════════════════════════════════════════════════════════════
+// ★ 練習賽固定 bo1 ★（kickoff 題 7「不做重打」的同一個理由：一屆一場、打完就過）——
+// bo1 由 `matchFormatOf` 對練習賽 entry 自然回 1（無 label 「決賽/準決賽」、opponentId 非天鷹）。
+export const PRACTICE_STAGE = 'practice';
+export const PRACTICE_LABEL = '紅白對抗賽';
+
+export function practiceMatchId(seasonIndex) {
+  return `practice-${seasonIndex}`;
+}
+
+// 練習賽的 matchEntry（形狀比照 schedule 的賽程項）。
+// ★ opponentId 恆為 null ★ 對手是自家白隊、不在 `opponents.js` 裡——任何以
+// opponentId 為鍵的路徑（招募進度、情蒐、宿敵、典藏牆）因此天然全部落空，
+// 這是設計而不是疏漏：練習賽不記戰績、不推招募（kickoff §三 題 3）。
+// ★ 這個 entry **不進 career.schedule** ★ 所以 `recordResult` 對它會 throw
+// （「賽程裡沒有比賽」）——那正是我們要的保險絲：練習賽走 settlePractice，
+// 任何一條誤把它當正式賽記帳的路徑都會當場炸，不會靜默污染戰績。
+export function practiceMatchEntry(seasonIndex) {
+  return {
+    id: practiceMatchId(seasonIndex),
+    stage: PRACTICE_STAGE,
+    opponentId: null,
+    label: PRACTICE_LABEL,
+  };
+}
+
+// 一隊的 sim Player 陣列＋自由人＋板凳。
+// @param squad        splitSquads 的單邊產物（members **不含** anchor）
+// @param teamId       'A'（紅）／'B'（白）
+// @param anchorPerson 錨本人（紅＝玩家物件；白＝該名成員）
+// @param playerObj    玩家的 sim Player（紅隊才給；白隊 null）——身分要保住 A2 那個物件
+// @param lineup       存檔的先發編排（只取 trust 映射：練習賽沿用你平常的信任值）
+// @param teamDive     隊友魚躍鏡像（同 careerTeams：主角學會＝全隊跟著會）
+function buildSquadSide({
+  squad, teamId, anchorPerson, playerObj, lineup, teamDive, mateTrustCap = null,
+}) {
+  const index = new Map(squad.members.map((m) => [m.id, m]));
+  if (anchorPerson) index.set(anchorPerson.id, anchorPerson);
+  // 餵球場的隊友 trust 上限（只有紅隊會拿到 mateTrustCap）——取 min 而不是直接指派，
+  // 本來就比它低的人不得被「調高」（那是往反方向餵球）
+  const trustFor = (id) => {
+    const t = trustOf(lineup, id);
+    return mateTrustCap == null ? t : Math.min(t, mateTrustCap);
+  };
+  const makeOne = (m) => createPlayer({
+    id: m.id,
+    name: m.name,
+    teamId,
+    naturalRole: m.role,
+    currentRole: m.role,
+    height: m.height ?? 1.85,
+    trust: trustFor(m.id),
+    attributes: { ...m.attributes },
+    techniques: { dive: teamDive },
+  });
+  const order = effectiveOrder(squad.lineup.starters, squad.lineup.rotationStart);
+  const six = order.map((id) => {
+    if (playerObj && id === playerObj.id) return playerObj;
+    const m = index.get(id);
+    if (!m) throw new Error(`practiceMatchSetup：${squad.label} 先發 ${id} 不在名冊`);
+    return makeOne(m);
+  });
+  // 自由人：結構欄位一律由 buildLibero 公式供給（同 careerMatchSetup 的 D3 慣例），
+  // 名冊成員存在時只覆寫 name＋attributes。玩家＝自由人時直接用玩家本人。
+  const liberoId = squad.lineup.libero;
+  let libero;
+  if (playerObj && liberoId === playerObj.id) {
+    libero = playerObj;
+  } else {
+    libero = buildLibero(teamId, `${squad.label}·自由人`);
+    const lm = index.get(liberoId);
+    if (lm) {
+      libero.name = lm.name;
+      libero.attributes = { ...libero.attributes, ...lm.attributes };
+    }
+    // 自由人豁免魚躍鏡像（07-27 Sawmah 拍板 B：防守專精者天生會撲）
+    libero.techniques.dive = 1;
+  }
+  // 板凳＝非先發、非現任自由人、非 libero 角色（濾法逐項比照 careerMatchSetup）
+  const starterSet = new Set(order);
+  const bench = squad.members
+    .filter((m) => !starterSet.has(m.id) && m.id !== liberoId && m.role !== 'libero')
+    .map(makeOne);
+  return { six, libero, bench };
+}
+
+/**
+ * 練習賽開賽包（紅白對抗）。回傳形狀與 `careerMatchSetup` 對齊，
+ * `resolveMatchConfig` 可以直接把它當 careerSetup 用。
+ *
+ * @param o.player       主角（save.player；本函式不寫它）
+ * @param o.members      `roster.members`（不含玩家）
+ * @param o.lineup       `save.lineup`（只取 trust 映射）
+ * @param o.drills       本場科目清單（`drillsFor` 的輸出）——偏置由它反推
+ * @param o.seasonIndex  這場練習賽屬於哪一屆（comboScale 的屆數閘同正式賽）
+ * @param o.seed         決定論種子（＝matchSeed(career, practiceMatchId)）
+ */
+export function practiceMatchSetup({
+  player, members = [], lineup = null, drills = [], seasonIndex = 2, seed = 1,
+} = {}) {
+  if (!player?.id) throw new Error('practiceMatchSetup：需要主角');
+  normalizeCareerPlayer(player); // 跨版本補正（同 careerTeams 的第一件事）
+  const bias = practiceBiasFor(drills);
+  const squads = splitSquads({
+    members, playerId: player.id, playerRole: player.currentRole ?? 'outside', player, seed,
+  });
+  // ★ 玩家 trust 拉高＝淺拷貝一個新物件，不動存檔裡的那一個 ★
+  // 練習賽的餵球偏置是**這一場的**訓練安排，不是永久的球權改變；就地改 `player.trust`
+  // 會被賽末的 savePlayer 固化進存檔（正式賽從此都餵他）。
+  const me = bias.playerTrust == null ? player : {
+    ...player,
+    trust: {
+      ...player.trust,
+      fromSetter: Math.max(player.trust?.fromSetter ?? 0, bias.playerTrust),
+    },
+  };
+  const anchorWhite = members.find((m) => m.id === squads.white.anchorId) ?? null;
+  if (!anchorWhite) throw new Error('practiceMatchSetup：白隊錨不在名冊');
+  const teamDive = player.techniques?.dive ?? 0;
+  const red = buildSquadSide({
+    squad: squads.red,
+    teamId: 'A',
+    anchorPerson: null,
+    playerObj: me,
+    lineup,
+    teamDive,
+    mateTrustCap: bias.mateTrust, // ★ 只有紅隊 ★ 白隊是對手，調笨它不是訓練是放水
+  });
+  const white = buildSquadSide({
+    squad: squads.white, teamId: 'B', anchorPerson: anchorWhite, playerObj: null, lineup, teamDive,
+  });
+  // 兩隊都是我隊 ⇒ 兩邊都吃同一份我方 profile（單一真相源＝careerState.alliedAiProfileOf），
+  // 白隊再疊上本場偏置。★ 偏置只加在白隊 ★ 紅隊要練的是自己，不是被放水。
+  const allied = alliedAiProfileOf(player);
+  return {
+    seed,
+    teams: { A: red.six, B: white.six },
+    benches: { A: red.bench, B: white.bench },
+    liberos: { A: red.libero, B: white.libero },
+    aiProfiles: {
+      A: { ...allied },
+      B: {
+        ...allied,
+        // 全站發（叫戰術／B 快科目）：把我方 profile 的跳發／飄浮率壓回 0
+        ...(bias.standServe ? { jumpServeRate: 0, floatServeRate: 0 } : {}),
+        // 不吊球（攔網科目）：aiProfileOf 的預設是 AI.TIP_RATE，這裡顯式歸零
+        ...(bias.noTip ? { tipRate: 0 } : {}),
+      },
+    },
+    // 組合攻擊屆數閘：與正式賽同一條規則（第 1 屆 0／第 2 屆起 1）——練習賽不是特例場
+    comboScale: seasonIndex >= 2 ? 1 : 0,
+    // 播報用的「對手」：白隊不是 opponents.js 裡的隊伍（無 ace／無 style）
+    opponent: { id: 'practice-white', name: SQUAD_LABELS.white },
+    // 以下是練習賽專屬的隨附資料（sim 不看；app／ui 層消費）
+    practice: { drills, seasonIndex, bias, squads },
   };
 }

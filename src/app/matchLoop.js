@@ -36,7 +36,10 @@ import {
   blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm, createBetCardGate,
 } from '../input/blockBetFeedback.js';
 import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
-import { settleCareerMatch, careerReturnUrl, resolveOppAceBox } from './matchCareer.js';
+import {
+  settleCareerMatch, settlePracticeMatch, careerReturnUrl, resolveOppAceBox,
+} from './matchCareer.js';
+import { settlePractice } from '../career/practiceMatch.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
 import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
@@ -223,8 +226,10 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   if (game.phase === 'set_break') showSetBreak(s);
   // W4(P4) 附錄 B-4：宿敵 ace pid 解析（rival 隊限定——ace 反讀的對象；
   // 宿敵人設未落檔時 def.rival ace 名對不上＝null＝機制沉睡，零擾動）
+  // 練習賽科目 HUD 的開場值（0/N 一開始就看得見——不必等第一個死球才知道要練什麼）
+  if (s.practiceDrills.length) refreshPracticeHud(s);
   if (careerCtx) {
-    const rivalBase = opponentById(careerCtx.matchEntry.opponentId);
+    const rivalBase = opponentById(careerCtx.matchEntry?.opponentId);
     if (rivalBase?.rival) {
       const rivalDef = applySeasonRoster(rivalBase, careerCtx.seasonIndex ?? 1);
       const aceName = rivalDef.ace?.name ?? null;
@@ -356,6 +361,11 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     assistLanding: null,
     // W6 壯舉達成字卡（新增採納 3）：本場對手未達成的 feat 條件清單，死球增量檢查
     recruitWatch: buildRecruitWatch(careerCtx, playerId, matchRoleOf(game, playerId)),
+    // 練習賽卷（2026-08-12）：本場科目清單（非練習賽＝空陣列＝所有掛點短路）
+    practiceDrills: careerCtx?.practice?.drills ?? [],
+    practiceRows: [],       // 最近一次結算的逐科目狀態（HUD 與結算面板共用同一份）
+    practiceFired: new Set(), // 已彈過「科目完成」字卡的科目 id（一科一卡）
+    practiceSettled: null,  // 賽末結算結果（結算面板讀）
     pendingSubLines: [], // 面板開著時累積的換人對話，關板一次播（teachDialog z 序在面板下）
     // W7 C1②：主角低體力教練建議——每場最多一次
     staminaAdviceShown: false,
@@ -670,6 +680,35 @@ export function checkRecruitFeats(s, cards) {
         onShown: () => { w.fired = true; },
       });
     }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 練習賽科目：死球節拍的增量檢查（範式逐項比照上面的 checkRecruitFeats）
+// ════════════════════════════════════════════════════════════════
+// ★ 判定不在這裡 ★ 一律呼叫 `career/practiceMatch.settlePractice`——賽中 HUD、
+// 賽中字卡、賽末結算三處看到的是**同一支函式**算出來的同一組數字。
+// 賽中重算一份「大概的進度」是本專案踩過的坑（喊一件事判另一件事）。
+// 純 UI 演出：真正落檔仍在賽末 settlePracticeMatch，這裡一個字都不寫。
+export function refreshPracticeHud(s, cards = null) {
+  if (!s.practiceDrills.length) return;
+  const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
+  const settled = settlePractice({
+    events: s.game.events, playerId: s.playerId, myTeam, drills: s.practiceDrills,
+  });
+  s.practiceRows = settled.results;
+  s.stage.practiceHud?.update(settled.results);
+  if (!cards) return;
+  for (const r of settled.results) {
+    if (!r.achieved || s.practiceFired.has(r.id)) continue;
+    cards.push({
+      pri: 40, // 與招募壯舉卡同級（同樣是「你剛剛達成了一件被明講過的事」）
+      text: `✅ 科目完成：${r.label}`,
+      color: '#ffd166',
+      dur: 1600,
+      // 被更高優先字卡擠掉時不標 fired，下個死球重驗再出（同 checkRecruitFeats 的不丟失）
+      onShown: () => { s.practiceFired.add(r.id); },
+    });
   }
 }
 
@@ -1734,6 +1773,7 @@ function applyEvents(s, frameEvents, now) {
       s.bquickFeedbackDone = false;
       stage.bquickButton?.hide();
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
+      refreshPracticeHud(s, cards); // 練習賽科目進度＋完成字卡（同一個死球節拍）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
       // （已經下場就沒什麼好建議的；讓位給體力播報的主角豁免那句話）
@@ -2082,6 +2122,23 @@ export function updateAssistAndPoses(s) {
 function settleIfOver(s) {
   const { game, stage } = s;
   if (game.phase === 'set_over' && s.prevPhase !== 'set_over') {
+    // 練習賽（2026-08-12）：走另一條收束——不記戰績、不推招募、不動名冊成長。
+    // ★ 早退在最前面 ★ 讓「練習賽不污染生涯」變成路徑上的事實，而不是一串 if
+    if (s.careerCtx?.practice) {
+      const { saveOk, settled } = settlePracticeMatch({
+        careerCtx: s.careerCtx, game, playerId: s.playerId,
+        drills: s.practiceDrills,
+        chemistry: s.chemistryTally,
+      });
+      s.practiceSettled = settled;
+      s.stage.practiceHud?.hide();
+      if (!saveOk) stage.floatText.show('⚠ 科目成績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
+      const pWinner = game.series?.winner ?? game.match.winner;
+      stage.setOverOverlay.show(pWinner, game.match.score,
+        game.players[s.controlledId].teamId, '點擊任意處看科目結算');
+      s.prevPhase = game.phase;
+      return;
+    }
     if (s.careerCtx) {
       const { saveOk } = settleCareerMatch({
         careerCtx: s.careerCtx, game, playerId: s.playerId,
@@ -2442,6 +2499,28 @@ function buildBoxPanelData(s) {
     extras.push(`⚡ OPP 火力：扣球 ${myRow.spikes}・得分 ${myRow.kills}`
       + `${rate == null ? '' : `（${rate}%）`}・攔網 ${myRow.blocks}`);
   }
+  // 練習賽結算面板（2026-08-12）：科目達成清單＋獎勵說明接在位置差異欄位後面。
+  // ★ 重用 boxScorePanel 的 extras 通道，不另做一個面板 ★ 玩家要看的資訊
+  // （全隊數據＋我這場做到什麼）是同一批，另開一頁只會讓他點兩次。
+  if (s.careerCtx?.practice) {
+    const settled = s.practiceSettled
+      ?? settlePractice({
+        events: game.events, playerId: s.playerId, myTeam, drills: s.practiceDrills,
+      });
+    for (const r of settled.results) {
+      extras.push(`${r.achieved ? '✅' : '❌'} ${r.label}　${r.count}/${r.target}`);
+    }
+    extras.push(practiceRewardLine(settled));
+    return {
+      // 勝負仍照實寫（那是比賽），但主標點明這是紅白賽——不記戰績的事寫在獎勵行
+      title: `🏐 紅白對抗賽・${won ? '紅隊勝' : '白隊勝'}`,
+      scoreLine,
+      rows,
+      playerPid: s.playerId,
+      oppAce: null, // 白隊沒有 opponents.js 的王牌
+      extras,
+    };
+  }
   return {
     title: won ? '🏆 勝利' : '敗北',
     scoreLine,
@@ -2450,6 +2529,21 @@ function buildBoxPanelData(s) {
     oppAce,
     extras,
   };
+}
+
+// 練習賽獎勵說明（kickoff 題 3 甲的三段階梯；文案與 `career/trainingCamp.js` 的
+// `campAttrPicks`／`CAMP_CONTROL_UNLOCKED` 同源——那兩支才是判定，這裡只是把它講出來）
+export function practiceRewardLine(settled) {
+  const done = settled?.completedCount ?? 0;
+  const total = settled?.results?.length ?? 0;
+  const head = `📋 科目 ${done}/${total}`;
+  if (settled?.unlockControl) {
+    return `${head}　全數完成 ⇒ 集訓「控球」格開放，屬性特訓可挑兩項（本場不記戰績）`;
+  }
+  if (done >= 2) {
+    return `${head}　完成 2 項以上 ⇒ 集訓的屬性特訓可挑兩項（本場不記戰績）`;
+  }
+  return `${head}　完成 2 項可多挑一項屬性特訓、全完成再開控球格（本場不記戰績）`;
 }
 
 // W4(P4) Q10 燈光秀收場（自然結束或點擊跳過共用）：恢復常態燈光/鏡頭、補播情蒐帶

@@ -10,6 +10,7 @@ import { buildTeamBox, buildAceBox, buildMentorFeed } from '../career/boxScore.j
 import { applyRosterGrowth } from '../career/roster.js';
 import { accrueRecruitProgress, matchRoleOf } from '../career/recruitment.js';
 import { scanChaseLost, actingLiberoFor } from '../career/n2Arc.js';
+import { settlePractice, practiceRecordOf } from '../career/practiceMatch.js';
 
 // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
 export function markMatchStarted(careerCtx) {
@@ -155,6 +156,66 @@ export function settleCareerMatch({
     }
   }
   return { saveOk, won };
+}
+
+// ════════════════════════════════════════════════════════════════
+// 練習賽賽末收束（2026-08-12 練習賽卷）——★ 與 settleCareerMatch 完全分開的一條路 ★
+// ════════════════════════════════════════════════════════════════
+// 為什麼不共用：`settleCareerMatch` 做的每一件事練習賽都**不該**做——
+//   戰績（recordResult）／招募進度／情蒐入庫／隊友成長／換人信任／對手 ace 記帳／典藏牆。
+// 加一堆 `if (!practice)` 進去，等於把「練習賽不污染生涯」這條保證分散到七個判斷式裡，
+// 日後誰加第八件事就漏掉。分成兩支＝練習賽路徑上根本沒有那些呼叫。
+//
+// 練習賽真正會寫的只有兩樣：
+//   ① `save.practice`＝科目成績（集訓格的屬性特訓名額與控球格吃它）
+//   ② `player.chemistry.pairs`＝默契配對計數（kickoff 題 6）
+//
+// 介面契約（tests/practice-wiring.test.mjs 把關）：
+// settlePracticeMatch({ careerCtx, game, playerId, drills, chemistry }) → { saveOk, settled }
+export function settlePracticeMatch({
+  careerCtx, game, playerId, drills = [], chemistry = null,
+}) {
+  const myTeam = game.players[playerId].teamId;
+  const settled = settlePractice({
+    events: game.events, playerId, myTeam, drills,
+  });
+  const seasonIndex = careerCtx.seasonIndex ?? careerCtx.store.seasonIndex?.() ?? 2;
+  let saveOk = true;
+  // ★ 重入防線 ★ 局終轉場理論上只跑一次，但這是累加器以外唯一會被重複呼叫弄壞的東西：
+  // 同一屆已有紀錄時直接不覆寫（重打防農場＝kickoff 題 7；也擋掉「打贏的科目被重打洗掉」）
+  const prev = careerCtx.store.loadPractice?.() ?? null;
+  const already = (prev?.seasonIndex ?? 0) === seasonIndex;
+  if (!already) {
+    saveOk = (careerCtx.store.savePractice?.(practiceRecordOf(seasonIndex, settled)) ?? true)
+      && saveOk;
+  }
+  // 默契配對計數（同 settleCareerMatch 的 E2 入帳；already 防重入同一道閘）
+  //
+  // ★★ kickoff 題 6 的「×2」在此**刻意不實作**——如實記錄理由 ★★
+  // 題 6 寫「與 focusId 對象完成的組合攻擊計數×2 計入默契」，前提是「默契本身已有
+  // 消費端＝組合攻擊解鎖進度」。實查（2026-08-12 全庫 grep `chemistry`）：
+  //   `chemistry.pairs` 的**唯一**讀取端是 `career/trainingCamp.chemistryPairsOf`，
+  //   而它的唯一呼叫端是 `ui/careerScreen.chemistrySection`＝生涯畫面的顯示區；
+  //   `chemistry.focusId` 至今零消費端（`career/trainingCamp.js` 檔頭自陳「本卷零效果」）。
+  // 也就是說沒有任何「解鎖進度」在吃這個數字。在這個狀態下乘 2 的唯一效果，是讓
+  // 畫面上那行「你和某某配合了 N 次」**不等於**實際次數——而那一行的語意是逐字寫死的
+  // （「默契算的是你和他一起跑成一次組合攻擊的次數」）⇒ 乘 2 就是喊一件事顯示另一件事。
+  // 因此本批只做**計數**（練習賽的組合攻擊照樣入帳），不做倍數；等默契真的接上
+  // 有門檻的消費端，倍率再連同那個門檻一起裁定。
+  const chemGain = (!already && chemistry)
+    ? Object.entries(chemistry).filter(([, n]) => (n ?? 0) > 0)
+    : [];
+  if (chemGain.length) {
+    const ch = careerCtx.player.chemistry ?? (careerCtx.player.chemistry = {});
+    const pairs = { ...(ch.pairs ?? {}) };
+    for (const [pid, n] of chemGain) pairs[pid] = (pairs[pid] ?? 0) + n;
+    ch.pairs = pairs;
+    if (ch.focusId === undefined) ch.focusId = null;
+    saveOk = careerCtx.store.savePlayer(careerCtx.player) && saveOk;
+  }
+  // 局間存檔殘留清除（同正式賽：不留「已結束比賽的假續玩入口」）
+  careerCtx.store.clearMidMatch?.();
+  return { saveOk, settled };
 }
 
 // W4(P4) Q9：對手 ace 的 pid 對映——當屆名冊（含畢業遞補/挖角除名）的 ace 名字

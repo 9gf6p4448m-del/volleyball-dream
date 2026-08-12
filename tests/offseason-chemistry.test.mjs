@@ -307,11 +307,12 @@ test('E6：耐力那格＝既有拍板值，且與 applyOffseasonTraining 逐值
 // E4／E7：兩次集訓外殼與默契候選
 // ════════════════════════════════════════════════════════════
 test('E4：第一次集訓（第 2 屆）無默契格、第二次（第 3 屆）有', () => {
+  // hasPractice（練習賽卷 2026-08-12）：兩次集訓都有一場紅白對抗賽
   assert.deepEqual(campPlanFor(2), {
-    ordinal: 1, seasonIndex: 2, hasChemistry: false, title: '第一次集訓',
+    ordinal: 1, seasonIndex: 2, hasChemistry: false, hasPractice: true, title: '第一次集訓',
   });
   assert.deepEqual(campPlanFor(3), {
-    ordinal: 2, seasonIndex: 3, hasChemistry: true, title: '第二次集訓',
+    ordinal: 2, seasonIndex: 3, hasChemistry: true, hasPractice: true, title: '第二次集訓',
   });
 });
 

@@ -564,6 +564,21 @@ export function buildLibero(team, name, level = 60) {
   });
 }
 
+// 我方 AI 風格（隊友技能綁玩家解鎖）——主角傳承節點：對手教主角→隊長請主角教全隊
+// （scramble-plan 定案敘事，07-24 Sawmah 正名）：主角學會＝回去教隊友＝全隊跟著會；
+// 溫和值低於對手招牌隊（鐵霧跳發 .45／北原飄浮 .25）——隊友是二手學的、不是專精。
+// 時程天然集中後段（飄浮＝八強後、跳發＝決賽前）。傳承的劇情呈現在 events.js
+// teach-* 的隊長收尾行。其他 profile 維持 aiProfileOf 預設；對手用 opponents 分級。
+// ★ 抽成具名函式（2026-08-12 練習賽卷）★ 原本這三個數字內嵌在 careerMatchSetup 裡，
+// 練習賽的紅白兩隊**也是我隊**、要吃同一份 profile ⇒ 抄第二份必然漂移。純抽取，零值變動。
+export function alliedAiProfileOf(player) {
+  return {
+    diveRate: (player?.techniques?.dive ?? 0) >= 1 ? 0.16 : 0,
+    jumpServeRate: (player?.techniques?.jumpServe ?? 0) >= 1 ? 0.12 : 0,
+    floatServeRate: (player?.techniques?.floatServe ?? 0) >= 1 ? 0.15 : 0,
+  };
+}
+
 // 生涯單場開賽包：種子＋兩隊 roster＋對手 AI 風格＋情蒐讀取——main.js 一次拿齊餵 createGame
 // W2 起第 4 參數 roster（save.roster 或 null）：A 隊五槽與自由人吃名冊具名/個性化/成長後屬性。
 // W3 起第 5 參數 lineup（save.lineup 或 null）：A 隊依先發輪轉序建隊、自由人由 lineup.libero 選。
@@ -676,16 +691,7 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
       revenge: oldTeamMates.map((m) => ({ id: m.id, name: m.name })),
     } : {}),
     aiProfiles: {
-      // 隊友技能綁玩家解鎖（主角傳承節點：對手教主角→隊長請主角教全隊——
-      // scramble-plan 定案敘事，07-24 Sawmah 正名）：主角學會＝回去教隊友＝全隊跟著會；
-      // 溫和值低於對手招牌隊（鐵霧跳發 .45／北原飄浮 .25）——隊友是二手學的、不是專精。
-      // 時程天然集中後段（飄浮＝八強後、跳發＝決賽前）。傳承的劇情呈現在 events.js
-      // teach-* 的隊長收尾行。其他 profile 維持 aiProfileOf 預設；對手用 opponents 分級
-      A: {
-        diveRate: (player.techniques?.dive ?? 0) >= 1 ? 0.16 : 0,
-        jumpServeRate: (player.techniques?.jumpServe ?? 0) >= 1 ? 0.12 : 0,
-        floatServeRate: (player.techniques?.floatServe ?? 0) >= 1 ? 0.15 : 0,
-      },
+      A: alliedAiProfileOf(player),
       B: { ...def.ai },
     },
     ...(scoutRead ? { scoutRead } : {}),

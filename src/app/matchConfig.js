@@ -3,6 +3,7 @@
 // matchLoop.js＝回合迴圈；matchCareer.js＝生涯開賽標記與賽末收束。
 // 三段以明確資料介面銜接：config →（createGame）→ gates → stage → loop。
 import { careerMatchSetup, buildLibero } from '../career/careerState.js';
+import { practiceMatchSetup } from '../career/practiceMatch.js';
 import { matchSeed } from '../career/careerState.js';
 import { createDefaultTeams } from '../sim/game.js';
 import { createPlayer } from '../sim/player.js';
@@ -87,12 +88,23 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   // ensureStarterRoster 補齊）餵進建隊——隊友具名/個性化/成長後屬性由此生效
   // W1(P4)：careerCtx.seasonIndex（呼叫端由 store.seasonIndex() 供給）——
   // 第 2 屆起對手 ace 畢業遞補（applySeasonRoster）換臉靠它；缺省＝1＝第 1 屆不變
+  // 練習賽卷（2026-08-12）：careerCtx.practice＝屆間紅白對抗賽——換一支建隊函式，
+  // 其餘（種子／技術閘／體力／氣勢／局間）全走同一條路。★ 差異只在建隊 ★
   const careerSetup = careerCtx
-    ? careerMatchSetup(
-      careerCtx.career, careerCtx.player, careerCtx.matchEntry,
-      careerCtx.roster ?? null, careerCtx.lineup ?? null,
-      careerCtx.seasonIndex ?? 1,
-    )
+    ? (careerCtx.practice
+      ? practiceMatchSetup({
+        player: careerCtx.player,
+        members: careerCtx.roster?.members ?? [],
+        lineup: careerCtx.lineup ?? null,
+        drills: careerCtx.practice.drills ?? [],
+        seasonIndex: careerCtx.seasonIndex ?? 2,
+        seed,
+      })
+      : careerMatchSetup(
+        careerCtx.career, careerCtx.player, careerCtx.matchEntry,
+        careerCtx.roster ?? null, careerCtx.lineup ?? null,
+        careerCtx.seasonIndex ?? 1,
+      ))
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）
   const quick = careerCtx ? null : buildQuickSetup(quickRole ?? params.get('role'));
@@ -108,7 +120,9 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   // 規則不分敵我；「鏡頭外調度」敘事改口「調度得好但人終究是人」（批 4 persona 重寫）。
   // 掃描數據（tools/balance-sim VD_B_COSTMUL）：1.0 下決賽 5→10%、決賽帶 20→28%、
   // B 深局最低 0.27＝疲勞可視化（N1）在對手身上真的看得到。快速比賽本就對稱。
-  const stamina = careerSetup
+  // 練習賽：兩邊都是自家隊——對手那格的 costMul 是為「對手」設的參數，紅白賽套上去
+  // 等於對自己人不對稱加料，一律走對稱值（同快速比賽）
+  const stamina = (careerSetup && !careerCtx?.practice)
     ? { A: {}, B: { costMul: 1.0 } }
     : { A: {}, B: {} };
   // W4(P4) Q8 分級賽制：生涯場由賽程項推導（決賽 bo5／準決賽・宿敵場 bo3／其餘 bo1）；
@@ -138,7 +152,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     ? (upcomingTeach(careerCtx.career, careerCtx.matchEntry.id)
       .find((k) => TAPE_FEATURE_KEYS.has(k)) ?? null)
     : null;
-  const tapeClips = careerSetup
+  // 練習賽無情蒐帶：那是「對手預演」，紅白賽的對手是自家隊友（你天天看他們練球）
+  const tapeClips = (careerSetup && !careerCtx?.practice)
     ? buildScoutTape(
       seed, careerSetup.teams, careerSetup.aiProfiles, careerSetup.liberos,
       teachFeature, careerSetup.benches, // W6：帶子與正賽同陣容鏡像（含板凳）
@@ -150,6 +165,9 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   return {
     seed, setTarget, simpleMode, autopilot, teamControl, assistOn,
     careerSetup, tapeClips, gameOptions,
+    // 練習賽隨附資料（matchStage 建科目 HUD、matchLoop 追蹤與結算都讀它）；
+    // 非練習賽＝null＝所有掛點短路，零擾動
+    practice: careerSetup?.practice ?? null,
   };
 }
 

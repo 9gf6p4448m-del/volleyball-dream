@@ -25,6 +25,7 @@ import { createBlockShadow } from '../render/blockShadow.js';
 import { createBlockReach } from '../render/blockReach.js';
 import { createDiegeticUi } from '../render/diegeticUi.js';
 import { createSubPanel } from '../ui/subPanel.js';
+import { createPracticeHud } from '../ui/practiceHud.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
 import { timeoutUsedThisPoint } from '../sim/game.js';
@@ -70,8 +71,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // A6（拍板）：生涯賽的「離開」＝棄賽敗 0:25，離開前自訂確認彈窗＋beforeunload 雙保險；
   // W6.1（試玩回饋 07-24）：快速比賽補同位置離開鈕——無存檔無代價，免彈窗直接回主選單
   //（此前快速比賽無任何返回路徑，只能 reload）
+  // 練習賽（2026-08-12）：離開不記棄賽敗（練習賽根本不落 pendingMatch）——
+  // 文案必須說對事，否則玩家會以為離開會賠一場戰績而不敢退出
   const leaveBtn = careerSetup
-    ? createLeaveButton(params, game)
+    ? createLeaveButton(params, game, !!config.practice)
     : createQuickLeaveButton(params);
   // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
   const teachDialog = careerSetup ? createTeachDialog() : null;
@@ -140,6 +143,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const blockReach = createBlockReach(ctx.scene);
   // W7 A6：主角體力條（HUD 角落；stamina 未啟用時 update() 內部短路不顯示）
   const heroStamina = createHeroStaminaBar();
+  // 練習賽卷（2026-08-12）：科目進度小字（只有紅白賽才建＝正式賽零 DOM 增量）
+  const practiceHud = config.practice ? createPracticeHud() : null;
   // 4.5B §4：S/L diegetic 介面（取代舊面板；?panel=classic＝降規/開發退路）
   const diegetic = simpleMode && params.get('panel') !== 'classic' ? createDiegeticUi() : null;
   showTutorialOnce(simpleMode);
@@ -156,6 +161,9 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     boxScorePanel, callButton, cutButton, tandemButton, bquickButton,
     blockShadow, blockReach, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
+    // ★ 新元件一定要進這個 return ★（2026-08-09 bquickButton 漏了這一行、
+    // 從上線起一次沒出現過——接線的價值源碼掃描驗不到，見下方那段註解）
+    practiceHud,
   };
 }
 
@@ -224,7 +232,7 @@ function createTeachDialog() {
 // beforeunload 雙保險（拍板 07-23）：比賽未完賽時 reload／關頁跳瀏覽器通用確認框
 // （文字瀏覽器內建、不可自訂——安全限制）；完賽（set_over）或已按離開鈕確認＝不攔
 // （否則局終正常返回生涯也會被通用框擋一次）。手機 PWA 對 beforeunload 支援不一＝已知限制。
-function createLeaveButton(params, game) {
+function createLeaveButton(params, game, practice = false) {
   const btn = document.createElement('button');
   btn.textContent = '✕ 離開';
   // 位置：右上 🎬 回放鈕正下方（Sawmah 07-23 試玩回報：原左上會擋到播報泡泡與 FPS）
@@ -250,7 +258,10 @@ function createLeaveButton(params, game) {
     'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
   ].join(';');
   const text = document.createElement('div');
-  text.textContent = '中途離開球場將記棄賽敗（0:25）——確定離開？';
+  // 練習賽不記戰績（沒有 pendingMatch ⇒ resolveForfeit 抓不到東西）——文案照實說
+  text.textContent = practice
+    ? '離開紅白對抗賽——這場不記戰績，但科目進度不會保留（集訓格還在，可以重打）。確定離開？'
+    : '中途離開球場將記棄賽敗（0:25）——確定離開？';
   text.style.cssText = ['color:#eef2fa', 'font-size:15px', 'line-height:1.6', 'margin-bottom:16px'].join(';');
   const btnRow = document.createElement('div');
   btnRow.style.cssText = ['display:flex', 'gap:12px', 'justify-content:center'].join(';');

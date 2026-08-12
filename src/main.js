@@ -20,6 +20,7 @@ import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentById } from './career/opponents.js';
 import { ENGINEERED_OPEN } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
+import { practiceMatchEntry } from './career/practiceMatch.js';
 import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
 import { buildMatchStage } from './app/matchStage.js';
 import { startMatchLoop } from './app/matchLoop.js';
@@ -116,6 +117,19 @@ async function showCareerEntry(ctx) {
         resumeMid,
       });
     },
+    // 練習賽卷（2026-08-12）：集訓面板的「🏐 紅白對抗賽」→ 開一場紅白賽。
+    // 與 onPlay 同一條 runMatch，差別只有 ①matchEntry 是練習賽的（不在 schedule 裡）
+    // ②多帶一個 practice 包（建隊換 practiceMatchSetup、賽末換 settlePracticeMatch）
+    onPractice: ({ career, player, drills, seasonIndex }) => {
+      const roster = ensureStarterRoster(store);
+      runMatch(ctx, {
+        store, career, player, roster,
+        matchEntry: practiceMatchEntry(seasonIndex),
+        lineup: store.loadLineup(),
+        seasonIndex,
+        practice: { drills, seasonIndex },
+      });
+    },
   });
   // 賽末返回：?slot=N 指回打球的那個槽（缺省＝槽 1，涵蓋 W4 前的舊返回連結）
   if (ctx.params.get('career') === 'resume') {
@@ -152,7 +166,10 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
   ctx.court.setFloorPalette(venueSpec.floor);
   config.venue = { key: venueKey, rivalAway: !!rival }; // matchLoop：應援偏向＋冠軍館燈光秀
   // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
-  if (careerCtx) markMatchStarted(careerCtx);
+  // ★ 練習賽不落 pending ★ 它不在 career.schedule 裡，`resolveForfeit` 會拿這個 id
+  // 去 `recordResult` 而當場 throw（「賽程裡沒有比賽 practice-2」）——而且練習賽
+  // 本來就不該有棄賽敗這種東西（不記戰績）
+  if (careerCtx && !careerCtx.practice) markMatchStarted(careerCtx);
   // W4(P4) Q8 局間存檔續玩：整包 sim state 快照直接當 game 開機（phase='set_break'
   // ＝從局間 huddle 前恢復；決定論等價由 tests/match-sets 背書）；情蒐帶不重播
   const resumeMid = careerCtx?.resumeMid ?? null;

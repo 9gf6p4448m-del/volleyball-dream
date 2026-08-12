@@ -35,6 +35,7 @@ import { showTrainingCamp } from './trainingCamp.js';
 import {
   chemistryPairsOf, isCampPending, clearCampPending, departedMatesOf,
 } from '../career/trainingCamp.js';
+import { drillsFor, recentTechniquesOf } from '../career/practiceMatch.js';
 import {
   positionTalkFor, transferCandidates, transferAskLines, transferTalkFor,
   interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV,
@@ -129,7 +130,7 @@ function countUp(node, target, delayMs, durMs = 320) {
   requestAnimationFrame(step);
 }
 
-export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
+export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPractice = null }) {
   const root = el('div', [
     'position:fixed', 'inset:0', 'z-index:30', 'display:none',
     // safe center：內容高於視窗時退化為 flex-start——修手機頂部被裁切、捲不到
@@ -2298,10 +2299,42 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot }) {
     const campEvs = filterPlayedOnce(resolveEventsForRole(resolveEventsForRoster(
       dueEvents(campCareer, 'camp', campSeason), campRoster?.members ?? null,
     ), freshPlayer?.currentRole ?? null));
+    // 練習賽卷（2026-08-12）：這屆紅白賽的科目與成績。
+    // ★ 科目吃「最近學會的技術」★ 存檔沒有「哪一屆學會的」這個欄位（teach-* 只記
+    // 觸發過沒），所以由 `recentTechniquesOf` 取 TECH_DRILL_ORDER 末端當近似——
+    // 教學鏈的時程本身由淺入深（吊球最早、跳發／叫戰術最晚），末端≒最近學的。
+    // 轉位旗標同理：`campPending` 那一刻 `TRANSFER_USED_EV` 已被 advanceSeason 濾掉，
+    // 改用「現任位置≠天生位置」＝轉過位（會多給一個該位置的基本科目，不會少給）。
+    const campPractice = store.loadPractice?.() ?? null;
+    const campDrills = drillsFor({
+      player: freshPlayer,
+      seasonIndex: campSeason,
+      techniques: recentTechniquesOf(freshPlayer),
+      flags: {
+        roleChanged: (freshPlayer?.currentRole ?? 'outside')
+          !== (freshPlayer?.naturalRole ?? 'outside'),
+      },
+    });
     showTrainingCamp({
       player: freshPlayer,
       seasonIndex: campSeason,
       members: campRoster?.members ?? [],
+      practice: campPractice,
+      drills: campDrills,
+      // 開打＝離開集訓覆蓋層去打球。★ campPending 旗標**不清** ★ 打完回生涯畫面時
+      // renderCareer 會照旗標重開集訓，那時 practice 已有成績（名額／控球格自動跟上）。
+      onPractice: onPractice
+        ? () => {
+          campOpen = false;
+          hide();
+          onPractice({
+            career: store.loadCareer() ?? careerNow,
+            player: freshPlayer,
+            drills: campDrills,
+            seasonIndex: campSeason,
+          });
+        }
+        : null,
       techPending: campEvs.length > 0,
       techNames: campEvs
         .map((e) => TECH_DEFS.find((t) => t.key === e.effect?.unlock)?.name)

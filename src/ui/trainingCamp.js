@@ -14,8 +14,9 @@ import { createRitualStage, tween } from '../render/ritualStage.js';
 import {
   campPlanFor, campAttrOptions, applyCampAttrTraining,
   chemistryCandidates, recordChemistryFocus, chemistryEmptyNote,
-  pendingCampSlots, CAMP_OPENING_LINES,
+  pendingCampSlots, CAMP_OPENING_LINES, campAttrPicks, practicePlayedIn,
 } from '../career/trainingCamp.js';
+import { drillDefOf } from '../career/practiceMatch.js';
 import { OFFSEASON_TRAINING_LINES } from '../career/events.js';
 import { ROLE_ABBR } from '../career/roster.js';
 
@@ -80,12 +81,21 @@ function gridButton(label, enabled, onTap) {
  * @param {boolean}  o.techPending  這次集訓有沒有技術補修的內容（事件表才是真相源）
  * @param {string[]} o.techNames    要補修的技術名（顯示用）
  * @param {Function} o.onDone       `(updatedPlayer) => void`；回傳的是新物件，呼叫端負責落檔
+ * @param {object}   o.practice     這屆紅白賽成績（`store.loadPractice()`；缺省＝沒打）
+ * @param {Array}    o.drills       這屆紅白賽的科目清單（`drillsFor` 的輸出，顯示用）
+ * @param {Function} o.onPractice   `() => void`＝開打（呼叫端導向比賽；本函式不落檔）
  */
 export function showTrainingCamp({
   player, seasonIndex, members = [], playTech = null, techPending = false,
-  techNames = [], onDone,
+  techNames = [], onDone, practice = null, drills = [], onPractice = null,
 }) {
   const plan = campPlanFor(seasonIndex);
+  // 紅白賽：這一屆打過了沒（屆數要對得上——上屆成績不得讓這屆看起來已完成）
+  const practicePlayed = practicePlayedIn(practice, seasonIndex);
+  // 打過才吃它的獎勵（沒打＝零完成＝一項名額、控球格不開）
+  const practiceNow = practicePlayed ? practice : null;
+  const attrPicks = campAttrPicks(practiceNow);
+  const unlockControl = !!practiceNow?.unlockControl;
   const motionOff = reduceMotion();
   const dur = (ms) => (motionOff ? 0 : ms);
   let cur = player; // 不可變累積：每個選擇產生新的 player 物件
@@ -216,31 +226,81 @@ export function showTrainingCamp({
     }
     body.appendChild(techBox);
 
-    // 格②屬性特訓（池＝逐場加點面板不開放的集合；留白項不可選）
+    // 「▶ 結束集訓」那顆鈕的未完成提示要跟著每一次選擇更新；鈕在本函式尾端才建得出來，
+    // 所以先擺一個 no-op，等它建好再指派（選擇 handler 只在渲染完成後才跑得到）。
+    let refreshDone = () => {};
+
+    // 格②紅白對抗賽（練習賽卷 2026-08-12 題五：取代原「技術補修」的被動格位置——
+    // 技術補修改成在紅白賽**之前**播，聽完馬上用）。
+    // ★ 排在屬性特訓之前 ★ 它決定屬性特訓的名額與控球格，順序反了玩家會先挑完才發現
+    // 「原來可以挑兩項」。
+    // ★ 沒接 onPractice 就整格不畫 ★ 畫一顆按不下去的鈕比不畫更糟（玩家會一直戳它）
+    if (plan.hasPractice && onPractice) {
+      const drillList = (drills ?? [])
+        .map((d) => drillDefOf(d)?.label)
+        .filter(Boolean);
+      const practiceBox = slotCard('🏐 紅白對抗賽', practicePlayed
+        ? '這一屆的紅白賽打完了——一屆只有一場。'
+        : '隊上分紅白兩隊，缺人補訓練組的臨時球員。教練會照今天的科目餵球。');
+      if (practicePlayed) {
+        practiceBox.appendChild(el('div', [
+          'font-size:13px', 'font-weight:800', `color:${COLOR.gold}`,
+        ], `科目完成 ${practice.completed}/${practice.total}`));
+        practiceBox.appendChild(el('div', [
+          'font-size:11px', `color:${COLOR.dim}`, 'line-height:1.5',
+        ], practice.unlockControl
+          ? '全數完成——屬性特訓可挑兩項，控球格開放。'
+          : (practice.completed >= 2
+            ? '完成 2 項以上——屬性特訓可挑兩項。'
+            : '完成不到 2 項——屬性特訓維持一項、控球格沒開。')));
+      } else {
+        for (const label of drillList) {
+          practiceBox.appendChild(el('div', [
+            'font-size:12px', `color:${COLOR.text}`, 'line-height:1.6',
+          ], `· ${label}`));
+        }
+        if (!drillList.length) {
+          practiceBox.appendChild(el('div', [
+            'font-size:12px', `color:${COLOR.dim}`,
+          ], '（這屆沒有科目——教練說今天自由打）'));
+        }
+        practiceBox.appendChild(gridButton('▶ 開打', !!onPractice, () => {
+          // ★ 這裡刻意什麼都不落檔 ★ 集訓成果要等 onDone 才寫；紅白賽打完回來時
+          // `campPending` 旗標還在（advanceSeason 那次 RMW 寫的），renderCareer 會
+          // 重新開一次集訓，那時候 practice 已有成績 ⇒ 名額與控球格自動跟上。
+          overlay.remove();
+          disposeStage();
+          onPractice();
+        }));
+      }
+      body.appendChild(practiceBox);
+    }
+
+    // 格③屬性特訓（池＝逐場加點面板不開放的集合；留白項不可選）
     const attrBox = slotCard('屬性特訓',
-      '集訓限定：這裡練的是逐場加點面板練不到的東西（兩邊的清單不重疊）。這次只能挑一項。');
+      `集訓限定：這裡練的是逐場加點面板練不到的東西（兩邊的清單不重疊）。這次可以挑 ${attrPicks} 項。`);
     const grid = el('div', [
       'display:grid', 'grid-template-columns:repeat(2,1fr)', 'gap:6px', 'margin-top:2px',
     ]);
     const attrMsg = el('div', ['font-size:12px', `color:${COLOR.gold}`, 'min-height:17px'], '');
-    let attrDone = false;
-    // 「▶ 結束集訓」那顆鈕的未完成提示要跟著每一次選擇更新；鈕在本函式尾端才建得出來，
-    // 所以先擺一個 no-op，等它建好再指派（選擇 handler 只在渲染完成後才跑得到）。
-    let refreshDone = () => {};
-    const opts = campAttrOptions(cur);
+    let attrPicked = 0;
+    const opts = campAttrOptions(cur, { unlockControl });
     const paintAttrs = () => {
       grid.replaceChildren();
-      for (const o of campAttrOptions(cur)) {
+      for (const o of campAttrOptions(cur, { unlockControl })) {
         const label = o.ready
           ? `${o.name} ${o.value} ＋${o.gain}`
           : `${o.name} ${o.value}（${o.reason}）`;
-        grid.appendChild(gridButton(label, o.ready && !attrDone, () => {
-          cur = applyCampAttrTraining(cur, o.key);
-          attrDone = true;
+        grid.appendChild(gridButton(label, o.ready && attrPicked < attrPicks, () => {
+          cur = applyCampAttrTraining(cur, o.key, { unlockControl });
+          attrPicked += 1;
           // 耐力那格的完成語＝既有屆間訓練營台詞（同一份文案，不另寫第二份）
-          attrMsg.textContent = o.key === 'stamina'
+          const line = o.key === 'stamina'
             ? (OFFSEASON_TRAINING_LINES[0]?.text ?? `${o.name} +${o.gain}`)
             : `${o.name} +${o.gain}`;
+          attrMsg.textContent = attrPicked < attrPicks
+            ? `${line}（還可以挑 ${attrPicks - attrPicked} 項）`
+            : line;
           paintAttrs();
           refreshDone();
         }));
@@ -308,8 +368,16 @@ export function showTrainingCamp({
       `background:rgba(40,34,14,0.9);color:${COLOR.gold}`, 'margin-top:4px',
     ], '▶ 結束集訓');
     // 未完成提示：鈕面直接說剩幾項（判定留在資料層 pendingCampSlots，測試驗得到同一支）
+    // ★ attrTrained 的語意是「名額用完了沒」★ 名額變成兩項之後，挑了一項還剩一項
+    // 也算沒做完——否則「還可以挑一項」這件事只有按過的人才知道。
     const pendingNow = () => pendingCampSlots({
-      player: cur, plan, members, attrTrained: attrDone,
+      player: cur,
+      plan,
+      members,
+      attrTrained: attrPicked >= attrPicks,
+      practice: practiceNow,
+      practicePlayed,
+      practiceOffered: !!onPractice,
     });
     refreshDone = () => {
       const pend = pendingNow();
