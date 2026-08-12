@@ -13,24 +13,20 @@
 //   ③ 事件流裡**判不到**的科目，寧可不喊——見下方「無素材而拿掉的科目」。
 //
 // ════════════════════════════════════════════════════════════════
-// ★ 無素材而拿掉的科目（2026-08-12 實查 sim 事件流；不是忘了寫）★
+// ★ 曾經無素材、2026-08-12 由 sim 觀測欄位復活的四項 ★
 // ════════════════════════════════════════════════════════════════
-// kickoff 題 2 舉例的候選裡，有四項在**現行事件流上判不到**，因此不入候選池。
-// 判準＝`src/sim/game.js` 實際 push 出去的欄位（不是推論、不是 game 執行期狀態——
-// 結算吃的是 `game.events`，執行期狀態賽末早就沒了）：
+// 這四項原本在事件流上判不到（見 git 歷史的本段舊文），使用者裁定「sim 加觀測欄位補
+// 素材」後復活。**sim 那三個欄位全是純觀測**：沒有任何判定讀它們，行為零位移已由
+// 「剝掉新欄位後同 seed 事件流逐位元相同」實測過（1526 個情境）。
 //
-//   ✗「成功叫成 N 次戰術」：叫戰術走 `aiState.replanCall` →`approach.resolveCalledPlay`，
-//     **全程沒有任何事件進 `game.events`**（sim 事件型別實查一輪，沒有 CALL_PLAY 這種東西；
-//     `CALL_BALL` 是 OPP 要球，不是叫戰術）。要開這個科目得先讓 sim 發一顆事件——
-//     那是 sim 改動、不在本批範圍（且會動 sim-hash）。
-//   ✗「跳發拿 N 個 ACE」「飄浮發球得 N 分」：`SERVE` 事件只有
-//     `{type,tick,team,playerId}`，**發球式樣 `rally.serveStyle` 沒有寫進事件**
-//     ⇒ 賽末分不出這一顆 ACE 是站發、飄浮還是跳發。
-//   ✗「後排攻擊（pipe）得 N 分」：扣球的 `TOUCH` 沒有 `routeKind`／沒有場上座標
-//     （`intent.routeKind` 只進 `game.tallies.routes`，不進事件流）⇒ 分不出前後排。
+//   ✓「成功叫成 N 次戰術」→ `CALL_PLAY` 事件（`sim/ai.js` 的 `pushCallPlay`）：
+//     叫戰術的四個入口（S 的 ⚡ 指令面板／OH ↘ 內切／OPP 🤝 夾塞／MB 🖐 要 B 快，
+//     全都由 `TECH_DEFS.callPlay` 這一把技術解鎖）指令真的生效時各發一顆。
+//   ✓「跳發拿 N 個 ACE」「飄浮發球得 N 分」→ `SERVE.style`（'power'|'float'|null）。
+//   ✓「後排攻擊（pipe）得 N 分」→ 扣球 `TOUCH.routeKind`（'pipe'／'left'／'quick'…）。
 //
-// 這四項要復活，最小改動都是「sim 多發一個欄位／一顆事件」，屆時把 `DRILL_DEFS`
-// 補回來即可（本檔其餘結構不必動）。**在那之前不得把它們寫進台詞**。
+// ★ 這一條紀律不變 ★ 判不到的科目仍然寧可不喊（例如「走位」沒有 MOVE 事件，
+// 見下方 `tut-receive` 的處理）——復活的判準是**事件流真的有那個欄位**，不是想要。
 import { matchStatsFor } from './growth.js';
 import { countSetAssistKills } from './boxScore.js';
 import { boxScoreLFor } from './boxScoreL.js';
@@ -63,6 +59,82 @@ export function countBlockTouches(events, playerId, myTeam) {
   let n = 0;
   for (const e of events ?? []) {
     if (e.type === 'BLOCK_TOUCH' && e.playerId === playerId && e.team === myTeam) n += 1;
+  }
+  return n;
+}
+
+// ---- 以下三支吃 2026-08-12 新增的 sim 觀測欄位 ----
+
+// 某一式發球的直接得分（ACE）次數。歸因法與 `matchStatsFor.aces` 同源——「得分之前
+// 最後一次觸球是我這一發」，任何人碰到球就不算 ⇒ 這裡一樣是「發完到得分之間零觸球」。
+// 差別只有多讀一格 `SERVE.style`（'power'＝跳發／'float'＝飄浮／null＝站發），
+// 把三式分開數。★ style 只在 SERVE 事件上，別去別的事件找 ★
+export function countServeAces(events, playerId, myTeam, style) {
+  let n = 0;
+  let pending = false; // 「我這一發還活著、且還沒有人碰到球」
+  for (const e of events ?? []) {
+    if (e.type === 'SERVE') {
+      pending = e.playerId === playerId && e.team === myTeam && (e.style ?? null) === style;
+    } else if (e.type === 'TOUCH' || e.type === 'BLOCK_TOUCH') {
+      pending = false; // 有人碰到＝不是直接得分
+    } else if (e.type === 'SCORE') {
+      if (pending && e.team === myTeam) n += 1;
+      pending = false;
+    }
+  }
+  return n;
+}
+
+// 後排 pipe 攻擊的得分次數。同一套歸因（得分前最後一次觸球是我的扣球），
+// 額外要求那一扣的 `routeKind === 'pipe'`——**前後排靠這個欄位分，不靠座標猜**。
+export function countPipeKills(events, playerId, myTeam) {
+  let n = 0;
+  let pending = false;
+  for (const e of events ?? []) {
+    if (e.type === 'TOUCH') {
+      pending = e.kind === 'spike' && e.playerId === playerId && e.team === myTeam
+        && e.routeKind === 'pipe';
+    } else if (e.type === 'SERVE' || e.type === 'BLOCK_TOUCH') {
+      pending = false;
+    } else if (e.type === 'SCORE') {
+      if (pending && e.team === myTeam) n += 1;
+      pending = false;
+    }
+  }
+  return n;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ★「成功叫成一次戰術」的定義（寫死在這裡，不得在別處另立第二份）★
+// ════════════════════════════════════════════════════════════════
+// 成功 ＝ ①我下的戰術指令**真的生效**（sim 發出 `CALL_PLAY`＝線已經寫回 approach）
+//        ＋ ②**這一波我方的下一次扣球**就是被指定的那個人、跑的就是那條線
+//          （`TOUCH.kind==='spike'` 且 `playerId===mainId` 且 `routeKind===kind`）。
+//
+// 為什麼要第②條：光有①只證明「面板受理了」。教練喊的是「叫成一次戰術」，
+// 玩家看到的成立畫面是那顆球真的照那條線打出來——只判①的話，按了鈕但球給了別人
+// （內切／夾塞實測有相當比例是白跑）也會算過，那就是「喊了一件事、判了另一件事」。
+//
+// 為什麼只認「下一次」扣球：叫戰術的窗開在 `touches===1`（一傳已起、二傳還沒出手），
+// 這一波的攻擊必然是接下來那一顆扣球。再往後的扣球屬於對方救回來之後的**另一波**，
+// 拿它來算會把「碰巧同一條線」誤記成叫成功。
+// 掃描在以下任一情況中止（＝這一波結束了，沒跑成）：
+//   死球／得分／新發球／**對方觸球**（球過網了）／我方先出現不符的扣球。
+export function countCalledPlays(events, playerId, myTeam) {
+  const ev = events ?? [];
+  let n = 0;
+  for (let i = 0; i < ev.length; i += 1) {
+    const call = ev[i];
+    if (call.type !== 'CALL_PLAY' || call.playerId !== playerId || call.team !== myTeam) continue;
+    if (!call.mainId || !call.kind) continue; // 線是 null＝連要跑什麼都說不出來，不算
+    for (let j = i + 1; j < ev.length; j += 1) {
+      const e = ev[j];
+      if (e.type === 'SERVE' || e.type === 'SCORE' || e.type === 'DEAD_BALL') break;
+      if (e.type === 'TOUCH' && e.team !== myTeam) break;
+      if (e.type !== 'TOUCH' || e.kind !== 'spike') continue;
+      if (e.playerId === call.mainId && e.routeKind === call.kind) n += 1;
+      break; // 我方這一波的下一顆扣球只認這一次，不是它就是沒跑成
+    }
   }
   return n;
 }
@@ -107,7 +179,10 @@ export function countTeamThreeTouch(events, myTeam) {
 // ⚠ 命名注意：候選池裡的 `count` 是**判定函式**，結算輸出裡的 `count` 是**數字**
 //   （結果物件形狀由卷書指定）。兩者不同層、不會同時出現在同一個物件上。
 export const DRILL_DEFS = {
-  // ---- 這屆新學的技術（只留判得到的兩項，理由見檔頭）----
+  // ---- 這屆新學的技術 ----
+  // ★ target 一律 1（除了魚躍）★ kickoff 題 2 的定位是「**新東西的第一次實際使用**」，
+  // 不是熟練度考試；而其中三項（跳發 ACE／飄浮 ACE／叫成戰術跑出來）都帶對手與球運，
+  // 目標訂高會變成「想練練不到」——那正是 kickoff 題 8 餵球式偏置要治的病。
   tip: {
     id: 'tip',
     label: '吊球拿下 1 分',
@@ -119,6 +194,34 @@ export const DRILL_DEFS = {
     label: '魚躍救起 2 球',
     target: 2,
     count: countDiveSaves,
+  },
+  'pipe-kill': {
+    id: 'pipe-kill',
+    label: '後排 pipe 拿下 1 分',
+    target: 1,
+    count: countPipeKills,
+  },
+  'float-ace': {
+    id: 'float-ace',
+    label: '飄浮發球直接得 1 分',
+    target: 1,
+    // 「直接得分」＝ACE（沒人碰到球）。台詞不寫「得分」兩個字就好——飄浮發球造成
+    // 對方一傳崩掉、我方之後打死，那不是這一發直接拿的分，判定也不會算。
+    count: (ev, pid, team) => countServeAces(ev, pid, team, 'float'),
+  },
+  'jump-ace': {
+    id: 'jump-ace',
+    label: '跳發拿下 1 個 ACE',
+    target: 1,
+    count: (ev, pid, team) => countServeAces(ev, pid, team, 'power'),
+  },
+  'call-play': {
+    id: 'call-play',
+    label: '成功叫成 1 次戰術（球照那條線打出來）',
+    target: 1,
+    // 台詞括號裡那句就是判定：`countCalledPlays` 的第②條。不寫的話玩家會以為
+    // 「按了鈕就算」，那是喊一件事判另一件事。
+    count: countCalledPlays,
   },
   // ---- 位置基本科目（轉位後首次集訓／沒有新東西時的保底）----
   'basic-setter': {
@@ -216,11 +319,16 @@ export const DRILL_DEFS = {
   },
 };
 
-// 技術 → 科目（只有這兩把技術在事件流上判得到；其餘見檔頭「無素材」清單）。
-// 陣列而不是物件＝**生成順序決定論**（同一屆學到兩把時科目順序恆定）。
+// 技術 → 科目。陣列而不是物件＝**生成順序決定論**（同一屆學到好幾把時科目順序恆定）；
+// 順序沿 `growth.TECH_DEFS` 的宣告序，唯一沒有科目的是 `feint`（假動作沒有專屬事件，
+// 它是「越用越純熟」的被動量，硬喊會變成判不到的台詞）。
 export const TECH_DRILL_ORDER = [
   { tech: 'tip', drill: 'tip' },
   { tech: 'dive', drill: 'dive' },
+  { tech: 'pipe', drill: 'pipe-kill' },
+  { tech: 'floatServe', drill: 'float-ace' },
+  { tech: 'jumpServe', drill: 'jump-ace' },
+  { tech: 'callPlay', drill: 'call-play' },
 ];
 
 // 位置 → 基本科目

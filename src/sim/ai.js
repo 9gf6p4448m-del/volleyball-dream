@@ -1156,6 +1156,45 @@ export function cutStateOf(game, aiState, playerId) {
   return { open: true, reason: null, kind: route.kind };
 }
 
+// ════════════════════════════════════════════════════════════════
+// CALL_PLAY —— 玩家戰術指令的**純觀測**事件（練習賽卷 2026-08-12）
+// ════════════════════════════════════════════════════════════════
+// ★ 為什麼要有它 ★ 叫戰術的四個入口全程只寫 `aiState.*Outcome`（執行期狀態），
+// 賽末結算讀的是 `game.events` ⇒ 「這場成功叫成幾次戰術」在事件流上判不到。
+// 這支就是把那一刻寫進歷史，**不改任何判定**：沒有人讀 CALL_PLAY，sim 一格不動。
+//
+// ★ 掛在哪 ★ 四個入口的「指令真的生效」那一行（`record('applied')`／replan 的收尾）：
+//   ⚡ S 的分配面板（replanCall）／↘ OH 內切（cutCall）／
+//   🤝 OPP 夾塞（tandemCall）／🖐 MB 要 B 快（bquickCall）
+// 四個都是 `TECH_DEFS.callPlay` 這一把技術解鎖的同一件事（見 career/growth.js:51），
+// 所以四個都要發——只掛 S 那一個的話，玩家站 OH／OPP／MB 時科目結構上做不到，
+// 那正是 `practiceMatch.js` 檔頭在防的「喊了但判不到」。
+//
+// ★ 零漂移保證 ★ 四個呼叫端的第一行都是「指令槽是空的就 return」，而那四個槽
+// **只有 matchLoop 的受控玩家按鈕會寫** ⇒ AI vs AI 對局一顆都不會發。
+//
+// ★ 寫進 `game.events` 而不是 tick 的 `ev` 緩衝 ★ 協調層拿不到那個緩衝（
+// `aiCollectIntents` 的簽名裡沒有），而 game.js 本來就有直接寫 state.events 的先例
+//（settlePoint／applySubstitution 等）。時序上它落在同一 tick 的 TOUCH **之前**＝
+// 「先叫，才打」，正是結算要的順序。
+//
+// 欄位：{ type, tick, team, playerId(＝下指令的人), callType, mainId(＝主攻者),
+//         kind(＝寫回後主攻者真正要跑的線) }
+// `kind` 一律從**寫回後的** `aiState.approach.routes` 讀（不是從指令名推）——
+// 面板承諾的與場上真的要跑的必須是同一個來源。
+function pushCallPlay(game, aiState, { callerId, callType, mainId }) {
+  const kind = approachRouteOf(aiState?.approach?.routes, mainId)?.kind ?? null;
+  game.events.push({
+    type: 'CALL_PLAY',
+    tick: game.tick,
+    team: game.players[callerId]?.teamId ?? game.players[mainId]?.teamId ?? null,
+    playerId: callerId ?? null,
+    callType,
+    mainId: mainId ?? null,
+    kind,
+  });
+}
+
 // 消費玩家的內切決定。**AI 對局恆為 no-op**：`aiState.cutCall` 只有 matchLoop
 // （受控玩家按鈕）會寫，AI vs AI 一律 null ⇒ 第一行就 return，逐值零漂移。
 //
@@ -1175,6 +1214,11 @@ function applyCutCall(game, aiState) {
   if (aiState.cutOutcome && aiState.cutOutcome.flightId === flightId) return;
   const record = (outcome, reason = null) => {
     aiState.cutOutcome = { flightId, pid: call.pid, outcome, reason };
+    // 純觀測（見 pushCallPlay）：'applied' 的兩條路（真的改了線／'already' 本來就切了）
+    // 對玩家都是「這一波我要的線成立了」⇒ 同樣記一筆，不在此處分岔。
+    if (outcome === 'applied') {
+      pushCallPlay(game, aiState, { callerId: call.pid, callType: 'cut', mainId: call.pid });
+    }
   };
   const st = cutStateOf(game, aiState, call.pid);
   if (!st.open) {
@@ -1312,6 +1356,9 @@ function applyTandemCall(game, aiState) {
   if (aiState.tandemOutcome && aiState.tandemOutcome.flightId === flightId) return;
   const record = (outcome, reason = null) => {
     aiState.tandemOutcome = { flightId, pid: call.pid, outcome, reason };
+    if (outcome === 'applied') { // 純觀測，見 pushCallPlay
+      pushCallPlay(game, aiState, { callerId: call.pid, callType: 'tandem', mainId: call.pid });
+    }
   };
   const plan = tandemPlanOf(game, aiState, call.pid);
   if (!plan.open) {
@@ -1397,6 +1444,9 @@ function applyBquickCall(game, aiState) {
   if (aiState.bquickOutcome && aiState.bquickOutcome.flightId === flightId) return;
   const record = (outcome, reason = null) => {
     aiState.bquickOutcome = { flightId, pid: call.pid, outcome, reason };
+    if (outcome === 'applied') { // 純觀測，見 pushCallPlay
+      pushCallPlay(game, aiState, { callerId: call.pid, callType: 'bquick', mainId: call.pid });
+    }
   };
   const st = bquickStateOf(game, aiState, call.pid);
   if (!st.open) {
@@ -1531,6 +1581,11 @@ function applyReplanCall(game, aiState) {
   aiState.approach = { team, setTick: aiState.approach.setTick, routes };
   aiState.attackTempo = approachRouteOf(routes, shaped.mainId)?.tempo ?? 'three';
   aiState.callOutcome = out;
+  // 純觀測（見 pushCallPlay）：走到這一行＝指令成立且線已經寫回 approach
+  //（'infeasible'／'launched' 兩條路都在上面提前 return，發不出這一顆）。
+  pushCallPlay(game, aiState, {
+    callerId: call.callerId, callType: call.type, mainId: shaped.mainId,
+  });
 }
 
 // ---- 叫戰術重做卷 段 1：受控玩家「不跑」的後果（Sawmah 2026-08-01 裁定 1A/1B/1C）----

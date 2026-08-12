@@ -16,6 +16,10 @@ import {
 } from '../src/career/practiceMatch.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { checkRoleStructure, validateLineup } from '../src/career/lineup.js';
+import { createGame, stepGame } from '../src/sim/game.js';
+import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
+import { localToWorld } from '../src/sim/rotation.js';
+import { offeredCallTypes } from '../src/sim/approach.js';
 
 const PID = 'A2';
 const TEAM = 'A';
@@ -50,6 +54,33 @@ const dives = (n) => Array.from({ length: n }, () => touch({
 const blocks = (n) => Array.from({ length: n }, () => blockTouch());
 const serves = (n) => Array.from({ length: n }, () => (
   { type: 'SERVE', tick: 0, team: TEAM, playerId: PID }));
+
+// ---- 2026-08-12 sim 觀測欄位（SERVE.style／TOUCH.routeKind／CALL_PLAY）----
+const serve = (o = {}) => ({ type: 'SERVE', tick: 0, team: TEAM, playerId: PID, style: null, ...o });
+const dead = () => ({ type: 'DEAD_BALL', tick: 0, reason: 'x' });
+// 叫戰術：玩家（PID，二傳）叫，主攻者 A5 跑 cross
+const callPlay = (o = {}) => ({
+  type: 'CALL_PLAY', tick: 0, team: TEAM, playerId: PID,
+  callType: 'cross', mainId: 'A5', kind: 'cross', ...o,
+});
+// n 次「某一式發球直接得分」（發完沒人碰到球就得分＝ACE）
+const aces = (style) => (n) => Array.from({ length: n }, () => [serve({ style }), score()]).flat();
+// n 次「玩家後排 pipe 扣球得分」
+const pipeKills = (n) => Array.from({ length: n }, () => [
+  touch({ playerId: PID, kind: 'spike', touches: 3, power: 0.9, routeKind: 'pipe' }), score(),
+]).flat();
+// n 次「叫了戰術，而且這一波的下一顆扣球真的是被指定的人跑那條線」
+const calledPlays = (n) => Array.from({ length: n }, () => [
+  callPlay(),
+  touch({ playerId: 'A5', kind: 'spike', touches: 3, power: 0.9, routeKind: 'cross' }),
+  dead(),
+]).flat();
+// 剝掉某型事件的某個欄位（鑑別力用：新欄位不在，科目就該判 0）
+const stripKey = (evs, type, key) => evs.map((e) => {
+  if (e.type !== type) return e;
+  const { [key]: _drop, ...rest } = e;
+  return rest;
+});
 // n 次我方三擊組織（接—舉—攻）；每次以 DEAD_BALL 收尾重置擊數
 const threeTouch = (n) => Array.from({ length: n }, () => [
   touch({ playerId: 'AL', kind: 'receive', touches: 1, power: 0.8 }),
@@ -66,6 +97,10 @@ const threeTouch = (n) => Array.from({ length: n }, () => [
 const STREAM_OF = {
   tip: tips,
   dive: dives,
+  'pipe-kill': pipeKills,
+  'float-ace': aces('float'),
+  'jump-ace': aces('power'),
+  'call-play': calledPlays,
   'basic-setter': assists,
   'basic-middle': blocks,
   'basic-libero': digs,
@@ -127,6 +162,65 @@ test('★反向★ 事件流是對手做的／別人做的都不算', () => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 一之三、契約測試：判定式吃的是**真實 sim 產得出來的**事件
+// ════════════════════════════════════════════════════════════
+// 上面那些合成事件流是我自己捏的形狀——捏錯了照樣全綠（本專案累犯型假綠燈：
+// fixture 餵了真實引擎根本不會落地的值）。這一段走真實鏈路：真的建 game、
+// 真的按下叫戰術指令、真的推 240 tick，只驗「事件是真的長那樣、科目真的判得到」。
+// 抄 `tests/called-play.test.mjs` 的 planWith 把變因按住。
+function driveCall(seed, rot, type, callerId) {
+  const g = createGame({ seed });
+  const base = g.match.rotations.A.slice();
+  g.match.rotations.A = [...base.slice(rot), ...base.slice(0, rot)];
+  const ai = createAiState();
+  g.phase = 'rally';
+  Object.assign(g.rally, {
+    flightId: 1, profile: 'arc', possession: 'A', touches: 1,
+    lastTouchTeam: 'A', lastToucherId: null, touchLockTick: -1,
+  });
+  const w = localToWorld('A', 1.2, 1.2);
+  const b = g.ball;
+  b.x = w.x; b.y = 3.0; b.z = w.z; b.vx = 0; b.vy = 0.5; b.vz = 0;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  ai.replanCall = { type, callerId };
+  for (let i = 0; i < 240; i += 1) stepGame(g, aiCollectIntents(g, ai));
+  return g;
+}
+
+test('★契約★ 真實 sim 發得出 CALL_PLAY，且叫戰術科目在真實事件流上判得到', () => {
+  let calls = 0;
+  let converted = 0;
+  let spikesWithRoute = 0;
+  for (let seed = 1; seed <= 3; seed += 1) {
+    for (let rot = 0; rot < 6; rot += 1) {
+      for (const type of offeredCallTypes()) {
+        const caller = 'A1';
+        const g = driveCall(seed, rot, type, caller);
+        for (const e of g.events) {
+          if (e.type !== 'CALL_PLAY') continue;
+          calls += 1;
+          assert.equal(e.team, 'A', 'CALL_PLAY.team 要是下指令的人那一隊');
+          assert.equal(e.playerId, caller);
+          assert.equal(typeof e.callType, 'string');
+          assert.ok(e.mainId && g.players[e.mainId], `mainId 要是場上的人：${e.mainId}`);
+          assert.ok(typeof e.kind === 'string' && e.kind.length > 0,
+            `kind 要是真的線（從寫回後的 approach.routes 讀）：${e.kind}`);
+        }
+        for (const e of g.events) {
+          if (e.type === 'TOUCH' && e.kind === 'spike' && e.routeKind) spikesWithRoute += 1;
+        }
+        converted += drillGainFor(g.events, caller, 'A', DRILL_DEFS['call-play']);
+      }
+    }
+  }
+  assert.ok(calls > 0, `真實 sim 一顆 CALL_PLAY 都沒發（${calls}）＝這個科目又變回判不到`);
+  assert.ok(spikesWithRoute > 0, '真實 sim 的扣球一顆都沒帶 routeKind');
+  assert.ok(converted > 0,
+    `★鑑別力★ 真實事件流上叫成 0 次（發了 ${calls} 顆 CALL_PLAY）——`
+    + '判定式與 sim 的實際輸出對不上，合成事件流的綠燈是假的');
+});
+
+// ════════════════════════════════════════════════════════════
 // 二、科目生成
 // ════════════════════════════════════════════════════════════
 const playerAt = (over = {}) => ({ id: PID, currentRole: 'outside', techniques: {}, ...over });
@@ -140,16 +234,88 @@ test('學了吊球 ⇒ 科目含吊球；學了魚躍 ⇒ 科目含魚躍', () =
   assert.ok(!none.some((d) => d.id === 'tip'), '★反向★ 沒學會就不得喊');
 });
 
-test('無素材的技術不生成科目（跳發／飄浮／pipe／叫戰術）', () => {
-  const ds = drillsFor({
-    player: playerAt(),
-    seasonIndex: 2,
-    techniques: ['jumpServe', 'floatServe', 'pipe', 'callPlay'],
-  });
+test('靠 sim 觀測欄位復活的四項技術都生成得出科目（跳發／飄浮／pipe／叫戰術）', () => {
+  const cases = {
+    jumpServe: 'jump-ace', floatServe: 'float-ace', pipe: 'pipe-kill', callPlay: 'call-play',
+  };
+  for (const [tech, drill] of Object.entries(cases)) {
+    const ds = drillsFor({ player: playerAt(), seasonIndex: 2, techniques: [tech] });
+    assert.ok(ds.some((d) => d.id === drill), `學了 ${tech} 卻沒喊 ${drill}`);
+    const not = drillsFor({ player: playerAt(), seasonIndex: 2, techniques: { [tech]: 0 } });
+    assert.ok(!not.some((d) => d.id === drill), `★反向★ 沒學會 ${tech} 就不得喊 ${drill}`);
+  }
+});
+
+test('仍然無素材的技術不生成科目（假動作沒有專屬事件）', () => {
+  const ds = drillsFor({ player: playerAt(), seasonIndex: 2, techniques: ['feint'] });
   for (const d of ds) {
-    assert.ok(!/跳發|飄浮|後排|戰術/.test(d.label),
+    assert.ok(!/假動作/.test(d.label),
       `喊了判不到的科目：「${d.label}」——事件流沒有素材（見 practiceMatch.js 檔頭）`);
   }
+});
+
+// ════════════════════════════════════════════════════════════
+// 一之二、消費端鑑別力：綠燈是不是**真的**從那個新欄位來的
+// ════════════════════════════════════════════════════════════
+// `02 §6.1` 條 1 的正反兩面：把欄位剝掉會不會變紅（會）、健康時會不會是綠（會）。
+test('★鑑別力★ 剝掉 SERVE.style ⇒ 跳發／飄浮科目立刻判 0', () => {
+  const jump = aces('power')(1);
+  const float = aces('float')(1);
+  assert.equal(drillGainFor(jump, PID, TEAM, DRILL_DEFS['jump-ace']), 1, '健康時是綠的');
+  assert.equal(drillGainFor(float, PID, TEAM, DRILL_DEFS['float-ace']), 1, '健康時是綠的');
+  assert.equal(drillGainFor(stripKey(jump, 'SERVE', 'style'), PID, TEAM, DRILL_DEFS['jump-ace']), 0,
+    '沒有 style 欄位就分不出這一發是哪一式——不得靜默算過');
+  assert.equal(drillGainFor(stripKey(float, 'SERVE', 'style'), PID, TEAM, DRILL_DEFS['float-ace']), 0);
+  assert.equal(drillGainFor(float, PID, TEAM, DRILL_DEFS['jump-ace']), 0, '★反向★ 飄浮不得算成跳發');
+  assert.equal(drillGainFor(jump, PID, TEAM, DRILL_DEFS['float-ace']), 0, '★反向★ 跳發不得算成飄浮');
+});
+
+test('★反向★ 有人碰到球就不是 ACE（跳發造成對方一傳崩掉、後來才打死 ⇒ 不算）', () => {
+  const notAce = [serve({ style: 'power' }),
+    touch({ playerId: 'B1', kind: 'receive', touches: 1, team: 'B' }),
+    touch({ playerId: PID, kind: 'spike', touches: 3, power: 0.9 }), score()];
+  assert.equal(drillGainFor(notAce, PID, TEAM, DRILL_DEFS['jump-ace']), 0);
+});
+
+test('★鑑別力★ 剝掉扣球 TOUCH.routeKind ⇒ pipe 科目立刻判 0', () => {
+  const p = pipeKills(1);
+  assert.equal(drillGainFor(p, PID, TEAM, DRILL_DEFS['pipe-kill']), 1, '健康時是綠的');
+  assert.equal(drillGainFor(stripKey(p, 'TOUCH', 'routeKind'), PID, TEAM, DRILL_DEFS['pipe-kill']), 0,
+    '沒有 routeKind 就分不出前後排——不得靜默算過');
+  const front = [touch({ playerId: PID, kind: 'spike', touches: 3, power: 0.9, routeKind: 'left' }),
+    score()];
+  assert.equal(drillGainFor(front, PID, TEAM, DRILL_DEFS['pipe-kill']), 0,
+    '★反向★ 前排 4 號位打死不算後排 pipe');
+});
+
+test('★鑑別力★ 拿掉 CALL_PLAY 事件 ⇒ 叫戰術科目立刻判 0', () => {
+  const c = calledPlays(1);
+  assert.equal(drillGainFor(c, PID, TEAM, DRILL_DEFS['call-play']), 1, '健康時是綠的');
+  assert.equal(
+    drillGainFor(c.filter((e) => e.type !== 'CALL_PLAY'), PID, TEAM, DRILL_DEFS['call-play']), 0,
+    'sim 不發這顆事件就判不到——這正是它從候選池被拿掉過的原因',
+  );
+  assert.equal(drillGainFor(stripKey(c, 'TOUCH', 'routeKind'), PID, TEAM, DRILL_DEFS['call-play']), 0,
+    '扣球沒帶 routeKind ⇒ 對不上叫的那條線');
+});
+
+test('★反向★ 叫了但沒跑成的四種樣子，一次都不得算', () => {
+  const def = DRILL_DEFS['call-play'];
+  const spike = (o) => touch({ kind: 'spike', touches: 3, power: 0.9, ...o });
+  assert.equal(drillGainFor([callPlay(), spike({ playerId: 'A5', routeKind: 'left' }), dead()],
+    PID, TEAM, def), 0, '球給了指定的人、卻跑了別的線');
+  assert.equal(drillGainFor([callPlay(), spike({ playerId: 'A3', routeKind: 'cross' }), dead()],
+    PID, TEAM, def), 0, '線對了、球卻給了別人');
+  assert.equal(drillGainFor([callPlay(), dead(),
+    spike({ playerId: 'A5', routeKind: 'cross' }), score()], PID, TEAM, def), 0,
+  '這一波已經死了——下一波碰巧同一條線不算叫成');
+  assert.equal(drillGainFor([callPlay({ playerId: 'A1' }),
+    spike({ playerId: 'A5', routeKind: 'cross' }), dead()], PID, TEAM, def), 0,
+  '隊友叫的不記在我頭上');
+  assert.equal(drillGainFor([callPlay(),
+    touch({ playerId: 'B4', kind: 'spike', touches: 3, team: 'B', routeKind: 'cross' }),
+    spike({ playerId: 'A5', routeKind: 'cross' }), dead()], PID, TEAM, def), 0,
+  '球已經過網＝這一波的攻擊沒發生');
 });
 
 test('轉位後首次集訓 ⇒ 該位置的基本科目', () => {

@@ -831,6 +831,12 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     type: 'TOUCH', tick: state.tick, team, playerId: player.id,
     kind: intent.action, touches: newCount,
     ...(toolSpike ? { tool: true } : {}), // §十-4b：這一扣走了 tool 路線（觀測用）
+    // 這一扣跑的攻擊路線（'quick'|'left'|'left_inside'|'cross'|'tandem'|'right'|'pipe'|
+    // 'bquick'|'dball'…）。★純觀測★（練習賽卷 2026-08-12）：與上面 scoutTally 的路線
+    // 記帳同一個來源（`intent.routeKind`），差別只在**這一份進得了事件流**＝賽末翻得到。
+    // 拿不到就是 null，不猜：協調層沒選定他當攻擊手（S 二次球、玩家自己搶打、
+    // 對手 AI 的非攻擊手扣球）時 intent 本來就不帶這個欄位。
+    ...(intent.action === 'spike' ? { routeKind: intent.routeKind ?? null } : {}),
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
     power: Math.round(timing * 100) / 100, // 蓄力品質：表現層分輕吊/重扣音效用
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
@@ -985,7 +991,10 @@ function performServe(state, intent, ev) {
   actor.lastTouchTick = state.tick;
 
   state.phase = 'rally';
-  ev.push({ type: 'SERVE', tick: state.tick, team, playerId: player.id });
+  // `style`＝本球發球式（'power' 跳發／'float' 飄浮／null 站發）＝`rally.serveStyle` 同一格。
+  // ★純觀測★（練習賽卷 2026-08-12）：判定端一律讀 `rally.serveStyle`，沒有人讀這個欄位；
+  // 它存在的唯一理由是**賽末結算翻得到**（rally 狀態賽末早就沒了，事件流才是歷史）。
+  ev.push({ type: 'SERVE', tick: state.tick, team, playerId: player.id, style: rally.serveStyle });
   // W7 A1 → 2026-08-10 改三檔（裁定：飄浮不得再白拿）：跳發大額 > 飄浮中額 > 站發極低。
   // 三檔的順序與 `rally.serveStyle` 的三個值一一對應，別再讓任何一式共用別人的價目。
   drainStamina(state, player.id, power ? STAMINA.COST_JUMP_SERVE
