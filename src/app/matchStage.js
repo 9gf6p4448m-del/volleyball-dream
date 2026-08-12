@@ -73,8 +73,12 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   //（此前快速比賽無任何返回路徑，只能 reload）
   // 練習賽（2026-08-12）：離開不記棄賽敗（練習賽根本不落 pendingMatch）——
   // 文案必須說對事，否則玩家會以為離開會賠一場戰績而不敢退出
+  // 教學局（2026-08-12）＝第三種文案：它連科目進度都不落檔，重來一次的代價與紅白賽不同
+  const leaveMode = config.practice
+    ? (config.practice.tutorial ? 'tutorial' : 'practice')
+    : null;
   const leaveBtn = careerSetup
-    ? createLeaveButton(params, game, !!config.practice)
+    ? createLeaveButton(params, game, leaveMode)
     : createQuickLeaveButton(params);
   // 學招預告對話框（Sawmah 07-23 二輪拍板：字幕太快→點擊逐句，careerScreen dlg 同範式）
   const teachDialog = careerSetup ? createTeachDialog() : null;
@@ -232,7 +236,7 @@ function createTeachDialog() {
 // beforeunload 雙保險（拍板 07-23）：比賽未完賽時 reload／關頁跳瀏覽器通用確認框
 // （文字瀏覽器內建、不可自訂——安全限制）；完賽（set_over）或已按離開鈕確認＝不攔
 // （否則局終正常返回生涯也會被通用框擋一次）。手機 PWA 對 beforeunload 支援不一＝已知限制。
-function createLeaveButton(params, game, practice = false) {
+function createLeaveButton(params, game, mode = null) {
   const btn = document.createElement('button');
   btn.textContent = '✕ 離開';
   // 位置：右上 🎬 回放鈕正下方（Sawmah 07-23 試玩回報：原左上會擋到播報泡泡與 FPS）
@@ -258,10 +262,13 @@ function createLeaveButton(params, game, practice = false) {
     'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
   ].join(';');
   const text = document.createElement('div');
-  // 練習賽不記戰績（沒有 pendingMatch ⇒ resolveForfeit 抓不到東西）——文案照實說
-  text.textContent = practice
-    ? '離開紅白對抗賽——這場不記戰績，但科目進度不會保留（集訓格還在，可以重打）。確定離開？'
-    : '中途離開球場將記棄賽敗（0:25）——確定離開？';
+  // 練習賽不記戰績（沒有 pendingMatch ⇒ resolveForfeit 抓不到東西）——文案照實說。
+  // 教學局另有一句：它連 `save.practice` 都不寫（零獎勵），而且**邀請只有一次**——
+  // `TUTORIAL_INVITE_EVENT_ID` 在按下「開始」那一刻就入帳了，離開＝這輩子不再邀請
+  text.textContent = {
+    tutorial: '離開隊內測試——這場不記戰績、不給獎勵，但教練不會再找你測第二次。確定離開？',
+    practice: '離開紅白對抗賽——這場不記戰績，但科目進度不會保留（集訓格還在，可以重打）。確定離開？',
+  }[mode] ?? '中途離開球場將記棄賽敗（0:25）——確定離開？';
   text.style.cssText = ['color:#eef2fa', 'font-size:15px', 'line-height:1.6', 'margin-bottom:16px'].join(';');
   const btnRow = document.createElement('div');
   btnRow.style.cssText = ['display:flex', 'gap:12px', 'justify-content:center'].join(';');

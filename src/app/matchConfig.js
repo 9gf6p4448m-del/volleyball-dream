@@ -99,6 +99,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
         drills: careerCtx.practice.drills ?? [],
         seasonIndex: careerCtx.seasonIndex ?? 2,
         seed,
+        tutorial: !!careerCtx.practice.tutorial, // 教學局＝同一條路，只是多一個旗標
       })
       : careerMatchSetup(
         careerCtx.career, careerCtx.player, careerCtx.matchEntry,

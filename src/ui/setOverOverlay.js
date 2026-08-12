@@ -23,11 +23,13 @@ export function createSetOverOverlay() {
 
   return {
     // winner：'A'|'B'；playerTeam：玩家隊；hint：點擊提示（生涯模式覆寫為「返回生涯」）
-    show(winner, score, playerTeam, hint) {
+    // title：主標覆寫（教學局用——它是六步走完就收工，沒有勝負可言；不覆寫的話
+    // 會拿一個根本沒判過的 winner 去說「你贏了／你輸了」）
+    show(winner, score, playerTeam, hint, title = null) {
       const won = winner === playerTeam;
       againEl.textContent = hint ?? '點擊任意處再來一局';
-      titleEl.textContent = won ? '🏆 你贏了這一局！' : '這局輸了…再來！';
-      titleEl.style.color = won ? '#ffd166' : '#ff8a8a';
+      titleEl.textContent = title ?? (won ? '🏆 你贏了這一局！' : '這局輸了…再來！');
+      titleEl.style.color = title ? '#6ee7ff' : (won ? '#ffd166' : '#ff8a8a');
       scoreEl.textContent = `${score.A} : ${score.B}`;
       el.style.visibility = 'visible';
       requestAnimationFrame(() => { el.style.opacity = '1'; });

@@ -265,10 +265,23 @@ export const DRILL_DEFS = {
   // ---- 教學局六步（第一屆開場；同一機制、不同科目集）----
   // 「走位」本身在事件流上判不到（沒有 MOVE 事件）⇒ 併進「接起 1 球」這一步：
   // 球接得起來就代表人走到了。**不另立一個判不到的走位科目**。
+  //
+  // ★ `hints` ＝教練喊的「怎麼做」，與 label／count 放在同一個物件裡（同一條紀律：
+  //   台詞是規格）。每一句都必須與**現行操作**逐字對準——依據標在該句上方的
+  //   `檔案:行號`，改操作的人請一併改這裡。對不上的句子就是下一次「文案說謊」事故。
   'tut-receive': {
     id: 'tut-receive',
     label: '跑到位置，接起 1 球',
     target: 1,
+    hints: [
+      // matchControls.js:824-841 readMove（鍵盤→世界座標）；:212-217 觸控只認左 40% 螢幕
+      '左半邊螢幕推方向（電腦 WASD），走到球落下來的地方',
+      // matchControls.js:153-209 蓄力/放開；:177-199 Perfect＝球下墜且進可及範圍那一刻放開
+      '球到手邊、正在往下掉的那一刻放開右邊大鈕——那是 Perfect 一傳',
+      // ★ 魚躍是自動的：matchStage.js:606-608 已撤掉常駐手動鈕，matchControls.js:488-518 自動觸發
+      // 這句刻意不提任何按鈕（`hintViolations` 守衛在測試裡逐句檢查）
+      '搆不到的球會自動魚躍撲救——這件事不用你動手',
+    ],
     count: (ev, pid, team) => {
       let n = 0;
       for (const e of ev ?? []) {
@@ -282,6 +295,12 @@ export const DRILL_DEFS = {
     id: 'tut-handle',
     label: '把球送出去 1 次（舉球或扣球）',
     target: 1,
+    hints: [
+      // actionButtons.js:3-5,41-44 鈕面標籤隨情境變（發球／扣球／舉球／墊球）
+      '球起來之後輪到你出手時，右邊那顆鈕會自己變成「舉球」或「扣球」',
+      // matchControls.js:153-209 按住蓄力→拖曳瞄準→放開出手；:177-199 甜蜜區
+      '一樣是按住蓄力、拖曳瞄準、放開——蓄力別壓到底，過頭球會飄掉',
+    ],
     count: (ev, pid, team) => {
       let n = 0;
       for (const e of ev ?? []) {
@@ -295,12 +314,27 @@ export const DRILL_DEFS = {
     id: 'tut-block',
     label: '攔網碰到球 1 次',
     target: 1,
+    hints: [
+      // matchControls.js:280-290 貼網 |z| < 2.2 才算攔網
+      '先貼著網站好——離網太遠就不算攔網',
+      '沿著網橫移，卡在他要打的那條線上',
+      // matchControls.js:120,141-148,577 K 鍵/攔網鈕一點即出（不蓄力）；手機站到位自動起跳
+      'K 鍵或攔網鈕一點就跳，不用蓄力；手機版站到位會自動起跳',
+    ],
     count: countBlockTouches,
   },
   'tut-serve': {
     id: 'tut-serve',
     label: '發出 1 球',
     target: 1,
+    hints: [
+      // matchControls.js:739-747 serveZones 四落點；matchLoop.js:1218-1241
+      '輪到你發球時，先從面板挑落點：深左／深中／深右／短球',
+      // matchControls.js:153-209 按住蓄力→放開出手；:177-199 甜蜜區（超蓄品質劣化）
+      // ★ 刻意不提發球三式 ★ 飄浮／跳發要先學會（growth.TECH_DEFS 的 floatServe／
+      // jumpServe），第一屆開場的新人只有普通發球——講一個他面板上沒有的選擇＝說謊
+      '再按住右邊大鈕蓄力、放開出手——蓄力有甜蜜區，壓到底反而會飄',
+    ],
     count: (ev, pid, team) => {
       let n = 0;
       for (const e of ev ?? []) {
@@ -313,12 +347,25 @@ export const DRILL_DEFS = {
     id: 'tut-three',
     label: '我方完成 1 次三擊組織（接—舉—攻）',
     target: 1,
+    hints: [
+      // countTeamThreeTouch：TOUCH.touches 1→2→3 且第三擊是 spike，中途對方碰到就重算
+      '一傳、二傳、扣球——這一波三擊都由我方接手才算數',
+      // matchControls.js:320-346 沒碰搖桿時系統會把你帶到該站的位置
+      '你只要把自己那一擊做好；沒碰搖桿時系統會把你帶回該站的位置',
+    ],
     count: (ev, pid, team) => countTeamThreeTouch(ev, team),
   },
   'tut-point': {
     id: 'tut-point',
     label: '拿下 1 分',
     target: 1,
+    hints: [
+      // totalPointsFor＝kills＋tipKills＋aces＋blockPoints（歸屬到你身上的那一分）
+      '殺球、吊球、發球直接得分、攔網得分——你親手拿下的那一分才算',
+      // DRILL_BIAS['tut-point'] = ['feedPlayer'] ⇒ practiceBiasFor 把你的 trust 拉到
+      // PRACTICE_FEED_TRUST、隊友壓到 PRACTICE_MATE_TRUST。這句話是那條偏置的台詞面
+      '今天教練讓二傳優先餵球給你——球會一直來，把握機會打下來',
+    ],
     count: totalPointsFor,
   },
 };
@@ -408,12 +455,195 @@ export function recentTechniquesOf(player, n = DRILLS_MAX) {
 }
 
 // 教學局六步（第一屆開場；固定清單、順序即教學順序）。
-// 這批**只做資料與判定**——「暫停等待玩家完成這一步」的流程控制不在本檔。
 export const TUTORIAL_DRILL_IDS = [
   'tut-receive', 'tut-handle', 'tut-block', 'tut-serve', 'tut-three', 'tut-point',
 ];
 export function tutorialDrills() {
   return TUTORIAL_DRILL_IDS.map((id) => DRILL_DEFS[id]);
+}
+
+// ════════════════════════════════════════════════════════════════
+// 三之二、教學局的步進機（純函式；2026-08-12 教學局批）
+// ════════════════════════════════════════════════════════════════
+// 與「屆間紅白賽」的差別只有一件事：**六個科目不是同時開放的**，一次只練一步、
+// 完成才走下一步。判定仍是同一批 `DRILL_DEFS[tut-*].count`——本檔不重刻一份。
+//
+// ★ 每一步只看「這一步開始之後」的事件 ★（`startEvent` 切片）
+// 理由：`count` 全是**整場累計**。若不切片，教練喊「現在練攔網」的那一刻，前面
+// 隨手打進的一分早就讓 `tut-point` 滿足了 ⇒ 玩家什麼都沒做，六步會在兩秒內自己跑完。
+// 切片之後語意才對得上教練那句話：「**現在**做給我看一次」。
+//
+// ★ 卡太久自動放行的存在理由 ★（不是為了省事）
+// 六步裡有兩步不是玩家單方面決定得了的：`tut-block` 要對面真的扣過來、`tut-serve`
+// 要輪轉輪到你發球。新手站錯位、或球運不好連續幾輪都沒輪到，這一步會**永遠**不完成——
+// 而教學局的收局條件就是六步走完 ⇒ 卡死在教學局出不去（他的第一場正式賽還沒開始）。
+// 放行不算完成（`cleared:false`，結算面板照實顯示 ⏭），只是把課帶著往下走。
+export const TUTORIAL_STALL_TICKS = 60 * 180; // 3 分鐘（sim 固定 60Hz，見 sim/constants.js）
+
+export function createTutorialState(tick = 0) {
+  return {
+    index: 0,          // 現在練第幾步（＝TUTORIAL_DRILL_IDS 的索引）
+    startEvent: 0,     // 這一步開始時 events 的長度（切片起點）
+    startTick: tick,   // 這一步開始時的 game.tick（卡太久的計時基準）
+    log: [],           // 已走完的步：{ id, label, count, target, cleared }
+    done: false,       // 六步都走完了（＝教學局該收局）
+  };
+}
+
+// 現在這一步的科目定義（done 之後回 null）
+export function currentTutorialDrill(state) {
+  const i = state?.index ?? 0;
+  if (state?.done || i >= TUTORIAL_DRILL_IDS.length) return null;
+  return DRILL_DEFS[TUTORIAL_DRILL_IDS[i]];
+}
+
+// 這一步目前做到幾次（切片後；上限夾在 target，HUD 不顯示 3/1 這種數字）
+function currentCount(state, { events = [], playerId, myTeam }) {
+  const def = currentTutorialDrill(state);
+  if (!def) return 0;
+  const slice = events.slice(state.startEvent ?? 0);
+  return def.count(slice, playerId, myTeam) ?? 0;
+}
+
+/**
+ * 步進一次。**純函式**：不改傳入的 state，回傳新的。
+ * @returns { state, change, drill, cleared }
+ *   change：null＝這一步還在進行／'advance'＝做到了，換下一步／'release'＝卡太久放行
+ *   drill ：剛剛結束的那一步（change 非 null 時才有意義）
+ *   cleared：那一步是真的做到（true）還是被放行（false）
+ *   收局訊號＝回傳的 `state.done`（六步都離開了）
+ */
+export function advanceTutorial(state, { events = [], playerId, myTeam, tick = 0 } = {}) {
+  const st = state ?? createTutorialState();
+  const def = currentTutorialDrill(st);
+  if (!def) return { state: st, change: null, drill: null, cleared: false };
+  const count = currentCount(st, { events, playerId, myTeam });
+  const cleared = count >= def.target;
+  // ★ 先判完成再判逾時 ★ 兩者同一幀成立時算「做到了」——同一顆球既完成了科目又
+  // 剛好壓線超時，記成放行會把玩家真的做到的事寫成沒做到
+  if (!cleared && (tick - (st.startTick ?? 0)) < TUTORIAL_STALL_TICKS) {
+    return { state: st, change: null, drill: def, cleared: false };
+  }
+  const nextIndex = st.index + 1;
+  return {
+    state: {
+      index: nextIndex,
+      startEvent: events.length,
+      startTick: tick,
+      log: [...st.log, {
+        id: def.id, label: def.label, count: Math.min(count, def.target), target: def.target, cleared,
+      }],
+      done: nextIndex >= TUTORIAL_DRILL_IDS.length,
+    },
+    change: cleared ? 'advance' : 'release',
+    drill: def,
+    cleared,
+  };
+}
+
+// HUD 用的逐步狀態（六列固定；`practiceHud.update` 吃這個形狀）。
+//   phase：'done'＝做到了／'passed'＝卡太久被帶過／'current'＝現在練這步／'todo'＝還沒到
+export function tutorialRows(state, { events = [], playerId, myTeam } = {}) {
+  const st = state ?? createTutorialState();
+  const cur = currentTutorialDrill(st);
+  return TUTORIAL_DRILL_IDS.map((id, i) => {
+    const def = DRILL_DEFS[id];
+    const past = st.log[i];
+    if (past) {
+      return {
+        id,
+        label: def.label,
+        count: past.count,
+        target: def.target,
+        achieved: past.cleared,
+        phase: past.cleared ? 'done' : 'passed',
+      };
+    }
+    if (cur && cur.id === id) {
+      return {
+        id,
+        label: def.label,
+        count: Math.min(currentCount(st, { events, playerId, myTeam }), def.target),
+        target: def.target,
+        achieved: false,
+        phase: 'current',
+        hints: def.hints ?? [],
+      };
+    }
+    return { id, label: def.label, count: 0, target: def.target, achieved: false, phase: 'todo' };
+  });
+}
+
+// 教學局結算（不給任何獎勵——第一屆沒有集訓格可聯動，純學操作）。
+// 形狀刻意與 `settlePractice` 對齊（results／completedCount），但**不含 unlockControl**：
+// 那個欄位的語意是「集訓控球格開放」，教學局沒有那回事，給了就是喊一件事做另一件事。
+export function tutorialSettle(state) {
+  const st = state ?? createTutorialState();
+  const results = TUTORIAL_DRILL_IDS.map((id, i) => {
+    const def = DRILL_DEFS[id];
+    const past = st.log[i];
+    return {
+      id,
+      label: def.label,
+      count: past?.count ?? 0,
+      target: def.target,
+      achieved: !!past?.cleared,
+    };
+  });
+  return {
+    results,
+    completedCount: results.filter((r) => r.achieved).length,
+    total: results.length,
+  };
+}
+
+// ---- 教練喊話（台詞是規格：每句都由科目定義本身組出來）----
+export function tutorialCoachLine(drill) {
+  const def = drillDefOf(drill);
+  if (!def) return '';
+  const hint = def.hints?.[0] ?? '';
+  return `教練：現在練——${def.label}${hint ? `。${hint}` : ''}`;
+}
+export const TUTORIAL_RELEASE_LINE = '教練：這個急不來，等等再說——先往下走。';
+export const TUTORIAL_FINISH_LINE = '教練：好，今天到這裡——收工！';
+
+// 賽末的一句評語（結算面板用；門檻與 `tutorialSettle` 的 completedCount 同源）
+export function tutorialVerdictLine(settled) {
+  const done = settled?.completedCount ?? 0;
+  const total = settled?.total ?? TUTORIAL_DRILL_IDS.length;
+  if (done >= total) return '教練：基本動作全摸過一遍了——正式比賽見。';
+  if (done >= total / 2) return '教練：夠了，剩下的上場慢慢練——真正的比賽從下一場開始。';
+  return '教練：先這樣。場上會逼你學會的——下一場就是正式的了。';
+}
+
+// ---- 文案守衛（可測的純函式，不是只寫在測試裡的斷言）----
+// 本專案兩次踩過「文案承諾程式做不到的事」。魚躍是**自動觸發**的（matchStage.js:606-608
+// 撤掉了常駐手動鈕），任何提到魚躍卻教人去按東西的句子都是錯的。
+// ★ 判準寫成「提到魚躍的句子必須說它是自動的、且不得提到鈕」★ 而不是「不准出現按字」
+// ——「不用按任何東西」是對的，單看關鍵字會誤殺。
+export function hintViolations(text) {
+  const s = String(text ?? '');
+  if (!s.includes('魚躍')) return [];
+  const out = [];
+  if (!s.includes('自動')) out.push('提到魚躍卻沒說它是自動的');
+  if (s.includes('鈕')) out.push('提到魚躍卻指向某顆鈕（魚躍沒有鈕）');
+  return out;
+}
+
+// ---- 教學局的掛點旗標（創角後、group-1 前，只邀請一次）----
+// ★ 走 `career.events` 這條既有管道 ★（同 `coach-height-guidance` 的去重法）——
+// 存檔 schema 零改動、舊檔零遷移。
+// ★ 旗標在「做決定的那一刻」落檔，不是在打完的那一刻 ★
+// 沿 `campPending` 的精神（旗標與那一次決定同一筆寫檔），但**結論相反**：集訓有成果
+// 要保護所以做完才清旗標；教學局零獎勵、什麼都不會丟，所以按下去就記。
+// 這樣打到一半殺 app 重開＝旗標已在 ⇒ 不會再邀請一次（也不會卡住 group-1）。
+export const TUTORIAL_INVITE_EVENT_ID = 'rookie-tutorial';
+// 該不該出邀請卡：第一屆、一場都還沒打、沒邀請過。
+export function tutorialInviteDue(career, seasonIndex = 1) {
+  if ((seasonIndex ?? 1) !== 1) return false;
+  if (!career) return false;
+  if ((career.results ?? []).length > 0) return false;
+  return !(career.events ?? []).includes(TUTORIAL_INVITE_EVENT_ID);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -805,9 +1035,10 @@ function buildSquadSide({
  * @param o.drills       本場科目清單（`drillsFor` 的輸出）——偏置由它反推
  * @param o.seasonIndex  這場練習賽屬於哪一屆（comboScale 的屆數閘同正式賽）
  * @param o.seed         決定論種子（＝matchSeed(career, practiceMatchId)）
+ * @param o.tutorial     教學局旗標（第一屆開場的隊內測試）——只往下游傳，不改建隊
  */
 export function practiceMatchSetup({
-  player, members = [], lineup = null, drills = [], seasonIndex = 2, seed = 1,
+  player, members = [], lineup = null, drills = [], seasonIndex = 2, seed = 1, tutorial = false,
 } = {}) {
   if (!player?.id) throw new Error('practiceMatchSetup：需要主角');
   normalizeCareerPlayer(player); // 跨版本補正（同 careerTeams 的第一件事）
@@ -863,6 +1094,6 @@ export function practiceMatchSetup({
     // 播報用的「對手」：白隊不是 opponents.js 裡的隊伍（無 ace／無 style）
     opponent: { id: 'practice-white', name: SQUAD_LABELS.white },
     // 以下是練習賽專屬的隨附資料（sim 不看；app／ui 層消費）
-    practice: { drills, seasonIndex, bias, squads },
+    practice: { drills, seasonIndex, bias, squads, tutorial: !!tutorial },
   };
 }

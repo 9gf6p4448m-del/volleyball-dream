@@ -28,20 +28,40 @@ export function createPracticeHud() {
   root.appendChild(list);
   document.body.appendChild(root);
 
+  // 教學局（2026-08-12）：一次只練一步 ⇒ 當前步要**看得出來是哪一步**。
+  // ★ 為什麼當前步展開操作提示 ★ 教練的泡泡 5 秒就消失，而新手看完泡泡才開始找鈕在哪；
+  // 「我剛剛要做什麼」是隨時可查的狀態，跟科目進度同一種資訊，放同一個框裡。
+  const PREFIX = { done: '✅', passed: '⏭', current: '👉 現在練：', todo: '·' };
+  const COLOR = { done: '#ffd166', passed: '#8ea3c4', current: '#6ee7ff', todo: '#cfd9ea' };
+
   return {
     // rows＝[{ label, count, target, achieved }]（matchLoop 用 settlePractice 算出來的同一份）
-    update(rows) {
+    // 教學局多帶 phase（'done'|'passed'|'current'|'todo'）與 current 那列的 hints
+    update(rows, headline = null) {
       if (!rows?.length) { root.style.display = 'none'; return; }
+      if (headline) title.textContent = headline;
       list.replaceChildren();
       for (const r of rows) {
+        const phase = r.phase ?? (r.achieved ? 'done' : 'todo');
         const line = document.createElement('div');
-        line.textContent = `${r.achieved ? '✅' : '·'} ${r.label}　${r.count}/${r.target}`;
+        line.textContent = phase === 'current'
+          ? `${PREFIX.current}${r.label}　${r.count}/${r.target}`
+          : `${PREFIX[phase]} ${r.label}　${r.count}/${r.target}`;
         line.style.cssText = [
           'font-size:11px', 'line-height:1.45', 'white-space:nowrap',
           'overflow:hidden', 'text-overflow:ellipsis',
-          `color:${r.achieved ? '#ffd166' : '#cfd9ea'}`,
+          `color:${COLOR[phase]}`,
+          ...(phase === 'current' ? ['font-weight:700'] : []),
         ].join(';');
         list.appendChild(line);
+        for (const h of (phase === 'current' ? r.hints ?? [] : [])) {
+          const tip = document.createElement('div');
+          tip.textContent = `　${h}`;
+          tip.style.cssText = [
+            'font-size:10px', 'line-height:1.4', 'color:#9fb0cc', 'white-space:normal',
+          ].join(';');
+          list.appendChild(tip);
+        }
       }
       root.style.display = 'flex';
     },

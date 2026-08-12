@@ -120,14 +120,16 @@ async function showCareerEntry(ctx) {
     // 練習賽卷（2026-08-12）：集訓面板的「🏐 紅白對抗賽」→ 開一場紅白賽。
     // 與 onPlay 同一條 runMatch，差別只有 ①matchEntry 是練習賽的（不在 schedule 裡）
     // ②多帶一個 practice 包（建隊換 practiceMatchSetup、賽末換 settlePracticeMatch）
-    onPractice: ({ career, player, drills, seasonIndex }) => {
+    // 教學局（第一屆開場的隊內測試）走**同一個** onPractice——kickoff §二-2「一個機制、
+    // 兩個掛點」：差別只有多帶一個 tutorial 旗標（逐步引導＋提前收局＋零獎勵）
+    onPractice: ({ career, player, drills, seasonIndex, tutorial = false }) => {
       const roster = ensureStarterRoster(store);
       runMatch(ctx, {
         store, career, player, roster,
         matchEntry: practiceMatchEntry(seasonIndex),
         lineup: store.loadLineup(),
         seasonIndex,
-        practice: { drills, seasonIndex },
+        practice: { drills, seasonIndex, tutorial },
       });
     },
   });

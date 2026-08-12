@@ -39,7 +39,12 @@ import { heroCardFor, momentumCardFor } from '../ui/heroCards.js';
 import {
   settleCareerMatch, settlePracticeMatch, careerReturnUrl, resolveOppAceBox,
 } from './matchCareer.js';
-import { settlePractice } from '../career/practiceMatch.js';
+import {
+  settlePractice,
+  createTutorialState, advanceTutorial, tutorialRows, tutorialSettle, currentTutorialDrill,
+  tutorialCoachLine, tutorialVerdictLine,
+  TUTORIAL_RELEASE_LINE, TUTORIAL_FINISH_LINE,
+} from '../career/practiceMatch.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
 import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
@@ -227,7 +232,9 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   // W4(P4) 附錄 B-4：宿敵 ace pid 解析（rival 隊限定——ace 反讀的對象；
   // 宿敵人設未落檔時 def.rival ace 名對不上＝null＝機制沉睡，零擾動）
   // 練習賽科目 HUD 的開場值（0/N 一開始就看得見——不必等第一個死球才知道要練什麼）
-  if (s.practiceDrills.length) refreshPracticeHud(s);
+  // 教學局走另一份（一次只亮一步）——兩者互斥，不要同時畫兩張表
+  if (s.tutorial) refreshTutorialHud(s);
+  else if (s.practiceDrills.length) refreshPracticeHud(s);
   if (careerCtx) {
     const rivalBase = opponentById(careerCtx.matchEntry?.opponentId);
     if (rivalBase?.rival) {
@@ -366,6 +373,12 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     practiceRows: [],       // 最近一次結算的逐科目狀態（HUD 與結算面板共用同一份）
     practiceFired: new Set(), // 已彈過「科目完成」字卡的科目 id（一科一卡）
     practiceSettled: null,  // 賽末結算結果（結算面板讀）
+    // 教學局（2026-08-12）：一次只練一步的步進機（非教學局＝null＝所有掛點短路）。
+    // ★ 不落存檔 ★ 教學局零獎勵、打到一半離開就是沒打——沒有東西需要被保護
+    tutorial: careerCtx?.practice?.tutorial ? createTutorialState(0) : null,
+    tutorialGreeted: false,   // 開場第一句教練喊話（要等 stage.commentary 拿得到 now）
+    tutorialEnded: false,     // 六步走完、已經提前收局（一次性）
+    tutorialNextLine: null,   // 排隊中的下一句教練喊話 { at, text }
     pendingSubLines: [], // 面板開著時累積的換人對話，關板一次播（teachDialog z 序在面板下）
     // W7 C1②：主角低體力教練建議——每場最多一次
     staminaAdviceShown: false,
@@ -710,6 +723,59 @@ export function refreshPracticeHud(s, cards = null) {
       onShown: () => { s.practiceFired.add(r.id); },
     });
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 教學局：逐步引導（2026-08-12）
+// ════════════════════════════════════════════════════════════════
+// ★ 不暫停 sim、不記比分壓力 ★ rally 照常打，變的只有「教練現在在教哪一步」。
+// kickoff 題 4 原本寫「暫停等待完成」，實作時改成常駐引導：暫停 sim 會讓球停在半空、
+// 而這六步全都要**球在動**才做得到（接球／攔網／發球），停下來反而練不成。
+//
+// ★ 判定與台詞全在 `career/practiceMatch.js` ★ 本函式只做三件事：什麼時候問、
+// 問到之後喊哪一句、六步走完把局收掉。一行判定都不在這裡重刻。
+// @returns true＝這一幀剛剛走完第六步（呼叫端據此收局）
+export function updateTutorial(s, now) {
+  if (!s.tutorial || s.tutorial.done) return false;
+  const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
+  const say = (text, ttl) => s.stage.commentary?.coach?.(text, now, ttl);
+  // 排隊中的下一句（放行那一句講完才接上）——泡泡只有一格，同一幀連喊兩句＝
+  // 玩家只會看到後面那句，前面那句等於沒講
+  if (s.tutorialNextLine && now >= s.tutorialNextLine.at) {
+    say(s.tutorialNextLine.text);
+    s.tutorialNextLine = null;
+  }
+  if (!s.tutorialGreeted) {
+    s.tutorialGreeted = true;
+    say(tutorialCoachLine(currentTutorialDrill(s.tutorial)));
+  }
+  const step = advanceTutorial(s.tutorial, {
+    events: s.game.events, playerId: s.playerId, myTeam, tick: s.game.tick,
+  });
+  s.tutorial = step.state;
+  if (step.change) {
+    const nextLine = step.state.done
+      ? TUTORIAL_FINISH_LINE
+      : tutorialCoachLine(currentTutorialDrill(step.state));
+    if (step.change === 'release') {
+      say(TUTORIAL_RELEASE_LINE, TUTORIAL_RELEASE_TTL);
+      s.tutorialNextLine = { at: now + TUTORIAL_RELEASE_TTL, text: nextLine };
+    } else {
+      say(nextLine);
+      s.tutorialNextLine = null;
+    }
+  }
+  refreshTutorialHud(s);
+  return !!step.change && step.state.done;
+}
+const TUTORIAL_RELEASE_TTL = 2600; // 「這個之後再說」那句的停留時間，講完接下一步
+
+export function refreshTutorialHud(s) {
+  if (!s.tutorial) return;
+  const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
+  const rows = tutorialRows(s.tutorial, { events: s.game.events, playerId: s.playerId, myTeam });
+  s.practiceRows = rows;
+  s.stage.practiceHud?.update(rows, '入隊測試・教練指導中');
 }
 
 // 輸入/導航事件绑定：局終點擊、回放（R/🎬）、魚躍（L/Space/鈕）、情蒐跳過
@@ -1773,7 +1839,8 @@ function applyEvents(s, frameEvents, now) {
       s.bquickFeedbackDone = false;
       stage.bquickButton?.hide();
       checkRecruitFeats(s, cards); // W6 壯舉達成字卡（死球節拍增量檢查）
-      refreshPracticeHud(s, cards); // 練習賽科目進度＋完成字卡（同一個死球節拍）
+      // 教學局的進度是逐幀跟著教練走的（updateTutorial），死球節拍不再重算一次
+      if (!s.tutorial) refreshPracticeHud(s, cards); // 練習賽科目進度＋完成字卡（同一個死球節拍）
       stage.benchAccelBtn?.forceOff(); // W7 C2③：死球自動恢復原速（拍板）
       // W7 C1②：主角低體力教練建議——每場最多一次，只在主角「仍在場上」時提醒
       // （已經下場就沒什麼好建議的；讓位給體力播報的主角豁免那句話）
@@ -2118,10 +2185,41 @@ export function updateAssistAndPoses(s) {
   return myBall;
 }
 
+// ════════════════════════════════════════════════════════════════
+// 教學局提前收局（2026-08-12）：六步走完就收工，不用打滿 25 分
+// ════════════════════════════════════════════════════════════════
+// ★ 為什麼是直接把 `game.phase` 寫成 'set_over' ★
+// ① 架構鐵律 1 不准動 `src/sim/`，所以不能去 sim 加一個「教學局結束條件」；
+// ② `stepGame` 開頭第一行就是 `if (phase === 'set_over' || 'set_break') return []`
+//    ——寫下去 sim 立刻凍結，語意與正常收局逐字相同（不是繞路，是走同一個閘）；
+// ③ **不另立一個平行旗標**：`game.phase === 'set_over'` 是全專案「這場結束了」的
+//    單一事實源——記分板、換人鈕、暫停鈕、beforeunload 攔阻、commentary 全都讀它。
+//    另立 `s.tutorialOver` 會讓那六個地方繼續以為比賽還在進行（防線要按「危險的效果」
+//    寫，不是按「我知道的那個入口」寫）。
+// ★ 刻意不碰 `game.match.winner` ★ 這一局沒有分出勝負，寫一個假贏家就是說謊；
+// 結算面板與 setOverOverlay 都吃教學局專屬的標題，不去讀 winner。
+export function endTutorialSet(s) {
+  if (s.tutorialEnded) return;
+  s.tutorialEnded = true;
+  s.game.phase = 'set_over';
+}
+
 // 局終/局間轉場（一次性）；生涯模式先落檔再顯示——點擊返回前進度已保住
 function settleIfOver(s) {
   const { game, stage } = s;
   if (game.phase === 'set_over' && s.prevPhase !== 'set_over') {
+    // 教學局（2026-08-12）：零獎勵、零落檔——第一屆沒有集訓格可聯動，純學操作。
+    // ★ 早退在練習賽之前 ★ 走 settlePracticeMatch 會把成績寫進 `save.practice`，
+    // 那個欄位的消費端是集訓面板的名額與控球格＝教學局憑空發獎勵
+    if (s.tutorial) {
+      s.practiceSettled = tutorialSettle(s.tutorial);
+      s.stage.practiceHud?.hide();
+      s.careerCtx?.store?.clearMidMatch?.(); // 同正式賽：不留「已結束比賽的假續玩入口」
+      stage.setOverOverlay.show(null, game.match.score,
+        game.players[s.controlledId].teamId, '點擊任意處看今天練了什麼', '🏐 練習結束——收工');
+      s.prevPhase = game.phase;
+      return;
+    }
     // 練習賽（2026-08-12）：走另一條收束——不記戰績、不推招募、不動名冊成長。
     // ★ 早退在最前面 ★ 讓「練習賽不污染生涯」變成路徑上的事實，而不是一串 if
     if (s.careerCtx?.practice) {
@@ -2498,6 +2596,21 @@ function buildBoxPanelData(s) {
     const rate = myRow.spikes ? Math.round((myRow.kills / myRow.spikes) * 100) : null;
     extras.push(`⚡ OPP 火力：扣球 ${myRow.spikes}・得分 ${myRow.kills}`
       + `${rate == null ? '' : `（${rate}%）`}・攔網 ${myRow.blocks}`);
+  }
+  // 教學局結算面板（2026-08-12）：**簡化版**——六步的結果＋教練一句評語，沒有獎勵行。
+  // ★ 位置差異欄位／對手王牌一律不掛 ★ 這是他這輩子第一場球，那些數字他還讀不懂
+  if (s.tutorial) {
+    const settled = s.practiceSettled ?? tutorialSettle(s.tutorial);
+    const lines = settled.results.map((r) => `${r.achieved ? '✅' : '⏭'} ${r.label}`);
+    lines.push(`📋 完成 ${settled.completedCount}/${settled.total}　${tutorialVerdictLine(settled)}`);
+    return {
+      title: '🏐 入隊測試',
+      scoreLine,
+      rows,
+      playerPid: s.playerId,
+      oppAce: null,
+      extras: lines,
+    };
   }
   // 練習賽結算面板（2026-08-12）：科目達成清單＋獎勵說明接在位置差異欄位後面。
   // ★ 重用 boxScorePanel 的 extras 通道，不另做一個面板 ★ 玩家要看的資訊
@@ -2909,6 +3022,8 @@ function frameStep(s, now) {
     ctx.camera.fov = fovTarget;
     ctx.camera.updateProjectionMatrix();
   }
+  // 教學局：逐步引導＋六步走完提前收局（不用打滿 25 分）
+  if (updateTutorial(s, now)) endTutorialSet(s);
   settleIfOver(s);
   // 螢幕震動：鏡頭位置疊隨機偏移、指數衰減（表現層，不碰 sim）
   if (s.shake > 0.004) {

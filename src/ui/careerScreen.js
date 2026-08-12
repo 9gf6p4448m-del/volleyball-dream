@@ -35,7 +35,10 @@ import { showTrainingCamp } from './trainingCamp.js';
 import {
   chemistryPairsOf, isCampPending, clearCampPending, departedMatesOf,
 } from '../career/trainingCamp.js';
-import { drillsFor, recentTechniquesOf } from '../career/practiceMatch.js';
+import {
+  drillsFor, recentTechniquesOf,
+  tutorialDrills, tutorialInviteDue, TUTORIAL_INVITE_EVENT_ID,
+} from '../career/practiceMatch.js';
 import {
   positionTalkFor, transferCandidates, transferAskLines, transferTalkFor,
   interSeasonTalkAllowed, TRANSFER_ASKED_EV, TRANSFER_USED_EV,
@@ -150,6 +153,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
   // 集訓覆蓋層是否已開（覆審 HIGH-1 的中斷復原有兩個呼叫端，防重入疊兩層）
   let campOpen = false;
+  // 教學局邀請卡是否已開（同一道防重入：renderCareer 可能被別的路徑再叫一次，
+  // 疊兩張卡的話下面那張永遠按不到——campOpen 的教訓）
+  let tutorialInviteOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -276,6 +282,61 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       card.appendChild(button(`${def.name}（強度 ${def.level}）`, false, () => pick(id)));
     }
     card.appendChild(button('不指定——全交給輪抽', true, () => pick(null)));
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  // ---- 教學局（2026-08-12）：入隊第一天的隊內測試邀請卡 ----
+  // 真人回饋的原點：「新手第一次操作練習的賭注就是真比賽」（第一場 group-1 中途離開
+  // 記棄賽敗）。這張卡把那個賭注拆掉：先打一場什麼都不賠的隊內測試。
+  //
+  // ★ 可跳過 ★ 二週目／老玩家按「我打過了」直接進生涯畫面（kickoff 題 4）。
+  // ★ 兩顆鈕都當場入帳旗標 ★ 教學局零獎勵、打到一半離開什麼都不會丟，所以「做了決定」
+  //   就是終局；等打完才入帳的話，中途離開會讓這張卡在每次回生涯畫面時再彈一次。
+  function showTutorialInvite(career, player) {
+    tutorialInviteOpen = true;
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:36', 'display:flex',
+      'background:rgba(4,6,12,0.82)', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'padding:24px 16px',
+    ]);
+    overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+    const card = el('div', [
+      `background:${COLOR.card}`, 'border-radius:16px', 'border:1px solid #2c3a58',
+      'padding:18px 20px', 'width:min(360px, 92vw)', 'display:flex',
+      'flex-direction:column', 'gap:10px', 'align-items:stretch',
+    ]);
+    card.appendChild(el('div', [
+      'font-size:17px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:1px',
+    ], '🏐 隊內測試'));
+    card.appendChild(el('div', ['font-size:14px', `color:${COLOR.gold}`, 'line-height:1.7'],
+      '教練：入隊第一天——先看看你的底子。'));
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
+      '紅白分隊打一場，我會一步一步喊你做：接球、送球、攔網、發球、三擊組織、拿下一分。'
+      + '六件事做完就收工——不記戰績、不算勝負，做壞了也不會扣你任何東西。'));
+    // ★ 決定與旗標同一次寫檔 ★ 分兩筆寫的話，中間被殺會留下「已經打過但旗標沒落」
+    // ＝下次重開再邀請一次（campPending 那條 RMW 紀律的同一個理由）
+    const decide = (start) => {
+      overlay.remove();
+      tutorialInviteOpen = false;
+      const marked = recordEvent(store.loadCareer() ?? career, TUTORIAL_INVITE_EVENT_ID);
+      if (!store.saveCareer(marked)) {
+        // 寫失敗＝旗標沒落＝下次重開會再問一次（寧可再問，不要靜默吞掉這場教學）
+        setMsg('⚠ 存檔寫入失敗——隊內測試的紀錄可能未保存');
+      }
+      if (!start) { renderCareer(); return; }
+      hide();
+      onPractice({
+        career: marked,
+        player,
+        drills: tutorialDrills(),
+        seasonIndex: 1,
+        tutorial: true,
+      });
+    };
+    card.appendChild(button('▶ 開始', true, () => decide(true)));
+    card.appendChild(button('我打過了，跳過', false, () => decide(false)));
     overlay.appendChild(card);
     document.body.appendChild(overlay);
   }
@@ -1638,6 +1699,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 集訓收掉時 onDone 會再 render 一次。
     if (!campOpen && isCampPending(player, store.seasonIndex?.() ?? 1)) {
       runTrainingCamp(player, career, () => renderCareer());
+      return;
+    }
+    // 教學局（2026-08-12）：入隊第一天的隊內測試——創角完成後、group-1 之前。
+    // ★ 為什麼掛在這裡而不是創角鏈的尾巴 ★ 創角鏈只跑一次，玩家在那一刻按了「跳過」
+    // 之後就沒事；但**中斷**（教學局打到一半殺 app、或創角完馬上關掉）也會回到這裡——
+    // 掛在 renderCareer 的入口＝這兩條路走同一個閘（同 campPending 的中斷復原範式）。
+    // 旗標判定純函式在 `practiceMatch.tutorialInviteDue`（第一屆＋零戰績＋沒邀請過）。
+    if (!tutorialInviteOpen && onPractice
+      && tutorialInviteDue(career, store.seasonIndex?.() ?? 1)) {
+      showTutorialInvite(career, player);
       return;
     }
     // W4(P4) Q8 局間存檔：合法離場（存檔離開）＝豁免棄賽判定；殘檔（比賽已結算或
