@@ -785,7 +785,9 @@ export function updateTutorial(s, now) {
 // 直線／斜線兩條過網線的中點 x（攔網圈用）。★ 沿用 blockCommitRead 已驗證的手法 ★
 // —— 的裁定書寫過同一個結論：站到兩條過網線的中點，
 // 而不是站到人身上。算不出來（沒有攻擊手／查不到那個人）＝回 null＝圈退回指攻擊手。
-function blockAimMidX(game, attackerId) {
+// ★ export 是為了讓探針量到**真的跑在遊戲裡的這一份** ★（02 §6.1 第 4 條：取得路徑）
+// 探針自己抄一份公式來量＝循環論證，量到的是探針對不對，不是產品對不對。
+export function blockAimMidX(game, attackerId) {
   if (!attackerId || !game?.actors?.[attackerId] || !game.players?.[attackerId]) return null;
   const from = game.actors[attackerId];
   const aims = spikeAimsFor(game, attackerId);
