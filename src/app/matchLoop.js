@@ -11,7 +11,7 @@ import {
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
-  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf,
+  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf, AI,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { contactAssistFor } from './contactAssist.js';
@@ -42,7 +42,7 @@ import {
 import {
   settlePractice,
   createTutorialState, advanceTutorial, tutorialRows, tutorialSettle, currentTutorialDrill,
-  tutorialCoachLine, tutorialVerdictLine, tutorialStageFor,
+  tutorialCoachLine, tutorialVerdictLine, tutorialStageFor, coachMarkerTarget,
   TUTORIAL_RELEASE_LINE, TUTORIAL_FINISH_LINE,
 } from '../career/practiceMatch.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
@@ -774,8 +774,30 @@ export function updateTutorial(s, now) {
     }
   }
   if (s.tutorialRestageDue && applyTutorialStage(s)) s.tutorialRestageDue = false;
+  updateCoachMarker(s, now);
   refreshTutorialHud(s);
   return !!step.change && step.state.done;
+}
+
+// 教練光圈：這一步該站哪（目前只有攔網那一步有——理由見 coachMarkerTarget 上方）。
+// ★ 純表現層 ★ 只讀 game／aiState 現成的值，一個判定都不在這裡算。
+export function updateCoachMarker(s, now = 0) {
+  const marker = s.stage?.coachMarker;
+  if (!marker) return; // 非教學局＝物件根本不存在
+  const drill = currentTutorialDrill(s.tutorial);
+  const myTeam = s.game.players?.[s.playerId]?.teamId ?? 'A';
+  const point = coachMarkerTarget(drill?.id, {
+    attackerId: s.aiState?.attackerId,
+    actors: s.game.actors,
+    myTeam,
+    blockLz: AI.BLOCK_LZ, // ★ 讀 sim 的常數，不複製一份 ★ 複製＝第二個真相源
+    possession: s.game.rally?.possession,
+    phase: s.game.phase,
+  });
+  if (!point) { marker.hide(); return; }
+  const me = s.game.actors?.[s.playerId];
+  const here = !!me && Math.hypot(me.x - point.x, me.z - point.z) <= marker.RADIUS;
+  marker.show(point, here, now);
 }
 
 // 把當前這一步需要的場景擺好（站位＋發球權）。回 false＝這一幀擺不成（rally 中／

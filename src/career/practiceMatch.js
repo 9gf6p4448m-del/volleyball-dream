@@ -545,6 +545,35 @@ export function tutorialStageFor(drillId, rotations, playerId, myTeam = 'A') {
   };
 }
 
+// ---- 教練光圈的目標點（純函式，可測；render 層只負責畫）----
+//
+// ★ 只有攔網那一步有圈 ★ 其餘五步都不畫，各有各的理由：
+//   - 扣球／發球／三擊／得分：simpleMode 會自動帶位（`matchControls.js:348-377`），
+//     玩家根本不需要移動——畫圈是噪音，而且會跟自動帶位互相打架
+//   - **接發：已經有圈了**——`landingMarker`（`matchStage.js:110`）本來就在畫來球
+//     預測落點（青＝界內、紅＝預測出界、接觸輔助另有分檔），且 `assistOn` 預設為開
+//     （`matchConfig.js:100`）⇒ 再加一個是重複的東西，只會讓畫面上有兩個圈在吵
+// 攔網是唯一「自動帶位被**刻意**關掉」的情境（07-24 拍板「攔網站位全交玩家」，
+// `matchControls.js:353-358`）⇒ 沒有任何既有提示，正是光圈該存在的地方。
+//
+// ★ 值取自引擎，不另算一份 ★ 用 `aiState.attackerId` 那個人的實際 x。
+// 第二份預測模型遲早跟本體分岔，分岔那天它會很有自信地指向錯的地方，比沒有標記更糟。
+//
+// @param drillId  現在練哪一步
+// @param ctx      { attackerId, actors, myTeam, blockLz, possession, phase }
+//                 全部由呼叫端從 game／aiState 直接讀出來（這裡不碰那兩個物件的形狀）
+export function coachMarkerTarget(drillId, ctx = {}) {
+  const { attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase } = ctx;
+  if (phase !== 'rally' || drillId !== 'tut-block') return null;
+  // 對方持球、且已經認出攻擊手，才知道要卡哪一條線
+  if (!possession || possession === myTeam || !attackerId) return null;
+  const atk = actors?.[attackerId];
+  if (!atk) return null;
+  // 「卡在他要打的那條線上」＝站到他的 x 上、貼著網（台詞與這一行是同一件事）
+  const side = myTeam === 'A' ? 1 : -1;
+  return { x: atk.x, z: blockLz * side };
+}
+
 export function createTutorialState(tick = 0) {
   return {
     index: 0,          // 現在練第幾步（＝TUTORIAL_DRILL_IDS 的索引）

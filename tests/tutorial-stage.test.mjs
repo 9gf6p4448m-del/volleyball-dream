@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
   rotationWithPlayerAt, tutorialStageFor, TUTORIAL_DRILL_STAGE, TUTORIAL_DRILL_IDS,
-  createTutorialState, advanceTutorial, tutorialCoachLine, DRILL_DEFS,
+  createTutorialState, advanceTutorial, tutorialCoachLine, DRILL_DEFS, coachMarkerTarget,
 } from '../src/career/practiceMatch.js';
 import { restageRotation } from '../src/sim/game.js';
 import { isBackRow, isFrontRow, positionOf } from '../src/sim/rotation.js';
@@ -199,6 +199,54 @@ test('提示三級：第一球／再來一次／全部攤開，三句真的不�
   assert.ok(b.includes('再來一次'));
   // 第三級要包含**所有**提示（不是只換一句）
   for (const h of def.hints) assert.ok(c.includes(h), `第三級漏了：${h}`);
+});
+
+// ════════════════════════════════════════════════════════════
+// 六、教練光圈：只有攔網那一步有
+// ════════════════════════════════════════════════════════════
+
+const blockCtx = (over = {}) => ({
+  attackerId: 'B3',
+  actors: { B3: { x: 2.4, z: -1.1 } },
+  myTeam: 'A',
+  blockLz: 0.6,
+  possession: 'B',
+  phase: 'rally',
+  ...over,
+});
+
+test('攔網：圈畫在攻擊手的 x 上、貼著我方的網（＝台詞說的「卡在他要打的那條線上」）', () => {
+  const p = coachMarkerTarget('tut-block', blockCtx());
+  assert.deepEqual(p, { x: 2.4, z: 0.6 });
+});
+
+test('★反向對照★ 其餘五步一律不畫（畫了就是跟自動帶位打架／跟落點圈重複）', () => {
+  for (const id of TUTORIAL_DRILL_IDS) {
+    if (id === 'tut-block') continue;
+    assert.equal(coachMarkerTarget(id, blockCtx()), null, `${id} 不該有圈`);
+  }
+  // 接發那步刻意不畫——landingMarker（matchStage.js:110）本來就在畫來球落點
+  assert.equal(coachMarkerTarget('tut-receive', blockCtx()), null);
+});
+
+test('條件不成立就不畫：非 rally／我方持球／還沒認出攻擊手／查不到那個人', () => {
+  assert.equal(coachMarkerTarget('tut-block', blockCtx({ phase: 'serve' })), null);
+  assert.equal(coachMarkerTarget('tut-block', blockCtx({ possession: 'A' })), null);
+  assert.equal(coachMarkerTarget('tut-block', blockCtx({ possession: null })), null);
+  assert.equal(coachMarkerTarget('tut-block', blockCtx({ attackerId: null })), null);
+  assert.equal(coachMarkerTarget('tut-block', blockCtx({ actors: {} })), null);
+});
+
+test('我方是 B 隊時圈畫在另一側（z 換號，不是寫死正值）', () => {
+  const p = coachMarkerTarget('tut-block', blockCtx({
+    myTeam: 'B', possession: 'A', attackerId: 'A3', actors: { A3: { x: -1.5, z: 1.2 } },
+  }));
+  assert.deepEqual(p, { x: -1.5, z: -0.6 });
+});
+
+test('★同源★ blockLz 由呼叫端從 sim 的 AI.BLOCK_LZ 餵進來，不是這裡寫死', () => {
+  const p = coachMarkerTarget('tut-block', blockCtx({ blockLz: 1.9 }));
+  assert.equal(p.z, 1.9, '沒吃呼叫端給的值＝這裡自己藏了一份常數');
 });
 
 test('★同源★ 三級台詞全部由 def.hints 組出來，不得憑空多出一份文案', () => {

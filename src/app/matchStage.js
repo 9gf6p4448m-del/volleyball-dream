@@ -26,6 +26,7 @@ import { createBlockReach } from '../render/blockReach.js';
 import { createDiegeticUi } from '../render/diegeticUi.js';
 import { createSubPanel } from '../ui/subPanel.js';
 import { createPracticeHud } from '../ui/practiceHud.js';
+import { createCoachMarker } from '../render/coachMarker.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
 import { timeoutUsedThisPoint } from '../sim/game.js';
@@ -149,6 +150,8 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const heroStamina = createHeroStaminaBar();
   // 練習賽卷（2026-08-12）：科目進度小字（只有紅白賽才建＝正式賽零 DOM 增量）
   const practiceHud = config.practice ? createPracticeHud() : null;
+  // 教練光圈：★只有教學局才建★ 紅白對抗賽與正式賽連物件都不存在＝結構上零外溢
+  const coachMarker = config.practice?.tutorial ? createCoachMarker(scene) : null;
   // 4.5B §4：S/L diegetic 介面（取代舊面板；?panel=classic＝降規/開發退路）
   const diegetic = simpleMode && params.get('panel') !== 'classic' ? createDiegeticUi() : null;
   showTutorialOnce(simpleMode);
@@ -167,7 +170,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
     // ★ 新元件一定要進這個 return ★（2026-08-09 bquickButton 漏了這一行、
     // 從上線起一次沒出現過——接線的價值源碼掃描驗不到，見下方那段註解）
-    practiceHud,
+    practiceHud, coachMarker,
   };
 }
 
