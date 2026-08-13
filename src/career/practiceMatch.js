@@ -315,9 +315,13 @@ export const DRILL_DEFS = {
     label: '攔網碰到球 1 次',
     target: 1,
     hints: [
-      // matchControls.js:280-290 貼網 |z| < 2.2 才算攔網
+      // input/matchControls.js:284 貼網 NEAR_NET_Z=2.2 才算攔網
       '先貼著網站好——離網太遠就不算攔網',
-      '沿著網橫移，卡在他要打的那條線上',
+      // ★ 這句改過（2026-08-13 量測）★ 原文是「卡在他要打的那條線上」，而量測顯示
+      // 攻擊手站的 x 與球真正過網的 x 中位數差 0.98m、攔網可及半寬只有 0.5m
+      // ⇒ 照原文站只有 37% 落在攔得到的範圍。真人回報「不走圈自己判斷才攔到」＝他是對的。
+      // 現在圈是兩段式的（先指人、球一出手改指過網點），台詞跟著講同一件事。
+      '先對著他站；他一出手圈會跳到球真正要過網的位置，跟著圈滑過去',
       // input/matchControls.js:519-527 手機站到位自動起跳（限 simpleMode）；:120,141-148 K 鍵
       // ★ 不寫「攔網鈕」★ 那顆鈕在 ui/actionButtons.js:34，simpleMode 下不建立
       //（app/matchStage.js:68）——教學局恆為 simpleMode，寫了就是教一顆不存在的鈕
@@ -566,7 +570,16 @@ export function tutorialStageFor(drillId, rotations, playerId, myTeam = 'A') {
 // @param drillId  現在練哪一步
 // @param ctx      { attackerId, actors, myTeam, blockLz, possession, phase }
 //                 全部由呼叫端從 game／aiState 直接讀出來（這裡不碰那兩個物件的形狀）
-export const MARKER_DRILLS = new Set(['tut-receive', 'tut-handle', 'tut-block', 'tut-three']);
+// ★★ tut-receive 不在這裡（2026-08-13 真人試玩事故）★★
+// 批 3 曾經把接發也加進來、圈畫在 `dutyPosition`，結果真人回報「**我已經在圈內了，
+// 對方還 ACE 兩次**」。原因是 `dutyPosition`（`ai.js:954-972`）回的是**陣型槽位**
+// ——後排固定 lz=7、lx 從 DUTY_SLOTS 挑，**與球在哪完全無關**；而指名發球瞄的是
+// `basePosition(opp, positionOf(rot, pid))`（`ai.js` serveTarget 那段），是**另一套座標**。
+// 兩者可以差好幾公尺 ⇒ 圈叫你站的地方不是球會來的地方。
+// ★ 接發要的是「球會落在哪」，那個圈已經有人在畫 ★ `landingMarker`
+//（`matchStage.js:110`，青＝界內／紅＝預測出界，`assistOn` 預設開）——用那個，不要再造一個。
+// 教訓：一個圈的價值不在於「有沒有圈」，而在於它指的東西**跟玩家要做的事是不是同一件**。
+export const MARKER_DRILLS = new Set(['tut-handle', 'tut-block', 'tut-three']);
 
 // ★ 最後一步刻意收掉輔助輪 ★（2026-08-13 Sawmah 裁定，起因是他自己的觀察：
 // 「實際玩大部分跑位都是玩家自己吧」——他說對了。自動帶位只在**整球沒碰過搖桿**時生效
@@ -580,16 +593,25 @@ export const TUTORIAL_MARKER_OFF_ID = 'tut-point';
 
 export function coachMarkerTarget(drillId, ctx = {}) {
   const {
-    attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase, dutyPos,
+    attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase, dutyPos, netCrossX,
   } = ctx;
   if (phase !== 'rally' || !MARKER_DRILLS.has(drillId)) return null;
   if (drillId === 'tut-block') {
     // 對方持球、且已經認出攻擊手，才知道要卡哪一條線
     if (!possession || possession === myTeam || !attackerId) return null;
+    const side = myTeam === 'A' ? 1 : -1;
+    // ★★ 球一離手就改指「球真正會過網的 x」（2026-08-13 真人試玩＋量測）★★
+    // 修前這個圈恆定畫在攻擊手站的 x 上。量測（`tools/coach-marker-block-probe.mjs`
+    // 150 seeds×6＝897 次真實扣球）：那個 x 與球實際過網的 x **中位數差 0.98m**，
+    // 而攔網可及半寬 `TUNING.BLOCK_REACH_X` 只有 0.5m ⇒ **只有 37.0% 的時候圈落在
+    // 攔得到的範圍內**。斜線球尤其差——攻擊手站的位置只有直線球才等於過網點。
+    // 真人回報「不走圈、自己判斷才攔到」＝他是對的，圈六成時間指錯地方。
+    // ★ 兩段式，跟真實攔網一樣 ★ 球在對方組織階段＝指攻擊手（預判，提前約 2.9 秒）；
+    // 球一被扣出來＝立刻改指過網點（修正）。`netCrossX` 由呼叫端用 sim 的
+    // `predictNetCrossing`（`flight.js:93`）算——那是 `tryBlock` 用的同一份公式，不另刻。
+    if (netCrossX != null) return { x: netCrossX, z: blockLz * side };
     const atk = actors?.[attackerId];
     if (!atk) return null;
-    // 「卡在他要打的那條線上」＝站到他的 x 上、貼著網（台詞與這一行是同一件事）
-    const side = myTeam === 'A' ? 1 : -1;
     return { x: atk.x, z: blockLz * side };
   }
   // 其餘有圈的步：畫在**引擎自己的職責位**（呼叫端傳 sim 的 `dutyPosition` 輸出）。

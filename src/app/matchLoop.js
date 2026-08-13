@@ -45,6 +45,7 @@ import {
   tutorialCoachLine, tutorialVerdictLine, tutorialStageFor, coachMarkerTarget,
   TUTORIAL_RELEASE_LINE, TUTORIAL_FINISH_LINE,
 } from '../career/practiceMatch.js';
+import { predictNetCrossing } from '../sim/flight.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
 import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
@@ -796,6 +797,12 @@ export function updateCoachMarker(s, now = 0) {
     // 職責位＝引擎自己的答案（玩家沒碰搖桿時系統就是把他帶去這裡）——不另算一份
     dutyPos: s.game.phase === 'rally' && s.game.match
       ? dutyPosition(s.game, myTeam, s.playerId) : null,
+    // 球一被扣出來就改指真正的過網點——用 sim 的同一份公式（tryBlock 也是用它），
+    // 不另刻拋物線。飛行中的球才算得出來；算不出（會先落地／還在對方手上）＝回 null
+    // ＝圈退回指攻擊手。★ 只在對方進攻中才問 ★ 我方持球時這個值沒有意義
+    netCrossX: (s.game.phase === 'rally' && s.game.rally?.possession
+      && s.game.rally.possession !== myTeam && s.game.rally.profile === 'spike')
+      ? (predictNetCrossing(s.game.ball)?.x ?? null) : null,
   });
   if (!point) { marker.hide(); return; }
   const me = s.game.actors?.[s.playerId];

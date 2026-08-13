@@ -216,17 +216,45 @@ const blockCtx = (over = {}) => ({
   ...over,
 });
 
-test('攔網：圈畫在攻擊手的 x 上、貼著我方的網（＝台詞說的「卡在他要打的那條線上」）', () => {
+test('攔網（預判階段）：球還在對方手上時，圈指攻擊手的 x', () => {
   const p = coachMarkerTarget('tut-block', blockCtx());
   assert.deepEqual(p, { x: 2.4, z: 0.6 });
 });
 
+test('★攔網（修正階段）★ 球一出手就改指真正的過網 x，不再指攻擊手站的位置', () => {
+  // 量測（tools/coach-marker-block-probe.mjs，897 次真實扣球）：攻擊手的 x 與球實際
+  // 過網的 x 中位數差 0.98m，而攔網可及半寬只有 0.5m ⇒ 指攻擊手只有 37% 攔得到。
+  const p = coachMarkerTarget('tut-block', blockCtx({ netCrossX: -0.7 }));
+  assert.deepEqual(p, { x: -0.7, z: 0.6 }, '有過網點時必須優先用它');
+  assert.notEqual(p.x, 2.4, '還在指攻擊手＝修正階段沒生效');
+});
+
+test('★反向對照★ 算不出過網點時退回指攻擊手（不是整個消失）', () => {
+  const p = coachMarkerTarget('tut-block', blockCtx({ netCrossX: null }));
+  assert.deepEqual(p, { x: 2.4, z: 0.6 });
+});
+
+test('★台詞與行為同源★ 攔網台詞要講「圈會跳」，不得再教「卡在他那條線」', () => {
+  const hints = DRILL_DEFS['tut-block'].hints ?? [];
+  const joined = hints.join('｜');
+  assert.ok(joined.includes('圈'), '兩段式的圈沒有任何一句台詞講出來');
+  assert.ok(!joined.includes('卡在他要打的那條線'),
+    '這句已被量測否證（照它站只有 37% 攔得到），不得復活');
+});
+
 test('有圈的步畫在引擎的職責位（不是另算一份預測）', () => {
   const duty = { x: -1.8, z: 3.2 };
-  for (const id of ['tut-receive', 'tut-handle', 'tut-three']) {
+  for (const id of ['tut-handle', 'tut-three']) {
     const p = coachMarkerTarget(id, blockCtx({ dutyPos: duty }));
     assert.deepEqual(p, duty, `${id} 沒吃引擎的職責位`);
   }
+});
+
+test('★接發不得有圈★ 真人試玩：站在圈內還被 ACE 兩次（dutyPos 是陣型槽位，與球無關）', () => {
+  // 這條守的是「圈指錯東西」——比沒有圈更糟，因為玩家會相信它。
+  // 接發要看的是球會落在哪，那個圈由 landingMarker（matchStage.js:110）畫，本檔不重造。
+  assert.ok(!MARKER_DRILLS.has('tut-receive'), '接發那步不得有職責位的圈');
+  assert.equal(coachMarkerTarget('tut-receive', blockCtx({ dutyPos: { x: 0, z: 7 } })), null);
 });
 
 test('★反向對照★ 沒有職責位可用時不硬畫（寧可沒有圈，不要畫錯的圈）', () => {
