@@ -221,25 +221,26 @@ test('攔網（預判階段）：球還在對方手上時，圈指攻擊手的 x
   assert.deepEqual(p, { x: 2.4, z: 0.6 });
 });
 
-test('★攔網（修正階段）★ 球一出手就改指真正的過網 x，不再指攻擊手站的位置', () => {
-  // 量測（tools/coach-marker-block-probe.mjs，897 次真實扣球）：攻擊手的 x 與球實際
-  // 過網的 x 中位數差 0.98m，而攔網可及半寬只有 0.5m ⇒ 指攻擊手只有 37% 攔得到。
-  const p = coachMarkerTarget('tut-block', blockCtx({ netCrossX: -0.7 }));
-  assert.deepEqual(p, { x: -0.7, z: 0.6 }, '有過網點時必須優先用它');
-  assert.notEqual(p.x, 2.4, '還在指攻擊手＝修正階段沒生效');
+test('★攔網★ 有中點時優先用它，不再指攻擊手站的位置', () => {
+  // 量測（tools/coach-marker-block-probe.mjs 897 次扣球）：攻擊手 x 誤差 p50 1.089m、
+  // 直線/斜線中點 p50 0.634m（−42%），且 74.8% 的樣本中點更準。
+  const p = coachMarkerTarget('tut-block', blockCtx({ crossMidX: -0.7 }));
+  assert.deepEqual(p, { x: -0.7, z: 0.6 }, '有中點時必須優先用它');
+  assert.notEqual(p.x, 2.4, '還在指攻擊手＝中點沒生效');
 });
 
-test('★反向對照★ 算不出過網點時退回指攻擊手（不是整個消失）', () => {
-  const p = coachMarkerTarget('tut-block', blockCtx({ netCrossX: null }));
+test('★反向對照★ 算不出中點時退回指攻擊手（不是整個消失）', () => {
+  const p = coachMarkerTarget('tut-block', blockCtx({ crossMidX: null }));
   assert.deepEqual(p, { x: 2.4, z: 0.6 });
 });
 
-test('★台詞與行為同源★ 攔網台詞要講「圈會跳」，不得再教「卡在他那條線」', () => {
-  const hints = DRILL_DEFS['tut-block'].hints ?? [];
-  const joined = hints.join('｜');
-  assert.ok(joined.includes('圈'), '兩段式的圈沒有任何一句台詞講出來');
+test('★台詞與行為同源★ 攔網台詞講中點，且不得復活兩句被量測否證的說法', () => {
+  const joined = (DRILL_DEFS['tut-block'].hints ?? []).join('｜');
+  assert.ok(joined.includes('中間'), '圈站在兩條線中間這件事沒有任何一句台詞講出來');
   assert.ok(!joined.includes('卡在他要打的那條線'),
-    '這句已被量測否證（照它站只有 37% 攔得到），不得復活');
+    '照它站只有 37% 攔得到，已被量測否證');
+  assert.ok(!joined.includes('圈會跳'),
+    '扣球到過網只有 0.133 秒、扣掉反應時間只有 8.5% 跑得完＝教玩家做不到的事');
 });
 
 test('有圈的步畫在引擎的職責位（不是另算一份預測）', () => {

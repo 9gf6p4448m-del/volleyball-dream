@@ -317,11 +317,12 @@ export const DRILL_DEFS = {
     hints: [
       // input/matchControls.js:284 貼網 NEAR_NET_Z=2.2 才算攔網
       '先貼著網站好——離網太遠就不算攔網',
-      // ★ 這句改過（2026-08-13 量測）★ 原文是「卡在他要打的那條線上」，而量測顯示
-      // 攻擊手站的 x 與球真正過網的 x 中位數差 0.98m、攔網可及半寬只有 0.5m
-      // ⇒ 照原文站只有 37% 落在攔得到的範圍。真人回報「不走圈自己判斷才攔到」＝他是對的。
-      // 現在圈是兩段式的（先指人、球一出手改指過網點），台詞跟著講同一件事。
-      '先對著他站；他一出手圈會跳到球真正要過網的位置，跟著圈滑過去',
+      // ★ 這句改過兩次（2026-08-13 兩輪量測）★
+      // 原文「卡在他要打的那條線上」被量測否證（照它站只有 37% 攔得到）；
+      // 第二版「他一出手圈會跳到過網位置，跟著滑過去」**教的是玩家做不到的事**
+      // ——扣球到過網中位數只有 0.133 秒，扣掉反應時間只有 8.5% 跑得完 ⇒ 已移除。
+      // 現在圈站在直線／斜線兩條路線的中間，這句話就講那件事。
+      '圈站在他直線和斜線的中間——站那裡兩邊都構得到，不要賭單邊',
       // input/matchControls.js:519-527 手機站到位自動起跳（限 simpleMode）；:120,141-148 K 鍵
       // ★ 不寫「攔網鈕」★ 那顆鈕在 ui/actionButtons.js:34，simpleMode 下不建立
       //（app/matchStage.js:68）——教學局恆為 simpleMode，寫了就是教一顆不存在的鈕
@@ -593,23 +594,32 @@ export const TUTORIAL_MARKER_OFF_ID = 'tut-point';
 
 export function coachMarkerTarget(drillId, ctx = {}) {
   const {
-    attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase, dutyPos, netCrossX,
+    attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase, dutyPos, crossMidX,
   } = ctx;
   if (phase !== 'rally' || !MARKER_DRILLS.has(drillId)) return null;
   if (drillId === 'tut-block') {
     // 對方持球、且已經認出攻擊手，才知道要卡哪一條線
     if (!possession || possession === myTeam || !attackerId) return null;
     const side = myTeam === 'A' ? 1 : -1;
-    // ★★ 球一離手就改指「球真正會過網的 x」（2026-08-13 真人試玩＋量測）★★
-    // 修前這個圈恆定畫在攻擊手站的 x 上。量測（`tools/coach-marker-block-probe.mjs`
-    // 150 seeds×6＝897 次真實扣球）：那個 x 與球實際過網的 x **中位數差 0.98m**，
-    // 而攔網可及半寬 `TUNING.BLOCK_REACH_X` 只有 0.5m ⇒ **只有 37.0% 的時候圈落在
-    // 攔得到的範圍內**。斜線球尤其差——攻擊手站的位置只有直線球才等於過網點。
-    // 真人回報「不走圈、自己判斷才攔到」＝他是對的，圈六成時間指錯地方。
-    // ★ 兩段式，跟真實攔網一樣 ★ 球在對方組織階段＝指攻擊手（預判，提前約 2.9 秒）；
-    // 球一被扣出來＝立刻改指過網點（修正）。`netCrossX` 由呼叫端用 sim 的
-    // `predictNetCrossing`（`flight.js:93`）算——那是 `tryBlock` 用的同一份公式，不另刻。
-    if (netCrossX != null) return { x: netCrossX, z: blockLz * side };
+    // ★★ 圈畫在「直線／斜線兩條過網線的中點」★★（2026-08-13 真人試玩＋兩輪量測）
+    //
+    // 這裡改過兩次，兩次都是被量測推翻的：
+    //   ① 最初＝攻擊手站的 x。量測（`tools/coach-marker-block-probe.mjs`，897 次真實扣球）：
+    //      與球實際過網 x **中位數差 0.98m**，而攔網可及半寬 `TUNING.BLOCK_REACH_X`
+    //      只有 0.5m ⇒ **只有 37.0% 落在攔得到的範圍**。真人回報「不走圈自己判斷才攔到」
+    //      ——他是對的，圈六成時間指錯地方。
+    //   ② 第二版＝球一出手就 snap 到 `predictNetCrossing`。**準是準了，但玩家用不到**：
+    //      量測（`tools/coach-marker-reachability-probe.mjs`）扣球到過網
+    //      **中位數只有 8 tick＝0.133 秒**（p10 更只有 0.1 秒），而角色全速 4.288 m/s
+    //      在 0.133 秒只跑得了 0.57m、通常要修正近 1m ⇒ 不扣反應時間就只有 60% 跑得完，
+    //      **扣掉 200ms 反應剩 8.5%、300ms 剩 2.9%**。螢幕上是對的，身體來不及兌現。
+    //      ⇒ 已移除。★ 不留「看得到卻做不到」的提示 ★ 那跟文案說謊是同一件事。
+    //   ③ 現在＝`spikeAimsFor`＋`netCrossingX`（`blockRead.js:33,38`）算出直線與斜線
+    //      各自的過網 x，取中點。**在攻擊手被認出的那一刻就算得出來**（提前中位數 2.93 秒），
+    //      誤差 p50 從 1.089m 降到 **0.634m（−42%）**，897 樣本中 **74.8% 比原本準**。
+    //      這不是新公式——`blockCommitRead`（`blockRead.js:192-231`）的裁定書早就寫過
+    //      同一個結論：「站到兩條過網線的中點，而不是站到人身上」。
+    if (crossMidX != null) return { x: crossMidX, z: blockLz * side };
     const atk = actors?.[attackerId];
     if (!atk) return null;
     return { x: atk.x, z: blockLz * side };

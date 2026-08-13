@@ -45,7 +45,7 @@ import {
   tutorialCoachLine, tutorialVerdictLine, tutorialStageFor, coachMarkerTarget,
   TUTORIAL_RELEASE_LINE, TUTORIAL_FINISH_LINE,
 } from '../career/practiceMatch.js';
-import { predictNetCrossing } from '../sim/flight.js';
+import { spikeAimsFor, netCrossingX } from '../sim/blockRead.js';
 import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
 import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
@@ -782,6 +782,17 @@ export function updateTutorial(s, now) {
 
 // 教練光圈：這一步該站哪（目前只有攔網那一步有——理由見 coachMarkerTarget 上方）。
 // ★ 純表現層 ★ 只讀 game／aiState 現成的值，一個判定都不在這裡算。
+// 直線／斜線兩條過網線的中點 x（攔網圈用）。★ 沿用 blockCommitRead 已驗證的手法 ★
+// —— 的裁定書寫過同一個結論：站到兩條過網線的中點，
+// 而不是站到人身上。算不出來（沒有攻擊手／查不到那個人）＝回 null＝圈退回指攻擊手。
+function blockAimMidX(game, attackerId) {
+  if (!attackerId || !game?.actors?.[attackerId] || !game.players?.[attackerId]) return null;
+  const from = game.actors[attackerId];
+  const aims = spikeAimsFor(game, attackerId);
+  if (!aims?.line || !aims?.cross) return null;
+  return (netCrossingX(from, aims.line) + netCrossingX(from, aims.cross)) / 2;
+}
+
 export function updateCoachMarker(s, now = 0) {
   const marker = s.stage?.coachMarker;
   if (!marker) return; // 非教學局＝物件根本不存在
@@ -797,12 +808,9 @@ export function updateCoachMarker(s, now = 0) {
     // 職責位＝引擎自己的答案（玩家沒碰搖桿時系統就是把他帶去這裡）——不另算一份
     dutyPos: s.game.phase === 'rally' && s.game.match
       ? dutyPosition(s.game, myTeam, s.playerId) : null,
-    // 球一被扣出來就改指真正的過網點——用 sim 的同一份公式（tryBlock 也是用它），
-    // 不另刻拋物線。飛行中的球才算得出來；算不出（會先落地／還在對方手上）＝回 null
-    // ＝圈退回指攻擊手。★ 只在對方進攻中才問 ★ 我方持球時這個值沒有意義
-    netCrossX: (s.game.phase === 'rally' && s.game.rally?.possession
-      && s.game.rally.possession !== myTeam && s.game.rally.profile === 'spike')
-      ? (predictNetCrossing(s.game.ball)?.x ?? null) : null,
+    // 直線／斜線兩條過網線的中點——攻擊手一被認出就算得出來（不必等他出手）。
+    // 用 sim 既有的 spikeAimsFor＋netCrossingX（blockRead.js:33,38），零新公式。
+    crossMidX: blockAimMidX(s.game, s.aiState?.attackerId),
   });
   if (!point) { marker.hide(); return; }
   const me = s.game.actors?.[s.playerId];
