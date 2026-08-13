@@ -326,3 +326,46 @@ test('★同源★ 三級台詞全部由 def.hints 組出來，不得憑空多�
     assert.equal(rest.replace(/[。；、，\s]/g, ''), '', `attempts=${n} 出現了不在 hints 裡的句子：${rest}`);
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// 七、tut-block 改判「起跳攔網」（2026-08-13 Sawmah 裁定）
+// ════════════════════════════════════════════════════════════
+// 起因是量測：個人攔網率 7.3%（897 次扣球），以「碰到球」為門檻平均要打約 14 球，
+// 而那 7.3% 的主因不是位置（誤差砍 42%，落在可及範圍內只 +1.7pp）而是時機窗與擲骰。
+
+test('★tut-block 判準★ 吃 obs.blockJumps，不吃事件流（sim 沒有起跳攔網事件）', () => {
+  const def = DRILL_DEFS['tut-block'];
+  assert.equal(def.count([], 'me', 'A', { blockJumps: 1 }), 1);
+  assert.equal(def.count([], 'me', 'A', { blockJumps: 0 }), 0);
+  assert.equal(def.count([], 'me', 'A', null), 0, '沒有觀測量時要回 0，不得當成做到了');
+});
+
+test('★反向對照★ 光有 BLOCK_TOUCH 事件而沒起跳觀測 ⇒ 不算過（判準真的換了）', () => {
+  const ev = [{ type: 'BLOCK_TOUCH', playerId: 'me', team: 'A' }];
+  assert.equal(DRILL_DEFS['tut-block'].count(ev, 'me', 'A', null), 0,
+    '還在讀事件流＝判準沒換成起跳');
+});
+
+test('★台詞與判準同源★ 標題講的是起跳卡位，不是碰到球', () => {
+  const def = DRILL_DEFS['tut-block'];
+  assert.ok(def.label.includes('起跳'), `標題沒講起跳：${def.label}`);
+  assert.ok(!def.label.includes('碰到球'), '標題還在承諾「碰到球」＝判準與文案脫鉤');
+});
+
+test('advanceTutorial 把 obs 傳得到判準（起跳 1 次就過這一步）', () => {
+  // 走到 tut-block（索引 2）
+  const st = { ...createTutorialState(0), index: 2 };
+  const out = advanceTutorial(st, {
+    events: [], playerId: 'me', myTeam: 'A', tick: 5, obs: { blockJumps: 1 },
+  });
+  assert.equal(out.change, 'advance');
+  assert.equal(out.cleared, true);
+});
+
+test('★反向對照★ 沒起跳就不過（否則這一步等於白送）', () => {
+  const st = { ...createTutorialState(0), index: 2 };
+  const out = advanceTutorial(st, {
+    events: [], playerId: 'me', myTeam: 'A', tick: 5, obs: { blockJumps: 0 },
+  });
+  assert.equal(out.change, null);
+});

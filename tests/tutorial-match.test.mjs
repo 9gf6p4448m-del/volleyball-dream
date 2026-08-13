@@ -51,8 +51,13 @@ const STEP_EVENTS = [
   () => tipKill(),
 ];
 
-const stepOnce = (state, events, tick = 0) => advanceTutorial(state, {
-  events, playerId: PID, myTeam: TEAM, tick,
+// ★ 2026-08-13 判準變更（Sawmah 裁定）★ `tut-block` 從「攔網碰到球」改成
+// 「貼網卡位、起跳攔網」——起因是量測：個人攔網率只有 7.3%（897 次扣球），
+// 以碰到球為門檻平均要打約 14 球，而主因不是位置而是時機窗與擲骰。
+// 起跳沒有事件（加事件會動到 sim-hash），走 `obs.blockJumps`⇒ 治具要跟著給觀測量。
+const STEP_OBS = [null, null, { blockJumps: 1 }, null, null, null];
+const stepOnce = (state, events, tick = 0, obs = null) => advanceTutorial(state, {
+  events, playerId: PID, myTeam: TEAM, tick, obs,
 });
 
 // ════════════════════════════════════════════════════════════
@@ -71,7 +76,7 @@ test('六步依序推進：每一步做到了才走下一步，六步走完回�
     assert.equal(currentTutorialDrill(idle.state).id, TUTORIAL_DRILL_IDS[i]);
 
     ev.push(...STEP_EVENTS[i]());
-    const done = stepOnce(st, ev, 0);
+    const done = stepOnce(st, ev, 0, STEP_OBS[i]);
     assert.equal(done.change, 'advance', `第 ${i + 1} 步（${TUTORIAL_DRILL_IDS[i]}）做到了卻沒推進`);
     assert.equal(done.cleared, true);
     assert.equal(done.drill.id, TUTORIAL_DRILL_IDS[i]);
@@ -98,7 +103,7 @@ test('★切片語意★ 每一步只看「這一步開始之後」的事件—�
   let st = createTutorialState(0);
   for (let i = 0; i < 5; i += 1) {
     ev.push(...STEP_EVENTS[i]());
-    const r = stepOnce(st, ev, 0);
+    const r = stepOnce(st, ev, 0, STEP_OBS[i]);
     assert.equal(r.change, 'advance', `第 ${i + 1} 步沒推進`);
     st = r.state;
   }
@@ -184,7 +189,7 @@ test('tutorialSettle：完成數與 log 同源，且**不得**帶 unlockControl�
   const ev = [];
   for (let i = 0; i < 4; i += 1) { // 前四步做到，後兩步放行
     ev.push(...STEP_EVENTS[i]());
-    st = stepOnce(st, ev, 0).state;
+    st = stepOnce(st, ev, 0, STEP_OBS[i]).state;
   }
   st = stepOnce(st, ev, TUTORIAL_STALL_TICKS).state;
   st = stepOnce(st, ev, TUTORIAL_STALL_TICKS * 2).state;
@@ -302,7 +307,15 @@ function loopState(events) {
       tutorialGreeted: false,
       tutorialEnded: false,
       tutorialNextLine: null,
-      game: { players: { [PID]: { id: PID, teamId: TEAM } }, events, tick: 0, phase: 'rally' },
+      game: {
+        players: { [PID]: { id: PID, teamId: TEAM } },
+        // `actors` 是起跳攔網觀測的來源（matchLoop.observeTutorialBlockJump 讀
+        // `blockStartTick` 的上升緣＝一次起跳；sim/game.js:592-604「一新窗＝一跳」）
+        actors: { [PID]: { blockStartTick: -9999, x: 0, z: 0 } },
+        events,
+        tick: 0,
+        phase: 'rally',
+      },
       stage: {
         practiceHud: { update: (rows, head) => hud.push({ rows, head }) },
         commentary: { coach: (text) => said.push(text) },
@@ -330,8 +343,11 @@ test('★接線★ updateTutorial：六步走完回 true（＝提前收局的訊
   const ev = [];
   const { s } = loopState(ev);
   let fired = 0;
-  for (const make of STEP_EVENTS) {
-    ev.push(...make());
+  for (let i = 0; i < STEP_EVENTS.length; i += 1) {
+    ev.push(...STEP_EVENTS[i]());
+    // 攔網那一步的判準是「起跳」不是事件——模擬 sim 開一次新攔網窗
+    // （這正是玩家貼網卡到位時 simpleMode 自動起跳會做的事）
+    if (STEP_OBS[i]?.blockJumps) s.game.actors[PID].blockStartTick = 42;
     if (updateTutorial(s, 0)) fired += 1;
   }
   assert.equal(fired, 1, '★核心★ 收局訊號要出現、而且只出現一次');

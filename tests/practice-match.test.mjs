@@ -134,16 +134,34 @@ test('★守衛★ 每個科目的 label 都含目標數字（台詞是規格）
   }
 });
 
+// ★ 2026-08-13 判準變更（Sawmah 裁定）★ `tut-block` 從「攔網碰到球」改成
+// 「貼網卡位、起跳攔網」——起跳在 sim 裡沒有事件（加事件會動到 sim-hash 的 `ev` 欄位），
+// 判準改讀 `actor.blockStartTick` 的上升緣，由呼叫端數好放進 `obs`。
+// ⇒ 這個科目的紅綠素材不在事件流裡，改由 OBS_OF 供給；其餘科目照舊走事件流。
+const OBS_OF = {
+  'tut-block': (n) => ({ blockJumps: n }),
+};
+
 for (const [id, def] of Object.entries(DRILL_DEFS)) {
   test(`判定「${def.label}」：剛好達標＝綠、差一次＝紅`, () => {
     const gen = STREAM_OF[id];
-    const green = drillGainFor(gen(def.target), PID, TEAM, def);
+    const obs = OBS_OF[id] ?? null;
+    const green = drillGainFor(gen(def.target), PID, TEAM, def, obs?.(def.target) ?? null);
     assert.ok(green >= def.target, `${id}：做滿 ${def.target} 次卻沒判到（實得 ${green}）`);
-    const red = drillGainFor(gen(def.target - 1), PID, TEAM, def);
+    const red = drillGainFor(gen(def.target - 1), PID, TEAM, def, obs?.(def.target - 1) ?? null);
     assert.ok(red < def.target,
       `★反向★ ${id}：只做了 ${def.target - 1} 次也判達標（實得 ${red}）＝判定式沒在數東西`);
   });
 }
+
+test('★守衛★ 走 obs 的科目，事件流餵再多也不得達標（判準真的搬離事件流）', () => {
+  for (const id of Object.keys(OBS_OF)) {
+    const def = DRILL_DEFS[id];
+    const many = drillGainFor(STREAM_OF[id](def.target + 5), PID, TEAM, def, null);
+    assert.ok(many < def.target,
+      `${id}：沒給 obs 卻靠事件流達標了＝判準沒真的搬過去（實得 ${many}）`);
+  }
+});
 
 test('drillGainFor：未知科目一律回 0（呼叫端手捏的科目不得繞過定義表）', () => {
   assert.equal(drillGainFor(kills(9), PID, TEAM, { id: '不存在的科目' }), 0);

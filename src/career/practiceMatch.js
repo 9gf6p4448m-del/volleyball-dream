@@ -312,7 +312,14 @@ export const DRILL_DEFS = {
   },
   'tut-block': {
     id: 'tut-block',
-    label: '攔網碰到球 1 次',
+    // ★ 目標從「碰到球」改成「起跳攔網」（2026-08-13 Sawmah 裁定，起因是量測）★
+    // 量測：個人攔網率只有 7.3%（`tools/coach-marker-crossmid-probe.mjs`，897 次扣球）
+    // ⇒ 以「碰到球」為門檻平均要打約 14 球。而那 7.3% 的主因**不是位置**——位置已經
+    // 盡力了（誤差 p50 從 0.984m 降到 0.573m，落在可及範圍內只從 37.0%→38.7%，
+    // 個人攔網率 7.0%→7.3% 統計上分不出來）——是起跳時機窗、手高閘、屬性擲骰的複合機率。
+    // 教學局要教的是**動作**（貼網、卡位、起跳），不是拿一個 7% 機率的結果當門檻。
+    // ★ 只改教學局 ★ 正式比賽的攔網判定一行未動。
+    label: '貼網卡位、起跳攔網 1 次',
     target: 1,
     hints: [
       // input/matchControls.js:284 貼網 NEAR_NET_Z=2.2 才算攔網
@@ -328,7 +335,11 @@ export const DRILL_DEFS = {
       //（app/matchStage.js:68）——教學局恆為 simpleMode，寫了就是教一顆不存在的鈕
       '手機不用按，貼網卡到位就會自己起跳（電腦按 K）',
     ],
-    count: countBlockTouches,
+    // ★ 不走事件流 ★ sim 沒有「起跳攔網」事件，而加一個會動到 sim-hash 的
+    // `ev` 欄位（`tools/sim-hash-probe.mjs:91`）＝行為基準被推移，那要拍板。
+    // 改讀既有的可觀測狀態：`actor.blockStartTick` 的上升緣＝一次起跳
+    // （`sim/game.js:592-604` 註解自己寫「一新窗＝一跳」），由呼叫端數好傳進 obs。
+    count: (ev, pid, team, obs) => obs?.blockJumps ?? 0,
   },
   'tut-serve': {
     id: 'tut-serve',
@@ -648,11 +659,13 @@ export function currentTutorialDrill(state) {
 }
 
 // 這一步目前做到幾次（切片後；上限夾在 target，HUD 不顯示 3/1 這種數字）
-function currentCount(state, { events = [], playerId, myTeam }) {
+// `obs`＝事件流以外的觀測量（目前只有 blockJumps＝起跳攔網次數）。呼叫端負責在
+// 換步／重試時把它歸零，語意與 `startEvent` 的切片起點一致。
+function currentCount(state, { events = [], playerId, myTeam, obs = null }) {
   const def = currentTutorialDrill(state);
   if (!def) return 0;
   const slice = events.slice(state.startEvent ?? 0);
-  return def.count(slice, playerId, myTeam) ?? 0;
+  return def.count(slice, playerId, myTeam, obs) ?? 0;
 }
 
 /**
@@ -664,12 +677,12 @@ function currentCount(state, { events = [], playerId, myTeam }) {
  *   收局訊號＝回傳的 `state.done`（六步都離開了）
  */
 export function advanceTutorial(
-  state, { events = [], playerId, myTeam, tick = 0, rallyEnded = false } = {},
+  state, { events = [], playerId, myTeam, tick = 0, rallyEnded = false, obs = null } = {},
 ) {
   const st = state ?? createTutorialState();
   const def = currentTutorialDrill(st);
   if (!def) return { state: st, change: null, drill: null, cleared: false };
-  const count = currentCount(st, { events, playerId, myTeam });
+  const count = currentCount(st, { events, playerId, myTeam, obs });
   const cleared = count >= def.target;
   // ★ 先判完成再判逾時 ★ 兩者同一幀成立時算「做到了」——同一顆球既完成了科目又
   // 剛好壓線超時，記成放行會把玩家真的做到的事寫成沒做到
@@ -709,7 +722,7 @@ export function advanceTutorial(
 
 // HUD 用的逐步狀態（六列固定；`practiceHud.update` 吃這個形狀）。
 //   phase：'done'＝做到了／'passed'＝卡太久被帶過／'current'＝現在練這步／'todo'＝還沒到
-export function tutorialRows(state, { events = [], playerId, myTeam } = {}) {
+export function tutorialRows(state, { events = [], playerId, myTeam, obs = null } = {}) {
   const st = state ?? createTutorialState();
   const cur = currentTutorialDrill(st);
   return TUTORIAL_DRILL_IDS.map((id, i) => {
@@ -729,7 +742,7 @@ export function tutorialRows(state, { events = [], playerId, myTeam } = {}) {
       return {
         id,
         label: def.label,
-        count: Math.min(currentCount(st, { events, playerId, myTeam }), def.target),
+        count: Math.min(currentCount(st, { events, playerId, myTeam, obs }), def.target),
         target: def.target,
         achieved: false,
         phase: 'current',
@@ -858,10 +871,10 @@ export function tutorialInviteDue(career, seasonIndex = 1) {
 // ════════════════════════════════════════════════════════════════
 // 本場某科目做到幾次。★以 id 回查定義表★——呼叫端手捏的科目物件（或打錯的 id）
 // 一律回 0，不會拿著自帶的判定函式繞過單一真相源。
-export function drillGainFor(events, playerId, myTeam, drill) {
+export function drillGainFor(events, playerId, myTeam, drill, obs = null) {
   const def = drillDefOf(drill);
   if (!def) return 0;
-  return def.count(events ?? [], playerId, myTeam) ?? 0;
+  return def.count(events ?? [], playerId, myTeam, obs) ?? 0;
 }
 
 // 賽末結算。`unlockControl`＝全數完成 ⇒ 集訓「控球」格開放的**資料面訊號**

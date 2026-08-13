@@ -756,13 +756,18 @@ export function updateTutorial(s, now) {
   const isRally = s.game.phase === 'rally';
   const rallyEnded = s.tutorialWasRally === true && !isRally;
   s.tutorialWasRally = isRally;
+  observeTutorialBlockJump(s);
   const step = advanceTutorial(s.tutorial, {
     events: s.game.events, playerId: s.playerId, myTeam, tick: s.game.tick, rallyEnded,
+    obs: s.tutorialObs,
   });
   s.tutorial = step.state;
   if (step.change) {
     // 換步／重試／放行都要重擺場景——但擺得成要等死球（見 applyTutorialStage）
     s.tutorialRestageDue = true;
+    // 觀測量跟著歸零——語意與 advanceTutorial 重設 startEvent 的切片起點一致：
+    // 這一步只算「這一步開始之後」發生的事，上一次起跳不得算進這一次
+    s.tutorialObs = { blockJumps: 0 };
     const nextLine = step.state.done
       ? TUTORIAL_FINISH_LINE
       : tutorialCoachLine(currentTutorialDrill(step.state), step.state.attempts ?? 0);
@@ -778,6 +783,22 @@ export function updateTutorial(s, now) {
   updateCoachMarker(s, now);
   refreshTutorialHud(s);
   return !!step.change && step.state.done;
+}
+
+// 起跳攔網的觀測（`tut-block` 的判準）。★ 不是新事件 ★ sim 沒有「起跳攔網」事件，
+// 而加一個會動到 sim-hash 的 `ev` 欄位（`tools/sim-hash-probe.mjs:91`）＝行為基準被推移。
+// 改讀既有狀態：`actor.blockStartTick` 只在**新窗開啟**時被寫入
+// （`sim/game.js:592-604`，註解自己寫「一新窗＝一跳」）⇒ 它的變動就是一次起跳。
+function observeTutorialBlockJump(s) {
+  if (!s.tutorialObs) s.tutorialObs = { blockJumps: 0 };
+  const a = s.game.actors?.[s.playerId];
+  if (!a) return;
+  const t = a.blockStartTick;
+  if (t !== s.tutorialLastBlockStart) {
+    // 初次見到（undefined → 實際值）不算一次跳，否則開場就先送一次
+    if (s.tutorialLastBlockStart !== undefined && t > -9999) s.tutorialObs.blockJumps += 1;
+    s.tutorialLastBlockStart = t;
+  }
 }
 
 // 教練光圈：這一步該站哪（目前只有攔網那一步有——理由見 coachMarkerTarget 上方）。
@@ -838,7 +859,9 @@ const TUTORIAL_RELEASE_TTL = 2600; // 「這個之後再說」那句的停留時
 export function refreshTutorialHud(s) {
   if (!s.tutorial) return;
   const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
-  const rows = tutorialRows(s.tutorial, { events: s.game.events, playerId: s.playerId, myTeam });
+  const rows = tutorialRows(s.tutorial, {
+    events: s.game.events, playerId: s.playerId, myTeam, obs: s.tutorialObs,
+  });
   s.practiceRows = rows;
   s.stage.practiceHud?.update(rows, '入隊測試・教練指導中');
 }
