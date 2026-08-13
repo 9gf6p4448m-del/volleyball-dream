@@ -368,6 +368,10 @@ export const DRILL_DEFS = {
       // DRILL_BIAS['tut-point'] = ['feedPlayer'] ⇒ practiceBiasFor 把你的 trust 拉到
       // PRACTICE_FEED_TRUST、隊友壓到 PRACTICE_MATE_TRUST。這句話是那條偏置的台詞面
       '今天教練讓二傳優先餵球給你——球會一直來，把握機會打下來',
+      // ★ 這句與 MARKER_DRILLS 是同一件事 ★ tut-point 不在那個集合裡＝這一步真的沒有圈。
+      // 兩者由 tests/tutorial-stage.test.mjs 的守衛綁在一起：把 tut-point 加進 MARKER_DRILLS
+      // 而沒改這句（或反過來）會當場紅。文案說謊事故（2026-08-13）的同型防護。
+      '地上的圈從這一步收起來了——正式比賽沒有圈，自己看球、自己找位置',
     ],
     count: totalPointsFor,
   },
@@ -562,16 +566,35 @@ export function tutorialStageFor(drillId, rotations, playerId, myTeam = 'A') {
 // @param drillId  現在練哪一步
 // @param ctx      { attackerId, actors, myTeam, blockLz, possession, phase }
 //                 全部由呼叫端從 game／aiState 直接讀出來（這裡不碰那兩個物件的形狀）
+export const MARKER_DRILLS = new Set(['tut-receive', 'tut-handle', 'tut-block', 'tut-three']);
+
+// ★ 最後一步刻意收掉輔助輪 ★（2026-08-13 Sawmah 裁定，起因是他自己的觀察：
+// 「實際玩大部分跑位都是玩家自己吧」——他說對了。自動帶位只在**整球沒碰過搖桿**時生效
+// （`matchControls.js:322-323, 348`：rally 中一推搖桿 `manualOwned=true`，那一球不再拉回），
+// 所以真正在玩的人跑位幾乎全是自己的。教學局如果一路給圈，落差會在教學結束那一刻
+// 突然出現＝玩家會覺得「怎麼跟剛剛不一樣」。收在最後一步、而且**教練明講**，
+// 落差就變成教學的一部分而不是意外。）
+export const TUTORIAL_MARKER_OFF_ID = 'tut-point';
+// ★ 沒有圈的步 ★ tut-serve 不在 MARKER_DRILLS 是另一個理由：發球員是定點發球，
+// 搖桿在發球前根本不生效（`matchControls.js:328-334` 直接把他推回發球區）⇒ 沒得跑。
+
 export function coachMarkerTarget(drillId, ctx = {}) {
-  const { attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase } = ctx;
-  if (phase !== 'rally' || drillId !== 'tut-block') return null;
-  // 對方持球、且已經認出攻擊手，才知道要卡哪一條線
-  if (!possession || possession === myTeam || !attackerId) return null;
-  const atk = actors?.[attackerId];
-  if (!atk) return null;
-  // 「卡在他要打的那條線上」＝站到他的 x 上、貼著網（台詞與這一行是同一件事）
-  const side = myTeam === 'A' ? 1 : -1;
-  return { x: atk.x, z: blockLz * side };
+  const {
+    attackerId, actors, myTeam = 'A', blockLz = 0.6, possession, phase, dutyPos,
+  } = ctx;
+  if (phase !== 'rally' || !MARKER_DRILLS.has(drillId)) return null;
+  if (drillId === 'tut-block') {
+    // 對方持球、且已經認出攻擊手，才知道要卡哪一條線
+    if (!possession || possession === myTeam || !attackerId) return null;
+    const atk = actors?.[attackerId];
+    if (!atk) return null;
+    // 「卡在他要打的那條線上」＝站到他的 x 上、貼著網（台詞與這一行是同一件事）
+    const side = myTeam === 'A' ? 1 : -1;
+    return { x: atk.x, z: blockLz * side };
+  }
+  // 其餘有圈的步：畫在**引擎自己的職責位**（呼叫端傳 sim 的 `dutyPosition` 輸出）。
+  // 用它的好處是這個圈永遠不會騙人——那正是玩家沒碰搖桿時系統會把他帶去的地方。
+  return dutyPos ? { x: dutyPos.x, z: dutyPos.z } : null;
 }
 
 export function createTutorialState(tick = 0) {

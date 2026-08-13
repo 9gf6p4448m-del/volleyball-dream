@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import {
   rotationWithPlayerAt, tutorialStageFor, TUTORIAL_DRILL_STAGE, TUTORIAL_DRILL_IDS,
   createTutorialState, advanceTutorial, tutorialCoachLine, DRILL_DEFS, coachMarkerTarget,
+  MARKER_DRILLS, TUTORIAL_MARKER_OFF_ID,
 } from '../src/career/practiceMatch.js';
 import { restageRotation } from '../src/sim/game.js';
 import { isBackRow, isFrontRow, positionOf } from '../src/sim/rotation.js';
@@ -220,13 +221,48 @@ test('攔網：圈畫在攻擊手的 x 上、貼著我方的網（＝台詞說�
   assert.deepEqual(p, { x: 2.4, z: 0.6 });
 });
 
-test('★反向對照★ 其餘五步一律不畫（畫了就是跟自動帶位打架／跟落點圈重複）', () => {
-  for (const id of TUTORIAL_DRILL_IDS) {
-    if (id === 'tut-block') continue;
-    assert.equal(coachMarkerTarget(id, blockCtx()), null, `${id} 不該有圈`);
+test('有圈的步畫在引擎的職責位（不是另算一份預測）', () => {
+  const duty = { x: -1.8, z: 3.2 };
+  for (const id of ['tut-receive', 'tut-handle', 'tut-three']) {
+    const p = coachMarkerTarget(id, blockCtx({ dutyPos: duty }));
+    assert.deepEqual(p, duty, `${id} 沒吃引擎的職責位`);
   }
-  // 接發那步刻意不畫——landingMarker（matchStage.js:110）本來就在畫來球落點
-  assert.equal(coachMarkerTarget('tut-receive', blockCtx()), null);
+});
+
+test('★反向對照★ 沒有職責位可用時不硬畫（寧可沒有圈，不要畫錯的圈）', () => {
+  assert.equal(coachMarkerTarget('tut-receive', blockCtx({ dutyPos: null })), null);
+});
+
+test('發球那步不畫圈——發球員是定點發球，搖桿在發球前不生效', () => {
+  assert.equal(coachMarkerTarget('tut-serve', blockCtx({ dutyPos: { x: 0, z: 7 } })), null);
+});
+
+test('★台詞與行為同源★ 收掉輔助輪那一步：真的沒有圈，而且台詞真的有講', () => {
+  // 這條守的是 2026-08-13 事故的同型錯誤：文案宣稱一件事、程式做另一件事。
+  // 把 tut-point 加進 MARKER_DRILLS 而沒改台詞（或反過來）＝這條紅。
+  assert.ok(!MARKER_DRILLS.has(TUTORIAL_MARKER_OFF_ID),
+    '宣稱要收掉圈的那一步卻在 MARKER_DRILLS 裡＝台詞說謊');
+  assert.equal(coachMarkerTarget(TUTORIAL_MARKER_OFF_ID, blockCtx({ dutyPos: { x: 1, z: 1 } })),
+    null, '收掉輔助輪的那一步不得有圈');
+  const hints = DRILL_DEFS[TUTORIAL_MARKER_OFF_ID].hints ?? [];
+  assert.ok(hints.some((h) => h.includes('圈')),
+    '圈收起來了這件事沒有任何一句台詞講出來＝玩家會以為是 bug');
+});
+
+test('★反向對照★ 有圈的那幾步，台詞不得宣稱圈不見了', () => {
+  for (const id of MARKER_DRILLS) {
+    for (const h of DRILL_DEFS[id].hints ?? []) {
+      assert.ok(!h.includes('圈收起來'), `${id} 有圈卻說圈收起來了：${h}`);
+    }
+  }
+});
+
+test('★反向對照★ 不在 MARKER_DRILLS 的步一律沒有圈', () => {
+  for (const id of TUTORIAL_DRILL_IDS) {
+    if (MARKER_DRILLS.has(id)) continue;
+    assert.equal(coachMarkerTarget(id, blockCtx({ dutyPos: { x: 1, z: 1 } })), null,
+      `${id} 不該有圈`);
+  }
 });
 
 test('條件不成立就不畫：非 rally／我方持球／還沒認出攻擊手／查不到那個人', () => {

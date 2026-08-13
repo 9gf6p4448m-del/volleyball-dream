@@ -11,7 +11,7 @@ import {
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
-  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf, AI,
+  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf, dutyPosition, AI,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { contactAssistFor } from './contactAssist.js';
@@ -793,6 +793,9 @@ export function updateCoachMarker(s, now = 0) {
     blockLz: AI.BLOCK_LZ, // ★ 讀 sim 的常數，不複製一份 ★ 複製＝第二個真相源
     possession: s.game.rally?.possession,
     phase: s.game.phase,
+    // 職責位＝引擎自己的答案（玩家沒碰搖桿時系統就是把他帶去這裡）——不另算一份
+    dutyPos: s.game.phase === 'rally' && s.game.match
+      ? dutyPosition(s.game, myTeam, s.playerId) : null,
   });
   if (!point) { marker.hide(); return; }
   const me = s.game.actors?.[s.playerId];
