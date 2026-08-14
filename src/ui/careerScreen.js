@@ -65,6 +65,10 @@ import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
 import { isHighSchool } from '../career/chapter.js';
+import { bestFinishOf, seasonFinishOf, FINISH_LABEL } from '../career/admission.js';
+import {
+  universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
+} from '../career/universities.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 // ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
@@ -1992,6 +1996,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // ＝維持現行行為，不用在這裡寫死字串（那會是第二個真相源）
     const careerOver = isHighSchool(store.loadChapter?.())
       && (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
+    // 升學已定（批 5）：這一格擋在最前面——已經選好學校的存檔不該再看到高中的收尾流程
+    const pickedSchool = universityById(store.loadSchool?.() ?? '');
+    if (pickedSchool) {
+      root.appendChild(el('div', [
+        'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
+        'letter-spacing:2px',
+      ], `🎓 ${pickedSchool.name}`));
+      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
+        '升學已定——大學賽季準備中（賽程在下一批接上）'));
+    }
     if (careerOver) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,
@@ -2010,6 +2024,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         if (endEvs.length) fireEvents(endEvs, career, player, goFinale);
         else goFinale();
       }));
+      // ★ 升學的第二道門（批 5）★ 謝幕後的過場卡也會接到同一個畫面，但那張卡點一下
+      // 就消失——沒有這顆按鈕，錯過的人就再也回不去升學了（升學是整章的分岔）。
+      root.appendChild(button('▶ 決定升學志願', false, () => showAdmission()));
     } else if (stage === 'champion') {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
@@ -2256,7 +2273,132 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     document.body.appendChild(overlay);
   }
 
-  // 下一章佔位（Q5：大學章 kickoff 另開，本輪只留門）——點擊回選檔頁（新的夢）
+  // ══════ 升學畫面（大學卷批 5，2026-08-14）══════
+  // 題 9 拍板：**成績決定候選集合（天花板），玩家在集合內自選（要什麼故事）**。
+  // ★ 代價一定要看得見 ★ 卷宗 §三之二：「選擇的痛苦要來自玩家知道代價還是選了，
+  // 不是來自他被騙。」所以每張卡都印球權／戰績／技術三軸的人話，不印數字。
+  function admissionContext() {
+    const career = store.loadCareer();
+    // 三屆最佳成績：屆末封存（loadSeasonArchive）＋當屆名次＋titles 三道回退，
+    // 判定全在 admission.js（批 2），這裡只負責把材料湊齊
+    const finish = bestFinishOf({ seasons: store.loadSeasonArchive?.() ?? [] }, {
+      titles: career?.titles ?? 0,
+      currentFinish: seasonFinishOf(career),
+    });
+    return {
+      finish,
+      schools: admissibleSchoolsFor(finish),
+      // 同屆隊友的去向（決定論；沒名冊就是空的——舊存檔不炸）
+      placements: alumniPlacementsFor(store.loadRoster?.()?.members ?? []),
+    };
+  }
+
+  function schoolCard(u, peers, onPick) {
+    const tierColor = { 強豪: COLOR.gold, 中段: COLOR.cyan, 弱校: COLOR.dim }[TIER_LABEL[u.tier]];
+    const card = el('div', [
+      'width:min(560px,94vw)', `background:${COLOR.card}`, 'border-radius:16px',
+      'padding:14px 16px', 'display:flex', 'flex-direction:column', 'gap:8px',
+      `border:1px solid ${tierColor === COLOR.dim ? '#2c3a58' : tierColor}44`,
+    ]);
+    const head = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+    head.appendChild(el('div', ['font-size:19px', 'font-weight:900', `color:${COLOR.text}`], u.name));
+    head.appendChild(badge(TIER_LABEL[u.tier], `${tierColor}22`, tierColor));
+    card.appendChild(head);
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'], u.blurb));
+    card.appendChild(el('div', ['font-size:12px', `color:${COLOR.cyan}`],
+      `王牌 ${u.ace.name}（${u.ace.title}）`));
+    // 舊識：資料表寫死的對手 ace ＋ 這份存檔算出來的同屆隊友
+    const known = [
+      ...(u.alumni ?? []).map((n) => `${n}（高中的對手）`),
+      ...peers.map((m) => `${m.fullName}（你的隊友）`),
+    ];
+    if (known.length) {
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`, 'line-height:1.6'],
+        `認識的人：${known.join('、')}`));
+    }
+    for (const [label, text] of [['球權', u.cost.ball], ['戰績', u.cost.record], ['技術', u.cost.tech]]) {
+      const row = el('div', ['display:flex', 'gap:8px', 'align-items:flex-start']);
+      row.appendChild(el('div', ['font-size:11px', 'font-weight:800', `color:${COLOR.dim}`,
+        'flex:none', 'width:28px', 'padding-top:2px'], label));
+      row.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'line-height:1.6'], text));
+      card.appendChild(row);
+    }
+    const pick = el('div', ['display:flex', 'justify-content:flex-end']);
+    pick.appendChild(smallButton('▶ 就決定是這裡', () => onPick(u)));
+    card.appendChild(pick);
+    return card;
+  }
+
+  function showAdmission() {
+    const { finish, schools, placements } = admissionContext();
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:39', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#05070d', 'gap:10px', 'padding:24px 12px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'letter-spacing:4px'],
+      '升學志願'));
+    overlay.appendChild(el('div', [
+      'font-size:26px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:3px',
+    ], FINISH_LABEL[finish] ?? '高中三年'));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'line-height:1.7',
+      'text-align:center', 'max-width:560px'],
+    `這樣的成績，有 ${schools.length} 所大學向你開了門。`));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
+      'text-align:center', 'max-width:560px', 'margin-bottom:4px'],
+    '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍沒有人教得動你。想清楚再選。'));
+    for (const u of schools) {
+      overlay.appendChild(schoolCard(u, placements[u.id] ?? [], (picked) => {
+        overlay.remove();
+        showAdmissionConfirm(picked, () => showAdmission());
+      }));
+    }
+    document.body.appendChild(overlay);
+  }
+
+  // 二次確認：升學是不可逆的，不能讓一次誤觸決定整章
+  function showAdmissionConfirm(u, onCancel) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.94)',
+      'gap:14px', 'padding:24px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:22px', 'font-weight:900', `color:${COLOR.gold}`], u.name));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
+      'line-height:1.7', 'max-width:460px'], u.cost.ball));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], '決定之後不能反悔。'));
+    const row = el('div', ['display:flex', 'gap:10px', 'flex-wrap:wrap', 'justify-content:center']);
+    row.appendChild(smallButton('再想想', () => { overlay.remove(); onCancel(); }));
+    row.appendChild(button('確定就是這裡', true, () => {
+      overlay.remove();
+      store.enterUniversity?.(u.id);
+      showAdmissionDone(u);
+    }));
+    overlay.appendChild(row);
+    document.body.appendChild(overlay);
+  }
+
+  function showAdmissionDone(u) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:#05070d', 'gap:14px',
+      'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', ['font-size:30px', 'font-weight:900', `color:${COLOR.gold}`,
+      'letter-spacing:6px'], u.name));
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.text}`, 'letter-spacing:2px'],
+      '新生報到'));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'margin-top:16px',
+      'text-align:center', 'line-height:1.8'],
+    '大學賽季準備中——這一年的對手，就是你剛剛沒有選的那八所。'));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:20px'],
+      '點擊任意處返回'));
+    overlay.addEventListener('pointerdown', () => { overlay.remove(); renderSlots(); });
+    document.body.appendChild(overlay);
+  }
+
+  // 下一章佔位（Q5：大學章 kickoff 另開，本輪只留門）——謝幕後直接接升學畫面
+  // （批 5 前這裡點一下就回選檔頁；現在那扇門後面有東西了）
   function showNextChapter() {
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
@@ -2272,10 +2414,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
       'margin-top:18px'], NEXT_CHAPTER_LINES.next));
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
-      '點擊任意處返回'));
+      '點擊繼續——決定要去哪裡'));
     overlay.addEventListener('pointerdown', () => {
       overlay.remove();
-      renderSlots();
+      // 已經選過的存檔（重看謝幕）不再問一次志願——選擇是不可逆的
+      if (store.loadSchool?.()) renderSlots();
+      else showAdmission();
     });
     document.body.appendChild(overlay);
   }

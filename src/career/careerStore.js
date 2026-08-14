@@ -11,6 +11,7 @@ import {
   normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted,
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
+import { universityById } from './universities.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -307,12 +308,27 @@ export function createCareerStore(storage, slot = 1) {
     loadChapter() {
       return normalizeChapter(loadSave()?.career ?? null);
     },
-    // 推進到大學章。冪等（enterUniversity 內部保證）——按兩次不會變成兩次升學。
-    enterUniversity() {
+    // 推進到大學章＋記下選了哪一所（大學卷批 5，2026-08-14）。
+    // 冪等（enterUniversity 內部保證）——按兩次不會變成兩次升學，**學校也不會被覆寫**
+    // （UI 重入、玩家連點兩下都不該改掉已經決定的志願）。
+    // ★ enteredAtSeason ＝ 現在的屆數 +1 ★ 全域屆數是線性的（高中 1→2→3，大學接 4）：
+    // 升學發生在第 3 屆季末，而大學的第一年是**第 4 屆**。批 1 這裡原本傳 `season.index`
+    // （＝3），會讓高中第 3 屆與大學大一共用同一個屆數 ⇒ `chapterSeasonOf` 的語意分裂。
+    // 純函式層的測試（`tests/chapter-state.test.mjs`）本來就是拿 4 在驗，這裡對齊它。
+    // ⚠ `season.index` 本身**不動**——大學賽程是批 6，先把屆數推過去就會掉進空狀態。
+    enterUniversity(schoolId = null) {
       return writeSave((prev) => {
         const base = prev ?? createSaveV2({});
-        return { ...base, career: enterUniversityBlock(base.career, base?.season?.index ?? null) };
+        const nextBlock = enterUniversityBlock(base.career, (base?.season?.index ?? 0) + 1);
+        const already = base.career?.school;
+        const school = already ?? (typeof schoolId === 'string' && schoolId ? schoolId : null);
+        return { ...base, career: school ? { ...nextBlock, school } : nextBlock };
       });
+    },
+    // 選了哪一所大學（沒選過＝null；`universityById` 查得到才算數，防手改存檔）。
+    loadSchool() {
+      const id = loadSave()?.career?.school;
+      return typeof id === 'string' && universityById(id) ? id : null;
     },
     // 練習賽卷（2026-08-12）：屆間紅白對抗賽的成績（`practiceRecordOf` 的形狀）。
     // ★ 讀出來一律過 normalizePractice ★ 舊存檔沒有這個鍵、手改的存檔可能只有半組欄位；

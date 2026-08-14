@@ -26,6 +26,16 @@ export const FINISH = {
   GROUP: 'group',     // 沒打進淘汰賽
 };
 
+// ★ 顯示用中文 ★ 只給畫面看，**不得當判準**（判斷一律用上面的 FINISH 值——
+// 拿顯示字串當判準是「同名不同義」最常見的入口，見本檔 KO_IDS 的同一個理由）。
+export const FINISH_LABEL = {
+  [FINISH.CHAMPION]: '全國冠軍',
+  [FINISH.RUNNER_UP]: '全國亞軍',
+  [FINISH.SEMI]: '全國四強',
+  [FINISH.QUARTER]: '全國八強',
+  [FINISH.GROUP]: '小組賽止步',
+};
+
 // 排序：數字越大越好。比較一律走這張表，不要在別處寫第二套順序。
 export const FINISH_RANK = {
   [FINISH.GROUP]: 0,
