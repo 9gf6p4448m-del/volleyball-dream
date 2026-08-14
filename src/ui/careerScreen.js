@@ -64,11 +64,12 @@ import { createRitualStage } from '../render/ritualStage.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
-import { isHighSchool } from '../career/chapter.js';
+import { isHighSchool, chapterSeasonOf } from '../career/chapter.js';
 import { bestFinishOf, seasonFinishOf, FINISH_LABEL } from '../career/admission.js';
 import {
   universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
 } from '../career/universities.js';
+import { uniTable, UNI_PLAYER_ID } from '../career/uniSchedule.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 // ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
@@ -1370,6 +1371,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       box.style.display = 'none';
       return box;
     }
+    // 大學卷批 6：大學階段一**暫停招募**（拍板）。不隱藏的話，大學賽季的畫面上會
+    // 掛著一整排高中對手的招募進度（「曜石體中・MB・三年級・已畢業」）——那些人
+    // 三年前就畢業了，招募條件也綁在高中賽程上，留著只會讓玩家以為還招得到。
+    if (!isHighSchool(store.loadChapter?.())) {
+      box.style.display = 'none';
+      return box;
+    }
     const slots = openSlots(roster);
     const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
     head.appendChild(el('div', [
@@ -1896,6 +1904,43 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       ], '全國賽・單淘汰'));
       for (const m of koRows) list.appendChild(rowFor(m));
     }
+    // ── 大學長循環（批 6）──：九隊單循環 8 場＋勝點制積分表
+    const leagueRows = career.schedule.filter((x) => x.round === 'league');
+    if (leagueRows.length) {
+      list.appendChild(el('div', [
+        'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
+      ], `大學聯賽・單循環（${leagueRows.length} 場・每場三戰兩勝）`));
+      for (const m of leagueRows) list.appendChild(rowFor(m));
+      const board = uniTable({
+        schoolId: store.loadSchool?.() ?? '',
+        seed: career.seed,
+        schedule: career.schedule,
+        results: career.results,
+      });
+      if (board.played > 0) {
+        const panel = el('div', [
+          `background:${COLOR.card}`, 'border-radius:12px', 'padding:8px 14px',
+          'display:flex', 'flex-direction:column', 'gap:4px',
+        ]);
+        board.table.forEach((row, i) => {
+          const me = row.id === UNI_PLAYER_ID;
+          const line = el('div', [
+            'display:flex', 'justify-content:space-between', 'font-size:13px',
+            `color:${me ? COLOR.gold : (i < 3 ? COLOR.cyan : COLOR.dim)}`,
+            me ? 'font-weight:700' : 'font-weight:400',
+          ]);
+          line.appendChild(el('div', [], `${i + 1}. ${row.name}`));
+          // 積分要顯示在最前面：勝點制的重點就是「同樣 4 勝，積分可能不同」
+          line.appendChild(el('div', [], `${row.points} 分　${row.wins}勝${row.losses}敗　`
+            + `局 ${row.setsFor}-${row.setsAgainst}`));
+          panel.appendChild(line);
+        });
+        list.appendChild(panel);
+        list.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:left',
+          'line-height:1.4', 'padding:0 14px'],
+        '勝點制：2-0 勝 3 分／2-1 勝 2 分／1-2 敗 1 分／0-2 敗 0 分——輸得漂亮也拿得到分'));
+      }
+    }
     root.appendChild(list);
 
     // W5 賽季輪迴：季末（奪冠/止步）→ 進入下一屆——名冊/招募/技巧/宿敵全保留。
@@ -2006,6 +2051,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 與升學入口都消失，玩家徹底卡死。防線要按「危險的效果」寫，不是按已知的入口。
     const inUniversity = !isHighSchool(store.loadChapter?.());
     const pickedSchool = universityById(store.loadSchool?.() ?? '');
+    const uniLeague = career.schedule.filter((x) => x.round === 'league');
+    // 大學賽季打完了沒（批 6）：八場全部有結果
+    const uniSeasonDone = inUniversity && uniLeague.length > 0
+      && uniLeague.every((m) => career.results.some((r) => r.matchId === m.id));
     if (inUniversity) {
       root.appendChild(el('div', [
         'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
@@ -2013,14 +2062,32 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       ], pickedSchool ? `🎓 ${pickedSchool.name}` : '🎓 升學已定'));
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
         pickedSchool
-          ? '升學已定——大學賽季準備中（賽程在下一批接上）'
-          : '升學已定，但存檔裡的學校讀不出來——大學賽季準備中'));
+          ? `升學已定——大學第 ${chapterSeasonOf(store.loadChapter?.(), seasonN)} 年`
+          : '升學已定，但存檔裡的學校讀不出來'));
       // 決定升學不該是「把高中鎖起來」——三年回得去。
       // ★ 但不是「生涯結算」★ 批 1 的凍結驗收 B1-3② 明訂大學章不得再出現那顆按鈕
       //（`tests/chapter-wiring.test.mjs`；理由：已經在念大學了還跳「三年的一切」＝
       // 系統分不出章節，而且它會再播一次謝幕、再把人導去升學）。回顧走**數據頁**——
       // 同樣看得到三屆戰績，但它是唯讀的，不是章節流程的入口。
       root.appendChild(button('📊 回看三年的數據', false, () => showCareerTotals()));
+    }
+    // ★ 分支鏈：大學賽季結束才佔位 ★ 還在打的時候要落到下面的「▶ 出戰」——
+    // 第一版把整個大學章都攔在鏈首，結果賽程生出來了卻沒有入口，一場都打不了。
+    if (uniSeasonDone) {
+      const board = uniTable({
+        schoolId: store.loadSchool?.() ?? '', seed: career.seed,
+        schedule: career.schedule, results: career.results,
+      });
+      const me = board.table.find((r) => r.id === UNI_PLAYER_ID);
+      root.appendChild(el('div', [
+        'font-size:22px', 'font-weight:900', `color:${board.playerRank === 1 ? COLOR.gold : COLOR.cyan}`,
+        'margin-top:8px', 'letter-spacing:2px',
+      ], board.playerRank === 1 ? '🏆 大學聯賽冠軍！' : `聯賽第 ${board.playerRank} 名`));
+      root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'line-height:1.7'],
+        `大一賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`));
+      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'max-width:min(340px,92vw)',
+        'text-align:center', 'line-height:1.6'],
+      '大二在下一批——屬性、技術與這一年的名次都會帶著走'));
     } else if (careerOver) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,
@@ -2042,7 +2109,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // ★ 升學的第二道門（批 5）★ 謝幕後的過場卡也會接到同一個畫面，但那張卡點一下
       // 就消失——沒有這顆按鈕，錯過的人就再也回不去升學了（升學是整章的分岔）。
       root.appendChild(button('▶ 決定升學志願', false, () => showAdmission()));
-    } else if (stage === 'champion') {
+    } else if (!inUniversity && stage === 'champion') {
+      // ★ `!inUniversity` 是死按鈕的防線 ★ 這兩個分支給的是「▶ 進入下一屆」，
+      // 而大學章的推進被 `chapterCompleted` 擋著＝按了沒反應。判準綁**章節**，
+      // 不綁 school 值——手改過的存檔（chapter 是大學、school 讀不出來）也擋得住。
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
         'letter-spacing:2px',
@@ -2053,7 +2123,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`,
         'max-width:min(340px, 92vw)', 'text-align:center', 'line-height:1.5'],
       '全國都在研究衛冕軍——來年的對手，會更強'));
-    } else if (stage === 'eliminated') {
+    } else if (!inUniversity && stage === 'eliminated') {
       // 循環賽卷（08-09）：止步點只認**淘汰賽**的那一敗——循環組輸球不止步，
       // 沒有淘汰賽敗績而走到這裡＝循環打滿沒進前二，那句要講「八強循環」不是某一場
       const lost = career.results.find((r) => {

@@ -332,8 +332,10 @@ test('★B5-5★ 選校後章節＝大學、school 存得住、enteredAtSeason�
   const reload = createCareerStore(storage);
   assert.deepEqual(reload.loadChapter(), { id: 'university', enteredAtSeason: 4 });
   assert.equal(reload.loadSchool(), 'meixi');
-  // ★ 屆數本身不動 ★ 大學賽程是批 6，先推過去就會掉進沒有賽程的空狀態
-  assert.equal(reload.seasonIndex(), 3);
+  // ★ 屆數推進到第 4 屆 ★ 批 5 當時這裡斷言的是「不動」（3）——理由是「大學賽程
+  // 是批 6，先推過去會掉進沒有賽程的空狀態」。批 6 把賽程做出來了，那個前提消失，
+  // 且批 6 的凍結條文 B6-5 明訂「升學後屆數推進到第 4 屆」。同樣嚴格、不是放寬。
+  assert.equal(reload.seasonIndex(), 4);
 });
 
 test('B5-5 冪等：再選一次不會覆寫已決定的志願', async () => {

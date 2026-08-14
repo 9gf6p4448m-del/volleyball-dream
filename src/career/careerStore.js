@@ -12,6 +12,8 @@ import {
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { universityById } from './universities.js';
+import { buildUniSchedule } from './uniSchedule.js';
+import { buildUniMembers, uniStartTrustFor } from './uniTeam.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -319,10 +321,48 @@ export function createCareerStore(storage, slot = 1) {
     enterUniversity(schoolId = null) {
       return writeSave((prev) => {
         const base = prev ?? createSaveV2({});
-        const nextBlock = enterUniversityBlock(base.career, (base?.season?.index ?? 0) + 1);
+        const nextSeason = (base?.season?.index ?? 0) + 1;
+        const nextBlock = enterUniversityBlock(base.career, nextSeason);
         const already = base.career?.school;
         const school = already ?? (typeof schoolId === 'string' && schoolId ? schoolId : null);
-        return { ...base, career: school ? { ...nextBlock, school } : nextBlock };
+        if (!school) return { ...base, career: nextBlock };
+        const uni = universityById(school);
+        if (!uni || already) return { ...base, career: { ...nextBlock, school } };
+        // ★★ 批 6：真的搬進那所大學 ★★ 這一整段是**同一次 RMW**——名冊、先發、球權、
+        // 賽程、屆數要嘛一起換好，要嘛一個都不換。分兩次寫的話中間斷電（或寫入失敗）
+        // 會留下「已經是大學章、名冊還是高中隊友」的半吊子存檔。
+        const members = buildUniMembers(school);
+        const playerRole = base.player?.currentRole ?? 'outside';
+        const lineup = defaultLineup(members, base.player?.id ?? 'A2', playerRole);
+        return {
+          ...base,
+          career: {
+            ...nextBlock,
+            school,
+            // 高中名冊封存（拍板：不隨行，但生涯數據頁還看得到）
+            highSchoolRoster: base.roster ?? null,
+          },
+          roster: { capacity: members.length + 1, members, alumni: [] },
+          lineup,
+          // 球權四軸的「球權」：強豪從地板起、弱校你就是王牌（`uniTeam.js`）。
+          // ★ 只動 `fromSetter` ★ `player.trust` 是物件 `{fromSetter, floorShare}`
+          //（`careerState.js:259-264`）——整個換成數字會把 `floorShare`（0.27 的球權
+          // 保底「玩家不得淪為觀眾」）一起洗掉。地板與學校無關，任何學校都要留著。
+          player: base.player
+            ? {
+              ...base.player,
+              trust: { ...(base.player.trust ?? {}), fromSetter: uniStartTrustFor(uni) },
+            }
+            : base.player,
+          season: {
+            ...base.season,
+            index: nextSeason,
+            schedule: buildUniSchedule({ schoolId: school, seed: base.season?.seed ?? 1 }),
+            results: [],
+            events: [],
+            pendingMatch: undefined,
+          },
+        };
       });
     },
     // 選了哪一所大學（沒選過＝null；`universityById` 查得到才算數，防手改存檔）。

@@ -145,8 +145,14 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   // W4(P4) Q8 分級賽制：生涯場由賽程項推導（決賽 bo5／準決賽・宿敵場 bo3／其餘 bo1）；
   // ?bo= 測試覆寫（3/5；快速比賽驗多局用）；bestOf 1＝series 不進 gameOptions＝零擾動
   const boParam = Number.parseInt(params.get('bo'), 10);
+  // 大學卷批 6：賽程項可以自帶賽制（`uniSchedule.js` 的 `format: 3`）——大學長循環
+  // 每場 bo3，而勝點制**需要**局數（bo1 場次連局數欄位都沒有，
+  // 見 `app/matchCareer.js:93-97`）。★ 用賽程項帶而不是改 `matchFormatOf` ★
+  // 那支在 `schedule.js` 裡，本卷鐵律是高中那份一行不動。
+  const entryFormat = careerCtx?.matchEntry?.format;
   const bestOf = [3, 5].includes(boParam) ? boParam
-    : careerCtx ? matchFormatOf(careerCtx.matchEntry) : 1;
+    : [3, 5].includes(entryFormat) ? entryFormat
+      : careerCtx ? matchFormatOf(careerCtx.matchEntry) : 1;
   // 教學局不靠比分結束——六步走完才收局（`matchLoop.endTutorialSet`）。
   // ★ 為什麼要拉高局分 ★ 分步關卡卷（2026-08-13）改成「沒做到就再擺一次同樣的場景」、
   // 且重試次數不限（Sawmah 題 3 裁定）⇒ 一步可能燒掉很多球，25 分會**先**到，

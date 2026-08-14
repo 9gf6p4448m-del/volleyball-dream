@@ -8,6 +8,8 @@ import { createPlayer, ATTRIBUTE_KEYS } from '../sim/player.js';
 import { createDefaultTeams } from '../sim/game.js';
 import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
+// 大學卷批 6：大學對手池（與 opponents 同構的另一張表；高中那張一行不動）
+import { universityById } from './universities.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 import {
   buildSchedule, nationalLegFor, roundRobinTable, RR_ADVANCE,
@@ -53,7 +55,8 @@ function season1Schedule(seed) {
 }
 
 export function opponentName(opponentId) {
-  return opponentById(opponentId)?.name ?? opponentId;
+  // 大學卷批 6：大學章的對手在另一張表（兩張表的 id 不重疊）
+  return opponentById(opponentId)?.name ?? universityById(opponentId)?.name ?? opponentId;
 }
 
 // seed＝生涯種子：每場比賽種子由 matchSeed 決定論導出（同生涯同場次可重現）
@@ -585,16 +588,23 @@ export function alliedAiProfileOf(player) {
 // W1(P4) 第 6 參數 seasonIndex：屆數——對手 ace 畢業遞補（applySeasonRoster）換算用；
 // 省略＝1＝第 1 屆行為不變。
 export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1) {
-  const baseDef = opponentById(matchEntry.opponentId);
+  // 大學卷批 6：對手可能是大學（`universities.js`）。兩張表**同構**（level／attrBias／
+  // roleBias／heights／squad／trustBias／ace），`buildOpponentTeam` 直接吃得下。
+  const uniDef = universityById(matchEntry.opponentId);
+  const baseDef = uniDef ?? opponentById(matchEntry.opponentId);
   if (!baseDef) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
   // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度（難度綁成就不綁屆數）
   const titles = career.titles ?? 0;
-  let def = titles > 0
+  let def = titles > 0 && !uniDef
     ? { ...baseDef, level: baseDef.level + TITLE_LEVEL_BONUS * titles }
     : baseDef;
   // W1(P4) Q4：三年級 ace 畢業＝下屆起遞補換臉（先於挖角除名——原 ace 已畢業離隊，
   // 挖角比對自然落空；接班人已頂上槽位）
-  def = applySeasonRoster(def, seasonIndex);
+  // ★ 大學隊跳過這一段 ★ `applySeasonRoster` 吃的是**高中**的年級推進
+  //（`currentGrade` 批 4 已查證只服務高中對手 ace 的畢業）：拿第 4 屆去換算，大學
+  // 王牌會被判成「早就畢業了」，而大學表沒有 reserves ⇒ 王牌直接消失。挖角同理，
+  // 那是高中的招募系統（大學階段一暫停招募）。
+  if (!uniDef) def = applySeasonRoster(def, seasonIndex);
   // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
   const seen = career.scouting?.[matchEntry.opponentId];
   const scoutRead = seen && (def.scoutRead ?? 0) > 0
@@ -750,8 +760,12 @@ export function deserializeCareer(json) {
   }
   for (const m of raw.schedule) {
     if (!m.id || !m.opponentId) throw new Error('生涯存檔賽程項缺 id/opponentId');
-    // 語意驗證：對手必須存在於參數檔——擋掉匯入壞資料在「出戰」當下才炸頁
-    if (!opponentById(m.opponentId)) throw new Error(`生涯存檔含未知對手：${m.opponentId}`);
+    // 語意驗證：對手必須存在於參數檔——擋掉匯入壞資料在「出戰」當下才炸頁。
+    // 大學卷批 6：大學章的賽程吃 `universities.js`，兩張表都算數（不放寬驗證，
+    // 只是把「參數檔」的範圍補全——查不到仍然照丟）
+    if (!opponentById(m.opponentId) && !universityById(m.opponentId)) {
+      throw new Error(`生涯存檔含未知對手：${m.opponentId}`);
+    }
   }
   return raw;
 }
