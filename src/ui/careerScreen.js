@@ -64,6 +64,7 @@ import { createRitualStage } from '../render/ritualStage.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
+import { isHighSchool } from '../career/chapter.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 // ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
@@ -1984,7 +1985,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       else beginGraduation();
     });
     // W1(P4)：高中章固定三屆——第 3 屆收束不再推進；W4(P4) Q5 生涯結算在此開幕
-    const careerOver = (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
+    // ★ 章節閘（大學卷批 1，2026-08-14）★ 原本只看 stage + seasonN——那算得出
+    // 「高中打完了」，但算不出「我已經在念大學」⇒ 已升學的存檔每次載入都會再長出
+    // 這顆「▶ 生涯結算」。章節狀態存在 save.career.chapter（零遷移，舊檔回退高中）。
+    // `loadChapter` 缺席（舊 store／測試替身）時 isHighSchool(undefined) 回 true
+    // ＝維持現行行為，不用在這裡寫死字串（那會是第二個真相源）
+    const careerOver = isHighSchool(store.loadChapter?.())
+      && (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
     if (careerOver) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,

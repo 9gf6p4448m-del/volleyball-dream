@@ -5,6 +5,9 @@
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
 import { advanceSeason, PLAYER_TRUST_FLOOR, normalizeCareerPlayer } from './careerState.js';
+// ★ 取別名 ★ store 上有個同名方法；物件方法不會遮蔽模組作用域的匯入（JS 這樣寫能動），
+// 但同名會讓讀的人以為是遞迴。別名讓「純函式」與「會落檔的方法」一眼分得開。
+import { normalizeChapter, enterUniversity as enterUniversityBlock } from './chapter.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -283,6 +286,18 @@ export function createCareerStore(storage, slot = 1) {
     seasonIndex() {
       const save = loadSave();
       return save?.season?.index ?? 1;
+    },
+    // 生涯章節（大學卷批 1，2026-08-14）——★讀出來一律過 normalizeChapter★
+    // 舊存檔的 `career` 是 `{}`（Phase 3 預留鍵），逐項回退＝零遷移，不動 schema 版本。
+    loadChapter() {
+      return normalizeChapter(loadSave()?.career ?? null);
+    },
+    // 推進到大學章。冪等（enterUniversity 內部保證）——按兩次不會變成兩次升學。
+    enterUniversity() {
+      return writeSave((prev) => {
+        const base = prev ?? createSaveV2({});
+        return { ...base, career: enterUniversityBlock(base.career, base?.season?.index ?? null) };
+      });
     },
     // 練習賽卷（2026-08-12）：屆間紅白對抗賽的成績（`practiceRecordOf` 的形狀）。
     // ★ 讀出來一律過 normalizePractice ★ 舊存檔沒有這個鍵、手改的存檔可能只有半組欄位；
