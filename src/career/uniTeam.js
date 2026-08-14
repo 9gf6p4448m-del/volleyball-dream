@@ -5,8 +5,13 @@
 //   ② 強弱校的球權用「各校起始信任值」兌現——沿用既有的二傳信任機制，零新機制。
 //
 // ★ 屬性走既有座標系 ★ `level + attrBias + roleBias`——與 `buildOpponentTeam`
-//（`careerState.js:295-319`）逐項同義。另造一套換算等於同名不同義，日後平衡治具
+//（`careerState.js:295-319`）同一條公式。另造一套換算等於同名不同義，日後平衡治具
 // 量到的數字會對不上（`02 §6.1` 第 2 條）。
+// ⚠ **兩處刻意的差異**（對抗覆審 F5 要求寫明，免得日後拿治具對兩邊時以為量錯）：
+//   ① 這裡 clamp 到 `ROSTER_GROWTH.ATTR_CAP`（85）與地板 30——那是**隊友**的天花板
+//      （主角 90＝主角感護欄）；對手側不 clamp，所以同一所大學當對手時上限更高。
+//   ② 王牌 +4 是本檔自訂；對手側走 `aceAttrBonus ?? 0`（大學表沒這個欄位＝0）。
+//   ⇒ 同一所學校當隊友與當對手，數值**本來就不同**，這不是 bug。
 //
 // 驗收＝`docs/kickoffs/acceptance-uni-batch6.md`（B6-3 建隊、B6-4 起始信任）。
 import { ATTRIBUTE_KEYS } from '../sim/player.js';

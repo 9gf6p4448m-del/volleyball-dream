@@ -2,7 +2,7 @@
 // node 可測（store 可注入假體）；three.js/DOM 一概不進本檔。
 // 開賽標記也住這裡：生涯場次的「開始→結束」生命週期收在同一模組。
 import {
-  recordResult, mergeScouting, markPending, opponentById, applySeasonRoster,
+  recordResult, mergeScouting, markPending, matchOpponentDef,
 } from '../career/careerState.js';
 import { matchStatsFor, growthPointsFor } from '../career/growth.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
@@ -223,9 +223,11 @@ export function settlePracticeMatch({
 // ace 被挖走（def.ace null／名冊查無此人）＝無記帳對象，回 null。
 // export 供 matchLoop 結算頁共用（同一條對映、同一組純函式）
 export function resolveOppAceBox(game, careerCtx, oppTeam) {
-  const base = opponentById(careerCtx.matchEntry.opponentId);
-  if (!base) return null;
-  const def = applySeasonRoster(base, careerCtx.store.seasonIndex?.() ?? 1);
+  // 大學卷批 6：走收斂後的單一入口（大學場原本 base 恆 null ⇒ 對面王牌不記帳）
+  const def = matchOpponentDef(
+    careerCtx.matchEntry.opponentId, careerCtx.store.seasonIndex?.() ?? 1,
+  );
+  if (!def) return null;
   const aceName = def.ace?.name ?? null;
   if (!aceName) return null;
   const acePid = Object.values(game.players)

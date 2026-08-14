@@ -189,3 +189,14 @@ test('B6-5 冪等：已經升學過的存檔再呼叫一次不會重建名冊或
   assert.equal(after.loadCareer().results.length, 1, '★戰績被洗掉＝重建了賽季★');
   assert.deepEqual(after.loadCareer().schedule, career.schedule);
 });
+
+// ════════ 對抗覆審 F4：高中名冊封存後要看得到 ════════
+test('★F4★ 升學後生涯數據頁讀得到封存的高中名冊（不是唯寫欄位）', () => {
+  const storage = thirdSeasonStorage();
+  const store = createCareerStore(storage);
+  assert.equal(store.loadHighSchoolRoster(), null, '還沒升學就有封存＝這條恆真');
+  store.enterUniversity('haiyan');
+  const archived = createCareerStore(storage).loadHighSchoolRoster();
+  assert.ok(archived?.members?.length, '封存讀不出來＝三年的隊友從所有畫面消失');
+  assert.ok(archived.members.some((m) => m.fullName === '林承哲'));
+});

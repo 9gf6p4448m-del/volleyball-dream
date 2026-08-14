@@ -199,7 +199,13 @@ export function markPending(career, matchId) {
   return { ...career, pendingMatch: matchId };
 }
 
-// 棄賽裁決：pending 未完賽＝記 0:25 敗（無成長點）；已完賽＝只清標記
+// 棄賽裁決：pending 未完賽＝記敗（無成長點）；已完賽＝只清標記
+// ★ 比分的**單位隨賽制而定** ★ bo1 記 0:25（分數）；多局賽記 0:N（**局數**）——
+// `settleCareerMatch` 在多局賽寫進 results 的就是局數（`app/matchCareer.js:93`），
+// 棄賽卻一律寫 25 的話，同一個欄位在同一份賽程裡有兩種單位。
+// 大學卷批 6 的實例：大學聯賽是 bo3，一次中途離開會讓積分表把「局差」灌成 ±25
+//（勝點那一層剛好沒事，所以更難發現），一場棄賽就足以決定整季名次。
+// 這是 `02 §6.1` 第 2 條「同名不同義」的正宗案例——修在源頭，不是在讀的那一端補救。
 export function resolveForfeit(career) {
   const pid = career.pendingMatch;
   if (!pid) return career;
@@ -207,7 +213,10 @@ export function resolveForfeit(career) {
     const { pendingMatch, ...rest } = career; // 真移除鍵（undefined 鍵會壞 roundtrip 比對）
     return rest;
   }
-  return recordResult(career, { matchId: pid, won: false, scoreFor: 0, scoreAgainst: 25 });
+  const entry = career.schedule.find((m) => m.id === pid);
+  const bestOf = [3, 5].includes(entry?.format) ? entry.format : 1;
+  const against = bestOf > 1 ? Math.ceil(bestOf / 2) : 25; // bo3⇒2 局、bo5⇒3 局、bo1⇒25 分
+  return recordResult(career, { matchId: pid, won: false, scoreFor: 0, scoreAgainst: against });
 }
 
 // 記錄一場結果（不可變更新）；同場重複記錄＝原樣返回（局終畫面重入保護）
@@ -372,6 +381,39 @@ export function currentGrade(baseGrade, seasonIndex = 1) {
 // 只動 ace 層（49 人全名單輪替＝明定不做）；接班人自 reserves 移除（剩餘者＝板凳）。
 // 自由人 ace（slot 'L'）同邏輯換 libero。資料不變式（tests 把關）：接班人基準年級 1
 // ——三屆生涯內不二次畢業，單次遞補即完備。
+/**
+ * ★ 比賽路徑取得對手參數檔的**單一入口**（大學卷批 6 收斂）★
+ *
+ * 為什麼要收斂：批 6 把 `opponentById` 補成「高中∪大學」時補了三處
+ *（`opponentName`／`careerMatchSetup`／`deserializeCareer`），**漏了賽前對陣畫面**
+ * ⇒ 大學八場的排位儀式（先發互換、輪轉球位、板凳替換、對面具名亮相）全部靜默消失，
+ * 而它是唯一的先發編排入口——板凳永遠換不上場。這正是「防線按已知的入口寫」的
+ * 典型後果（`02 §6.1` 第 7 條）：分母 17 處 `opponentById(`，其中比賽路徑 4 處。
+ * 收斂成這一支之後，「大學隊怎麼取 def」只有一份答案。
+ *
+ * 其餘 13 處**刻意不改**：`schedule.js`（高中排程）、`recruitment.js`／`events.js`／
+ * 招募面板（招募是高中系統、大學階段一暫停）、`main.js` 的 RIVAL_TEAM_ID（高中宿敵）
+ * ——那些路徑在大學章根本不該有對手可查，查不到回 null 才是對的。
+ *
+ * @param seasonIndex 高中的年級推進換算用（大學不吃）
+ * @param titles      衛冕加成（大學不吃——那是高中錦標賽的難度旋鈕）
+ */
+export function matchOpponentDef(opponentId, seasonIndex = 1, { titles = 0 } = {}) {
+  // 大學：直接回資料表。★不套 applySeasonRoster★ 那吃的是高中的年級推進
+  //（`currentGrade` 批 4 已查證只服務高中對手 ace 的畢業）：拿第 4 屆去換算，
+  // 大學王牌會被判成「早就畢業了」，而大學表沒有 reserves ⇒ 王牌直接消失。
+  const uni = universityById(opponentId);
+  if (uni) return uni;
+  const base = opponentById(opponentId);
+  if (!base) return null;
+  // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度
+  const boosted = titles > 0
+    ? { ...base, level: base.level + TITLE_LEVEL_BONUS * titles }
+    : base;
+  // W1(P4) Q4：三年級 ace 畢業＝下屆起遞補換臉（先於挖角除名）
+  return applySeasonRoster(boosted, seasonIndex);
+}
+
 export function applySeasonRoster(def, seasonIndex = 1) {
   if (seasonIndex <= 1 || !def.ace || !def.grades) return def;
   // W4(P4) 題6 硬約束：宿敵 ace 豁免（ace.rival＝true）——三年間不被遞補純函式
@@ -588,23 +630,8 @@ export function alliedAiProfileOf(player) {
 // W1(P4) 第 6 參數 seasonIndex：屆數——對手 ace 畢業遞補（applySeasonRoster）換算用；
 // 省略＝1＝第 1 屆行為不變。
 export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1) {
-  // 大學卷批 6：對手可能是大學（`universities.js`）。兩張表**同構**（level／attrBias／
-  // roleBias／heights／squad／trustBias／ace），`buildOpponentTeam` 直接吃得下。
-  const uniDef = universityById(matchEntry.opponentId);
-  const baseDef = uniDef ?? opponentById(matchEntry.opponentId);
-  if (!baseDef) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
-  // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度（難度綁成就不綁屆數）
-  const titles = career.titles ?? 0;
-  let def = titles > 0 && !uniDef
-    ? { ...baseDef, level: baseDef.level + TITLE_LEVEL_BONUS * titles }
-    : baseDef;
-  // W1(P4) Q4：三年級 ace 畢業＝下屆起遞補換臉（先於挖角除名——原 ace 已畢業離隊，
-  // 挖角比對自然落空；接班人已頂上槽位）
-  // ★ 大學隊跳過這一段 ★ `applySeasonRoster` 吃的是**高中**的年級推進
-  //（`currentGrade` 批 4 已查證只服務高中對手 ace 的畢業）：拿第 4 屆去換算，大學
-  // 王牌會被判成「早就畢業了」，而大學表沒有 reserves ⇒ 王牌直接消失。挖角同理，
-  // 那是高中的招募系統（大學階段一暫停招募）。
-  if (!uniDef) def = applySeasonRoster(def, seasonIndex);
+  const def = matchOpponentDef(matchEntry.opponentId, seasonIndex, { titles: career.titles ?? 0 });
+  if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
   // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
   const seen = career.scouting?.[matchEntry.opponentId];
   const scoutRead = seen && (def.scoutRead ?? 0) > 0

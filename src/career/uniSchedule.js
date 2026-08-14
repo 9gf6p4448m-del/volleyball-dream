@@ -177,8 +177,13 @@ export function uniTable({ schoolId, seed = 1, schedule = [], results = [] }) {
     const r = resultOf(m.id);
     if (!r) continue;
     playedRounds.add(m.id);
-    const sf = Math.max(0, r.scoreFor | 0);
-    const sa = Math.max(0, r.scoreAgainst | 0);
+    // ★ 第二層防線：局數不可能超過賽制上限 ★ 源頭（`resolveForfeit`）已按賽制記局數，
+    // 但這張表也讀得到舊存檔與手改過的資料——bo3 卻寫著 25 的話，勝點那一層算得出
+    // 合理的 0 分（所以不會報錯），局差卻被灌成 ±25，一筆髒資料就能決定整季名次。
+    // clamp 到 0..bestOf：讓「讀進來的值超出賽制」不再是一個能改變名次的通道。
+    const cap = [3, 5].includes(m.format) ? m.format : UNI_MATCH_FORMAT;
+    const sf = Math.min(cap, Math.max(0, r.scoreFor | 0));
+    const sa = Math.min(cap, Math.max(0, r.scoreAgainst | 0));
     const [pf, pa] = pointsForSets(sf, sa, seed, `player-${m.id}`);
     addMatch(rows.get(UNI_PLAYER_ID), sf, sa, pf, pa);
     const opp = rows.get(m.opponentId);

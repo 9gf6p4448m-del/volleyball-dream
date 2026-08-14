@@ -3,7 +3,7 @@
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
   careerStage, opponentById, normalizeCareerPlayer, resolveForfeit, applyPoaching,
-  applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable,
+  applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable, matchOpponentDef,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
 import {
@@ -704,7 +704,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // lineup.js 全套規則）。挖角語意與開賽一致（applyPoaching：被挖走的人原隊換遞補、
   // 王牌被挖不亮相）。確認＝saveLineup＋onConfirm；返回（不出戰）改走「返回（不出戰）」鈕（U1）
   function showMatchupScreen(career, player, next, onConfirm) {
-    const baseDef = opponentById(next.opponentId);
+    // ★ 大學場也要有排位儀式 ★ 這裡原本只查高中表 ⇒ 大學八場 baseDef 恆 null ⇒
+    // 直接 onConfirm() 跳過整個對陣畫面：先發互換、輪轉球位、板凳替換、對面具名亮相
+    // 全部靜默消失，而這是唯一的先發編排入口（板凳永遠換不上場）。走收斂後的單一入口。
+    const seasonN = store.seasonIndex?.() ?? 1;
+    const baseDef = matchOpponentDef(next.opponentId, seasonN, { titles: career.titles ?? 0 });
     const roster = ensureStarterRoster(store);
     if (!baseDef || !roster) { onConfirm(); return; } // 無資料（防呆）＝直接出戰
     const saved = store.loadLineup();
@@ -713,9 +717,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const oldMates = members.filter((m) => m.dna?.teamId === next.opponentId);
     // W1(P4)：與開賽同一條轉換鏈——①ace 畢業遞補（第 2 屆起換臉：新王牌金框＋新稱號）
     // ②挖角/校友除名（畢業的招募生不還魂）
-    const seasonN = store.seasonIndex?.() ?? 1;
-    const seasonDef = applySeasonRoster(baseDef, seasonN);
-    const def = applyPoaching(seasonDef, [
+    // `matchOpponentDef` 已經套過該屆的 ace 遞補（大學則刻意不套）——這裡只做挖角除名
+    const def = applyPoaching(baseDef, [
       ...oldMates.map((m) => m.fullName),
       ...(roster.alumni ?? []).map((a) => a.member?.fullName),
     ].filter(Boolean));
@@ -2585,6 +2588,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     sumCard.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.text}`, 'line-height:1.5'],
       totalLine(sum)));
     overlay.appendChild(sumCard);
+    // 大學卷批 6：升學後高中名冊被封存（拍板：不隨行，但**這一頁還看得到**）。
+    // 沒有這一段的話 `career.highSchoolRoster` 是個唯寫欄位——三年的隊友在升學那一刻
+    // 從所有畫面消失，而拍板承諾的正好相反（對抗覆審 F4）。
+    const hsRoster = store.loadHighSchoolRoster?.();
+    if (hsRoster?.members?.length) {
+      const hsCard = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left',
+        'display:flex', 'flex-direction:column', 'gap:3px',
+      ]);
+      hsCard.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.cyan}`],
+        `${OUR_TEAM_NAME}・那三年的隊友`));
+      hsCard.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.text}`, 'line-height:1.7'],
+        hsRoster.members.map((m) => m.name ?? m.fullName).join('、')));
+      overlay.appendChild(hsCard);
+    }
     // U1（07-30 拍板）：移除「點擊任意處關閉」，改明鈕（stopPropagation 防止背景點擊誤關）
     overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
     const closeBtn = smallButton('關閉', () => overlay.remove());

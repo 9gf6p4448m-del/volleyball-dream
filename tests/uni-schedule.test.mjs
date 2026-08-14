@@ -149,3 +149,41 @@ test('B6-2 打完八場 ⇒ complete，且每隊都打滿八場', () => {
   for (const r of table) assert.equal(r.played, 8, `${r.name} 只打了 ${r.played} 場`);
   assert.ok(playerRank >= 1 && playerRank <= 9);
 });
+
+// ════════ 對抗覆審 F1：棄賽的比分單位 ════════
+// 大學聯賽是 bo3，`results.scoreFor/scoreAgainst` 是**局數**；棄賽卻一律記 0:25（分數）
+// ⇒ 積分表把局差灌成 ±25，一次中途離開就足以決定整季名次。兩層都要驗：
+// 源頭（resolveForfeit 按賽制記局數）與消費端（uniTable clamp 到賽制上限）。
+test('★F1 源頭★ 大學場（bo3）棄賽記 0:2 局，不是 0:25 分', async () => {
+  const { createCareer, markPending, resolveForfeit } = await import('../src/career/careerState.js');
+  const career = createCareer({ seed: 5, playerName: '小夢' });
+  const sch = buildUniSchedule({ schoolId: 'meixi', seed: 5 });
+  const uni = { ...career, schedule: sch, results: [] };
+  const forfeited = resolveForfeit(markPending(uni, sch[0].id));
+  const r = forfeited.results.find((x) => x.matchId === sch[0].id);
+  assert.equal(r.scoreAgainst, 2, '★bo3 的棄賽記成 25＝同一欄位兩種單位★');
+  assert.equal(r.scoreFor, 0);
+  assert.equal(r.won, false);
+});
+
+test('F1 源頭反向對照：高中 bo1 場次的棄賽仍記 0:25（分數，行為不變）', async () => {
+  const { createCareer, markPending, resolveForfeit } = await import('../src/career/careerState.js');
+  const career = createCareer({ seed: 5, playerName: '小夢' });
+  const first = career.schedule[0];
+  const forfeited = resolveForfeit(markPending(career, first.id));
+  const r = forfeited.results.find((x) => x.matchId === first.id);
+  assert.equal(r.scoreAgainst, 25, '高中 bo1 的既有行為被改掉了');
+});
+
+test('★F1 消費端★ 舊存檔／手改資料寫著 0:25，積分表也不得把局差灌成 ±25', () => {
+  const sch = buildUniSchedule({ schoolId: 'meixi', seed: 7 });
+  const dirty = [{
+    matchId: sch[0].id, opponentId: sch[0].opponentId, won: false, scoreFor: 0, scoreAgainst: 25, gp: 0,
+  }];
+  const { table } = uniTable({ schoolId: 'meixi', seed: 7, schedule: sch, results: dirty });
+  const me = table.find((r) => r.id === UNI_PLAYER_ID);
+  assert.equal(me.setsAgainst, 3, '局數沒有被夾在賽制上限內');
+  assert.ok(Math.abs(me.setsFor - me.setsAgainst) <= 3, '局差仍被髒資料灌爆');
+  const opp = table.find((r) => r.id === sch[0].opponentId);
+  assert.ok(opp.setsFor <= 3, '對手那一邊也要夾');
+});

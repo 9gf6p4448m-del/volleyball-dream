@@ -365,6 +365,11 @@ export function createCareerStore(storage, slot = 1) {
         };
       });
     },
+    // 升學時封存的高中名冊（拍板：不隨行，但生涯數據頁還看得到）。沒升學＝null。
+    loadHighSchoolRoster() {
+      const r = loadSave()?.career?.highSchoolRoster ?? null;
+      return r?.members?.length ? structuredClone(r) : null;
+    },
     // 選了哪一所大學（沒選過＝null；`universityById` 查得到才算數，防手改存檔）。
     loadSchool() {
       const id = loadSave()?.career?.school;

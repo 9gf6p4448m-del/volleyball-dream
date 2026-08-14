@@ -39,7 +39,13 @@ function fakeDom() {
     removeEventListener(ev, fn) {
       this.handlers[ev] = (this.handlers[ev] ?? []).filter((f) => f !== fn);
     },
-    replaceChildren() { this.children = []; },
+    // ★ 與其他 wiring 測試的替身差在這一行 ★ 那些替身的 replaceChildren 直接清空、
+    // **把參數丟掉**——對陣畫面正是用 `replaceChildren(card)` 重繪的，於是畫面內容
+    // 在假 DOM 裡憑空消失，測試會誤判成「對陣畫面沒出現」。這裡照真實 DOM 的語意實作。
+    replaceChildren(...nodes) {
+      this.children = [];
+      for (const n of nodes) this.appendChild(n);
+    },
     setAttribute() {},
     getAttribute() { return null; },
     focus() {},
@@ -80,6 +86,21 @@ const nodeWith = (re) => walk(globalThis.document.body)
 const allText = () => walk(globalThis.document.body).map((n) => n.textContent ?? '').join('｜');
 const settle = () => new Promise((r) => { setTimeout(r, 0); });
 
+// 賽前劇情對話要先點完才會到對陣畫面（出戰 → fireEvents → showMatchupScreen）。
+// ⚠ 對話卡是模組層級的**隱藏單例**（`display:none` 也留在 DOM 裡），所以這個迴圈
+// 一定會找到「▼ 點擊繼續」——不能拿「找不到對話」當結束條件，只點固定次數即可。
+async function clearDialogs() {
+  for (let i = 0; i < 4; i += 1) {
+    const cont = walk(globalThis.document.body).find((n) => /點擊繼續/.test(n.textContent ?? ''));
+    if (!cont) break;
+    let t = cont;
+    while (t && !(t.handlers?.pointerdown ?? []).length) t = t.parent;
+    if (!t) break;
+    tap(t);
+    await settle();
+  }
+}
+
 /** 已經升學到指定學校、打完 `played` 場的存檔。 */
 function uniStorage(schoolId, played = 0) {
   const storage = fakeStorage();
@@ -111,11 +132,11 @@ function uniStorage(schoolId, played = 0) {
   return storage;
 }
 
-async function renderCareer(storage) {
+async function renderCareer(storage, hooks = {}) {
   fakeDom();
   const { createCareerScreen } = await import('../src/ui/careerScreen.js');
   createCareerScreen(createCareerStore(storage), {
-    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+    primeSlot: () => {}, onQuick: () => {}, onPractice: () => {}, onPlay: () => {}, ...hooks,
   }).show('career');
   await settle();
   for (let i = 0; i < 12; i += 1) {
@@ -178,4 +199,38 @@ test('B6-4 畫面對照：強豪與弱校的玩家球權不同（同一份存檔
   const weak = createCareerStore(uniStorage('meixi')).loadPlayer().trust.fromSetter;
   const power = createCareerStore(uniStorage('north-ridge')).loadPlayer().trust.fromSetter;
   assert.ok(weak > power, `弱校的球權應該多於強豪：${weak} vs ${power}`);
+});
+
+// ════════ 對抗覆審 F2：大學場的賽前對陣畫面 ════════
+// `showMatchupScreen` 原本只查高中對手表 ⇒ 大學八場 baseDef 恆 null ⇒ 直接 onConfirm()
+// 跳過整個排位儀式。它是**唯一**的先發編排入口：跳過＝B6-3 特地保住的那位板凳
+// 永遠換不上場、對面的具名王牌也不會亮相。
+test('★F2★ 大學場點「出戰」要先進對陣畫面，不得直接開打', async () => {
+  let playedCalls = 0;
+  await renderCareer(uniStorage('haiyan'), { onPlay: () => { playedCalls += 1; } });
+  const go = nodeWith(/出戰/);
+  assert.ok(go, '沒有出戰入口');
+  tap(go);
+  await settle();
+  await clearDialogs();
+  assert.equal(playedCalls, 0, '★跳過對陣畫面直接開打★ 先發編排入口整個消失');
+  const text = allText();
+  assert.match(text, /返回（不出戰）/, '對陣畫面沒出現');
+  assert.match(text, /海硯大學/, '對面的隊名沒亮相');
+});
+
+test('F2 對陣畫面上看得到對手的具名球員（大學表真的被吃進去）', async () => {
+  await renderCareer(uniStorage('meixi'));
+  tap(nodeWith(/出戰/));
+  await settle();
+  await clearDialogs();
+  const text = allText();
+  const { universityById } = await import('../src/career/universities.js');
+  const { createCareerStore: mk } = await import('../src/career/careerStore.js');
+  void mk;
+  // 第一場的對手（賽程決定論，seed 固定）
+  const oppId = createCareerStore(uniStorage('meixi')).loadCareer().schedule[0].opponentId;
+  const opp = universityById(oppId);
+  assert.ok(opp.squad.some((n) => text.includes(n)),
+    `對陣畫面上找不到 ${opp.name} 的任何一位球員`);
 });
