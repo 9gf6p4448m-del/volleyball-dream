@@ -65,3 +65,46 @@ export function enterUniversity(careerBlock = null, seasonIndex = null) {
     chapter: { id: CHAPTER.UNIVERSITY, enteredAtSeason: at },
   };
 }
+
+// ════════════════════════════════════════════════════════════════
+// 屆數的章節化（批 4，2026-08-14）
+// ════════════════════════════════════════════════════════════════
+// `season.index` 是**全域**的線性計數（高中 1→2→3，大學接著 4→5…）。
+// 但玩家看到的是「大一」「大二」，判斷年限也要按章算 ⇒ 需要「章內第幾年」。
+//
+// ★ 為什麼不直接把全域屆數歸零 ★ 那會讓既有存檔的 `season.index` 語意分裂成兩種
+// （有些是全域、有些是章內），而屆數散落在賽程、對手升級、招募進度好幾處。
+// 保留全域計數、另外算章內年份，是唯一不動既有語意的做法。
+
+// 各章的年限。★ 集中在這裡 ★ 散落各處就會出現「這裡三年、那裡四年」。
+// 大學階段一＝1 年（`docs/kickoffs/university-chapter-kickoff.md` 題 2「最小可玩版」）；
+// 之後要延長只改這一個值。
+export const CHAPTER_SEASONS = {
+  [CHAPTER.HIGH_SCHOOL]: 3,
+  [CHAPTER.UNIVERSITY]: 1,
+};
+
+/** 這一章的年限（認不得的章節照高中給——保守，不會意外放行）。 */
+export function seasonCapOf(chapter) {
+  const id = normalizeChapter({ chapter }).id;
+  return CHAPTER_SEASONS[id] ?? CHAPTER_SEASONS[CHAPTER.HIGH_SCHOOL];
+}
+
+/**
+ * 全域屆數 → 章內第幾年。
+ * 高中：恆等於全域屆數（那一章從第 1 屆開始，兩者同義）。
+ * 大學：`seasonIndex - enteredAtSeason + 1`；`enteredAtSeason` 缺席（壞存檔）時
+ *       退化成全域屆數——★不猜★ 猜錯會讓年限判斷失準，寧可保守。
+ */
+export function chapterSeasonOf(chapter, seasonIndex = 1) {
+  const ch = normalizeChapter({ chapter });
+  const idx = Number.isInteger(seasonIndex) && seasonIndex > 0 ? seasonIndex : 1;
+  if (ch.id === CHAPTER.HIGH_SCHOOL) return idx;
+  if (!Number.isInteger(ch.enteredAtSeason) || ch.enteredAtSeason <= 0) return idx;
+  return Math.max(1, idx - ch.enteredAtSeason + 1);
+}
+
+/** 這一章打完了沒（章內年份已達年限）＝封頂判斷的單一真相源。 */
+export function chapterCompleted(chapter, seasonIndex = 1) {
+  return chapterSeasonOf(chapter, seasonIndex) >= seasonCapOf(chapter);
+}

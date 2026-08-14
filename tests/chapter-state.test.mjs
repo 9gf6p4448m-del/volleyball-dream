@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 
 import {
   CHAPTER, DEFAULT_CHAPTER, normalizeChapter, isHighSchool, isUniversity, enterUniversity,
+  CHAPTER_SEASONS, seasonCapOf, chapterSeasonOf, chapterCompleted,
 } from '../src/career/chapter.js';
 import { createSaveV2 } from '../src/career/schema.js';
 
@@ -98,4 +99,58 @@ test('沒給賽季序號時 enteredAtSeason 為 null（不硬塞一個假的）'
   assert.equal(normalizeChapter(enterUniversity({}, null)).enteredAtSeason, null);
   assert.equal(normalizeChapter(enterUniversity({}, 0)).enteredAtSeason, null);
   assert.equal(normalizeChapter(enterUniversity({}, -3)).enteredAtSeason, null);
+});
+
+// ════════════════════════════════════════════════════════════
+// 批 4：屆數章節化（驗收 B4-1～B4-5）
+// ════════════════════════════════════════════════════════════
+
+test('★B4-1 最重要★ 高中封頂行為逐值不變：1/2 屆未到頂、第 3 屆到頂', () => {
+  assert.equal(chapterCompleted(undefined, 1), false);
+  assert.equal(chapterCompleted(undefined, 2), false);
+  assert.equal(chapterCompleted(undefined, 3), true, '高中仍然三屆封頂');
+});
+
+test('★B4-1 反向對照★ 年限改成 4 的話第 3 屆就沒到頂（證明不是恆假）', () => {
+  // 不改實作，直接驗「判斷式真的吃年限」：高中年限 3 ⇒ 第 3 屆到頂、第 2 屆沒到頂。
+  // 若判斷式恆為 true/false，這兩個值不可能同時成立。
+  assert.notEqual(chapterCompleted(undefined, 2), chapterCompleted(undefined, 3),
+    '★核心★ 第 2 屆與第 3 屆的結果必須不同——相同就代表判斷式沒在看屆數');
+  assert.equal(seasonCapOf(undefined), 3, '高中年限是 3');
+  assert.equal(CHAPTER_SEASONS[CHAPTER.HIGH_SCHOOL], 3);
+});
+
+test('B4-2 章內年份：高中恆等於全域屆數', () => {
+  for (const i of [1, 2, 3]) assert.equal(chapterSeasonOf(undefined, i), i);
+});
+
+test('B4-2 章內年份：大學從進入那一屆起算', () => {
+  const ch = { id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 };
+  assert.equal(chapterSeasonOf(ch, 4), 1, '進入的那一屆＝大一');
+  assert.equal(chapterSeasonOf(ch, 5), 2);
+  assert.equal(chapterSeasonOf(ch, 6), 3);
+});
+
+test('★B4-2 反向對照★ 同一個全域屆數、不同進入點 ⇒ 章內年份不同', () => {
+  const early = { id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 };
+  const late = { id: CHAPTER.UNIVERSITY, enteredAtSeason: 6 };
+  assert.notEqual(chapterSeasonOf(early, 7), chapterSeasonOf(late, 7),
+    '★核心★ 相同就代表根本沒在用進入點換算');
+});
+
+test('B4-3 大學年限＝1（階段一最小可玩版），且集中在一處', () => {
+  assert.equal(CHAPTER_SEASONS[CHAPTER.UNIVERSITY], 1);
+  assert.equal(seasonCapOf({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }), 1);
+  // 大學第 1 年就到頂（階段一打完一年）
+  assert.equal(chapterCompleted({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }, 4), true);
+});
+
+test('壞存檔：大學章缺 enteredAtSeason ⇒ 退化成全域屆數（不猜）', () => {
+  assert.equal(chapterSeasonOf({ id: CHAPTER.UNIVERSITY }, 5), 5);
+});
+
+test('B4-4 舊存檔零遷移：沒有章節欄位一律當高中', () => {
+  assert.equal(seasonCapOf(null), 3);
+  assert.equal(chapterCompleted(null, 3), true);
+  assert.equal(chapterCompleted(null, 2), false);
 });

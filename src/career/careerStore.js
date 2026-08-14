@@ -7,7 +7,9 @@ import { serializePlayer } from '../sim/player.js';
 import { advanceSeason, PLAYER_TRUST_FLOOR, normalizeCareerPlayer } from './careerState.js';
 // ★ 取別名 ★ store 上有個同名方法；物件方法不會遮蔽模組作用域的匯入（JS 這樣寫能動），
 // 但同名會讓讀的人以為是遞迴。別名讓「純函式」與「會落檔的方法」一眼分得開。
-import { normalizeChapter, enterUniversity as enterUniversityBlock } from './chapter.js';
+import {
+  normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted,
+} from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
@@ -166,7 +168,11 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       const view = save ? careerViewOf(save) : null;
       if (!view) return false;
-      if ((save.season.index ?? 1) >= 3) return false; // 高中章三屆封頂（W4 接生涯結算）
+      // 封頂改由章節決定（大學卷批 4，2026-08-14）——★不再寫死 3★
+      // 高中仍是三屆（`CHAPTER_SEASONS`），行為逐值不變；大學的年限同表另計。
+      // ⚠ 大學賽程是批 6：在那之前推進到大學章會掉進沒有賽程的空狀態，
+      //   而目前唯一進得了大學章的路徑是 `store.enterUniversity()`，尚未接上任何 UI。
+      if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
       // 4.5A 宿敵保底：下一屆屆數傳入賽程生成（第 2 屆天鷹掛準決賽）
       const next = advanceSeason(view, { ...opts, seasonIndex: (save.season.index ?? 1) + 1 });
       if (next === view) return false; // 賽季未結束
