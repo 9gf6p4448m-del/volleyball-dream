@@ -27,7 +27,13 @@ import { TIER, admissionTiersFor } from './admission.js';
 //     「更大的海」不等於「更安全的船」，他去的是一所要人把船划出去的學校。
 // 這些名字必須與 `opponents.js` 逐字相同（同一個人，不是同名的新角色）；
 // `tests/university.test.mjs` 的 B5-1 會對照既有名單逐字驗。
-export const UNI_ALUMNI_ACES = Object.freeze(['詹子曜', '劉振鎧', '簡子嵐']);
+export const UNI_ALUMNI_ACES = Object.freeze(['詹子曜', '劉振鎧', '簡子嵐', '曾家松']);
+
+// ★ 不升學的人 ★ 伏筆已經播出去的去向，不得被任何分配邏輯覆寫。
+// 王勝翔＝`events.js:471-478`「**直接**挑戰企業聯賽」。這裡的存在理由是：他**招募得到**
+// （`recruitment.js:227` sky-hawk 槽），玩家挖走他之後他就在名冊裡、第 3 屆是三年級
+// ⇒ 同屆隊友的分配會把他送進大學，當著玩家的面推翻已經講過的話（對抗覆審實測到）。
+export const NOT_ATTENDING = Object.freeze(['王勝翔']);
 
 // 等級的顯示用中文（同 `FINISH_LABEL`：只給畫面看，判斷一律用 `TIER` 的值）。
 export const TIER_LABEL = {
@@ -165,12 +171,16 @@ export const UNIVERSITIES = [
     roleBias: { libero: { reaction: 6 } },
     trustBias: {},
     heights: [1.80, 1.85, 1.92, 1.87, 1.83, 1.91],
-    squad: ['賀晏群', '鄒皓天', '曾明凱', '侯朗晉', '甘子昀', '童明祐'],
+    squad: ['賀晏群', '鄒皓天', '曾家松', '侯朗晉', '甘子昀', '童明祐'],
     grades: [4, 2, 1, 3, 2, 1],
     libero: '唐晞平',
     liberoGrade: 4,
     ace: { slot: 'L', name: '唐晞平', title: '最後一道光' },
-    alumni: [],
+    // 曾家松＝黑松「未完成的牆」。`events.js:475` 已經播出去的畢業台詞寫
+    // 「大學排壇等著看他砌完」——伏筆講了就要有著落，漏掉他和把王勝翔寫進來
+    // 是同一種錯（對抗覆審指出）。★ 他不是這裡的王牌 ★ 承光的隊魂是自由人，
+    // 他還在砌那面牆——這比直接讓他當王牌更接近那句台詞。
+    alumni: ['曾家松'],
     ai: { tipRate: 0.22, dumpRate: 0.1, floatServeRate: 0.18, diveRate: 0.2, blockPersona: 'read' },
   },
   {
@@ -305,6 +315,16 @@ export function admissibleSchoolsFor(finish) {
 //    補位員連 persona 都是生成的，替他寫去向只會稀釋真正認得的人。
 //    ——這裡的判準是 `growth.grade === 3`（與玩家同屆），補位新生年級較低自然落榜。
 
+// ★ 去向已經寫死的人不進分配 ★ 資料表裡的 `alumni`（詹子曜們）與 `NOT_ATTENDING`
+// （王勝翔）都是「已經有答案的人」。他們**招募得到**，被挖走後就成了玩家的隊友、
+// 第 3 屆也是三年級——沒有這道過濾，詹子曜會同時出現在北陵（寫死）與另一所（分配），
+// 王勝翔會出現在他明說不會去的地方。判準是「這個名字有沒有既定去向」，不是「他在不在
+// 玩家隊上」——後者才是會被玩家的招募行為繞過的那種寫法。
+const PREPLACED = new Set([
+  ...UNIVERSITIES.flatMap((u) => u.alumni ?? []),
+  ...NOT_ATTENDING,
+]);
+
 const ATTR_KEYS = ['jump', 'power', 'reaction', 'stamina', 'speed', 'control', 'serve', 'block'];
 
 function powerOf(member) {
@@ -312,9 +332,9 @@ function powerOf(member) {
   return ATTR_KEYS.reduce((s, k) => s + (Number.isFinite(a[k]) ? a[k] : 0), 0);
 }
 
-// 分發順序＝強豪 → 中段 → 弱校（表內順序）。★ 集中在這裡 ★ 別處再排一次就會漂移。
-const PLACEMENT_ORDER = [TIER.POWERHOUSE, TIER.MID, TIER.WEAK]
-  .flatMap((t) => UNIVERSITIES.filter((u) => u.tier === t).map((u) => u.id));
+// 分層順序＝強豪 → 中段 → 弱校。★ 集中在這裡 ★ 別處再排一次就會漂移。
+const TIER_ORDER = [TIER.POWERHOUSE, TIER.MID, TIER.WEAK];
+const SCHOOLS_BY_TIER = TIER_ORDER.map((t) => UNIVERSITIES.filter((u) => u.tier === t).map((u) => u.id));
 
 /**
  * 同屆隊友各自去了哪所大學。**純函式、決定論**。
@@ -323,15 +343,21 @@ const PLACEMENT_ORDER = [TIER.POWERHOUSE, TIER.MID, TIER.WEAK]
  */
 export function alumniPlacementsFor(members = null) {
   const peers = (Array.isArray(members) ? members : [])
-    .filter((m) => m?.growth?.grade === 3 && typeof m.fullName === 'string' && m.fullName);
+    .filter((m) => m?.growth?.grade === 3 && typeof m.fullName === 'string' && m.fullName)
+    .filter((m) => !PREPLACED.has(m.fullName));
   if (!peers.length) return {};
   // 先排序再分發＝名冊順序（招募／畢業會打亂它）不影響結果
   const sorted = [...peers].sort((a, b) => (
     powerOf(b) - powerOf(a) || String(a.id).localeCompare(String(b.id))
   ));
+  // ★ 分層，不是依序填滿 ★ 先前寫成「照順序輪流塞進九所」，結果三個隊友會**全部**
+  // 進強豪校（前三所都是強豪）——強弱之分整個不見了。改成按名次的**相對位置**決定
+  // 等級：前 1/3 去強豪、中 1/3 中段、後 1/3 弱校，組內再輪流分到該等級的三所。
   const out = {};
   sorted.forEach((m, i) => {
-    const schoolId = PLACEMENT_ORDER[i % PLACEMENT_ORDER.length];
+    const tierIdx = Math.min(TIER_ORDER.length - 1, Math.floor((i * TIER_ORDER.length) / sorted.length));
+    const tierSchools = SCHOOLS_BY_TIER[tierIdx];
+    const schoolId = tierSchools[i % tierSchools.length];
     (out[schoolId] ||= []).push({
       id: m.id, name: m.name ?? m.fullName, fullName: m.fullName, role: m.role ?? 'outside',
     });

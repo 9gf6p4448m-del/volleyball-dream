@@ -1996,7 +1996,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // ＝維持現行行為，不用在這裡寫死字串（那會是第二個真相源）
     const careerOver = isHighSchool(store.loadChapter?.())
       && (stage === 'champion' || stage === 'eliminated') && seasonN >= 3;
-    // 升學已定（批 5）：這一格擋在最前面——已經選好學校的存檔不該再看到高中的收尾流程
+    // ★ 升學已定（批 5）★ 這一格**排在整條分支鏈的最前面**，不是附加在旁邊：
+    // 選完學校後 `careerOver` 會變 false（章節已是大學），沒有這道分支就會掉進下面的
+    // 「▶ 進入下一屆——衛冕之路」——那顆按鈕被 `chapterCompleted` 擋著，按下去毫無反應
+    // （對抗覆審實測到的死按鈕），而且「▶ 生涯結算」會整顆消失、三年結算再也看不到。
     const pickedSchool = universityById(store.loadSchool?.() ?? '');
     if (pickedSchool) {
       root.appendChild(el('div', [
@@ -2005,8 +2008,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       ], `🎓 ${pickedSchool.name}`));
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
         '升學已定——大學賽季準備中（賽程在下一批接上）'));
-    }
-    if (careerOver) {
+      // 決定升學不該是「把高中鎖起來」——三年的結算永遠回得去
+      root.appendChild(button('▶ 重看生涯結算——三年的一切', false,
+        () => showCareerFinale(career, player, stage === 'champion')));
+    } else if (careerOver) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,
         'margin-top:8px', 'letter-spacing:2px',

@@ -40,9 +40,24 @@ function seasonsFor(best) {
  * @param finish 三屆最佳成績（`FINISH` 之一）
  * @returns 合法的 v2 存檔物件；`finish` 認不得時回 null（★不猜★）
  */
+// 當屆的收尾場次（批 5 補）。★ 為什麼非有不可 ★ 沒有它，合成存檔的 `careerStage`
+// 是 `group`（當屆一場都沒打）⇒ 生涯畫面認為賽季還在進行，**升學入口根本不會出現**，
+// 治具送你到的是「第 3 屆還沒打完」而不是「升學那一刻」。
+// ★ 為什麼 id 不用國賽階梯的那三個 ★ `seasonFinishOf` 是用 id 判當屆名次的
+// （`admission.js:41`）——借用 `national-qf` 會讓合成的「小組出局」被讀成八強，
+// 治具就會開出比它宣稱的更多的候選學校。用一個階梯外的 id，當屆名次照樣是「沒打進
+// 淘汰賽」，而分發吃的是三屆封存裡的最佳成績（那份才是治具真正要控制的東西）。
+const END_MATCH = {
+  id: 'devseed-end', stage: 'national', round: 'qf', opponentId: 'iron-mist', label: '全國賽',
+};
+
 export function buildSyntheticSave({ finish, playerName = '治具', seed = 4242 } = {}) {
   if (!(finish in FINISH_RANK)) return null;
   const career = createCareer({ seed, playerName });
+  career.schedule = [...career.schedule, END_MATCH];
+  career.results = [...career.results, {
+    matchId: END_MATCH.id, won: false, scoreA: 21, scoreB: 25,
+  }];
   const player = createCareerPlayer(playerName, { seed });
   const save = createSaveV2({ career, player });
   return {

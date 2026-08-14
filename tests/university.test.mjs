@@ -95,13 +95,15 @@ test('★B5-1 不撞名★ 新面孔不得與既有任何具名角色同名；�
 
 // ════════ B5-2 舊識落地且伏筆對得上 ════════
 
-test('B5-2 三位對手 ace 各在恰好一所大學', () => {
-  for (const name of ['詹子曜', '簡子嵐', '劉振鎧']) {
+// 加嚴（對抗覆審 F5）：曾家松的畢業台詞（`events.js:475`「大學排壇等著看他砌完」）
+// 也是已經播出去的伏筆，一併納入「恰好一所」的約束。
+test('B5-2 四位對手 ace 各在恰好一所大學', () => {
+  for (const name of ['詹子曜', '簡子嵐', '劉振鎧', '曾家松']) {
     const hit = UNIVERSITIES.filter((u) => rosterOf(u).includes(name));
     assert.equal(hit.length, 1, `${name} 應在恰好一所大學，實際 ${hit.length} 所`);
     assert.ok((hit[0].alumni ?? []).includes(name), `${name} 未被標記為舊識`);
   }
-  assert.deepEqual([...UNI_ALUMNI_ACES].sort(), ['劉振鎧', '簡子嵐', '詹子曜'].sort());
+  assert.deepEqual([...UNI_ALUMNI_ACES].sort(), ['劉振鎧', '簡子嵐', '詹子曜', '曾家松'].sort());
 });
 
 test('B5-2 詹子曜在強豪校（伏筆：北部的大學強豪）', () => {
@@ -156,7 +158,9 @@ const SAME_GRADE = [
   member('A1', '林承哲', 3, 480, 'setter'),
   member('A5', '葉翊飛', 3, 520),
   member('AL', '魏守恆', 3, 460, 'libero'),
-  member('R1', '詹子曜', 3, 560, 'middle'),
+  // ★ 不用舊識當治具 ★ 詹子曜們的去向寫死在資料表裡、不進分配池——拿他當樣本
+  // 等於把「同一個人出現在兩所大學」寫成期望值（對抗覆審 F2 指出的自我驗證）
+  member('A7', '莊明遠', 3, 560, 'middle'),
 ];
 const YOUNGER = [member('A6', '陳定岩', 2, 500, 'middle')];
 
@@ -179,6 +183,52 @@ test('B5-4 決定論：同一份名冊連跑兩次逐值相同', () => {
   assert.deepEqual(alumniPlacementsFor(SAME_GRADE), alumniPlacementsFor(SAME_GRADE));
   // 名冊順序不影響結果（存檔裡的成員順序會因招募／畢業而變動）
   assert.deepEqual(alumniPlacementsFor(SAME_GRADE), alumniPlacementsFor([...SAME_GRADE].reverse()));
+});
+
+// ★ 加嚴（2026-08-14 對抗覆審 F4）★ 原本的反向對照只比「兩份不同名冊 → 不同輸出」，
+// 對「全隊塞同一所」與「排序方向反了」兩種壞實作都是綠的（worktree 突變實測）。
+// 這一條把人固定、只動戰力值——分配邏輯本身才是被測的東西。
+test('★B5-4 鑑別力★ 同一批人只改戰力：最強的落在強豪、去向要跨越多個等級', () => {
+  const strongFirst = [
+    member('A1', '林承哲', 3, 700, 'setter'),
+    member('A5', '葉翊飛', 3, 500),
+    member('A6', '陳定岩', 3, 300, 'middle'),
+  ];
+  const p1 = alumniPlacementsFor(strongFirst);
+  const schoolOf = (place, fullName) => Object.entries(place)
+    .find(([, ms]) => ms.some((m) => m.fullName === fullName))?.[0];
+  assert.equal(universityById(schoolOf(p1, '林承哲')).tier, TIER.POWERHOUSE,
+    '最強的隊友沒去強豪＝排序方向反了');
+  const tiers = Object.keys(p1).map((id) => universityById(id).tier);
+  assert.ok(new Set(tiers).size >= 2, '三個人全塞進同一個等級＝分配是常數');
+  // 把戰力對調：同一批人、同一組分數，只換誰拿高分 ⇒ 去向必須跟著換人
+  const swapped = [
+    member('A1', '林承哲', 3, 300, 'setter'),
+    member('A5', '葉翊飛', 3, 500),
+    member('A6', '陳定岩', 3, 700, 'middle'),
+  ];
+  const p2 = alumniPlacementsFor(swapped);
+  assert.equal(universityById(schoolOf(p2, '陳定岩')).tier, TIER.POWERHOUSE);
+  assert.notEqual(schoolOf(p1, '林承哲'), schoolOf(p2, '林承哲'),
+    '戰力對調了去向卻沒變＝分配沒吃戰力');
+});
+
+test('★B5-2 真實路徑★ 招募來的舊識不得被分配去向覆寫（王勝翔不升學、詹子曜不分身）', () => {
+  // 玩家挖角天鷹王勝翔與曜石詹子曜——他們第 3 屆都是三年級，會進同屆隊友的分配池
+  const withAces = [
+    member('R1', '王勝翔', 3, 600),
+    member('R2', '詹子曜', 3, 590, 'middle'),
+    member('R3', '曾家松', 3, 580, 'middle'),
+    member('A1', '林承哲', 3, 480, 'setter'),
+  ];
+  const placed = Object.values(alumniPlacementsFor(withAces)).flat().map((m) => m.fullName);
+  assert.ok(!placed.includes('王勝翔'),
+    '★他的伏筆寫「直接挑戰企業聯賽」★ 招募過就被送進大學＝當著玩家的面改掉講過的話');
+  for (const name of ['詹子曜', '曾家松']) {
+    assert.ok(!placed.includes(name),
+      `${name} 的去向已經寫在資料表裡，再分配一次會讓同一個人同時出現在兩所大學`);
+  }
+  assert.deepEqual(placed, ['林承哲'], '只有沒既定去向的人該被分配');
 });
 
 test('★B5-4 反向對照★ 換一份隊友組成，去向要跟著變（不是寫死的假分配）', () => {

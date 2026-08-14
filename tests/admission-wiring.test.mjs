@@ -139,11 +139,31 @@ const schoolsOnScreen = () => {
   return UNIVERSITIES.filter((u) => text.includes(u.name));
 };
 
-test('★B5-6① 亞軍存檔 ⇒ 升學畫面列出九所（含強豪）', async () => {
-  await openAdmission(await seededStorage('national-final'));
+// ★ 治具存檔（批 3 的 devseed 路徑）★ 這同時是 P5-1 的機械版：
+// 「`?devseed=champion&devslot=3` 進去看得到升學畫面、九所全列」。
+// 治具原本合成不出當屆賽況 ⇒ `careerStage` 是 group ⇒ 升學入口根本不出現，
+// 人工試玩會直接撞牆（批 5 修）。這一條就是守那件事的。
+async function devSeededStorage(finish) {
+  const { SAVE_KEY } = await import('../src/career/careerStore.js');
+  const { buildSyntheticSave } = await import('../src/career/devSeed.js');
+  const storage = fakeStorage();
+  const save = buildSyntheticSave({ finish, playerName: '小夢' });
+  assert.ok(save, `治具造不出 ${finish} 的存檔`);
+  storage.setItem(SAVE_KEY, JSON.stringify(save));
+  return storage;
+}
+
+test('★B5-6① 冠軍存檔（治具路徑）⇒ 升學畫面列出九所（含強豪）', async () => {
+  await openAdmission(await devSeededStorage('champion'));
   const shown = schoolsOnScreen();
   assert.equal(shown.length, 9, `畫面上只有 ${shown.length} 所`);
   assert.ok(shown.some((u) => u.tier === TIER.POWERHOUSE));
+  assert.match(allText(), /全國冠軍/);
+});
+
+test('B5-6①b 亞軍存檔（真人路徑：決賽敗）⇒ 也是九所', async () => {
+  await openAdmission(await seededStorage('national-final'));
+  assert.equal(schoolsOnScreen().length, 9);
   assert.match(allText(), /全國亞軍/);
 });
 
@@ -185,6 +205,43 @@ test('B5-6④ 卡片可點：選擇→確認→存檔真的記住了（畫面不
   assert.ok(picked, '確認後存檔仍然沒有志願');
   assert.equal(createCareerStore(storage).loadChapter().id, 'university');
   assert.match(allText(), /新生報到/);
+});
+
+// 對抗覆審 F3：選校後 `careerOver` 變 false，若沒有專屬分支就會掉進「▶ 進入下一屆」
+// ——那顆按鈕被 chapterCompleted 擋著、按下去毫無反應，而且生涯結算會整顆消失。
+// ★ 用冠軍存檔跑 ★ 死按鈕正是從「奪冠 → 衛冕之路」那條分支掉出來的，
+// 而那條分支在 wiring 層一次都沒被走過（F7）。
+async function renderCareerText(storage) {
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  createCareerScreen(createCareerStore(storage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  }).show('career');
+  await settle();
+  for (let i = 0; i < 12; i += 1) {
+    const cont = walk(globalThis.document.body).find((n) => /點擊繼續/.test(n.textContent ?? ''));
+    if (!cont) break;
+    let t = cont;
+    while (t && !(t.handlers?.pointerdown ?? []).length) t = t.parent;
+    if (!t) break;
+    tap(t);
+    await settle();
+  }
+  return allText();
+}
+
+test('★F3★ 選校後不得長出按不動的「進入下一屆」，且生涯結算仍回得去', async () => {
+  const storage = await devSeededStorage('champion');
+  // 對照組：還沒選校時，這份存檔本來就看得到收尾流程（證明下面的「不出現」有意義）
+  const before = await renderCareerText(storage);
+  assert.match(before, /生涯結算/, '選校前連結算都沒有＝這條對照失效');
+
+  createCareerStore(storage).enterUniversity('meixi');
+  const after = await renderCareerText(storage);
+  assert.doesNotMatch(after, /進入下一屆/, '★升學後又給一顆按不動的推進鈕★');
+  assert.doesNotMatch(after, /捲土重來/);
+  assert.match(after, /重看生涯結算/, '升學後三年的結算再也看不到＝把高中鎖起來了');
+  assert.match(after, /升學已定/);
 });
 
 test('B5-6⑤ 已選校的存檔重開 ⇒ 顯示升學已定、不再出現升學入口', async () => {
