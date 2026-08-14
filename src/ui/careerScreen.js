@@ -2000,17 +2000,27 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 選完學校後 `careerOver` 會變 false（章節已是大學），沒有這道分支就會掉進下面的
     // 「▶ 進入下一屆——衛冕之路」——那顆按鈕被 `chapterCompleted` 擋著，按下去毫無反應
     // （對抗覆審實測到的死按鈕），而且「▶ 生涯結算」會整顆消失、三年結算再也看不到。
+    // ★ 判準是「在不在大學章」，不是「學校讀不讀得出來」★ 二輪覆審實測：只看 school
+    // 的話，`chapter=university` 但 `school` 解不開的存檔（手改過、或批 6 之後改過任何
+    // 一個大學 id 的舊存檔）會兩邊都落空 ⇒ 直落「▶ 進入下一屆」的死按鈕，連生涯結算
+    // 與升學入口都消失，玩家徹底卡死。防線要按「危險的效果」寫，不是按已知的入口。
+    const inUniversity = !isHighSchool(store.loadChapter?.());
     const pickedSchool = universityById(store.loadSchool?.() ?? '');
-    if (pickedSchool) {
+    if (inUniversity) {
       root.appendChild(el('div', [
         'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
         'letter-spacing:2px',
-      ], `🎓 ${pickedSchool.name}`));
+      ], pickedSchool ? `🎓 ${pickedSchool.name}` : '🎓 升學已定'));
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
-        '升學已定——大學賽季準備中（賽程在下一批接上）'));
-      // 決定升學不該是「把高中鎖起來」——三年的結算永遠回得去
-      root.appendChild(button('▶ 重看生涯結算——三年的一切', false,
-        () => showCareerFinale(career, player, stage === 'champion')));
+        pickedSchool
+          ? '升學已定——大學賽季準備中（賽程在下一批接上）'
+          : '升學已定，但存檔裡的學校讀不出來——大學賽季準備中'));
+      // 決定升學不該是「把高中鎖起來」——三年回得去。
+      // ★ 但不是「生涯結算」★ 批 1 的凍結驗收 B1-3② 明訂大學章不得再出現那顆按鈕
+      //（`tests/chapter-wiring.test.mjs`；理由：已經在念大學了還跳「三年的一切」＝
+      // 系統分不出章節，而且它會再播一次謝幕、再把人導去升學）。回顧走**數據頁**——
+      // 同樣看得到三屆戰績，但它是唯讀的，不是章節流程的入口。
+      root.appendChild(button('📊 回看三年的數據', false, () => showCareerTotals()));
     } else if (careerOver) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,
@@ -2298,6 +2308,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     };
   }
 
+  // 舊識的標籤要吃名冊（二輪覆審 N3）：曾家松與簡子嵐高中一年級就招得到，可以在
+  // 玩家隊上打滿兩年——把剛在畢業式道別的隊友寫成「高中的對手」，跟讓他分身到兩所
+  // 大學是同一類的「當著玩家的面推翻他玩過的東西」，只是輕一點。
+  function alumniLabelFor(fullName) {
+    const onRoster = (store.loadRoster?.()?.members ?? [])
+      .some((m) => m?.fullName === fullName);
+    return onRoster ? `${fullName}（你的隊友）` : `${fullName}（高中的對手）`;
+  }
+
   function schoolCard(u, peers, onPick) {
     const tierColor = { 強豪: COLOR.gold, 中段: COLOR.cyan, 弱校: COLOR.dim }[TIER_LABEL[u.tier]];
     const card = el('div', [
@@ -2314,7 +2333,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       `王牌 ${u.ace.name}（${u.ace.title}）`));
     // 舊識：資料表寫死的對手 ace ＋ 這份存檔算出來的同屆隊友
     const known = [
-      ...(u.alumni ?? []).map((n) => `${n}（高中的對手）`),
+      ...(u.alumni ?? []).map(alumniLabelFor),
       ...peers.map((m) => `${m.fullName}（你的隊友）`),
     ];
     if (known.length) {

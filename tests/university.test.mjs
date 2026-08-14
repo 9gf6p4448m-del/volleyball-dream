@@ -106,6 +106,28 @@ test('B5-2 四位對手 ace 各在恰好一所大學', () => {
   assert.deepEqual([...UNI_ALUMNI_ACES].sort(), ['劉振鎧', '簡子嵐', '詹子曜', '曾家松'].sort());
 });
 
+// 二輪覆審 N2：舊識的大學年級要對得上他高中什麼時候畢業。
+// 高中 grade g（第 1 屆的年級）⇒ 第 (4−g) 屆末畢業 ⇒ 玩家第 4 屆入學時他念大 g。
+// （詹子曜 3→大三、劉振鎧 2→大二、簡子嵐／曾家松 1→大一——恰好等於高中年級。）
+test('B5-2 舊識的大學年級＝他的高中年級（早畢業的人不能畫成同屆新生）', () => {
+  const hsGradeOf = (name) => {
+    for (const o of OPPONENTS) {
+      const i = o.squad.indexOf(name);
+      if (i >= 0) return o.grades[i];
+      if (o.libero === name) return o.liberoGrade;
+    }
+    return null;
+  };
+  for (const u of UNIVERSITIES) {
+    for (const name of u.alumni ?? []) {
+      const i = u.squad.indexOf(name);
+      const uniGrade = i >= 0 ? u.grades[i] : u.liberoGrade;
+      assert.equal(uniGrade, hsGradeOf(name),
+        `${name}：大學 ${uniGrade} 年級 vs 高中 ${hsGradeOf(name)} 年級——畢業時間對不上`);
+    }
+  }
+});
+
 test('B5-2 詹子曜在強豪校（伏筆：北部的大學強豪）', () => {
   const school = UNIVERSITIES.find((u) => rosterOf(u).includes('詹子曜'));
   assert.equal(school.tier, TIER.POWERHOUSE);
@@ -239,6 +261,27 @@ test('★B5-4 反向對照★ 換一份隊友組成，去向要跟著變（不�
   const a = JSON.stringify(alumniPlacementsFor(SAME_GRADE));
   const b = JSON.stringify(alumniPlacementsFor(other));
   assert.notEqual(a, b, '兩份完全不同的名冊卻分出一樣的去向＝分配沒吃輸入');
+});
+
+// ★ 明示：自由人也升學 ★ 凍結的 B5-4 只規定「非自由人隊友每一位都在」，沒有規定
+// 自由人——實作選擇把他也算進去（拍板是「高中那些人**全部**回來」，小守跟你打了三年）。
+// 這條把那個選擇寫成明示斷言，免得它只隱含在「總數相等」裡而被誤讀成漏過濾
+// （二輪覆審 F6 就是這樣讀的）。★ 這是加嚴不是放寬 ★ 多一個人要滿足不重不漏。
+test('B5-4 自由人也有去向（凍結條文沒規定，實作選擇把他算進來）', () => {
+  const p = alumniPlacementsFor(SAME_GRADE);
+  const placed = Object.values(p).flat();
+  const libero = placed.find((m) => m.fullName === '魏守恆');
+  assert.ok(libero, '自由人沒有去向——他也在隊上打了三年');
+  assert.equal(libero.role, 'libero');
+});
+
+// 二輪覆審 N4：名次分層在人少時會退化
+test('B5-4 只剩一位同屆隊友時不會無條件直上第一強豪', () => {
+  const solo = alumniPlacementsFor([member('A9', '孤單一人', 3, 420)]);
+  const [id] = Object.keys(solo);
+  assert.equal(Object.values(solo).flat().length, 1);
+  assert.notEqual(universityById(id).tier, TIER.POWERHOUSE,
+    '唯一的同屆隊友不論多弱都進最強的學校＝分層在 n=1 退化成常數');
 });
 
 test('B5-4 空名冊／壞資料不炸（畢業後名冊被清空的存檔）', () => {

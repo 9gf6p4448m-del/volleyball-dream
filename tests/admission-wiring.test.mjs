@@ -240,8 +240,49 @@ test('★F3★ 選校後不得長出按不動的「進入下一屆」，且生�
   const after = await renderCareerText(storage);
   assert.doesNotMatch(after, /進入下一屆/, '★升學後又給一顆按不動的推進鈕★');
   assert.doesNotMatch(after, /捲土重來/);
-  assert.match(after, /重看生涯結算/, '升學後三年的結算再也看不到＝把高中鎖起來了');
+  // ★ 不能用「生涯結算」當判準 ★ 批 1 的 B1-3② 明訂大學章不得再出現那顆按鈕；
+  // 回顧走唯讀的數據頁，兩條凍結驗收在這裡並存（見 careerScreen 的註解）
+  assert.match(after, /回看三年的數據/, '升學後三年再也看不到＝把高中鎖起來了');
+  assert.doesNotMatch(after, /生涯結算——三年的一切/, '撞到批 1 的 B1-3②');
   assert.match(after, /升學已定/);
+});
+
+test('★N1★ 大學章但 school 讀不出來 ⇒ 仍不得長出死按鈕（判準是章節，不是學校值）', async () => {
+  const { SAVE_KEY } = await import('../src/career/careerStore.js');
+  const storage = await devSeededStorage('champion');
+  const raw = JSON.parse(storage.getItem(SAVE_KEY));
+  // 手改過的存檔，或批 6 之後改過任一大學 id 的舊存檔，都會落在這個狀態
+  raw.career = { ...raw.career, chapter: { id: 'university', enteredAtSeason: 4 }, school: 'no-such-uni' };
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  const text = await renderCareerText(storage);
+  assert.doesNotMatch(text, /進入下一屆/, '★學校讀不出來就掉回死按鈕★ 玩家會徹底卡死');
+  assert.doesNotMatch(text, /捲土重來/);
+  assert.match(text, /升學已定/, '至少要告訴玩家他已經升學了');
+  assert.match(text, /回看三年的數據/, '出不去也回不去＝死局');
+});
+
+test('★N3★ 招募過的舊識在升學畫面上要標成「你的隊友」，不是「高中的對手」', async () => {
+  const { SAVE_KEY } = await import('../src/career/careerStore.js');
+  const { buildRecruitMember } = await import('../src/career/recruitment.js');
+  const storage = await devSeededStorage('champion');
+  const raw = JSON.parse(storage.getItem(SAVE_KEY));
+  // 曾家松（黑松 ace）第 1 屆招得到、在隊上打到第 3 屆——他現在在承光大學的名單裡
+  const { buildStarterMembers } = await import('../src/career/roster.js');
+  const m = buildRecruitMember('black-pine', 4242, 'R1');
+  assert.equal(m.fullName, '曾家松', '招募定義變了，這條測試要跟著更新');
+  // ★ 名冊要完整 ★ 只塞一個成員的殘缺名冊會觸發畫面層的補名冊寫入，把 career 洗掉
+  //（第一次寫就踩到：升學畫面變成「小組賽止步」＝封存的冠軍成績被蓋掉了）
+  const third = (x) => ({ ...x, growth: { ...x.growth, grade: 3 } });
+  raw.roster = {
+    capacity: 12,
+    members: [...buildStarterMembers().map(third), third(m)],
+  };
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  await openAdmission(storage);
+  const text = allText();
+  assert.match(text, /曾家松（你的隊友）/,
+    '跟你打了兩年、剛在畢業式道別的人被寫成「高中的對手」');
+  assert.doesNotMatch(text, /曾家松（高中的對手）/);
 });
 
 test('B5-6⑤ 已選校的存檔重開 ⇒ 顯示升學已定、不再出現升學入口', async () => {

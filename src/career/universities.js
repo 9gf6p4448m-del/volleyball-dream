@@ -96,7 +96,11 @@ export const UNIVERSITIES = [
     trustBias: { opposite: 8 },
     heights: [1.85, 1.91, 1.98, 1.95, 1.89, 1.96],
     squad: ['韋擎宇', '施駿霆', '崔立剛', '劉振鎧', '童奕勳', '練昱豪'],
-    grades: [3, 2, 4, 1, 2, 3],
+    // 劉振鎧＝2（二輪覆審 N2 更正）：他高中 grade 2（`opponents.js:186`，第 2 屆末畢業）
+    // ⇒ 玩家第 4 屆入學時他已經念了一年。原本填 1 會把一個早你一年畢業的人畫成同屆新生。
+    // 對照：詹子曜高中 grade 3（第 1 屆末畢業）⇒ 大三；簡子嵐／曾家松高中 grade 1
+    // （與玩家同屆）⇒ 大一。
+    grades: [3, 2, 4, 2, 2, 3],
     libero: '顧毅安',
     liberoGrade: 2,
     ace: { slot: 3, name: '劉振鎧', title: '鐵彈道' },
@@ -353,9 +357,13 @@ export function alumniPlacementsFor(members = null) {
   // ★ 分層，不是依序填滿 ★ 先前寫成「照順序輪流塞進九所」，結果三個隊友會**全部**
   // 進強豪校（前三所都是強豪）——強弱之分整個不見了。改成按名次的**相對位置**決定
   // 等級：前 1/3 去強豪、中 1/3 中段、後 1/3 弱校，組內再輪流分到該等級的三所。
+  // ★ 取每個名次的**區間中點**，分母至少 3 ★ 直接用 `i * 3 / n` 的話，只有一位同屆
+  // 隊友時 `floor(0)` ＝ 無條件直上第一強豪（二輪覆審 N4）——那不是分層，是退化。
+  // 中點取樣讓 n=1 落在中段、n=2 落在強豪＋中段，n≥3 起與均分同義。
   const out = {};
   sorted.forEach((m, i) => {
-    const tierIdx = Math.min(TIER_ORDER.length - 1, Math.floor((i * TIER_ORDER.length) / sorted.length));
+    const tierIdx = Math.min(TIER_ORDER.length - 1,
+      Math.floor(((i + 0.5) / sorted.length) * TIER_ORDER.length));
     const tierSchools = SCHOOLS_BY_TIER[tierIdx];
     const schoolId = tierSchools[i % tierSchools.length];
     (out[schoolId] ||= []).push({
