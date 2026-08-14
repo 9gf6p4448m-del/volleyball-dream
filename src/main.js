@@ -16,6 +16,7 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
+import { devSeedRequest, buildSyntheticSave } from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentById } from './career/opponents.js';
 import { ENGINEERED_OPEN } from './career/positionFlags.js';
@@ -84,6 +85,18 @@ async function showCareerEntry(ctx) {
   }
   // W4(P4) 題2 多槽：可切槽代理——選檔頁 useSlot 重綁，careerScreen 內部零改動
   const store = createSlotStoreProxy();
+  // 大學卷治具（2026-08-14）：?devseed=<成績>&devslot=<1-3> 把合成的
+  // 「剛打完高中三屆」存檔寫進**指定的槽**，免得為了測升學要真的打三年。
+  // ★ 兩個參數缺一不啟動、且無預設槽 ★ 判定全在 devSeedRequest（單一真相源），
+  // 這裡不再自己判一次——手滑的網址不得洗掉玩家的生涯。
+  const devReq = devSeedRequest(params);
+  if (devReq) {
+    const synthetic = buildSyntheticSave({ finish: devReq.finish });
+    if (synthetic) {
+      store.useSlot(devReq.slot);
+      store.seedWholeSave(synthetic);
+    }
+  }
   // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置回填至 open
   // （ready→open 兩段合法轉移、冪等；上架版語意＝四位置恆開放）。
   // W4 起搬到「選定槽」時執行（per-slot 寫入；未選槽不寫檔——空槽不留骨架）。

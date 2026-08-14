@@ -288,6 +288,14 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       return save?.season?.index ?? 1;
     },
+    // ★★ 治具專用（大學卷批 3，2026-08-14）★★ 整份覆蓋當前槽。
+    // **正式流程不得呼叫**——它會蓋掉整份存檔，存在的唯一理由是 `devSeed` 的
+    // 合成存檔要寫得進去（免得為了測升學要真的打三年）。
+    // 安全靠呼叫端：`devSeedRequest` 缺參數／無合法槽就不啟動（見 devSeed.js 檔頭）。
+    seedWholeSave(save) {
+      if (!save) return false;
+      return writeSave(() => save);
+    },
     // 生涯章節（大學卷批 1，2026-08-14）——★讀出來一律過 normalizeChapter★
     // 舊存檔的 `career` 是 `{}`（Phase 3 預留鍵），逐項回退＝零遷移，不動 schema 版本。
     loadChapter() {
