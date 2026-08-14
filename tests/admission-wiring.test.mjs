@@ -259,6 +259,13 @@ test('★N1★ 大學章但 school 讀不出來 ⇒ 仍不得長出死按鈕（�
   assert.doesNotMatch(text, /捲土重來/);
   assert.match(text, /升學已定/, '至少要告訴玩家他已經升學了');
   assert.match(text, /回看三年的數據/, '出不去也回不去＝死局');
+  // ★ 死按鈕的教訓：只驗「文字在」抓不到「按了沒反應」★ 這一整串 finding 的主題
+  // 就是死按鈕，回顧路徑自己更不能是一顆擺飾（三輪覆審指出這道保護沒進 regression）
+  const back = nodeWith(/回看三年的數據/);
+  assert.ok(back, '回顧按鈕不可點');
+  tap(back);
+  await settle();
+  assert.match(allText(), /生涯數據/, '按了回顧卻什麼都沒打開＝又一顆死按鈕');
 });
 
 test('★N3★ 招募過的舊識在升學畫面上要標成「你的隊友」，不是「高中的對手」', async () => {
