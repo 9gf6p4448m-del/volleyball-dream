@@ -8,6 +8,7 @@ import { advanceSeason, PLAYER_TRUST_FLOOR, normalizeCareerPlayer } from './care
 // ★ 取別名 ★ store 上有個同名方法；物件方法不會遮蔽模組作用域的匯入（JS 這樣寫能動），
 // 但同名會讓讀的人以為是遞迴。別名讓「純函式」與「會落檔的方法」一眼分得開。
 import { normalizeChapter, enterUniversity as enterUniversityBlock } from './chapter.js';
+import { seasonFinishOf } from './admission.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -659,6 +660,11 @@ export function archiveSeasonSummary(season) {
     wins: results.filter((r) => r.won).length,
     losses: results.filter((r) => !r.won).length,
     champion: results.some((r) => r.matchId === 'national-final' && r.won),
+    // 大學卷批 2（2026-08-14）：升學評定要「三屆最佳成績」，而 champion 只分得出
+    // 冠軍／非冠軍——亞軍與八強在這裡長得一模一樣。多存一個五級名次。
+    // ★ 加在既有封存裡，不另開一份歷史 ★ 兩份同義的歷史遲早互相矛盾。
+    // 舊條目沒有這個欄位＝`admission.normalizeSeasonLog` 回退用 champion 判（見該檔）。
+    finish: seasonFinishOf({ results }),
     totals,
   };
 }
