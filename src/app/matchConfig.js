@@ -228,6 +228,11 @@ export function resolveTechGates(game, playerId, careerActive, hintsOff = false)
     // 注意這只是 UI 閘：邏輯層另有一道（evaluateCombination 的 scale===0 連 force 一起關），
     // 繞過面板直接送 replanCall 也產不出 combo——兩層各自獨立，不互為前提。
     canCallPlay: (!tech || (tech.callPlay ?? 0) >= 1) && (game.comboScale ?? 1) > 0,
+    // 大學卷批 7（08-24）：兩招大學技術，與上列同一把尺（快速比賽 tech===null＝恆開）。
+    // canPressBlock 只餵 MB 讀心面板的「壓手封X」兩個選項——B7-3 要求壓手不得有
+    // 獨立於方向的入口，所以這個布林**只**決定那兩個選項出不出現，不另開鈕。
+    canPressBlock: !tech || (tech.pressBlock ?? 0) >= 1,
+    canChaseServe: !tech || (tech.chaseServe ?? 0) >= 1,
     // 讀攔網提示檔位（reaction 綁定，決策第 4 題）：none＝無、slow＝0.6s 後上色、instant＝即時
     readTier: hintsOff ? 'none' : (careerActive ? blockReadTier(game.players[playerId]) : 'instant'),
   };

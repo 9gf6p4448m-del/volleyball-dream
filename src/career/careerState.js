@@ -481,7 +481,12 @@ export function normalizeCareerPlayer(player) {
   }
   // ④新技術缺欄＝未解鎖（callPlay 於 07-31 加入：段 E 叫戰術改走技術傳授；
   // 舊存檔無此欄＝未受教＝鎖，與新生涯的顯式 0 同值，兩者行為一致）
-  for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive', 'callPlay']) t[k] = t[k] ?? 0;
+  // 大學卷批 7（08-24）：pressBlock／chaseServe 同理——高中三屆的舊存檔升上大學時
+  // 這兩欄不存在，補 0＝未受教。★不能留 undefined★：UI 閘門雖然是 `(tech.x ?? 0) >= 1`
+  // 讀得動，但 B7-1 要求舊存檔讀出來逐值＝0——undefined 在技術列表顯示層是
+  // 「這一招不存在」，與「還沒學會」是兩種意思。
+  for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive', 'callPlay',
+    'pressBlock', 'chaseServe']) t[k] = t[k] ?? 0;
   t.feintUses = t.feintUses ?? 0;
   // ⑤屆間養成卷 E1（2026-08-09）：默契欄缺席＝空紀錄。舊存檔讀出來是 undefined
   // （serializePlayer 是整個物件 JSON.stringify、deserializePlayer 不驗未知欄位），

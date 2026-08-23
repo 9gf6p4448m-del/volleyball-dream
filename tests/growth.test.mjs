@@ -77,7 +77,9 @@ test('unlockTechnique：0→1、重複解鎖拒絕、假動作熟練度從 0 起
   const pf = unlockTechnique(p, 'feint');
   assert.equal(pf.techniques.feint, 1);
   assert.equal(pf.techniques.feintUses, 0);
-  assert.equal(TECH_DEFS.length, 7); // 吊球/魚躍/pipe/飄浮/假動作/跳發/叫戰術（07-31 段 E 裁定加入）
+  // 08-24 大學卷批 7：7→9（壓手攔網／追發）。B7-10 的例外，使用者已針對該條追認。
+  // 仍是逐值相等斷言：少加一招、加錯 key、加了沒進表，這條都還是紅的。
+  assert.equal(TECH_DEFS.length, 9); // 吊球/魚躍/pipe/飄浮/假動作/跳發/叫戰術/壓手/追發
 });
 
 test('技術閘門起點：生涯新人全鎖、預設球員（快速比賽/AI）全開', () => {

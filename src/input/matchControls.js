@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { createIntent } from '../sim/intent.js';
 import { serverId } from '../sim/match.js';
 import {
-  TEAM_SIDE, isFrontRow, localToWorld, positionOf, basePosition, servePosition,
+  TEAM_SIDE, isFrontRow, isBackRow, localToWorld, positionOf, basePosition, servePosition,
 } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
@@ -85,6 +85,11 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let setChosen = false;            // W3 S 玩法：本次舉球已分配（面板不再彈）
   let mbChosen = false;             // W3 MB 玩法：本次讀舉球已決定時機（面板不再彈）
   let digChosen = false;            // W3 L 玩法：本次防守指揮已選/已自動（面板不再彈）
+  // 大學卷批 7（08-24）：本波攔網要不要壓手（press）。★不與 mbChosen 同壽★——
+  // mbChosen 在「讀舉球時刻」結束就重置（touches!==2），而攔網窗要等對方扣球出手
+  // 之後才開；跟著它清會讓 press 永遠送不出去。改成「送出過一次 block intent 就清」
+  // （sim 是一窗一態、窗開時定格，見 game.js:589-596，第一次送出即定案）＋球死兜底。
+  let pressArmed = false;
   let digHeroSignal = false;        // W3 L 演出武裝：Perfect/魚躍起球——TOUCH 確認後消費
   let manualOwned = false;          // 本球玩家已接管走位（碰過搖桿＝整球歸你；發球階段重置）
   let diveLand = { flightId: -1, landing: null }; // 自動魚躍落點閘的逐 flight 快取
@@ -312,6 +317,8 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       if (mbChosen && !this.isMbMoment(game)) mbChosen = false;
       // 非防守指揮時刻＝重置 L 選擇旗標（digBias 本體由 matchLoop 管理生命週期）
       if (digChosen && !this.isLMoment(game)) digChosen = false;
+      // 批 7：球死＝壓手承諾作廢（沒攔到的那一波不留到下一球）
+      if (pressArmed && game.phase !== 'rally') pressArmed = false;
       const tick = game.tick;
       const me = game.players[playerId];
       const a = game.actors[playerId];
@@ -540,6 +547,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       // 段 1 記債豁免旗標：只在手動攔網時掛上（同 ai.js 掛 `hand` 的既有作法，
       // 不擴充 createIntent 的白名單）——自動跳攔不掛＝與 AI 同閘
       if (manualBlock) it.manual = true;
+      // 大學卷批 7（08-24）壓手攔網：與 it.manual／ai.js 掛 hand 同一招——建好 intent
+      // 再補屬性，不擴充 createIntent 的白名單（sim 端 game.js:596 讀 intent.hand）。
+      // ★手動與自動跳攔都吃★：面板承諾的是「這一波要壓手」，不是「怎麼起跳」——
+      // 起跳時機在 08-03 已裁定交回自動跳攔，壓手不重開那個軸。
+      // 送出即清：sim 一窗一態、窗開時定格，後續 tick 再帶也不會被讀。
+      if (action === 'block' && pressArmed) {
+        it.hand = 'press';
+        pressArmed = false;
+      }
       return [it];
     },
     // 出手成功（sim 發出我的觸球/發球事件）→ 清掉緩衝
@@ -686,6 +702,11 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       if (early) blockTap();
     },
     mbPending() { return mbChosen; },
+    // 批 7 壓手攔網：面板選了「壓手封X」時武裝，下一個 block intent 帶 hand='press'。
+    // ★這是唯一的 press 入口★（B7-3：不得有獨立於封線方向的壓手路徑）——
+    // 呼叫端 matchLoop 在同一個 callback 裡必定也寫了 aiState.blockCall，兩者咬合。
+    armPressBlock() { pressArmed = true; },
+    isPressArmed() { return pressArmed; },
 
     // ---- L 防守指揮（W3 附錄 A1/A2：玩家＝場上自由人、對手舉球出手瞬間）----
     isLMoment(game) {
@@ -745,6 +766,33 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         { key: 'dr', label: '深右', aim: localToWorld(opp, -2.8, 7.8) },
         { key: 'short', label: '短球', aim: localToWorld(opp, 0, 3.6) },
       ];
+    },
+
+    // 大學卷批 7（08-24）追發（指名發球）：對方**當前輪轉的後排三人**，各自的
+    // 陣型基準位換算成發球 aim。這一卷的靈魂＝「大學是我讓對面打不好」——
+    // 專打接發最弱的那個人。
+    // ★三件事刻意這樣做★
+    //   ① 後排＝isBackRow（rotation.js:51，位置 1/5/6），不是寫死名字或列六人；
+    //      對方輪轉推進後名單自然跟著變（B7-6）。
+    //   ② aim 用 basePosition（陣型基準位）而不是球員當下的 actor 座標——發球那一刻
+    //      對方還沒動，基準位才是「他站的地方」；也順帶讓這條路徑決定論、不吃走位抖動。
+    //   ③ 三個位置號的基準位互不相同 ⇒ 三個目標的 aim 逐值不同（B7-5 的反向對照）。
+    chaseServeTargets(game) {
+      const me = game.players[playerId];
+      const opp = me.teamId === 'A' ? 'B' : 'A';
+      const rot = game.match?.rotations?.[opp];
+      if (!Array.isArray(rot)) return [];
+      return rot
+        .filter((pid) => isBackRow(rot, pid))
+        .map((pid) => ({ pid, pos: positionOf(rot, pid) }))
+        .sort((a, b) => a.pos - b.pos)
+        .map(({ pid, pos }) => ({
+          key: 'chase-' + pid,
+          pid,
+          pos,
+          label: game.players[pid]?.name ?? '？',
+          aim: basePosition(opp, pos),
+        }));
     },
 
     // ---- 攔網決策（防守面的讀取：他選線、你封線）----

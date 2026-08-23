@@ -285,6 +285,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     game, aiState,
     seed: config.seed,          // 快速比賽局終點擊換局：seed+1 再開
     servedThisTurn: false,      // 每個發球回合只處理一次發球決策
+    chaseExpanded: false,       // 批 7 追發：發球面板是否已展開到「發給誰」那一層
     whistledServe: false,       // 每個發球回合只吹一次發球前短哨
     diveReady: false,           // 魚躍鈕當幀可用性（Space/L 鍵共用判定）
     // 假動作熟練度：場終一次累積寫回 Player；局間存檔續玩＝接回快照時的累計
@@ -1199,6 +1200,8 @@ function updateDecisions(s, now) {
     game.phase === 'serve' && serverId(game.match) === s.controlledId &&
     game.tick >= game.serveReadyTick && !s.servedThisTurn;
   if (game.phase !== 'serve') s.servedThisTurn = false;
+  // 批 7：離開發球階段＝追發那一層收起來（下一個發球回合從主面板重新開始）
+  if (game.phase !== 'serve') s.chaseExpanded = false;
   // 發球前短哨（裁判示意發球）：每個發球回合一次
   if (game.phase === 'serve' && game.tick >= game.serveReadyTick && !s.whistledServe) {
     s.whistledServe = true;
@@ -1255,15 +1258,26 @@ function updateDecisions(s, now) {
       // ⇒ 按鈕只能把跳躍**提前**，提前一律遠離頂點。
       // 換成封線之後，玩家管的是實測**完全沒被碰過**的橫向維度，而取捨、地板影子、
       // 讀對/讀反字卡全都是 L 配套（liberoRead.js）現成的。
+      // 大學卷批 7（08-24）壓手攔網：★press 只能從這裡出去★（B7-3）——
+      // 它跟封線方向綁在同一顆按鈕上，所以「想用壓手」必然等於「放棄 AI 讀球、
+      // 自己押一邊」。未受教（canPressBlock=false）＝這兩個選項根本不存在，
+      // 不是變灰（B7-4 要求 gate 寫在行為層，灰掉但按得下去是紅法）。
       [
         { key: 'block-line', label: '🧱 封直線', color: 'orange', line: 'line' },
         { key: 'block-cross', label: '🧱 封斜線', color: 'orange', line: 'cross' },
+        ...(gates.canPressBlock ? [
+          { key: 'press-line', label: '✋ 壓手封直線', color: 'red', line: 'line', press: true },
+          { key: 'press-cross', label: '✋ 壓手封斜線', color: 'red', line: 'cross', press: true },
+        ] : []),
       ],
       (it) => {
         aiState.blockCall = { team: game.players[s.controlledId].teamId, line: it.line };
         // 不再送出「立即起跳」——起跳交給自動跳攔（就位後在擊球瞬間開窗）
         controls.chooseMbTiming(false);
-        s.mbCommit = { jumped: false, line: it.line };
+        // 批 7：壓手武裝擺在 blockCall 之後——兩者同一個 callback 內成對發生，
+        // 想單獨拿到 press 而不付出「押方向」的代價，程式上沒有那條路。
+        if (it.press) controls.armPressBlock();
+        s.mbCommit = { jumped: false, line: it.line, pressed: !!it.press };
       },
       null,
       'low',
@@ -1408,6 +1422,23 @@ function updateDecisions(s, now) {
         (it) => pickSet(it.zone),
       );
     }
+  } else if (serveDeciding && s.chaseExpanded) {
+    // 大學卷批 7（08-24）追發第二層：「發給誰」。★對方當前輪轉的後排三人★
+    // 名單與座標都由 controls.chaseServeTargets 現算（B7-6：輪轉推進後跟著變）。
+    const targets = controls.chaseServeTargets(game);
+    panel.show(
+      '追發：發給誰？',
+      [
+        ...targets.map((t) => ({ key: t.key, label: t.label, color: 'red', target: t })),
+        { key: 'chase-back', label: '← 返回', color: 'dim', back: true },
+      ],
+      (it) => {
+        if (it.back) { s.chaseExpanded = false; return; }
+        controls.serveNow(game, it.target.aim, null);
+        s.servedThisTurn = true;
+        s.chaseExpanded = false;
+      },
+    );
   } else if (serveDeciding) {
     // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
     const zs = controls.serveZones(game);
@@ -1426,8 +1457,12 @@ function updateDecisions(s, now) {
         ...(gates.canJumpServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
           key: `j-${z.key}`, label: `跳${z.label.slice(1)}`, color: 'orange', zone: z, style: 'jump',
         })) : []),
+        // 批 7 追發：★一個入口、不是十個★——落點區照舊，追發自己展開一層問「發給誰」。
+        // 未受教＝這個入口不存在（B7-4：gate 在行為層，不是把鈕變灰）。
+        ...(gates.canChaseServe ? [{ key: 'chase', label: '🎯 追發', color: 'red', chase: true }] : []),
       ],
       (it) => {
+        if (it.chase) { s.chaseExpanded = true; return; } // 展開第二層，這一按不發球
         controls.serveNow(game, it.zone.aim, it.style);
         s.servedThisTurn = true;
       },
