@@ -53,6 +53,33 @@ export const EVENT_DEFS = [
       { speaker: '阿哲', text: '你手感燙起來了。之後的球，會更常到你手上。' },
     ],
   },
+  // ---- 大學卷批 7（2026-08-24）：大學章專屬傳授 ----
+  // ★技術軸打平（卷宗 §三之三拍板 3）★ 兩條都只看「大學聯賽打完幾場」——
+  // 不看學校 tier、不看戰績、不看誰教。選北陵（強豪）與選梅溪（弱校）解鎖場次相同
+  // （B7-7）。強弱校的差異只在球權與戰績兩軸，那兩軸批 6 已經做完了。
+  {
+    id: 'teach-press',
+    moment: 'post',
+    when: { uniLeaguePlayed: 3 },
+    effect: { unlock: 'pressBlock' },
+    lines: [
+      { speaker: '大四學長', text: '你的攔網……手是直的。高中那樣沒問題，但這裡的人扣得比你想的重——直著的手，只會被他打手出界。' },
+      { speaker: '大四學長', text: '手要壓過去，蓋在球上面。擦到你手頂的球就不會往後彈了，會被你壓回他們場內。' },
+      { speaker: '大四學長', text: '但有個條件。壓手得提早把手送過網，你沒空再看他要打哪邊了——想壓手，就得自己先押一邊：直線，還是斜線。' },
+      { speaker: '大四學長', text: '押錯，那面牆就白站了。想清楚再壓。' },
+    ],
+  },
+  {
+    id: 'teach-chase',
+    moment: 'post',
+    when: { uniLeaguePlayed: 6 },
+    effect: { unlock: 'chaseServe' },
+    lines: [
+      { speaker: '大四學長', text: '發球別再只想著發不發得進了。看對面後排那三個——總有一個接得比較差。' },
+      { speaker: '大四學長', text: '發給他。下一球還發給他。發到他自己都不想站在那個位置為止。' },
+      { speaker: '大四學長', text: '高中你練的是怎麼把球打好。大學開始，你要練的是——怎麼讓對面打不好。' },
+    ],
+  },
   // ---- 技術傳授線（改版裁定：技術經故事習得，每場一招；輸贏都教——敗者也有收穫）----
   {
     id: 'teach-tip',
@@ -340,6 +367,8 @@ export const ONCE_EVENT_IDS = new Set([
   'debut', 'first-win', 'first-loss', 'nationals',
   'teach-tip', 'teach-dive', 'teach-pipe', 'teach-float', 'teach-feint', 'teach-jump',
   'teach-call',
+  // 批 7：大學兩招同樣是「教過就不再教」（舊存檔升上大學後不會重播）
+  'teach-press', 'teach-chase',
   'mb-warn', 'rematch-won', 'rematch-lost',
 ]);
 export function isOnceEvent(id) {
@@ -611,6 +640,19 @@ function matchesWhen(when, { career, last, next, seasonIndex = 1 }) {
       case 'lostVs':
         if (!ctxCareerHasResult(career, val, false)) return false;
         break;
+      // 大學卷批 7：大學聯賽已打完幾場。★round==='league' 只在 uniSchedule 產生★
+      // （高中賽程是 'rr'，schedule.js:110）⇒ 高中章恆 0，這兩條事件不可能在
+      // 高中觸發，B7-11 的零回歸由判準本身保證，不靠額外的章節條件。
+      // 用 >= 而不是 ===：ONCE_EVENT_IDS 已保證只播一次，而 >= 讓「那一場賽後剛好
+      // 沒進賽後畫面」的存檔之後仍補得到；=== 會讓錯過的人一輩子學不到這一招。
+      case 'uniLeaguePlayed': {
+        const league = (career.schedule ?? []).filter((m) => m?.round === 'league');
+        const done = league.filter(
+          (m) => career.results.some((r) => r.matchId === m.id),
+        ).length;
+        if (done < val) return false;
+        break;
+      }
       case 'playedCount':
         if (career.results.length !== val) return false;
         break;

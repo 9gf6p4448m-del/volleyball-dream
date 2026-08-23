@@ -48,7 +48,13 @@ export const TIER_LABEL = {
 // `cost` 三軸＝升學畫面上**明講的代價**（卷宗 §三之二）：
 //   ball  球權——你的球會有多少
 //   record 戰績——這一年打得到哪裡
-//   tech  技術——有沒有人教得動你
+//   tech  技術——★2026-08-24 批 7 拍板 4：這一軸不再承諾「學得快」★
+//         大學章的技術傳授是**各校同場次**（第 3 場壓手、第 6 場追發，判準見
+//         events.js 的 uniLeaguePlayed），強弱校在技術軸上完全打平。這一欄因此
+//         改成描述「隊上的人是什麼樣子」——那是真的、也確實經由球權與戰績影響你，
+//         但它不是一張「來這裡技術解鎖比較快」的支票（階段一兌現不了）。
+//         ⚠ 不要把這一欄刪掉：批 5 的 B5-7（三軸文字非空、同 tier 不得雷同）
+//         是凍結條文，刪欄會撞它。要換的是內容，不是結構。
 // ★ 逐校寫不同的話 ★ 九校同一套字＝玩家看不出差別，那個取捨就是假的。
 // 「選擇的痛苦要來自玩家知道代價還是選了，不是來自他被騙。」
 export const UNIVERSITIES = [
@@ -63,7 +69,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '這裡的球先給三年級。你的第一年多半在替補席上看，看得很清楚而已。',
       record: '打得到全國決賽——只要你進得了那六個人。',
-      tech: '每天對練的都是全國級的手，一個學期學到的比高中三年多。',
+      tech: '每天對練的都是全國級的手。你會知道自己差在哪裡——每一天都知道。',
     },
     level: 82,
     attrBias: { block: 6, control: 4 },
@@ -88,7 +94,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '你會有球，但要先在體能訓練裡活下來——排在你前面的人也很強。',
       record: '四強是基本盤，這裡的人拿冠軍當任務不是夢想。',
-      tech: '教練組有國青教練，跳躍與攻擊的細節有人一格一格改給你看。',
+      tech: '教練組有國青教練。他們看過太多好手了，不會為你一個人停下來。',
     },
     level: 80,
     attrBias: { power: 8, jump: 6, stamina: 4 },
@@ -117,7 +123,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '快攻體系認節奏不認人，跟不上的人球權自然歸零。',
       record: '穩定的四強；決賽要看那一天二傳的手感。',
-      tech: '想學跑動與時間差，全國沒有比這裡更好的地方。',
+      tech: '這裡的節奏比你打過的任何一場都快。跟得上，你才算是其中一個。',
     },
     level: 78,
     attrBias: { speed: 8, reaction: 6 },
@@ -168,7 +174,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '球權分得很平均，沒有人是王牌，也沒有人被冷落。',
       record: '十六強到八強。這裡的人不把輸球當世界末日。',
-      tech: '學長會教你怎麼防守，攻擊方面幫不上什麼忙。',
+      tech: '學長很願意帶你，只是他們自己也還在摸索。',
     },
     level: 70,
     attrBias: { reaction: 8, speed: 4, power: -3 },
@@ -197,7 +203,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '你打得好就有球，這裡沒有輩分，只有數據。',
       record: '八強邊緣，抽籤好的話能再往上一場。',
-      tech: '發球想練到會痛的程度，找他們沒錯；其他就自己想辦法。',
+      tech: '練得很凶，但沒有人會告訴你為什麼要那樣練。',
     },
     level: 74,
     attrBias: { serve: 10, power: 4, control: -3 },
@@ -223,7 +229,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '球隨你打。想扣幾球扣幾球，沒有人跟你搶。',
       record: '第一輪就可能結束。這裡沒有人打過全國賽。',
-      tech: '你是隊上最強的人——沒有人教得動你，只能自己練。',
+      tech: '你是隊上最強的人。沒有人追得上你的球，也沒有人會叫你停下來。',
     },
     level: 64,
     attrBias: { stamina: 4, power: -4 },
@@ -248,7 +254,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '你是唯一打過全國賽的人，球當然給你。',
       record: '升格第一年，能贏一場就是校史。',
-      tech: '沒有人能教你，但也沒有人會擋你試任何東西。',
+      tech: '沒有人會擋你試任何東西——包括那些不該試的。',
     },
     level: 62,
     attrBias: { stamina: 6, jump: 3, control: -6 },
@@ -273,7 +279,7 @@ export const UNIVERSITIES = [
     cost: {
       ball: '要多少有多少，因為其他人根本不介意誰扣。',
       record: '不會有戰績。他們連報名表都是截止前一天才交的。',
-      tech: '這裡沒有人在乎技術，你會學到怎麼自己一個人變強。',
+      tech: '這裡沒有人在乎輸贏。留下來的理由要你自己找。',
     },
     level: 66,
     attrBias: { control: 3, power: -5, stamina: -3 },

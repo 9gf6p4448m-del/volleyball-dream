@@ -91,6 +91,18 @@ export function countServeAces(events, playerId, myTeam, style) {
 
 // 後排 pipe 攻擊的得分次數。同一套歸因（得分前最後一次觸球是我的扣球），
 // 額外要求那一扣的 `routeKind === 'pipe'`——**前後排靠這個欄位分，不靠座標猜**。
+// 大學卷批 7（08-24）：壓手攔網成功次數。判準＝sim 自己發的 BLOCK_TOUCH 事件帶
+// `pressed: true`（game.js:1281 那一支，只有 zone==='top' 且 blockHand==='press' 才會有）——
+// ★不是「按了壓手鈕幾次」★：按了但沒擦到頂不算，那樣才對得起台詞「把球壓回去」。
+export function countPressBlocks(events, playerId, myTeam) {
+  let n = 0;
+  for (const e of events ?? []) {
+    if (e.type === 'BLOCK_TOUCH' && e.pressed
+      && e.playerId === playerId && e.team === myTeam) n += 1;
+  }
+  return n;
+}
+
 export function countPipeKills(events, playerId, myTeam) {
   let n = 0;
   let pending = false;
@@ -218,6 +230,14 @@ export const DRILL_DEFS = {
     label: '跳發拿下 1 個 ACE',
     target: 1,
     count: (ev, pid, team) => countServeAces(ev, pid, team, 'power'),
+  },
+  'press-block': {
+    id: 'press-block',
+    label: '壓手把對方的球壓回去 1 次',
+    target: 1,
+    // 台詞就是判定：擦到手頂、被壓回對方場內才算（BLOCK_TOUCH.pressed）。
+    // 押錯邊沒碰到球、或碰到的是手側/身體，都不算——與玩家在場上看到的一致。
+    count: countPressBlocks,
   },
   'call-play': {
     id: 'call-play',
@@ -403,6 +423,11 @@ export const TECH_DRILL_ORDER = [
   { tech: 'floatServe', drill: 'float-ace' },
   { tech: 'jumpServe', drill: 'jump-ace' },
   { tech: 'callPlay', drill: 'call-play' },
+  { tech: 'pressBlock', drill: 'press-block' },
+  // ★chaseServe 刻意沒有科目★ 同 feint 的先例（見本區塊檔頭註解）：sim 沒有
+  // 「這一發是追發」的事件——發球 aim 指向某人，落地後只剩一般的發球結果，
+  // 判不出「他是不是在追發」。硬掛一個「發球拿 ACE」會變成喊一件事判另一件事，
+  // 那正是 float-ace/call-play 兩條註解在防的病。追發的價值靠場上直接看見。
 ];
 
 // 位置 → 基本科目

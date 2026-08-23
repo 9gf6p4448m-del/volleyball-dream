@@ -2443,7 +2443,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     `這樣的成績，有 ${schools.length} 所大學向你開了門。`));
     overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
       'text-align:center', 'max-width:560px', 'margin-bottom:4px'],
-    '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍沒有人教得動你。想清楚再選。'));
+    '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍陪你贏不到什麼。想清楚再選。'));
     for (const u of schools) {
       overlay.appendChild(schoolCard(u, placements[u.id] ?? [], (picked) => {
         overlay.remove();

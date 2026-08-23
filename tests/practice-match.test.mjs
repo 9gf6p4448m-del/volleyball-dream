@@ -81,6 +81,11 @@ const stripKey = (evs, type, key) => evs.map((e) => {
   const { [key]: _drop, ...rest } = e;
   return rest;
 });
+// 大學卷批 7：n 次「壓手把球壓回去」。★pressed 是 sim 只在 zone===top 且
+// blockHand===press 時才寫的欄位（game.js:1281）★——一般攔網沒有它。
+const pressBlocks = (n) => Array.from({ length: n }, () => (
+  { ...blockTouch(), zone: 'top', pressed: true }));
+
 // n 次我方三擊組織（接—舉—攻）；每次以 DEAD_BALL 收尾重置擊數
 const threeTouch = (n) => Array.from({ length: n }, () => [
   touch({ playerId: 'AL', kind: 'receive', touches: 1, power: 0.8 }),
@@ -101,6 +106,7 @@ const STREAM_OF = {
   'float-ace': aces('float'),
   'jump-ace': aces('power'),
   'call-play': calledPlays,
+  'press-block': pressBlocks,
   'basic-setter': assists,
   'basic-middle': blocks,
   'basic-libero': digs,
@@ -161,6 +167,22 @@ test('★守衛★ 走 obs 的科目，事件流餵再多也不得達標（判�
     assert.ok(many < def.target,
       `${id}：沒給 obs 卻靠事件流達標了＝判準沒真的搬過去（實得 ${many}）`);
   }
+});
+
+// 大學卷批 7 鑑別力：壓手科目數的是「壓回去」，不是「有攔到」。
+// 這條在防的紅法＝count 寫成數 BLOCK_TOUCH 就好——那樣一般攔網也會達標，
+// 而台詞喊的是「壓手把對方的球壓回去」，就變成喊一件事判另一件事。
+test('★反向★ 壓手科目：一般攔網（沒有 pressed 欄位）餵再多都不得達標', () => {
+  const def = DRILL_DEFS['press-block'];
+  const plain = drillGainFor(blocks(def.target + 5), PID, TEAM, def);
+  assert.ok(plain < def.target,
+    `一般攔網 ${def.target + 5} 次就達標了＝判定沒在看 pressed（實得 ${plain}）`);
+  const stripped = drillGainFor(
+    stripKey(pressBlocks(def.target + 5), 'BLOCK_TOUCH', 'pressed'),
+    PID, TEAM, def,
+  );
+  assert.ok(stripped < def.target,
+    `剝掉 pressed 欄位仍達標＝判定不吃那個欄位（實得 ${stripped}）`);
 });
 
 test('drillGainFor：未知科目一律回 0（呼叫端手捏的科目不得繞過定義表）', () => {

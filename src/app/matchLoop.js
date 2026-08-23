@@ -1058,6 +1058,80 @@ function runReplayFrame(s, now, delta) {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// 大學卷批 7（2026-08-24）：面板選項與選擇後果抽成純函式
+// ════════════════════════════════════════════════════════════
+// ★ 為什麼抽出來 ★ createMatchControls 需要 window，node 測試環境建不起來，
+// 於是「按鈕按下去到底做了什麼」在此之前是**完全沒有測試點過的盲區**
+// （批 6 教訓 10：沒有測試點過的按鈕就是盲區）。把選項建構與選擇後果抽成
+// 不吃 DOM 的純函式之後，驗收測試可以真的「按下去」看值，而不是只驗文字在。
+// updateDecisions 是唯一的呼叫端——抽出來的是同一份程式碼，不是複製品。
+
+// MB 讀心面板的選項。壓手兩項只在受教後存在（B7-4：gate 在行為層，不是變灰）。
+// ★press 必與 line 綁在同一個 item★（B7-3）——沒有「只壓手不押方向」的選項，
+// 想用壓手就得放棄 blockPlanTargetX 的 AI 讀球、自己押一邊。
+export function mbPanelItems(gates) {
+  return [
+    { key: 'block-line', label: '🧱 封直線', color: 'orange', line: 'line' },
+    { key: 'block-cross', label: '🧱 封斜線', color: 'orange', line: 'cross' },
+    ...(gates?.canPressBlock ? [
+      { key: 'press-line', label: '✋ 壓手封直線', color: 'red', line: 'line', press: true },
+      { key: 'press-cross', label: '✋ 壓手封斜線', color: 'red', line: 'cross', press: true },
+    ] : []),
+  ];
+}
+
+// 按下 MB 面板某一項的後果。★blockCall 與 armPressBlock 在同一個函式裡成對發生★
+// ——程式上沒有「拿到 press 卻不付押方向代價」的路徑（B7-3 紅法二）。
+export function applyMbChoice(s, it) {
+  const { game, aiState, stage } = s;
+  const { controls } = stage;
+  aiState.blockCall = { team: game.players[s.controlledId].teamId, line: it.line };
+  // 不再送出「立即起跳」——起跳交給自動跳攔（就位後在擊球瞬間開窗）
+  controls.chooseMbTiming(false);
+  if (it.press) controls.armPressBlock();
+  s.mbCommit = { jumped: false, line: it.line, pressed: !!it.press };
+}
+
+// 發球主面板的選項：四落點區 ＋ 飄浮/跳發變體 ＋ 追發入口（各自吃自己的閘）。
+export function servePanelItems(gates, zs) {
+  return [
+    ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, style: null })),
+    // 飄浮/跳躍球路＝故事線傳授的技術（未習得不出現）
+    ...(gates?.canFloatServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
+      key: `f-${z.key}`, label: `飄${z.label.slice(1)}`, color: 'cyan', zone: z, style: 'float',
+    })) : []),
+    ...(gates?.canJumpServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
+      key: `j-${z.key}`, label: `跳${z.label.slice(1)}`, color: 'orange', zone: z, style: 'jump',
+    })) : []),
+    // 批 7 追發：★一個入口、不是十個★——落點區照舊，追發自己展開一層問「發給誰」。
+    // 未受教＝這個入口不存在（B7-4：gate 在行為層，不是把鈕變灰）。
+    ...(gates?.canChaseServe
+      ? [{ key: 'chase', label: '🎯 追發', color: 'red', chase: true }]
+      : []),
+  ];
+}
+
+export function applyServeChoice(s, it) {
+  if (it.chase) { s.chaseExpanded = true; return; } // 展開第二層，這一按不發球
+  s.stage.controls.serveNow(s.game, it.zone.aim, it.style);
+  s.servedThisTurn = true;
+}
+
+// 追發第二層：對方當前輪轉的後排三人（名單與座標由 controls 現算）＋返回。
+export function chasePanelItems(targets) {
+  return [
+    ...targets.map((t) => ({ key: t.key, label: t.label, color: 'red', target: t })),
+    { key: 'chase-back', label: '← 返回', color: 'dim', back: true },
+  ];
+}
+
+export function applyChaseChoice(s, it) {
+  if (it.back) { s.chaseExpanded = false; return; }
+  s.stage.controls.serveNow(s.game, it.target.aim, null);
+  s.servedThisTurn = true;
+  s.chaseExpanded = false;
+}
 // 簡化模式決策窗：進攻選區/發球選區面板＋攔網防守窗；回傳放慢倍率（0＝不放慢）
 function updateDecisions(s, now) {
   if (!s.config.simpleMode) return 0;
@@ -1258,27 +1332,8 @@ function updateDecisions(s, now) {
       // ⇒ 按鈕只能把跳躍**提前**，提前一律遠離頂點。
       // 換成封線之後，玩家管的是實測**完全沒被碰過**的橫向維度，而取捨、地板影子、
       // 讀對/讀反字卡全都是 L 配套（liberoRead.js）現成的。
-      // 大學卷批 7（08-24）壓手攔網：★press 只能從這裡出去★（B7-3）——
-      // 它跟封線方向綁在同一顆按鈕上，所以「想用壓手」必然等於「放棄 AI 讀球、
-      // 自己押一邊」。未受教（canPressBlock=false）＝這兩個選項根本不存在，
-      // 不是變灰（B7-4 要求 gate 寫在行為層，灰掉但按得下去是紅法）。
-      [
-        { key: 'block-line', label: '🧱 封直線', color: 'orange', line: 'line' },
-        { key: 'block-cross', label: '🧱 封斜線', color: 'orange', line: 'cross' },
-        ...(gates.canPressBlock ? [
-          { key: 'press-line', label: '✋ 壓手封直線', color: 'red', line: 'line', press: true },
-          { key: 'press-cross', label: '✋ 壓手封斜線', color: 'red', line: 'cross', press: true },
-        ] : []),
-      ],
-      (it) => {
-        aiState.blockCall = { team: game.players[s.controlledId].teamId, line: it.line };
-        // 不再送出「立即起跳」——起跳交給自動跳攔（就位後在擊球瞬間開窗）
-        controls.chooseMbTiming(false);
-        // 批 7：壓手武裝擺在 blockCall 之後——兩者同一個 callback 內成對發生，
-        // 想單獨拿到 press 而不付出「押方向」的代價，程式上沒有那條路。
-        if (it.press) controls.armPressBlock();
-        s.mbCommit = { jumped: false, line: it.line, pressed: !!it.press };
-      },
+      mbPanelItems(gates),
+      (it) => applyMbChoice(s, it),
       null,
       'low',
     );
@@ -1428,16 +1483,8 @@ function updateDecisions(s, now) {
     const targets = controls.chaseServeTargets(game);
     panel.show(
       '追發：發給誰？',
-      [
-        ...targets.map((t) => ({ key: t.key, label: t.label, color: 'red', target: t })),
-        { key: 'chase-back', label: '← 返回', color: 'dim', back: true },
-      ],
-      (it) => {
-        if (it.back) { s.chaseExpanded = false; return; }
-        controls.serveNow(game, it.target.aim, null);
-        s.servedThisTurn = true;
-        s.chaseExpanded = false;
-      },
+      chasePanelItems(targets),
+      (it) => applyChaseChoice(s, it),
     );
   } else if (serveDeciding) {
     // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
@@ -1448,24 +1495,8 @@ function updateDecisions(s, now) {
     ].filter(Boolean).join('、');
     panel.show(
       styleHint ? `選發球目標！（${styleHint}）` : '選發球目標！',
-      [
-        ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, style: null })),
-        // 飄浮/跳躍球路＝故事線傳授的技術（未習得不出現）
-        ...(gates.canFloatServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
-          key: `f-${z.key}`, label: `飄${z.label.slice(1)}`, color: 'cyan', zone: z, style: 'float',
-        })) : []),
-        ...(gates.canJumpServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
-          key: `j-${z.key}`, label: `跳${z.label.slice(1)}`, color: 'orange', zone: z, style: 'jump',
-        })) : []),
-        // 批 7 追發：★一個入口、不是十個★——落點區照舊，追發自己展開一層問「發給誰」。
-        // 未受教＝這個入口不存在（B7-4：gate 在行為層，不是把鈕變灰）。
-        ...(gates.canChaseServe ? [{ key: 'chase', label: '🎯 追發', color: 'red', chase: true }] : []),
-      ],
-      (it) => {
-        if (it.chase) { s.chaseExpanded = true; return; } // 展開第二層，這一按不發球
-        controls.serveNow(game, it.zone.aim, it.style);
-        s.servedThisTurn = true;
-      },
+      servePanelItems(gates, zs),
+      (it) => applyServeChoice(s, it),
     );
   } else {
     panel.hide();
