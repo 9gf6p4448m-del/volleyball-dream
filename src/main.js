@@ -204,11 +204,14 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
   const rival = venueKey === 'key' && careerCtx?.matchEntry?.opponentId === RIVAL_TEAM_ID
     ? opponentById(RIVAL_TEAM_ID)
     : null;
-  const venueSpec = ctx.arena.setVenue(
-    venueKey, rival
+  const venueSpec = ctx.arena.setVenue(venueKey, {
+    ...(rival
       ? { awayBanner: { name: rival.name, color: cssColor(kitFor(rival)?.banner ?? kitFor(rival)?.jersey ?? 0x7db2ff) } }
-      : {},
-  );
+      : {}),
+    // 配色卷階段二 E4：現在的隊名（常規館「★ 主場之夜」看板用）——config.teamName
+    // 由 matchConfig.currentTeamName 算好，這裡只負責遞
+    ...(config.teamName ? { teamName: config.teamName } : {}),
+  });
   ctx.court.setFloorPalette(venueSpec.floor);
   config.venue = { key: venueKey, rivalAway: !!rival }; // matchLoop：應援偏向＋冠軍館燈光秀
   // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）

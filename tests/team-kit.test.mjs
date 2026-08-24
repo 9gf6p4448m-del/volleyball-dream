@@ -80,3 +80,49 @@ test('天鷹橫幅錨：kit.banner 保住既有 #7db2ff', () => {
   const hawk = kitFor(opponentById('sky-hawk'));
   assert.equal(cssColor(hawk.banner), '#7db2ff');
 });
+
+// ---- 配色卷階段二 E6（v2 B 案，2026-08-24）----
+// 題 2 主裁定：READABILITY_MIN(150) 不再作為 9 校色票的通過門檻（改由 UI 語意
+// 通道——球網／球員標籤／對陣抬頭／記分板固定側——承擔可讀性）。色距硬門檻只剩
+// identity（IDENTITY_MIN=100，jersey 對 jersey）：checkKitPalette 的 K2/K3 測試
+// 已用 ALL_TEAMS（16 隊，含 9 校）永久蓋住這條，本測試是**明示版**——只針對 9 校
+// 兩兩 identity 逐對斷言，與 checkKitPalette 冗餘但把「9 校」這個分母說清楚。
+// ★不得對 150 加任何斷言★——<150 的對只印出來當資訊，不構成 gate（B 案裁定）。
+test('E6：9 校兩兩 identity（redmean）逐對 ≥100（B 案唯一硬門檻）', () => {
+  assert.equal(UNIVERSITIES.length, 9); // 分母變了要回來重審
+  for (let i = 0; i < UNIVERSITIES.length; i += 1) {
+    for (let k = i + 1; k < UNIVERSITIES.length; k += 1) {
+      const a = UNIVERSITIES[i];
+      const b = UNIVERSITIES[k];
+      const d = colorDistance(a.kit.jersey, b.kit.jersey);
+      assert.ok(
+        d >= 100,
+        `identity ${a.id}×${b.id} ${d.toFixed(2)} < 100（9 校 identity 是 B 案唯一硬門檻）`,
+      );
+    }
+  }
+});
+
+test('E6：9 校兩兩 <150（READABILITY_MIN）名單——資訊性輸出（v2 B 案）：不構成 gate', () => {
+  const below = [];
+  for (let i = 0; i < UNIVERSITIES.length; i += 1) {
+    for (let k = i + 1; k < UNIVERSITIES.length; k += 1) {
+      const a = UNIVERSITIES[i];
+      const b = UNIVERSITIES[k];
+      const d = colorDistance(a.kit.jersey, b.kit.jersey);
+      if (d < 150) below.push(`${a.id}×${b.id} ${d.toFixed(2)}`);
+    }
+  }
+  // eslint-disable-next-line no-console
+  console.log(
+    '資訊性輸出（v2 B 案）：不構成 gate——9 校兩兩 <150（READABILITY_MIN）的對：',
+    below.length ? below.join('、') : '（無）',
+  );
+  // 永久註記（V7）：北陵×海硯薄餘裕對（102.44，距 identity 底線僅 2.44）——未來
+  // 任何一校色票變動時必須重量測。這裡只斷言這對「存在於量測結果裡」（迴歸哨兵：
+  // 若哪天色票被動過而這對消失/變樣，測試會紅，提醒回頭重讀這條永久註記）；
+  // 不對 150 這個數字本身斷言（B 案：150 只是資訊性輸出）。
+  const beiling = universityById('north-ridge');
+  const haiyan = universityById('haiyan');
+  assert.ok(beiling && haiyan, '薄餘裕對的兩校 id 需存在（id 對不上要回頭核對凍結稿）');
+});

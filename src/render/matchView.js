@@ -63,7 +63,12 @@ const REACH_KIND_ACTION = {
 
 // kits（配色卷批 1）：{ A?, B? } 各側隊伍 kit（career/teamKit.js 形狀）；
 // null/缺鍵＝該側穿 geoCharacter 側別預設（快速比賽、練習賽、無 kit 的隊）
-export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null, kits = null) {
+// teamName（配色卷階段二 E4）：現在的隊名字串，只餵給暫停戰術板（huddleProps）；
+// null＝該檔沿用內建預設字面值（快速比賽/練習賽/無 careerCtx）。★render 層不得
+// 自查章節★——這個值必須從呼叫端（matchStage←matchConfig.currentTeamName）傳進來。
+export async function createMatchView(
+  scene, quality, game, initialControlledId, forcePose = null, kits = null, teamName = null,
+) {
   let highlightId = initialControlledId;
   let huddleTeam = null; // W7.1 #3A：目前正在集合帶位的隊伍（'A'|'B'|null）——matchLoop 逐幀灌入
   let huddleViewOn = false; // W8：圈內第一人稱進行中——隱藏受控者本體（鏡頭＝他的眼睛）
@@ -139,8 +144,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
 
   // W8 暫停演出：兩隊教練＋戰術板（暫停圍圈時現身；我方板的戰術由 matchLoop 灌入）
   const huddleProps = {
-    A: createHuddleProps(scene, TEAM_SIDE.A),
-    B: createHuddleProps(scene, TEAM_SIDE.B),
+    A: createHuddleProps(scene, TEAM_SIDE.A, teamName),
+    B: createHuddleProps(scene, TEAM_SIDE.B, teamName),
   };
 
   // 玩家操控者足下光圈（一眼找到自己；「這球歸你」時轉橘紅示警）

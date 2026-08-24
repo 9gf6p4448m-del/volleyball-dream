@@ -3,6 +3,10 @@
 // 純表現層：不讀不寫 sim；建立一次、show/hide 切換（暫停頻率低，不進 InstancedMesh 池）
 import * as THREE from 'three';
 import { coachPos } from './huddleLayout.js';
+// 配色卷階段二 E4：角落隊名字面值預設——只借單一事實來源的常數，不是在這裡自查
+// 章節/學校狀態；呼叫端（matchView←matchStage←matchConfig.currentTeamName）沒帶
+// teamName 時（快速比賽／練習賽／舊呼叫端）回落這個值，逐值同批 1 既有行為。
+import { OUR_TEAM_NAME } from '../career/roster.js';
 
 const BOARD_W = 0.78;
 const BOARD_H = 0.54;
@@ -10,7 +14,7 @@ const CANVAS_W = 512;
 const CANVAS_H = 354;
 
 // 戰術板繪製：白板底＋球場線稿；play＝null 基本陣型 / 'calm' 防守收攏 / 'fire' 進攻箭頭
-function drawBoard(ctx, play) {
+function drawBoard(ctx, play, teamName = OUR_TEAM_NAME) {
   const W = CANVAS_W;
   const H = CANVAS_H;
   ctx.fillStyle = '#f4f1e8';
@@ -74,11 +78,11 @@ function drawBoard(ctx, play) {
     arrow(ctx, cx + cw * 0.75, oy - 8, cx + cw * 0.3, xy + 6, '#b83a2a', 7);
     arrow(ctx, cx + cw * 0.5, oy - 8, cx + cw * 0.5, xy - 2, '#b83a2a', 7);
   }
-  // 角落隊名小字（板子是遊隼的）
+  // 角落隊名小字（板子是我方的——動態隊名，配色卷階段二 E4）
   ctx.fillStyle = '#8a8474';
   ctx.font = 'bold 22px system-ui, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('遊隼高中', W - 22, H - 18);
+  ctx.fillText(teamName, W - 22, H - 18);
 }
 
 function arrow(ctx, x0, y0, x1, y1, color, w) {
@@ -139,12 +143,14 @@ function buildCoach(boardMesh) {
 }
 
 // side＝TEAM_SIDE[team]（A=1/B=-1）：擺位鏡射、面向自家隊員（朝球場側）
-export function createHuddleProps(scene, side) {
+// teamName＝角落隊名字面值（配色卷階段二 E4）；null/省略＝OUR_TEAM_NAME
+export function createHuddleProps(scene, side, teamName = null) {
+  const name = teamName ?? OUR_TEAM_NAME;
   const canvas = document.createElement('canvas');
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
   const ctx = canvas.getContext('2d');
-  drawBoard(ctx, null);
+  drawBoard(ctx, null, name);
   const tex = new THREE.CanvasTexture(canvas);
   const board = new THREE.Mesh(
     new THREE.PlaneGeometry(BOARD_W, BOARD_H),
@@ -163,14 +169,14 @@ export function createHuddleProps(scene, side) {
       coach.visible = v;
       if (!v && currentPlay) { // 散場重置成基本陣型（下次暫停從乾淨的板開始）
         currentPlay = null;
-        drawBoard(ctx, null);
+        drawBoard(ctx, null, name);
         tex.needsUpdate = true;
       }
     },
     drawPlay(play) {
       if (play === currentPlay) return;
       currentPlay = play;
-      drawBoard(ctx, play);
+      drawBoard(ctx, play, name);
       tex.needsUpdate = true;
     },
   };

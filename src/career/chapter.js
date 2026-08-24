@@ -12,6 +12,12 @@
 //
 // 卷宗＝`docs/kickoffs/university-chapter-kickoff.md`；
 // 驗收＝`docs/kickoffs/acceptance-uni-batch1.md`（動手前凍結）。
+//
+// 配色卷階段二 E3（2026-08-24）：`universities.js`／`roster.js` 進來——`isUniversity`
+// 已是「chapter → true/false」的單一入口，這裡再加一顆「chapter → 隊名字串」的單一入口，
+// 兩者同一種呼叫慣例（吃 `normalizeChapter()` 的輸出，例如 `store.loadChapter()`）。
+import { universityById } from './universities.js';
+import { OUR_TEAM_NAME } from './roster.js';
 
 export const CHAPTER = {
   HIGH_SCHOOL: 'highschool',
@@ -107,4 +113,19 @@ export function chapterSeasonOf(chapter, seasonIndex = 1) {
 /** 這一章打完了沒（章內年份已達年限）＝封頂判斷的單一真相源。 */
 export function chapterCompleted(chapter, seasonIndex = 1) {
   return chapterSeasonOf(chapter, seasonIndex) >= seasonCapOf(chapter);
+}
+
+/**
+ * 現在隊伍顯示名稱（配色卷階段二 E3，單一事實來源）：高中章恆為 OUR_TEAM_NAME
+ * （`roster.js` 定義的創隊隊名）；大學章＝入學校名。`school` 查無效／未選校
+ * （升學過渡中間態）時安全回退 OUR_TEAM_NAME，不炸畫面——同 `kitFor` 缺欄位回
+ * null 的防呆慣例。
+ *
+ * @param chapter  一律吃 `normalizeChapter()` 的輸出（如 `store.loadChapter()`）
+ * @param school   大學章的學校 id（如 `store.loadSchool()`）；高中章不使用
+ */
+export function currentTeamName(chapter, school = null) {
+  if (!isUniversity(chapter)) return OUR_TEAM_NAME;
+  const uni = school ? universityById(school) : null;
+  return uni?.name ?? OUR_TEAM_NAME;
 }

@@ -11,6 +11,7 @@ import { buildScoutTape, TAPE_FEATURE_KEYS } from '../career/scoutTape.js';
 import { upcomingTeach } from '../career/events.js';
 import { blockReadTier } from '../career/growth.js';
 import { matchFormatOf } from '../career/schedule.js';
+import { currentTeamName } from '../career/chapter.js';
 
 // W3(P4) 07-27 Sawmah 拍板：快速比賽＝位置遊樂場（五位置任選；生涯轉位 gate 不動——
 // 快速比賽本來就是測試/試駕場）。建隊＝預設隊伍最小變換：玩家（A2）與目標槽位互換、
@@ -121,6 +122,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
         careerCtx.career, careerCtx.player, careerCtx.matchEntry,
         careerCtx.roster ?? null, careerCtx.lineup ?? null,
         careerCtx.seasonIndex ?? 1,
+        // 配色卷階段二 E1 第 7 參數：大學章已選校時的學校 id（高中章 loadSchool 恆 null）
+        careerCtx.store?.loadSchool?.() ?? null,
       ))
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）
@@ -196,6 +199,12 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     careerSetup, tapeClips, gameOptions,
     // 配色卷批 1：各側球衣 kit（careerMatchSetup 供給；快速比賽/練習賽＝null＝預設藍紅）
     kits: careerSetup?.kits ?? null,
+    // 配色卷階段二 E4：現在的隊名（單一入口 currentTeamName）——render 層（arena/
+    // huddleProps）不得自查章節，一律吃這裡算好的值；快速比賽（無 careerCtx）＝null
+    // ＝render 層各自回落既有預設字面值，行為不變
+    teamName: careerCtx
+      ? currentTeamName(careerCtx.store?.loadChapter?.(), careerCtx.store?.loadSchool?.())
+      : null,
     // 練習賽隨附資料（matchStage 建科目 HUD、matchLoop 追蹤與結算都讀它）；
     // 非練習賽＝null＝所有掛點短路，零擾動
     practice: careerSetup?.practice ?? null,

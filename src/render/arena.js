@@ -6,6 +6,10 @@
 // 降規把手（60 FPS 未達標時逐項降）：attendance（出席率）→ 上層看台 count → 桁架/穹頂
 import * as THREE from 'three';
 import { COURT } from '../sim/constants.js';
+// 配色卷階段二 E4：opts.teamName 缺席時的字面值預設——只借單一事實來源的常數
+// （不重複刻字面值，見 acceptance V4 grep 名單），不是在這裡自查章節/學校狀態；
+// 章節判定本身仍一律由呼叫端（matchConfig.currentTeamName）算好再遞進來
+import { OUR_TEAM_NAME } from '../career/roster.js';
 
 function hash01(n) {
   let x = Math.imul(n | 0, 2654435761);
@@ -26,7 +30,9 @@ export const VENUES = {
     crowdColors: [0x2a3352, 0x3a2f4a, 0x27354a, 0x40304a, 0x223047, 0x4a3a30],
     truss: false,
     dome: false,
-    adTexts: ['排球夢 VOLLEYBALL DREAM', 'SAWMAH SPORTS', '遊隼高中 ★ 主場之夜'],
+    // 配色卷階段二 E4：{TEAM} 為隊名佔位符，setVenue 時用 opts.teamName 代入
+    // （render 層不 import career 狀態自查；「★ 主場之夜」字樣保留）
+    adTexts: ['排球夢 VOLLEYBALL DREAM', 'SAWMAH SPORTS', '{TEAM} ★ 主場之夜'],
     adColors: [['#0b1430', '#6ee7ff'], ['#301010', '#ff9d7a'], ['#101f14', '#8dffb0']],
     floor: null,
   },
@@ -63,6 +69,7 @@ export const VENUES = {
 
 // 建館（回傳可切館把手）：venue 切換＝整組 dispose 重建（比賽開場一次，非熱路徑）。
 // opts.awayBanner＝主客場氛圍（關鍵戰館打宿敵：客隊橫幅＋客隊應援色塊；冠軍館中立不帶）
+// opts.teamName＝現在的隊名（配色卷階段二 E4：常規館「★ 主場之夜」看板用）
 export function createArena(scene, venueKey = 'regular') {
   let group = null;
   let currentSig = null;
@@ -70,13 +77,14 @@ export function createArena(scene, venueKey = 'regular') {
   const api = {
     setVenue(key, opts = {}) {
       const spec = VENUES[key] ?? VENUES.regular;
-      const sig = `${key}|${opts.awayBanner?.name ?? ''}`;
-      if (sig === currentSig) return spec; // 同館同氛圍＝免重建
+      const teamName = opts.teamName ?? OUR_TEAM_NAME;
+      const sig = `${key}|${opts.awayBanner?.name ?? ''}|${teamName}`;
+      if (sig === currentSig) return spec; // 同館同氛圍同隊名＝免重建
       if (group) disposeGroup(scene, group);
       group = new THREE.Group();
       buildStands(group, spec);
       buildCrowd(group, spec, opts);
-      buildAdBoards(group, spec);
+      buildAdBoards(group, spec, teamName);
       if (spec.truss) buildTruss(group, spec);
       if (spec.dome) buildDome(group, spec);
       if (opts.awayBanner) buildAwayBanner(group, spec, opts.awayBanner);
@@ -185,8 +193,10 @@ function buildCrowd(group, spec, opts = {}) {
 }
 
 // 場邊 LED 廣告板：自由區外緣、面向球場；MeshBasic（不受光）＝自發光 LED 感
-function buildAdBoards(group, spec) {
-  const texs = spec.adTexts.map((t, i) => makeBannerTexture(t, spec.adColors[i][0], spec.adColors[i][1]));
+// teamName：代入 adTexts 裡的 {TEAM} 佔位符（其餘無佔位符的文字 replace 為 no-op）
+function buildAdBoards(group, spec, teamName) {
+  const adTexts = spec.adTexts.map((t) => t.replace('{TEAM}', teamName));
+  const texs = adTexts.map((t, i) => makeBannerTexture(t, spec.adColors[i][0], spec.adColors[i][1]));
   const mats = texs.map((map) => new THREE.MeshBasicMaterial({ map, toneMapped: false }));
   const geo = new THREE.PlaneGeometry(7.2, 0.85);
   const edgeX = COURT.WIDTH / 2 + COURT.FREE_ZONE + 0.6;

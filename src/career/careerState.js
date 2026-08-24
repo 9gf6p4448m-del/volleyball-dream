@@ -640,7 +640,13 @@ export function alliedAiProfileOf(player) {
 // W3 起第 5 參數 lineup（save.lineup 或 null）：A 隊依先發輪轉序建隊、自由人由 lineup.libero 選。
 // W1(P4) 第 6 參數 seasonIndex：屆數——對手 ace 畢業遞補（applySeasonRoster）換算用；
 // 省略＝1＝第 1 屆行為不變。
-export function careerMatchSetup(career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1) {
+// 配色卷階段二 E1（2026-08-24）第 7 參數 school：大學章已選定的學校 id（呼叫端由
+// `store.loadSchool()` 供給）。高中章恆不傳（=null）——`school` 是 `save.career.school`
+// 那條線唯一的寫入者是 `careerStore.enterUniversity`，高中章路徑上它永遠是 null，
+// 靠這一點自然滿足「高中章不補 A 面」，不必在這裡額外判 chapter。
+export function careerMatchSetup(
+  career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1, school = null,
+) {
   const def = matchOpponentDef(matchEntry.opponentId, seasonIndex, { titles: career.titles ?? 0 });
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
   // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
@@ -728,12 +734,17 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
       attributes: attrs,
     });
   });
+  // 配色卷階段二 E1：大學章＋已選校時我方（A）補上入學校 kit；kitFor 缺欄位回 null
+  // ⇒ 消費端（geoCharacter.resolveKit）回落側別預設——school 查無效（universityById
+  // 落空）時 uniSchoolKit 為 null，跟高中章一樣不補 A 面，行為安全一致。
+  const uniSchoolKit = school ? kitFor(universityById(school)) : null;
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, oppDef, members, lineup),
-    // 配色卷批 1：對手隊 kit（渲染層球衣覆寫）。kitFor 缺欄位回 null＝穿側別預設，
-    // 我方（A）恆定不帶（拍板題 1 C 案）
-    kits: { B: kitFor(oppDef) },
+    // 配色卷批 1：對手隊 kit（渲染層球衣覆寫）；批 1 拍板題 1 C 案原本我方（A）恆定
+    // 不帶——階段二 E1 大學章時補上（見上）。E2：自由人色隨 kits.A 一併帶（同一個
+    // kit 物件的 .libero 欄位），resolveKit('A', true, kit) 已會吃，這裡不必另處理。
+    kits: { ...(uniSchoolKit ? { A: uniSchoolKit } : {}), B: kitFor(oppDef) },
     benches: { A: benchA, B: benchB },
     ...(oldTeamMates.length ? {
       trustDynInit: Object.fromEntries(

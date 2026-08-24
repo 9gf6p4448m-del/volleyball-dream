@@ -64,7 +64,7 @@ import { createRitualStage } from '../render/ritualStage.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
-import { isHighSchool, chapterSeasonOf } from '../career/chapter.js';
+import { isHighSchool, chapterSeasonOf, currentTeamName } from '../career/chapter.js';
 import { bestFinishOf, seasonFinishOf, FINISH_LABEL } from '../career/admission.js';
 import {
   universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
@@ -162,6 +162,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     'min-height:20px', 'font-size:14px', `color:${COLOR.red}`, 'text-align:center',
   ]);
   const setMsg = (text) => { msgEl.textContent = text ?? ''; };
+
+  // 配色卷階段二 E4：動態隊名單一入口——高中章恆 OUR_TEAM_NAME、大學章＝入學校名。
+  // 呼叫端一律經這個函式取，不得自行判斷章節（v2 裁定二前提，同
+  // isHighSchool(store.loadChapter?.()) 慣例）
+  const teamName = () => currentTeamName(store.loadChapter?.(), store.loadSchool?.());
 
   // 集訓覆蓋層是否已開（覆審 HIGH-1 的中斷復原有兩個呼叫端，防重入疊兩層）
   let campOpen = false;
@@ -861,7 +866,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       ]);
       head.appendChild(el('div', [
         'font-size:18px', 'font-weight:900', `color:${COLOR.cyan}`, 'letter-spacing:1px',
-      ], OUR_TEAM_NAME));
+      ], teamName()));
       head.appendChild(el('div', ['font-size:12px', 'font-weight:900', `color:${COLOR.dim}`], 'VS'));
       head.appendChild(el('div', [
         'font-size:18px', 'font-weight:900', 'color:#ff9d7a', 'letter-spacing:1px',
@@ -926,7 +931,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       } else if (seasonDef.ace) {
         // W1(P4)：以「該屆應有的王牌」為基準——畢業拔除不誤報成被挖走
         intel.appendChild(el('div', ['font-size:12px', 'font-weight:700', `color:${COLOR.cyan}`],
-          `他們的王牌？現在穿著遊隼的球衣。`));
+          `他們的王牌？現在穿著${teamName()}的球衣。`));
       }
       if (def.scoutRead > 0 && career.scouting?.[next.opponentId]) {
         intel.appendChild(el('div', ['font-size:11.5px', 'color:#ffb454'],
@@ -1800,7 +1805,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
     ], `${career.playerName}・你·${ROLE_ABBR[player.currentRole] ?? 'OH'}${seasonN > 1 ? `・第 ${seasonN} 屆` : ''}`));
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
-      `${OUR_TEAM_NAME}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
+      `${teamName()}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
     root.appendChild(growthSection(career, player));
     // 屆間養成卷 E3（08-09）：默契計數顯示——非零才出現（第 1 屆 comboScale=0，
     // 計數結構上恆為 0 ⇒ 不需要任何屆數閘）。零效果，文案如實呈現計數。
@@ -1894,7 +1899,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
             `color:${me ? COLOR.gold : (i < RR_ADVANCE ? COLOR.cyan : COLOR.dim)}`,
             me ? 'font-weight:700' : 'font-weight:400',
           ]);
-          line.appendChild(el('div', [], `${i + 1}. ${me ? OUR_TEAM_NAME : opponentName(row.id)}`));
+          line.appendChild(el('div', [], `${i + 1}. ${me ? teamName() : opponentName(row.id)}`));
           // 淨得分要顯示出來：同勝場時它就是晉級與否的判準（roundRobinTable 的 tiebreak），
           // 不顯示的話玩家會看到「一樣 2 勝，為什麼是我出局」而找不到答案
           line.appendChild(el('div', [], `${row.wins} 勝 ${row.played - row.wins} 敗　`
@@ -2224,6 +2229,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 🔓 手批面板已移除（07-27 Sawmah 拍板：四位置驗收完結→版本級 open，見
   // positionFlags.ENGINEERED_OPEN；未來新位置驗收用 ?openPosition= 入口即可）
 
+  // 配色卷階段二 E5（對抗覆審 CRITICAL 修，使用者裁定＝消費端章節感知）：即時季
+  // 「進行中」判定的單一定義。高中章＝careerStage 收束事實（eliminated/champion）；
+  // 大學章不能吃 careerStage——它只認高中賽程 schema（stage:'group'/'national'、
+  // national-final），對 stage:'uni' 恆回 'national'（＝恆「進行中」）——改比照
+  // renderCareer 的 uniSeasonDone 先例：league 全部有結果＝收束。league 空
+  // （school 解不開的舊存檔）視為進行中＝與改前行為一致的安全回退。
+  function liveSeasonOngoing(career) {
+    if (!isHighSchool(store.loadChapter?.())) {
+      const league = (career.schedule ?? []).filter((x) => x.round === 'league');
+      return !(league.length > 0
+        && league.every((m) => (career.results ?? []).some((r) => r.matchId === m.id)));
+    }
+    return !['eliminated', 'champion'].includes(careerStage(career));
+  }
+
   // ---- W4(P4) Q5 生涯結算（第 3 屆終點）：三屆定格→招募全記錄→關鍵球典藏→
   // 隊友具名送別→主角版畢業儀式（逐位聚光鏈單人版）→下一章佔位。
   // 資料底＝Q9 累積頁（歷屆封存＋本屆）＋recruitment＋finalRally（VCR 典藏）----
@@ -2231,7 +2251,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const seasons = [...(store.loadSeasonArchive?.() ?? [])];
     seasons.push({
       ...archiveSeasonSummary({ index: store.seasonIndex?.() ?? 1, results: career.results }),
-      current: true,
+      // 配色卷階段二 E5：archive 陣列外那筆即時季用收束事實判定（雙源），不再硬寫
+      // true——判準單一定義在 liveSeasonOngoing（章節感知）
+      current: liveSeasonOngoing(career),
     });
     const roster = store.loadRoster?.();
     const memberNames = {};
@@ -2253,6 +2275,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     ]);
     overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
       '生涯結算'));
+    // TODO(uni-finale) 大學章結算接線時 showCareerFinale() 必查此行；並注意（覆審 LOW
+    // 2026-08-25）：接大二（CHAPTER_SEASONS.university > 1）之前，careerStore.js:178 的
+    // chapterCompleted（純年數）與 careerState.js advanceSeason 的 careerStage 判準（對
+    // stage:'uni' 恆回 'national'＝死鎖）都還不認得大學賽程收束——三份「大學季收束」定義
+    // 要先對齊（本檔 liveSeasonOngoing 是其一），否則屆數推進會在聯賽沒打完時就放行/卡死
     overlay.appendChild(el('div', [
       'font-size:26px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:3px',
       'text-shadow:0 4px 24px rgba(0,0,0,0.8)',
@@ -2535,7 +2562,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const seasons = [...(store.loadSeasonArchive?.() ?? [])];
     seasons.push({
       ...archiveSeasonSummary({ index: store.seasonIndex?.() ?? 1, results: career.results }),
-      current: true,
+      // 配色卷階段二 E5：雙源判定——archive 內的季一律已收束（能進陣列本身就是
+      // 收束的事實），陣列外這筆即時季問 liveSeasonOngoing（章節感知，同 showCareerFinale）
+      current: liveSeasonOngoing(career),
     });
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
