@@ -528,3 +528,54 @@ test('★MEDIUM-1 反向★ 自動跳攔路徑下不按壓手，intent 不帶 ha
     assert.equal(it.hand, undefined);
   });
 });
+
+// ── 第三輪對抗覆審：HIGH-1 的第四條洩漏路徑 ──────────────────
+// 前三個洞（球死／球權翻我方／板凳／換受控者）補上之後，覆審實跑找到第四條：
+// game.js:1198-1204 只有在**沒被攔到**時才寫 possession=toTeam，被攔到時
+// possession 原封不動留在攻方 ⇒ 「隊友攔到球」這條路上「球死」與「球權翻我方」
+// 兩個條件都不成立，承諾清不掉，下一波沒按壓手也會壓手。
+// ★這是原 HIGH-1 的同一個危險效果換一條路活下來★——所以判準改成看
+// lastTouchTeam（我方碰過球＝這一波攔網結束），不再列舉情境。
+test('★HIGH-1 第四條路★ 隊友攔到球（球權不翻）時，壓手承諾也要作廢', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    applyMbChoice(s, mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }))
+      .find((i) => i.key === 'press-line'));
+    assert.equal(controls.isPressArmed(), true);
+    // 模擬隊友攔到之後的 rally 狀態：三個欄位照抄 game.js 攔到時實際寫入的值
+    g.rally.lastTouchTeam = 'A';
+    g.rally.lastToucherId = 'A2'; // 隊友，不是受控的 A3
+    g.rally.touches = 0;
+    g.rally.profile = 'arc';
+    assert.equal(g.rally.possession, 'B', '前提：球權仍在攻方，否則測的不是第四條路');
+    assert.equal(g.phase, 'rally', '前提：球還沒死，否則會被「球死」那條清掉');
+    controls.collect(g, null);
+    assert.equal(controls.isPressArmed(), false,
+      '隊友攔到球之後承諾還活著 ⇒ 下一波沒按壓手也會壓手（HIGH-1 換一條路活）');
+  });
+});
+
+test('★HIGH-1 第四條路 後果★ 隊友攔到之後的下一波，intent 不得帶 press', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    const items = mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }));
+    applyMbChoice(s, items.find((i) => i.key === 'press-line'));
+    // 隊友攔到（球權留在對方）
+    g.rally.lastTouchTeam = 'A';
+    g.rally.lastToucherId = 'A2';
+    g.rally.touches = 0;
+    g.rally.profile = 'arc';
+    controls.collect(g, null);
+    // 對方再組織一波，玩家這次只按「封直線」
+    g.rally.lastTouchTeam = 'B';
+    g.rally.touches = 2;
+    g.rally.profile = 'spike';
+    applyMbChoice(s, items.find((i) => i.key === 'block-line'));
+    controls.chooseMbTiming(true);
+    const [it] = controls.collect(g, { landingTeam: 'A' });
+    assert.equal(it.action, 'block');
+    assert.equal(it.hand, undefined, '上一波的壓手承諾漏過來了');
+  });
+});

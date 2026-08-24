@@ -155,20 +155,35 @@ test('★B7-11 判準的來源★ uniLeaguePlayed 只數 round==="league" 的場
 // ════════════════════════════════════════════════════════════
 // 機械判準＝黑名單詞組。它防的是「這裡學得比較快／這裡沒人教你」這類**兌現不了的
 // 支票**：大學章的技術傳授各校同場次（上面 B7-7 已逐校驗過），文案再暗示快慢就是說謊。
-const BROKEN_PROMISES = [
+// ① 直接承諾詞（誰教你、學不學得到、解不解得開）
+const DIRECT_PROMISES = [
   '教得動', '教你', '能教', '會教', '沒有人教', '沒人教',
   '學到的比', '學得比', '學到', '想學', '學不到', '解鎖',
   '改給你看', '更好的地方',
 ];
+// ② 共現判準：「技術習得語彙」× 「速度／程度比較語彙」同時出現＝在承諾快慢。
+// ★這一層是第三輪覆審逼出來的★——只有 ① 的話，換一組沒用過的字就穿過去了
+// （覆審現造五句全新寫法，5/5 通過）。判準要有形狀，不能照著改掉的字串配。
+const TECH_WORDS = ['技術', '技巧', '招式', '新招', '球技', '基本功', '練出來', '上手', '掌握'];
+const SPEED_WORDS = ['快', '早', '慢', '晚', '倍', '縮短', '比高中', '別人的', '遠超', '進步', '成長'];
+
+function brokenPromiseIn(text) {
+  const direct = DIRECT_PROMISES.find((w) => text.includes(w));
+  if (direct) return direct;
+  const t = TECH_WORDS.find((w) => text.includes(w));
+  const sp = SPEED_WORDS.find((w) => text.includes(w));
+  return t && sp ? `${t}＋${sp}` : null;
+}
+
+// 為了讓既有的逐條測試沿用同一個判準，保留這個名字（值＝①，僅供逐詞回報用）
+const BROKEN_PROMISES = DIRECT_PROMISES;
 
 test('B7-8 九校的 tech 文案都不含技術快慢承諾', () => {
   for (const u of UNIVERSITIES) {
     const t = u.cost?.tech ?? '';
     assert.ok(t.length > 0, `${u.name} 的 tech 文案空了（會撞批 5 的 B5-7）`);
-    for (const bad of BROKEN_PROMISES) {
-      assert.ok(!t.includes(bad),
-        `${u.name} 的 tech 文案還寫著「${bad}」：${t}`);
-    }
+    const hit = brokenPromiseIn(t);
+    assert.equal(hit, null, `${u.name} 的 tech 文案命中「${hit}」：${t}`);
   }
 });
 
@@ -229,24 +244,47 @@ const OLD_COPY_BEFORE_BATCH7 = [
   ['meixi', '這裡沒有人在乎技術，你會學到怎麼自己一個人變強。'],
 ];
 
-test('★B7-8 鑑別力★ 判準抓得到批 7 之前的每一句承諾式舊文案', () => {
+test('★B7-8 鑑別力 一★ 判準抓得到批 7 之前的每一句承諾式舊文案', () => {
   for (const [id, text] of OLD_COPY_BEFORE_BATCH7) {
-    assert.ok(BROKEN_PROMISES.some((bad) => text.includes(bad)),
-      `${id} 的舊文案「${text}」通過了判準 ⇒ 這組黑名單是照改掉的字串配的，沒有鑑別力`);
+    assert.ok(brokenPromiseIn(text),
+      `${id} 的舊文案「${text}」通過了判準 ⇒ 判準是照改掉的字串配的，沒有鑑別力`);
   }
+});
+
+// ★第三輪對抗覆審現造的五句★：完全沒用到舊文案的字，第一版判準 5/5 全部放行。
+// 釘成 fixture＝下次有人想把判準簡化回單純黑名單時，這一條會擋住。
+const FRESH_PROMISES_FROM_REVIEW = [
+  '在這裡，技術進步的速度會比你想像的快。',
+  '同樣一年，你在這裡練出來的東西是別人的兩倍。',
+  '這裡的訓練會讓你更早掌握高階技巧。',
+  '來這裡，新招式上手的時間會縮短一半。',
+  '強隊的資源讓你的技術成長遠快於弱校。',
+];
+
+test('★B7-8 鑑別力 二★ 判準也要抓得到沒見過的新寫法（不是照字串配的）', () => {
+  for (const text of FRESH_PROMISES_FROM_REVIEW) {
+    assert.ok(brokenPromiseIn(text),
+      `「${text}」通過了判準 ⇒ 換一組沒用過的字就能穿過去，這判準沒有形狀`);
+  }
+});
+
+test('★B7-8 反向 誤判★ 現行九句與抬頭句都不得被判準誤傷', () => {
+  // 判準是自然語言的近似，一定會有邊界。這一條釘住「現在這幾句是乾淨的」，
+  // 免得日後把判準收得太緊、逼著文案去閃關鍵詞而不是講真話。
+  for (const u of UNIVERSITIES) {
+    assert.equal(brokenPromiseIn(u.cost.tech), null, `${u.name} 被誤傷：${u.cost.tech}`);
+  }
+  assert.equal(brokenPromiseIn(ADMISSION_COST_LINE), null, '抬頭句被誤傷');
 });
 
 test('★B7-8★ 升學畫面的抬頭句也吃同一道判準', () => {
   // 覆審指出這一句原本內嵌在 DOM 建構裡、tests/ 全域 grep 不到＝零覆蓋。
   assert.ok(typeof ADMISSION_COST_LINE === 'string' && ADMISSION_COST_LINE.length > 0);
-  for (const bad of BROKEN_PROMISES) {
-    assert.ok(!ADMISSION_COST_LINE.includes(bad),
-      `升學抬頭句還寫著「${bad}」：${ADMISSION_COST_LINE}`);
-  }
+  const hit = brokenPromiseIn(ADMISSION_COST_LINE);
+  assert.equal(hit, null, `升學抬頭句命中「${hit}」：${ADMISSION_COST_LINE}`);
   // 反向：改動前那一句（「弱的隊伍沒有人教得動你」）必須被擋下
   const before = '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍沒有人教得動你。想清楚再選。';
-  assert.ok(BROKEN_PROMISES.some((bad) => before.includes(bad)),
-    '舊抬頭句沒被擋＝這條測試沒有鑑別力');
+  assert.ok(brokenPromiseIn(before), '舊抬頭句沒被擋＝這條測試沒有鑑別力');
 });
 
 // ── B7-9 的機械守衛：不得偷偷長出玩家端的縮手入口 ────────────

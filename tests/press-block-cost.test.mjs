@@ -44,7 +44,20 @@ function sideTouch(seed, hand) {
   return null;
 }
 
+// ★期望值寫死在測試裡，不讀 TUNING★（第三輪覆審抓到的恆真式）：
+// 原本拿量到的比值去比「當下的常數自己」，於是常數改成 1.0、甚至改成 0.5
+//（反向＝壓手反而更不容易被撥出界＝變成獎勵）都是綠的——那顆鈕的**幅度與方向**
+// 完全沒有測試在守，只有「分支存在與否」被守到。
+// 1.6 的來源＝tools/press-cost-sweep.mjs 的掃描（2768 個配對接觸點），
+// 要改這個數字就要重跑掃描並更新 B7-3 的修訂紀錄。
+const EXPECTED_SIDE_MUL = 1.6;
+const EXPECTED_BODY_MUL = 0.7;
+
 test('★代價一★ 擦側：壓手把球撥得更開（逐值＝1.6 倍）', () => {
+  assert.equal(TUNING.BLOCK_PRESS_SIDE_MUL, EXPECTED_SIDE_MUL,
+    `常數被改成 ${TUNING.BLOCK_PRESS_SIDE_MUL} 了——幅度是掃描掃出來的，改它要重跑 press-cost-sweep`);
+  assert.ok(EXPECTED_SIDE_MUL > 1,
+    '方向反了：壓手應該讓球被撥得**更開**（代價），小於 1 會變成獎勵');
   let checked = 0;
   for (let seed = 1; seed <= 20; seed += 1) {
     const v = sideTouch(seed, 'vertical');
@@ -54,9 +67,9 @@ test('★代價一★ 擦側：壓手把球撥得更開（逐值＝1.6 倍）', 
     assert.equal(p.zone, 'side', `種子 ${seed} 的壓手組不是擦側，兩組不可比`);
     // 同一顆球、同一站位，唯一變因是手態 ⇒ 橫向速度的比值就是那顆鈕
     const ratio = Math.abs(p.vx) / Math.abs(v.vx);
-    assert.ok(Math.abs(ratio - TUNING.BLOCK_PRESS_SIDE_MUL) < 1e-9,
-      `種子 ${seed}：壓手/直立的橫向速度比 ${ratio.toFixed(4)}，`
-      + `不等於 BLOCK_PRESS_SIDE_MUL ${TUNING.BLOCK_PRESS_SIDE_MUL}`);
+    assert.ok(Math.abs(ratio - EXPECTED_SIDE_MUL) < 1e-9,
+      `種子 ${seed}：壓手/直立的橫向速度比 ${ratio.toFixed(4)}，不等於期望的 ${EXPECTED_SIDE_MUL}`);
+    assert.ok(ratio > 1, `種子 ${seed}：壓手撥得比直立還少（比值 ${ratio.toFixed(4)}）＝代價變獎勵`);
     checked += 1;
   }
   assert.ok(checked >= 10, `只驗到 ${checked} 個種子，樣本不足以說治具穩定`);
@@ -64,6 +77,7 @@ test('★代價一★ 擦側：壓手把球撥得更開（逐值＝1.6 倍）', 
 
 test('★代價一 鑑別力★ 把 SIDE_MUL 調回中性，壓手與直立就變成一模一樣', () => {
   const prev = TUNING.BLOCK_PRESS_SIDE_MUL;
+  assert.notEqual(prev, 1.0, '原值本來就是中性 ⇒ 這條測試變成恆真式（它只證明 1.0 等於 1.0）');
   TUNING.BLOCK_PRESS_SIDE_MUL = 1.0;
   try {
     let same = 0; let checked = 0;
@@ -123,6 +137,8 @@ test('★代價二★ 正面：壓手攔死的次數少於直立（手在網的�
 
 test('★代價二 鑑別力★ 把 BODY_MUL 調回中性，兩者的攔死次數就會相等', () => {
   const prev = TUNING.BLOCK_PRESS_BODY_MUL;
+  assert.equal(prev, EXPECTED_BODY_MUL, `常數被改成 ${prev} 了`);
+  assert.ok(EXPECTED_BODY_MUL < 1, '方向反了：壓手應該讓正面**更難**攔死（代價），大於 1 會變成獎勵');
   TUNING.BLOCK_PRESS_BODY_MUL = 1.0;
   try {
     const N = 1200;

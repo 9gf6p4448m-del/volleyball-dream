@@ -320,13 +320,25 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       if (digChosen && !this.isLMoment(game)) digChosen = false;
       const tick = game.tick;
       const me = game.players[playerId];
-      // 批 7：壓手承諾與封線指令 **同壽**（matchLoop.js:1144-1147 的 blockCall 生命週期）
-      // ——球死，或球權翻回我方（這一波的攔網機會已經過去）＝承諾作廢。
+      // 批 7：壓手承諾的壽命＝「這一波的攔網機會」。三個結束條件缺一不可：
+      //   ① 球死 ② 球過網到我方（沒被攔，攔網機會過了）
+      //   ③ **我方碰過球**（含隊友攔到）
+      // ★③ 是第三輪對抗覆審抓出來的★：game.js:1198-1204 只有在**沒被攔到**時才寫
+      // possession=toTeam，被攔到時 possession 原封不動留在攻方 ⇒ 「隊友攔到球」
+      // 這條路上 ①② 都不成立，承諾清不掉，下一波沒按壓手也會壓手（原 HIGH-1 換一條路活）。
+      // 判準用 lastTouchTeam 而不是再列舉一種情境：不論球是被攔、被接還是被誰碰到，
+      // 只要**我方碰過**，這一波的攔網就結束了——按危險的效果寫，不按已知的入口寫。
+      //
+      // 為什麼不乾脆收斂成「由 blockCall 導出、不另存布林」（覆審的建議）：
+      // blockCall 自己的清除條件（matchLoop.js:1144-1147）**有同一個洞**，導過去只會
+      // 繼承它；而修 blockCall 的壽命會動到 08-03 就定案的封線站位行為，超出本批範圍。
       // ★不能只清「球死」★ 一球之內對手可能舉球多次（我方起球→攻擊→對方防起→再舉），
       // 只清球死會讓上一波沒用掉的 press 殘留到下一波，變成沒按也壓手、而且 blockCall
       // 已經是 null ⇒ B7-3 紅法二「代價落空、玩家白拿 press」。而 press 對非擦頂區
       // 完全沒有副作用（game.js:1287 以下不讀 blockHand），殘留就是純增益。
-      if (pressArmed && (game.phase !== 'rally' || game.rally.possession === me.teamId)) {
+      if (pressArmed && (game.phase !== 'rally'
+        || game.rally.possession === me.teamId
+        || game.rally.lastTouchTeam === me.teamId)) {
         pressArmed = false;
       }
       const a = game.actors[playerId];
