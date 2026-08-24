@@ -19,6 +19,7 @@ import { createSlotStoreProxy } from './career/careerStore.js';
 import { devSeedRequest, buildSyntheticSave } from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentById } from './career/opponents.js';
+import { kitFor, cssColor } from './career/teamKit.js';
 import { ENGINEERED_OPEN } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
 import { practiceMatchEntry } from './career/practiceMatch.js';
@@ -78,6 +79,11 @@ async function init() {
   const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
+  } else if (params.get('devkit') === '1') {
+    // 配色卷批 1 治具：?devkit=1 全隊球衣預覽（16 隊卡片＋3D 舞台）——
+    // 題 3 色票裁定工具兼驗收 K6 量測工具；動態載入，不進正常路徑的 bundle 熱路
+    const { runKitPreview } = await import('./render/kitPreview.js');
+    runKitPreview(ctx);
   } else if (params.get('quick') === '1') {
     await runMatch(ctx, null); // 快速比賽直達（測試腳本/舊連結用）
   } else {
@@ -199,7 +205,9 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
     ? opponentById(RIVAL_TEAM_ID)
     : null;
   const venueSpec = ctx.arena.setVenue(
-    venueKey, rival ? { awayBanner: { name: rival.name, color: '#7db2ff' } } : {},
+    venueKey, rival
+      ? { awayBanner: { name: rival.name, color: cssColor(kitFor(rival)?.banner ?? kitFor(rival)?.jersey ?? 0x7db2ff) } }
+      : {},
   );
   ctx.court.setFloorPalette(venueSpec.floor);
   config.venue = { key: venueKey, rivalAway: !!rival }; // matchLoop：應援偏向＋冠軍館燈光秀

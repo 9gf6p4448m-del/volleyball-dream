@@ -25,6 +25,15 @@ const LIBERO_KIT = {
   B: { jersey: 0xf2f4f8, shorts: 0x3c1512, trim: 0x9aa0ab },
 };
 // 膚色與髮色池（依 id 決定論取用——12 人不撞臉的精緻感）
+// 配色卷批 1（08-24）：隊伍 kit 覆寫——kit＝該隊 def 的配色物件（career/teamKit.js
+// 的 kitFor 供給；shape 見該檔）。null＝回落側別預設（快速比賽／練習賽／無 kit 的隊）。
+// 純函式、node 直測（驗收 K5 回退安全）。
+export function resolveKit(teamId, isLibero, kit = null) {
+  const fallback = isLibero ? LIBERO_KIT[teamId] : TEAM_KIT[teamId];
+  if (kit) return (isLibero ? kit.libero : kit) ?? fallback;
+  return fallback;
+}
+
 const SKINS = [0xe8b08c, 0xd99a72, 0xc98a63, 0xa9714f, 0x8a5a3d];
 const HAIRS = [0x20242c, 0x33261c, 0x3d2e1e, 0x151820, 0x4a3423];
 const SHOE = 0xf2f4f8;
@@ -153,8 +162,8 @@ export function createGeoPool(scene, castShadow, playerCount) {
 // name＝球員名（慣用手的雜湊鍵，見 isLeftHanded）。省略＝回落 playerId：
 // 立牌／儀式／開卡三個靜態舞台不播助跑，handed 在那裡不被消費（geoAnimator 只用它
 // 鏡像 approach3/4 的步序），所以只有 matchView 需要餵真名
-export function createGeoCharacter(pool, playerId, teamId, height, isLibero = false, name = '') {
-  const kit = isLibero ? LIBERO_KIT[teamId] : TEAM_KIT[teamId];
+export function createGeoCharacter(pool, playerId, teamId, height, isLibero = false, name = '', teamKit = null) {
+  const kit = resolveKit(teamId, isLibero, teamKit);
   const h = idHash(playerId);
   const skin = SKINS[h % SKINS.length];
   const hair = HAIRS[(h >> 3) % HAIRS.length];

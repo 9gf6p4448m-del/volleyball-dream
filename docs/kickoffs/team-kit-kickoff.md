@@ -26,7 +26,7 @@
 | 資料層 | `opponents.js`（高中 7 隊）、`universities.js`（9 校）、`players.js` **完全沒有配色欄位** |
 | 唯一資料驅動色機件 | 宿敵客場橫幅：`arena.js` 的 `opts.awayBanner.color`，但 `main.js:202` 寫死 `'#7db2ff'` 且只給天鷹學園 |
 | UI 敵我語意色（另一套系統） | 頭上標籤 `matchView.js:25` `TAG_COLORS`（A 青 `#6ee7ff`／B 暖 `#ff9d7a`）、氣勢計 `scoreboard.js:19`（我方青／對方暖）、落點圈文案「跑向藍色落點圈」`scoreboard.js:203` ⇒ **玩家的敵我判讀有獨立顏色通道，不全靠球衣** |
-| 玩家隊身分 | ★查無我方隊名欄位★（`careerState.js`／`scoreboard.js`／`careerScreen.js` 均以「我方」稱呼）——我方要有「校色」得先有「我們是誰」 |
+| 玩家隊身分 | 更正（08-24 實測）：玩家高中隊有隊名「遊隼高中」（生涯畫面抬頭）；開卷時 grep 沒中是搜錯關鍵詞。C 案下本卷不動我方，此事實供階段二「穿校色」取用 |
 | 大學對手建構 | `uniTeam.js` 從 `universities.js` 建隊、比賽路徑取 def 的單一入口＝`matchOpponentDef`（批 6 收斂）⇒ kit 欄位有現成的流通管道 |
 | sim-hash 基準 | `2f60f04312b666db`（批 6 立）——本卷不得推移 |
 

@@ -10,6 +10,7 @@ import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 // 大學卷批 6：大學對手池（與 opponents 同構的另一張表；高中那張一行不動）
 import { universityById } from './universities.js';
+import { kitFor } from './teamKit.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 import {
   buildSchedule, nationalLegFor, roundRobinTable, RR_ADVANCE,
@@ -730,6 +731,9 @@ export function careerMatchSetup(career, player, matchEntry, roster = null, line
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, oppDef, members, lineup),
+    // 配色卷批 1：對手隊 kit（渲染層球衣覆寫）。kitFor 缺欄位回 null＝穿側別預設，
+    // 我方（A）恆定不帶（拍板題 1 C 案）
+    kits: { B: kitFor(oppDef) },
     benches: { A: benchA, B: benchB },
     ...(oldTeamMates.length ? {
       trustDynInit: Object.fromEntries(

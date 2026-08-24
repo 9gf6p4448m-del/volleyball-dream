@@ -46,7 +46,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   let matchView;
   try {
     // ?pose=bump|overhead|spike|block|serve：強制循環播放單一姿勢（調角度用）
-    matchView = await createMatchView(scene, quality, game, playerId, params.get('pose'));
+    matchView = await createMatchView(scene, quality, game, playerId, params.get('pose'), config.kits ?? null);
   } catch (err) {
     loadingEl.textContent = `模型載入失敗：${err.message ?? err}`;
     hud.error(`模型載入失敗（${quality.model}）`);

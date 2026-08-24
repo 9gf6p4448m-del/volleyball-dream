@@ -194,6 +194,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   return {
     seed, setTarget, simpleMode, autopilot, teamControl, assistOn,
     careerSetup, tapeClips, gameOptions,
+    // 配色卷批 1：各側球衣 kit（careerMatchSetup 供給；快速比賽/練習賽＝null＝預設藍紅）
+    kits: careerSetup?.kits ?? null,
     // 練習賽隨附資料（matchStage 建科目 HUD、matchLoop 追蹤與結算都讀它）；
     // 非練習賽＝null＝所有掛點短路，零擾動
     practice: careerSetup?.practice ?? null,

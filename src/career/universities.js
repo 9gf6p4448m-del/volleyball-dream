@@ -61,6 +61,7 @@ export const UNIVERSITIES = [
   // ---- 強豪三所（powerhouse）----
   {
     id: 'north-ridge',
+    kit: { jersey: 0x5b3fa8, shorts: 0x1e1440, trim: 0xd8cff0, libero: { jersey: 0xd8cff0, shorts: 0x1e1440, trim: 0x5b3fa8 } }, // 王者紫——移動的牆自帶威儀
     name: '北陵大學',
     tier: TIER.POWERHOUSE,
     style: 'wall',
@@ -86,6 +87,7 @@ export const UNIVERSITIES = [
   },
   {
     id: 'hanchi-sport',
+    kit: { jersey: 0x8e1f2f, shorts: 0x2e0a10, trim: 0xe8d5a0, libero: { jersey: 0xe8d5a0, shorts: 0x2e0a10, trim: 0x8e1f2f } }, // 體大酒紅——體能暴力的血色
     name: '瀚崎體育大學',
     tier: TIER.POWERHOUSE,
     style: 'power',
@@ -115,6 +117,7 @@ export const UNIVERSITIES = [
   },
   {
     id: 'chiyang',
+    kit: { jersey: 0xe07018, shorts: 0x38200a, trim: 0xffe2b8, libero: { jersey: 0x3a2410, shorts: 0x38200a, trim: 0xe07018 } }, // 麒陽焦橙——正午的太陽
     name: '麒陽大學',
     tier: TIER.POWERHOUSE,
     style: 'quick',
@@ -141,6 +144,7 @@ export const UNIVERSITIES = [
   // ---- 中段三所（mid）----
   {
     id: 'haiyan',
+    kit: { jersey: 0x36567c, shorts: 0x101e2e, trim: 0xd0e0ea, libero: { jersey: 0xd0e0ea, shorts: 0x101e2e, trim: 0x36567c } }, // 硯台藍——老派墨色
     name: '海硯大學',
     tier: TIER.MID,
     style: 'trick',
@@ -166,6 +170,7 @@ export const UNIVERSITIES = [
   },
   {
     id: 'chengguang',
+    kit: { jersey: 0xf5b8a0, shorts: 0x4a3a22, trim: 0xfff3e0, libero: { jersey: 0x4a3a22, shorts: 0x2e2414, trim: 0xf5b8a0 } }, // 曙光杏——最後一道光的暖
     name: '承光大學',
     tier: TIER.MID,
     style: 'defense',
@@ -195,6 +200,7 @@ export const UNIVERSITIES = [
   },
   {
     id: 'luze-tech',
+    kit: { jersey: 0x97862c, shorts: 0x2c2a10, trim: 0xf0ecc8, libero: { jersey: 0xdce8d8, shorts: 0x2c2a10, trim: 0x97862c } }, // 鹿澤橄欖——硬地上的草色
     name: '鹿澤科技大學',
     tier: TIER.MID,
     style: 'serve',
@@ -221,6 +227,7 @@ export const UNIVERSITIES = [
   // ---- 弱校三所（weak）----
   {
     id: 'songhe',
+    kit: { jersey: 0xbfa878, shorts: 0x3f3524, trim: 0x3f5a48, libero: { jersey: 0x3f5a48, shorts: 0x243528, trim: 0xbfa878 } }, // 原木×松青——湊滿人數的樸素
     name: '松河大學',
     tier: TIER.WEAK,
     style: 'steady',
@@ -246,6 +253,7 @@ export const UNIVERSITIES = [
   },
   {
     id: 'daiban',
+    kit: { jersey: 0x8474a4, shorts: 0x2a2438, trim: 0xe8e0c0, libero: { jersey: 0xe8e0c0, shorts: 0x2a2438, trim: 0x8474a4 } }, // 岱坂岩紫——山的暮色
     name: '岱坂技術學院',
     tier: TIER.WEAK,
     style: 'power',
@@ -271,6 +279,7 @@ export const UNIVERSITIES = [
   },
   {
     id: 'meixi',
+    kit: { jersey: 0xd4668f, shorts: 0x3c1428, trim: 0xffe0ec, libero: { jersey: 0x2f1a26, shorts: 0x24101c, trim: 0xd4668f } }, // 梅紅——打好玩的也要打得漂亮
     name: '梅溪大學',
     tier: TIER.WEAK,
     style: 'trick',

@@ -58,7 +58,9 @@ const REACH_KIND_ACTION = {
   spike: REACH_ACTION.SPIKE, dive: REACH_ACTION.DIVE,
 };
 
-export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null) {
+// kits（配色卷批 1）：{ A?, B? } 各側隊伍 kit（career/teamKit.js 形狀）；
+// null/缺鍵＝該側穿 geoCharacter 側別預設（快速比賽、練習賽、無 kit 的隊）
+export async function createMatchView(scene, quality, game, initialControlledId, forcePose = null, kits = null) {
   let highlightId = initialControlledId;
   let huddleTeam = null; // W7.1 #3A：目前正在集合帶位的隊伍（'A'|'B'|null）——matchLoop 逐幀灌入
   let huddleViewOn = false; // W8：圈內第一人稱進行中——隱藏受控者本體（鏡頭＝他的眼睛）
@@ -81,6 +83,7 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // 字面，餵名字才會有真正的左手分佈，且慣用手跟著人不跟著輪轉槽位
     const rig = createGeoCharacter(
       pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero', p.name,
+      kits?.[p.teamId] ?? null,
     );
     rig.root.rotation.order = 'YXZ'; // 先朝向(y)再前傾(x)——魚躍飛撲沿朝向前方傾倒才正確
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網

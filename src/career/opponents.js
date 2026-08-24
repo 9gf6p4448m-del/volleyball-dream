@@ -72,6 +72,7 @@
 export const OPPONENTS = [
   {
     id: 'north-tech',
+    kit: { jersey: 0x6b4a2e, shorts: 0x241a10, trim: 0xd8c9a8, libero: { jersey: 0xd8d2c8, shorts: 0x241a10, trim: 0x6b4a2e } }, // 工裝深褐×卡其——紀律型職校的樸實
     name: '北原工商',
     style: 'steady',
     trait: '紀律型隊伍——發球保守、失誤極少，節奏四平八穩',
@@ -96,6 +97,7 @@ export const OPPONENTS = [
   },
   {
     id: 'white-wave',
+    kit: { jersey: 0x117f92, shorts: 0x0b2e36, trim: 0xd9f4f8, libero: { jersey: 0xf2f4f8, shorts: 0x0b2e36, trim: 0x117f92 } }, // 深浪藍綠×白沫——救球不落地的海
     name: '白浪高中',
     style: 'defense',
     trait: '防守黏得可怕——救球救不完，還愛用吊球打亂你的節奏',
@@ -120,6 +122,7 @@ export const OPPONENTS = [
   },
   {
     id: 'obsidian',
+    kit: { jersey: 0x2a2733, shorts: 0x14121c, trim: 0xb08cff, libero: { jersey: 0xb08cff, shorts: 0x14121c, trim: 0x2a2733 } }, // 曜石黑×紫光——黑曜箭的鋒芒
     name: '曜石體中',
     style: 'quick',
     trait: '這隊 MB 攔網極快、快攻又急又狠——中路是他們的天下',
@@ -146,6 +149,7 @@ export const OPPONENTS = [
   // 靠球路變化（吊球/二次球/飄浮球）打亂節奏；攔網差＝扣過去很痛快
   {
     id: 'gale-shore',
+    kit: { jersey: 0x43b25c, shorts: 0x143824, trim: 0xe4ffd2, libero: { jersey: 0x1b3a2e, shorts: 0x143824, trim: 0x43b25c } }, // 青嵐綠——颱風過境的山色
     name: '青嵐水產',
     style: 'trick',
     trait: '球路花得要命——吊球、二次球、飄浮球輪番來，節奏全在他們手裡',
@@ -174,6 +178,7 @@ export const OPPONENTS = [
   },
   {
     id: 'iron-mist',
+    kit: { jersey: 0x9aa3b5, shorts: 0x232833, trim: 0x3e4656, libero: { jersey: 0x2b3140, shorts: 0x232833, trim: 0x9aa3b5 } }, // 鐵灰霧面——工業隊的鋼
     name: '鐵霧工業',
     style: 'serve',
     trait: '發球輪就是他們的得分輪——強力發球連發，一傳頂不住就崩',
@@ -200,6 +205,7 @@ export const OPPONENTS = [
   // 正面硬扣會被一路蓋回來；腳步偏慢＝吊球與快節奏是解法
   {
     id: 'black-pine',
+    kit: { jersey: 0x2e6b45, shorts: 0x122b1c, trim: 0xcfe3d0, libero: { jersey: 0xcfe3d0, shorts: 0x122b1c, trim: 0x2e6b45 } }, // 墨松綠——高牆是一排樹
     name: '黑松實業',
     style: 'wall',
     trait: '高牆型隊伍——攔網手一排比一排高，硬扣過去的球都會被蓋回來',
@@ -227,6 +233,7 @@ export const OPPONENTS = [
   },
   {
     id: 'sky-hawk',
+    kit: { jersey: 0xf4f7ff, shorts: 0x1b2b52, trim: 0x7db2ff, libero: { jersey: 0x1b2b52, shorts: 0x10182e, trim: 0x7db2ff }, banner: 0x7db2ff }, // 白鷹×天藍——banner 保住既有 #7db2ff 錨
     name: '天鷹學園',
     // W4(P4) 題6 拍板：天鷹＝宿敵所屬（三屆三幕同屆宿敵的舞台）。隊級旗標供
     // 關鍵戰館主客場氛圍（橫幅/應援）、情蒐宿敵標記、L 2.0 ace 反讀（附錄 B-4）
