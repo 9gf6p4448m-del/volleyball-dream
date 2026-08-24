@@ -29,6 +29,24 @@ import { markMatchStarted } from './app/matchCareer.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
+// 2026-08-24：真機（尤其 standalone PWA）拿不到 console 時的唯一診斷管道——
+// 任何未捕捉錯誤直接蓋一層文字疊層畫在螢幕上，不再無聲吞掉變成空白畫面。
+function showFatalError(err) {
+  const msg = err?.stack || err?.message || String(err);
+  let el = document.getElementById('fatal-error');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'fatal-error';
+    el.style.cssText = 'position:fixed;inset:0;z-index:999;background:#1c2230;'
+      + 'color:#ff8a8a;font:12px/1.5 ui-monospace,Consolas,monospace;padding:16px;'
+      + 'overflow:auto;white-space:pre-wrap;';
+    document.body.appendChild(el);
+  }
+  el.textContent += `${el.textContent ? '\n\n' : ''}${msg}`;
+}
+window.addEventListener('error', (e) => showFatalError(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason));
+
 async function init() {
   // 遊戲頁禁右鍵選單與 iOS 捏合縮放（長按/拖曳是遊戲操作，不能跳原生 UI）
   window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -248,7 +266,7 @@ async function runBench(ctx) {
   requestAnimationFrame(frame);
 }
 
-init();
+init().catch(showFatalError);
 
 // PWA service worker（僅存在於 vite 建置環境；測試直接 import sim 模組不經過這裡）
 // autoUpdate 的更新在「下次重整」才生效＝玩家永遠慢一版；改為新 SW 接管瞬間
