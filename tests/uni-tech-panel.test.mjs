@@ -415,3 +415,116 @@ test('B7-5 落點區照舊可用（追發沒有把原本四個區擠掉）', () 
     }
   });
 });
+
+// ════════════════════════════════════════════════════════════
+// 對抗覆審 HIGH-1 回歸：壓手承諾的生命週期
+// ════════════════════════════════════════════════════════════
+// 覆審抓到的洩漏：`pressArmed` 原本只在「送出過 block intent」或「球死」時清，
+// 而封線指令 `blockCall` 是在**球權翻回我方**時就清（matchLoop.js:1144-1147）。
+// 兩者被註解宣稱「成對發生」，實際壽命卻不同 ⇒ 一球之內對手若舉球多次
+// （我方起球→攻擊→對方防起→再舉），上一波沒用掉的 press 會殘留到下一波，
+// 變成**沒按壓手也壓手、而且 blockCall 已經是 null**＝B7-3 紅法二「代價落空」。
+// press 對非擦頂區完全沒有副作用（game.js:1287 以下不讀 blockHand）⇒ 殘留＝純增益。
+
+test('★HIGH-1★ 這一波沒用掉的壓手，球權翻回我方時就要作廢', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    const items = mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }));
+    applyMbChoice(s, items.find((i) => i.key === 'press-line'));
+    assert.equal(controls.isPressArmed(), true);
+    // 這一波沒有產出 block intent（對手第三擊是輕吊／玩家退離網帶／落點不在我方），
+    // 接著我方起球 ⇒ 球權翻回我方＝這一波的攔網機會已經過去
+    g.rally.possession = 'A';
+    controls.collect(g, null);
+    assert.equal(controls.isPressArmed(), false,
+      '★B7-3 紅法二★ 殘留到下一波＝沒按壓手也會壓手，玩家白拿 press');
+  });
+});
+
+test('★HIGH-1 後果★ 殘留的壓手不得掛到下一波的攔網 intent 上', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    const items = mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }));
+    applyMbChoice(s, items.find((i) => i.key === 'press-line'));
+    // 第一波沒攔到，球權翻回我方
+    g.rally.possession = 'A';
+    controls.collect(g, null);
+    // 第二波：對手又舉球，玩家這次**只封線、沒按壓手**
+    g.rally.possession = 'B';
+    g.rally.touches = 2;
+    applyMbChoice(s, items.find((i) => i.key === 'block-line'));
+    controls.chooseMbTiming(true);
+    const [it] = controls.collect(g, { landingTeam: 'A' });
+    assert.equal(it.action, 'block');
+    assert.equal(it.hand, undefined,
+      '沒按壓手卻帶了 press ⇒ 上一波的承諾漏過來了');
+  });
+});
+
+test('★HIGH-1 洩漏點二★ 主角被換下板凳，壓手承諾要清掉', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    applyMbChoice(s, mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }))
+      .find((i) => i.key === 'press-line'));
+    assert.equal(controls.isPressArmed(), true);
+    // 換下場：把 A3 從雙方名冊移除＝onCourt 為 false（collect 會走板凳早退分支）
+    for (const t of ['A', 'B']) {
+      g.match.rotations[t] = g.match.rotations[t].filter((pid) => pid !== 'A3');
+    }
+    controls.collect(g, null);
+    assert.equal(controls.isPressArmed(), false,
+      '板凳期間留著承諾＝回場後第一次攔網莫名壓手');
+  });
+});
+
+test('★HIGH-1 洩漏點三★ 全隊輪控切換受控球員，壓手承諾不得跟著跑到別人身上', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    applyMbChoice(s, mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }))
+      .find((i) => i.key === 'press-cross'));
+    assert.equal(controls.isPressArmed(), true);
+    controls.setPlayerId('A2'); // matchLoop 的 syncControlled 在 rally 中會這樣切
+    assert.equal(controls.isPressArmed(), false,
+      'A3 承諾的壓手跟著控制權跑到 A2 身上＝玩家沒為這個人押過方向');
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// 對抗覆審 MEDIUM-1：production 走的是自動跳攔，不是手動窗
+// ════════════════════════════════════════════════════════════
+// 上面段 B／段 C 用 chooseMbTiming(true) 投遞攔網，那會走 blockTap→queuedAction→
+// manualBlock=true，而 game.js:1231 是 `if (airT > AIR_TICKS && !actor.blockManual) continue;`
+// ⇒ **手動窗豁免滯空閘、自動跳攔不豁免**，治具比 production 寬。
+// production 的路徑是 applyMbChoice 只呼叫 chooseMbTiming(false)，block intent 由
+// matchControls 的自動跳攔（simpleMode＋contextAction==='block'＋profile==='spike'
+// ＋landingTeam===我方＋貼網）產生。這一段補上那條路。
+test('★MEDIUM-1★ 不按任何攔網鍵：自動跳攔產出的 intent 也帶得到 press', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    applyMbChoice(s, mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }))
+      .find((i) => i.key === 'press-line'));
+    // ★刻意不呼叫 chooseMbTiming(true)★——applyMbChoice 內部只送 (false)，
+    // 起跳交給自動跳攔，這才是玩家實際走的路
+    const [it] = controls.collect(g, { landingTeam: 'A' });
+    assert.equal(it.action, 'block', '自動跳攔沒觸發＝這條路徑的前置在治具裡不成立');
+    assert.equal(it.manual, undefined, '走到手動窗了＝測的還是比 production 寬的那條');
+    assert.equal(it.hand, 'press');
+  });
+});
+
+test('★MEDIUM-1 反向★ 自動跳攔路徑下不按壓手，intent 不帶 hand', () => {
+  const g = topRigGame();
+  withControls('A3', (controls) => {
+    const s = fakeState(g, controls, 'A3');
+    applyMbChoice(s, mbPanelItems(gatesFor({ pressBlock: 1, chaseServe: 0 }))
+      .find((i) => i.key === 'block-line'));
+    const [it] = controls.collect(g, { landingTeam: 'A' });
+    assert.equal(it.action, 'block');
+    assert.equal(it.hand, undefined);
+  });
+});

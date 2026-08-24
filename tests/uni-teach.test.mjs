@@ -13,6 +13,9 @@ import { EVENT_DEFS, dueEvents, ONCE_EVENT_IDS } from '../src/career/events.js';
 import { UNIVERSITIES } from '../src/career/universities.js';
 import { TECH_DEFS } from '../src/career/growth.js';
 import { buildUniSchedule } from '../src/career/uniSchedule.js';
+import { TECH_DRILL_ORDER } from '../src/career/practiceMatch.js';
+import { ADMISSION_COST_LINE } from '../src/ui/careerScreen.js';
+import { readFileSync } from 'node:fs';
 
 const PRESS = 'teach-press';
 const CHASE = 'teach-chase';
@@ -153,8 +156,9 @@ test('★B7-11 判準的來源★ uniLeaguePlayed 只數 round==="league" 的場
 // 機械判準＝黑名單詞組。它防的是「這裡學得比較快／這裡沒人教你」這類**兌現不了的
 // 支票**：大學章的技術傳授各校同場次（上面 B7-7 已逐校驗過），文案再暗示快慢就是說謊。
 const BROKEN_PROMISES = [
-  '教得動', '教你', '能教', '沒有人教', '沒人教',
-  '學到的比', '學得比', '學不到', '解鎖',
+  '教得動', '教你', '能教', '會教', '沒有人教', '沒人教',
+  '學到的比', '學得比', '學到', '想學', '學不到', '解鎖',
+  '改給你看', '更好的地方',
 ];
 
 test('B7-8 九校的 tech 文案都不含技術快慢承諾', () => {
@@ -184,4 +188,84 @@ test('★B7-8 反向對照★ 同 tier 三校的 tech 文案仍互不相同（�
     assert.equal(new Set(texts).size, texts.length,
       `${tier} 有兩所學校的 tech 文案一模一樣＝那個取捨是假的`);
   }
+});
+
+// ════════════════════════════════════════════════════════════
+// 2026-08-24 Sawmah 裁定：棄賽不算「打完」
+// ════════════════════════════════════════════════════════════
+// 覆審 MEDIUM：resolveForfeit 也會寫一筆 result ⇒ 棄賽三場就能領走壓手。
+// 學長教你東西是因為看了你打球，棄賽領傳授在敘事上說不通。
+test('★裁定★ 棄賽的場次不計入 uniLeaguePlayed', () => {
+  const career = uniCareer(3);
+  // 把三場全部標成棄賽（resolveForfeit 寫入的形狀）
+  career.results = career.results.map((r) => ({ ...r, won: false, scoreFor: 0, forfeit: true }));
+  assert.ok(!dueIds(career).includes(PRESS),
+    '棄賽三場就領走壓手＝只要中途離開就能拿傳授');
+});
+
+test('★裁定 反向對照★ 真的打完三場照樣拿得到（排除條件沒有寫太寬）', () => {
+  assert.ok(dueIds(uniCareer(3)).includes(PRESS));
+  // 混合：兩場真打＋一場棄賽 ⇒ 只算兩場，還不到門檻
+  const mixed = uniCareer(3);
+  mixed.results = mixed.results.map((r, i) => (i === 2 ? { ...r, forfeit: true } : r));
+  assert.ok(!dueIds(mixed).includes(PRESS), '兩場真打＋一場棄賽不該滿三場');
+  // 補打第四場（真打）⇒ 湊滿三場真打
+  const four = uniCareer(4);
+  four.results = four.results.map((r, i) => (i === 2 ? { ...r, forfeit: true } : r));
+  assert.ok(dueIds(four).includes(PRESS), '三場真打＋一場棄賽應該要到門檻');
+});
+
+// ── B7-8 的鑑別力：判準必須抓得到「批 7 之前的舊文案」────────────
+// 覆審的批評成立：第一版黑名單是照著**改掉的字串**事後配出來的，
+// 九句舊文案裡有五句是承諾卻只抓到四句 ⇒ 若實作只改那四所，測試照樣綠。
+// 這一條把舊文案釘成 fixture，證明判準抓的是「承諾」這件事，不是特定字串。
+const OLD_COPY_BEFORE_BATCH7 = [
+  ['north-ridge', '每天對練的都是全國級的手，一個學期學到的比高中三年多。'],
+  ['hanchi-sport', '教練組有國青教練，跳躍與攻擊的細節有人一格一格改給你看。'],
+  ['chiyang', '想學跑動與時間差，全國沒有比這裡更好的地方。'],
+  ['chengguang', '學長會教你怎麼防守，攻擊方面幫不上什麼忙。'],
+  ['songhe', '你是隊上最強的人——沒有人教得動你，只能自己練。'],
+  ['daiban', '沒有人能教你，但也沒有人會擋你試任何東西。'],
+  ['meixi', '這裡沒有人在乎技術，你會學到怎麼自己一個人變強。'],
+];
+
+test('★B7-8 鑑別力★ 判準抓得到批 7 之前的每一句承諾式舊文案', () => {
+  for (const [id, text] of OLD_COPY_BEFORE_BATCH7) {
+    assert.ok(BROKEN_PROMISES.some((bad) => text.includes(bad)),
+      `${id} 的舊文案「${text}」通過了判準 ⇒ 這組黑名單是照改掉的字串配的，沒有鑑別力`);
+  }
+});
+
+test('★B7-8★ 升學畫面的抬頭句也吃同一道判準', () => {
+  // 覆審指出這一句原本內嵌在 DOM 建構裡、tests/ 全域 grep 不到＝零覆蓋。
+  assert.ok(typeof ADMISSION_COST_LINE === 'string' && ADMISSION_COST_LINE.length > 0);
+  for (const bad of BROKEN_PROMISES) {
+    assert.ok(!ADMISSION_COST_LINE.includes(bad),
+      `升學抬頭句還寫著「${bad}」：${ADMISSION_COST_LINE}`);
+  }
+  // 反向：改動前那一句（「弱的隊伍沒有人教得動你」）必須被擋下
+  const before = '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍沒有人教得動你。想清楚再選。';
+  assert.ok(BROKEN_PROMISES.some((bad) => before.includes(bad)),
+    '舊抬頭句沒被擋＝這條測試沒有鑑別力');
+});
+
+// ── B7-9 的機械守衛：不得偷偷長出玩家端的縮手入口 ────────────
+// 條文判定「不做 retract 第三檔」，但覆審指出**沒有任何機械守衛**擋未來加鈕。
+test('★B7-9 守衛★ 玩家輸入層不得出現 retract 字面（AI 側不受限）', () => {
+  for (const p of ['src/input/matchControls.js', 'src/app/matchLoop.js']) {
+    const src = readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+    assert.ok(!src.includes('retract'),
+      `${p} 出現了 retract ⇒ 玩家端長出縮手入口。依 uni-batch7-retract-measurement.md：`
+      + '玩家一人縮手勝率 50.9%→5.8%（−45.1pp），那是永遠不該按的假抉擇');
+  }
+});
+
+test('★交付範圍守衛★ chaseServe 刻意沒有集訓科目，這個決定要守得住', () => {
+  // 覆審 ⑤-1：交付項寫「補 TECH_DRILL_ORDER」，實作只補了 pressBlock，
+  // chaseServe 是動手後自行決定不補的——理由寫在 practiceMatch.js，但沒有測試守。
+  assert.ok(TECH_DRILL_ORDER.some((r) => r.tech === 'pressBlock'),
+    'pressBlock 沒有科目＝新招永遠沒有集訓科目，而且不會報錯');
+  assert.ok(!TECH_DRILL_ORDER.some((r) => r.tech === 'chaseServe'),
+    'chaseServe 被掛上科目了：sim 沒有「這一發是追發」的事件，判不出來 ⇒ '
+    + '會變成喊一件事判另一件事（同 feint 不給科目的先例）');
 });

@@ -307,6 +307,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         charge = null;
         jumpSignal = false;
         blockSignal = false;
+        pressArmed = false; // 批 7：板凳期間留著承諾＝回場後第一次攔網莫名壓手
         return [createIntent({ playerId, tick: game.tick })];
       }
       // 非扣球時刻＝重置進攻選擇旗標（下次進攻重新彈面板）
@@ -317,10 +318,17 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       if (mbChosen && !this.isMbMoment(game)) mbChosen = false;
       // 非防守指揮時刻＝重置 L 選擇旗標（digBias 本體由 matchLoop 管理生命週期）
       if (digChosen && !this.isLMoment(game)) digChosen = false;
-      // 批 7：球死＝壓手承諾作廢（沒攔到的那一波不留到下一球）
-      if (pressArmed && game.phase !== 'rally') pressArmed = false;
       const tick = game.tick;
       const me = game.players[playerId];
+      // 批 7：壓手承諾與封線指令 **同壽**（matchLoop.js:1144-1147 的 blockCall 生命週期）
+      // ——球死，或球權翻回我方（這一波的攔網機會已經過去）＝承諾作廢。
+      // ★不能只清「球死」★ 一球之內對手可能舉球多次（我方起球→攻擊→對方防起→再舉），
+      // 只清球死會讓上一波沒用掉的 press 殘留到下一波，變成沒按也壓手、而且 blockCall
+      // 已經是 null ⇒ B7-3 紅法二「代價落空、玩家白拿 press」。而 press 對非擦頂區
+      // 完全沒有副作用（game.js:1287 以下不讀 blockHand），殘留就是純增益。
+      if (pressArmed && (game.phase !== 'rally' || game.rally.possession === me.teamId)) {
+        pressArmed = false;
+      }
       const a = game.actors[playerId];
       let move = readMove(keys, joystick, TEAM_SIDE[me.teamId]);
 
@@ -577,6 +585,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       charge = null;
       jumpSignal = false;
       blockSignal = false;
+      // 批 7：壓手是**替某一個人**押的方向，不得跟著控制權跑到別人身上
+      // （matchLoop 的 syncControlled 在 rally 中就會切人）
+      pressArmed = false;
     },
     getPlayerId() { return playerId; },
     // NBA2K 式按鈕路徑（actionButtons UI 呼叫）；px/py＝拇指螢幕座標（蓄力圈定位用）

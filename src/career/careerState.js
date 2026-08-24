@@ -216,14 +216,18 @@ export function resolveForfeit(career) {
   const entry = career.schedule.find((m) => m.id === pid);
   const bestOf = [3, 5].includes(entry?.format) ? entry.format : 1;
   const against = bestOf > 1 ? Math.ceil(bestOf / 2) : 25; // bo3⇒2 局、bo5⇒3 局、bo1⇒25 分
-  return recordResult(career, { matchId: pid, won: false, scoreFor: 0, scoreAgainst: against });
+  return recordResult(career, {
+    matchId: pid, won: false, scoreFor: 0, scoreAgainst: against, forfeit: true,
+  });
 }
 
 // 記錄一場結果（不可變更新）；同場重複記錄＝原樣返回（局終畫面重入保護）
 // gp＝本場獲得的成長點數（累加進 growthPoints）；stats＝表現摘要（成長畫面顯示用）
 // W4(P4) Q8：sets＝多局系列各局終分（[{A,B}]；bo1 不帶）——box score／生涯結算消費
 // W4(P4) Q9：box＝單場全員記帳 {team, oppAce, mentor}（結算頁/導師賽後鏈消費）
-export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp = 0, stats = null, sets = null, box = null }) {
+// forfeit（2026-08-24 Sawmah 裁定）：這一場是不是棄賽。用可選欄位模式寫入，
+// 非棄賽路徑的 result 逐值不變（舊存檔讀出來 undefined＝當作正常完賽）。
+export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp = 0, stats = null, sets = null, box = null, forfeit = false }) {
   const entry = career.schedule.find((m) => m.id === matchId);
   if (!entry) throw new Error(`recordResult：賽程裡沒有比賽 ${matchId}`);
   if (career.results.some((r) => r.matchId === matchId)) return career;
@@ -243,6 +247,7 @@ export function recordResult(career, { matchId, won, scoreFor, scoreAgainst, gp 
         ...(stats ? { stats } : {}),
         ...(sets ? { sets } : {}),
         ...(box ? { box } : {}),
+        ...(forfeit ? { forfeit: true } : {}),
       },
     ],
   };

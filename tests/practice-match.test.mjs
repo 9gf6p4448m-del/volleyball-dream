@@ -532,3 +532,28 @@ test('拆隊：玩家轉位後也拆得出合法兩隊（紅隊錨＝玩家的�
     }
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// 對抗覆審 MEDIUM-2：位置上做不到的科目不得指派
+// ════════════════════════════════════════════════════════════
+// 自由人恆後排，而 MB 讀心面板吃 isFrontRow（matchControls.js:57）⇒ 他永遠開不了
+// 那個面板、壓手科目的 countPressBlocks 恆 0。喊了＝白燒一格集訓名額。
+test('★MEDIUM-2★ 自由人學會壓手也不會被指派壓手科目（他做不到）', () => {
+  const libero = { currentRole: 'libero' };
+  const drills = drillsFor({
+    player: libero, seasonIndex: 3, techniques: { pressBlock: 1 },
+  });
+  assert.ok(!drills.some((d) => d.id === 'press-block'),
+    '自由人被喊了壓手科目＝一整格集訓名額判定恆 0，白燒');
+  assert.ok(drills.length >= DRILLS_MIN, '排除之後仍要湊滿保底科目，不能開天窗');
+});
+
+test('★MEDIUM-2 反向對照★ 同一份技術，前排位置照樣拿得到壓手科目', () => {
+  for (const role of ['middle', 'outside', 'opposite']) {
+    const drills = drillsFor({
+      player: { currentRole: role }, seasonIndex: 3, techniques: { pressBlock: 1 },
+    });
+    assert.ok(drills.some((d) => d.id === 'press-block'),
+      `${role} 拿不到壓手科目＝排除條件寫太寬，把做得到的人也擋了`);
+  }
+});

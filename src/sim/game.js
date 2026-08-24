@@ -205,6 +205,18 @@ export const TUNING = {
   // t10-4b 探針 M1 基準；Q4 裁定＝調參項不進驗收閘）
   BLOCK_EDGE_FRAC: 0.15,    // 側緣區佔帶半寬比例（dx 落最外 15% ＝擦側）
   BLOCK_TOP_BAND: 0.14,     // 擦頂窄條厚度 m（手頂邊＋球半徑往下算；0.15/0.14 掃描定＝graze 率 10.68/局 距錨 −2.5%）
+  // ★壓手的代價（2026-08-24 Sawmah 裁定「走 A」）★
+  // press 原本只在 zone==="top" 那一支生效、其餘兩區完全不讀 blockHand
+  // ⇒ 結構上不可能有代價（實測：全樣本 vertical 22.7% vs press 24.3%，白拿 +1.6pp）。
+  // 手伸過網＝手往前不往上，於是：
+  //   · 擦側 → 手更前伸、側邊更空，橫向偏折加大（更容易被打手出界）
+  //   · 正面 → 手在網的另一側，正面攔死的有效面積變小，攔死機率下降
+  // 壓手因此變成「賭這球會擦到我手頂」：賭對大賺（39.3%→78.6%），
+  // 賭錯（62.5% 正面＋14.6% 擦側）要付錢。
+  // ⚠ 兩個乘數**先以中性值 1.0 落地**（行為逐值不變、sim-hash 不動），
+  //   幅度由 tools/press-cost-sweep.mjs 掃出來再定——不憑感覺挑係數。
+  BLOCK_PRESS_SIDE_MUL: 1.0,
+  BLOCK_PRESS_BODY_MUL: 1.0,
   BLOCK_GRAZE_SLOW: 0.45,   // 擦側後穿越速度保留比（減速但仍常飛向深區/界外）
   BLOCK_GRAZE_TOP_SLOW: 0.75, // 擦頂後速度保留比（指尖擦過＝球保留大半前速衝深區/底線外）
   // §十-4b 意圖層：tool 路線（打手出界的攻擊端）。被牆蓋住的強攻有機率改瞄
@@ -1293,11 +1305,19 @@ function tryBlock(state, toTeam, ev) {
       b.vy = 0.9 + blownHash(state, `${best.p.id}:gy`) * 0.8;
     } else {
       // 擦側＝帶外緣：球被向外側撥（撥向球相對手中心的那一側）——改變救球幾何，
-      // 多數仍留場內可救（探針實測未觸出界僅 ~6%）；出側線屬長尾
+      // 多數仍留場內可救；出側線屬長尾。
+      // ★2026-08-24 更正為實測值★（1750 局、side 觸網 n=5274，來源＝
+      // docs/kickoffs/uni-batch7-retract-measurement.md）：擦側之後攔網方**直接失分
+      // 39.2%**，但其中真正出界只有 **3.8%**——大宗是「落地未接」35.4%（球留在界內
+      // 卻沒人救到）。舊註解那句「~6%」既偏高、又只講了出界那一半。
       const dir = Math.sign(b.x - best.x)
         || (blownHash(state, `${best.p.id}:gd`) < 0.5 ? -1 : 1);
       b.vz *= TUNING.BLOCK_GRAZE_SLOW;
-      b.vx = dir * (1.2 + blownHash(state, `${best.p.id}:gx`) * 2.0);
+      // 壓手的代價之一：手前伸 ⇒ 側邊更空，撥出去的橫向速度更大（更容易出界）。
+      // ★乘在既有的 blownHash 結果上，不多消費 rand★——不改變隨機序列，
+      // 只改變這一觸的結果，行為差異才歸因得到手態本身。
+      const sideMul = best.actor.blockHand === 'press' ? TUNING.BLOCK_PRESS_SIDE_MUL : 1;
+      b.vx = dir * (1.2 + blownHash(state, `${best.p.id}:gx`) * 2.0) * sideMul;
       b.vy = 1.2 + blownHash(state, `${best.p.id}:gy`) * 1.0;
     }
     const r = state.rally;
@@ -1316,7 +1336,11 @@ function tryBlock(state, toTeam, ev) {
   // 【第三層】屬性擲骰（手身區才走到這）：`block` 屬性**只**決定碰到之後的結果分佈，
   // 不決定有沒有碰到（那是第一層幾何的事）。stage 5 情蒐讀取＝對被讀者的慣用線收攏
   //（假動作的 deceive 骰在上方——騙贏免讀）
-  const chance = (0.12 + best.p.attributes.block * 0.004) * scoutBlockMul(state, toTeam);
+  // 壓手的代價之二：手在網的另一側 ⇒ 正面能封住的有效面積變小，攔死機率下降。
+  // 同樣只乘在既有機率上，不多消費 rand。
+  const bodyMul = best.actor.blockHand === 'press' ? TUNING.BLOCK_PRESS_BODY_MUL : 1;
+  const chance = (0.12 + best.p.attributes.block * 0.004)
+    * scoutBlockMul(state, toTeam) * bodyMul;
   if (rand(state) >= chance) return false; // 手身也沒成形（手型/時差）＝乾淨過網
 
   // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零

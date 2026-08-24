@@ -89,8 +89,6 @@ export function countServeAces(events, playerId, myTeam, style) {
   return n;
 }
 
-// 後排 pipe 攻擊的得分次數。同一套歸因（得分前最後一次觸球是我的扣球），
-// 額外要求那一扣的 `routeKind === 'pipe'`——**前後排靠這個欄位分，不靠座標猜**。
 // 大學卷批 7（08-24）：壓手攔網成功次數。判準＝sim 自己發的 BLOCK_TOUCH 事件帶
 // `pressed: true`（game.js:1281 那一支，只有 zone==='top' 且 blockHand==='press' 才會有）——
 // ★不是「按了壓手鈕幾次」★：按了但沒擦到頂不算，那樣才對得起台詞「把球壓回去」。
@@ -103,6 +101,8 @@ export function countPressBlocks(events, playerId, myTeam) {
   return n;
 }
 
+// 後排 pipe 攻擊的得分次數。同一套歸因（得分前最後一次觸球是我的扣球），
+// 額外要求那一扣的 `routeKind === 'pipe'`——**前後排靠這個欄位分，不靠座標猜**。
 export function countPipeKills(events, playerId, myTeam) {
   let n = 0;
   let pending = false;
@@ -423,7 +423,11 @@ export const TECH_DRILL_ORDER = [
   { tech: 'floatServe', drill: 'float-ace' },
   { tech: 'jumpServe', drill: 'jump-ace' },
   { tech: 'callPlay', drill: 'call-play' },
-  { tech: 'pressBlock', drill: 'press-block' },
+  // ★notRoles＝位置上做不到就不喊★（覆審 MEDIUM-2）：自由人恆後排，
+  // 而 MB 讀心面板吃 isFrontRow（matchControls.js:57）⇒ 他永遠開不了那個面板、
+  // countPressBlocks 恆 0。喊了就是白燒一格集訓名額，與本檔「判不到的科目寧可
+  // 不喊」的鐵律相違（見檔頭，以及 feint 沒有科目的理由）。
+  { tech: 'pressBlock', drill: 'press-block', notRoles: ['libero'] },
   // ★chaseServe 刻意沒有科目★ 同 feint 的先例（見本區塊檔頭註解）：sim 沒有
   // 「這一發是追發」的事件——發球 aim 指向某人，落地後只剩一般的發球結果，
   // 判不出「他是不是在追發」。硬掛一個「發球拿 ACE」會變成喊一件事判另一件事，
@@ -472,8 +476,10 @@ export function drillsFor({ player, seasonIndex = 2, techniques = [], flags = {}
     const def = DRILL_DEFS[id];
     if (def && out.length < DRILLS_MAX && !out.includes(def)) out.push(def);
   };
-  for (const { tech, drill } of TECH_DRILL_ORDER) {
-    if (learned.has(tech)) push(drill);
+  for (const { tech, drill, notRoles } of TECH_DRILL_ORDER) {
+    if (!learned.has(tech)) continue;
+    if (notRoles?.includes(role)) continue; // 位置上做不到＝不喊（見 TECH_DRILL_ORDER）
+    push(drill);
   }
   // 轉位後首次集訓＝該位置的基本科目（新位置的第一次實際使用）；
   // 這屆沒學到任何判得到的新東西時，同一格科目改當保底

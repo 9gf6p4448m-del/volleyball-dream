@@ -139,6 +139,12 @@ function countUp(node, target, delayMs, durMs = 320) {
   requestAnimationFrame(step);
 }
 
+// 升學畫面的抬頭句。★抽成常數是為了讓它吃得到 B7-8 的判準★——覆審指出
+// 這一句原本內嵌在 DOM 建構裡，tests/ 全域 grep 不到，等於零覆蓋。
+// 內容受 uni-teach.test.mjs 的「不得承諾技術快慢」黑名單約束（批 7 拍板 4：
+// 技術軸各校打平，代價只剩球權與戰績兩軸）。
+export const ADMISSION_COST_LINE = '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍陪你贏不到什麼。想清楚再選。';
+
 export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPractice = null }) {
   const root = el('div', [
     'position:fixed', 'inset:0', 'z-index:30', 'display:none',
@@ -2443,7 +2449,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     `這樣的成績，有 ${schools.length} 所大學向你開了門。`));
     overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
       'text-align:center', 'max-width:560px', 'margin-bottom:4px'],
-    '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍陪你贏不到什麼。想清楚再選。'));
+    ADMISSION_COST_LINE));
     for (const u of schools) {
       overlay.appendChild(schoolCard(u, placements[u.id] ?? [], (picked) => {
         overlay.remove();

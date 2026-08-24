@@ -647,8 +647,11 @@ function matchesWhen(when, { career, last, next, seasonIndex = 1 }) {
       // 沒進賽後畫面」的存檔之後仍補得到；=== 會讓錯過的人一輩子學不到這一招。
       case 'uniLeaguePlayed': {
         const league = (career.schedule ?? []).filter((m) => m?.round === 'league');
+        // ★棄賽不算「打完」★（2026-08-24 Sawmah 裁定）：學長教你東西是因為看了你
+        // 打球，棄賽三場就領走傳授在敘事上也說不通。標記由 resolveForfeit 寫入
+        // （careerState.js 的 recordResult，可選欄位）；舊存檔無此欄＝當作正常完賽。
         const done = league.filter(
-          (m) => career.results.some((r) => r.matchId === m.id),
+          (m) => career.results.some((r) => r.matchId === m.id && !r.forfeit),
         ).length;
         if (done < val) return false;
         break;
