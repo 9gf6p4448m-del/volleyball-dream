@@ -32,7 +32,12 @@ const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切�
 // 2026-08-24：真機（尤其 standalone PWA）拿不到 console 時的唯一診斷管道——
 // 任何未捕捉錯誤直接蓋一層文字疊層畫在螢幕上，不再無聲吞掉變成空白畫面。
 function showFatalError(err) {
-  const msg = err?.stack || err?.message || String(err);
+  // Safari 的 .stack 只有 call frame、不含錯誤訊息本身（跟 V8 不同）——
+  // 訊息與 stack 要分開組，只看 .stack 會漏看到底哪個錯誤（08-24 實測踩過）。
+  const header = err?.name || err?.message
+    ? `${err.name ?? 'Error'}: ${err.message ?? ''}`
+    : String(err);
+  const msg = err?.stack ? `${header}\n${err.stack}` : header;
   let el = document.getElementById('fatal-error');
   if (!el) {
     el = document.createElement('div');
@@ -107,7 +112,7 @@ async function showCareerEntry(ctx) {
   // 「剛打完高中三屆」存檔寫進**指定的槽**，免得為了測升學要真的打三年。
   // ★ 兩個參數缺一不啟動、且無預設槽 ★ 判定全在 devSeedRequest（單一真相源），
   // 這裡不再自己判一次——手滑的網址不得洗掉玩家的生涯。
-  const devReq = devSeedRequest(params);
+  const devReq = devSeedRequest(ctx.params);
   if (devReq) {
     const synthetic = buildSyntheticSave({ finish: devReq.finish });
     if (synthetic) {

@@ -11,6 +11,10 @@ export default defineConfig({
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   base: './', // 相對路徑：GitHub Pages 子路徑或任何靜態主機都能跑
   build: {
+    // 08-24：真機（尤其手機）拿不到 console，排錯只能靠 fatal-error 疊層印出的
+    // 極簡 stack；沒有 sourcemap 那串 minified 位置（Fl@...js:6:2356）等於無法定位。
+    // 玩家不會主動載入 .map（只有接開發者工具才會抓），不影響一般載入體積。
+    sourcemap: true,
     rollupOptions: {
       output: {
         // Phase 3 W1 bundle 分割：three（表現層最大宗）／sim 純核心／ui+career 面板層。
