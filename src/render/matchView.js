@@ -5,7 +5,10 @@ import * as THREE from 'three';
 import { SIM_DT } from '../sim/constants.js';
 import { TEAM_SIDE, isFrontRow } from '../sim/rotation.js';
 import { serverId } from '../sim/match.js';
-import { createGeoCharacter, createGeoPool, BASE_H } from './geoCharacter.js';
+import {
+  createGeoCharacter, createGeoPool, BASE_H, getNumberTexture,
+} from './geoCharacter.js';
+import { numbersForRoster, initialOnCourtIds } from '../career/teamKit.js';
 import { createGeoAnimator, contactSeqFor } from './geoAnimator.js';
 import { STAMINA, tierOf, staminaPerfMul } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
@@ -71,11 +74,25 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   let tagsVisible = true;   // 4.6 §2 重演特寫：全員標籤總開關（賽中恆 true）
   const castShadow = quality.shadowSize > 0;
 
-  // InstancedMesh 池（每種幾何一池＝10 draw calls，取代每人 16 個獨立 Mesh）；
+  // InstancedMesh 池（每種幾何一池＝12 draw calls，取代每人 16+ 個獨立 Mesh）；
   // root 骨架不再加入 scene——它只是不可見的關節 Object3D 樹，逐幀由 sync() 手動
   // updateMatrixWorld 後讀 matrixWorld 寫進池（見下方 sync 尾端）
   const playerList = Object.values(game.players);
   const pool = createGeoPool(scene, castShadow, playerList.length);
+
+  // 背號（配色卷批 2 N2/N4，F1/F2 對抗覆審修正 2026-08-24）：全名冊決定論配號——
+  // 涵蓋板凳，賽中換人上場的替補在建 game 當下就已經有號碼（numbersForRoster，
+  // src/career/teamKit.js，純函式、與測試共用同一份實作，見 F2）。
+  // ★ F1 修前這裡只給「開場上場 7 人」配號——applySubstitution 把板凳 id 寫進
+  // rotations 後，該球員 numberSlots=null，整場沒背號。現在號碼與「現在站不站在
+  // 場上」脫鉤：numberSlots 一律建（cheap，只是關節樹裡的 Object3D，不是 Mesh），
+  // 只有「要不要現在就建看得見的 Mesh」才分開場/惰性兩批（見下方 eagerNumberIds）。
+  const numberMap = numbersForRoster(playerList);
+  // 開場就建 Mesh 的名單＝上場 14 人（N4 mesh 上限＝14×2＝28≤30，見 initialOnCourtIds）；
+  // 其餘板凳球員的 Mesh 留到 routeEvents 的 SUBSTITUTION 分支惰性補建，不計入這個上限。
+  const eagerNumberIds = new Set([
+    ...initialOnCourtIds(game, 'A'), ...initialOnCourtIds(game, 'B'),
+  ]);
 
   const units = {};
   for (const p of playerList) {
@@ -83,10 +100,15 @@ export async function createMatchView(scene, quality, game, initialControlledId,
     // 字面，餵名字才會有真正的左手分佈，且慣用手跟著人不跟著輪轉槽位
     const rig = createGeoCharacter(
       pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero', p.name,
-      kits?.[p.teamId] ?? null,
+      kits?.[p.teamId] ?? null, numberMap[p.id] ?? null,
     );
     rig.root.rotation.order = 'YXZ'; // 先朝向(y)再前傾(x)——魚躍飛撲沿朝向前方傾倒才正確
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網
+    // 背號面片（N4）：只有開場上場者現在就建 Mesh；其餘 rig.numberSlots 仍在，
+    // 等 SUBSTITUTION 事件把他換上場時才惰性補建（見 routeEvents）
+    const buildNow = rig.numberSlots && eagerNumberIds.has(p.id);
+    const numberBack = buildNow ? makeNumberPlate(scene, rig.numberSlots.back) : null;
+    const numberFront = buildNow ? makeNumberPlate(scene, rig.numberSlots.front) : null;
     units[p.id] = {
       rig,
       animator: createGeoAnimator(rig),
@@ -98,6 +120,8 @@ export async function createMatchView(scene, quality, game, initialControlledId,
       reachAction: REACH_ACTION.SPIKE, // reachWindow 的動作別（見 REACH_KIND_ACTION）
       reachW: 0,         // 夠球包絡的平滑值（0..1）
       contactArm: null,  // 擊球動作提前觸發的登記（見 triggerContact／CONTACT_ARM_TTL）
+      numberBack,
+      numberFront,
     };
   }
   // 觸發動作＝同時記下這個動作該用哪一組手臂夠球、以及該用哪個可及半徑（表格未列＝沿用上次）
@@ -132,6 +156,20 @@ export async function createMatchView(scene, quality, game, initialControlledId,
   // 比賽事件 → 姿勢觸發（表現層唯讀路由）
   function routeEvents(events, gameState) {
     for (const e of events) {
+      // F1（背號對抗覆審修正）：SUBSTITUTION 沒有 e.playerId（形狀是
+      // {type,tick,team,inId,outId}，見 sim/game.js:1683），走獨立分支——進場者
+      // （e.inId）在建 game 時就已經有號碼（numbersForRoster 涵蓋全名冊），只是
+      // 開場沒建看得見的 Mesh（省 mesh 預算，見上方 eagerNumberIds／N4）；這裡補上，
+      // 且只補一次（numberBack 已存在＝之前建過，不重建；不動 e.outId——他仍保留
+      // 原本的背號 Mesh，繼續跟著板凳位置畫，同真實球員坐板凳仍穿著球衣號碼）
+      if (e.type === 'SUBSTITUTION') {
+        const inU = units[e.inId];
+        if (inU && !inU.numberBack && inU.rig.numberSlots) {
+          inU.numberBack = makeNumberPlate(scene, inU.rig.numberSlots.back);
+          inU.numberFront = makeNumberPlate(scene, inU.rig.numberSlots.front);
+        }
+        continue;
+      }
       const u = units[e.playerId];
       if (!u) continue;
       if (e.type === 'SERVE') {
@@ -431,6 +469,14 @@ export async function createMatchView(scene, quality, game, initialControlledId,
         // 再把各部件 slot 的世界矩陣寫進 InstancedMesh 池
         u.rig.root.updateMatrixWorld(true);
         for (const part of u.rig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+        // 背號面片（N4）：貼齊點的世界矩陣直接整份複製到獨立 Mesh——同上一行的手法，
+        // 不重算一次位置/旋轉數學。numberBack 有值代表 numberFront／rig.numberSlots 皆有值
+        if (u.numberBack) {
+          u.numberBack.matrix.copy(u.rig.numberSlots.back.node.matrixWorld);
+          u.numberBack.matrixWorldNeedsUpdate = true;
+          u.numberFront.matrix.copy(u.rig.numberSlots.front.node.matrixWorld);
+          u.numberFront.matrixWorldNeedsUpdate = true;
+        }
 
         if (id === highlightId) {
           ring.position.x = x;
@@ -503,6 +549,27 @@ function staminaTagColor(gameState, id) {
   const v = gameState.stamina[id] ?? 1;
   if (v < STAMINA.TIER2_BELOW) return '#ff5b5b';
   return v < STAMINA.TIER1_BELOW ? '#ffd166' : null;
+}
+
+// ---- 背號面片（配色卷批 2，N2/N4）----
+// rig.numberSlots.{back,front} 只是關節樹裡的貼齊點（Object3D，不進 scene）；這裡才建
+// 真正要畫的 Mesh，加進 scene，逐幀由 sync() 把貼齊點的 matrixWorld 複製過來（同 pool
+// writeMatrix 的手法）。alphaTest 而非 transparent 混色：數字是二值鏤空貼圖，用 cutout
+// 避免透明排序在快速移動的球員身上抖動。
+function makeNumberPlate(scene, slot) {
+  const geo = new THREE.PlaneGeometry(slot.size, slot.size);
+  const mat = new THREE.MeshBasicMaterial({
+    map: getNumberTexture(slot.number, slot.color),
+    alphaTest: 0.4,
+    side: THREE.DoubleSide, // 背號貼齊點的 rotation.y 已定向；雙面保險，防浮空/穿模量測誤差下被剔
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.matrixAutoUpdate = false; // 手動整矩陣複製（見 sync()），不吃 position/rotation/scale
+  mesh.renderOrder = 3;
+  mesh.frustumCulled = false; // 同球員本體池的理由：緊貼快速移動角色，靜態 bbox 常誤剔
+  scene.add(mesh);
+  return mesh;
 }
 
 // ---- 頭上標籤（canvas sprite）----

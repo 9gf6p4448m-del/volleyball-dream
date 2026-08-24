@@ -5,13 +5,34 @@
 // 也避開「每隊一個 WebGL context」的瀏覽器上限雷——recruitPortrait 檔頭那顆）。
 // 每隊兩個 rig（場員＋自由人）全數建好，未選中的停在地板下 y=-60；
 // 選隊＝把那一對搬到鏡頭前，零重建、零 dispose。
-import { createGeoPool, createGeoCharacter, BASE_H } from './geoCharacter.js';
+import * as THREE from 'three';
+import {
+  createGeoPool, createGeoCharacter, BASE_H, getNumberTexture,
+} from './geoCharacter.js';
 import { applyPortraitPose, pickPortraitPose } from './recruitPortrait.js';
 import { OPPONENTS } from '../career/opponents.js';
 import { UNIVERSITIES } from '../career/universities.js';
-import { kitFor, cssColor } from '../career/teamKit.js';
+import { kitFor, cssColor, numbersForRoster } from '../career/teamKit.js';
 
 const PARK_Y = -60; // 未選中隊伍的停車場（地板下，永不入鏡）
+
+// 背號面片 Mesh（同 matchView.makeNumberPlate 的手法：貼齊點只是關節樹裡的
+// Object3D，實際要畫的 Mesh 另建、加進 scene，逐幀複製貼齊點的 matrixWorld）
+function makeNumberPlate(scene, slot) {
+  const geo = new THREE.PlaneGeometry(slot.size, slot.size);
+  const mat = new THREE.MeshBasicMaterial({
+    map: getNumberTexture(slot.number, slot.color),
+    alphaTest: 0.4,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.matrixAutoUpdate = false;
+  mesh.renderOrder = 3;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+}
 
 export function runKitPreview(ctx) {
   ctx.loadingEl.remove();
@@ -24,12 +45,38 @@ export function runKitPreview(ctx) {
   ];
 
   const pool = createGeoPool(ctx.scene, false, teams.length * 2);
+  // 配色卷批 2（N6，2026-08-24 改用 numbersForRoster）：預覽也要看得到背號＋trim——
+  // 原本場員/自由人固定掛 1/9 號，使用者裁定改散號後改成跟正式比賽同一份配號函式
+  // 推導，讓使用者在 devkit 就看得到散號效果（不是治具另外編一套假數字）。
+  //
+  // ★ N6 覆驗抓到的卡死 bug（2026-08-25）★ 這裡的 teamId 只是拿來給
+  // numbersForRoster 分組（跟 createGeoCharacter 實際吃的 t.teamId 'A'/'B' 是兩件
+  // 事——後者決定球衣側別預設色，這裡只決定「跟誰共用同一個號碼命名空間」）。
+  // 原本誤用 t.teamId：16 個預覽隊的球衣＋自由人全掛在同一個 'B' 命名空間裡＝32 人
+  // 擠 1–25 個號碼，一定會撞滿、觸發 numbersForRoster 的撞號遞補；本檔改成有界迴圈
+  // 後不再卡死，但語意仍是錯的——每張預覽卡片本來就是「一隊」，該用 t.id（每隊
+  // 唯一）分組，讓散號在每隊自己的 7–8 人小名冊裡各自推導，不跟其他 15 隊搶號碼。
+  const numberRoster = teams.flatMap((t) => [
+    { id: `${t.id}-f`, teamId: t.id },
+    { id: `${t.id}-l`, teamId: t.id },
+  ]);
+  const numberMap = numbersForRoster(numberRoster);
   const entries = teams.map((t) => {
-    const field = createGeoCharacter(pool, `${t.id}-f`, t.teamId, BASE_H, false, '', t.kit);
-    const libero = createGeoCharacter(pool, `${t.id}-l`, t.teamId, BASE_H - 0.1, true, '', t.kit);
+    const field = createGeoCharacter(
+      pool, `${t.id}-f`, t.teamId, BASE_H, false, '', t.kit, numberMap[`${t.id}-f`],
+    );
+    const libero = createGeoCharacter(
+      pool, `${t.id}-l`, t.teamId, BASE_H - 0.1, true, '', t.kit, numberMap[`${t.id}-l`],
+    );
     applyPortraitPose(field.joints, pickPortraitPose('outside'));
     applyPortraitPose(libero.joints, pickPortraitPose('libero'));
-    for (const rig of [field, libero]) rig.root.position.set(0, PARK_Y, 0);
+    for (const rig of [field, libero]) {
+      rig.root.position.set(0, PARK_Y, 0);
+      // 背號面片（N6）：貼齊點在 rig.numberSlots，這裡建對應的真實 Mesh，掛回 rig 上
+      // 供下面 frame() 逐幀複製 matrixWorld（同 matchView 的手法）
+      rig.numberBack = makeNumberPlate(ctx.scene, rig.numberSlots.back);
+      rig.numberFront = makeNumberPlate(ctx.scene, rig.numberSlots.front);
+    }
     return { ...t, field, libero };
   });
   pool.finishColors();
@@ -84,6 +131,10 @@ export function runKitPreview(ctx) {
       for (const rig of [t.field, t.libero]) {
         rig.root.updateMatrixWorld(true);
         for (const part of rig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+        rig.numberBack.matrix.copy(rig.numberSlots.back.node.matrixWorld);
+        rig.numberBack.matrixWorldNeedsUpdate = true;
+        rig.numberFront.matrix.copy(rig.numberSlots.front.node.matrixWorld);
+        rig.numberFront.matrixWorldNeedsUpdate = true;
       }
     }
     pool.markDirty();
