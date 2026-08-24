@@ -254,9 +254,14 @@ init();
 // autoUpdate 的更新在「下次重整」才生效＝玩家永遠慢一版；改為新 SW 接管瞬間
 // 自動重載一次拿到最新版。只在載入初期（<15s）重載——絕不打斷進行中的比賽
 if ('serviceWorker' in navigator) {
+  // 2026-08-24：全新安裝（無舊 controller）不得重載——當下載入的本來就是最新版，
+  // 重載沒有任何好處，只有「三D場景/生涯選單初始化中途被打斷」的風險。
+  // standalone PWA（尤其 iOS 剛裝到主畫面首次開啟）疑似卡在這條路徑上（空白畫面
+  // 只剩 FPS 角標）——這段只該在「真的有舊版本被取代」時才觸發。
+  const hadController = !!navigator.serviceWorker.controller;
   let swRefreshed = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (swRefreshed || performance.now() > 15000) return;
+    if (!hadController || swRefreshed || performance.now() > 15000) return;
     swRefreshed = true;
     window.location.reload();
   });
