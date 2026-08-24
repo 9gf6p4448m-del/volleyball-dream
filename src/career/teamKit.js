@@ -43,6 +43,12 @@ export function checkKitPalette(entries) {
   const bad = [];
   for (const { id, kit } of entries) {
     if (!kit) { bad.push(`${id}: 缺 kit`); continue; }
+    // 欄位齊備守門（覆審 MEDIUM 08-24）：缺 shorts/trim 時 THREE.Color 吃到
+    // undefined 會靜默變白、任何色距檢查都抓不到——在資料層就擋下
+    for (const f of ['jersey', 'shorts', 'trim']) {
+      if (kit[f] == null) bad.push(`${id}: kit 缺 ${f}`);
+      if (kit.libero?.[f] == null) bad.push(`${id}: kit.libero 缺 ${f}`);
+    }
     for (const [tag, c] of [['球衣', kit.jersey], ['自由人', kit.libero?.jersey]]) {
       if (c == null) { bad.push(`${id}: 缺${tag}色`); continue; }
       if (colorDistance(c, OUR_ANCHORS.jersey) < READABILITY_MIN) {

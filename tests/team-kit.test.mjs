@@ -34,6 +34,10 @@ test('K2 鑑別力對照：壞色票必被 checkKitPalette 抓到（恆空的檢
   const flat = structuredClone(entries);
   flat[3].kit.libero.jersey = flat[3].kit.jersey;
   assert.ok(checkKitPalette(flat).some((v) => v.includes('隊內自由人對比')));
+  // ⑤部分缺欄位（覆審 MEDIUM）：缺 shorts 會靜默變白，必須在資料層被抓
+  const holey = structuredClone(entries);
+  delete holey[4].kit.shorts;
+  assert.ok(checkKitPalette(holey).some((v) => v.includes('缺 shorts')));
   // ④參照組：已知「該撞」的距離都在門檻下（門檻不是恆真式）
   assert.ok(colorDistance(0xf4f7ff, 0xfff1c9) < 100); // 白 vs 米白
   assert.ok(colorDistance(0xffc531, 0xf59d1e) < 100); // 金 vs 橙金
