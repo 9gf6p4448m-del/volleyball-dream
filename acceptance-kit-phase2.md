@@ -42,3 +42,15 @@
 
 1. **隊友卡片排除（V2/V3 的 7 處改 6 處）**：凍結稿把生涯數據頁隊友卡片（careerScreen.js:2619 `${OUR_TEAM_NAME}・那三年的隊友`）列為第 7 個動態隊名消費端，實作時發現其渲染的是升學時封存的高中名冊（`loadHighSchoolRoster`，careerStore.js:369）、只在大學章出現、語意＝高中歷史——掛動態隊名會把大學校名印在高中歷史卡上。**原標準錯在**：把「畫面上出現我方隊名」全數視為「指涉現任隊伍」，漏判此卡指涉封存歷史；**現在才知道**因凍結稿產出時無此卡的渲染脈絡。使用者裁定：比照 careerScreen.js:2259 排除、維持靜態 `OUR_TEAM_NAME`。V2/V3 的「7 處」據此改為 6 處（對陣抬頭／戰績列／名次板／情蒐行／球場看板／戰術板），排除清單增列此處。
 2. **E5 改消費端章節感知**：v2 裁定三指定即時季用 `careerStage()` 判收束，對抗覆審實證 `careerStage()` 只認高中賽程 schema、對大學章恆回 `'national'`（打完 8 場的大學球季恆標「進行中」）。**原標準錯在**：「careerStage＝章節脫鉤的收束事實」這個前提對大學章不成立；**現在才知道**因大學賽程 schema（`stage:'uni'`/`round:'league'`）是批 6 後才有、裁定時未實測。使用者裁定：消費端章節感知——高中章照 `careerStage`、大學章比照既有 `uniSeasonDone` 先例（league 全有結果＝收束），單一定義收斂在 `liveSeasonOngoing()`（careerScreen.js）。V6 語意不變、涵蓋面擴及大學章（加嚴），新增測試 E5④⑤守門。
+
+---
+
+## 結案（2026-08-25，main fbb5fa6／gh-pages 784b732）
+
+**已知債入帳**（ruling §六＋施工期新增）：
+- 債 A：大學章儀式演出穿藍金的換裝落差（題 1-A 案代價，使用者已知悉）
+- 債 B：我方 kit 雙源（高中＝回落側別預設／大學＝kits.A）；職業卷添第三源時開單源化整併卷
+- 債 C（施工期新增，覆審 LOW）：三份「大學季收束」定義未對齊（chapterCompleted 純年數／careerStage 對 stage:'uni' 死鎖 'national'／liveSeasonOngoing league 全有結果）——接大二前必先對齊，已註記於 careerScreen.js TODO(uni-finale) 旁
+- 觀察（照舊排隊，不入本卷）：大學章場館直立橫幅仍「全國高中排球錦標賽」（venue 語意、非隊名家族，與對陣徽章/beatStage/觀眾席同列既有排除清單）
+
+**驗收證據索引**：P1 sim-hash 探針合計＝34772c06e02243fd（實跑）；V1 1668/1668 綠；P2/V3 瀏覽器實開海硯大學一場（對陣抬頭/戰績列/看板/戰術板浮水印＝海硯大學、我方 libero 冰藍 0xd0e0ea 在場截圖、對手梅溪照舊）；P3/V2 高中新生涯＋快速比賽實開（藍金/預設藍紅、看板遊隼高中照舊）；練習賽＝node E4 測試（quick/practice teamName=null）＋git diff 零觸及 practiceMatch.js，未瀏覽器實開（紅白拆隊不吃 kit 池）；V4 grep 命中＝排除清單逐一吻合；V5 TODO 標籤在 careerScreen.js:2278；V6 高中末屆＋大學進行中/收束雙向（node E5①-⑤＋瀏覽器兩章實證）；V7 薄餘裕註記在本檔 v2 回填節。
