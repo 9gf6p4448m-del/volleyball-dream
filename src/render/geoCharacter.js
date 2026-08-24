@@ -284,8 +284,8 @@ export function createGeoCharacter(
     front.position.set(0, 0.36, 0.14); // 胸前，略高於背號（真實球衣慣例）；面向 +Z
     spine.add(front);
     numberSlots = {
-      back: { node: back, number, color: textColor, size: 0.2 },
-      front: { node: front, number, color: textColor, size: 0.09 },
+      back: { node: back, number, color: textColor, size: 0.30 },
+      front: { node: front, number, color: textColor, size: 0.13 },
     };
   }
 
@@ -309,7 +309,7 @@ export function getNumberTexture(number, colorHex) {
   const key = `${number}:${colorHex}`;
   const hit = numberTextureCache.get(key);
   if (hit) return hit;
-  const size = 128;
+  const size = 256;
   let canvas;
   if (typeof document !== 'undefined') {
     canvas = document.createElement('canvas');
@@ -317,11 +317,11 @@ export function getNumberTexture(number, colorHex) {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, size, size);
-    ctx.font = 'bold 92px system-ui, sans-serif';
+    ctx.font = '900 200px Impact, "Arial Black", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = `#${(colorHex >>> 0).toString(16).padStart(6, '0')}`;
-    ctx.fillText(String(number), size / 2, size / 2 + 6);
+    ctx.fillText(String(number), size / 2, size / 2 + 12);
   } else {
     canvas = { width: size, height: size }; // node 測試 stub：不繪製，只驗快取身分
   }
