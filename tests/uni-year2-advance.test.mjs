@@ -174,3 +174,47 @@ test('B1-5 年限：推到大四打完，第 4 次推進被 chapterCompleted 擋
   playSeason(storage);
   assert.equal(createCareerStore(storage).advanceSeason(), false, '大四季末＝年限封頂');
 });
+
+// ---- 大二卷批 5：屆間集訓待辦＋身高定型 ----
+import { campPlanFor, CAMP_OPENING_LINES } from '../src/career/trainingCamp.js';
+import { heightSettled } from '../src/career/heightGrowth.js';
+
+test('B5-1 大學推進與集訓待辦同一次 RMW：campPending＝新屆數', () => {
+  const storage = uniSave('meixi');
+  playSeason(storage);
+  createCareerStore(storage).advanceSeason();
+  const save = JSON.parse(storage.getItem(SAVE_KEY));
+  assert.equal(save.player.campPending, 5, '大二（全域第 5 屆）的集訓待辦要在推進當下落檔');
+});
+
+test('B5-2 campPlanFor：大學版換 title 關默契；高中路徑逐值不變', () => {
+  const uni = campPlanFor(5, { uniYear: 2 });
+  assert.equal(uni.title, '大二屆間集訓');
+  assert.equal(uni.hasChemistry, false, '默契一生一次（高中限定），大學不得重開');
+  assert.equal(uni.hasPractice, true);
+  // 覆審 HIGH 修：大學開場不得播高中「挑一個人」台詞；「最後一個冬天」只給大四
+  assert.equal(uni.openingKey, 'uni');
+  assert.equal(campPlanFor(7, { uniYear: 4 }).openingKey, 'uniFinal');
+  const uniLines = JSON.stringify(CAMP_OPENING_LINES.uni);
+  assert.ok(!/挑一個|最後一個冬天/.test(uniLines), '大二/大三開場詞不得有高中第二次集訓語彙');
+  assert.match(JSON.stringify(CAMP_OPENING_LINES.uniFinal), /最後一個冬天/);
+  assert.ok(!/挑一個/.test(JSON.stringify(CAMP_OPENING_LINES.uniFinal)), '大四也沒有默契格');
+  assert.ok(!/挑一個/.test(uni.subtitle), '副標題同理');
+  // 高中逐值不變（既有呼叫端不帶第二參數）
+  assert.deepEqual(campPlanFor(2), {
+    ordinal: 1, seasonIndex: 2, hasChemistry: false, hasPractice: true, title: '第一次集訓',
+  });
+  assert.deepEqual(campPlanFor(3), {
+    ordinal: 2, seasonIndex: 3, hasChemistry: true, hasPractice: true, title: '第二次集訓',
+  });
+});
+
+test('B5-3 heightSettled：曲線耗盡才定型；無曲線舊存檔不亂標', () => {
+  const p = { height: { plan: [180, 183, 185], current: 1.85 } };
+  assert.equal(heightSettled(p, 2), false, '高中第 2 屆還在長');
+  assert.equal(heightSettled(p, 3), false, '高中第 3 屆＝曲線最後一格');
+  assert.equal(heightSettled(p, 4), true, '大一起定型');
+  assert.equal(heightSettled(p, 7), true, '大四也定型');
+  assert.equal(heightSettled({ height: {} }, 5), false, '無曲線＝不標');
+  assert.equal(heightSettled(null, 5), false);
+});

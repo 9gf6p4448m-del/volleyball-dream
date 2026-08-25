@@ -26,7 +26,7 @@ import {
   resolveEventsForRoster, resolveEventsForRole, isOnceEvent, heightGuidanceEventFor,
 } from '../career/events.js';
 import { aceGrowthAt } from '../career/aceGrowth.js';
-import { clampHeightCm } from '../career/heightGrowth.js';
+import { clampHeightCm, heightSettled } from '../career/heightGrowth.js';
 import {
   adviceFor, coachAdviceLines, aspirationReplyLines, bandShiftLines, roleLabel,
 } from '../career/heightAdvice.js';
@@ -1838,8 +1838,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     root.appendChild(el('div', [
       'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
     ], `${career.playerName}・你·${ROLE_ABBR[player.currentRole] ?? 'OH'}${seasonN > 1 ? `・第 ${seasonN} 屆` : ''}`));
+    // 大二卷批 5（U4，拍板題 7）：大學章身高**明確定型**——曲線耗盡不再靜默，
+    // 抬頭直說；高中章（曲線未耗盡）逐字不變。判定單一定義＝heightGrowth.heightSettled
+    const settledTag = heightSettled(player, seasonN)
+      ? `・身高 ${Math.round((player.height?.current ?? 0) * 100)}cm（已定型）`
+      : '';
     root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`],
-      `${teamName()}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}`));
+      `${teamName()}・戰績 ${rec.wins} 勝 ${rec.losses} 敗・二傳信任 ${player.trust.fromSetter}${settledTag}`));
     root.appendChild(growthSection(career, player));
     // 屆間養成卷 E3（08-09）：默契計數顯示——非零才出現（第 1 屆 comboScale=0，
     // 計數結構上恆為 0 ⇒ 不需要任何屆數閘）。零效果，文案如實呈現計數。
@@ -2783,6 +2788,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     showTrainingCamp({
       player: freshPlayer,
       seasonIndex: campSeason,
+      // 大二卷批 5：大學章傳章內年份（集訓 title 換大學版＋默契格關閉）
+      uniYear: isHighSchool(store.loadChapter?.())
+        ? null
+        : chapterSeasonOf(store.loadChapter?.(), campSeason),
       members: campRoster?.members ?? [],
       practice: campPractice,
       drills: campDrills,

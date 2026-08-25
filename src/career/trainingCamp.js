@@ -201,7 +201,27 @@ export function chemistryEmptyNote(role, members) {
 // ---- 集訓內容表 ----
 // hasTech＝這次集訓有沒有技術補修的內容（實際有沒有，由呼叫端把待播的教學事件數餵進來——
 // 事件表才是真相源，這裡不重刻一份「第幾次教什麼」的清單）
-export function campPlanFor(seasonIndex) {
+export function campPlanFor(seasonIndex, { uniYear = null } = {}) {
+  // 大二卷批 5（拍板題 8：沿用機制換文案）：大學屆間集訓——title 換大學版；
+  // ★hasChemistry=false★ 默契是「一生一次」（高中第二次集訓限定消費），大學
+  // 重開會撞語意（裁量記錄在 acceptance-uni-y2-batch5.md）。
+  // uniYear 省略＝高中路徑逐值不變（既有呼叫端零遷移）。
+  if (Number.isInteger(uniYear) && uniYear >= 1) {
+    return {
+      // ordinal 只剩內容格判準沿用（批 5 覆審 HIGH 修）：開場台詞與副標題不再走
+      // ordinal（那會播高中第二次集訓的「挑一個人」——大學沒有默契格，而且
+      // 「最後一個冬天」對大二大三是假話），改由 openingKey/subtitle 顯式指定
+      ordinal: 2,
+      seasonIndex,
+      hasChemistry: false,
+      hasPractice: true,
+      title: `大${['一', '二', '三', '四'][uniYear - 1] ?? uniYear}屆間集訓`,
+      openingKey: uniYear >= 4 ? 'uniFinal' : 'uni',
+      subtitle: uniYear >= 4
+        ? '最後一個冬天。把該練的練完——春天沒有下一次。'
+        : '大學的冬天沒人盯你練。補齊自己，名次會記得你做了什麼。',
+    };
+  }
   const ordinal = seasonIndex >= CAMP_SEASONS.SECOND ? 2 : 1;
   return {
     ordinal,
@@ -283,6 +303,16 @@ export const CAMP_OPENING_LINES = {
   2: [
     { speaker: '教練', text: '最後一個冬天了。該補的補、該練的練——然後挑一個人。' },
     { speaker: '教練', text: '最後一年，你不會一個人打完。挑一個要一起跑到最後的人，冬天陪他練。' },
+  ],
+  // 大二卷批 5（覆審 HIGH 修）：大學版開場——不提「挑一個人」（大學無默契格），
+  // 「最後一個冬天」只給 uniFinal（大四前那個冬天）
+  uni: [
+    { speaker: '教練', text: '賽季收了。名次貼在公佈欄上——不滿意的，冬天有的是時間改。' },
+    { speaker: '教練', text: '大學的冬天沒人盯你練。留下來的，都是自己想變強的。開始吧。' },
+  ],
+  uniFinal: [
+    { speaker: '教練', text: '最後一個冬天了。把你這幾年欠自己的，這個冬天補完。' },
+    { speaker: '教練', text: '春天開賽，就是你們的最後一個賽季。別留遺憾。' },
   ],
 };
 

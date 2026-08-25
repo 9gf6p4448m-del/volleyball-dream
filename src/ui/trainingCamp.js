@@ -88,8 +88,9 @@ function gridButton(label, enabled, onTap) {
 export function showTrainingCamp({
   player, seasonIndex, members = [], playTech = null, techPending = false,
   techNames = [], onDone, practice = null, drills = [], onPractice = null,
+  uniYear = null, // 大二卷批 5：大學章傳章內年份（title 換版＋默契關閉），高中不傳
 }) {
-  const plan = campPlanFor(seasonIndex);
+  const plan = campPlanFor(seasonIndex, { uniYear });
   // 紅白賽：這一屆打過了沒（屆數要對得上——上屆成績不得讓這屆看起來已完成）
   const practicePlayed = practicePlayedIn(practice, seasonIndex);
   // 打過才吃它的獎勵（沒打＝零完成＝一項名額、控球格不開）
@@ -167,7 +168,9 @@ export function showTrainingCamp({
       stageSlot.appendChild(stage.el);
     } catch { stage = null; /* WebGL 失敗＝退化台詞卡（同 graduationRitual） */ }
 
-    const lines = CAMP_OPENING_LINES[plan.ordinal] ?? [];
+    // 批 5 覆審 HIGH 修：大學版 plan 帶 openingKey（uni/uniFinal）；高中缺鍵回退
+    // ordinal＝逐字不變
+    const lines = CAMP_OPENING_LINES[plan.openingKey ?? plan.ordinal] ?? [];
     let li = 0;
     let busy = true;
     const paint = () => {
@@ -211,9 +214,9 @@ export function showTrainingCamp({
     ], plan.title));
     body.appendChild(el('div', [
       'font-size:12px', `color:${COLOR.dim}`, 'line-height:1.5', 'text-align:center',
-    ], plan.ordinal === 1
+    ], plan.subtitle ?? (plan.ordinal === 1
       ? '第一年學基本功，第二年學配合——這個冬天先把「怎麼叫球」學起來。'
-      : '最後一個冬天。補齊自己，然後挑一個要一起跑到最後的人。'));
+      : '最後一個冬天。補齊自己，然後挑一個要一起跑到最後的人。')));
 
     // 格①技術補修
     const techBox = slotCard('技術補修', techPending

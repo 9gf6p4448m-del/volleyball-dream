@@ -258,6 +258,8 @@ test('債C覆審修（08-25）：大學聯賽打滿後「去找教練」不與�
 test('大二卷批4：推進按鈕先播送別與新生亮相，演出完落回新賽季', async () => {
   const text0 = await renderCareer(uniStorage('meixi', 8));
   assert.match(text0, /進入大二/, 'fixture 前提：8/8 收束畫面有推進按鈕');
+  // 批 5（B5-3 / U4）：大學章抬頭明示身高定型（治具 plan=[188,190,191]、屆 4 耗盡）
+  assert.match(text0, /身高 \d+cm（已定型）/, 'U4：大學章沒有明示身高定型');
   const btn = nodeWith(/進入大二/);
   let t = btn;
   while (t && !(t.handlers?.pointerdown ?? []).length) t = t.parent;
@@ -279,10 +281,13 @@ test('大二卷批4：推進按鈕先播送別與新生亮相，演出完落回�
     if (!c) break;
     tap(c);
     await settle();
-    if (/大學第 2 年/.test(allText())) break; // 演出收尾、已落回大二
+    if (/屆間集訓/.test(allText())) break; // 批 5：演出收尾→大學集訓面板自動開
   }
   assert.ok(sawIntro, '新生亮相沒播（送別與亮相的演出鏈斷了）');
-  assert.match(allText(), /大學第 2 年/, '演出結束沒落回大二生涯畫面');
+  // 批 5（B5-1/B5-2）：演出結束的落點＝大二屆間集訓（isCampPending 復原閘），
+  // 不再直接回抬頭——批 4 第一版斷言「大學第 2 年」由此改寫（凍結依據＝
+  // acceptance-uni-y2-batch5.md B5-1）
+  assert.match(allText(), /大二屆間集訓/, '演出結束沒開大學集訓面板');
 });
 
 test('大二卷批4：大四打完＝謝幕佔位過場卡，不出現推進按鈕', async () => {
@@ -291,6 +296,11 @@ test('大二卷批4：大四打完＝謝幕佔位過場卡，不出現推進按�
   for (let y = 0; y < 3; y += 1) {
     const s = createCareerStore(storage);
     assert.ok(s.advanceSeason(), `第 ${y + 1} 次推進要成功`);
+    // 批 5：推進會掛集訓待辦——治具視同「集訓已完成」清旗標，否則 renderCareer
+    // 會停在集訓面板、看不到大四謝幕入口（正式流程由集訓 onDone 清）
+    const rawSave = JSON.parse(storage.getItem(SAVE_KEY));
+    delete rawSave.player.campPending;
+    storage.setItem(SAVE_KEY, JSON.stringify(rawSave));
     const c = s.loadCareer();
     s.saveCareer({
       ...c,

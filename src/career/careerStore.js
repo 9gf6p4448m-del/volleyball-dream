@@ -227,14 +227,16 @@ export function createCareerStore(storage, slot = 1) {
           // 回 UNI_START_TRUST（B1-4 改寫聲明見 acceptance-uni-y2-batch3.md）；
           // floorShare 照舊不碰（球權保底與名次無關）
           const bonus = uniRankTrustBonus(uniRank);
+          // 批 5（拍板題 8）：大學屆間集訓待辦與屆數推進**同一次 RMW**落檔——
+          // 高中 HIGH-1 的中斷復原紀律同款（renderCareer 的 isCampPending 閘自動接）
           const advancedPlayer = prev.player
-            ? {
+            ? markCampPending({
               ...prev.player,
               trust: {
                 ...(prev.player.trust ?? {}),
                 fromSetter: Math.min(100, (prev.player.trust?.fromSetter ?? 0) + bonus),
               },
-            }
+            }, endingSeason + 1)
             : prev.player;
           return {
             ...prev,

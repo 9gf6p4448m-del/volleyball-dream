@@ -70,6 +70,17 @@ export function initialHeightState({ seed, heightCm }) {
 
 // 賽季推進揭曉（純函式；careerStore.advanceSeason RMW 消費）。
 // 冪等：該屆已揭曉／無 plan（舊檔容錯）／seasonIndex 超界 → 原樣返回、reveal:null。
+// 大二卷批 5（U4，拍板題 7）：身高定型的**明確判定**——曲線耗盡（屆數超出
+// plan 長度）＝成長板閉合，不再長。U4 的原始壞法是 revealHeightForSeason 對
+// 第 4 屆起**靜默 no-op**（看起來有系統但什麼都沒發生）；定型不是 bug 是設計
+// （18+ 真實性），但要明著說——UI 拿這顆在大學章顯示「已定型」。
+// 無曲線的舊存檔回 false（沒有曲線就談不上定型，不亂標）。
+export function heightSettled(player, seasonIndex) {
+  const plan = player?.height?.plan;
+  if (!Array.isArray(plan) || !plan.length) return false;
+  return Number.isInteger(seasonIndex) && seasonIndex > plan.length;
+}
+
 export function revealHeightForSeason(player, seasonIndex) {
   const h = player?.height;
   const plan = h?.plan;
