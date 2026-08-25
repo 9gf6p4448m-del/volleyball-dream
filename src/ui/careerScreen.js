@@ -49,6 +49,9 @@ import { rivalPreEvents, rivalPostEvents, rivalSpectatorEvents } from '../career
 import { n2OpeningLines, n2PostEvents, n2FinaleEvents } from '../career/n2Arc.js';
 import { archiveSeasonSummary } from '../career/careerStore.js';
 import {
+  uniGraduationLines, uniFreshmenIntroLines, UNI_FINALE_PLACEHOLDER,
+} from '../career/uniGraduation.js';
+import {
   finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
 } from '../career/careerFinale.js';
 import { readSlotHeads } from '../career/saveSlots.js';
@@ -2148,19 +2151,27 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'line-height:1.7'],
         `大${['一', '二', '三', '四'][uniYear - 1] ?? uniYear}賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`));
       // 大二卷批 1：推進入口——store.advanceSeason 大學分支（換血＋新賽程同一次
-      // RMW）。畢業送別/新生亮相的儀式演出是批 4，這裡先直接重繪
+      // RMW）。批 4：先送別（畢業者具名/ace/通用三級台詞）再新生亮相，演出完落回
+      // 新賽季的生涯畫面；台詞單一事實源＝uniGraduation.js
       if (uniYear < 4) {
         root.appendChild(button(`▶ 進入大${['一', '二', '三', '四'][uniYear] ?? uniYear + 1}`, true, () => {
-          if (store.advanceSeason?.()) renderCareer();
+          const adv = store.advanceSeason?.();
+          if (!adv) return;
+          const seqs = [];
+          const farewell = uniGraduationLines(adv.graduates ?? []);
+          if (farewell.length) seqs.push({ lines: farewell });
+          const intro = uniFreshmenIntroLines(adv.freshmen ?? []);
+          if (intro.length) seqs.push({ lines: intro });
+          if (seqs.length) dialogPlay(seqs, () => renderCareer());
+          else renderCareer();
         }));
         root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'max-width:min(340px,92vw)',
           'text-align:center', 'line-height:1.6'],
         '屬性、技術與這一年的名次都會帶著走'));
       } else {
-        // 大四末收尾儀式＝批 4；年限封頂由 chapterCompleted 擋著，先給佔位文案
-        root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'max-width:min(340px,92vw)',
-          'text-align:center', 'line-height:1.6'],
-        '四年打完了——大學的謝幕在下一批'));
+        // 批 4：大四末佔位過場卡（拍板題 1 乙——謝幕儀式在下一卷，先立牌）；
+        // 年限封頂由 chapterCompleted 擋著推進，這裡只開卡
+        root.appendChild(button('▶ 四年打完了——謝幕', true, () => showUniFinalePlaceholder()));
       }
     } else if (careerOver) {
       root.appendChild(el('div', [
@@ -2605,6 +2616,28 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       if (store.loadSchool?.()) renderSlots();
       else showAdmission();
     });
+    document.body.appendChild(overlay);
+  }
+
+  // 大二卷批 4：大四末佔位過場卡（樣式比照 showNextChapter；點擊回生涯畫面——
+  // 大學章沒有「決定去哪」的分岔，謝幕儀式與下一章是下一卷的事）
+  function showUniFinalePlaceholder() {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:#05070d',
+      'gap:16px', 'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', [
+      'font-size:40px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:10px',
+      'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
+    ], UNI_FINALE_PLACEHOLDER.title));
+    overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
+      UNI_FINALE_PLACEHOLDER.sub));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
+      'margin-top:18px'], UNI_FINALE_PLACEHOLDER.next));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
+      '點擊返回'));
+    overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
     document.body.appendChild(overlay);
   }
 

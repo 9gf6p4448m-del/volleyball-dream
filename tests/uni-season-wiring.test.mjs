@@ -254,3 +254,59 @@ test('債C覆審修（08-25）：大學聯賽打滿後「去找教練」不與�
   assert.match(doneText, /賽季結束|大學聯賽冠軍|聯賽第/, 'fixture 前提：8/8 已進結算分支');
   assert.doesNotMatch(doneText, /去找教練/, '賽季已收束＝屆間談話的時段，不重疊');
 });
+
+test('大二卷批4：推進按鈕先播送別與新生亮相，演出完落回新賽季', async () => {
+  const text0 = await renderCareer(uniStorage('meixi', 8));
+  assert.match(text0, /進入大二/, 'fixture 前提：8/8 收束畫面有推進按鈕');
+  const btn = nodeWith(/進入大二/);
+  let t = btn;
+  while (t && !(t.handlers?.pointerdown ?? []).length) t = t.parent;
+  tap(t);
+  await settle();
+  const dlg = allText();
+  // meixi 大一季末畢業者皆非 ace ⇒ 教練開場＋通用送別句（uniGraduation.js）
+  assert.match(dlg, /四年級的，留下來說幾句/, '送別對話沒開場');
+  // 逐格點掉對話（送別＋新生亮相）——「點擊繼續」提示節點自身沒有 handler
+  // （handler 在對話卡根上），要照 clearDialogs 樣板 walk＋爬 parent，
+  // 用 nodeWith 會第一輪就 break（本測第一版就是這樣假紅的）
+  let sawIntro = false;
+  for (let i = 0; i < 20; i += 1) {
+    if (/補進來的新生/.test(allText())) sawIntro = true;
+    const cont = walk(globalThis.document.body).find((n) => /點擊繼續/.test(n.textContent ?? ''));
+    if (!cont) break;
+    let c = cont;
+    while (c && !(c.handlers?.pointerdown ?? []).length) c = c.parent;
+    if (!c) break;
+    tap(c);
+    await settle();
+    if (/大學第 2 年/.test(allText())) break; // 演出收尾、已落回大二
+  }
+  assert.ok(sawIntro, '新生亮相沒播（送別與亮相的演出鏈斷了）');
+  assert.match(allText(), /大學第 2 年/, '演出結束沒落回大二生涯畫面');
+});
+
+test('大二卷批4：大四打完＝謝幕佔位過場卡，不出現推進按鈕', async () => {
+  const storage = uniStorage('meixi', 8);
+  // 推到大四打完：三次〔推進＋打滿〕（走正式 store 鏈）
+  for (let y = 0; y < 3; y += 1) {
+    const s = createCareerStore(storage);
+    assert.ok(s.advanceSeason(), `第 ${y + 1} 次推進要成功`);
+    const c = s.loadCareer();
+    s.saveCareer({
+      ...c,
+      results: c.schedule.filter((m) => m.round === 'league').map((m, i) => ({
+        matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+        scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+      })),
+    });
+  }
+  const text = await renderCareer(storage);
+  assert.doesNotMatch(text, /進入大[二三四五]/, '大四末不得再有推進按鈕');
+  assert.match(text, /四年打完了——謝幕/, '謝幕入口沒出現');
+  const btn = nodeWith(/四年打完了——謝幕/);
+  let t = btn;
+  while (t && !(t.handlers?.pointerdown ?? []).length) t = t.parent;
+  tap(t);
+  await settle();
+  assert.match(allText(), /第二章・完/, '過場卡沒開');
+});

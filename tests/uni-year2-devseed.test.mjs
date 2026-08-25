@@ -88,3 +88,56 @@ test('B2-1c 跳到大四＝最後一年開局（年限內可打、不再有下�
   assert.equal(chapterSeasonOf(store.loadChapter(), store.seasonIndex()), 4);
   assert.equal(store.loadCareer().results.length, 0, '大四開局零戰績');
 });
+
+// ---- 大二卷批 4（B4-1 具名句）：舊識 ace 畢業時用手寫送別 ----
+import { uniGraduationLines, uniFarewellFor } from '../src/career/uniGraduation.js';
+
+test('批4：詹子曜（北陵，大二季末畢業）的送別用具名手寫句', () => {
+  const { store } = (() => {
+    const storage = fakeStorage();
+    const s = createCareerStore(storage);
+    s.seedWholeSave(buildSyntheticSave({ finish: FINISH.QUARTER }));
+    return { storage, store: s };
+  })();
+  assert.equal(advanceToUniYear(store, { schoolId: 'north-ridge', year: 2 }), true);
+  // 打完大二、推進大三——這一刻詹子曜（玩家大一時大三⇒現在大四）畢業
+  const c = store.loadCareer();
+  const league = c.schedule.filter((m) => m.round === 'league');
+  store.saveCareer({
+    ...c,
+    results: league.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  const adv = store.advanceSeason();
+  assert.ok(adv && adv.ok);
+  const zhan = adv.graduates.find((g) => g.name === '詹子曜');
+  assert.ok(zhan, `大二季末的畢業名單要有詹子曜（實際：${adv.graduates.map((g) => g.name)}）`);
+  const text = uniGraduationLines(adv.graduates).map((l) => l.text).join('');
+  assert.match(text, /箭離弦/, '具名手寫句沒被用上（掉到通用句）');
+  // 三級台詞的另兩級：ace title 版與通用版都要走得到
+  assert.match(uniFarewellFor({ name: '路人', title: '某某箭' }), /某某箭/);
+  assert.match(uniFarewellFor({ name: '路人' }), /四年打完了/);
+});
+
+test('批4：劉振鎧（瀚崎，大三季末畢業）的送別用具名手寫句', () => {
+  const storage = fakeStorage();
+  const store = createCareerStore(storage);
+  store.seedWholeSave(buildSyntheticSave({ finish: FINISH.QUARTER }));
+  assert.equal(advanceToUniYear(store, { schoolId: 'hanchi-sport', year: 3 }), true);
+  const c = store.loadCareer();
+  const league = c.schedule.filter((m) => m.round === 'league');
+  store.saveCareer({
+    ...c,
+    results: league.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  const adv = store.advanceSeason();
+  assert.ok(adv && adv.ok);
+  const liu = adv.graduates.find((g) => g.name === '劉振鎧');
+  assert.ok(liu, `大三季末的畢業名單要有劉振鎧（實際：${adv.graduates.map((g) => g.name)}）`);
+  assert.match(uniGraduationLines(adv.graduates).map((l) => l.text).join(''), /彈道不會轉彎/);
+});
