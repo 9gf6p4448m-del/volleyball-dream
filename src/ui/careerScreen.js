@@ -92,6 +92,13 @@ const ATTR_LABELS = {
 };
 const GROWABLE_KEYS = new Set(GROWABLE_ATTRS.map((a) => a.key));
 const GRADE_LABEL = { 1: '一年級', 2: '二年級', 3: '三年級' };
+// 企業章批 3：corp 成員的 growth.grade＝在隊年資（corporations.js 檔頭），
+// 不是會畢業的年級——照 GRADE_LABEL 畫會把年資 3 寫成「三年級」、年資 8 變空白。
+// 判準用成員自己的 origin（corp: 前綴），不用全域章節——名冊混章不可能，但
+// per-member 判準連手改存檔都不會畫錯。
+const memberGradeLabel = (member) => (String(member?.origin ?? '').startsWith('corp:')
+  ? `年資 ${member?.growth?.grade ?? '?'} 年`
+  : GRADE_LABEL[member?.growth?.grade] ?? '');
 
 const COLOR = {
   bg: 'linear-gradient(180deg, #070a12 0%, #0b1120 55%, #070a12 100%)',
@@ -870,7 +877,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 看得到才有取捨）。現行年級＝基準＋屆數−1；顯示夾限三年級（非 ace 無輪替＝已知債）
     const oppGradeLabel = (i) => {
       const g = def.grades?.[i];
-      return g ? (GRADE_LABEL[Math.min(3, currentGrade(g, seasonN))] ?? '') : '';
+      if (!g) return '';
+      // 企業章批 3：corp 對手的 grades＝在隊年資（corporations.js 檔頭），
+      // 套高中的 currentGrade 屆數推進＋夾限會把全隊畫成「三年級」——改標年資。
+      // 判準＝這個 def 在企業表查得到（def 本身沒有章節欄位，id 是唯一可靠識別）。
+      if (corporationById(def.id ?? '')) return `年資 ${g} 年`;
+      return GRADE_LABEL[Math.min(3, currentGrade(g, seasonN))] ?? '';
     };
     // N2（07-30）情蒐讀當屆值：成長型 ace 的身高走跨屆曲線（applySeasonRoster 掛的
     // aceHeight），不是建檔常數——「情蒐錄影帶數據跨屆真實變化」的顯示端
@@ -1217,7 +1229,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         `「${member.title}」`));
     }
     head.appendChild(el('div', ['font-size:14px', `color:${COLOR.cyan}`, 'font-weight:700'],
-      `${ROLE_ABBR[member.role] ?? member.role}・${GRADE_LABEL[member.growth.grade] ?? ''}・${member.height.toFixed(2)}m`));
+      `${ROLE_ABBR[member.role] ?? member.role}・${memberGradeLabel(member)}・${member.height.toFixed(2)}m`));
     card.appendChild(head);
     if (member.persona) {
       card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.5', 'text-align:left'],
@@ -1396,7 +1408,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         ], '隊長'));
       }
       left.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
-        `${ROLE_ABBR[member.role] ?? member.role}・${GRADE_LABEL[member.growth.grade] ?? ''}`));
+        `${ROLE_ABBR[member.role] ?? member.role}・${memberGradeLabel(member)}`));
       row.appendChild(left);
       row.appendChild(el('div', ['font-size:13px', `color:${COLOR.cyan}`], '▶'));
       row.addEventListener('pointerdown', (e) => {
@@ -1936,10 +1948,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const list = el('div', [
       'display:flex', 'flex-direction:column', 'gap:8px', 'width:min(340px, 92vw)',
     ]);
-    list.appendChild(el('div', [
-      'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
-    ], '地區賽・小組循環'));
-    for (const m of career.schedule.filter((x) => x.stage === 'group')) list.appendChild(rowFor(m));
+    // 企業章批 3：group 場次空（大學/企業章）就不畫區頭——空區頭掛著高中語彙誤導章節
+    const groupRows = career.schedule.filter((x) => x.stage === 'group');
+    if (groupRows.length) {
+      list.appendChild(el('div', [
+        'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
+      ], '地區賽・小組循環'));
+      for (const m of groupRows) list.appendChild(rowFor(m));
+    }
     // 循環賽卷（08-09）：國賽分兩區顯示——循環組（打滿 3 場、前二晉級）與淘汰賽。
     // 舊存檔沒有 round 欄位 ⇒ rrRows 為空 ⇒ 只出現一個「全國賽・單淘汰」區＝原樣
     const rrRows = career.schedule.filter((x) => x.round === 'rr');
@@ -2008,6 +2024,43 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           ]);
           line.appendChild(el('div', [], `${i + 1}. ${row.name}`));
           // 積分要顯示在最前面：勝點制的重點就是「同樣 4 勝，積分可能不同」
+          line.appendChild(el('div', [], `${row.points} 分　${row.wins}勝${row.losses}敗　`
+            + `局 ${row.setsFor}-${row.setsAgainst}`));
+          panel.appendChild(line);
+        });
+        list.appendChild(panel);
+        list.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:left',
+          'line-height:1.4', 'padding:0 14px'],
+        '勝點制：2-0 勝 3 分／2-1 勝 2 分／1-2 敗 1 分／0-2 敗 0 分——輸得漂亮也拿得到分'));
+      }
+    }
+    // ── 企業聯賽（批 3）──：八隊單循環 7 場＋勝點制積分表（鏡射大學 league 區；
+    // corpTable 純函式重算，8 隊 7 輪成本可忽略）
+    const corpRows2 = career.schedule.filter((x) => x.round === 'corp');
+    if (corpRows2.length) {
+      list.appendChild(el('div', [
+        'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
+      ], `企業聯賽・單循環（${corpRows2.length} 場・每場三戰兩勝）`));
+      for (const m of corpRows2) list.appendChild(rowFor(m));
+      const board = corpTable({
+        corpId: store.loadCorp?.() ?? '',
+        seed: career.seed,
+        schedule: career.schedule,
+        results: career.results,
+      });
+      if (board.played > 0) {
+        const panel = el('div', [
+          `background:${COLOR.card}`, 'border-radius:12px', 'padding:8px 14px',
+          'display:flex', 'flex-direction:column', 'gap:4px',
+        ]);
+        board.table.forEach((row, i) => {
+          const me = row.id === CORP_PLAYER_ID;
+          const line = el('div', [
+            'display:flex', 'justify-content:space-between', 'font-size:13px',
+            `color:${me ? COLOR.gold : (i < 3 ? COLOR.cyan : COLOR.dim)}`,
+            me ? 'font-weight:700' : 'font-weight:400',
+          ]);
+          line.appendChild(el('div', [], `${i + 1}. ${row.name}`));
           line.appendChild(el('div', [], `${row.points} 分　${row.wins}勝${row.losses}敗　`
             + `局 ${row.setsFor}-${row.setsAgainst}`));
           panel.appendChild(line);
