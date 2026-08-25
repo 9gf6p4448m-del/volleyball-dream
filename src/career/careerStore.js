@@ -391,6 +391,10 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       const view = save ? careerViewOf(save) : null;
       if (!view) return false;
+      // ★覆審 HIGH 修（2026-08-25）：只有章節末年（U4）才准結算——U1–U3 季末
+      // seasonConcluded 同樣為 true，缺這條會提早封假結局並鎖死 finaleSettled，
+      // 真 U4 之後永遠補不進封存。判準照抄 advanceSeason（183 行）同一顆 chapterCompleted。
+      if (!chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
       if (save.career?.finaleSettled) return false; // 已結算，冪等 no-op
       if (!seasonConcluded(view)) return false; // 未打完不結算（B1-3）
       const schoolId = save.career?.school ?? null;

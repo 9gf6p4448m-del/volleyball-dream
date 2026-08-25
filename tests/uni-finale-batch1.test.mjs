@@ -135,3 +135,13 @@ test('B1-5 封存形狀一致：第 4 筆的鍵集＝前 3 筆大學封存的鍵
   assert.equal(fourthKeys, firstThreeKeySets[0],
     '第 4 筆鍵集要與前 3 筆完全一致，消費端（careerScreen 名次顯示/🏆 計數）才不用特判');
 });
+
+test('覆審HIGH修：U1 季末（非章節末年）呼叫 settleUniFinale 回 false、存檔不變、旗標不打', () => {
+  const storage = uniSave('meixi');
+  playSeason(storage); // 大一球季打完、尚未推進——seasonConcluded=true 但非章節末年
+  const before = storage.getItem(SAVE_KEY);
+  const store = createCareerStore(storage);
+  assert.equal(store.settleUniFinale(), false, 'U1 季末不得結算');
+  assert.equal(storage.getItem(SAVE_KEY), before, '存檔必須逐位元不變');
+  assert.equal(store.uniFinaleSettled(), false, '旗標不得被打上');
+});
