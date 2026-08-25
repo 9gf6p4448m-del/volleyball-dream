@@ -123,3 +123,15 @@ B4-1~B4-4 全過。三級送別（具名>ace title>通用）＋大學版新生�
 「第二章・完」佔位卡。覆審 1 MEDIUM（簡子嵐/曾家松句＝大四季末預埋內容，
 本卷不可達）已如實註記於 uniGraduation.js 檔頭與驗收檔已知限制節；
 劉振鎧可達路徑補測。1707 綠、sim-hash 同基準、改前紅於行為斷言。
+
+## 批 5 結案＝全卷關卷（2026-08-25，main d3c0685／gh-pages a254dee）
+
+B5-1~B5-4 全過。大學屆間集訓（title 換版、默契關閉、開場台詞 uni/uniFinal——
+覆審 HIGH「誤播高中挑人台詞」已修並送審判真的修好）＋U4 身高定型（heightSettled
+單一定義、抬頭明示）。1710 綠、sim-hash 同基準。
+
+★ 大二卷五批全上線 ★ 快速試玩法：`?devseed=quarter&devslot=3&devuni=<校id>:<年1-4>`
+（校 id：north-ridge/hanchi-sport/chiyang/haiyan/chengguang/luze-tech/songhe/
+daiban/meixi）。加成表與集訓文案屬提案，試玩後可調。
+遺留掛帳：大學謝幕卷（大四收尾儀式＋簡子嵐/曾家松預埋送別句＋下一章入口）、
+職業卷構想、stands 接線、careerState.js:335 既有 ROLE_ORDER 複製收斂。
