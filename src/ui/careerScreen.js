@@ -203,6 +203,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
   // 集訓覆蓋層是否已開（覆審 HIGH-1 的中斷復原有兩個呼叫端，防重入疊兩層）
   let campOpen = false;
+  // 企業章批 4 覆審 MEDIUM 修：薪水卡的重入守衛——同 campOpen 教訓（本檔 207 行
+  // 一帶：疊兩張卡的話下面那張永遠按不到）。旗標未落地前任何重繪都不得再彈一張。
+  let corpPaydayOpen = false;
   // 教學局邀請卡是否已開（同一道防重入：renderCareer 可能被別的路徑再叫一次，
   // 疊兩張卡的話下面那張永遠按不到——campOpen 的教訓）
   let tutorialInviteOpen = false;
@@ -2245,8 +2248,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       }
     }
     // 企業章批 4（A4-2）：薪水選擇點——第 2 場打完、賽季未完、未選過才播；
-    // 選完旗標＋加成同一次 RMW（store.corpPaydayChoice），re-render 不重播
-    if (pickedCorp && corpPaydayDue(career)) showCorpPayday();
+    // 選完旗標＋加成同一次 RMW（store.corpPaydayChoice），re-render 不重播。
+    // 覆審 MEDIUM 修：比照 campOpen——旗標守衛＋return（覆蓋層收掉時會再 render 一次）
+    if (pickedCorp && !corpPaydayOpen && corpPaydayDue(career)) {
+      showCorpPayday();
+      return;
+    }
     // ★ 分支鏈：大學賽季結束才佔位 ★ 還在打的時候要落到下面的「▶ 出戰」——
     // 第一版把整個大學章都攔在鏈首，結果賽程生出來了卻沒有入口，一場都打不了。
     // 企業章批 3（A3-2）：企業賽季結束＝名次＋收尾卡；未結束照樣落到「▶ 出戰」
@@ -3038,6 +3045,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 企業章批 4（A4-2）：薪水選擇卡——兩鍵 overlay（同 showCorpConfirm 的誤觸防線形狀）。
   // 兩個出口都走同一顆 store.corpPaydayChoice（冪等 RMW），選完重繪生涯頁。
   function showCorpPayday() {
+    corpPaydayOpen = true;
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.94)',
@@ -3048,14 +3056,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
       'line-height:1.8', 'max-width:min(460px,90vw)'], CORP_PAYDAY_CARD.body));
     const pick = (treat, note) => {
-      store.corpPaydayChoice?.(treat);
+      // 覆審 HIGH 修：writeSave 的契約是「呼叫端要看回傳值」（careerStore.js write()
+      // 註解）——配額滿/私密模式時不得顯示成功文案假裝選完；旗標沒落地＝下次
+      // 重繪會再問，文案要把這件事講明，不是讓玩家覺得遊戲在說謊。
+      const ok = store.corpPaydayChoice?.(treat);
       overlay.replaceChildren();
       overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
-        'line-height:1.8', 'max-width:min(460px,90vw)'], note));
+        'line-height:1.8', 'max-width:min(460px,90vw)'],
+      ok ? note : '⚠ 存檔寫入失敗——這個選擇沒有保存，之後會再問你一次'));
       overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:18px'],
         '點擊繼續'));
       overlay.style.cssText += ';cursor:pointer';
-      overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+      overlay.addEventListener('pointerdown', () => {
+        corpPaydayOpen = false;
+        overlay.remove();
+        renderCareer();
+      });
     };
     const row = el('div', ['display:flex', 'gap:10px', 'flex-wrap:wrap', 'justify-content:center']);
     row.appendChild(button(CORP_PAYDAY_CARD.treat.label, true,

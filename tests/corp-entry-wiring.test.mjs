@@ -181,7 +181,11 @@ test('A3-2① 企業 7/7 打完 ⇒ 名次＋收尾卡入口出現、出戰消�
 });
 
 test('A3-2② 企業 6/7 未打完 ⇒ 照舊出戰、名次結算不得出現', async () => {
-  const text = await renderAndGetText(corpSave(6));
+  const storage = corpSave(6);
+  // 批 4 之後的季中常態＝薪水卡已答過（A4-2 的「卡會出現」有自己的專測；
+  // 這條凍結守的是「賽季未完→出戰、無結算」，先把批 4 的閘答掉以隔離關注點）
+  createCareerStore(storage).corpPaydayChoice(false);
+  const text = await renderAndGetText(storage);
   assert.match(text, /出戰/);
   assert.doesNotMatch(text, /賽季落幕/);
 });
