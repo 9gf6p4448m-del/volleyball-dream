@@ -69,13 +69,13 @@ import { createRitualStage } from '../render/ritualStage.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
-import { isHighSchool, chapterSeasonOf, currentTeamName } from '../career/chapter.js';
+import { isHighSchool, isCorporate, chapterSeasonOf, currentTeamName } from '../career/chapter.js';
 import { bestFinishOf, seasonFinishOf, FINISH_LABEL } from '../career/admission.js';
 import {
   universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
 } from '../career/universities.js';
 import { uniTable, UNI_PLAYER_ID } from '../career/uniSchedule.js';
-import { CORPORATIONS, CORP_TIER_LABEL } from '../career/corporations.js';
+import { CORPORATIONS, CORP_TIER_LABEL, corporationById } from '../career/corporations.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -175,7 +175,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 配色卷階段二 E4：動態隊名單一入口——高中章恆 OUR_TEAM_NAME、大學章＝入學校名。
   // 呼叫端一律經這個函式取，不得自行判斷章節（v2 裁定二前提，同
   // isHighSchool(store.loadChapter?.()) 慣例）
-  const teamName = () => currentTeamName(store.loadChapter?.(), store.loadSchool?.());
+  const teamName = () => currentTeamName(store.loadChapter?.(), store.loadSchool?.(), store.loadCorp?.());
 
   // 隊伍配色卷批 3（B2 對陣色條／B4 beatStage 共用單一入口）：我方現在實際穿的
   // kit——大學章已選校時走該校 kit（與 careerState.js:747 kits.A 同一組函式
@@ -183,6 +183,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 大學未選校）回傳 null——B2 消費端回落 teamKit.js 的 OUR_ANCHORS.jersey、
   // B4 消費端（beatStage resolveKit）回落現行硬編碼 TEAM_KIT.A，兩份錨定值本就同步
   const ourSchoolKit = () => {
+    // 企業章批 2 覆審 MEDIUM 修：簽約後穿的是公司 kit，不是舊大學的
+    const corp = store.loadCorp?.() ?? null;
+    if (corp) return kitFor(corporationById(corp));
     const school = store.loadSchool?.() ?? null;
     return school ? kitFor(universityById(school)) : null;
   };
@@ -1889,7 +1892,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const title = m.label ? `${m.label}・${opponentName(m.opponentId)}` : opponentName(m.opponentId);
       // 批 3 B3：對手色塊——與 B2 同一入口 opponentAccentColor（不得兩處各自實作）；
       // 練習賽 opponentId 恆 null ⇒ 兩個 lookup 皆落空 ⇒ null ⇒ 不畫、不炸
-      const oppDef = opponentById(m.opponentId) ?? universityById(m.opponentId) ?? null;
+      // 企業章批 2 覆審 LOW 修：第三張表也查（同 opponentName 的補全）
+      const oppDef = opponentById(m.opponentId) ?? universityById(m.opponentId)
+        ?? corporationById(m.opponentId) ?? null;
       const accent = opponentAccentColor(oppDef);
       const titleRow = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'min-width:0']);
       if (accent != null) {
@@ -2127,14 +2132,29 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // （league 全有結果）；uniLeague.length 守衛保留＝league 空的壞存檔不進結算分支
     const uniSeasonDone = inUniversity && uniLeague.length > 0 && seasonConcluded(career);
     if (inUniversity) {
-      root.appendChild(el('div', [
-        'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
-        'letter-spacing:2px',
-      ], pickedSchool ? `🎓 ${pickedSchool.name}` : '🎓 升學已定'));
-      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
-        pickedSchool
-          ? `升學已定——大學第 ${chapterSeasonOf(store.loadChapter?.(), seasonN)} 年`
-          : '升學已定，但存檔裡的學校讀不出來'));
+      // 企業章批 2 覆審 MEDIUM 修：簽約後的頭部要說實話——公司名＋企業聯賽年份，
+      // 不是舊大學的「🎓 升學已定」。★只換頭部文案，分支結構不動★ inUniversity
+      // 仍是「非高中」語意（上方註解的卡死防線靠它），企業章照走同一條鏈：
+      // uniSeasonDone 對 corp 賽程恆 false（league 空）→ 自然落到「▶ 出戰」。
+      const pickedCorp = isCorporate(store.loadChapter?.())
+        ? corporationById(store.loadCorp?.() ?? '') : null;
+      if (pickedCorp) {
+        root.appendChild(el('div', [
+          'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
+          'letter-spacing:2px',
+        ], `🏢 ${pickedCorp.name}`));
+        root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
+          `企業聯賽——第 ${chapterSeasonOf(store.loadChapter?.(), seasonN)} 年`));
+      } else {
+        root.appendChild(el('div', [
+          'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
+          'letter-spacing:2px',
+        ], pickedSchool ? `🎓 ${pickedSchool.name}` : '🎓 升學已定'));
+        root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
+          pickedSchool
+            ? `升學已定——大學第 ${chapterSeasonOf(store.loadChapter?.(), seasonN)} 年`
+            : '升學已定，但存檔裡的學校讀不出來'));
+      }
       // 決定升學不該是「把高中鎖起來」——三年回得去。
       // ★ 但不是「生涯結算」★ 批 1 的凍結驗收 B1-3② 明訂大學章不得再出現那顆按鈕
       //（`tests/chapter-wiring.test.mjs`；理由：已經在念大學了還跳「三年的一切」＝

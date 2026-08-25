@@ -154,3 +154,15 @@ test('A2-3② U4 打完＋未結算 ⇒ 不出現（謝幕先於下一章）', a
   assert.doesNotMatch(text, ENTRY_BTN);
   assert.match(text, /謝幕/, '對照：謝幕鈕本身要在（畫面沒壞，只是入口被旗標擋住）');
 });
+
+// 批 2 覆審 MEDIUM 回歸：簽約後的生涯頁頭部說實話（公司名，不是舊大學）
+test('簽約後 ⇒ 頭部顯示 🏢 公司名＋企業聯賽年份，不再是「升學已定」', async () => {
+  const storage = u4Save({ settled: true });
+  const s = createCareerStore(storage);
+  assert.ok(s.enterCorporate('panshi-heavy'), 'fixture 前提：簽約成功');
+  const text = await renderAndGetText(storage);
+  assert.match(text, /🏢 磐石重工/, '頭部要是公司名');
+  assert.match(text, /企業聯賽——第 1 年/);
+  assert.doesNotMatch(text, /升學已定/, '舊大學文案不得殘留');
+  assert.match(text, /出戰/, '企業賽季要落到出戰入口（不是死路）');
+});

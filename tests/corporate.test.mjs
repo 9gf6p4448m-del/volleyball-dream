@@ -19,7 +19,9 @@ import { buildUniMembers } from '../src/career/uniTeam.js';
 import {
   corpRounds, buildCorpSchedule, corpTable, corpPointsFor, CORP_PLAYER_ID, CORP_ROUNDS,
 } from '../src/career/corpSchedule.js';
-import { advanceSeason, createCareer, recordResult } from '../src/career/careerState.js';
+import {
+  advanceSeason, createCareer, recordResult, matchOpponentDef,
+} from '../src/career/careerState.js';
 import { TIER } from '../src/career/admission.js';
 import { OUR_TEAM_NAME } from '../src/career/roster.js';
 
@@ -247,6 +249,17 @@ test('A1-8b 純 corp 賽程同樣 no-op（兩版皆綠的顯式守衛條，同 C
   }));
   const career = { ...base, schedule, results };
   assert.equal(advanceSeason(career), career, '企業章不得進高中的屆間推進');
+});
+
+// ════════════════════════════════════════════════════════════════
+// 批 2 覆審 HIGH 回歸：matchOpponentDef 認得第三張表
+// ════════════════════════════════════════════════════════════════
+test('matchOpponentDef：企業隊回真實資料表（不落回通用預設隊）', () => {
+  for (const c of CORPORATIONS) {
+    const def = matchOpponentDef(c.id, 8);
+    assert.equal(def, c, `${c.id} 要拿到 corporations.js 那份 def——null 會讓 teams.B 變通用隊`);
+  }
+  assert.equal(matchOpponentDef('no-such-team', 8), null, '未知 id 照舊 null');
 });
 
 // ════════════════════════════════════════════════════════════════

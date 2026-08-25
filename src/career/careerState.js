@@ -441,6 +441,12 @@ export function matchOpponentDef(opponentId, seasonIndex = 1, { titles = 0 } = {
   // 大學王牌會被判成「早就畢業了」，而大學表沒有 reserves ⇒ 王牌直接消失。
   const uni = universityById(opponentId);
   if (uni) return uni;
+  // 企業章批 2 覆審 HIGH 修：第三張表同大學處理——直接回資料表、不套
+  // applySeasonRoster（corp 的 grades＝在隊年資，不是會畢業的年級；也沒有 reserves）。
+  // 漏這條的話 careerMatchSetup 拿到 null → teams.B 落回 createDefaultTeams 通用隊，
+  // 八家企業的陣容/王牌/AI 在戰鬥層整批被架空（覆審實查：賽前對陣畫面也被靜默跳過）。
+  const corp = corporationById(opponentId);
+  if (corp) return corp;
   const base = opponentById(opponentId);
   if (!base) return null;
   // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度
