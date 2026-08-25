@@ -36,3 +36,13 @@
 每批：凍結驗收（commit 落點）→實作→改前 worktree 紅驗證（junction node_modules）→
 全套 node --test＋sim-hash 34772c06e02243fd 不動→fresh 對抗覆審→修 findings→反駁式送審→
 部署→回填結案節。
+
+## 批 1 結案（2026-08-25，main f4ace47）
+
+B1-1~B1-5 全過（`tests/uni-finale-batch1.test.mjs`，fixture 全走真實引擎）。
+`settleUniFinale()`＋`uniFinaleSettled()`（`careerStore.js:390-424`），重用 advanceSeason
+同一份封存事實來源。改前紅＝69e4265 worktree 行為級證明（U4 末 seasons 卡 3 筆）。
+覆審 1 HIGH（缺章節末年守衛，U1–U3 季末會封假結局鎖死旗標）已修（f4ace47，判準
+逐字同 advanceSeason:183；修前紅於 98b8c4c worktree、行為斷言）；反駁式送審判
+「真的修好」，並掃過旁路：`finaleSettled` 唯一寫入點即本函式，無第二條路。
+1716 綠、sim-hash 34772c06e02243fd 同基準。
