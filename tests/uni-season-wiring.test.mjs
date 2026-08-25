@@ -290,7 +290,14 @@ test('大二卷批4：推進按鈕先播送別與新生亮相，演出完落回�
   assert.match(allText(), /大二屆間集訓/, '演出結束沒開大學集訓面板');
 });
 
-test('大二卷批4：大四打完＝謝幕佔位過場卡，不出現推進按鈕', async () => {
+// 改寫依據：uni-finale-kickoff.md 題4＋acceptance-uni-finale-batch2.md B2-2
+// （原批4佔位卡行為由本卷正式取代，2026-08-25）——批 4 當時的佔位卡是「點一次
+// 謝幕鈕就直接看到『第二章・完』」，大學謝幕卷批 2 把它換成①四年回顧②同屆送別
+// ③終卡的三段序列（拍板題 4，使用者已同意的行為變更）。斷言語意保留不刪：
+// 「不出現推進按鈕」原樣照舊；「第二章・完」仍必須出現，只是要走完①②③才到得了
+// ——細節驗證見 `tests/uni-finale-batch2.test.mjs`（B2-1～B2-5），這裡只守最基本的
+// 「舊入口沒斷、終卡真的到得了」。
+test('大二卷批4→大學謝幕卷批2：大四打完＝謝幕三段卡序列，不出現推進按鈕', async () => {
   const storage = uniStorage('meixi', 8);
   // 推到大四打完：三次〔推進＋打滿〕（走正式 store 鏈）
   for (let y = 0; y < 3; y += 1) {
@@ -318,5 +325,27 @@ test('大二卷批4：大四打完＝謝幕佔位過場卡，不出現推進按�
   while (t && !(t.handlers?.pointerdown ?? []).length) t = t.parent;
   tap(t);
   await settle();
-  assert.match(allText(), /第二章・完/, '過場卡沒開');
+  // ①四年回顧：點一次不再直接到終卡（批 2 換掉的正是這個舊行為）
+  assert.doesNotMatch(allText(), /第二章・完/, '★改前紅★ 舊版點一次就到終卡，新版該先進回顧卡');
+  assert.match(allText(), /大學謝幕・四年回顧/, '回顧卡沒開');
+  // 點掉回顧卡，進②同屆送別（dialogPlay 對話卡）
+  const hint = walk(globalThis.document.body).find((n) => /還有幾句話/.test(n.textContent ?? ''));
+  assert.ok(hint, '回顧卡的提示文字沒出現');
+  let h = hint;
+  while (h && !(h.handlers?.pointerdown ?? []).length) h = h.parent;
+  tap(h);
+  await settle();
+  // 逐句點完送別對話，直到③終卡出現（meixi 大四同屆只有一位通用款畢業生，
+  // 對話句數不多；上限給寬一點防脆）
+  for (let i = 0; i < 10; i += 1) {
+    if (/第二章・完/.test(allText())) break;
+    const cont = walk(globalThis.document.body).find((n) => /^▼ 點擊繼續$/.test(n.textContent ?? ''));
+    if (!cont) break;
+    let c2 = cont;
+    while (c2 && !(c2.handlers?.pointerdown ?? []).length) c2 = c2.parent;
+    if (!c2) break;
+    tap(c2);
+    await settle();
+  }
+  assert.match(allText(), /第二章・完/, '走完①②之後，終卡沒開');
 });

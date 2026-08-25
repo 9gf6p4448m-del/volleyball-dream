@@ -49,8 +49,9 @@ import { rivalPreEvents, rivalPostEvents, rivalSpectatorEvents } from '../career
 import { n2OpeningLines, n2PostEvents, n2FinaleEvents } from '../career/n2Arc.js';
 import { archiveSeasonSummary } from '../career/careerStore.js';
 import {
-  uniGraduationLines, uniFreshmenIntroLines, UNI_FINALE_PLACEHOLDER,
+  uniGraduationLines, uniFreshmenIntroLines, uniFinaleFarewellLines, UNI_FINALE_CLOSING,
 } from '../career/uniGraduation.js';
+import { uniSeasonTurnover } from '../career/uniTurnover.js';
 import {
   finaleFarewellLines, finaleRitualSegments, buildFinaleSummary, NEXT_CHAPTER_LINES,
 } from '../career/careerFinale.js';
@@ -2139,6 +2140,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 系統分不出章節，而且它會再播一次謝幕、再把人導去升學）。回顧走**數據頁**——
       // 同樣看得到三屆戰績，但它是唯讀的，不是章節流程的入口。
       root.appendChild(button('📊 回看三年的數據', false, () => showCareerTotals()));
+      // 大學謝幕卷 批 2（B2-1，2026-08-25）：大四還在打的時候先亮出（禁用的）謝幕鈕——
+      // 讓玩家知道終點在哪；賽季打完後同一個位置會換成可按的真鈕（下面 uniSeasonDone
+      // 分支）。禁用樣式沿用既有的成長面板 disabled 慣例（opacity:0.5＋native disabled）。
+      if (chapterSeasonOf(store.loadChapter?.(), seasonN) >= 4 && !uniSeasonDone) {
+        const finaleBtn = el('button', [
+          'min-width:220px', 'height:52px', 'padding:0 24px', 'border-radius:26px',
+          'border:none', 'font-size:17px', 'font-weight:700', 'cursor:not-allowed',
+          'touch-action:manipulation', 'letter-spacing:1px',
+          `background:rgba(30,40,64,0.9);color:${COLOR.dim};opacity:0.5`,
+        ], '🎓 謝幕');
+        finaleBtn.disabled = true;
+        root.appendChild(finaleBtn);
+        root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`,
+          'max-width:min(340px,92vw)', 'text-align:center', 'line-height:1.6'],
+        '把大四聯賽打完，才能開啟謝幕儀式'));
+      }
     }
     // ★ 分支鏈：大學賽季結束才佔位 ★ 還在打的時候要落到下面的「▶ 出戰」——
     // 第一版把整個大學章都攔在鏈首，結果賽程生出來了卻沒有入口，一場都打不了。
@@ -2174,9 +2191,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           'text-align:center', 'line-height:1.6'],
         '屬性、技術與這一年的名次都會帶著走'));
       } else {
-        // 批 4：大四末佔位過場卡（拍板題 1 乙——謝幕儀式在下一卷，先立牌）；
-        // 年限封頂由 chapterCompleted 擋著推進，這裡只開卡
-        root.appendChild(button('▶ 四年打完了——謝幕', true, () => showUniFinalePlaceholder()));
+        // 大學謝幕卷 批 2（2026-08-25）：批 4 的佔位卡在此正式換成真儀式
+        // （①四年回顧②同屆送別③終卡）；年限封頂仍由 chapterCompleted 擋著推進，
+        // 這裡只開儀式——結算（批 1 settleUniFinale）在 showUniFinaleCeremony 內接線
+        root.appendChild(button('▶ 四年打完了——謝幕', true, () => showUniFinaleCeremony()));
       }
     } else if (careerOver) {
       root.appendChild(el('div', [
@@ -2624,9 +2642,99 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     document.body.appendChild(overlay);
   }
 
-  // 大二卷批 4：大四末佔位過場卡（樣式比照 showNextChapter；點擊回生涯畫面——
-  // 大學章沒有「決定去哪」的分岔，謝幕儀式與下一章是下一卷的事）
-  function showUniFinalePlaceholder() {
+  // ════════ 大學謝幕卷 批 2（2026-08-25）：謝幕儀式 ════════
+  // 批 4 佔位卡在此正式換掉。三段卡序列①四年回顧②同屆送別③終卡；
+  // 驗收＝docs/kickoffs/acceptance-uni-finale-batch2.md（B2-1~B2-5）。
+
+  // 入口：先接批 1 結算（冪等——已結算過的重看不重複封存，B2-4），再開①回顧卡。
+  // ★順序要點★ 一定要在讀 U4 名次之前呼叫，回顧卡才讀得到剛封存的第 4 筆。
+  function showUniFinaleCeremony() {
+    store.settleUniFinale?.();
+    showUniFinaleReview();
+  }
+
+  // ①四年回顧：U1–U4 名次軌跡（讀 career.seasons，settleUniFinale 之後恰好 4 筆）
+  // ＋累計統計。點擊繼續→②送別。
+  function showUniFinaleReview() {
+    const career = store.loadCareer();
+    const seasons = store.loadSeasonArchive?.() ?? [];
+    const chapter = store.loadChapter?.();
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#04060c', 'gap:10px', 'padding:26px 14px', 'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
+      '大學謝幕・四年回顧'));
+    overlay.appendChild(el('div', [
+      'font-size:24px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:2px',
+    ], `${career?.playerName ?? ''}・大學四年`));
+    const yearName = ['大一', '大二', '大三', '大四'];
+    const sum = {
+      kills: 0, tipKills: 0, aces: 0, blockPoints: 0, perfects: 0,
+      digs: 0, assistDigs: 0, rallySaves: 0, wins: 0, losses: 0, titles: 0,
+    };
+    for (const sn of seasons) {
+      const uniYear = chapterSeasonOf(chapter, sn.index);
+      const card = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:9px 16px', 'width:min(340px, 94vw)', 'display:flex',
+        'justify-content:space-between', 'align-items:center',
+      ]);
+      card.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
+        yearName[uniYear - 1] ?? `第 ${uniYear} 年`));
+      const rankText = Number.isInteger(sn.uniRank) && sn.uniRank >= 1
+        ? (sn.uniRank === 1 ? '🏆 聯賽冠軍' : `聯賽第 ${sn.uniRank} 名`)
+        : '名次未知（舊存檔）';
+      card.appendChild(el('div', ['font-size:13px', `color:${sn.uniRank === 1 ? COLOR.gold : COLOR.dim}`],
+        `${sn.wins} 勝 ${sn.losses} 敗・${rankText}`));
+      overlay.appendChild(card);
+      for (const k of ['kills', 'tipKills', 'aces', 'blockPoints', 'perfects', 'digs', 'assistDigs', 'rallySaves']) {
+        sum[k] += sn.totals?.[k] ?? 0;
+      }
+      sum.wins += sn.wins;
+      sum.losses += sn.losses;
+      if (sn.uniRank === 1) sum.titles += 1;
+    }
+    const numCard = el('div', [
+      'background:rgba(40,34,14,0.9)', 'border-radius:12px', `border:1px solid ${COLOR.gold}`,
+      'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left', 'line-height:1.6',
+      'font-size:12px', `color:${COLOR.text}`,
+    ]);
+    numCard.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.gold}`,
+      'margin-bottom:2px'], `四年合計　${sum.wins} 勝 ${sum.losses} 敗${sum.titles ? `・🏆×${sum.titles}` : ''}`));
+    const bits = [`殺球 ${sum.kills + sum.tipKills}`, `ACE ${sum.aces}`, `攔網 ${sum.blockPoints}`, `Perfect ${sum.perfects}`];
+    if (sum.digs + sum.assistDigs + sum.rallySaves > 0) {
+      bits.push(`起球 ${sum.digs}`, `助攻一傳 ${sum.assistDigs}`, `續命 ${sum.rallySaves}`);
+    }
+    numCard.appendChild(el('div', [], bits.join('・')));
+    overlay.appendChild(numCard);
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:20px'],
+      '點擊繼續——同屆的畢業生，還有幾句話'));
+    overlay.addEventListener('pointerdown', () => { overlay.remove(); showUniFinaleFarewell(); });
+    document.body.appendChild(overlay);
+  }
+
+  // ②同屆送別：與玩家同屆（U1 入學、U4 末畢業）的隊友——具名(簡子嵐/曾家松)＞
+  // title＞通用三級，機制單一事實源＝uniFarewellFor（uniGraduation.js）。學弟
+  // （尚未到畢業年級者）不在 graduates 名單裡，自然不發言。
+  // ★同屆判定★ 重用 uniSeasonTurnover 的 graduates 篩法（grade>=UNI_GRADUATE_GRADE）
+  // ——純函式、不落檔，只取 .graduates 供顯示，不消費 .roster/.freshmen（沒有真的
+  // 換血；U4 末仍是死路，批 1 早已拍板不動）。
+  function showUniFinaleFarewell() {
+    const career = store.loadCareer();
+    const roster = store.loadRoster?.();
+    const schoolId = store.loadSchool?.() ?? '';
+    const { graduates } = uniSeasonTurnover({
+      roster, schoolId, seasonIndex: career?.seasons?.length ?? 0, seed: 1,
+    });
+    const lines = uniFinaleFarewellLines(graduates, career?.playerName ?? '你');
+    dialogPlay([{ lines }], () => showUniFinaleClosing());
+  }
+
+  // ③終卡「第二章・完」＋「下一個舞台・敬請期待」（不點名成人/企業，拍板題 6）；
+  // 出口回生涯畫面。存檔那顆 finaleSettled 旗標已在入口處由批 1 打上，供未來章節讀。
+  function showUniFinaleClosing() {
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:center', 'background:#05070d',
@@ -2635,13 +2743,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', [
       'font-size:40px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:10px',
       'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
-    ], UNI_FINALE_PLACEHOLDER.title));
+    ], UNI_FINALE_CLOSING.title));
     overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
-      UNI_FINALE_PLACEHOLDER.sub));
+      UNI_FINALE_CLOSING.sub));
     overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
-      'margin-top:18px'], UNI_FINALE_PLACEHOLDER.next));
+      'margin-top:18px'], UNI_FINALE_CLOSING.next));
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
-      '點擊返回'));
+      '點擊返回生涯畫面'));
     overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
     document.body.appendChild(overlay);
   }
