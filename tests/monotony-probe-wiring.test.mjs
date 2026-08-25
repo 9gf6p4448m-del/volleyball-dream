@@ -5,7 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
-import { createCareer, createCareerPlayer } from '../src/career/careerState.js';
+import {
+  createCareer, createCareerPlayer, mergeScouting, leagueScoutZones, careerMatchSetup,
+} from '../src/career/careerState.js';
+import { buildCorpMembers } from '../src/career/corpTeam.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { clearCampPending } from '../src/career/trainingCamp.js';
 
@@ -84,7 +87,7 @@ const findBtn = (re) => walk(globalThis.document.body)
   .find((n) => n.tag === 'button' && re.test(n.textContent ?? ''));
 
 /** 已簽約磐石重工、打了 played 場的企業存檔（含指定 scouting）。 */
-function corpSave({ played = 0, scouting = null, thisOppZones = null } = {}) {
+function corpSave({ played = 0, scouting = null, thisOppZones = null, scoutAtHS = false } = {}) {
   const storage = fakeStorage();
   const store = createCareerStore(storage);
   const career = createCareer({ seed: 99, playerName: '小夢' });
@@ -95,6 +98,15 @@ function corpSave({ played = 0, scouting = null, thisOppZones = null } = {}) {
   raw.roster = { capacity: 12, members: buildStarterMembers(), alumni: [] };
   storage.setItem(SAVE_KEY, JSON.stringify(raw));
   const s = createCareerStore(storage);
+  // 覆審 MEDIUM 補證（2026-08-26）：scoutAtHS＝在高中期用**真的 mergeScouting**
+  // 寫入情蒐（賽末記帳的同一支函式），讓「聚合撐過章節轉換」有可執行證據，
+  // 不再只靠程式碼推導
+  if (scoutAtHS) {
+    const c0 = s.loadCareer();
+    s.saveCareer(mergeScouting(c0, 'north-tech', {
+      zones: { line: 8, cross: 2, middle: 1, tip: 1 }, spikes: 12, feints: 0, routes: {},
+    }));
+  }
   s.enterUniversity('meixi');
   const play = () => {
     const c = s.loadCareer();
@@ -119,7 +131,7 @@ function corpSave({ played = 0, scouting = null, thisOppZones = null } = {}) {
   assert.ok(s.enterCorporate('panshi-heavy'));
   const c = s.loadCareer();
   const games = c.schedule.filter((m) => m.round === 'corp');
-  const sc = scouting ? { ...scouting } : {};
+  const sc = scouting ? { ...scouting } : (scoutAtHS ? (c.scouting ?? {}) : {});
   if (thisOppZones && played > 0) sc[games[played - 1].opponentId] = { zones: thisOppZones };
   s.saveCareer({
     ...c,
@@ -210,4 +222,23 @@ test('M4② 被盯線照打 ⇒ 不播、不入帳', async () => {
   assert.doesNotMatch(acc, /球探報告在第一局就過期/);
   const save = JSON.parse(storage.getItem(SAVE_KEY));
   assert.equal(save.season.events.includes(`corp-shakeoff-${games[0].id}`), false);
+});
+
+// ════════════════════════════════════════════════════════════════
+// 覆審 MEDIUM 補證：聚合撐過章節轉換（真實鏈可執行證據）
+// ════════════════════════════════════════════════════════════════
+test('高中期 mergeScouting 寫入 → 正式鏈入企業章 → 聚合非空且 setup 帶讀取參數', async () => {
+  const { storage, games } = corpSave({ played: 0, scoutAtHS: true });
+  const s = createCareerStore(storage);
+  const career = s.loadCareer();
+  const agg = leagueScoutZones(career);
+  assert.ok(agg, '高中寫入的情蒐要撐過 enterUniversity→四年→settleUniFinale→enterCorporate');
+  assert.deepEqual(agg.zones, { line: 8, cross: 2, middle: 1, tip: 1 }, '逐鍵原值');
+  const setup = careerMatchSetup(
+    career, s.loadPlayer(), games[0],
+    { capacity: 8, members: buildCorpMembers('panshi-heavy'), alumni: [] },
+    null, 8, null, 'panshi-heavy',
+  );
+  assert.ok(setup.scoutRead, '企業首戰 setup 要真的帶讀取參數（因果鏈全通）');
+  assert.deepEqual(setup.scoutRead.B.zones, agg.zones);
 });
