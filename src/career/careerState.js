@@ -129,6 +129,21 @@ export function careerStage(career) {
   return 'national';
 }
 
+// 債 C（2026-08-25，acceptance-uni-finale-align.md）：「這一季打完了沒」的
+// **單一事實來源**——章節偵測走賽程 schema（`round==='league'` 只在 uniSchedule
+// 產生、高中是 'rr'，events.js:643 既有不變式），career view 自足、不用外帶 chapter。
+// 大學＝league 全部有結果（league 空的壞存檔回 false＝視為進行中，安全回退，
+// 與配色卷 E5 的裁定一致）；高中＝careerStage 收束事實。
+// ★careerStage 仍是高中 schema 專用★（'group'/'national'/'national-final'）——
+// 它對大學賽程恆回 'national'，季收束一律問這一顆，不要再各自手抄 league 判斷式。
+export function seasonConcluded(career) {
+  const league = (career.schedule ?? []).filter((m) => m?.round === 'league');
+  if (league.length > 0) {
+    return league.every((m) => (career.results ?? []).some((r) => r.matchId === m.id));
+  }
+  return ['eliminated', 'champion'].includes(careerStage(career));
+}
+
 // 下一場：小組賽依序保底 3 場；循環組保底 3 場（輸球照打）；
 // 淘汰賽逐輪推進、落敗/未晉級/奪冠＝null（生涯弧線收束）
 export function nextMatch(career) {
@@ -167,8 +182,13 @@ export const TITLE_LEVEL_BONUS = 3; // 每座冠軍讓對手全屬性 +3（平�
 // 4.5A：opts.seasonIndex＝下一屆屆數（宿敵保底階梯——第 2 屆天鷹改掛準決賽；
 // 省略＝預設階梯＝既有行為不變，舊呼叫端/測試零遷移）
 export function advanceSeason(career, { invitedId = null, seasonIndex = null } = {}) {
-  const stage = careerStage(career);
-  if (stage !== 'champion' && stage !== 'eliminated') return career; // 賽季未結束＝不動
+  // TODO(uni-year2) 債 C 顯式守衛（2026-08-25）：大學屆間推進要走 uniSchedule 重建
+  // ＋大學版換血，接線前一律 no-op——改前這裡靠 careerStage 對大學恆回 'national'
+  // 的**意外死鎖**擋住；顯式擋，否則大二卷升 CHAPTER_SEASONS 後，這個函式會拿
+  // 高中的 buildSchedule 幫大學生蓋高中賽程（不變式測試＝uni-season-concluded C4）
+  if ((career.schedule ?? []).some((m) => m?.round === 'league')) return career;
+  if (!seasonConcluded(career)) return career; // 賽季未結束＝不動（單一定義，債 C）
+  const stage = careerStage(career); // 高中 schema：titles 記帳仍要分冠軍/止步
   let h = (career.seed ^ 0x9e3779b9) >>> 0;
   h = Math.imul(h ^ 0x85ebca6b, 16777619) >>> 0;
   const seed = (h % 1000000007) || 1; // 決定論鏈：下一屆種子由本屆種子衍生

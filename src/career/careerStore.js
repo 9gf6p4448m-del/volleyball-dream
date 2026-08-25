@@ -173,8 +173,10 @@ export function createCareerStore(storage, slot = 1) {
       if (!view) return false;
       // 封頂改由章節決定（大學卷批 4，2026-08-14）——★不再寫死 3★
       // 高中仍是三屆（`CHAPTER_SEASONS`），行為逐值不變；大學的年限同表另計。
-      // ⚠ 大學賽程是批 6：在那之前推進到大學章會掉進沒有賽程的空狀態，
-      //   而目前唯一進得了大學章的路徑是 `store.enterUniversity()`，尚未接上任何 UI。
+      // 債 C（2026-08-25）：chapterCompleted 是**年限封頂**（這一章沒有下一年了），
+      // 「這一季打完了沒」是另一個問題＝careerState.seasonConcluded（單一定義）。
+      // 大學屆間推進在 careerState.advanceSeason 有顯式 no-op 守衛（TODO(uni-year2)），
+      // 大二卷升 CHAPTER_SEASONS 後這裡放行也推不動，要去那裡接線。
       if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
       // 4.5A 宿敵保底：下一屆屆數傳入賽程生成（第 2 屆天鷹掛準決賽）
       const next = advanceSeason(view, { ...opts, seasonIndex: (save.season.index ?? 1) + 1 });

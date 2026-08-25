@@ -234,3 +234,23 @@ test('F2 對陣畫面上看得到對手的具名球員（大學表真的被吃�
   assert.ok(opp.squad.some((n) => text.includes(n)),
     `對陣畫面上找不到 ${opp.name} 的任何一位球員`);
 });
+
+test('債C覆審修（08-25）：大學聯賽打滿後「去找教練」不與結算同框；未打滿照舊浮現', async () => {
+  // 位置旗標的 ENGINEERED_OPEN 回填只在 main.js 開機跑（node 治具吃不到）——
+  // 比照 debugVault.js 走正式兩段轉移補上，否則轉位候選恆空、面板恆不浮現、
+  // 這條測試兩個方向都零鑑別力
+  const { ENGINEERED_OPEN } = await import('../src/career/positionFlags.js');
+  const openFlags = (storage) => {
+    const s = createCareerStore(storage);
+    for (const p of ENGINEERED_OPEN) { s.markPositionReady(p); s.approveOpenPosition(p); }
+    return storage;
+  };
+  // 反向：守衛不能把面板整個殺掉——7/8 未收束，請調入口該在
+  const midText = await renderCareer(openFlags(uniStorage('meixi', 7)));
+  assert.match(midText, /去找教練/, '未收束時請調入口消失＝守衛過寬');
+  // 正向：8/8 已收束（結算分支渲染），面板不得同框——舊守衛問 careerStage
+  // （對大學恆 'national'）就是在這裡穿幫的
+  const doneText = await renderCareer(openFlags(uniStorage('meixi', 8)));
+  assert.match(doneText, /賽季結束|大學聯賽冠軍|聯賽第/, 'fixture 前提：8/8 已進結算分支');
+  assert.doesNotMatch(doneText, /去找教練/, '賽季已收束＝屆間談話的時段，不重疊');
+});

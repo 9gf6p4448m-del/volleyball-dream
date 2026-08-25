@@ -2,7 +2,8 @@
 // 夜賽同色系；動態文字一律 textContent（匯入的存檔名字不可信，不走 innerHTML）
 import {
   createCareer, createCareerPlayer, nextMatch, careerRecord, opponentName,
-  careerStage, opponentById, normalizeCareerPlayer, resolveForfeit, applyPoaching,
+  careerStage, seasonConcluded, opponentById, normalizeCareerPlayer, resolveForfeit,
+  applyPoaching,
   applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable, matchOpponentDef,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
@@ -1847,10 +1848,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
     // W4(P4) 題1：賽季中「去找教練」請調入口（對話事件語彙、非功能按鈕——
     // gate 三條件成立才浮現；賽季已收束＝屆間談話的時段，不重疊）
+    // 債 C 覆審 MEDIUM（08-25）：收束判準改接 seasonConcluded——舊寫法問 careerStage，
+    // 它對大學 schema 恆回 'national' ⇒ 大學聯賽 8/8 打滿後這面板照樣浮現，
+    // 跟「大一賽季結束」結算同框（高中章兩判準等值，行為不變）
     const transferRoles = transferCandidates({
       flags: store.loadPositionFlags?.() ?? {}, player, career,
     });
-    if (transferRoles.length && stage !== 'champion' && stage !== 'eliminated') {
+    if (transferRoles.length && !seasonConcluded(career)) {
       const t = el('div', [
         `background:${COLOR.card}`, 'border-radius:12px', 'border:1px dashed #3a4a68',
         'padding:10px 16px', 'width:min(340px, 92vw)', 'cursor:pointer',
@@ -2109,9 +2113,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const inUniversity = !isHighSchool(store.loadChapter?.());
     const pickedSchool = universityById(store.loadSchool?.() ?? '');
     const uniLeague = career.schedule.filter((x) => x.round === 'league');
-    // 大學賽季打完了沒（批 6）：八場全部有結果
-    const uniSeasonDone = inUniversity && uniLeague.length > 0
-      && uniLeague.every((m) => career.results.some((r) => r.matchId === m.id));
+    // 大學賽季打完了沒（批 6）→ 債 C 收斂：判準單一定義在 seasonConcluded
+    // （league 全有結果）；uniLeague.length 守衛保留＝league 空的壞存檔不進結算分支
+    const uniSeasonDone = inUniversity && uniLeague.length > 0 && seasonConcluded(career);
     if (inUniversity) {
       root.appendChild(el('div', [
         'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
@@ -2272,19 +2276,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 🔓 手批面板已移除（07-27 Sawmah 拍板：四位置驗收完結→版本級 open，見
   // positionFlags.ENGINEERED_OPEN；未來新位置驗收用 ?openPosition= 入口即可）
 
-  // 配色卷階段二 E5（對抗覆審 CRITICAL 修，使用者裁定＝消費端章節感知）：即時季
-  // 「進行中」判定的單一定義。高中章＝careerStage 收束事實（eliminated/champion）；
-  // 大學章不能吃 careerStage——它只認高中賽程 schema（stage:'group'/'national'、
-  // national-final），對 stage:'uni' 恆回 'national'（＝恆「進行中」）——改比照
-  // renderCareer 的 uniSeasonDone 先例：league 全部有結果＝收束。league 空
-  // （school 解不開的舊存檔）視為進行中＝與改前行為一致的安全回退。
+  // 配色卷階段二 E5（對抗覆審 CRITICAL 修）→ 債 C 收斂（2026-08-25）：即時季
+  // 「進行中」＝「季未收束」，判準單一定義在 careerState.seasonConcluded（章節偵測
+  // 走賽程 schema：大學＝league 全有結果、league 空的壞存檔安全回退進行中；
+  // 高中＝careerStage 收束事實）。這裡不再手抄 league 判斷式。
   function liveSeasonOngoing(career) {
-    if (!isHighSchool(store.loadChapter?.())) {
-      const league = (career.schedule ?? []).filter((x) => x.round === 'league');
-      return !(league.length > 0
-        && league.every((m) => (career.results ?? []).some((r) => r.matchId === m.id)));
-    }
-    return !['eliminated', 'champion'].includes(careerStage(career));
+    return !seasonConcluded(career);
   }
 
   // ---- W4(P4) Q5 生涯結算（第 3 屆終點）：三屆定格→招募全記錄→關鍵球典藏→
@@ -2318,11 +2315,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     ]);
     overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
       '生涯結算'));
-    // TODO(uni-finale) 大學章結算接線時 showCareerFinale() 必查此行；並注意（覆審 LOW
-    // 2026-08-25）：接大二（CHAPTER_SEASONS.university > 1）之前，careerStore.js:178 的
-    // chapterCompleted（純年數）與 careerState.js advanceSeason 的 careerStage 判準（對
-    // stage:'uni' 恆回 'national'＝死鎖）都還不認得大學賽程收束——三份「大學季收束」定義
-    // 要先對齊（本檔 liveSeasonOngoing 是其一），否則屆數推進會在聯賽沒打完時就放行/卡死
+    // TODO(uni-finale) 大學章結算接線時 showCareerFinale() 必查此行。
+    // 債 C 已對齊（2026-08-25，acceptance-uni-finale-align.md）：季收束單一定義
+    // ＝careerState.seasonConcluded（本檔 liveSeasonOngoing/uniSeasonDone 都接它）；
+    // advanceSeason 對大學 schema 顯式 no-op（TODO(uni-year2)，不再靠 careerStage
+    // 死鎖）；chapterCompleted 維持**年限封頂**語意與收束互補。大二接線＝推進條件
+    // 該是「seasonConcluded && !chapterCompleted」＋uniSchedule 重建。
     overlay.appendChild(el('div', [
       'font-size:26px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:3px',
       'text-shadow:0 4px 24px rgba(0,0,0,0.8)',
