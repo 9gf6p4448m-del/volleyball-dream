@@ -10,6 +10,7 @@ import { TRUST_DYN } from '../sim/trust.js';
 import { OPPONENTS, opponentById } from './opponents.js';
 // 大學卷批 6：大學對手池（與 opponents 同構的另一張表；高中那張一行不動）
 import { universityById } from './universities.js';
+import { corporationById } from './corporations.js';
 import { kitFor } from './teamKit.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
 import {
@@ -57,7 +58,9 @@ function season1Schedule(seed) {
 
 export function opponentName(opponentId) {
   // 大學卷批 6：大學章的對手在另一張表（兩張表的 id 不重疊）
-  return opponentById(opponentId)?.name ?? universityById(opponentId)?.name ?? opponentId;
+  // 企業章批 2：第三張表也算數（同大學卷批 6 對 universities 的補全）
+  return opponentById(opponentId)?.name ?? universityById(opponentId)?.name
+    ?? corporationById(opponentId)?.name ?? opponentId;
 }
 
 // seed＝生涯種子：每場比賽種子由 matchSeed 決定論導出（同生涯同場次可重現）
@@ -842,8 +845,11 @@ export function deserializeCareer(json) {
     if (!m.id || !m.opponentId) throw new Error('生涯存檔賽程項缺 id/opponentId');
     // 語意驗證：對手必須存在於參數檔——擋掉匯入壞資料在「出戰」當下才炸頁。
     // 大學卷批 6：大學章的賽程吃 `universities.js`，兩張表都算數（不放寬驗證，
-    // 只是把「參數檔」的範圍補全——查不到仍然照丟）
-    if (!opponentById(m.opponentId) && !universityById(m.opponentId)) {
+    // 只是把「參數檔」的範圍補全——查不到仍然照丟）。
+    // 企業章批 2：`corporations.js` 是第三張——漏掉它的話 enterCorporate 寫完存檔，
+    // 下一次 loadSave 直接 throw＝整份存檔讀不回來（A2 系列測試實抓）。
+    if (!opponentById(m.opponentId) && !universityById(m.opponentId)
+      && !corporationById(m.opponentId)) {
       throw new Error(`生涯存檔含未知對手：${m.opponentId}`);
     }
   }

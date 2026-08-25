@@ -13,11 +13,15 @@ import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 // 但同名會讓讀的人以為是遞迴。別名讓「純函式」與「會落檔的方法」一眼分得開。
 import {
   normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted, isUniversity,
+  enterCorporate as enterCorporateBlock, isCorporate,
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { universityById } from './universities.js';
 import { buildUniSchedule, uniTable } from './uniSchedule.js';
 import { buildUniMembers, uniStartTrustFor, uniRankTrustBonus } from './uniTeam.js';
+import { corporationById, corpOffersFor } from './corporations.js';
+import { buildCorpMembers, corpStartTrustFor } from './corpTeam.js';
+import { buildCorpSchedule } from './corpSchedule.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -35,6 +39,18 @@ import {
 import { slotKey, slotHeadKey, slotMidKey, headOf } from './saveSlots.js';
 
 export const SAVE_KEY = 'vd-save'; // ＝slotKey(1)：槽 1 沿用既有單檔 key（零遷移）
+
+// 企業章批 2：封存裡最近一筆帶 uniRank 的季（正常存檔＝U4 那筆，settleUniFinale 寫入）。
+// ★單一讀取點★ corpOffers 與 enterCorporate 的名次加成都問這裡——A2-4「值從哪來」：
+// 讀的是封存的真實路徑，不接受呼叫端外帶 rank。壞存檔（一筆都沒有）回 0＝最低待遇，不猜。
+function archivedUniRank(save) {
+  const seasons = save?.career?.seasons ?? [];
+  for (let i = seasons.length - 1; i >= 0; i -= 1) {
+    const r = seasons[i]?.uniRank;
+    if (Number.isInteger(r) && r >= 1) return r;
+  }
+  return 0;
+}
 // Phase 2 雙 key 舊制（v1）：拍板不相容——偵測到即清空並提示重置，不做資料遷移
 export const LEGACY_CAREER_KEY = 'vd-career-v1';
 export const LEGACY_PLAYER_KEY = 'vd-career-player-v1';
@@ -506,6 +522,78 @@ export function createCareerStore(storage, slot = 1) {
     loadSchool() {
       const id = loadSave()?.career?.school;
       return typeof id === 'string' && universityById(id) ? id : null;
+    },
+    // ══════ 企業章 批 2（2026-08-25）══════
+    // 驗收＝docs/kickoffs/acceptance-corp-batch2.md（A2-1/A2-2/A2-4）。
+    // 簽了哪家企業（沒簽＝null；查得到才算數，同 loadSchool 慣例）。
+    loadCorp() {
+      const id = loadSave()?.career?.corp;
+      return typeof id === 'string' && corporationById(id) ? id : null;
+    },
+    // 入章時封存的大學名冊（比照 loadHighSchoolRoster）。沒入章＝null。
+    loadUniRoster() {
+      const r = loadSave()?.career?.uniRoster ?? null;
+      return r?.members?.length ? structuredClone(r) : null;
+    },
+    // 邀約集合——★值從封存的 uniRank 來（A2-4「值從哪來」）★ UI 一律呼叫這裡，
+    // 不得自己拿 rank 當參數去呼叫 corpOffersFor（招募替代路徑卷的教訓：把判準
+    // 當參數餵進去，測試與畫面就再也驗不到「值的真實來源」）。
+    corpOffers() {
+      return corpOffersFor(archivedUniRank(loadSave()));
+    },
+    /**
+     * 簽入企業隊＝入章。★★ 同一次 RMW ★★ 章節、公司、名冊換血、球權、賽程、
+     * 屆數要嘛一起換好，要嘛一個都不換（同 enterUniversity 批 6 的半吊子存檔防線）。
+     * 守衛（A2-2）：只有「大學謝幕已結算」（finaleSettled＝U4 第 4 筆已封存）的
+     * 存檔可入章——謝幕先於下一章；已在企業章＝冪等 no-op（不覆寫已簽的公司）；
+     * 壞 corpId＝不猜、不入章。
+     * 球權（A2-1，★數值屬提案★）：隊階起點（corpStartTrustFor，沿大學同一張表）
+     * ＋大學名次加成（uniRankTrustBonus 同一顆函式——名次帶著走的企業章版本）；
+     * floorShare 照舊不碰（球權保底與章節無關）。
+     */
+    enterCorporate(corpId = null) {
+      const save = loadSave();
+      if (!save) return false;
+      if (save.career?.finaleSettled !== true) return false;
+      if (isCorporate(normalizeChapter(save.career ?? null))) return false;
+      const corp = corporationById(corpId);
+      if (!corp) return false;
+      return writeSave((prev) => {
+        // no-op 條件與寫入內容綁同一份 prev 讀值（同 settleUniFinale 的雙保險慣例）
+        if (prev?.career?.finaleSettled !== true) return prev;
+        if (isCorporate(normalizeChapter(prev.career ?? null))) return prev;
+        const nextSeason = (prev.season?.index ?? 0) + 1;
+        const members = buildCorpMembers(corp.id);
+        const playerRole = prev.player?.currentRole ?? 'outside';
+        const lineup = defaultLineup(members, prev.player?.id ?? 'A2', playerRole);
+        const startTrust = Math.min(100,
+          corpStartTrustFor(corp) + uniRankTrustBonus(archivedUniRank(prev)));
+        return {
+          ...prev,
+          career: {
+            ...enterCorporateBlock(prev.career, nextSeason),
+            corp: corp.id,
+            // 大學名冊封存（比照 highSchoolRoster：不隨行，生涯數據頁還看得到）
+            uniRoster: prev.roster ?? null,
+          },
+          roster: { capacity: members.length + 1, members, alumni: [] },
+          lineup,
+          player: prev.player
+            ? {
+              ...prev.player,
+              trust: { ...(prev.player.trust ?? {}), fromSetter: startTrust },
+            }
+            : prev.player,
+          season: {
+            ...prev.season,
+            index: nextSeason,
+            schedule: buildCorpSchedule({ corpId: corp.id, seed: prev.season?.seed ?? 1 }),
+            results: [],
+            events: [],
+            pendingMatch: undefined,
+          },
+        };
+      });
     },
     // 練習賽卷（2026-08-12）：屆間紅白對抗賽的成績（`practiceRecordOf` 的形狀）。
     // ★ 讀出來一律過 normalizePractice ★ 舊存檔沒有這個鍵、手改的存檔可能只有半組欄位；

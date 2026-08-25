@@ -17,6 +17,7 @@ import { FINISH, FINISH_RANK } from './admission.js';
 // 批 2 治具跳年只允許碰 universities（驗參數用）——推進一律走 store 公開方法，
 // 不得 import buildUniSchedule/uniSeasonTurnover/buildUniMembers（B2-2 機械判定）
 import { universityById } from './universities.js';
+import { corporationById } from './corporations.js';
 
 // 三屆的名次組合：讓「三屆最佳成績」等於請求值，其餘兩屆固定較差（不影響最佳值，
 // 但避免三屆一模一樣——那會讓「取最好的一屆」這條邏輯在治具上驗不到東西）。
@@ -129,5 +130,47 @@ export function advanceToUniYear(store, { schoolId, year }) {
     });
     if (!store.advanceSeason?.()) return false;
   }
+  return true;
+}
+
+// ---- 企業章批 2：治具入章（acceptance-corp-batch2.md A2-5）----
+// `?devcorp=<企業id>`，同 devuni：只在 devSeedRequest 成立時被 main.js 消費，
+// 單獨出現零寫入。與 devuni 同時出現時 devcorp 優先（它本來就包含跑完大學四年）。
+export const DEV_CORP_PARAM = 'devcorp';
+
+// 治具用的大學母校（走完四年用；固定一所＝決定論。要測不同 uniRank 起點，
+// 現階段用正式流程打——治具控名次是掛帳，不在 A2-5 範圍）
+const DEV_CORP_UNI = 'haiyan';
+
+/** 解 devcorp 參數。隊不存在＝null（不啟動、不猜）——驗參數允許 import corporations，
+ *  同 devuni 之於 universities 的既有先例（B2-2 註解）。 */
+export function devCorpRequest(params) {
+  const raw = params?.get?.(DEV_CORP_PARAM) ?? null;
+  if (typeof raw !== 'string' || !raw) return null;
+  if (!corporationById(raw)) return null;
+  return { corpId: raw };
+}
+
+/**
+ * 把當前槽推進到「已簽入指定企業隊、企業賽季開局」。
+ * ★ 全程走正式鏈 ★ enterUniversity → 逐年 advanceSeason → U4 打滿 →
+ * settleUniFinale → enterCorporate——治具合成的只有各年戰績（與跳年同式）。
+ * 注意：直接簽指定隊＝繞過邀約集合檢查（治具語意，同 devuni 繞過升學候選集合）。
+ * @returns true＝到位；false＝中途任何一步失敗（不半吊子續跑）
+ */
+export function advanceToCorp(store, { corpId }) {
+  if (!advanceToUniYear(store, { schoolId: DEV_CORP_UNI, year: 4 })) return false;
+  const career = store.loadCareer?.();
+  const league = (career?.schedule ?? []).filter((m) => m?.round === 'league');
+  if (!league.length) return false;
+  store.saveCareer?.({
+    ...career,
+    results: league.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  if (!store.settleUniFinale?.()) return false;
+  if (!store.enterCorporate?.(corpId)) return false;
   return true;
 }

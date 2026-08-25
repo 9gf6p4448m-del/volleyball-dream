@@ -75,6 +75,7 @@ import {
   universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
 } from '../career/universities.js';
 import { uniTable, UNI_PLAYER_ID } from '../career/uniSchedule.js';
+import { CORPORATIONS, CORP_TIER_LABEL } from '../career/corporations.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -2195,6 +2196,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         // （①四年回顧②同屆送別③終卡）；年限封頂仍由 chapterCompleted 擋著推進，
         // 這裡只開儀式——結算（批 1 settleUniFinale）在 showUniFinaleCeremony 內接線
         root.appendChild(button('▶ 四年打完了——謝幕', true, () => showUniFinaleCeremony()));
+        // 企業章批 2（2026-08-25，acceptance-corp-batch2 A2-3）：謝幕已結算的存檔
+        // 才長出下一章入口——謝幕先於下一章（未結算連按鈕都沒有，不是按了沒反應）
+        if (store.uniFinaleSettled?.()) {
+          root.appendChild(button('▶ 前往下一個舞台', false, () => showCorpDraft()));
+        }
       }
     } else if (careerOver) {
       root.appendChild(el('div', [
@@ -2768,6 +2774,127 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
       '點擊返回生涯畫面'));
     overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+    document.body.appendChild(overlay);
+  }
+
+  // ════════ 企業章 批 2（2026-08-25）：選秀儀式（演出）→ 邀約自選 → 入章 ════════
+  // 拍板題 4＝混合：唱名儀式的演出在前（大作感），實質仍是「U4 名次決定邀約集合、
+  // 玩家在集合內自選」——集合一律問 store.corpOffers()（值從封存 uniRank 來，A2-4）。
+  // ★演出文案與唱名分派屬提案★（試玩回饋即改）。
+  function showCorpDraft() {
+    const career = store.loadCareer();
+    const roster = store.loadRoster?.();
+    const schoolId = store.loadSchool?.() ?? '';
+    // 唱名名單＝同屆畢業生（謝幕送別同一套篩法；純演出、不落檔）
+    const { graduates } = uniSeasonTurnover({
+      roster, schoolId, seasonIndex: career?.seasons?.length ?? 0, seed: 1,
+    });
+    const called = graduates.filter((g) => g?.fullName).slice(0, 3);
+    const lines = [
+      '【企業排球聯賽・新人選秀會】',
+      '轉播燈亮起。八家企業的桌牌在場邊排開——名字被念到的人，從這裡走進大人的聯賽。',
+    ];
+    // 決定論輪派（i*3+1 讓三個名字落在不同 tier 的隊；純演出，不影響任何存檔）
+    called.forEach((g, i) => {
+      const team = CORPORATIONS[(i * 3 + 1) % CORPORATIONS.length];
+      lines.push(`「——${team.name}，指名 ${g.fullName}。」掌聲。他起身時朝你點了下頭。`);
+    });
+    lines.push('然後，主持人唸出下一個名字的瞬間——好幾張桌子同時舉了牌。');
+    lines.push(`「${career?.playerName ?? '你'}。」輪到你了。`);
+    dialogPlay([{ lines }], () => showCorpOffers());
+  }
+
+  function corpCard(c, onPick) {
+    const tierColor = { 強豪: COLOR.gold, 中堅: COLOR.cyan, 保底: COLOR.dim }[CORP_TIER_LABEL[c.tier]];
+    const card = el('div', [
+      'width:min(560px,94vw)', `background:${COLOR.card}`, 'border-radius:16px',
+      'padding:14px 16px', 'display:flex', 'flex-direction:column', 'gap:8px',
+      `border:1px solid ${tierColor === COLOR.dim ? '#2c3a58' : tierColor}44`,
+    ]);
+    const head = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+    head.appendChild(el('div', ['font-size:19px', 'font-weight:900', `color:${COLOR.text}`], c.name));
+    head.appendChild(badge(CORP_TIER_LABEL[c.tier], `${tierColor}22`, tierColor));
+    card.appendChild(head);
+    card.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.6'], c.blurb));
+    card.appendChild(el('div', ['font-size:12px', `color:${COLOR.cyan}`],
+      `王牌 ${c.ace.name}（${c.ace.title}）`));
+    for (const [label, text] of [['球權', c.cost.ball], ['戰績', c.cost.record], ['環境', c.cost.tech]]) {
+      const row = el('div', ['display:flex', 'gap:8px', 'align-items:flex-start']);
+      row.appendChild(el('div', ['font-size:11px', 'font-weight:800', `color:${COLOR.dim}`,
+        'flex:none', 'width:28px', 'padding-top:2px'], label));
+      row.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'line-height:1.6'], text));
+      card.appendChild(row);
+    }
+    const pick = el('div', ['display:flex', 'justify-content:flex-end']);
+    pick.appendChild(smallButton('▶ 簽這一家', () => onPick(c)));
+    card.appendChild(pick);
+    return card;
+  }
+
+  function showCorpOffers() {
+    const offers = store.corpOffers?.() ?? [];
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:39', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#05070d', 'gap:10px', 'padding:24px 12px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'letter-spacing:4px'],
+      '企業聯賽・邀約'));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'line-height:1.7',
+      'text-align:center', 'max-width:560px'],
+    `舉牌的桌子放下了，正式的邀約送到你面前——${offers.length} 家企業要你。`));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
+      'text-align:center', 'max-width:560px', 'margin-bottom:4px'],
+    '這次不是四年——是簽約。代價都寫在卡片上了，想清楚再簽。'));
+    for (const c of offers) {
+      overlay.appendChild(corpCard(c, (picked) => {
+        overlay.remove();
+        showCorpConfirm(picked, () => showCorpOffers());
+      }));
+    }
+    document.body.appendChild(overlay);
+  }
+
+  // 二次確認：簽約是不可逆的（同升學的誤觸防線）
+  function showCorpConfirm(c, onCancel) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.94)',
+      'gap:14px', 'padding:24px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:22px', 'font-weight:900', `color:${COLOR.gold}`], c.name));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
+      'line-height:1.7', 'max-width:460px'], c.cost.ball));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], '簽了字就不能反悔。'));
+    const row = el('div', ['display:flex', 'gap:10px', 'flex-wrap:wrap', 'justify-content:center']);
+    row.appendChild(smallButton('再想想', () => { overlay.remove(); onCancel(); }));
+    row.appendChild(button('簽約', true, () => {
+      const ok = store.enterCorporate?.(c.id);
+      overlay.remove();
+      // 守衛擋下（壞存檔/重入）不得裝作簽成——回生涯頁，不進 done 卡
+      if (ok) showCorpDone(c);
+      else renderCareer();
+    }));
+    overlay.appendChild(row);
+    document.body.appendChild(overlay);
+  }
+
+  function showCorpDone(c) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:#05070d', 'gap:14px',
+      'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', ['font-size:30px', 'font-weight:900', `color:${COLOR.gold}`,
+      'letter-spacing:6px'], c.name));
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.text}`, 'letter-spacing:2px'],
+      '入社報到'));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'margin-top:16px',
+      'text-align:center', 'line-height:1.8'],
+    '企業聯賽賽季準備中——這一年的對手，就是剛剛沒有簽的那七家。'));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:20px'],
+      '點擊任意處返回'));
+    overlay.addEventListener('pointerdown', () => { overlay.remove(); renderSlots(); });
     document.body.appendChild(overlay);
   }
 

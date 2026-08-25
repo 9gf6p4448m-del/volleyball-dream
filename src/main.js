@@ -18,6 +18,7 @@ import { createCareerScreen } from './ui/careerScreen.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
 import {
   devSeedRequest, buildSyntheticSave, devUniRequest, advanceToUniYear,
+  devCorpRequest, advanceToCorp,
 } from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentName } from './career/careerState.js';
@@ -128,8 +129,12 @@ async function showCareerEntry(ctx) {
       store.seedWholeSave(synthetic);
       // 大二卷批 2：?devuni=<校id>:<年1-4> 治具跳年（走正式升學＋屆間推進鏈；
       // 參數不合法＝devUniRequest 回 null＝忽略，停在升學那一刻照舊）
+      // 企業章批 2：?devcorp=<企業id> 治具入章（走正式升學→四年→謝幕→簽約鏈；
+      // 與 devuni 同時出現時 devcorp 優先——它本來就包含跑完大學四年）
+      const corpReq = devCorpRequest(ctx.params);
       const uniReq = devUniRequest(ctx.params);
-      if (uniReq) advanceToUniYear(store, uniReq);
+      if (corpReq) advanceToCorp(store, corpReq);
+      else if (uniReq) advanceToUniYear(store, uniReq);
     }
   }
   // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置回填至 open
