@@ -53,3 +53,14 @@
 ## 改前紅
 - 新測試在 0a884da worktree 上跑須紅；紅因若僅是 import 不到新檔（旁枝），
   依大二卷慣例以壞版自證補行為級紅（至少一條：改壞 corpSchedule 勝點表後對應斷言紅）。
+
+---
+## A1-3 附註（2026-08-25 實作時依 02 §2.1 例外自行修正、事後回報）
+- **原條件錯在哪**：`chapterCompleted({corporate, enteredAtSeason:8}, 7) === false` 不可能成立——
+  `chapterSeasonOf` 對「seasonIndex < enteredAtSeason」**既有設計**是夾到第 1 年
+  （chapter.js：壞存檔保守回退，大學章測試釘著這個行為）⇒ 年限 1 的章對任何輸入都
+  回「已達末年」。該條**無論實作對錯都過不了**＝零鑑別力，符合 §2.1 例外（恆假）。
+- **為什麼現在才知道**：凍結時照大學章 A 條的形狀類推（cap 4 時 7/8 有別），
+  沒推導 cap=1 與 clamp 的交互。
+- **修正後**（不降低任何其他條的難度）：true 半照舊（第 8 屆＝末年）＋反向探針改為
+  「completed 邏輯不得恆真」＝大學章年中（entered 4、season 5）仍須 false。

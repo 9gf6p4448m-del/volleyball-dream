@@ -193,8 +193,10 @@ export function advanceSeason(career, { invitedId = null, seasonIndex = null } =
   // 債 C 顯式守衛（2026-08-25）：本函式是**高中版**屆間推進（buildSchedule＝高中
   // 賽程）。大學屆間推進走 careerStore.advanceSeason 的大學分支（大二卷批 1 接線，
   // uniSchedule 重建＋uniTurnover 換血），不進這裡——這道守衛擋的是「拿高中的
-  // buildSchedule 幫大學生蓋高中賽程」（測試＝uni-season-concluded C4）
-  if ((career.schedule ?? []).some((m) => m?.round === 'league')) return career;
+  // buildSchedule 幫大學生蓋高中賽程」（測試＝uni-season-concluded C4）。
+  // 企業章批 1（2026-08-25）：`'corp'` 比照 `'league'`——同一種錯的第三章版本
+  //（企業章階段一只有一年、chapterCompleted 即封頂，更沒有理由進到高中的推進）。
+  if ((career.schedule ?? []).some((m) => m?.round === 'league' || m?.round === 'corp')) return career;
   if (!seasonConcluded(career)) return career; // 賽季未結束＝不動（單一定義，債 C）
   const stage = careerStage(career); // 高中 schema：titles 記帳仍要分冠軍/止步
   const seed = deriveSeasonSeed(career.seed); // 決定論鏈：下一屆種子由本屆種子衍生

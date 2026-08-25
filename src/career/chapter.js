@@ -17,17 +17,20 @@
 // 已是「chapter → true/false」的單一入口，這裡再加一顆「chapter → 隊名字串」的單一入口，
 // 兩者同一種呼叫慣例（吃 `normalizeChapter()` 的輸出，例如 `store.loadChapter()`）。
 import { universityById } from './universities.js';
+import { corporationById } from './corporations.js';
 import { OUR_TEAM_NAME } from './roster.js';
 
 export const CHAPTER = {
   HIGH_SCHOOL: 'highschool',
   UNIVERSITY: 'university',
+  // 成人/企業章（批 1，2026-08-25）——卷宗＝`docs/kickoffs/corporate-chapter-kickoff.md`
+  CORPORATE: 'corporate',
 };
 
 // 舊存檔（與任何缺鍵／壞值）一律回退高中——★這是 B1-2 零遷移的那一行★
 export const DEFAULT_CHAPTER = CHAPTER.HIGH_SCHOOL;
 
-const KNOWN = new Set([CHAPTER.HIGH_SCHOOL, CHAPTER.UNIVERSITY]);
+const KNOWN = new Set([CHAPTER.HIGH_SCHOOL, CHAPTER.UNIVERSITY, CHAPTER.CORPORATE]);
 
 /**
  * 把 `save.career` 這一塊正規化成完整的章節狀態。
@@ -54,6 +57,10 @@ export function isUniversity(chapter) {
   return normalizeChapter({ chapter }).id === CHAPTER.UNIVERSITY;
 }
 
+export function isCorporate(chapter) {
+  return normalizeChapter({ chapter }).id === CHAPTER.CORPORATE;
+}
+
 /**
  * 推進到大學章。**純函式**：回傳新的 `save.career` 區塊，不改傳入的那一份。
  * ★ 冪等 ★ 已經在大學章就原樣回傳（含 `enteredAtSeason` 不被覆寫）——防「按兩次
@@ -69,6 +76,21 @@ export function enterUniversity(careerBlock = null, seasonIndex = null) {
   return {
     ...(careerBlock ?? {}),
     chapter: { id: CHAPTER.UNIVERSITY, enteredAtSeason: at },
+  };
+}
+
+/**
+ * 推進到成人/企業章（批 1，2026-08-25）。**純函式、冪等**——語意與 `enterUniversity`
+ * 逐條相同：已在企業章原樣回傳（`enteredAtSeason` 與其餘鍵不被覆寫）、不改傳入物件。
+ * 簽了哪家公司存 `career.corp`（批 2 的 store RMW 寫，本函式不碰——同 school 之於大學）。
+ */
+export function enterCorporate(careerBlock = null, seasonIndex = null) {
+  const cur = normalizeChapter(careerBlock);
+  if (cur.id === CHAPTER.CORPORATE) return careerBlock ?? {};
+  const at = Number.isInteger(seasonIndex) && seasonIndex > 0 ? seasonIndex : null;
+  return {
+    ...(careerBlock ?? {}),
+    chapter: { id: CHAPTER.CORPORATE, enteredAtSeason: at },
   };
 }
 
@@ -90,6 +112,8 @@ export const CHAPTER_SEASONS = {
   // 大二卷批 1（2026-08-25 拍板題 1）：1→4——機制做「任意年推進」，內容分批；
   // 大四末收尾儀式是批 4，本表只管「還有沒有下一年」
   [CHAPTER.UNIVERSITY]: 4,
+  // 成人/企業章階段一＝1 年（卷宗拍板題 3「先做一年最小可玩」）；要延長只改這一個值
+  [CHAPTER.CORPORATE]: 1,
 };
 
 /** 這一章的年限（認不得的章節照高中給——保守，不會意外放行）。 */
@@ -124,9 +148,14 @@ export function chapterCompleted(chapter, seasonIndex = 1) {
  * null 的防呆慣例。
  *
  * @param chapter  一律吃 `normalizeChapter()` 的輸出（如 `store.loadChapter()`）
- * @param school   大學章的學校 id（如 `store.loadSchool()`）；高中章不使用
+ * @param school   大學章的學校 id（如 `store.loadSchool()`）；其他章不使用
+ * @param corp     企業章的公司 id（批 2 起由 `store.loadCorp()` 供給）；其他章不使用
  */
-export function currentTeamName(chapter, school = null) {
+export function currentTeamName(chapter, school = null, corp = null) {
+  if (isCorporate(chapter)) {
+    // 批 1 只鋪函式：`corp` 缺席（尚未接線）時回退創隊隊名，不炸畫面——同大學分支慣例
+    return (corp ? corporationById(corp)?.name : null) ?? OUR_TEAM_NAME;
+  }
   if (!isUniversity(chapter)) return OUR_TEAM_NAME;
   const uni = school ? universityById(school) : null;
   return uni?.name ?? OUR_TEAM_NAME;
