@@ -87,3 +87,33 @@
 - 續約/轉隊/多年生涯（題 3 拍板先做一年）；季後賽；國外強權可玩化（職業章再裁）；
   職業卷構想（贊助商球衣）；ATTR_CAP 100 傳奇解鎖（職業章）。
 - 既有掛帳照舊：stands 接線、`careerState.js:335` ROLE_ORDER 收斂、結算失敗文案 1 LOW。
+
+---
+## 六、結案紀錄（2026-08-25 開卷即關卷，四批）
+
+每批照慣例：凍結驗收（commit 落點）→實作→改前 worktree 紅→全套+sim-hash→
+fresh 對抗覆審→修 findings→（有修才）反駁式送審→部署。sim-hash `34772c06e02243fd`
+全卷不動；測試 1722→1768（＋46）。
+
+- **批 1**（e662d43 凍→e63472c）純函式與資料層：chapter CORPORATE／corporations 八隊／
+  corpTeam／corpSchedule／邀約集合／advanceSeason 守衛。覆審 0C/0H/1M（scoutRead
+  缺欄→查證＝大學同先例，批 3 裁定記檔）。A1-3 反向探針依 02 §2.1 例外修正
+  （原條恆假，附註在驗收檔）。
+- **批 2**（aa49e56 凍→231337a→修 0f8b5f4）入章接線：enterCorporate RMW／finaleSettled
+  入口／選秀演出＋邀約自選／?devcorp。實作中抓到存檔驗證漏第三張表（寫完即整份
+  讀不回）。覆審 1H（matchOpponentDef 漏表＝企業對手變通用隊）3M/L 全修；
+  反駁式送審 4/4 真的修好。
+- **批 3**（47faf9d 凍→d204fd9→真機修 736b271）賽季迴圈：seasonConcluded 擴充／
+  名次＋收尾卡／A 面球衣與隊名端到端／大學殘留分流／scoutRead 裁定。覆審 APPROVE
+  零 findings。瀏覽器實開 ?devcorp 全鏈驗證＋三個顯示修
+  （截圖 docs/snapshots/corp-{career,matchup}-batch3.png）。
+- **批 4**（3ff4bd0 凍→846d5cd→修 abfc1aa）敘事層：合約卡／薪水選擇點（單一 RMW）／
+  王勝翔錨點（fireEvents 一生一次）／收尾點名＋條件簡子嵐／design-brief 補句。
+  覆審 1H（寫入失敗假成功）1M（重入守衛）全修；送審 2/2 真的修好。
+
+### 掛帳（結案時點）
+- 續約/轉隊/多年生涯（收尾卡佔位「續約談判・敬請期待」）；季後賽；國外強權可玩化；
+  ATTR_CAP 100；level 治具校準（企業 level 未實測）；devcorp 治具控 uniRank。
+- 情蒐 scoutRead：企業與大學對手都不吃（先例）——未來平衡題連同大學一起裁。
+- archivedUniRank 讀「最後一筆帶 uniRank」——未來章節若重用該鍵名會抓錯筆（批 3
+  覆審留字）。
