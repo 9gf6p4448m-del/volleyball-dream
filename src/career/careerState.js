@@ -605,6 +605,54 @@ export function careerTeams(player, opponentDef = null, rosterMembers = null, li
 
 // stage 5 情蒐：把單場 scoutTally 併入生涯（per 對手——「這隊看過我什麼」；
 // 宿敵＝同隊 id 跨賽段自然沿用同一份記憶）
+// ══ 單調治療探針卷（2026-08-26）：球探建檔的讀取端 ══
+// ★ 門檻鏡射 sim ★ 0.35/0.15 與 `sim/game.js` scoutBlockMul 的熱/冷線同值——
+// M5 禁改 sim（sim-hash 不動），所以這裡是**有意的複製**，由測試把兩邊行為釘在
+// 同一個邊界上（tests/monotony-probe：share 恰過/不過門檻時 scoutBlockMul 的回傳）。
+export const SCOUT_HOT_SHARE = 0.35;
+export const SCOUT_COLD_SHARE = 0.15;
+export const SCOUT_ZONE_LABEL = { line: '直線', cross: '斜線', middle: '中路', tip: '吊球' };
+
+/**
+ * 全生涯扣打分佈聚合（拍板題 1「球探開季建檔」的資料來源）。**純函式**。
+ * career.scouting 是「各對手看過我的分佈」逐隊記帳（mergeScouting）——加總＝
+ * 我整個生涯的出手習慣＝聯賽球探研究錄影帶會得到的東西。
+ * @param excludeId 排除某對手的紀錄（賽後算「賽前狀態」用——企業對手本場的紀錄
+ *                  要剔掉，否則甩開句拿被污染的分佈自證）
+ * @returns {zones} 或 null（零紀錄——新檔/治具；呼叫端交給 sim 樣本<6 防線）
+ */
+export function leagueScoutZones(career, { excludeId = null } = {}) {
+  const out = { line: 0, cross: 0, middle: 0, tip: 0 };
+  let total = 0;
+  for (const [id, rec] of Object.entries(career?.scouting ?? {})) {
+    if (id === excludeId) continue;
+    for (const k of Object.keys(out)) {
+      const v = rec?.zones?.[k] ?? 0;
+      out[k] += v;
+      total += v;
+    }
+  }
+  return total > 0 ? { zones: out } : null;
+}
+
+/**
+ * 被盯的線：分佈中佔比 > SCOUT_HOT_SHARE 的最大線。樣本 <6 回 null（鏡射 sim
+ * 的小樣本防線——樣本不足時 sim 不讀，UI 也不得嚇唬玩家）。
+ * @returns { zone, share } 或 null
+ */
+export function scoutFocusZone(zones = null) {
+  if (!zones) return null;
+  const keys = ['line', 'cross', 'middle', 'tip'];
+  const total = keys.reduce((n, k) => n + (zones[k] ?? 0), 0);
+  if (total < 6) return null;
+  let best = null;
+  for (const k of keys) {
+    const share = (zones[k] ?? 0) / total;
+    if (share > SCOUT_HOT_SHARE && (!best || share > best.share)) best = { zone: k, share };
+  }
+  return best;
+}
+
 export function mergeScouting(career, opponentId, tally) {
   if (!tally) return career;
   const prev = career.scouting?.[opponentId] ?? {
@@ -693,8 +741,12 @@ export function careerMatchSetup(
 ) {
   const def = matchOpponentDef(matchEntry.opponentId, seasonIndex, { titles: career.titles ?? 0 });
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
-  // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）
-  const seen = career.scouting?.[matchEntry.opponentId];
+  // 對手讀我：這隊過去看過的我的攻擊分佈 × 其讀取強度（弱隊 scoutRead 0＝不讀）。
+  // 探針卷（2026-08-26 拍板題 1）：企業對手＝球探開季建檔——個別交手紀錄缺席時
+  // 回退全生涯聚合（單循環下賽前必缺；寫成回退而非覆蓋＝語意誠實）。聚合為空
+  // （零紀錄新檔）回 null ⇒ 參數不成立，sim 照舊不讀。高中/大學路徑逐字不變。
+  const seen = career.scouting?.[matchEntry.opponentId]
+    ?? (corporationById(matchEntry.opponentId) ? leagueScoutZones(career) : null);
   const scoutRead = seen && (def.scoutRead ?? 0) > 0
     ? { B: { targetId: 'A2', read: def.scoutRead, zones: seen.zones } }
     : undefined;

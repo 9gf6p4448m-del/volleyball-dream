@@ -12,10 +12,12 @@
 // 保底 72-75 是「比大學高一截」的第一版猜測，批 3 接上賽季迴圈後用治具校準——
 // 現在沒有企業賽程可跑，任何數字都還沒有實測支撐，不假裝有。
 //
-// ★ scoutRead 刻意不設（2026-08-25 批 3 裁定，不是漏欄）★ 情蒐反讀（careerState
-// `def.scoutRead ?? 0`）是高中章的機制；大學表 universities.js 同樣無此欄、大學章
-// 接戰鬥時也未開此題——企業章沿同一先例：對手不讀玩家球路。要讓成人對手更「老練」
-// 是未來的平衡題（連同大學章一起裁），到時加欄即可，本表結構已相容。
+// ★ scoutRead（2026-08-26 單調治療探針卷修訂）★ 08-25 批 3 原裁定「刻意不設、
+// 到時加欄即可」——後半是錯的：既有閘吃「個別交手紀錄」（careerState seen），
+// 企業單循環每隊只碰一次、加欄也永不觸發。探針卷拍板題 1 改為**球探開季建檔**：
+// corp 對手在 careerMatchSetup 以全生涯聚合分佈（leagueScoutZones）回退，本表
+// 的 scoutRead 因此生效。三檔梯度＝強豪 0.85／中堅 0.55／保底 0.25
+//（★屬提案試玩可調★；參照高中天鷹 0.9）。大學表維持不設（拍板題 4：探針限企業）。
 //
 // ★ grades 在這裡＝在隊年資 ★（成人沒有年級）。同名欄位、語意改記「第幾年」——
 // 沿用欄位名是因為 `buildCorpMembers` 與 `buildUniMembers` 同形（A1-5），而企業章
@@ -44,6 +46,7 @@ export const CORPORATIONS = [
   // ---- 強豪兩家（powerhouse）----
   {
     id: 'qingkong-aero',
+    scoutRead: 0.85,
     kit: { jersey: 0x1b3f7a, shorts: 0x0a1a30, trim: 0xcfe0f5, libero: { jersey: 0xcfe0f5, shorts: 0x0a1a30, trim: 0x1b3f7a } }, // 深空藍——天花板的顏色
     name: '擎空航太',
     tier: TIER.POWERHOUSE,
@@ -72,6 +75,7 @@ export const CORPORATIONS = [
   },
   {
     id: 'panshi-heavy',
+    scoutRead: 0.85,
     kit: { jersey: 0x4a4f55, shorts: 0x1c1f24, trim: 0xe8862a, libero: { jersey: 0xe8862a, shorts: 0x1c1f24, trim: 0x4a4f55 } }, // 鋼灰×熔橙——廠房與爐火
     name: '磐石重工',
     tier: TIER.POWERHOUSE,
@@ -98,6 +102,7 @@ export const CORPORATIONS = [
   // ---- 中堅三家（mid）----
   {
     id: 'chaoxi-marine',
+    scoutRead: 0.55,
     kit: { jersey: 0x0e6e8c, shorts: 0x06222e, trim: 0xe6f4f8, libero: { jersey: 0xe6f4f8, shorts: 0x06222e, trim: 0x0e6e8c } }, // 遠洋青——甲板上的天色
     name: '潮汐海運',
     tier: TIER.MID,
@@ -123,6 +128,7 @@ export const CORPORATIONS = [
   },
   {
     id: 'lieyang-petro',
+    scoutRead: 0.55,
     kit: { jersey: 0xb32418, shorts: 0x330a06, trim: 0xffd08a, libero: { jersey: 0xffd08a, shorts: 0x330a06, trim: 0xb32418 } }, // 烈陽紅——煉塔頂的火
     name: '烈陽石化',
     tier: TIER.MID,
@@ -148,6 +154,7 @@ export const CORPORATIONS = [
   },
   {
     id: 'baigang-precision',
+    scoutRead: 0.55,
     kit: { jersey: 0xc8ccd2, shorts: 0x2e3138, trim: 0x2563a8, libero: { jersey: 0x2563a8, shorts: 0x2e3138, trim: 0xc8ccd2 } }, // 銀白×工程藍——卡尺的顏色
     name: '白鋼精機',
     tier: TIER.MID,
@@ -174,6 +181,7 @@ export const CORPORATIONS = [
   // ---- 保底三家（weak）----
   {
     id: 'lvyuan-foods',
+    scoutRead: 0.25,
     kit: { jersey: 0x3e7d3a, shorts: 0x142a12, trim: 0xf2ecd8, libero: { jersey: 0xf2ecd8, shorts: 0x142a12, trim: 0x3e7d3a } }, // 原野綠——包裝紙上的田
     name: '綠原食品',
     tier: TIER.WEAK,
@@ -199,6 +207,7 @@ export const CORPORATIONS = [
   },
   {
     id: 'xingqiao-elec',
+    scoutRead: 0.25,
     kit: { jersey: 0x3b2f86, shorts: 0x120e2e, trim: 0x9fe8d8, libero: { jersey: 0x9fe8d8, shorts: 0x120e2e, trim: 0x3b2f86 } }, // 星紫×螢光青——深夜機房
     name: '星橋電子',
     tier: TIER.WEAK,
@@ -224,6 +233,7 @@ export const CORPORATIONS = [
   },
   {
     id: 'nanfeng-textile',
+    scoutRead: 0.25,
     kit: { jersey: 0xb08d57, shorts: 0x362a18, trim: 0x6a8ea0, libero: { jersey: 0x6a8ea0, shorts: 0x362a18, trim: 0xb08d57 } }, // 舊布駝×褪藍——五十年的布樣
     name: '南風紡織',
     tier: TIER.WEAK,

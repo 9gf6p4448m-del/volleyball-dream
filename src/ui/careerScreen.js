@@ -5,6 +5,7 @@ import {
   careerStage, seasonConcluded, opponentById, normalizeCareerPlayer, resolveForfeit,
   applyPoaching,
   applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable, matchOpponentDef,
+  leagueScoutZones, scoutFocusZone, SCOUT_ZONE_LABEL,
 } from '../career/careerState.js';
 import { GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute } from '../career/growth.js';
 import {
@@ -79,6 +80,7 @@ import { CORPORATIONS, CORP_TIER_LABEL, corporationById } from '../career/corpor
 import { corpTable, CORP_PLAYER_ID } from '../career/corpSchedule.js';
 import {
   CORP_CONTRACT_LINES, CORP_PAYDAY_CARD, corpPaydayDue, corpAnchorPreEvents, corpClosingLines,
+  corpShakeOffEvents,
 } from '../career/corpEvents.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
@@ -991,6 +993,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       if (def.scoutRead > 0 && career.scouting?.[next.opponentId]) {
         intel.appendChild(el('div', ['font-size:11.5px', 'color:#ffb454'],
           '⚠ 這隊研究過你——慣用線路會被讀'));
+      } else if (def.scoutRead > 0 && corporationById(next.opponentId)) {
+        // 探針卷（M3）：企業對手＝球探建檔——點名被盯的具體線（段 F 教訓：
+        // 只說「會被讀」玩家對不上帳）。聚合無明顯慣性（scoutFocusZone null）
+        // ＝不顯示，不嚇唬沒有慣性的玩家。
+        const focus = scoutFocusZone(
+          leagueScoutZones(career, { excludeId: next.opponentId })?.zones,
+        );
+        if (focus) {
+          intel.appendChild(el('div', ['font-size:11.5px', 'color:#ffb454'],
+            `⚠ 聯賽球探研究過你——他們盯上你的${SCOUT_ZONE_LABEL[focus.zone]}（改打別的線有奇效）`));
+        }
       }
       if (oldMates.length) {
         intel.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.cyan}`],
@@ -1825,6 +1838,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       )),
       ...rivalPostEvents({ career, seasonIndex: seasonForPost, player }),
       ...n2PostEvents({ career, seasonIndex: seasonForPost, player, roster: rosterForPost }),
+      // 探針卷（M4）：企業場甩開情蒐的得利端回饋（per-match id 入帳一場一次）
+      ...corpShakeOffEvents(career),
     ];
     if (postEvs.length) {
       fireEvents(postEvs, career, player, () => renderCareer());
@@ -2902,17 +2917,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       roster, schoolId, seasonIndex: career?.seasons?.length ?? 0, seed: 1,
     });
     const called = graduates.filter((g) => g?.fullName).slice(0, 3);
+    // ★ line＝{speaker, text} 物件（dialogPlay 契約）★ 批 4 出廠寫成字串＝空白泡泡
+    // （探針卷實跑抓到，2026-08-26 修）
     const lines = [
-      '【企業排球聯賽・新人選秀會】',
-      '轉播燈亮起。八家企業的桌牌在場邊排開——名字被念到的人，從這裡走進大人的聯賽。',
+      { speaker: '', text: '【企業排球聯賽・新人選秀會】' },
+      { speaker: '', text: '轉播燈亮起。八家企業的桌牌在場邊排開——名字被念到的人，從這裡走進大人的聯賽。' },
     ];
     // 決定論輪派（i*3+1 讓三個名字落在不同 tier 的隊；純演出，不影響任何存檔）
     called.forEach((g, i) => {
       const team = CORPORATIONS[(i * 3 + 1) % CORPORATIONS.length];
-      lines.push(`「——${team.name}，指名 ${g.fullName}。」掌聲。他起身時朝你點了下頭。`);
+      lines.push({ speaker: '司儀', text: `——${team.name}，指名 ${g.fullName}。` });
+      lines.push({ speaker: '', text: `掌聲。${g.fullName} 起身時朝你點了下頭。` });
     });
-    lines.push('然後，主持人唸出下一個名字的瞬間——好幾張桌子同時舉了牌。');
-    lines.push(`「${career?.playerName ?? '你'}。」輪到你了。`);
+    lines.push({ speaker: '', text: '然後，司儀唸出下一個名字的瞬間——好幾張桌子同時舉了牌。' });
+    lines.push({ speaker: '司儀', text: `${career?.playerName ?? '你'}。` });
+    lines.push({ speaker: '', text: '輪到你了。' });
     dialogPlay([{ lines }], () => showCorpOffers());
   }
 

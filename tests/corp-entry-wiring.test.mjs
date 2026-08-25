@@ -229,6 +229,8 @@ test('A4-1 完整簽約流程 ⇒ 入社卡含合約敘事、存檔為企業章'
   // 走真流程：前往下一個舞台 → 選秀唱名（dialog 點掉）→ 邀約自選 → 簽約 → 入社卡
   tap(findBtn(/前往下一個舞台/));
   await settle();
+  // 加嚴（2026-08-26 探針卷抓到字串 lines＝空白泡泡）：唱名對話要真的有字
+  assert.match(allText(globalThis.document.body), /新人選秀會/, '選秀對話不得是空白泡泡');
   await tapDialogs();
   const sign = findBtn(/簽這一家/);
   assert.ok(sign, '邀約卡要出現（保底隊恆有）');

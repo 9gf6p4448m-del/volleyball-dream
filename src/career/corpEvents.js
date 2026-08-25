@@ -6,7 +6,10 @@
 //   不做經濟數值系統——本檔沒有任何「錢」的數值欄位，只有話。
 // ★ 拍板題 1 ★ 國外強權職業聯賽＝世界觀存在、本章僅敘事點名（接簡子嵐
 //   「更大的海」`events.js:503` 伏筆）；可玩與否留職業章再裁。
-import { CORPORATIONS } from './corporations.js';
+import { CORPORATIONS, corporationById } from './corporations.js';
+import {
+  leagueScoutZones, scoutFocusZone, SCOUT_COLD_SHARE, SCOUT_ZONE_LABEL,
+} from './careerState.js';
 
 // ── A4-1 入隊合約敘事（併入入社報到卡，零新機制）──
 export const CORP_CONTRACT_LINES = [
@@ -48,14 +51,16 @@ const WANG_TEAM_ID = 'qingkong-aero'; // ＝corporations.js 王勝翔那一隊
 export function corpAnchorPreEvents(career, matchEntry) {
   if (matchEntry?.opponentId !== WANG_TEAM_ID || matchEntry?.round !== 'corp') return [];
   if ((career?.events ?? []).includes(CORP_WANG_INTRO_EV)) return [];
+  // ★ line＝{speaker, text} 物件（dialogPlay 的 paintLine 契約）★ 批 4 出廠時寫成
+  // 字串＝正式遊戲裡整段空白泡泡（探針卷 M4 接線實跑抓到，2026-08-26 修）
   return [{
     id: CORP_WANG_INTRO_EV,
     lines: [
-      '熱身時，網子另一邊有人停下了動作。',
-      '王勝翔：「……你也爬到這裡了。」',
-      '王勝翔：「我先到四年。這片天空長什麼樣子，我比誰都清楚——」',
-      '王勝翔：「所以今天，讓我看看你這四年，練出了什麼。」',
-      '高中那年說要直接挑戰企業聯賽的男人，就站在那裡。制空者——現在是這個聯賽的天花板。',
+      { speaker: '', text: '熱身時，網子另一邊有人停下了動作。' },
+      { speaker: '王勝翔', text: '……你也爬到這裡了。' },
+      { speaker: '王勝翔', text: '我先到四年。這片天空長什麼樣子，我比誰都清楚——' },
+      { speaker: '王勝翔', text: '所以今天，讓我看看你這四年，練出了什麼。' },
+      { speaker: '', text: '高中那年說要直接挑戰企業聯賽的男人，就站在那裡。制空者——現在是這個聯賽的天花板。' },
     ],
   }];
 }
@@ -75,6 +80,39 @@ export function corpClosingLines(uniRoster = null) {
     lines.push('聽說簡子嵐真的出海了——「更大的海」不是比喻。轉播名單上，有一個熟悉的名字。');
   }
   return lines;
+}
+
+// ── 探針卷（2026-08-26）：賽後甩開句——反制迴路的「得利端」可視化 ──
+// 拍板題 3：被盯（賽前）與甩開（賽後）兩端都要看得見。走 postEvs/fireEvents 管道
+// （per-match id 入帳＝每場最多一次）。判準鏡射 sim 的冷線：本場打被盯線的佔比
+// < SCOUT_COLD_SHARE 且本場樣本 >=6——你整場躲開他們賭的那條線，sim 真的給了
+// 攔網折扣（game.js scoutBlockMul <0.15 分支），這句只是把它說出來。
+export function corpShakeOffEvents(career) {
+  const results = career?.results ?? [];
+  if (!results.length) return [];
+  const last = results[results.length - 1];
+  const entry = (career.schedule ?? []).find((m) => m.id === last.matchId);
+  if (entry?.round !== 'corp') return [];
+  const id = `corp-shakeoff-${last.matchId}`;
+  if ((career.events ?? []).includes(id)) return [];
+  const corp = corporationById(entry.opponentId);
+  if (!corp || !(corp.scoutRead > 0)) return [];
+  // 賽前被盯線＝聚合**剔除本場對手的紀錄**（mergeScouting 已把本場記進去，
+  // 不剔會拿被污染的分佈自證——careerState.leagueScoutZones 的 excludeId 註解）
+  const focus = scoutFocusZone(leagueScoutZones(career, { excludeId: entry.opponentId })?.zones);
+  if (!focus) return [];
+  const mine = career.scouting?.[entry.opponentId]?.zones ?? null;
+  if (!mine) return [];
+  const total = (mine.line ?? 0) + (mine.cross ?? 0) + (mine.middle ?? 0) + (mine.tip ?? 0);
+  if (total < 6) return [];
+  if ((mine[focus.zone] ?? 0) / total >= SCOUT_COLD_SHARE) return [];
+  return [{
+    id,
+    lines: [{
+      speaker: '',
+      text: `整場比賽，你幾乎沒有碰${SCOUT_ZONE_LABEL[focus.zone]}——${corp.name}的球探報告在第一局就過期了。他們的攔網，一直在等一顆不會來的球。`,
+    }],
+  }];
 }
 
 // 資料完整性自我檢查（測試用）：王勝翔的隊要真的存在於八隊表

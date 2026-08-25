@@ -363,7 +363,10 @@ test('A4-3 corpAnchorPreEvents：只在首戰擎空航太回台詞', () => {
   const evs = corpAnchorPreEvents(base, entry);
   assert.equal(evs.length, 1);
   assert.equal(evs[0].id, CORP_WANG_INTRO_EV);
-  assert.ok(evs[0].lines.some((l) => l.includes('王勝翔')));
+  // 加嚴（2026-08-26）：line＝{speaker,text} 物件——字串會被 paintLine 畫成空白泡泡
+  assert.ok(evs[0].lines.every((l) => typeof l.text === 'string' && typeof l.speaker === 'string'),
+    'dialogPlay 契約：每句都要是 {speaker, text}');
+  assert.ok(evs[0].lines.some((l) => l.speaker === '王勝翔' || l.text.includes('王勝翔')));
   assert.deepEqual(corpAnchorPreEvents({ ...base, events: [CORP_WANG_INTRO_EV] }, entry), [],
     '播過＝一生一次');
   assert.deepEqual(corpAnchorPreEvents(base, { ...entry, opponentId: 'panshi-heavy' }), []);
