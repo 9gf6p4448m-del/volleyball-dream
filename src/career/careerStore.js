@@ -379,6 +379,47 @@ export function createCareerStore(storage, slot = 1) {
         heightReveal,
       };
     },
+    // ★★ 大學謝幕卷 批 1（2026-08-25）★★ U4 季末結算入口——只封存＋打旗標，
+    // **不推進屆數**（`advanceSeason` 在 U4 末仍走 183 行的 `chapterCompleted` 擋線，
+    // 本批不改那條分支；儀式 UI／下一章接線是批 2 的事）。
+    // 驗收＝`docs/kickoffs/acceptance-uni-finale-batch1.md`。
+    // 封存邏輯與 187-265 行「大學屆間 RMW」同一份事實來源（uniTable 現算 uniRank＋
+    // archiveSeasonSummary），不另開第二份——形狀才會跟前三筆一致（B1-5）。
+    // 冪等（B1-2）：已結算過（career.finaleSettled===true）→ no-op 回 false，
+    // 不重複封存。未打完（B1-3，!seasonConcluded）→ no-op 回 false，無任何存檔寫入。
+    settleUniFinale() {
+      const save = loadSave();
+      const view = save ? careerViewOf(save) : null;
+      if (!view) return false;
+      if (save.career?.finaleSettled) return false; // 已結算，冪等 no-op
+      if (!seasonConcluded(view)) return false; // 未打完不結算（B1-3）
+      const schoolId = save.career?.school ?? null;
+      if (!universityById(schoolId)) return false; // 壞存檔：不猜、不結算
+      const ok = writeSave((prev) => {
+        // 冪等雙保險：writeSave 之間本模組零非同步操作，理論上不會有第二個呼叫端
+        // 插進來，但這裡再檢一次讓 no-op 條件與寫入內容綁在同一份 prev 讀值上
+        if (prev?.career?.finaleSettled) return prev;
+        const board = uniTable({
+          schoolId, seed: prev.season.seed ?? 1,
+          schedule: prev.season.schedule ?? [], results: prev.season.results ?? [],
+        });
+        const uniRank = board?.playerRank ?? 0;
+        const seasons = [...(prev.career.seasons ?? []), {
+          ...archiveSeasonSummary(prev.season),
+          uniRank,
+          school: schoolId,
+        }];
+        return {
+          ...prev,
+          career: { ...prev.career, seasons, finaleSettled: true },
+        };
+      });
+      return ok;
+    },
+    // 大學謝幕已結算（批 2 用旗標判斷謝幕鈕/下一章入口——批 1 只造旗標，讀取端由此開）
+    uniFinaleSettled() {
+      return !!loadSave()?.career?.finaleSettled;
+    },
     // 現在第幾屆（UI 顯示用）
     seasonIndex() {
       const save = loadSave();
