@@ -14,6 +14,9 @@
 import { createSaveV2 } from './schema.js';
 import { createCareer, createCareerPlayer } from './careerState.js';
 import { FINISH, FINISH_RANK } from './admission.js';
+// 批 2 治具跳年只允許碰 universities（驗參數用）——推進一律走 store 公開方法，
+// 不得 import buildUniSchedule/uniSeasonTurnover/buildUniMembers（B2-2 機械判定）
+import { universityById } from './universities.js';
 
 // 三屆的名次組合：讓「三屆最佳成績」等於請求值，其餘兩屆固定較差（不影響最佳值，
 // 但避免三屆一模一樣——那會讓「取最好的一屆」這條邏輯在治具上驗不到東西）。
@@ -82,4 +85,49 @@ export function devSeedRequest(params) {
   const slotRaw = Number.parseInt(params?.get?.(DEV_SLOT_PARAM) ?? '', 10);
   if (!Number.isInteger(slotRaw) || slotRaw < 1 || slotRaw > 3) return null; // B3-S1：無預設槽
   return { finish, slot: slotRaw };
+}
+
+// ---- 大二卷批 2：治具跳年（acceptance-uni-y2-batch2.md）----
+// `?devuni=<校id>:<年1-4>`，只在 devSeedRequest 成立時被 main.js 消費——
+// devseed/devslot 缺任一＝整組治具不啟動，devuni 單獨出現零寫入（既有守衛）。
+export const DEV_UNI_PARAM = 'devuni';
+
+/** 解 devuni 參數。任何一段不合法＝null（忽略跳年、其餘照舊——少做不多做）。 */
+export function devUniRequest(params) {
+  const raw = params?.get?.(DEV_UNI_PARAM) ?? null;
+  if (typeof raw !== 'string' || !raw.includes(':')) return null;
+  const idx = raw.lastIndexOf(':');
+  const schoolId = raw.slice(0, idx);
+  const yearRaw = raw.slice(idx + 1);
+  // ★全字串驗證，不用 parseInt★（批 2 覆審 LOW）：parseInt 對 "3.5" 會靜默截成 3
+  // 悄悄接受——治具參數打錯要明著失效，不要猜
+  if (!/^[1-4]$/.test(yearRaw)) return null;
+  if (!universityById(schoolId)) return null;          // 校不存在＝不啟動（不猜）
+  return { schoolId, year: Number(yearRaw) };
+}
+
+/**
+ * 把當前槽（已是「剛打完高中三屆」的合成存檔）推進到大學第 `year` 年開局。
+ * ★ 全程走正式路徑 ★ enterUniversity ＋ 批 1 的 store.advanceSeason（含換血、
+ * 大一摘要封存、信任帶走）——治具合成的只有「當季戰績」（勝敗交錯決定論，
+ * 與 uni-year2-advance 測試 fixture 同式），世界的推進不另造一條。
+ * 注意：直接進指定校＝繞過升學候選集合檢查（治具語意）。
+ * @returns true＝到位；false＝中途任何一步失敗（不半吊子續跑）
+ */
+export function advanceToUniYear(store, { schoolId, year }) {
+  if (!store.enterUniversity?.(schoolId)) return false;
+  for (let y = 1; y < year; y += 1) {
+    const career = store.loadCareer?.();
+    const league = (career?.schedule ?? []).filter((m) => m?.round === 'league');
+    if (!league.length) return false;
+    store.saveCareer?.({
+      ...career,
+      results: league.map((m, i) => ({
+        matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+        scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+      })),
+    });
+    if (!store.advanceSeason?.()) return false;
+  }
+  return true;
 }

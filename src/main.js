@@ -16,7 +16,9 @@ import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
-import { devSeedRequest, buildSyntheticSave } from './career/devSeed.js';
+import {
+  devSeedRequest, buildSyntheticSave, devUniRequest, advanceToUniYear,
+} from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentName } from './career/careerState.js';
 import { kitAccentColor, cssColor } from './career/teamKit.js';
@@ -124,6 +126,10 @@ async function showCareerEntry(ctx) {
     if (synthetic) {
       store.useSlot(devReq.slot);
       store.seedWholeSave(synthetic);
+      // 大二卷批 2：?devuni=<校id>:<年1-4> 治具跳年（走正式升學＋屆間推進鏈；
+      // 參數不合法＝devUniRequest 回 null＝忽略，停在升學那一刻照舊）
+      const uniReq = devUniRequest(ctx.params);
+      if (uniReq) advanceToUniYear(store, uniReq);
     }
   }
   // W3(P4) 甲4 驗收完結（07-27 Sawmah 拍板）：已驗訖位置回填至 open
