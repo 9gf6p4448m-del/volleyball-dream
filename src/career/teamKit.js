@@ -171,6 +171,23 @@ export function numbersForRoster(playerList) {
   return numbers;
 }
 
+// ---- 隊伍配色卷批 3（對陣色條／賽程色塊／客隊應援色，2026-08-25）----
+// 三處都要「同一顏色運算式」，不得各自實作（B3 驗收：兩處取色走同一入口）。
+// 回退序統一＝banner 優先、缺 banner 退 jersey（與宿敵橫幅 main.js 既有回退序一致）。
+
+// kit 版本：呼叫端已經是 kitFor() 算好的結果（如 careerMatchSetup 給的
+// config.kits.B），這裡不重複呼叫 kitFor。fallback＝無 kit 時的回傳值
+// （預設 null＝消費端不畫色、不炸；main.js 客隊應援色會傳自己的預設色當 fallback）。
+export function kitAccentColor(kit, fallback = null) {
+  return kit ? (kit.banner ?? kit.jersey) : fallback;
+}
+
+// def 版本：對手/隊伍 def（含 .kit 欄位，opponents.js／universities.js 條目皆可）；
+// 內部走 kitFor 單一入口，無 kit 資料的隊回傳 fallback（不炸）。
+export function opponentAccentColor(def, fallback = null) {
+  return kitAccentColor(kitFor(def), fallback);
+}
+
 // 開場上場名單重建（N4 用）：只用來決定「哪些人一開場就該看得到背號面片 Mesh」——
 // 這批人數決定 N4 的 mesh 上限（14×2＝28≤30）；其餘板凳球員賽中換人上場時才惰性
 // 補建 Mesh（見 matchView.js routeEvents 的 SUBSTITUTION 分支），不計入這個上限。

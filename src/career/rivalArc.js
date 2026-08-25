@@ -7,6 +7,8 @@
 // 動態事件範式沿 oldTeamPreEvents：id 進 career.events 去重（各幕綁定屆數＝天然一次性）。
 import { nextMatch, careerStage } from './careerState.js';
 import { RIVAL_TEAM_ID } from './schedule.js';
+import { opponentById } from './opponents.js';
+import { kitFor } from './teamKit.js';
 
 const RIVAL = '天鷹學園・莊敬嶺';
 const MA = '天鷹學園・馬振羽';
@@ -288,8 +290,13 @@ const WATCH = {
 // 純表現層宣告、零邏輯影響；career 層只給語意（角度/身高），幾何在 beatStage 收斂）
 const withCam = (lines, cam, camOpts = null) => lines.map((l) => ({ ...l, cam, camOpts }));
 const RIVAL_HEIGHT_M = 1.88;
+// 隊伍配色卷批 3 B4：宿敵三幕的 B 側 subjects 恆是天鷹本隊——用同一組
+// kitFor(opponentById(...)) 資料源（與客隊橫幅/應援色同步，不另抄色值）餵給
+// beatStage 的 opts.opponentKit，讓 confront/exit/rimlight-solo 都認得出「這是天鷹」
+const RIVAL_KIT = kitFor(opponentById(RIVAL_TEAM_ID));
 const confrontOpts = (player, angle) => ({
   angle, playerHeightM: playerHeightCm(player) / 100, rivalHeightM: RIVAL_HEIGHT_M,
+  opponentKit: RIVAL_KIT,
 });
 
 // 賽前：下一場＝本屆掛點場且對手＝天鷹
@@ -331,13 +338,13 @@ export function rivalPostEvents({ career, seasonIndex, player }) {
   if (act === 1) {
     // 幕一賽後：他轉身走離、鏡頭不追，餘隊伍剪影（exit 模板）
     lines = withCam((last.won ? ACT1_POST_WON : ACT1_POST_LOST)[side], 'exit',
-      { rivalHeightM: RIVAL_HEIGHT_M });
+      { rivalHeightM: RIVAL_HEIGHT_M, opponentKit: RIVAL_KIT });
   } else if (act === 2) {
     // 幕二斷句 beat（專屬 #2）：勝版＝他第一次擦汗、敗版＝握拳盯著手心的靜止一拍
     lines = withCam(
       last.won ? ACT2_POST_WON : ACT2_POST_LOST,
       'rimlight-solo',
-      { heightM: RIVAL_HEIGHT_M, role: 'outside', pose: last.won ? 'wipe' : 'fist' },
+      { heightM: RIVAL_HEIGHT_M, role: 'outside', pose: last.won ? 'wipe' : 'fist', opponentKit: RIVAL_KIT },
     );
   } else {
     const outcome = last.won ? 'won' : 'lost';
@@ -351,7 +358,7 @@ export function rivalPostEvents({ career, seasonIndex, player }) {
       ...withCam(ACT3_CLOSE[outcome], 'confront', confess),
       ...(variant.grewTall ? withCam(ACT3_GROWN_EXTRA, 'confront', confess) : []),
       // 馬振羽一句：隊伍末端邊光單人（rimlight-solo 模板，不搶主場景）
-      ...withCam(MA_LINE, 'rimlight-solo', { heightM: 1.84, role: 'opposite' }),
+      ...withCam(MA_LINE, 'rimlight-solo', { heightM: 1.84, role: 'opposite', opponentKit: RIVAL_KIT }),
       ...ACT3_TAIL[outcome], // 阿哲收尾＝回純對話卡（演出讓位給收束）
     ];
   }

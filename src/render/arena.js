@@ -68,7 +68,8 @@ export const VENUES = {
 };
 
 // 建館（回傳可切館把手）：venue 切換＝整組 dispose 重建（比賽開場一次，非熱路徑）。
-// opts.awayBanner＝主客場氛圍（關鍵戰館打宿敵：客隊橫幅＋客隊應援色塊；冠軍館中立不帶）
+// opts.awayBanner＝主客場氛圍（客隊橫幅＋客隊應援色塊）——隊伍配色卷批 3 B5 起
+// main.js 對任何生涯對手皆會帶（快速比賽/練習賽無 opponentId＝不帶，回落中立氛圍）
 // opts.teamName＝現在的隊名（配色卷階段二 E4：常規館「★ 主場之夜」看板用）
 export function createArena(scene, venueKey = 'regular') {
   let group = null;

@@ -18,8 +18,8 @@ import { createCareerScreen } from './ui/careerScreen.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
 import { devSeedRequest, buildSyntheticSave } from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
-import { opponentById } from './career/opponents.js';
-import { kitFor, cssColor } from './career/teamKit.js';
+import { opponentName } from './career/careerState.js';
+import { kitAccentColor, cssColor } from './career/teamKit.js';
 import { ENGINEERED_OPEN } from './career/positionFlags.js';
 import { ensureStarterRoster } from './career/roster.js';
 import { practiceMatchEntry } from './career/practiceMatch.js';
@@ -198,22 +198,28 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
     randomSeed: Date.now() % 1000000007, // 開局隨機（快速比賽）；隨機化住在 main（sim 外）
   });
   // W4(P4) Q10 三館制：依賽制切館（bo5 冠軍館／bo3 關鍵戰館／bo1 常規館）＋地板換色。
-  // 主客場氛圍：關鍵戰館打宿敵（天鷹）＝客隊橫幅＋客隊應援區＋音場偏對手；冠軍館＝中立場
   const bestOf = config.gameOptions.series?.bestOf ?? 1;
   const venueKey = bestOf >= 5 ? 'final' : bestOf === 3 ? 'key' : 'regular';
-  const rival = venueKey === 'key' && careerCtx?.matchEntry?.opponentId === RIVAL_TEAM_ID
-    ? opponentById(RIVAL_TEAM_ID)
+  // 音場偏向宿敵／冠軍館燈光秀專用旗標（matchLoop 消費）——與下面客隊應援色分開判定，
+  // 這條敘事旗標本卷不動：仍限「宿敵×關鍵戰館」
+  const rivalAway = venueKey === 'key' && careerCtx?.matchEntry?.opponentId === RIVAL_TEAM_ID;
+  // 隊伍配色卷批 3 B5：客隊應援色不再限宿敵關鍵戰館——任何生涯對手（快速比賽無
+  // careerCtx、練習賽 opponentId 恆 null，兩者天然落空、看台回落既有氛圍盤，不炸）
+  // 皆吃 kitFor(oppDef) 的 banner??jersey；同一色源＝careerMatchSetup 已算好的
+  // config.kits.B（不再另呼叫 kitFor/opponentById，兩處各自實作會走岔），
+  // kitAccentColor 與 B2/B3 對陣色條/賽程色塊共用同一份回退序（banner→jersey→fallback）
+  const awayOpponentId = careerCtx?.matchEntry?.opponentId ?? null;
+  const awayBanner = awayOpponentId
+    ? { name: opponentName(awayOpponentId), color: cssColor(kitAccentColor(config.kits?.B, 0x5a7dd8)) }
     : null;
   const venueSpec = ctx.arena.setVenue(venueKey, {
-    ...(rival
-      ? { awayBanner: { name: rival.name, color: cssColor(kitFor(rival)?.banner ?? kitFor(rival)?.jersey ?? 0x7db2ff) } }
-      : {}),
+    ...(awayBanner ? { awayBanner } : {}),
     // 配色卷階段二 E4：現在的隊名（常規館「★ 主場之夜」看板用）——config.teamName
     // 由 matchConfig.currentTeamName 算好，這裡只負責遞
     ...(config.teamName ? { teamName: config.teamName } : {}),
   });
   ctx.court.setFloorPalette(venueSpec.floor);
-  config.venue = { key: venueKey, rivalAway: !!rival }; // matchLoop：應援偏向＋冠軍館燈光秀
+  config.venue = { key: venueKey, rivalAway }; // matchLoop：應援偏向＋冠軍館燈光秀
   // 拍板 07-22：開賽即落 pending 標記——中途退出回生涯畫面＝記棄賽敗（堵 reload 白嫖）
   // ★ 練習賽不落 pending ★ 它不在 career.schedule 裡，`resolveForfeit` 會拿這個 id
   // 去 `recordResult` 而當場 throw（「賽程裡沒有比賽 practice-2」）——而且練習賽

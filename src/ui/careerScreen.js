@@ -70,6 +70,9 @@ import {
   universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
 } from '../career/universities.js';
 import { uniTable, UNI_PLAYER_ID } from '../career/uniSchedule.js';
+import {
+  kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
+} from '../career/teamKit.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 // ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
@@ -168,6 +171,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // isHighSchool(store.loadChapter?.()) 慣例）
   const teamName = () => currentTeamName(store.loadChapter?.(), store.loadSchool?.());
 
+  // 隊伍配色卷批 3（B2 對陣色條／B4 beatStage 共用單一入口）：我方現在實際穿的
+  // kit——大學章已選校時走該校 kit（與 careerState.js:747 kits.A 同一組函式
+  // kitFor/universityById/store.loadSchool()，不得另抄一份色值），其餘（含高中章、
+  // 大學未選校）回傳 null——B2 消費端回落 teamKit.js 的 OUR_ANCHORS.jersey、
+  // B4 消費端（beatStage resolveKit）回落現行硬編碼 TEAM_KIT.A，兩份錨定值本就同步
+  const ourSchoolKit = () => {
+    const school = store.loadSchool?.() ?? null;
+    return school ? kitFor(universityById(school)) : null;
+  };
+
   // 集訓覆蓋層是否已開（覆審 HIGH-1 的中斷復原有兩個呼叫端，防重入疊兩層）
   let campOpen = false;
   // 教學局邀請卡是否已開（同一道防重入：renderCareer 可能被別的路徑再叫一次，
@@ -239,7 +252,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     }
     if (reduceMotion()) return;
     try {
-      const stage = createBeatStage({ template: line.cam, opts: line.camOpts ?? {} });
+      // B4：我方 beat subjects 恆穿我方現在的 kit（章節感知）——kitA 為 null 時
+      // （高中章／大學未選校）整段 spread 是 no-op，opts 與現行完全相同
+      const kitA = ourSchoolKit();
+      const opts = { ...(line.camOpts ?? {}), ...(kitA ? { kitA } : {}) };
+      const stage = createBeatStage({ template: line.cam, opts });
       dlg.insertBefore(stage.el, dlgCard);
       dlgStage = { stage, sig };
     } catch { dlgStage = null; /* WebGL 失敗＝退化純對話卡（ritualStage 慣例） */ }
@@ -792,17 +809,24 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     ]);
 
     // 名牌：enemy＝暖色唯讀；ally＝隊色青、可互動。isAce＝金框＋稱號行
+    // accent（批 3 B2）：該隊球衣色色條，貼名牌頂緣；null（無 kit 資料）＝不畫、不炸
     function chipEl({ name, sub, tone, isAce = false, aceTitle = null,
-      selectedNow = false, onTap = null, badges = [] }) {
+      selectedNow = false, onTap = null, badges = [], accent = null }) {
       const c = el('div', [
         'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
         `gap:1px`, `min-height:${short ? 38 : 46}px`, 'padding:4px 2px', 'border-radius:10px',
-        'text-align:center', 'min-width:0',
+        'text-align:center', 'min-width:0', 'position:relative', 'overflow:hidden',
         tone === 'enemy' ? 'background:rgba(88,44,26,0.5)' : 'background:rgba(17,42,62,0.75)',
         `border:2px solid ${selectedNow ? COLOR.cyan : isAce ? COLOR.gold : 'rgba(255,255,255,0.06)'}`,
         ...(isAce ? ['box-shadow:0 0 10px rgba(255,209,102,0.35)'] : []),
         ...(onTap ? ['cursor:pointer', 'touch-action:manipulation'] : []),
       ]);
+      if (accent != null) {
+        c.appendChild(el('div', [
+          'position:absolute', 'top:0', 'left:0', 'right:0', 'height:3px',
+          `background:${cssColor(accent)}`,
+        ]));
+      }
       const top = el('div', ['display:flex', 'align-items:center', 'gap:4px', 'max-width:100%']);
       top.appendChild(el('div', [
         'font-size:13px', 'font-weight:800', 'white-space:nowrap', 'overflow:hidden',
@@ -843,6 +867,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const oppHeight = (i) => (def.ace?.slot === i && def.aceHeight)
       ? def.aceHeight
       : (def.heights?.[i] ?? 1.85);
+    // 批 3 B2：對手色條——kitFor(oppDef) 單一入口（無 kit 資料＝null＝不畫）
+    const oppAccent = opponentAccentColor(def);
     const oppChip = (i) => chipEl({
       name: def.squad?.[i] ?? `${def.name}${i + 1}號`,
       sub: [OPP_ROLE[i], oppGradeLabel(i), `${oppHeight(i).toFixed(2)}m`]
@@ -850,6 +876,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       tone: 'enemy',
       isAce: def.ace?.slot === i,
       aceTitle: def.ace?.title,
+      accent: oppAccent,
     });
 
     function paint() {
@@ -981,6 +1008,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 我方站位＝effectiveOrder（首發球位改變＝名牌真的在場上轉動）；
       // 顯示位 i ↔ starters 索引 (rotationStart + i) % 6
       const eff = effectiveOrder(working.starters, working.rotationStart);
+      // 批 3 B2：我方色條——恆定（大學章已選校＝校色，其餘回落 OUR_ANCHORS 錨定色）
+      const myAccent = ourSchoolKit()?.jersey ?? OUR_ANCHORS.jersey;
       const myChip = (effIdx) => {
         const id = eff[effIdx];
         const si = (working.rotationStart + effIdx) % 6;
@@ -995,6 +1024,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           selectedNow: selected?.kind === 'field' && selected.si === si,
           onTap: () => tapField(si),
           badges,
+          accent: myAccent,
         });
       };
       ourHalf.appendChild(row3([myChip(3), myChip(2), myChip(1)])); // 前排 P4/P3/P2 貼網
@@ -1843,9 +1873,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         `border:1px solid ${isNext ? COLOR.cyan : 'transparent'}`,
       ]);
       const title = m.label ? `${m.label}・${opponentName(m.opponentId)}` : opponentName(m.opponentId);
+      // 批 3 B3：對手色塊——與 B2 同一入口 opponentAccentColor（不得兩處各自實作）；
+      // 練習賽 opponentId 恆 null ⇒ 兩個 lookup 皆落空 ⇒ null ⇒ 不畫、不炸
+      const oppDef = opponentById(m.opponentId) ?? universityById(m.opponentId) ?? null;
+      const accent = opponentAccentColor(oppDef);
+      const titleRow = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'min-width:0']);
+      if (accent != null) {
+        titleRow.appendChild(el('div', [
+          'width:5px', 'height:20px', 'border-radius:2px', 'flex-shrink:0',
+          `background:${cssColor(accent)}`,
+        ]));
+      }
       // W6 A2：指定邀請場帶徽章（輪抽結果屆初公開，邀請場一眼可辨）
-      row.appendChild(el('div', ['font-size:16px', 'font-weight:600'],
-        m.invited ? `⭐ ${title}` : title));
+      titleRow.appendChild(el('div', [
+        'font-size:16px', 'font-weight:600', 'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
+      ], m.invited ? `⭐ ${title}` : title));
+      row.appendChild(titleRow);
       let status;
       if (result) {
         status = el('div', [

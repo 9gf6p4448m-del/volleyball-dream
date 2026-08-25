@@ -25,7 +25,10 @@ const BEAT_POSES = {
 
 // 模板預設演員（消費端以語意 opts 覆蓋：playerHeightM/rivalHeightM/heightM/pose/
 // formation——career 層只宣告語意，幾何在這裡收斂）
-function defaultSubjects(template, opts = {}) {
+// 隊伍配色卷批 3 B4：非我方 subject 的 kit 欄位只在這裡（呼叫端明確帶對手脈絡時，
+// 走 opts.opponentKit）填入——未傳＝undefined，subjectTeamKit 視同「未帶」，B 隊
+// 維持 resolveKit 的現行預設（恆定紅），逐值不變。
+export function defaultSubjects(template, opts = {}) {
   if (template === 'confront') {
     if (opts.formation === 'trio') {
       // 三人版轉位並排（小守/玩家/小白——三個自由人的隊）：confront 變體、不新增模板
@@ -36,22 +39,22 @@ function defaultSubjects(template, opts = {}) {
       ];
     }
     return [
-      { id: 'B1', teamId: 'B', heightM: opts.rivalHeightM ?? 1.88, role: 'outside', x: 0, z: -1.4, facing: 0 },
+      { id: 'B1', teamId: 'B', heightM: opts.rivalHeightM ?? 1.88, role: 'outside', x: 0, z: -1.4, facing: 0, kit: opts.opponentKit ?? null },
       { id: 'A2', teamId: 'A', heightM: opts.playerHeightM ?? 1.75, role: 'outside', x: 0.35, z: 1.4, facing: Math.PI },
     ];
   }
   if (template === 'exit') {
     return [
-      { id: 'B1', teamId: 'B', heightM: opts.rivalHeightM ?? 1.88, role: 'outside', x: -0.4, z: -1.0, facing: Math.PI, walk: true },
-      { id: 'B2', teamId: 'B', heightM: 1.82, role: 'middle', x: -1.7, z: -2.2, facing: 0 },
-      { id: 'B3', teamId: 'B', heightM: 1.78, role: 'setter', x: -2.4, z: -1.8, facing: 0 },
+      { id: 'B1', teamId: 'B', heightM: opts.rivalHeightM ?? 1.88, role: 'outside', x: -0.4, z: -1.0, facing: Math.PI, walk: true, kit: opts.opponentKit ?? null },
+      { id: 'B2', teamId: 'B', heightM: 1.82, role: 'middle', x: -1.7, z: -2.2, facing: 0, kit: opts.opponentKit ?? null },
+      { id: 'B3', teamId: 'B', heightM: 1.78, role: 'setter', x: -2.4, z: -1.8, facing: 0, kit: opts.opponentKit ?? null },
     ];
   }
   if (template === 'rimlight-solo') {
     return [{
       id: opts.subjectId ?? 'B4', teamId: opts.teamId ?? 'B', heightM: opts.heightM ?? 1.84,
       role: opts.role ?? 'opposite', x: 0, z: 0, facing: 0,
-      pose: opts.pose ?? null, sink: opts.sink ?? 0,
+      pose: opts.pose ?? null, sink: opts.sink ?? 0, kit: opts.opponentKit ?? null,
     }];
   }
   // stands：遠景球場上的兩隊剪影（止步旁觀——你在看台上）
@@ -61,6 +64,16 @@ function defaultSubjects(template, opts = {}) {
     { id: 'A1', teamId: 'A', heightM: 1.78, role: 'outside', x: -0.2, z: 1.7, facing: Math.PI },
     { id: 'A3', teamId: 'A', heightM: 1.75, role: 'setter', x: 1.1, z: 1.5, facing: Math.PI },
   ];
+}
+
+// 每位 subject 實際套用的 teamKit（createGeoCharacter 第 7 參數）——createBeatStage
+// 與單測共用同一份，不得分裂成兩份邏輯（B4 驗收）。我方（teamId 'A'，未標示者預設
+// 亦視為 'A'）恆吃 opts.kitA（章節感知，呼叫端算好；未傳＝null＝resolveKit 回落
+// 現行 TEAM_KIT.A 預設，高中章／大學未選校下逐值不變）；非我方僅在 subject 自帶
+// .kit（呼叫端經 opts.opponentKit 明確傳入對手身分）時換裝，未傳＝null＝resolveKit
+// 回落現行預設（B 隊恆定紅），逐值不變。
+export function subjectTeamKit(s, opts = {}) {
+  return (s.teamId ?? 'A') === 'A' ? (opts.kitA ?? null) : (s.kit ?? null);
 }
 
 // 膝蓋著地悶響（零音檔架構——憲法 Q3 未開，一律 WebAudio 合成；失敗靜默）
@@ -201,7 +214,12 @@ export function createBeatStage({ template, opts = {}, width = 460, height = 240
     }));
   const pool = createGeoPool(scene, false, subjects.length);
   const rigs = subjects.map((s) => {
-    const rig = createGeoCharacter(pool, s.id ?? 'A2', s.teamId ?? 'A', s.heightM ?? BASE_H, s.role === 'libero');
+    // 隊伍配色卷批 3 B4：第 7 參數＝subjectTeamKit（我方章節感知／對手看脈絡），
+    // 第 6 參數 name 明傳空字串——原本靠省略吃預設值，這裡補上第 7 參數就得顯式補回
+    const rig = createGeoCharacter(
+      pool, s.id ?? 'A2', s.teamId ?? 'A', s.heightM ?? BASE_H, s.role === 'libero',
+      '', subjectTeamKit(s, opts),
+    );
     applyPortraitPose(rig.joints, s.basePose);
     rig.root.position.set(s.x ?? 0, -(s.sink ?? 0), s.z ?? 0);
     rig.root.rotation.y = s.facing ?? 0;
