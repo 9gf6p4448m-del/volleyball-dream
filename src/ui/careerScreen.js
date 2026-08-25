@@ -2648,7 +2648,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       }
       sum.wins += sn.wins;
       sum.losses += sn.losses;
-      if (sn.champion) sum.titles += 1;
+      // 批 3：大學聯賽冠軍（uniRank===1）計入生涯 🏆 顯示（titles 存檔欄位不動——
+      // 那顆掛著高中衛冕加成語意，只是顯示合計）
+      if (sn.champion || sn.uniRank === 1) sum.titles += 1;
       const card = el('div', [
         `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
         'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left',
@@ -2657,8 +2659,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
       head.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
         `第 ${sn.index} 屆${sn.current ? '（進行中）' : ''}`));
-      head.appendChild(el('div', ['font-size:13px', `color:${sn.champion ? COLOR.gold : COLOR.dim}`],
-        `${sn.wins} 勝 ${sn.losses} 敗${sn.champion ? '・🏆 全國冠軍' : ''}`));
+      // 批 3（拍板題 2 甲）：大學屆封存帶 uniRank ⇒ 顯示聯賽名次；高中屆（無此欄）
+      // 走原字串逐字不變
+      const uniTag = Number.isInteger(sn.uniRank) && sn.uniRank >= 1
+        ? `・${sn.uniRank === 1 ? '🏆 聯賽冠軍' : `聯賽第 ${sn.uniRank} 名`}`
+        : '';
+      head.appendChild(el('div', ['font-size:13px',
+        `color:${sn.champion || sn.uniRank === 1 ? COLOR.gold : COLOR.dim}`],
+      `${sn.wins} 勝 ${sn.losses} 敗${sn.champion ? '・🏆 全國冠軍' : ''}${uniTag}`));
       card.appendChild(head);
       card.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.dim}`, 'line-height:1.5'],
         totalLine(sn.totals)));

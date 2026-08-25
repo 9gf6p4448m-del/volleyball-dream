@@ -16,8 +16,8 @@ import {
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { universityById } from './universities.js';
-import { buildUniSchedule } from './uniSchedule.js';
-import { buildUniMembers, uniStartTrustFor } from './uniTeam.js';
+import { buildUniSchedule, uniTable } from './uniSchedule.js';
+import { buildUniMembers, uniStartTrustFor, uniRankTrustBonus } from './uniTeam.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -195,6 +195,12 @@ export function createCareerStore(storage, slot = 1) {
           // 決定論鏈：下一屆種子由本屆種子衍生（與高中同一顆 deriveSeasonSeed）；
           // 賽程與換血吃同一顆 seed——同存檔重演逐值一致
           const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
+          // 批 3（拍板題 2 甲）：季末名次——封存與球權微調共用同一次 uniTable 結算
+          const board = uniTable({
+            schoolId, seed: prev.season.seed ?? 1,
+            schedule: prev.season.schedule ?? [], results: prev.season.results ?? [],
+          });
+          const uniRank = board?.playerRank ?? 0;
           uniTurn = uniSeasonTurnover({
             roster: prev.roster, schoolId, seasonIndex: endingSeason, seed: nextSeed,
           });
@@ -210,11 +216,29 @@ export function createCareerStore(storage, slot = 1) {
           for (const f of uniTurn.freshmen) {
             if (lineup.trust[f.id] !== undefined) lineup.trust[f.id] = FRESHMAN_TRUST;
           }
-          // 屆末封存本屆摘要（與高中同一份 archiveSeasonSummary——歷屆數據頁吃它；
-          // 名次紀錄的結構化欄位是批 3，本批先讓戰績不因 results 清空而消失）
-          const seasons = [...(prev.career.seasons ?? []), archiveSeasonSummary(prev.season)];
+          // 屆末封存本屆摘要（與高中同一份 archiveSeasonSummary——★加在既有封存裡，
+          // 不另開一份歷史★）＋批 3 結構化名次欄位（高中封存不帶這兩鍵，零改動）
+          const seasons = [...(prev.career.seasons ?? []), {
+            ...archiveSeasonSummary(prev.season),
+            uniRank,
+            school: schoolId,
+          }];
+          // 批 3（拍板題 2 甲＋題 3）：fromSetter＝原值＋名次加成——不歸零、不重設
+          // 回 UNI_START_TRUST（B1-4 改寫聲明見 acceptance-uni-y2-batch3.md）；
+          // floorShare 照舊不碰（球權保底與名次無關）
+          const bonus = uniRankTrustBonus(uniRank);
+          const advancedPlayer = prev.player
+            ? {
+              ...prev.player,
+              trust: {
+                ...(prev.player.trust ?? {}),
+                fromSetter: Math.min(100, (prev.player.trust?.fromSetter ?? 0) + bonus),
+              },
+            }
+            : prev.player;
           return {
             ...prev,
+            player: advancedPlayer,
             roster: uniTurn.roster,
             lineup,
             career: { ...prev.career, seasons },

@@ -44,6 +44,18 @@ export function uniStartTrustFor(school) {
   return UNI_START_TRUST[school?.tier] ?? UNI_START_TRUST[TIER.MID];
 }
 
+// 大二卷批 3（拍板題 2 甲）：聯賽名次→下一年球權微調——「名次帶著走」的兌現。
+// ★數值屬提案★（acceptance-uni-y2-batch3.md，試玩後可調）：搭配賽季內自然成長
+// （約每年 +16），冠軍年強豪線 27→~49，四年可到王牌線；墊底＝0 不倒扣
+// （failed season 的懲罰是戰績本身，不再剝球權——與高中「止步不加難」同哲學）。
+export function uniRankTrustBonus(rank) {
+  if (!Number.isInteger(rank) || rank < 1) return 0;
+  if (rank === 1) return 6;
+  if (rank <= 3) return 4;
+  if (rank <= 6) return 2;
+  return 0;
+}
+
 function attributesFor(school, role, i) {
   const attrs = {};
   const isAce = school.ace?.slot === i;

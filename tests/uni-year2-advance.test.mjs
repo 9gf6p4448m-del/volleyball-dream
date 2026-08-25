@@ -6,10 +6,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
+import { createCareerStore, SAVE_KEY, archiveSeasonSummary } from '../src/career/careerStore.js';
 import { createCareer, createCareerPlayer } from '../src/career/careerState.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { universityById } from '../src/career/universities.js';
+import { uniTable } from '../src/career/uniSchedule.js';
+import { uniRankTrustBonus } from '../src/career/uniTeam.js';
 import { UNI_GRADUATE_GRADE } from '../src/career/uniTurnover.js';
 
 function fakeStorage() {
@@ -122,16 +124,42 @@ test('B1-3 換血：大四離隊入 alumni、其餘升級、同位置 grade1 新
   assert.ok(Object.values(lineup.starters ?? lineup).flat().length > 0, 'lineup 存在');
 });
 
-test('B1-4 信任帶走（題 3 翻盤本體）：fromSetter 與 floorShare 推進前後逐值不變', () => {
-  // 強豪北陵（north-ridge）＝翻盤敘事的主角：fromSetter 從 27 起
+// ★B1-4 改寫（批 3，acceptance-uni-y2-batch3.md 的改寫聲明）★：原凍結「fromSetter
+// 逐值不變」與拍板題 2（名次微調）矛盾——凍結時把「不重置」寫過頭成「不變」。
+// 現行語意：floorShare 不變；fromSetter＝原值＋uniRankTrustBonus(名次)，不歸零、
+// 不重設回 UNI_START_TRUST。
+test('B1-4/B3-2 信任帶走＋名次微調：fromSetter=原值+加成、floorShare 不變', () => {
   const storage = uniSave('north-ridge');
   playSeason(storage);
-  const before = JSON.parse(storage.getItem(SAVE_KEY)).player.trust;
+  const save0 = JSON.parse(storage.getItem(SAVE_KEY));
+  const before = save0.player.trust;
   assert.equal(before.fromSetter, 27, 'fixture 前提：強豪起始信任 27（uniTeam）');
+  const board = uniTable({
+    schoolId: 'north-ridge', seed: save0.season.seed,
+    schedule: save0.season.schedule, results: save0.season.results,
+  });
+  const expected = Math.min(100, before.fromSetter + uniRankTrustBonus(board.playerRank));
+  assert.ok(uniRankTrustBonus(board.playerRank) > 0,
+    `fixture 前提：交錯戰績的名次 ${board.playerRank} 要拿得到加成（否則微調測不到）`);
   const adv = createCareerStore(storage).advanceSeason();
   assert.ok(adv && adv.ok, 'fixture 前提：推進真的發生了（否則本測零鑑別力）');
   const after = JSON.parse(storage.getItem(SAVE_KEY)).player.trust;
-  assert.deepEqual(after, before, '屆間不得動玩家球權（翻盤靠賽季內自然累積）');
+  assert.equal(after.fromSetter, expected, '原值＋名次加成——壞版（重設回起始值）必紅');
+  assert.equal(after.floorShare, before.floorShare, '球權保底與名次無關，不得動');
+});
+
+test('B3-1 封存欄位：大學屆末筆帶 uniRank/school；高中共用封存函式不帶新鍵', () => {
+  const storage = uniSave('meixi');
+  playSeason(storage);
+  createCareerStore(storage).advanceSeason();
+  const seasons = JSON.parse(storage.getItem(SAVE_KEY)).career.seasons;
+  const last = seasons.at(-1);
+  assert.ok(Number.isInteger(last.uniRank) && last.uniRank >= 1 && last.uniRank <= 9,
+    `uniRank=${last.uniRank} 要是 1-9 的名次`);
+  assert.equal(last.school, 'meixi');
+  // 高中封存零改動：共用函式本身不產這兩鍵（大學分支才附加）
+  const hs = archiveSeasonSummary({ index: 1, results: [] });
+  assert.ok(!('uniRank' in hs) && !('school' in hs), '高中封存不得長出大學欄位');
 });
 
 test('B1-5 年限：推到大四打完，第 4 次推進被 chapterCompleted 擋下', () => {
