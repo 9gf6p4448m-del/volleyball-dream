@@ -124,6 +124,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
         careerCtx.seasonIndex ?? 1,
         // 配色卷階段二 E1 第 7 參數：大學章已選校時的學校 id（高中章 loadSchool 恆 null）
         careerCtx.store?.loadSchool?.() ?? null,
+        // 企業章批 3（A3-3）第 8 參數：已簽公司 id（其他章 loadCorp 恆 null）
+        careerCtx.store?.loadCorp?.() ?? null,
       ))
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）
@@ -203,7 +205,10 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     // huddleProps）不得自查章節，一律吃這裡算好的值；快速比賽（無 careerCtx）＝null
     // ＝render 層各自回落既有預設字面值，行為不變
     teamName: careerCtx
-      ? currentTeamName(careerCtx.store?.loadChapter?.(), careerCtx.store?.loadSchool?.())
+      ? currentTeamName(
+        careerCtx.store?.loadChapter?.(), careerCtx.store?.loadSchool?.(),
+        careerCtx.store?.loadCorp?.(), // 企業章批 3（A3-3）：公司名進場內 HUD
+      )
       : null,
     // 練習賽隨附資料（matchStage 建科目 HUD、matchLoop 追蹤與結算都讀它）；
     // 非練習賽＝null＝所有掛點短路，零擾動

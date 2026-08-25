@@ -155,6 +155,43 @@ test('A2-3② U4 打完＋未結算 ⇒ 不出現（謝幕先於下一章）', a
   assert.match(text, /謝幕/, '對照：謝幕鈕本身要在（畫面沒壞，只是入口被旗標擋住）');
 });
 
+// ════════ 批 3（acceptance-corp-batch3.md A3-2/A3-4）════════
+/** 已簽約的企業存檔；played 控制打了幾場（7＝賽季全打完）。 */
+function corpSave(played) {
+  const storage = u4Save({ settled: true });
+  const s = createCareerStore(storage);
+  assert.ok(s.enterCorporate('panshi-heavy'), 'fixture 前提：簽約成功');
+  const c = s.loadCareer();
+  const games = c.schedule.filter((m) => m.round === 'corp');
+  s.saveCareer({
+    ...c,
+    results: games.slice(0, played).map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  return storage;
+}
+
+test('A3-2① 企業 7/7 打完 ⇒ 名次＋收尾卡入口出現、出戰消失', async () => {
+  const text = await renderAndGetText(corpSave(7));
+  assert.match(text, /聯賽第 \d 名|企業聯賽冠軍/, '名次要顯示');
+  assert.match(text, /賽季落幕/, '收尾卡入口要在');
+});
+
+test('A3-2② 企業 6/7 未打完 ⇒ 照舊出戰、名次結算不得出現', async () => {
+  const text = await renderAndGetText(corpSave(6));
+  assert.match(text, /出戰/);
+  assert.doesNotMatch(text, /賽季落幕/);
+});
+
+test('A3-4 企業章不得出現大學殘留：「回看三年的數據」與「🎓 謝幕」', async () => {
+  const text = await renderAndGetText(corpSave(3));
+  assert.doesNotMatch(text, /回看三年的數據/, '企業章要用「回看生涯數據」');
+  assert.match(text, /回看生涯數據/);
+  assert.doesNotMatch(text, /🎓 謝幕/, '大學謝幕鈕不得在企業章冒出（年限延長也一樣）');
+});
+
 // 批 2 覆審 MEDIUM 回歸：簽約後的生涯頁頭部說實話（公司名，不是舊大學）
 test('簽約後 ⇒ 頭部顯示 🏢 公司名＋企業聯賽年份，不再是「升學已定」', async () => {
   const storage = u4Save({ settled: true });

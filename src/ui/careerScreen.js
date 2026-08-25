@@ -76,6 +76,7 @@ import {
 } from '../career/universities.js';
 import { uniTable, UNI_PLAYER_ID } from '../career/uniSchedule.js';
 import { CORPORATIONS, CORP_TIER_LABEL, corporationById } from '../career/corporations.js';
+import { corpTable, CORP_PLAYER_ID } from '../career/corpSchedule.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -2127,17 +2128,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 與升學入口都消失，玩家徹底卡死。防線要按「危險的效果」寫，不是按已知的入口。
     const inUniversity = !isHighSchool(store.loadChapter?.());
     const pickedSchool = universityById(store.loadSchool?.() ?? '');
+    // 企業章批 3：pickedCorp 提升到旗標區（頭部/數據鈕/謝幕鈕/賽季結算四處共用；
+    // 判準綁章節不綁年限——A3-4 分流）
+    const pickedCorp = isCorporate(store.loadChapter?.())
+      ? corporationById(store.loadCorp?.() ?? '') : null;
     const uniLeague = career.schedule.filter((x) => x.round === 'league');
+    const corpGames = career.schedule.filter((x) => x.round === 'corp');
+    // 企業賽季打完了沒（A3-1 的 seasonConcluded 擴充；corpGames 守衛同 uniLeague 慣例）
+    const corpSeasonDone = !!pickedCorp && corpGames.length > 0 && seasonConcluded(career);
     // 大學賽季打完了沒（批 6）→ 債 C 收斂：判準單一定義在 seasonConcluded
     // （league 全有結果）；uniLeague.length 守衛保留＝league 空的壞存檔不進結算分支
     const uniSeasonDone = inUniversity && uniLeague.length > 0 && seasonConcluded(career);
     if (inUniversity) {
       // 企業章批 2 覆審 MEDIUM 修：簽約後的頭部要說實話——公司名＋企業聯賽年份，
       // 不是舊大學的「🎓 升學已定」。★只換頭部文案，分支結構不動★ inUniversity
-      // 仍是「非高中」語意（上方註解的卡死防線靠它），企業章照走同一條鏈：
-      // uniSeasonDone 對 corp 賽程恆 false（league 空）→ 自然落到「▶ 出戰」。
-      const pickedCorp = isCorporate(store.loadChapter?.())
-        ? corporationById(store.loadCorp?.() ?? '') : null;
+      // 仍是「非高中」語意（上方註解的卡死防線靠它）。
       if (pickedCorp) {
         root.appendChild(el('div', [
           'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
@@ -2160,11 +2165,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       //（`tests/chapter-wiring.test.mjs`；理由：已經在念大學了還跳「三年的一切」＝
       // 系統分不出章節，而且它會再播一次謝幕、再把人導去升學）。回顧走**數據頁**——
       // 同樣看得到三屆戰績，但它是唯讀的，不是章節流程的入口。
-      root.appendChild(button('📊 回看三年的數據', false, () => showCareerTotals()));
+      root.appendChild(button(
+        pickedCorp ? '📊 回看生涯數據' : '📊 回看三年的數據', // A3-4：企業章不再是「三年」
+        false, () => showCareerTotals(),
+      ));
       // 大學謝幕卷 批 2（B2-1，2026-08-25）：大四還在打的時候先亮出（禁用的）謝幕鈕——
       // 讓玩家知道終點在哪；賽季打完後同一個位置會換成可按的真鈕（下面 uniSeasonDone
       // 分支）。禁用樣式沿用既有的成長面板 disabled 慣例（opacity:0.5＋native disabled）。
-      if (chapterSeasonOf(store.loadChapter?.(), seasonN) >= 4 && !uniSeasonDone) {
+      // A3-4：判準加 !pickedCorp——企業章年限（CHAPTER_SEASONS.corporate）未來被
+      // 調大時，這顆大學語彙的「🎓 謝幕」鈕也不得在企業章冒出（批 2 修補送審追蹤項②）
+      if (!pickedCorp && chapterSeasonOf(store.loadChapter?.(), seasonN) >= 4 && !uniSeasonDone) {
         const finaleBtn = el('button', [
           'min-width:220px', 'height:52px', 'padding:0 24px', 'border-radius:26px',
           'border:none', 'font-size:17px', 'font-weight:700', 'cursor:not-allowed',
@@ -2180,7 +2190,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     }
     // ★ 分支鏈：大學賽季結束才佔位 ★ 還在打的時候要落到下面的「▶ 出戰」——
     // 第一版把整個大學章都攔在鏈首，結果賽程生出來了卻沒有入口，一場都打不了。
-    if (uniSeasonDone) {
+    // 企業章批 3（A3-2）：企業賽季結束＝名次＋收尾卡；未結束照樣落到「▶ 出戰」
+    if (corpSeasonDone) {
+      const board = corpTable({
+        corpId: pickedCorp.id, seed: career.seed,
+        schedule: career.schedule, results: career.results,
+      });
+      const me = board.table.find((r) => r.id === CORP_PLAYER_ID);
+      root.appendChild(el('div', [
+        'font-size:22px', 'font-weight:900', `color:${board.playerRank === 1 ? COLOR.gold : COLOR.cyan}`,
+        'margin-top:8px', 'letter-spacing:2px',
+      ], board.playerRank === 1 ? '🏆 企業聯賽冠軍！' : `聯賽第 ${board.playerRank} 名`));
+      root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'line-height:1.7'],
+        `企業元年賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`));
+      root.appendChild(button('▶ 賽季落幕——企業元年', true, () => showCorpSeasonClosing(board)));
+    } else if (uniSeasonDone) {
       const board = uniTable({
         schoolId: store.loadSchool?.() ?? '', seed: career.seed,
         schedule: career.schedule, results: career.results,
@@ -2915,6 +2939,28 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:20px'],
       '點擊任意處返回'));
     overlay.addEventListener('pointerdown', () => { overlay.remove(); renderSlots(); });
+    document.body.appendChild(overlay);
+  }
+
+  // 企業章批 3（A3-2）：章末收尾卡——佔位（續約/轉隊/多年生涯＝掛帳，卷宗 §五）。
+  // ★文案屬提案★ 出口回生涯畫面（不是死路；重看名次也走同一顆鈕，冪等純顯示）。
+  function showCorpSeasonClosing(board) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:#05070d',
+      'gap:16px', 'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', [
+      'font-size:40px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:10px',
+      'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
+    ], '企業元年・完'));
+    overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
+      board.playerRank === 1 ? '第一年就把冠軍盃帶回了公司' : `聯賽第 ${board.playerRank} 名——大人的聯賽，站穩了`));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
+      'margin-top:18px'], '續約談判・敬請期待'));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
+      '點擊返回生涯畫面'));
+    overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
     document.body.appendChild(overlay);
   }
 

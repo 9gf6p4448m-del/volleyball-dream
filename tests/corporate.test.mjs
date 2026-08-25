@@ -20,8 +20,10 @@ import {
   corpRounds, buildCorpSchedule, corpTable, corpPointsFor, CORP_PLAYER_ID, CORP_ROUNDS,
 } from '../src/career/corpSchedule.js';
 import {
-  advanceSeason, createCareer, recordResult, matchOpponentDef,
+  advanceSeason, createCareer, recordResult, matchOpponentDef, seasonConcluded,
+  careerMatchSetup, createCareerPlayer,
 } from '../src/career/careerState.js';
+import { resolveMatchConfig } from '../src/app/matchConfig.js';
 import { TIER } from '../src/career/admission.js';
 import { OUR_TEAM_NAME } from '../src/career/roster.js';
 
@@ -273,4 +275,62 @@ test('currentTeamName：企業章給 corp id 回公司名、缺席回退創隊�
   // 大學分支不受第三參數影響
   assert.equal(currentTeamName({ id: 'university', enteredAtSeason: 4 }, 'haiyan', 'panshi-heavy'), '海硯大學');
   assert.equal(isUniversity(ch), false);
+});
+
+// ════════════════════════════════════════════════════════════════
+// 批 3（acceptance-corp-batch3.md）
+// ════════════════════════════════════════════════════════════════
+const corpResultsFor = (sched, n) => sched.slice(0, n).map((m, i) => ({
+  matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+  scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+}));
+
+test('A3-1 seasonConcluded 認得 corp：7/7 true、6/7 false', () => {
+  const base = createCareer({ seed: 5, playerName: '小夢' });
+  const schedule = buildCorpSchedule({ corpId: 'baigang-precision', seed: 5 });
+  assert.equal(seasonConcluded({ ...base, schedule, results: corpResultsFor(schedule, 7) }), true);
+  assert.equal(seasonConcluded({ ...base, schedule, results: corpResultsFor(schedule, 6) }), false);
+});
+
+test('A3-3 careerMatchSetup 第 8 參數：kits.A＝公司 kit、teams.B＝真對手', () => {
+  const career = createCareer({ seed: 5, playerName: '小夢' });
+  const schedule = buildCorpSchedule({ corpId: 'lieyang-petro', seed: 5 });
+  const player = createCareerPlayer('小夢', { seed: 5 });
+  const entry = schedule[0];
+  const setup = careerMatchSetup(
+    { ...career, schedule, results: [] }, player, entry,
+    { capacity: 8, members: buildCorpMembers('lieyang-petro'), alumni: [] },
+    null, 8, null, 'lieyang-petro',
+  );
+  assert.deepEqual(setup.kits.A, corporationById('lieyang-petro').kit, 'A 面穿公司 kit');
+  assert.deepEqual(setup.kits.B, corporationById(entry.opponentId).kit, 'B 面穿對手公司 kit');
+  // 對照：不給 corp 時 A 面不帶 kit（高中章行為不變）
+  const hs = careerMatchSetup(career, player, career.schedule[0]);
+  assert.equal(hs.kits.A, undefined);
+});
+
+test('A3-3b resolveMatchConfig：企業存檔的 teamName＝公司名', () => {
+  const career = createCareer({ seed: 5, playerName: '小夢' });
+  const schedule = buildCorpSchedule({ corpId: 'chaoxi-marine', seed: 5 });
+  const player = createCareerPlayer('小夢', { seed: 5 });
+  const fakeStore = {
+    loadChapter: () => ({ id: 'corporate', enteredAtSeason: 8 }),
+    loadSchool: () => null,
+    loadCorp: () => 'chaoxi-marine',
+  };
+  const cfg = resolveMatchConfig({
+    params: new URLSearchParams(),
+    careerCtx: {
+      career: { ...career, schedule, results: [] },
+      player,
+      matchEntry: schedule[0],
+      roster: { capacity: 8, members: buildCorpMembers('chaoxi-marine'), alumni: [] },
+      lineup: null,
+      seasonIndex: 8,
+      store: fakeStore,
+    },
+    randomSeed: 1,
+  });
+  assert.equal(cfg.teamName, '潮汐海運', '場內 HUD 隊名要是公司名');
+  assert.deepEqual(cfg.kits.A, corporationById('chaoxi-marine').kit);
 });

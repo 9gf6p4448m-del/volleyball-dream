@@ -140,9 +140,12 @@ export function careerStage(career) {
 // ★careerStage 仍是高中 schema 專用★（'group'/'national'/'national-final'）——
 // 它對大學賽程恆回 'national'，季收束一律問這一顆，不要再各自手抄 league 判斷式。
 export function seasonConcluded(career) {
-  const league = (career.schedule ?? []).filter((m) => m?.round === 'league');
-  if (league.length > 0) {
-    return league.every((m) => (career.results ?? []).some((r) => r.matchId === m.id));
+  // 企業章批 3（A3-1）：`'corp'` 比照 `'league'`——長循環章的收束＝該章場次全有結果。
+  // 兩個標記互斥（一份賽程只會有其中一種），合在同一個 filter 不會互相污染。
+  const longSeason = (career.schedule ?? [])
+    .filter((m) => m?.round === 'league' || m?.round === 'corp');
+  if (longSeason.length > 0) {
+    return longSeason.every((m) => (career.results ?? []).some((r) => r.matchId === m.id));
   }
   return ['eliminated', 'champion'].includes(careerStage(career));
 }
@@ -681,8 +684,12 @@ export function alliedAiProfileOf(player) {
 // `store.loadSchool()` 供給）。高中章恆不傳（=null）——`school` 是 `save.career.school`
 // 那條線唯一的寫入者是 `careerStore.enterUniversity`，高中章路徑上它永遠是 null，
 // 靠這一點自然滿足「高中章不補 A 面」，不必在這裡額外判 chapter。
+// 企業章批 3（A3-3）第 8 參數 corp：企業章已簽公司的 id（呼叫端由 `store.loadCorp()`
+// 供給）——A 面球衣改穿公司 kit。與 school 並存不衝突：兩者最多一個非 null
+//（同一份存檔不會同時「在大學」又「已簽企業」；同時給時 corp 優先＝現在的章）。
 export function careerMatchSetup(
   career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1, school = null,
+  corp = null,
 ) {
   const def = matchOpponentDef(matchEntry.opponentId, seasonIndex, { titles: career.titles ?? 0 });
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
@@ -774,7 +781,8 @@ export function careerMatchSetup(
   // 配色卷階段二 E1：大學章＋已選校時我方（A）補上入學校 kit；kitFor 缺欄位回 null
   // ⇒ 消費端（geoCharacter.resolveKit）回落側別預設——school 查無效（universityById
   // 落空）時 uniSchoolKit 為 null，跟高中章一樣不補 A 面，行為安全一致。
-  const uniSchoolKit = school ? kitFor(universityById(school)) : null;
+  const corpKit = corp ? kitFor(corporationById(corp)) : null;
+  const uniSchoolKit = corpKit ?? (school ? kitFor(universityById(school)) : null);
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, oppDef, members, lineup),
