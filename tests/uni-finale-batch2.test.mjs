@@ -350,3 +350,21 @@ test('B2-4 重看謝幕不重複封存：第二次進入儀式，career.seasons 
   assert.equal(store.loadSeasonArchive().length, 4, 'B2-4：重看不得再封一次（仍 4 筆）');
   assert.equal(storage.getItem(SAVE_KEY), afterFirst, 'B2-4：重看不得再動存檔');
 });
+
+test('覆審MEDIUM修：壞存檔（school id 解不開）點謝幕→擋下明示，不靜默播儀式、不封存、不打旗標', async () => {
+  const storage = u4Save('meixi', 8);
+  const raw = JSON.parse(storage.getItem(SAVE_KEY)); // 模擬手改存檔弄壞 school id
+  raw.career.school = 'no-such-school';
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  await renderCareer(storage);
+  const btn = nodeWith(/四年打完了——謝幕/);
+  assert.ok(btn, 'fixture 前提：gating 不依賴 school id，謝幕鈕仍在');
+  tap(btn);
+  await settle();
+  const afterTap = allText();
+  assert.match(afterTap, /謝幕結算失敗/, '失敗必須明示，不得靜默');
+  assert.doesNotMatch(afterTap, /大學謝幕・四年回顧/, '不得照播回顧卡');
+  const store = createCareerStore(storage);
+  assert.equal((store.loadSeasonArchive?.() ?? []).length, 3, 'U4 不得被封存');
+  assert.equal(store.uniFinaleSettled(), false, '旗標不得被打上');
+});

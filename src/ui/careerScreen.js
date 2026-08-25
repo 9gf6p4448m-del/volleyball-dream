@@ -2649,7 +2649,24 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 入口：先接批 1 結算（冪等——已結算過的重看不重複封存，B2-4），再開①回顧卡。
   // ★順序要點★ 一定要在讀 U4 名次之前呼叫，回顧卡才讀得到剛封存的第 4 筆。
   function showUniFinaleCeremony() {
-    store.settleUniFinale?.();
+    const settled = store.settleUniFinale?.();
+    // 覆審 MEDIUM 修（2026-08-25）：結算失敗（壞存檔——school id 解不開，
+    // settleUniFinale 依設計「不猜、不結算」回 false）不得靜默照播——否則儀式
+    // 「完工」但 U4 永遠沒封存、finaleSettled 沒打。首次進入（旗標未打）且結算
+    // 回 false ＝失敗，擋下並明示；重看路徑（旗標已打、冪等回 false）不受影響。
+    if (!settled && !store.uniFinaleSettled?.()) {
+      const overlay = el('div', [
+        'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center', 'background:#05070d',
+        'gap:12px', 'cursor:pointer', 'padding:26px 14px', 'text-align:center',
+      ]);
+      overlay.appendChild(el('div', ['font-size:15px', 'font-weight:800', `color:${COLOR.text}`,
+        'line-height:1.7'], '謝幕結算失敗——存檔資料異常（學校資料解不開），大四成績尚未封存'));
+      overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`], '點擊返回生涯畫面'));
+      overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+      document.body.appendChild(overlay);
+      return;
+    }
     showUniFinaleReview();
   }
 
