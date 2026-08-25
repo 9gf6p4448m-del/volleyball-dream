@@ -20,8 +20,11 @@ import { ROSTER_GROWTH } from './roster.js';
 import { universityById } from './universities.js';
 import { TIER } from './admission.js';
 
-// 槽序＝`careerState.js:291` 的 ROLE_ORDER（大學資料表的 squad 照同一個序）
-const ROLE_ORDER = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
+// 槽序＝`careerState.js:291` 的 ROLE_ORDER（大學資料表的 squad 照同一個序）。
+// 大二卷批 1 起 export：uniTurnover 的新生身高 fallback 要用它對照 school.heights
+// ——別再抄一份（同名不同義的溫床）。
+export const UNI_ROLE_ORDER = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
+const ROLE_ORDER = UNI_ROLE_ORDER;
 
 /**
  * 各校的玩家起始信任（＝球權四軸裡的「球權」那一軸）。

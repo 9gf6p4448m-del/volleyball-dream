@@ -138,11 +138,13 @@ test('★B4-2 反向對照★ 同一個全域屆數、不同進入點 ⇒ 章內
     '★核心★ 相同就代表根本沒在用進入點換算');
 });
 
-test('B4-3 大學年限＝1（階段一最小可玩版），且集中在一處', () => {
-  assert.equal(CHAPTER_SEASONS[CHAPTER.UNIVERSITY], 1);
-  assert.equal(seasonCapOf({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }), 1);
-  // 大學第 1 年就到頂（階段一打完一年）
-  assert.equal(chapterCompleted({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }, 4), true);
+test('B4-3 大學年限＝4（大二卷批1改寫：拍板題1，原「階段一＝1」語意到期），且集中在一處', () => {
+  assert.equal(CHAPTER_SEASONS[CHAPTER.UNIVERSITY], 4);
+  assert.equal(seasonCapOf({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }), 4);
+  // 大一～大三未到頂（還有下一年）、大四到頂（B1-5：季末不再放行推進）
+  assert.equal(chapterCompleted({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }, 4), false);
+  assert.equal(chapterCompleted({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }, 6), false);
+  assert.equal(chapterCompleted({ id: CHAPTER.UNIVERSITY, enteredAtSeason: 4 }, 7), true);
 });
 
 test('壞存檔：大學章缺 enteredAtSeason ⇒ 退化成全域屆數（不猜）', () => {

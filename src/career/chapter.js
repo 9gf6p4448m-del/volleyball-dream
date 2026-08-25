@@ -87,7 +87,9 @@ export function enterUniversity(careerBlock = null, seasonIndex = null) {
 // 之後要延長只改這一個值。
 export const CHAPTER_SEASONS = {
   [CHAPTER.HIGH_SCHOOL]: 3,
-  [CHAPTER.UNIVERSITY]: 1,
+  // 大二卷批 1（2026-08-25 拍板題 1）：1→4——機制做「任意年推進」，內容分批；
+  // 大四末收尾儀式是批 4，本表只管「還有沒有下一年」
+  [CHAPTER.UNIVERSITY]: 4,
 };
 
 /** 這一章的年限（認不得的章節照高中給——保守，不會意外放行）。 */

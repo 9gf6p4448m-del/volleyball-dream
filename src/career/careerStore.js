@@ -4,11 +4,15 @@
 // W2–W5 把 runtime 邏輯搬上 v2 鍵後再收斂。
 // storage 可注入替身（tests 用 Map 假體）；私密模式/配額爆掉一律安全降級不炸畫面
 import { serializePlayer } from '../sim/player.js';
-import { advanceSeason, PLAYER_TRUST_FLOOR, normalizeCareerPlayer } from './careerState.js';
+import {
+  advanceSeason, PLAYER_TRUST_FLOOR, normalizeCareerPlayer, seasonConcluded, deriveSeasonSeed,
+} from './careerState.js';
+import { uniSeasonTurnover } from './uniTurnover.js';
+import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 // ★ 取別名 ★ store 上有個同名方法；物件方法不會遮蔽模組作用域的匯入（JS 這樣寫能動），
 // 但同名會讓讀的人以為是遞迴。別名讓「純函式」與「會落檔的方法」一眼分得開。
 import {
-  normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted,
+  normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted, isUniversity,
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { universityById } from './universities.js';
@@ -175,9 +179,64 @@ export function createCareerStore(storage, slot = 1) {
       // 高中仍是三屆（`CHAPTER_SEASONS`），行為逐值不變；大學的年限同表另計。
       // 債 C（2026-08-25）：chapterCompleted 是**年限封頂**（這一章沒有下一年了），
       // 「這一季打完了沒」是另一個問題＝careerState.seasonConcluded（單一定義）。
-      // 大學屆間推進在 careerState.advanceSeason 有顯式 no-op 守衛（TODO(uni-year2)），
-      // 大二卷升 CHAPTER_SEASONS 後這裡放行也推不動，要去那裡接線。
+      // 推進條件＝seasonConcluded && !chapterCompleted（大二卷批 1 接線兌現）。
       if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
+      // ★★ 大二卷批 1：大學屆間推進 ★★（acceptance-uni-y2-batch1.md）
+      // 高中路徑一行不動（往下走原分支）；大學＝uniSchedule 重建＋uniTurnover 換血，
+      // careerState.advanceSeason 的高中純函式不進來（它的 league 守衛照舊擋著）。
+      if (isUniversity(normalizeChapter(save.career ?? null))) {
+        if (!seasonConcluded(view)) return false; // 季未收束＝不推進（單一定義，債 C）
+        const schoolId = save.career?.school ?? null;
+        // 學校解不開的壞存檔：不猜、不推進（比照 enterUniversity「查得到才算數」）
+        if (!universityById(schoolId)) return false;
+        let uniTurn = null;
+        const ok = writeSave((prev) => {
+          const endingSeason = prev.season.index ?? 1;
+          // 決定論鏈：下一屆種子由本屆種子衍生（與高中同一顆 deriveSeasonSeed）；
+          // 賽程與換血吃同一顆 seed——同存檔重演逐值一致
+          const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
+          uniTurn = uniSeasonTurnover({
+            roster: prev.roster, schoolId, seasonIndex: endingSeason, seed: nextSeed,
+          });
+          const playerRole = prev.player?.currentRole ?? 'outside';
+          const lineup = defaultLineup(uniTurn.roster.members, prev.player?.id ?? 'A2', playerRole);
+          // trust 跟人（高中屆間同語意）：倖存者沿用、畢業者鍵自然消失、新生顯式 10。
+          // ★ 玩家的 player.trust.fromSetter 這裡完全不碰＝題 3「跨年原值帶走」的
+          // 翻盤本體——強豪 27 起、每年打球自然累積，屆間不歸零 ★
+          const prevTrust = prev.lineup?.trust ?? {};
+          for (const id of Object.keys(lineup.trust)) {
+            if (prevTrust[id] !== undefined) lineup.trust[id] = prevTrust[id];
+          }
+          for (const f of uniTurn.freshmen) {
+            if (lineup.trust[f.id] !== undefined) lineup.trust[f.id] = FRESHMAN_TRUST;
+          }
+          // 屆末封存本屆摘要（與高中同一份 archiveSeasonSummary——歷屆數據頁吃它；
+          // 名次紀錄的結構化欄位是批 3，本批先讓戰績不因 results 清空而消失）
+          const seasons = [...(prev.career.seasons ?? []), archiveSeasonSummary(prev.season)];
+          return {
+            ...prev,
+            roster: uniTurn.roster,
+            lineup,
+            career: { ...prev.career, seasons },
+            season: {
+              ...prev.season,
+              index: endingSeason + 1,
+              seed: nextSeed,
+              schedule: buildUniSchedule({ schoolId, seed: nextSeed }),
+              results: [],
+              // 當屆旗標逐屆重置（與高中 careerState.advanceSeason 同兩顆）；
+              // 其餘 events（已播劇情/傳授旗標）跨屆有效照舊帶入
+              events: (prev.season.events ?? []).filter(
+                (e) => e !== TRANSFER_ASKED_EV && e !== TRANSFER_USED_EV,
+              ),
+              pendingMatch: undefined,
+            },
+          };
+        });
+        if (!ok) return false;
+        // 畢業送別/新生亮相的儀式演出＝批 4；本批回資料讓 UI 直接重繪
+        return { ok: true, graduates: uniTurn.graduates, freshmen: uniTurn.freshmen };
+      }
       // 4.5A 宿敵保底：下一屆屆數傳入賽程生成（第 2 屆天鷹掛準決賽）
       const next = advanceSeason(view, { ...opts, seasonIndex: (save.season.index ?? 1) + 1 });
       if (next === view) return false; // 賽季未結束

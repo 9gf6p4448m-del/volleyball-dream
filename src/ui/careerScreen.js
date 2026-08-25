@@ -2140,15 +2140,28 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         schedule: career.schedule, results: career.results,
       });
       const me = board.table.find((r) => r.id === UNI_PLAYER_ID);
+      const uniYear = chapterSeasonOf(store.loadChapter?.(), seasonN);
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${board.playerRank === 1 ? COLOR.gold : COLOR.cyan}`,
         'margin-top:8px', 'letter-spacing:2px',
       ], board.playerRank === 1 ? '🏆 大學聯賽冠軍！' : `聯賽第 ${board.playerRank} 名`));
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'line-height:1.7'],
-        `大一賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`));
-      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'max-width:min(340px,92vw)',
-        'text-align:center', 'line-height:1.6'],
-      '大二在下一批——屬性、技術與這一年的名次都會帶著走'));
+        `大${['一', '二', '三', '四'][uniYear - 1] ?? uniYear}賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`));
+      // 大二卷批 1：推進入口——store.advanceSeason 大學分支（換血＋新賽程同一次
+      // RMW）。畢業送別/新生亮相的儀式演出是批 4，這裡先直接重繪
+      if (uniYear < 4) {
+        root.appendChild(button(`▶ 進入大${['一', '二', '三', '四'][uniYear] ?? uniYear + 1}`, true, () => {
+          if (store.advanceSeason?.()) renderCareer();
+        }));
+        root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'max-width:min(340px,92vw)',
+          'text-align:center', 'line-height:1.6'],
+        '屬性、技術與這一年的名次都會帶著走'));
+      } else {
+        // 大四末收尾儀式＝批 4；年限封頂由 chapterCompleted 擋著，先給佔位文案
+        root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'max-width:min(340px,92vw)',
+          'text-align:center', 'line-height:1.6'],
+        '四年打完了——大學的謝幕在下一批'));
+      }
     } else if (careerOver) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${stage === 'champion' ? COLOR.gold : COLOR.cyan}`,

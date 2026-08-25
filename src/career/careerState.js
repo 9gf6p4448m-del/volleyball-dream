@@ -181,17 +181,23 @@ export const TITLE_LEVEL_BONUS = 3; // 每座冠軍讓對手全屬性 +3（平�
 // 第 1 屆恆為故事模板（createCareer）——教學鏈綁定北原/白浪/曜石場次（schedule.js 註）
 // 4.5A：opts.seasonIndex＝下一屆屆數（宿敵保底階梯——第 2 屆天鷹改掛準決賽；
 // 省略＝預設階梯＝既有行為不變，舊呼叫端/測試零遷移）
+// 下一屆種子的衍生鏈（單一定義，大二卷批 1 抽出）：高中與大學屆間推進共用——
+// 同存檔重演一致、每屆種子不同。抄第二份公式＝兩章的決定論鏈可能靜默分岔。
+export function deriveSeasonSeed(seed) {
+  let h = (seed ^ 0x9e3779b9) >>> 0;
+  h = Math.imul(h ^ 0x85ebca6b, 16777619) >>> 0;
+  return (h % 1000000007) || 1;
+}
+
 export function advanceSeason(career, { invitedId = null, seasonIndex = null } = {}) {
-  // TODO(uni-year2) 債 C 顯式守衛（2026-08-25）：大學屆間推進要走 uniSchedule 重建
-  // ＋大學版換血，接線前一律 no-op——改前這裡靠 careerStage 對大學恆回 'national'
-  // 的**意外死鎖**擋住；顯式擋，否則大二卷升 CHAPTER_SEASONS 後，這個函式會拿
-  // 高中的 buildSchedule 幫大學生蓋高中賽程（不變式測試＝uni-season-concluded C4）
+  // 債 C 顯式守衛（2026-08-25）：本函式是**高中版**屆間推進（buildSchedule＝高中
+  // 賽程）。大學屆間推進走 careerStore.advanceSeason 的大學分支（大二卷批 1 接線，
+  // uniSchedule 重建＋uniTurnover 換血），不進這裡——這道守衛擋的是「拿高中的
+  // buildSchedule 幫大學生蓋高中賽程」（測試＝uni-season-concluded C4）
   if ((career.schedule ?? []).some((m) => m?.round === 'league')) return career;
   if (!seasonConcluded(career)) return career; // 賽季未結束＝不動（單一定義，債 C）
   const stage = careerStage(career); // 高中 schema：titles 記帳仍要分冠軍/止步
-  let h = (career.seed ^ 0x9e3779b9) >>> 0;
-  h = Math.imul(h ^ 0x85ebca6b, 16777619) >>> 0;
-  const seed = (h % 1000000007) || 1; // 決定論鏈：下一屆種子由本屆種子衍生
+  const seed = deriveSeasonSeed(career.seed); // 決定論鏈：下一屆種子由本屆種子衍生
   const { pendingMatch, ...base } = career;
   return {
     ...base,
