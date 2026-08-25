@@ -78,6 +78,9 @@ import { uniTable, UNI_PLAYER_ID } from '../career/uniSchedule.js';
 import { CORPORATIONS, CORP_TIER_LABEL, corporationById } from '../career/corporations.js';
 import { corpTable, CORP_PLAYER_ID } from '../career/corpSchedule.js';
 import {
+  CORP_CONTRACT_LINES, CORP_PAYDAY_CARD, corpPaydayDue, corpAnchorPreEvents, corpClosingLines,
+} from '../career/corpEvents.js';
+import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
 
@@ -2241,6 +2244,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         '把大四聯賽打完，才能開啟謝幕儀式'));
       }
     }
+    // 企業章批 4（A4-2）：薪水選擇點——第 2 場打完、賽季未完、未選過才播；
+    // 選完旗標＋加成同一次 RMW（store.corpPaydayChoice），re-render 不重播
+    if (pickedCorp && corpPaydayDue(career)) showCorpPayday();
     // ★ 分支鏈：大學賽季結束才佔位 ★ 還在打的時候要落到下面的「▶ 出戰」——
     // 第一版把整個大學章都攔在鏈首，結果賽程生出來了卻沒有入口，一場都打不了。
     // 企業章批 3（A3-2）：企業賽季結束＝名次＋收尾卡；未結束照樣落到「▶ 出戰」
@@ -2397,6 +2403,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           ].flat(), rosterNow?.members ?? null), player?.currentRole ?? null)),
           ...oldTeamPreEvents(career, rosterNow),
           ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
+          // 企業章批 4（A4-3）：首戰擎空航太＝王勝翔亮相（fireEvents 入帳一生一次）
+          ...corpAnchorPreEvents(career, next),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
@@ -2986,6 +2994,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       'letter-spacing:6px'], c.name));
     overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.text}`, 'letter-spacing:2px'],
       '入社報到'));
+    // 批 4（A4-1）：合約敘事併入同一張卡（拍板題 2 輕量成人元素——只有話，沒有數值）
+    for (const line of CORP_CONTRACT_LINES) {
+      overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:10px',
+        'text-align:center', 'line-height:1.8', 'max-width:min(420px,90vw)'], line));
+    }
     overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'margin-top:16px',
       'text-align:center', 'line-height:1.8'],
     '企業聯賽賽季準備中——這一年的對手，就是剛剛沒有簽的那七家。'));
@@ -3009,11 +3022,47 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     ], '企業元年・完'));
     overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
       board.playerRank === 1 ? '第一年就把冠軍盃帶回了公司' : `聯賽第 ${board.playerRank} 名——大人的聯賽，站穩了`));
+    // 批 4（A4-4）：國外強權點名（題 1 敘事層）＋條件簡子嵐傳聞（大學名冊封存判定）
+    for (const line of corpClosingLines(store.loadUniRoster?.() ?? null)) {
+      overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:8px',
+        'text-align:center', 'line-height:1.8', 'max-width:min(440px,90vw)'], line));
+    }
     overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
       'margin-top:18px'], '續約談判・敬請期待'));
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
       '點擊返回生涯畫面'));
     overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+    document.body.appendChild(overlay);
+  }
+
+  // 企業章批 4（A4-2）：薪水選擇卡——兩鍵 overlay（同 showCorpConfirm 的誤觸防線形狀）。
+  // 兩個出口都走同一顆 store.corpPaydayChoice（冪等 RMW），選完重繪生涯頁。
+  function showCorpPayday() {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.94)',
+      'gap:14px', 'padding:24px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:22px', 'font-weight:900', `color:${COLOR.gold}`],
+      CORP_PAYDAY_CARD.title));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
+      'line-height:1.8', 'max-width:min(460px,90vw)'], CORP_PAYDAY_CARD.body));
+    const pick = (treat, note) => {
+      store.corpPaydayChoice?.(treat);
+      overlay.replaceChildren();
+      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
+        'line-height:1.8', 'max-width:min(460px,90vw)'], note));
+      overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:18px'],
+        '點擊繼續'));
+      overlay.style.cssText += ';cursor:pointer';
+      overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+    };
+    const row = el('div', ['display:flex', 'gap:10px', 'flex-wrap:wrap', 'justify-content:center']);
+    row.appendChild(button(CORP_PAYDAY_CARD.treat.label, true,
+      () => pick(true, CORP_PAYDAY_CARD.treat.note)));
+    row.appendChild(smallButton(CORP_PAYDAY_CARD.save.label,
+      () => pick(false, CORP_PAYDAY_CARD.save.note)));
+    overlay.appendChild(row);
     document.body.appendChild(overlay);
   }
 

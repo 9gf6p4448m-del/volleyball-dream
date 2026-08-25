@@ -22,6 +22,7 @@ import { buildUniMembers, uniStartTrustFor, uniRankTrustBonus } from './uniTeam.
 import { corporationById, corpOffersFor } from './corporations.js';
 import { buildCorpMembers, corpStartTrustFor } from './corpTeam.js';
 import { buildCorpSchedule } from './corpSchedule.js';
+import { CORP_PAYDAY_EV } from './corpEvents.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -534,6 +535,30 @@ export function createCareerStore(storage, slot = 1) {
     loadUniRoster() {
       const r = loadSave()?.career?.uniRoster ?? null;
       return r?.members?.length ? structuredClone(r) : null;
+    },
+    // 薪水選擇點（批 4 A4-2）：旗標＋小加成**同一次 RMW**——分兩次寫的話中間
+    // 斷電會留下「加成給了、旗標沒落」的重播重領通道。冪等：旗標已落＝no-op false。
+    // ★+2 屬提案★（acceptance-corp-batch4.md）；treat=false 只落旗標不動數值。
+    corpPaydayChoice(treat = false) {
+      return writeSave((prev) => {
+        if (!prev || (prev.season?.events ?? []).includes(CORP_PAYDAY_EV)) return prev;
+        return {
+          ...prev,
+          season: {
+            ...prev.season,
+            events: [...(prev.season.events ?? []), CORP_PAYDAY_EV],
+          },
+          player: treat && prev.player
+            ? {
+              ...prev.player,
+              trust: {
+                ...(prev.player.trust ?? {}),
+                fromSetter: Math.min(100, (prev.player.trust?.fromSetter ?? 0) + 2),
+              },
+            }
+            : prev.player,
+        };
+      });
     },
     // 邀約集合——★值從封存的 uniRank 來（A2-4「值從哪來」）★ UI 一律呼叫這裡，
     // 不得自己拿 rank 當參數去呼叫 corpOffersFor（招募替代路徑卷的教訓：把判準

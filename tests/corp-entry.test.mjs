@@ -188,3 +188,33 @@ test('A2-5b advanceToCorp：正式鏈走完＝企業章開局＋四筆大學封�
   assert.equal(uniSeasons.length, 4, '大學四年逐年封存（＝真的走了 advanceSeason 鏈）');
   assert.equal(save.career.finaleSettled, true);
 });
+
+// ════════════════════════════════════════════════════════════════
+// 批 4 A4-2：corpPaydayChoice 單一 RMW
+// ════════════════════════════════════════════════════════════════
+import { CORP_PAYDAY_EV } from '../src/career/corpEvents.js';
+
+test('A4-2 corpPaydayChoice：treat 加成＋旗標同一次寫、冪等不重領', () => {
+  const storage = settledUniSave();
+  const store = createCareerStore(storage);
+  assert.ok(store.enterCorporate('lvyuan-foods'));
+  const before = JSON.parse(storage.getItem(SAVE_KEY)).player.trust.fromSetter;
+  assert.ok(store.corpPaydayChoice(true));
+  const after = JSON.parse(storage.getItem(SAVE_KEY));
+  assert.equal(after.player.trust.fromSetter, Math.min(100, before + 2), '請客＝+2（提案值）');
+  assert.ok(after.season.events.includes(CORP_PAYDAY_EV), '旗標同一次落檔');
+  const snap = storage.getItem(SAVE_KEY);
+  store.corpPaydayChoice(true);
+  assert.equal(storage.getItem(SAVE_KEY), snap, '第二次呼叫＝no-op，不重領');
+});
+
+test('A4-2b corpPaydayChoice(false)：只落旗標、數值不動', () => {
+  const storage = settledUniSave();
+  const store = createCareerStore(storage);
+  assert.ok(store.enterCorporate('lvyuan-foods'));
+  const before = JSON.parse(storage.getItem(SAVE_KEY)).player.trust.fromSetter;
+  assert.ok(store.corpPaydayChoice(false));
+  const after = JSON.parse(storage.getItem(SAVE_KEY));
+  assert.equal(after.player.trust.fromSetter, before);
+  assert.ok(after.season.events.includes(CORP_PAYDAY_EV));
+});

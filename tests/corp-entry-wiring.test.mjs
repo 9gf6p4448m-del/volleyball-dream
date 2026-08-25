@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
+import { CORP_PAYDAY_EV } from '../src/career/corpEvents.js';
 import { createCareer, createCareerPlayer } from '../src/career/careerState.js';
 import { buildStarterMembers } from '../src/career/roster.js';
 import { clearCampPending } from '../src/career/trainingCamp.js';
@@ -83,7 +84,7 @@ const allText = (root) => walk(root).map((n) => n.textContent ?? '').join('｜')
 const settle = () => new Promise((r) => { setTimeout(r, 0); });
 
 /** U4 打滿的存檔；settled 控制要不要跑謝幕結算（A2-3 的兩態）。 */
-function u4Save({ settled }) {
+function u4Save({ settled, school = 'meixi' }) {
   const storage = fakeStorage();
   const store = createCareerStore(storage);
   const career = createCareer({ seed: 99, playerName: '小夢' });
@@ -94,7 +95,7 @@ function u4Save({ settled }) {
   raw.roster = { capacity: 12, members: buildStarterMembers(), alumni: [] };
   storage.setItem(SAVE_KEY, JSON.stringify(raw));
   const s = createCareerStore(storage);
-  s.enterUniversity('meixi');
+  s.enterUniversity(school);
   const play = () => {
     const c = s.loadCareer();
     const league = c.schedule.filter((m) => m.round === 'league');
@@ -202,4 +203,96 @@ test('簽約後 ⇒ 頭部顯示 🏢 公司名＋企業聯賽年份，不再是
   assert.match(text, /企業聯賽——第 1 年/);
   assert.doesNotMatch(text, /升學已定/, '舊大學文案不得殘留');
   assert.match(text, /出戰/, '企業賽季要落到出戰入口（不是死路）');
+});
+
+// ════════ 批 4（acceptance-corp-batch4.md A4-1/A4-2/A4-4）════════
+const findBtn = (re) => walk(globalThis.document.body)
+  .find((n) => n.tag === 'button' && re.test(n.textContent ?? ''));
+const tapDialogs = async () => {
+  for (let i = 0; i < 15; i += 1) {
+    const cont = walk(globalThis.document.body).find((n) => /點擊繼續/.test(n.textContent ?? ''));
+    if (!cont) break;
+    let p = cont;
+    while (p && !(p.handlers?.pointerdown ?? []).length) p = p.parent;
+    if (p) tap(p); else break;
+    await settle();
+  }
+};
+
+test('A4-1 完整簽約流程 ⇒ 入社卡含合約敘事、存檔為企業章', async () => {
+  const storage = u4Save({ settled: true });
+  await renderAndGetText(storage);
+  // 走真流程：前往下一個舞台 → 選秀唱名（dialog 點掉）→ 邀約自選 → 簽約 → 入社卡
+  tap(findBtn(/前往下一個舞台/));
+  await settle();
+  await tapDialogs();
+  const sign = findBtn(/簽這一家/);
+  assert.ok(sign, '邀約卡要出現（保底隊恆有）');
+  tap(sign);
+  await settle();
+  tap(findBtn(/簽約/));
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.match(text, /入社報到/);
+  assert.match(text, /合約/, 'A4-1 合約敘事要在入社卡上');
+  assert.match(text, /薪水|職員/, '薪水/社會人語意至少一句');
+  const save = JSON.parse(storage.getItem(SAVE_KEY));
+  assert.equal(save.career.chapter.id, 'corporate', '流程走完＝真的入章');
+});
+
+test('A4-2 第 2 場後薪水卡出現；選請客 ⇒ +2＋旗標＋不重播', async () => {
+  const storage = corpSave(2);
+  const text = await renderAndGetText(storage);
+  assert.match(text, /第一份薪水/, '薪水卡要出現');
+  // ★ before 在 render 之後讀 ★ 未消化的賽後劇情事件在 render 時先套 trust 效果
+  //（fireEvents），render 前讀會把那段也算進薪水加成（實跑抓到 33!==31）
+  const before = JSON.parse(storage.getItem(SAVE_KEY)).player.trust.fromSetter;
+  tap(findBtn(/請全隊吃一頓/));
+  await settle();
+  // 選後的餘韻卡點掉
+  const note = walk(globalThis.document.body).find((n) => /點擊繼續/.test(n.textContent ?? ''));
+  let p = note;
+  while (p && !(p.handlers?.pointerdown ?? []).length) p = p.parent;
+  if (p) tap(p);
+  await settle();
+  const save = JSON.parse(storage.getItem(SAVE_KEY));
+  assert.equal(save.player.trust.fromSetter, Math.min(100, before + 2));
+  assert.ok(save.season.events.includes(CORP_PAYDAY_EV));
+  const text2 = allText(globalThis.document.body);
+  assert.doesNotMatch(text2, /第一份薪水/, '選完重繪不得重播');
+});
+
+test('A4-2b 只打 1 場 ⇒ 薪水卡不出現', async () => {
+  const text = await renderAndGetText(corpSave(1));
+  assert.doesNotMatch(text, /第一份薪水/);
+});
+
+test('A4-4 收尾卡：海外點名恆在；簡子嵐句依大學名冊封存兩態', async () => {
+  // 態一：meixi（大學隊無簡子嵐）
+  await renderAndGetText(corpSave(7));
+  tap(findBtn(/賽季落幕/));
+  await settle();
+  let text = allText(globalThis.document.body);
+  assert.match(text, /海外|另一邊/, '國外強權點名（海外語意）');
+  assert.doesNotMatch(text, /簡子嵐/);
+  // 態二：haiyan（簡子嵐同隊四年 → 封存名冊含他）
+  const storage = u4Save({ settled: true, school: 'haiyan' });
+  const s2 = createCareerStore(storage);
+  assert.ok(s2.enterCorporate('panshi-heavy'));
+  const c = s2.loadCareer();
+  const games = c.schedule.filter((m) => m.round === 'corp');
+  s2.saveCareer({
+    ...c,
+    results: games.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  assert.ok(JSON.parse(storage.getItem(SAVE_KEY)).career.uniRoster.members
+    .some((m) => m.fullName === '簡子嵐'), 'fixture 前提：封存名冊含簡子嵐');
+  await renderAndGetText(storage);
+  tap(findBtn(/賽季落幕/));
+  await settle();
+  text = allText(globalThis.document.body);
+  assert.match(text, /簡子嵐/, '同隊過的人，出海的消息要傳到');
 });

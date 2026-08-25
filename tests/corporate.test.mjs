@@ -334,3 +334,49 @@ test('A3-3b resolveMatchConfig：企業存檔的 teamName＝公司名', () => {
   assert.equal(cfg.teamName, '潮汐海運', '場內 HUD 隊名要是公司名');
   assert.deepEqual(cfg.kits.A, corporationById('chaoxi-marine').kit);
 });
+
+// ════════════════════════════════════════════════════════════════
+// 批 4（acceptance-corp-batch4.md）純函式層
+// ════════════════════════════════════════════════════════════════
+import {
+  corpPaydayDue, corpAnchorPreEvents, corpClosingLines,
+  CORP_PAYDAY_EV, CORP_WANG_INTRO_EV, WANG_TEAM_EXISTS,
+} from '../src/career/corpEvents.js';
+
+test('A4-2 corpPaydayDue：2 場起、7/7 不補播、旗標落過不重播', () => {
+  const base = createCareer({ seed: 7, playerName: '小夢' });
+  const schedule = buildCorpSchedule({ corpId: 'nanfeng-textile', seed: 7 });
+  const c = (n, events = []) => ({ ...base, schedule, results: corpResultsFor(schedule, n), events });
+  assert.equal(corpPaydayDue(c(0)), false);
+  assert.equal(corpPaydayDue(c(1)), false);
+  assert.equal(corpPaydayDue(c(2)), true);
+  assert.equal(corpPaydayDue(c(6)), true);
+  assert.equal(corpPaydayDue(c(7)), false, '賽季打完不補播（結算優先）');
+  assert.equal(corpPaydayDue(c(3, [CORP_PAYDAY_EV])), false, '選過不重播');
+  assert.equal(corpPaydayDue(base), false, '高中存檔（無 corp 場）不播');
+});
+
+test('A4-3 corpAnchorPreEvents：只在首戰擎空航太回台詞', () => {
+  const base = createCareer({ seed: 7, playerName: '小夢' });
+  assert.ok(WANG_TEAM_EXISTS, '王勝翔的隊 id 要真的在八隊表裡');
+  const entry = { id: 'corp-r7', round: 'corp', opponentId: 'qingkong-aero' };
+  const evs = corpAnchorPreEvents(base, entry);
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].id, CORP_WANG_INTRO_EV);
+  assert.ok(evs[0].lines.some((l) => l.includes('王勝翔')));
+  assert.deepEqual(corpAnchorPreEvents({ ...base, events: [CORP_WANG_INTRO_EV] }, entry), [],
+    '播過＝一生一次');
+  assert.deepEqual(corpAnchorPreEvents(base, { ...entry, opponentId: 'panshi-heavy' }), []);
+  assert.deepEqual(corpAnchorPreEvents(base, { ...entry, round: 'league' }), [],
+    'round 守衛：不是企業賽程不播');
+});
+
+test('A4-4 corpClosingLines：海外恆點名、簡子嵐條件句', () => {
+  const none = corpClosingLines(null);
+  assert.equal(none.length, 1);
+  assert.ok(none[0].includes('海'), '國外強權點名（海外語意）');
+  const withJian = corpClosingLines({ members: [{ fullName: '簡子嵐' }] });
+  assert.equal(withJian.length, 2);
+  assert.ok(withJian[1].includes('簡子嵐'));
+  assert.equal(corpClosingLines({ members: [{ fullName: '別人' }] }).length, 1);
+});
