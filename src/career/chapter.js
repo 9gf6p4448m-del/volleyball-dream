@@ -136,8 +136,10 @@ export const CHAPTER_SEASONS = {
   [CHAPTER.UNIVERSITY]: 4,
   // 成人/企業章階段一＝1 年（卷宗拍板題 3「先做一年最小可玩」）；要延長只改這一個值
   [CHAPTER.CORPORATE]: 1,
-  // 職業章階段一＝1 年（卷宗§三批 1「一年最小可玩」）；要延長只改這一個值
-  [CHAPTER.PRO]: 1,
+  // 多年職業生涯卷批 1（2026-08-27 拍板題 1 補題）：1→10——開放式自選退休的
+  // **硬上限**（存檔守衛），不是「必打十年」；每年退不退由 proRetired 旗標管
+  // （`proCareerOver` 才是生涯收束的判斷，本表只管「還有沒有下一年」）
+  [CHAPTER.PRO]: 10,
 };
 
 /** 這一章的年限（認不得的章節照高中給——保守，不會意外放行）。 */
@@ -163,6 +165,21 @@ export function chapterSeasonOf(chapter, seasonIndex = 1) {
 /** 這一章打完了沒（章內年份已達年限）＝封頂判斷的單一真相源。 */
 export function chapterCompleted(chapter, seasonIndex = 1) {
   return chapterSeasonOf(chapter, seasonIndex) >= seasonCapOf(chapter);
+}
+
+/**
+ * 職業生涯結束了沒＝多年卷收束判斷的單一真相源（多年職業生涯卷批 1）。
+ * 結束＝自選退休（career.proRetired，`careerStore.retirePro` 唯一寫入點）**或**
+ * 滿硬上限（chapterCompleted，第 10 年）。非職業章恆 false——別的章的收束各有
+ * 自己的 settle 旗標，不進這裡。
+ *
+ * @param career       save.career 整塊（要讀 proRetired 與 chapter）
+ * @param seasonIndex  全域屆數（save.season.index）
+ */
+export function proCareerOver(career, seasonIndex = 1) {
+  if (!isPro(normalizeChapter(career ?? null))) return false;
+  if (career?.proRetired === true) return true;
+  return chapterCompleted(career?.chapter, seasonIndex);
 }
 
 /**

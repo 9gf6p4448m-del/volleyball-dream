@@ -53,11 +53,15 @@ test('A1b enterPro 純函式、冪等：其餘鍵保留、傳入物件不被改'
   assert.equal(again.chapter.enteredAtSeason, 9, '進章時點不得被第二次呼叫覆寫');
 });
 
-test('A1c 職業章年限＝1：進章那一年即末年', () => {
-  assert.equal(CHAPTER_SEASONS[CHAPTER.PRO], 1);
-  assert.equal(seasonCapOf({ id: 'pro', enteredAtSeason: 9 }), 1);
+// A1c 原凍「年限＝1」（acceptance-pro-batch1）——多年職業生涯卷批 1 拍板改 10
+// （acceptance-multiyear-batch1 A1，凍結 01c9243），本測試依新凍結文改寫
+// ＝凍結測試改寫慣例第五例（前例 kit-batch3）。
+test('A1c 職業章年限＝10（多年卷硬上限）：第 1 年不再是末年', () => {
+  assert.equal(CHAPTER_SEASONS[CHAPTER.PRO], 10);
+  assert.equal(seasonCapOf({ id: 'pro', enteredAtSeason: 9 }), 10);
   assert.equal(chapterSeasonOf({ id: 'pro', enteredAtSeason: 9 }, 9), 1, '全域第 9 屆＝職業第 1 年');
-  assert.equal(chapterCompleted({ id: 'pro', enteredAtSeason: 9 }, 9), true, '一年制：第 1 年就是末年');
+  assert.equal(chapterCompleted({ id: 'pro', enteredAtSeason: 9 }, 9), false, '多年制：第 1 年不是末年');
+  assert.equal(chapterCompleted({ id: 'pro', enteredAtSeason: 9 }, 18), true, '章內第 10 年才封頂');
 });
 
 test('A1d currentTeamName：職業分支回職業隊名、缺席回退創隊隊名', () => {

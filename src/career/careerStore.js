@@ -25,7 +25,7 @@ import { buildCorpMembers, corpStartTrustFor, corpRankTrustBonus } from './corpT
 import { buildCorpSchedule, corpTable } from './corpSchedule.js';
 import { CORP_PAYDAY_EV } from './corpEvents.js';
 // 職業章批 2（2026-08-26）：入章接線——資料層（proTeams/proTeam/proSchedule）批 1 已鋪好
-import { proTeamById, proOffersFor } from './proTeams.js';
+import { proTeamById, proOffersFor, proBaseSalaryFor } from './proTeams.js';
 import { buildProMembers, proStartTrustFor } from './proTeam.js';
 // 職業章批 3：growProSchedule（saveCareer 的季後賽接線）／proTable（settleProFinale 讀名次）
 import { buildProSchedule, proTable, growProSchedule } from './proSchedule.js';
@@ -231,6 +231,41 @@ export function createCareerStore(storage, slot = 1) {
       // 「這一季打完了沒」是另一個問題＝careerState.seasonConcluded（單一定義）。
       // 推進條件＝seasonConcluded && !chapterCompleted（大二卷批 1 接線兌現）。
       if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
+      // ★★ 多年卷批 1：職業屆間推進 ★★（acceptance-multiyear-batch1 A3）
+      // 與大學分支的差異：①結算先於推進——本季必須先 settleProFinale（封存＋旗標）
+      // 才准推，封存單一入口不旁生（批 3 頭道閘教訓）②零換血（拍板三小題：NPC 與
+      // 自家名冊皆靜態，uniTurnover 不搬）③season.events 保留跨季帶入（劇情/傳授
+      // 已播旗標；pro 無當屆性旗標要濾）。轉隊/續約選單＝批 2–3，本分支恆同隊續行。
+      if (isPro(normalizeChapter(save.career ?? null))) {
+        if (save.career?.proRetired === true) return false; // 退休＝生涯收束，不推進
+        if (!seasonConcluded(view)) return false; // 季未收束＝不推進（單一定義）
+        if (save.career?.proFinaleSettled !== true) return false; // 未結算不推進
+        const teamId = save.career?.pro ?? null;
+        if (!proTeamById(teamId)) return false; // 壞存檔：不猜、不推進
+        return writeSave((prev) => {
+          // no-op 條件與寫入內容綁同一份 prev 讀值（同 enterPro 雙保險慣例）
+          if (prev?.career?.proRetired === true) return prev;
+          if (prev?.career?.proFinaleSettled !== true) return prev;
+          if (chapterCompleted(prev.career?.chapter, prev.season.index ?? 1)) return prev;
+          const endingSeason = prev.season.index ?? 1;
+          // 決定論鏈：下一季種子由本季種子衍生（與高中/大學同一顆 deriveSeasonSeed）
+          const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
+          return {
+            ...prev,
+            // 旗標逐季重置：下一季打完才可再結算（不清＝第 2 季永遠不能結算）
+            career: { ...prev.career, proFinaleSettled: false },
+            season: {
+              ...prev.season,
+              index: endingSeason + 1,
+              seed: nextSeed,
+              // 重建＝純循環 7 場（季後賽由 growProSchedule 打滿後自動長，不預長）
+              schedule: buildProSchedule({ teamId, seed: nextSeed }),
+              results: [],
+              pendingMatch: undefined,
+            },
+          };
+        });
+      }
       // ★★ 大二卷批 1：大學屆間推進 ★★（acceptance-uni-y2-batch1.md）
       // 高中路徑一行不動（往下走原分支）；大學＝uniSchedule 重建＋uniTurnover 換血，
       // careerState.advanceSeason 的高中純函式不進來（它的 league 守衛照舊擋著）。
@@ -748,6 +783,9 @@ export function createCareerStore(storage, slot = 1) {
           career: {
             ...enterProBlock(prev.career, nextSeason),
             pro: team.id,
+            // 多年卷批 1：新人約——隊階底薪（★數值屬提案★）；續約公式＝批 2。
+            // sinceSeason 記簽約屆數，謝幕卡的薪水曲線靠 settleProFinale 逐季封存
+            contract: { salary: proBaseSalaryFor(team), sinceSeason: nextSeason },
             // 企業名冊封存（比照 uniRoster：不隨行，生涯數據頁還看得到）
             corpRoster: prev.roster ?? null,
           },
@@ -770,19 +808,22 @@ export function createCareerStore(storage, slot = 1) {
         };
       });
     },
-    // ★★ 職業章批 3（2026-08-26）★★ 職業季末結算入口——只封存＋打旗標，不推進
-    // 屆數（職業章年限＝1，本來就沒有下一年；比照 settleCorpFinale 逐條）。
+    // ★★ 職業章批 3（2026-08-26）→ 多年卷批 1 逐季化（2026-08-27）★★
+    // 職業季末結算入口——只封存＋打旗標，不推進屆數（推進＝advanceSeason 的 pro
+    // 分支，結算先於推進）。多年化拿掉 chapterCompleted 守衛：那是「年限封頂」
+    // （沒有下一年了），不是「這一季打完了沒」——年限改 10 後留著它會把第 1–9 季
+    // 全擋死（acceptance-multiyear-batch1 A2 的壞版自證正是這條）。
     //   守衛：只有職業章才准結算（isPro 顯式檢查）；已結算（proFinaleSettled）→
     //         no-op；未打完（!seasonConcluded——C3 單一定義，含季後賽全部有結果）
     //         → no-op；壞存檔（pro id 解不開）→ 不猜、不結算。
-    //   封存鍵名用 proRank（同 corpRank 之於 uniRank 的教訓：鍵名不得撞名）。
+    //   封存鍵名用 proRank（同 corpRank 之於 uniRank 的教訓：鍵名不得撞名）；
+    //   多年卷加 salary（謝幕卡薪水曲線的資料源；舊檔無 contract＝null 不猜）。
     settleProFinale() {
       const save = loadSave();
       const view = save ? careerViewOf(save) : null;
       if (!view) return false;
       if (!isPro(normalizeChapter(save.career ?? null))) return false; // 非職業章拒絕
-      if (!chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
-      if (save.career?.proFinaleSettled) return false; // 已結算，冪等 no-op
+      if (save.career?.proFinaleSettled) return false; // 本季已結算，冪等 no-op
       if (!seasonConcluded(view)) return false; // 未打完（含季後賽）不結算
       const proId = save.career?.pro ?? null;
       if (!proTeamById(proId)) return false; // 壞存檔：不猜、不結算
@@ -798,6 +839,7 @@ export function createCareerStore(storage, slot = 1) {
           ...archiveSeasonSummary(prev.season),
           proRank,
           pro: proId,
+          salary: prev.career?.contract?.salary ?? null,
         }];
         return {
           ...prev,
@@ -805,6 +847,27 @@ export function createCareerStore(storage, slot = 1) {
         };
       });
       return ok;
+    },
+    // ★★ 多年卷批 1（2026-08-27）★★ 自選退休——生涯收束的唯一寫入點。
+    //   守衛：只有職業章；本季**已結算**才准退（proFinaleSettled——沒結算就退＝
+    //   本季白打不進封存，批 3「結算先於下一步」同一條紀律）；已退休＝冪等 no-op。
+    //   退休後的收束判斷走 chapter.proCareerOver（SSOT），UI 謝幕卡＝批 5。
+    retirePro() {
+      const save = loadSave();
+      if (!save) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false;
+      if (save.career?.proFinaleSettled !== true) return false; // 結算先於退休
+      if (save.career?.proRetired === true) return false; // 已退休，冪等 no-op
+      return writeSave((prev) => {
+        // 冪等雙保險：no-op 條件與寫入內容綁同一份 prev 讀值
+        if (prev?.career?.proRetired === true) return prev;
+        if (prev?.career?.proFinaleSettled !== true) return prev;
+        return { ...prev, career: { ...prev.career, proRetired: true } };
+      });
+    },
+    // 已退休（UI 用；判「生涯結束了沒」一律走 chapter.proCareerOver，不得自組判式）
+    proRetired() {
+      return loadSave()?.career?.proRetired === true;
     },
     // 職業謝幕已結算（同 corpFinaleSettled 慣例：UI 用旗標判斷收尾卡重看/重複結算）
     proFinaleSettled() {
