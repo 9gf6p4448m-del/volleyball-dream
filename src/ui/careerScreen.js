@@ -2388,7 +2388,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 企業章批 3（A3-2）：企業賽季結束＝名次＋收尾卡；未結束照樣落到「▶ 出戰」
     // 職業章批 3（C1/C5）：同款分支，排在鏈首——章節互斥（同一份存檔只會有一個
     // pickedXxx 非 null），順序本身不影響行為，只是沿用「當前章節優先」的既有排法
-    if (proSeasonDone) {
+    // ★裁定 (a) 最終形（最終確認審反例）★ degraded 統一分流上移到整條鏈頂端：
+    // 棄賽寫入失敗的那一輪，不進任何結算/出戰流程——季末分支的 settle* 讀磁碟舊值
+    // 必回 false，玩家會卡在措辭錯誤（「資料解不開」）的失敗卡循環；有下一場的
+    // 情境則有結算炸例外風險（前輪送審實測）。鏈頂攔下＝結構上無可繞分支。
+    // 主按鈕看得到按不了（依情境給文字），警示措辭統一。
+    if (saveDegraded) {
+      const degradedNext = nextMatch(career);
+      const degradedBtn = button(
+        degradedNext ? `▶ 出戰 ${opponentName(degradedNext.opponentId)}` : '▶ 賽季落幕',
+        true, () => {},
+      );
+      degradedBtn.disabled = true;
+      root.appendChild(degradedBtn);
+      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`],
+        '⚠ 存檔空間異常——戰績目前寫不進存檔，出戰與結算已暫停。清出儲存空間或離開私密瀏覽模式後，重新整理再繼續。'));
+    } else if (proSeasonDone) {
       const board = proTable({
         teamId: pickedPro.id, seed: career.seed,
         schedule: career.schedule, results: career.results,
@@ -2534,15 +2549,6 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       ));
       root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
         '局間存檔——從換邊休息點恢復'));
-    } else if (next && saveDegraded) {
-      // ★第三輪送審裁定 (a)★ 存檔寫入壞掉的那一輪：出戰停用＋誠實明示。
-      // 不停用的話：①打完成績也存不住 ②兜底賽程的季後賽場次不在硬碟上，
-      // matchCareer 結算 recordResult 找不到場次會炸（送審第三輪實測）。
-      const degradedBtn = button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, () => {});
-      degradedBtn.disabled = true;
-      root.appendChild(degradedBtn);
-      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`],
-        '⚠ 存檔空間異常——戰績目前寫不進存檔，出戰已暫停。清出儲存空間或離開私密瀏覽模式後，重新整理再出戰。'));
     } else if (next) {
       // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
       const startMatch = () => {

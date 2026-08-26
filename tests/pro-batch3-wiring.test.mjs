@@ -457,3 +457,48 @@ test('裁定(a)補全 degraded＋到期事件：跳過對話直達警示，不�
     .find((n) => n.tag === 'button' && /▶ 出戰/.test(n.textContent ?? ''));
   assert.equal(playBtn?.disabled, true, '出戰鈕停用（裁定 a 的承諾在此輪也成立）');
 });
+
+// ════════════════════════════════════════════════════════════════
+// 裁定 (a) 最終形（最終確認審反例）：degraded＋不晉級＝季收束——
+// 改前紅：走 proSeasonDone 分支，「▶ 賽季落幕」可點→「資料解不開」失敗卡循環，
+// 警示永遠缺席
+// ════════════════════════════════════════════════════════════════
+test('裁定(a)最終形 degraded＋不晉級：鏈頂攔下，落幕鈕停用＋警示可見、無資料解不開卡', async () => {
+  const storage = proSave();
+  const s = createCareerStore(storage);
+  let c = s.loadCareer();
+  const league = c.schedule.filter((m) => m.round === 'pro');
+  // 前 6 場全敗（確定不晉級）
+  s.saveCareer({
+    ...c,
+    results: league.slice(0, 6).map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: false, scoreFor: 0, scoreAgainst: 2, gp: 1,
+    })),
+  });
+  c = s.loadCareer();
+  s.saveCareer({
+    ...c,
+    pendingMatch: league[6].id,
+    events: [...new Set([...(c.events ?? []), 'first-loss'])],
+  });
+  const failingStorage = {
+    getItem: (k) => storage.getItem(k),
+    setItem: () => { throw new Error('QuotaExceededError（模擬私密模式）'); },
+    removeItem: (k) => storage.removeItem(k),
+  };
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(failingStorage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.match(text, /存檔空間異常/, 'degraded＋不晉級也要看到統一警示（鏈頂分流）');
+  assert.doesNotMatch(text, /資料解不開/, '不得落入措辭錯誤的既有結算失敗卡');
+  const closingBtn = walk(globalThis.document.body)
+    .find((n) => n.tag === 'button' && /賽季落幕/.test(n.textContent ?? ''));
+  assert.ok(closingBtn, '季末情境要有落幕鈕（看得到按不了）');
+  assert.equal(closingBtn.disabled, true, '落幕鈕必須停用（結算讀磁碟舊值必失敗）');
+});
