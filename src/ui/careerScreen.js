@@ -89,7 +89,9 @@ import {
 // 職業章批 2（2026-08-26）：入章接線——資料層批 1 已鋪好
 import { PRO_TIER_LABEL, proTeamById } from '../career/proTeams.js';
 // 職業章批 3：名次表／季後賽場次顯示（proSchedule.js 批 1 的純函式＋批 3 的 round 標記）
-import { proTable, PRO_PLAYER_ID, PLAYOFF_ROUND } from '../career/proSchedule.js';
+import {
+  proTable, PRO_PLAYER_ID, PLAYOFF_ROUND, growProSchedule,
+} from '../career/proSchedule.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -1844,9 +1846,19 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 玩家先看到假的「賽季落幕」、點結算再吃一句假的「存檔資料異常」。
       // ★送審反例修（第二輪）★ 只有寫入**成功**才信 loadCareer——寫入失敗時
       // loadCareer 讀回的是「未棄賽的舊存檔」，無條件重讀＝當輪棄賽判定被靜默撤銷，
-      // 玩家可重打棄賽場次（反白嫖規則 07-22 被繞）。失敗維持 settled 兜底（與舊版
-      // 一致：當輪畫面棄賽已判，下次重整才因未落檔還原——那是存檔失敗的既有語意）。
-      career = (saved ? store.loadCareer() : null) ?? settled;
+      // 玩家可重打棄賽場次（反白嫖規則 07-22 被繞）。
+      // ★第三輪修★ 失敗兜底不能直接吞 settled（長之前的形狀）——那會讓第一輪 HIGH
+      // 的假「賽季落幕」在「寫入失敗＋晉級」組合下復活。改在記憶體端補跑同一顆
+      // growProSchedule 純函式（saveCareer 內部那一步），畫面用的 career 恆與
+      // 「寫入成功會讀回的形狀」一致：棄賽已判（反白嫖守住）＋季後賽場次看得到。
+      let view = saved ? store.loadCareer() : null;
+      if (!view) {
+        const proId = store.loadPro?.() ?? null;
+        view = proId
+          ? { ...settled, schedule: growProSchedule(settled.schedule, settled.results, proId, settled.seed) }
+          : settled;
+      }
+      career = view;
       if (forfeited) setMsg('上一場中途離開——依規記為棄賽敗（0:25）');
     }
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）。
