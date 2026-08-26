@@ -1883,13 +1883,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 探針卷（M4）：企業場甩開情蒐的得利端回饋（per-match id 入帳一場一次）
       ...corpShakeOffEvents(career),
     ];
-    if (postEvs.length) {
+    // ★裁定 (a) 補全（確認審反例 1）★ degraded 輪一律跳過會 return 的對話/儀式段
+    // （postEvs／mentor／招募儀式）直達警示畫面：存檔壞掉時事件入帳落不了碟，
+    // 播了＝每輪重讀舊碟重推同一事件＝無限對話迴圈，玩家永遠看不到停用鈕與警示
+    // （確認審以重現腳本證實三輪同句）。事件零丟失——存檔修好後照常到期播放。
+    if (postEvs.length && !saveDegraded) {
       fireEvents(postEvs, career, player, () => renderCareer());
       return;
     }
     // W4(P4) Q9 導師接線（縫隙 1 層次二上線）：玩家=S 且最近一場有 box.mentor
     // → dueMentorLines 決定論選句（每場至多一句）；events 入帳防重播（mentor-<matchId>）
-    if (player.currentRole === 'setter') {
+    if (player.currentRole === 'setter' && !saveDegraded) {
       const lastR = career.results[career.results.length - 1];
       const mentorEvId = lastR ? `mentor-${lastR.matchId}` : null;
       if (lastR?.box?.mentor && !(career.events ?? []).includes(mentorEvId)) {
@@ -1905,7 +1909,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     }
     // W4 招募入隊：條件達成且有空位→入隊（單次原子 RMW，冪等），賽後結算畫面彈
     // 儀式演出（名字/位置/屬性亮相）；播完重繪即見新成員入名冊
-    const joined = settleRecruitJoins(store, career.seed);
+    const joined = saveDegraded ? [] : settleRecruitJoins(store, career.seed);
     if (joined.length) {
       showRecruitCeremony(joined, () => renderCareer());
       return;

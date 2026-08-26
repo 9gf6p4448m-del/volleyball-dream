@@ -417,3 +417,43 @@ test('送審修 寫入失敗的棄賽：當輪仍顯示棄賽已判（第7輪不
   assert.equal(playBtn.disabled, true, '裁定 (a)：存檔壞掉的當輪出戰鈕必須停用');
   assert.match(text, /存檔空間異常/, '裁定 (a)：要誠實明示存檔異常與復原方法');
 });
+
+// ════════════════════════════════════════════════════════════════
+// 裁定 (a) 補全（確認審反例 1）：degraded＋同輪有到期賽後事件（不預燒 first-loss）
+// 改前紅：對話無限重播（每輪重讀舊碟重推同一事件），警示畫面永遠到不了
+// ════════════════════════════════════════════════════════════════
+test('裁定(a)補全 degraded＋到期事件：跳過對話直達警示，不得無限重播', async () => {
+  const storage = proSave();
+  const s = createCareerStore(storage);
+  let c = s.loadCareer();
+  const league = c.schedule.filter((m) => m.round === 'pro');
+  s.saveCareer({
+    ...c,
+    results: league.slice(0, 6).map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: true, scoreFor: 2, scoreAgainst: 0, gp: 3,
+    })),
+  });
+  // ★不預燒 first-loss★——棄賽敗＝生涯首敗，事件到期（確認審重現輸入）
+  c = s.loadCareer();
+  s.saveCareer({ ...c, pendingMatch: league[6].id });
+  const failingStorage = {
+    getItem: (k) => storage.getItem(k),
+    setItem: () => { throw new Error('QuotaExceededError（模擬私密模式）'); },
+    removeItem: (k) => storage.removeItem(k),
+  };
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(failingStorage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.doesNotMatch(text, /別背著。輸球是全隊的事/,
+    'degraded 輪不得播事件對話（入帳落不了碟＝會無限重播）');
+  assert.match(text, /存檔空間異常/, 'degraded＋到期事件也要直達警示畫面');
+  const playBtn = walk(globalThis.document.body)
+    .find((n) => n.tag === 'button' && /▶ 出戰/.test(n.textContent ?? ''));
+  assert.equal(playBtn?.disabled, true, '出戰鈕停用（裁定 a 的承諾在此輪也成立）');
+});
