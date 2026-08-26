@@ -13,7 +13,12 @@ import { recruitDefOf } from './recruitment.js';
 
 // ---- 成長模型參數（D2 拍板：表現歸因驅動、新人快老將慢、上限 85）----
 export const ROSTER_GROWTH = {
-  ATTR_CAP: 85, // 隊友屬性天花板（低於主角的 90——主角感護欄）
+  // 隊友「自然成長」天花板（低於主角的 90——主角感護欄）。
+  // ★例外（2026-08-27 Sawmah 拍板，多年卷批 4B MEDIUM-2）★ 職業章屆間「傳承」
+  // 可把單一隊友推到最高 90（careerStore.chooseProGrowth mentor 路的 clamp）——
+  // 職業章的主角感由 ATTR_CAP 100 傳奇上限維持（隊友最高 87 仍低 13），
+  // 護欄在職業章明文放寬、其餘章節照舊。
+  ATTR_CAP: 85,
   XP_PER_POINT: 2, // 每累積 2 xp 兌換 +1 屬性（餘數留存跨場）
   // 成長率分檔：依年級（資歷）——一年級新人吸收快、三年級老將已近成形
   RATE_BY_GRADE: { 1: 1.0, 2: 0.7, 3: 0.4 },

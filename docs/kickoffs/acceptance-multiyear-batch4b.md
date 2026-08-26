@@ -56,3 +56,15 @@
   「存讀一致（投影漏存＝這裡紅）」——三條皆 AssertionError；其餘案紅於
   chooseProGrowth 未定義的 TypeError（旁枝，不計入證據）。
 - 健康樹 11 綠；全套 2056 綠；sim-hash 不動。
+
+## 覆審處置紀錄（2026-08-27）
+
+- HIGH-1（情報顯示被 oppFocus 反向閘擋住）＝已修：顯示行提到閘外、只吃 F4 兩條件；
+  盲注句 intel 態改寫免矛盾；F4 測試改 HIGH-1 反例場景（不塞 scouting）。
+- HIGH-2（聚合段零護欄）＝已修：F3 整合測試走 settleCareerMatch；突變自驗
+  M-direction/M-reentry/M-invert 各 fail=1。
+- MEDIUM-1（clamp 恆真）＝已修：聲望種值 97 驗封頂。
+- MEDIUM-2（傳承 clamp 85/90）＝Sawmah 拍板**維持 90 明文放寬**：職業章主角感由
+  ATTR_CAP 100 傳奇上限維持；roster.js ROSTER_GROWTH.ATTR_CAP 註解已同步免矛盾。
+- LOW×2＝記錄：傳承對 control/stamina 也 +2（凍結字面「每項」，與隊友自然成長
+  邊界不同屬刻意——傳承是教學不是練球）；attributes 缺鍵壞檔寫成 {}（既有路徑）。
