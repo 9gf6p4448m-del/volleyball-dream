@@ -87,3 +87,51 @@ UI 接線後行，入章 RMW 一次寫齊。
 - 多年職業生涯／續約轉隊（收尾卡佔位）；國外強權可玩化；多人連線前置。
 - 既有掛帳照舊：企業 level 治具校準；scoutRead 大學端（維持關閉）；
   假 DOM 替身其餘檔未帶參數呼叫（債清批已修壞行為，結構整併不急）。
+
+## 六、結案紀錄（2026-08-26 開卷即關卷，五批）
+
+每批照慣例：凍結驗收（commit 落點）→實作→改前 worktree 紅→全套+sim-hash→
+（有動 UI/敘事的批次）對抗覆審→修 findings。sim-hash `34772c06e02243fd` 全卷
+不動；職業章批 1-4c 收版（HEAD=7f62cc6）測試基準 1974；批 5（本次）1974→1991（＋17）。
+
+- **批 1**（e17854a）純函式與資料層：chapter PRO／settleCorpFinale＋corpFinaleSettled／
+  `proTeams.js` 八隊（含王勝翔挖角錨點：蒼羽泰坦 ace）／`proTeam.js` 名冊＋入章信任／
+  `proSchedule.js`（round 'pro'、單循環 bo3＋季後賽四強單淘汰 bracket 純函式）／
+  挖角邀約集合（corpRank→隊階，單調＋非空）／advanceSeason 守衛。A1-A9 全過，
+  fresh 覆審 APPROVE 0 findings。
+- **批 2**（edc77f9）入章接線：store.enterPro RMW／企業收尾卡消費 corpFinaleSettled→
+  「前往下一個舞台」／挖角測試會演出（球團開口卡→邀約自選→簽約二次確認）／
+  `?devpro=<隊id>` 治具。B1-B7 全過，fallback 鏈 N=9 全查證，覆審 1 MEDIUM
+  （甩開句 round 閘鎖死 corp）已修。
+- **批 3**（2e9467a）賽季迴圈＋季後賽：出戰入口／名次表／季後賽 bracket 顯示與推進
+  （growProSchedule 冪等長場次）／章末收尾卡（多年掛帳佔位）／ATTR_CAP 章節感知
+  90→100。C1-C7 全過，覆審 1 HIGH（棄賽分支本地 career 過期）已修，瀏覽器實開截圖。
+- **批 4**（拆三批，Sawmah 拍板技術三案全做）：
+  - **4a**（e2c0412 修版，凍 acceptance-pro-batch4a.md）餵線技術（案 A）＋賽前布置面板
+    （對陣卡兩槽讀 career.scouting，sim 零擾動）。D1-D6 全過。
+  - **4b**（3ea0f76）改叫技術（B2 直接下指令，重用 applyReplanCall 通道）。E1-E5 全過，
+    覆審 MEDIUM（取重不疊乘）已修。
+  - **4c**（4050d89 首版→7f62cc6 拍板丙修）二段時間差（滯空第二段拖曳＝變向，地基級）。
+    F1-F5 全過；opus 覆審三修，拍板丙將機率騙牆層整層刪除、變向收益回歸純幾何
+    （零機率語意，落點只由真實站位決定）。
+- **批 5**（本次，凍 acceptance-pro-batch5.md）敘事層——本卷最後一批：
+  - G1 職業合約卡：併入 `showProDone`（同構企業章 A4-1，`src/career/proEvents.js`
+    `PRO_CONTRACT_LINES`）。
+  - G2 王勝翔同場宿敵線：`proWangRivalPreEvents`——玩家簽他隊→循環賽首次對戰蒼羽
+    泰坦的賽前對話（資歷差四年＋高中伏筆「直接挑戰企業聯賽」收束，event id
+    `pro-wang-rival`）；玩家簽蒼羽泰坦→隊內首見變體（第一場賽前，`pro-wang-teammate`）。
+    兩情境由 teamId 決定，結構互斥；各自 fireEvents 一生一次；round 守衛防高中/大學/
+    企業章存檔誤觸發。
+  - G3 收尾卡：`proClosingLines`（同構企業章 A4-4）——國外強權恆點名（世界觀存在、
+    不可玩，決策 7 敘事層級不變）；條件簡子嵐（`store.loadUniRoster()` 封存判定含
+    簡子嵐才播「更大的海」收束句，未同隊零可見）。
+  - 覆審：純函式層 9 案＋DOM 接線層 8 案（含互斥/一生一次/高中大學企業零誤觸發的
+    負向測試）全綠；改前 worktree（HEAD=7f62cc6）跑同一批測試逐一行為級紅（純函式
+    層為新檔案 import 級紅、DOM 層為真實文案/事件缺席的行為級紅）。測試 1974→1991。
+
+### 掛帳（結案時點，承企業章掛帳延續）
+- 多年職業生涯／續約轉隊（收尾卡「續約談判・敬請期待」佔位）；國外強權可玩化
+  （批 5 定案維持不可玩，世界觀存在）；多人連線前置。
+- 企業/職業 level 治具校準（level 數值屬提案，未實測平衡）；scoutRead 大學端
+  （維持關閉，先例延續）；archivedUniRank/archivedCorpRank 鍵名不得混用（企業章批 3
+  覆審留字，職業章批 1 已避開）。

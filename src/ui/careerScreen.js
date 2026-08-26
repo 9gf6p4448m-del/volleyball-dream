@@ -92,6 +92,8 @@ import { PRO_TIER_LABEL, proTeamById } from '../career/proTeams.js';
 import {
   proTable, PRO_PLAYER_ID, PLAYOFF_ROUND, growProSchedule,
 } from '../career/proSchedule.js';
+// 職業章批 5（2026-08-26）：敘事層——合約卡／王勝翔宿敵線／收尾點名（同構 corpEvents.js）
+import { PRO_CONTRACT_LINES, proWangRivalPreEvents, proClosingLines } from '../career/proEvents.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -2738,6 +2740,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           ...rivalPreEvents({ career, seasonIndex: store.seasonIndex?.() ?? 1, player }),
           // 企業章批 4（A4-3）：首戰擎空航太＝王勝翔亮相（fireEvents 入帳一生一次）
           ...corpAnchorPreEvents(career, next),
+          // 職業章批 5（G2）：王勝翔同場宿敵線——同隊/敵隊兩情境互斥，各自一生一次
+          ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
@@ -3433,6 +3437,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
       champion ? '第一年就站上職業聯賽之巔'
         : (madePlayoffs ? `季後賽止步——循環第 ${board.playerRank} 名的證明` : `聯賽第 ${board.playerRank} 名——職業初體驗`)));
+    // 批 5（B5-3）：國外強權點名（世界觀存在、不可玩）＋條件簡子嵐（大學名冊封存判定）
+    for (const line of proClosingLines(store.loadUniRoster?.() ?? null)) {
+      overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:8px',
+        'text-align:center', 'line-height:1.8', 'max-width:min(440px,90vw)'], line));
+    }
     overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
       'margin-top:18px'], '續約談判・敬請期待'));
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
@@ -3575,6 +3584,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       'letter-spacing:6px'], t.name));
     overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.text}`, 'letter-spacing:2px'],
       '職業初登場'));
+    // 批 5（B5-1）：合約敘事併入同一張卡（同企業章 A4-1 的做法，職業味文案）
+    for (const line of PRO_CONTRACT_LINES) {
+      overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:10px',
+        'text-align:center', 'line-height:1.8', 'max-width:min(420px,90vw)'], line));
+    }
     overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'margin-top:16px',
       'text-align:center', 'line-height:1.8'],
     '職業聯賽賽季準備中——這一年的對手，是剩下那七支球隊。'));
