@@ -51,3 +51,15 @@
 ## C6 鑑別力
 
 - C2 至少一條在「無 transferPro 實作」（3083d56）上行為紅的斷言；紀錄實跑輸出。
+
+## C6 鑑別力紀錄（2026-08-27 覆審後補正）
+
+- 首版測試檔靜態 import 舊樹沒有的 `proRankTrustBonus` ⇒ 在 3083d56 上死於模組
+  載入期 SyntaxError、0 案執行（覆審 HIGH-1 抓到＝§6.1-1 旁枝紅原型）。修正＝
+  新符號改動態 import。
+- **修正後實跑（3083d56 舊樹＋修訂版測試檔）**：9 案全部執行、9 案全紅於行為
+  斷言——C1 紅於「全敗仍有新軍保底（得 0）」（AssertionError，proTransferOffers
+  不存在回 undefined→[]）、C2 紅於「有 offer 可轉」；健康樹（ebbe272＋修補）9 綠。
+- 覆審突變面已補斷言：offer 外守衛（目標改非現隊豪門）、末季案、schedule 換隊
+  （舊隊變對手＋不自戰）、seed 衍生、pendingMatch 清空、lineup 重排（奇異 trust
+  值不殘留——位序 id 跨隊共用，roster 隸屬斷言抓不到沿用舊 lineup 的突變）。

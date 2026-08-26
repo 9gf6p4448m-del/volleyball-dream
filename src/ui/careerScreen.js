@@ -237,6 +237,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   let proClosingOpen = false;
   // 多年卷批 3（C4）：轉隊選單/確認的重入守衛（同 retireConfirmOpen 慣例）
   let transferMenuOpen = false;
+  let transferConfirmOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -3543,6 +3544,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     for (const t of offers) {
       const salary = proRenewalSalaryFor(t, lastPro?.proRank, lastPro?.proFinish);
       const card = button(`${t.name}（${PRO_TIER_LABEL[t.tier] ?? t.tier}）——年薪 ${salary} 萬`, false, () => {
+        if (transferConfirmOpen) return;
+        transferConfirmOpen = true;
         const confirm = el('div', [
           'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
           'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.96)',
@@ -3553,6 +3556,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         `確定轉入 ${t.name}？年薪 ${salary} 萬——隊友信任將重新累積。`));
         confirm.appendChild(button('✍ 簽下轉隊合約', true, () => {
           // transferPro 冪等（旗標守衛）：連點第二次 settled 已清＝false，不雙轉
+          transferConfirmOpen = false;
           if (store.transferPro?.(t.id)) {
             transferMenuOpen = false;
             proClosingOpen = false;
@@ -3561,7 +3565,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
             confirm.remove();
           }
         }));
-        confirm.appendChild(button('再想想', false, () => confirm.remove()));
+        confirm.appendChild(button('再想想', false, () => {
+          transferConfirmOpen = false;
+          confirm.remove();
+        }));
         document.body.appendChild(confirm);
       });
       menu.appendChild(card);

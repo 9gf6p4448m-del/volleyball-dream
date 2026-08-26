@@ -954,9 +954,12 @@ export function createCareerStore(storage, slot = 1) {
         if (prev?.career?.proFinaleSettled !== true) return prev;
         if (chapterCompleted(prev.career?.chapter, prev.season.index ?? 1)) return prev;
         if ((prev.career?.pro ?? null) === team.id) return prev;
+        const lastPrev = lastProSeasonOf(prev);
+        // 覆審 LOW-1：offer 集合守衛也綁 prev 讀值——「全數複製到 prev」才是實話
+        if (!lastPrev) return prev;
+        if (!proOffersFor(lastPrev.proRank).some((t) => t.id === team.id)) return prev;
         const endingSeason = prev.season.index ?? 1;
         const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
-        const lastPrev = lastProSeasonOf(prev);
         const members = buildProMembers(team.id);
         const playerRole = prev.player?.currentRole ?? 'outside';
         const lineup = defaultLineup(members, prev.player?.id ?? 'A2', playerRole);

@@ -7,9 +7,9 @@ import assert from 'node:assert/strict';
 import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
 import { createCareer, createCareerPlayer } from '../src/career/careerState.js';
 import { buildStarterMembers } from '../src/career/roster.js';
-import { proRenewalSalaryFor, proOffersFor } from '../src/career/proTeams.js';
-import { proStartTrustFor, proRankTrustBonus } from '../src/career/proTeam.js';
-import { proTeamById } from '../src/career/proTeams.js';
+import { proRenewalSalaryFor, proOffersFor, proTeamById } from '../src/career/proTeams.js';
+// ★ proStartTrustFor/proRankTrustBonus 刻意走動態 import（C6 鑑別力，覆審 HIGH-1）：
+// 靜態 import 會讓「無實作的舊樹」死在模組載入期＝一條行為斷言都沒跑到 ★
 
 // ════════════════════════════════════════════════════════════════
 // 共用治具（同批 1 測試檔）
@@ -155,10 +155,18 @@ test('C1 末季/已退休＝空集合（末季不得再轉隊）', () => {
 // ════════════════════════════════════════════════════════════════
 // C2 transferPro
 // ════════════════════════════════════════════════════════════════
-test('C2 轉隊成功：換隊＋推進同一次 RMW——隊/合約/名冊/lineup/trust/season 一次到位【壞版自證條】', () => {
+test('C2 轉隊成功：換隊＋推進同一次 RMW——隊/合約/名冊/lineup/trust/season 一次到位【壞版自證條】', async () => {
   const storage = settledProYear1('cangyu-titans'); // proRank 8 → 只能轉新軍
+  // 覆審 MEDIUM-2 加嚴：位序 id（P1..P6/PL）跨隊共用——先在舊 lineup 灌一個
+  // 奇異 trust 值，轉隊後它必須消失（「沿用舊 lineup」的突變才抓得到）
+  {
+    const raw = saveOf(storage);
+    raw.lineup.trust.P3 = 87;
+    storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  }
   const before = saveOf(storage);
-  const target = createCareerStore(storage).proTransferOffers()[0];
+  const target = createCareerStore(storage).proTransferOffers?.()?.[0];
+  assert.ok(target, '有 offer 可轉（無實作＝這裡紅）');
   assert.ok(createCareerStore(storage).transferPro?.(target.id) ?? false, '轉隊必須成功（無實作＝這裡紅）');
   const after = saveOf(storage);
   assert.equal(after.career.pro, target.id, '換隊');
@@ -168,11 +176,23 @@ test('C2 轉隊成功：換隊＋推進同一次 RMW——隊/合約/名冊/line
     proRenewalSalaryFor(proTeamById(target.id), lastPro.proRank, lastPro.proFinish), '新約薪水＝同一顆公式');
   assert.equal(after.career.contract.sinceSeason, after.season.index, 'sinceSeason＝新季');
   assert.notDeepEqual(after.roster.members, before.roster.members, '名冊重建為新隊');
+  const { proStartTrustFor, proRankTrustBonus } = await import('../src/career/proTeam.js');
   assert.equal(after.player.trust.fromSetter,
     Math.min(100, proStartTrustFor(proTeamById(target.id)) + proRankTrustBonus(lastPro.proRank)),
     '信任重置＝新隊起點＋名次加成（轉隊代價）');
   assert.equal(after.career.proFinaleSettled, false, '旗標逐季重置');
-  assert.equal(after.season.schedule.filter((m) => m.round === 'pro').length, 7, '新隊新賽程');
+  // 覆審 MEDIUM-2 加嚴：賽程要真的是**新隊的**（7 場數字分不出隊——舊隊也是 7 場）
+  const proGames = after.season.schedule.filter((m) => m.round === 'pro');
+  assert.equal(proGames.length, 7, '新季＝純循環 7 場');
+  assert.ok(proGames.some((m) => m.opponentId === 'cangyu-titans'), '舊隊變成對手＝賽程確實重建');
+  assert.ok(!proGames.some((m) => m.opponentId === target.id), '不得自我對戰（proSchedule 經典防線）');
+  assert.notEqual(after.season.seed, before.season.seed, 'seed 必須衍生（不得沿用）');
+  assert.equal(after.season.pendingMatch, undefined, 'pendingMatch 清空');
+  const rosterIds = new Set(after.roster.members.map((m) => m.id));
+  assert.ok(after.lineup.starters.every((id) => id === after.player.id || rosterIds.has(id)),
+    'lineup 重排＝先發除玩家外全是新隊名冊的人');
+  assert.ok(after.lineup.starters.includes(after.player.id), '玩家在先發');
+  assert.notEqual(after.lineup.trust.P3, 87, '舊隊 trust 不得殘留到新隊友（lineup 真的重排）');
   assert.equal(after.season.results.length, 0);
   assert.deepEqual(after.season.events ?? [], before.season.events ?? [], '劇情/傳授旗標保留');
 });
@@ -184,13 +204,25 @@ test('C2 守衛：未結算/offer 外/現隊/末季/退休/壞 id 全拒絕且�
   assert.equal(createCareerStore(notSettled).transferPro('tiegu-warlords'), false, '未結算拒絕');
   assert.equal(notSettled.getItem(SAVE_KEY), snap0, '零寫入');
 
-  const storage = settledProYear1('cangyu-titans'); // proRank 8：offer 只有新軍
+  const storage = settledProYear1('moye-outlaws'); // 新軍現隊、proRank 8：offer 只有其他新軍
   const snap = storage.getItem(SAVE_KEY);
-  assert.equal(createCareerStore(storage).transferPro('cangyu-titans'), false, '現隊拒絕');
-  const midTeam = proOffersFor(1).find((t) => t.tier !== proOffersFor(8)[0].tier);
-  assert.equal(createCareerStore(storage).transferPro(midTeam.id), false, 'offer 外（階太高）拒絕');
+  assert.equal(createCareerStore(storage).transferPro('moye-outlaws'), false, '現隊拒絕');
+  // 覆審 HIGH-2：offer 外的目標必須是**非現隊**的高階隊，否則測到的是現隊守衛
+  // （原治具現隊＝cangyu-titans、目標也是它＝零鑑別力，offer 集合守衛從未被觸及）
+  assert.equal(createCareerStore(storage).transferPro('cangyu-titans'), false, 'offer 外（豪門、非現隊）拒絕');
   assert.equal(createCareerStore(storage).transferPro('不存在'), false, '壞 id 拒絕');
   assert.equal(storage.getItem(SAVE_KEY), snap, '全拒絕零寫入');
+
+  // 覆審 MEDIUM-1：末季案要真的存在（原標題寫了末季、本體沒測＝文案說謊同型）
+  const capped = proSaveInProgress();
+  const rawC = saveOf(capped);
+  rawC.season.index = rawC.career.chapter.enteredAtSeason + 9;
+  capped.setItem(SAVE_KEY, JSON.stringify(rawC));
+  loseOutSeason(capped);
+  assert.ok(createCareerStore(capped).settleProFinale());
+  const snapC = capped.getItem(SAVE_KEY);
+  assert.equal(createCareerStore(capped).transferPro('tiegu-warlords'), false, '末季拒絕');
+  assert.equal(capped.getItem(SAVE_KEY), snapC, '末季零寫入');
 
   const retired = settledProYear1();
   assert.ok(createCareerStore(retired).retirePro());
