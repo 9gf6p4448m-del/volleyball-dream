@@ -27,6 +27,19 @@ export function corpStartTrustFor(corp) {
   return UNI_START_TRUST[corp?.tier] ?? UNI_START_TRUST[TIER.MID];
 }
 
+// 職業章批 1（2026-08-26）：企業名次入章信任加成——沿 `uniRankTrustBonus`
+// 同一套哲學（名次帶著走），鍵改 corpRank。放在這裡（企業建隊檔）而不是
+// `proTeam.js`，是照抄 `uniRankTrustBonus` 放在「上一章建隊檔」的先例——
+// `proTeam.js` 之後直接 import 這顆，同 `corpTeam.js` import `uniRankTrustBonus`
+// 的慣例。★數值屬提案★（acceptance-pro-batch1.md，試玩後可調）。
+export function corpRankTrustBonus(rank) {
+  if (!Number.isInteger(rank) || rank < 1) return 0;
+  if (rank === 1) return 6;
+  if (rank <= 3) return 4;
+  if (rank <= 6) return 2;
+  return 0;
+}
+
 function attributesFor(corp, role, i) {
   const attrs = {};
   const isAce = corp.ace?.slot === i;

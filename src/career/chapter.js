@@ -18,6 +18,7 @@
 // 兩者同一種呼叫慣例（吃 `normalizeChapter()` 的輸出，例如 `store.loadChapter()`）。
 import { universityById } from './universities.js';
 import { corporationById } from './corporations.js';
+import { proTeamById } from './proTeams.js';
 import { OUR_TEAM_NAME } from './roster.js';
 
 export const CHAPTER = {
@@ -25,12 +26,14 @@ export const CHAPTER = {
   UNIVERSITY: 'university',
   // 成人/企業章（批 1，2026-08-25）——卷宗＝`docs/kickoffs/corporate-chapter-kickoff.md`
   CORPORATE: 'corporate',
+  // 職業章（批 1，2026-08-26）——卷宗＝`docs/kickoffs/pro-chapter-kickoff.md`
+  PRO: 'pro',
 };
 
 // 舊存檔（與任何缺鍵／壞值）一律回退高中——★這是 B1-2 零遷移的那一行★
 export const DEFAULT_CHAPTER = CHAPTER.HIGH_SCHOOL;
 
-const KNOWN = new Set([CHAPTER.HIGH_SCHOOL, CHAPTER.UNIVERSITY, CHAPTER.CORPORATE]);
+const KNOWN = new Set([CHAPTER.HIGH_SCHOOL, CHAPTER.UNIVERSITY, CHAPTER.CORPORATE, CHAPTER.PRO]);
 
 /**
  * 把 `save.career` 這一塊正規化成完整的章節狀態。
@@ -59,6 +62,10 @@ export function isUniversity(chapter) {
 
 export function isCorporate(chapter) {
   return normalizeChapter({ chapter }).id === CHAPTER.CORPORATE;
+}
+
+export function isPro(chapter) {
+  return normalizeChapter({ chapter }).id === CHAPTER.PRO;
 }
 
 /**
@@ -94,6 +101,21 @@ export function enterCorporate(careerBlock = null, seasonIndex = null) {
   };
 }
 
+/**
+ * 推進到職業章（批 1，2026-08-26）。**純函式、冪等**——語意與 `enterCorporate`
+ * 逐條相同：已在職業章原樣回傳（`enteredAtSeason` 與其餘鍵不被覆寫）、不改傳入物件。
+ * 簽了哪支職業隊存 `career.pro`（批 2 的 store RMW 寫，本函式不碰——同 corp 之於企業章）。
+ */
+export function enterPro(careerBlock = null, seasonIndex = null) {
+  const cur = normalizeChapter(careerBlock);
+  if (cur.id === CHAPTER.PRO) return careerBlock ?? {};
+  const at = Number.isInteger(seasonIndex) && seasonIndex > 0 ? seasonIndex : null;
+  return {
+    ...(careerBlock ?? {}),
+    chapter: { id: CHAPTER.PRO, enteredAtSeason: at },
+  };
+}
+
 // ════════════════════════════════════════════════════════════════
 // 屆數的章節化（批 4，2026-08-14）
 // ════════════════════════════════════════════════════════════════
@@ -114,6 +136,8 @@ export const CHAPTER_SEASONS = {
   [CHAPTER.UNIVERSITY]: 4,
   // 成人/企業章階段一＝1 年（卷宗拍板題 3「先做一年最小可玩」）；要延長只改這一個值
   [CHAPTER.CORPORATE]: 1,
+  // 職業章階段一＝1 年（卷宗§三批 1「一年最小可玩」）；要延長只改這一個值
+  [CHAPTER.PRO]: 1,
 };
 
 /** 這一章的年限（認不得的章節照高中給——保守，不會意外放行）。 */
@@ -150,8 +174,13 @@ export function chapterCompleted(chapter, seasonIndex = 1) {
  * @param chapter  一律吃 `normalizeChapter()` 的輸出（如 `store.loadChapter()`）
  * @param school   大學章的學校 id（如 `store.loadSchool()`）；其他章不使用
  * @param corp     企業章的公司 id（批 2 起由 `store.loadCorp()` 供給）；其他章不使用
+ * @param pro      職業章的球隊 id（批 2 起由 `store.loadPro()` 供給）；其他章不使用
  */
-export function currentTeamName(chapter, school = null, corp = null) {
+export function currentTeamName(chapter, school = null, corp = null, pro = null) {
+  if (isPro(chapter)) {
+    // 批 1 只鋪函式：`pro` 缺席（尚未接線）時回退創隊隊名，不炸畫面——同企業分支慣例
+    return (pro ? proTeamById(pro)?.name : null) ?? OUR_TEAM_NAME;
+  }
   if (isCorporate(chapter)) {
     // 批 1 只鋪函式：`corp` 缺席（尚未接線）時回退創隊隊名，不炸畫面——同大學分支慣例
     return (corp ? corporationById(corp)?.name : null) ?? OUR_TEAM_NAME;

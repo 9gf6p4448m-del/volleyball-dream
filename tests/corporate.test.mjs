@@ -37,7 +37,11 @@ test('A1-1 normalizeChapter 認得 corporate 並保留 enteredAtSeason', () => {
 });
 
 test('A1-1b 未知章節值仍回退高中（既有回退不被 corporate 的加入弄壞）', () => {
-  for (const bad of ['pro', 'CORPORATE', 42, null]) {
+  // ★職業章批 1（2026-08-26）修正★ 原本用 'pro' 當「未知值」範例——它現在是
+  // `CHAPTER.PRO` 這個真實章節 id（acceptance-pro-batch1.md A1 明訂要被 normalizeChapter
+  // 認得），繼續拿它當「未知」範例本身就是錯的斷言，與新章節的存在互斥，不是實作錯。
+  // 換一個確定非章節 id 的字串（'legacy'）保留同一條行為斷言：認不得的值仍回退高中。
+  for (const bad of ['legacy', 'CORPORATE', 42, null]) {
     assert.equal(normalizeChapter({ chapter: { id: bad, enteredAtSeason: 8 } }).id, CHAPTER.HIGH_SCHOOL);
   }
 });

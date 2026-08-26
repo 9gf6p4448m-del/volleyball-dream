@@ -202,7 +202,8 @@ export function advanceSeason(career, { invitedId = null, seasonIndex = null } =
   // buildSchedule 幫大學生蓋高中賽程」（測試＝uni-season-concluded C4）。
   // 企業章批 1（2026-08-25）：`'corp'` 比照 `'league'`——同一種錯的第三章版本
   //（企業章階段一只有一年、chapterCompleted 即封頂，更沒有理由進到高中的推進）。
-  if ((career.schedule ?? []).some((m) => m?.round === 'league' || m?.round === 'corp')) return career;
+  // 職業章批 1（2026-08-26）：`'pro'` 比照 `'league'`／`'corp'`——同一種錯的第四章版本。
+  if ((career.schedule ?? []).some((m) => m?.round === 'league' || m?.round === 'corp' || m?.round === 'pro')) return career;
   if (!seasonConcluded(career)) return career; // 賽季未結束＝不動（單一定義，債 C）
   const stage = careerStage(career); // 高中 schema：titles 記帳仍要分冠軍/止步
   const seed = deriveSeasonSeed(career.seed); // 決定論鏈：下一屆種子由本屆種子衍生

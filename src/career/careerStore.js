@@ -21,7 +21,7 @@ import { buildUniSchedule, uniTable } from './uniSchedule.js';
 import { buildUniMembers, uniStartTrustFor, uniRankTrustBonus } from './uniTeam.js';
 import { corporationById, corpOffersFor } from './corporations.js';
 import { buildCorpMembers, corpStartTrustFor } from './corpTeam.js';
-import { buildCorpSchedule } from './corpSchedule.js';
+import { buildCorpSchedule, corpTable } from './corpSchedule.js';
 import { CORP_PAYDAY_EV } from './corpEvents.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
@@ -440,6 +440,52 @@ export function createCareerStore(storage, slot = 1) {
     // 大學謝幕已結算（批 2 用旗標判斷謝幕鈕/下一章入口——批 1 只造旗標，讀取端由此開）
     uniFinaleSettled() {
       return !!loadSave()?.career?.finaleSettled;
+    },
+    // ★★ 職業章批 1（2026-08-26）★★ 企業季末結算入口——只封存＋打旗標，
+    // **不推進屆數**（同 `settleUniFinale`：儀式 UI／下一章接線是批 2 的事）。
+    // 卷宗§二地基盤點：企業章收尾卡目前是佔位（「續約談判・敬請期待」），
+    // 沒有 settle 機制與旗標——本函式就是那個對應物，比照 `settleUniFinale` 逐條：
+    //   守衛：只有章節末年（企業章 1 年制，進章那年即末年）才准結算；
+    //         ★非企業章拒絕★（`isCorporate` 顯式檢查——settleUniFinale 靠
+    //         「已結算旗標恆真」間接擋掉跨章誤呼叫，這裡直接寫明，判準逐字同源）。
+    //   冪等：已結算過（career.corpFinaleSettled===true）→ no-op 回 false。
+    //   未打完（!seasonConcluded）→ no-op 回 false，無任何存檔寫入。
+    // ★封存鍵名用 corpRank，不得用 uniRank★（批 3 覆審地雷：`archivedUniRank` 讀
+    // 「最後一筆帶 uniRank」的季——鍵名撞了會讓它抓錯筆，corpOffers／enterCorporate
+    // 的名次加成全部連帶算錯）。
+    settleCorpFinale() {
+      const save = loadSave();
+      const view = save ? careerViewOf(save) : null;
+      if (!view) return false;
+      if (!isCorporate(normalizeChapter(save.career ?? null))) return false; // 非企業章拒絕
+      if (!chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
+      if (save.career?.corpFinaleSettled) return false; // 已結算，冪等 no-op
+      if (!seasonConcluded(view)) return false; // 未打完不結算
+      const corpId = save.career?.corp ?? null;
+      if (!corporationById(corpId)) return false; // 壞存檔：不猜、不結算
+      const ok = writeSave((prev) => {
+        // 冪等雙保險：no-op 條件與寫入內容綁同一份 prev 讀值（同 settleUniFinale 慣例）
+        if (prev?.career?.corpFinaleSettled) return prev;
+        const board = corpTable({
+          corpId, seed: prev.season.seed ?? 1,
+          schedule: prev.season.schedule ?? [], results: prev.season.results ?? [],
+        });
+        const corpRank = board?.playerRank ?? 0;
+        const seasons = [...(prev.career.seasons ?? []), {
+          ...archiveSeasonSummary(prev.season),
+          corpRank,
+          corp: corpId,
+        }];
+        return {
+          ...prev,
+          career: { ...prev.career, seasons, corpFinaleSettled: true },
+        };
+      });
+      return ok;
+    },
+    // 企業謝幕已結算（批 2 用旗標判斷謝幕鈕/下一章入口——批 1 只造旗標，讀取端由此開）
+    corpFinaleSettled() {
+      return !!loadSave()?.career?.corpFinaleSettled;
     },
     // 現在第幾屆（UI 顯示用）
     seasonIndex() {

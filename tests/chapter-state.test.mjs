@@ -45,7 +45,10 @@ test('★反向對照★ 拿掉回退的話舊存檔會拿到 undefined（證明
 });
 
 test('認不得的章節值回退高中（手改的存檔／未來章節在舊版開啟）', () => {
-  assert.equal(normalizeChapter({ chapter: { id: 'pro' } }).id, CHAPTER.HIGH_SCHOOL);
+  // ★職業章批 1（2026-08-26）修正★ 'pro' 原本是「還不存在的未來章節」範例，現在是
+  // `CHAPTER.PRO` 真實 id（acceptance-pro-batch1.md A1）——換一個仍確定認不得的字串，
+  // 行為斷言（未知值回退高中）不變。
+  assert.equal(normalizeChapter({ chapter: { id: 'legacy-future-chapter' } }).id, CHAPTER.HIGH_SCHOOL);
   assert.equal(normalizeChapter({ chapter: { id: 42 } }).id, CHAPTER.HIGH_SCHOOL);
   assert.equal(normalizeChapter({ chapter: 'university' }).id, CHAPTER.HIGH_SCHOOL,
     '形狀不對（字串而非物件）也要回退，不得半信半疑地採用');
