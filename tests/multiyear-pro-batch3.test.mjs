@@ -236,8 +236,8 @@ test('C2 守衛：未結算/offer 外/現隊/末季/退休/壞 id 全拒絕且�
   assert.ok(createCareerStore(retired).retirePro());
   // 目標固定 offer(rank 8) 內非現隊——退休後 proTransferOffers 回空、fallback 會
   // 落到 offer 外＝零鑑別力（送審輪 2 抓到）
+  const snapR = retired.getItem(SAVE_KEY); // 快照取在呼叫**之前**（第 3 輪送審抓到取反＝恆真）
   assert.equal(createCareerStore(retired).transferPro('moye-outlaws'), false, '退休拒絕');
-  const snapR = retired.getItem(SAVE_KEY);
   assert.equal(retired.getItem(SAVE_KEY), snapR, '退休零寫入');
 });
 
