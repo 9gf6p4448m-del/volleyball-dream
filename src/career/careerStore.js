@@ -990,6 +990,32 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       return structuredClone(save?.career?.aceBook ?? {});
     },
+    // 職業章批 4a：賽前布置面板（攔網重心／發球攻擊）——落 save.career.deploy
+    // （career 自由區慣例，同 aceBook）。keyed by matchId：換一場對手，matchId
+    // 對不上就視為未設定——不必額外清除邏輯就天然防止舊選擇沿用到不相干的對手
+    // （D5「情報不足」誠實顯示的前提：選擇本來就該逐場重新評估）。
+    loadDeployment(matchId) {
+      const save = loadSave();
+      const d = save?.career?.deploy;
+      if (!d || d.matchId !== matchId) return { blockLean: null, chaseTargetId: null };
+      return { blockLean: d.blockLean ?? null, chaseTargetId: d.chaseTargetId ?? null };
+    },
+    saveDeployment(matchId, deploy) {
+      return writeSave((prev) => {
+        const next = prev ?? createSaveV2({});
+        return {
+          ...next,
+          career: {
+            ...next.career,
+            deploy: {
+              matchId,
+              blockLean: deploy?.blockLean ?? null,
+              chaseTargetId: deploy?.chaseTargetId ?? null,
+            },
+          },
+        };
+      });
+    },
     // W4(P4) Q9 生涯累積頁：歷屆封存摘要（advanceSeason 屆末寫入）＋讀取
     loadSeasonArchive() {
       const save = loadSave();

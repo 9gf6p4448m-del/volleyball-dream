@@ -5,7 +5,7 @@ import {
   careerStage, seasonConcluded, opponentById, normalizeCareerPlayer, resolveForfeit,
   applyPoaching,
   applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable, matchOpponentDef,
-  leagueScoutZones, scoutFocusZone, SCOUT_ZONE_LABEL,
+  leagueScoutZones, scoutFocusZone, SCOUT_ZONE_LABEL, weakestReceiverIdOf,
 } from '../career/careerState.js';
 import {
   GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, attrCapFor,
@@ -795,6 +795,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // W4 選取模型：{kind:'field',si}｜{kind:'bench',id}｜null（si＝starters 索引）
     let selected = null;
     let notice = null; // 互換被擋的紅字理由（下一次操作清除）
+    // 職業章批 4a：賽前布置（僅職業章面板讀寫，見下方 proChapter 分支）——
+    // 逐場 keyed（store.loadDeployment 已依 matchId 篩過期選擇，這裡拿到手的
+    // 保證是「本場」的選擇或預設空值），不與 lineup 混在同一顆 RMW 物件裡
+    // （lineup 跨場沿用是刻意設計，布置選錯場次沿用則是 D5 想避免的事故）。
+    const proChapter = isPro(store.loadChapter?.());
+    const deploy = proChapter
+      ? { ...(store.loadDeployment?.(next.id) ?? { blockLean: null, chaseTargetId: null }) }
+      : { blockLean: null, chaseTargetId: null };
 
     const nameOf = (id) => (id === playerId
       ? career.playerName
@@ -1027,6 +1035,54 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         intel.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.cyan}`],
           `🔗 ${oldMates.map((m) => m.name).join('、')} 要打老東家`));
       }
+      // 職業章批 4a D1/D2：解鎖「餵線」後——「對手眼中的你」（全生涯扣打分佈＋
+      // 對手這場將押的線）。未解鎖＝這整塊零可見（D1「未解鎖＝零可見」）。
+      // ★不得另抄一份算法★ 分佈與 focus 都直接呼叫既有的 leagueScoutZones／
+      // scoutFocusZone（D2 凍結）——本區塊只負責畫，不重算。
+      if (proChapter && (player.techniques?.baitLine ?? 0) >= 1) {
+        const myZones = leagueScoutZones(career, { excludeId: next.opponentId })?.zones ?? null;
+        const zoneTotal = myZones ? Object.values(myZones).reduce((s, v) => s + v, 0) : 0;
+        const myFocus = scoutFocusZone(myZones);
+        const baitBox = el('div', [
+          'display:flex', 'flex-direction:column', 'gap:3px', 'width:100%', 'max-width:280px',
+          'margin-top:2px',
+        ]);
+        baitBox.appendChild(el('div', [
+          'font-size:11.5px', 'font-weight:800', `color:${COLOR.gold}`, 'text-align:center',
+        ], '🎯 餵線——對手眼中的你'));
+        if (!(def.scoutRead > 0) || zoneTotal < 6) {
+          // 誠實顯示「讀不到你」級文案——不畫假分佈（D2 凍結）
+          baitBox.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:center'],
+            def.scoutRead > 0 ? '這隊還摸不透你——樣本不足，讀不到你' : '這隊沒在研究你——讀不到你'));
+        } else {
+          for (const z of ['line', 'cross', 'middle', 'tip']) {
+            const cnt = myZones[z] ?? 0;
+            const pct = zoneTotal > 0 ? Math.round((cnt / zoneTotal) * 100) : 0;
+            const isFocus = myFocus?.zone === z;
+            const row = el('div', ['display:flex', 'align-items:center', 'gap:6px']);
+            row.appendChild(el('div', [
+              'width:34px', 'font-size:10.5px', `color:${isFocus ? '#ff9d7a' : COLOR.dim}`,
+            ], SCOUT_ZONE_LABEL[z]));
+            const bar = el('div', [
+              'flex:1', 'height:6px', 'border-radius:3px', 'background:#141b2e', 'overflow:hidden',
+            ]);
+            bar.appendChild(el('div', [
+              `width:${pct}%`, 'height:100%', `background:${isFocus ? '#ff6b6b' : COLOR.cyan}`,
+            ]));
+            row.appendChild(bar);
+            row.appendChild(el('div', [
+              'width:30px', 'font-size:10.5px', 'text-align:right', `color:${COLOR.dim}`,
+            ], `${pct}%`));
+            baitBox.appendChild(row);
+          }
+          baitBox.appendChild(el('div', [
+            'font-size:11px', 'text-align:center', `color:${myFocus ? '#ff9d7a' : COLOR.dim}`,
+          ], myFocus
+            ? `這場他們會押你的${SCOUT_ZONE_LABEL[myFocus.zone]}——關鍵分改打別線，吃反常線折扣`
+            : '分佈平均——這場他們押不準你的慣用線'));
+        }
+        intel.appendChild(baitBox);
+      }
       if (intel.children.length) card.appendChild(intel);
       if (notice) {
         card.appendChild(el('div', [
@@ -1156,6 +1212,97 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       }
       card.appendChild(libRow);
 
+      // 職業章批 4a D4：賽前布置面板（僅職業章可見）——兩槽：①攔網重心 ②發球攻擊。
+      // 選擇存在 `deploy`（本函式作用域內的可變物件，非 `working`——不隨 lineup
+      // 沿用到下一場，見上方宣告處註解）；確認出戰時才落 store（見下方 confirm）。
+      if (proChapter) {
+        const deployWrap = el('div', ['display:flex', 'flex-direction:column', 'gap:8px']);
+        deployWrap.appendChild(el('div', [
+          'font-size:12px', `color:${COLOR.cyan}`, 'letter-spacing:2px',
+        ], '賽前布置（職業限定）——押錯有真實代價'));
+
+        // ---- 槽①攔網重心：資料源＝career.scouting 該隊 zones（D4 凍結，不得另抄算法）----
+        const oppFocus = scoutFocusZone(career.scouting?.[next.opponentId]?.zones ?? null);
+        const slot1 = el('div', ['display:flex', 'flex-direction:column', 'gap:4px']);
+        slot1.appendChild(el('div', [
+          'font-size:11.5px', 'font-weight:700', `color:${COLOR.text}`,
+        ], '① 攔網重心'));
+        if (!oppFocus) {
+          // 情報不足＝不可選：連帶清掉可能殘留的舊選擇（防止資料狀態變回不足時，
+          // 畫面上按鈕消失了但 deploy 裡還留著上一次的值、確認出戰時悄悄生效）
+          deploy.blockLean = null;
+          slot1.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`],
+            '情報不足——這隊還沒累積夠交手紀錄，不可押'));
+        } else {
+          // ★批 4a 覆審 HIGH 修（Sawmah 拍板 A：誠實降級）★ 原文案「這隊…偏向X」把
+          // career.scouting（＝這隊對**你**的讀取紀錄）講成對手自己的攻擊慣性——
+          // 押線判定（applyBlockLean 抓場上真實推進者）與那份資料零關聯＝披著情報
+          // 外衣的盲注。降級為明示賭注；真情報化（對手攻擊統計資料源）掛帳等試玩。
+          slot1.appendChild(el('div', ['font-size:10.5px', `color:${COLOR.dim}`],
+            '沒有對手攻擊路線的情報——押哪條線，靠你自己的判斷（押錯整面落空）'));
+          const row1 = el('div', ['display:flex', 'gap:6px']);
+          for (const [key, label] of [['line', '押直線'], ['cross', '押斜線']]) {
+            const active = deploy.blockLean === key;
+            const b = el('button', [
+              'flex:1', 'height:32px', 'border-radius:8px', 'border:none', 'cursor:pointer',
+              'touch-action:manipulation', 'font-size:12.5px', 'font-weight:700',
+              active ? `background:${COLOR.cyan};color:#062430`
+                : `background:rgba(30,40,64,0.9);color:${COLOR.dim}`,
+            ], label);
+            b.addEventListener('pointerdown', (e) => {
+              e.stopPropagation();
+              deploy.blockLean = active ? null : key;
+              paint();
+            });
+            row1.appendChild(b);
+          }
+          slot1.appendChild(row1);
+          slot1.appendChild(el('div', ['font-size:10.5px', 'color:#ffb454'], deploy.blockLean
+            ? '押下去了——猜對這波攔網賭中，猜錯牆站錯邊、擦手都碰不到'
+            : '不押＝維持牆本身的判斷（不猜、也沒有加成）'));
+        }
+        deployWrap.appendChild(slot1);
+
+        // ---- 槽②發球攻擊：資料源＝career.scouting 該隊（有無交手紀錄）＋
+        // def 屬性算出的最弱接發者（weakestReceiverIdOf，D4 凍結：sim 零新判定，
+        // 純用既有 def.level/attrBias/roleBias 座標系）----
+        const scoutedOpp = !!career.scouting?.[next.opponentId];
+        const weakId = scoutedOpp ? weakestReceiverIdOf(def) : null;
+        const weakIdx = weakId ? Number(weakId.slice(1)) - 1 : null;
+        const weakName = weakIdx != null
+          ? (def.squad?.[weakIdx] ?? `${def.name}${weakIdx + 1}號`) : null;
+        const weakRole = weakIdx != null ? OPP_ROLE[weakIdx] : null;
+        const slot2 = el('div', ['display:flex', 'flex-direction:column', 'gap:4px']);
+        slot2.appendChild(el('div', [
+          'font-size:11.5px', 'font-weight:700', `color:${COLOR.text}`,
+        ], '② 發球攻擊'));
+        if (!weakId) {
+          deploy.chaseTargetId = null; // 同上：情報不足時連帶清掉殘留選擇
+          slot2.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`],
+            '情報不足——還沒和這隊交手過，不知道誰接發最弱'));
+        } else {
+          const active = deploy.chaseTargetId === weakId;
+          const b2 = el('button', [
+            'height:32px', 'border-radius:8px', 'border:none', 'cursor:pointer',
+            'touch-action:manipulation', 'font-size:12.5px', 'font-weight:700',
+            active ? `background:${COLOR.cyan};color:#062430`
+              : `background:rgba(30,40,64,0.9);color:${COLOR.dim}`,
+          ], active ? `✓ 追打 ${weakName}（${weakRole}）` : `追打 ${weakName}（${weakRole}）——接發最弱`);
+          b2.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            deploy.chaseTargetId = active ? null : weakId;
+            paint();
+          });
+          slot2.appendChild(b2);
+          slot2.appendChild(el('div', ['font-size:10.5px', 'color:#ffb454'], deploy.chaseTargetId
+            ? '全場指名追發——追發失誤率上升，非純增益'
+            : '不指定＝維持隊友原本的發球判斷'));
+        }
+        deployWrap.appendChild(slot2);
+
+        card.appendChild(deployWrap);
+      }
+
       // 起始輪轉（rotationStart 0-5，顯示 1-6）
       const rotWrap = el('div', ['display:flex', 'flex-direction:column', 'gap:6px']);
       rotWrap.appendChild(el('div', [
@@ -1210,6 +1357,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const confirm = button('✓ 確認出戰', legal, () => {
         if (!legal) return;
         store.saveLineup(working);
+        // 職業章批 4a：布置選擇落檔（僅職業章；其餘章節 proChapter 恆 false，
+        // 這裡整條不執行＝那些章節的存檔結構逐值不變）
+        if (proChapter) store.saveDeployment?.(next.id, deploy);
         closeLineup();
         onConfirm();
       });

@@ -80,6 +80,25 @@ export const EVENT_DEFS = [
       { speaker: '大四學長', text: '高中你練的是怎麼把球打好。大學開始，你要練的是——怎麼讓對面打不好。' },
     ],
   },
+  // ---- 職業章批 4a（2026-08-26）：職業章專屬傳授 ----
+  // 講者用職業聯賽的通用角色（球探分析師）而非具名隊友——職業隊名冊隨簽約隊伍變動
+  // （proTeam.js squad 逐隊不同），寫死某隊友名字會在換一支球隊時對不上人。
+  // 靈魂句收尾：「職業是我決定對手看到什麼」——情報戰主題定調。
+  {
+    id: 'teach-baitline',
+    moment: 'post',
+    // 提案值＝7（單循環打滿）：晚於既有 pro-batch3 覆審治具慣用的「6 勝＋第 7 場
+    // 掛 pending」窗口（那些測試刻意在該窗口不放任何到期事件、以隔離另一條回歸），
+    // 選這個數字單純是避開巧合撞期，不是機制上必須卡在賽季末——真人試玩後可調。
+    when: { proLeaguePlayed: 7 },
+    effect: { unlock: 'baitLine' },
+    lines: [
+      { speaker: '球探分析師', text: '職業聯賽每一隊都有情蒐——你打過的每一顆球，都在建你的檔案。' },
+      { speaker: '球探分析師', text: '但檔案是雙面刃。你知道他們在看，就能決定給他們看見什麼——故意餵一條假的慣用線。' },
+      { speaker: '球探分析師', text: '關鍵分，打回你真正想打的那條。他們押檔案上那條線——押錯的，是他們。' },
+      { speaker: '球探分析師', text: '高中你把球打好，大學你讓對面打不好。到了這裡——你決定對手看到什麼。' },
+    ],
+  },
   // ---- 技術傳授線（改版裁定：技術經故事習得，每場一招；輸贏都教——敗者也有收穫）----
   {
     id: 'teach-tip',
@@ -650,6 +669,16 @@ function matchesWhen(when, { career, last, next, seasonIndex = 1 }) {
         // ★棄賽不算「打完」★（2026-08-24 Sawmah 裁定）：學長教你東西是因為看了你
         // 打球，棄賽三場就領走傳授在敘事上也說不通。標記由 resolveForfeit 寫入
         // （careerState.js 的 recordResult，可選欄位）；舊存檔無此欄＝當作正常完賽。
+        const done = league.filter(
+          (m) => career.results.some((r) => r.matchId === m.id && !r.forfeit),
+        ).length;
+        if (done < val) return false;
+        break;
+      }
+      // 職業章批 4a：職業聯賽已打完幾場（同 uniLeaguePlayed 的棄賽不算「打完」規則，
+      // round==='pro' 只在 proSchedule 產生——高中/大學/企業章恆 0，不可能誤觸發）。
+      case 'proLeaguePlayed': {
+        const league = (career.schedule ?? []).filter((m) => m?.round === 'pro');
         const done = league.filter(
           (m) => career.results.some((r) => r.matchId === m.id && !r.forfeit),
         ).length;

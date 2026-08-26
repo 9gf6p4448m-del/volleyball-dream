@@ -128,6 +128,9 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
         careerCtx.store?.loadCorp?.() ?? null,
         // 職業章批 2 第 9 參數：已簽球隊 id（其他章 loadPro 恆 null）
         careerCtx.store?.loadPro?.() ?? null,
+        // 職業章批 4a 第 10 參數：賽前布置面板選擇（其他章 loadDeployment 缺席
+        // ⇒ `?.()` 短路成 undefined ⇒ `?? null` ⇒ careerMatchSetup 內兩槽皆空）
+        careerCtx.store?.loadDeployment?.(careerCtx.matchEntry.id) ?? null,
       ))
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）

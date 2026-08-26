@@ -394,6 +394,31 @@ export function buildOpponentTeam(def) {
   });
 }
 
+// 職業章批 4a：賽前布置面板②「發球攻擊」的資料源——對方接發最弱者（後排候選中
+// control 屬性最低者）。純函式、只吃 def（不需要 game 物件，賽前 UI 就能算）；
+// 排除二傳（索引 0）——傳統戰術對象是接發手，不是舉球員（與 sim/ai.js
+// serveTargetPidOf 的攻擊手候選池同精神：挑的是「後排的他」，不是隨便一個人）。
+// 回傳的 pid 只是「教練指定的目標」——buildOpponentTeam 才是唯一真正建出這個 id
+// 的地方；兩處用同一條 `B${i+1}` 命名規則，不是巧合，是同一份 ROLE_ORDER 座標系。
+export function weakestReceiverIdOf(def) {
+  if (!def) return null;
+  let worst = null;
+  for (let i = 1; i < ROLE_ORDER.length; i += 1) {
+    const role = ROLE_ORDER[i];
+    const control = def.level + (def.attrBias?.control ?? 0) + (def.roleBias?.[role]?.control ?? 0);
+    if (!worst || control < worst.control) worst = { id: `B${i + 1}`, control };
+  }
+  return worst?.id ?? null;
+}
+
+// 職業章批 4a：賽前布置的代價數值（皆屬提案，出廠值待真人試玩校準）。
+// CHASE_SERVE_SCATTER_MUL：指定追發時套用在 `game.js performServe` 散佈乘子鏈——
+// 「押錯有真實代價」的發球側兌現（追發失誤率上升）。未布置＝不進 aiProfiles＝
+// `?? 1` 零效果（D3 凍結：預設值下逐值無效果，sim-hash 不動）。
+export const PRO_DEPLOY = {
+  CHASE_SERVE_SCATTER_MUL: 1.35,
+};
+
 // 命名工程 07-25 挖角除名：名冊裡來自該隊的招募生（同一人，以 fullName 對應）不得
 // 再出現在原隊名單——對應槽位由 def.reserves 依序遞補；王牌被挖＝ace 拔除（賽前敵情/
 // 播報不再喊他）。fullName 對不上（玩家改過名/極舊存檔）＝維持原名單的可接受退化。
@@ -767,9 +792,15 @@ export function alliedAiProfileOf(player) {
 //（同一份存檔不會同時「在大學」又「已簽企業」；同時給時 corp 優先＝現在的章）。
 // 職業章批 2（B4 分母清單第 4 項）第 9 參數 pro：職業章已簽球隊的 id（呼叫端由
 // `store.loadPro()` 供給）——A 面球衣改穿球隊 kit，優先序在 corp 之前（現在的章）。
+// 職業章批 4a 第 10 參數 deploy：賽前布置面板選擇（呼叫端由 `store.loadDeployment()`
+// 供給，見 acceptance-pro-batch4a.md D4）——{ blockLean: 'line'|'cross'|null,
+// chaseTargetId: string|null }。省略／null＝兩者皆空＝不進 aiProfiles.A＝逐值不變
+// （零效果，同 school/corp/pro 的「非本章恆 null」保守方向）。★僅職業章生效★
+// （下方以 `pro` 是否非空作為章節閘——面板只在職業章 UI 出現，其餘章節 deploy
+// 結構上恆是預設值，這道閘只是雙重保險，不是唯一防線）。
 export function careerMatchSetup(
   career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1, school = null,
-  corp = null, pro = null,
+  corp = null, pro = null, deploy = null,
 ) {
   const def = matchOpponentDef(matchEntry.opponentId, seasonIndex, { titles: career.titles ?? 0 });
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
@@ -886,7 +917,17 @@ export function careerMatchSetup(
       revenge: oldTeamMates.map((m) => ({ id: m.id, name: m.name })),
     } : {}),
     aiProfiles: {
-      A: alliedAiProfileOf(player),
+      // 職業章批 4a：布置面板兩槽疊在既有 alliedAiProfileOf 之上——只在 `pro` 非空
+      // （職業章）且玩家真的選了值時才加鍵；其餘章節／未布置＝逐值等同批 4a 之前
+      // （zero-effect 凍結，見 D3 附註與 careerMatchSetup 檔頭註解）。
+      A: {
+        ...alliedAiProfileOf(player),
+        ...(pro && (deploy?.blockLean === 'line' || deploy?.blockLean === 'cross')
+          ? { blockLean: deploy.blockLean } : {}),
+        ...(pro && deploy?.chaseTargetId
+          ? { serveTargetPid: deploy.chaseTargetId, serveScatterMul: PRO_DEPLOY.CHASE_SERVE_SCATTER_MUL }
+          : {}),
+      },
       B: { ...def.ai },
     },
     ...(scoutRead ? { scoutRead } : {}),

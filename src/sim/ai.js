@@ -2366,7 +2366,11 @@ export function blockSetterTendency(game, atkTeam, opts = {}) {
 // 重建**當年被拿掉的那條選人規則**：瞄「最接近網、正在朝網推進」的攻方前排球員身體 x。
 // 只讀可觀察量（actors 的 x／z／pz），與 `blockCommitRead` 同一組線索 ⇒ 反作弊鐵律不破。
 // `closing` 的判準沿用 `BLOCK_COMMIT.APPROACH_EPS`（本檔 :1069 同款），不另立門檻。
-function decoyAimX(game, atkTeam) {
+// ★ 2026-08-26 抽成具名函式（職業章批 4a）★ 原本 pid 與 x 在同一個迴圈裡算完就丟——
+// 攔網重心（blockLeanCrossingX）需要同一個「最靠近網、正在推進」的攻方球員**完整位置**
+// （算過網點要 x 與 z 兩者），不只 x。純抽取、零行為變動：decoyAimX 的輸出逐值不變
+// （下方 decoyAimX 直接讀這裡回傳的 pid 取 actor.x，與抽取前同一段運算）。
+function closingAttackerIdOf(game, atkTeam) {
   const rot = game.match.rotations?.[atkTeam];
   if (!rot?.length) return null;
   const side = TEAM_SIDE[atkTeam];
@@ -2379,9 +2383,41 @@ function decoyAimX(game, atkTeam) {
     const closing = (side * a.pz) - (side * a.z) > BLOCK_COMMIT.APPROACH_EPS;
     if (!closing) continue;
     const dz = Math.abs(a.z); // 離網距離：越小越像「正要打的那個」
-    if (!best || dz < best.dz) best = { x: a.x, dz };
+    if (!best || dz < best.dz) best = { pid, dz };
   }
-  return best?.x ?? null;
+  return best?.pid ?? null;
+}
+
+function decoyAimX(game, atkTeam) {
+  const pid = closingAttackerIdOf(game, atkTeam);
+  return pid != null ? game.actors[pid].x : null;
+}
+
+// 職業章批 4a 攔網重心：布置面板押的方向（'line'｜'cross'）×「最靠近網、正在推進」
+// 的攻方球員（與誘餌同一組公開線索，反作弊鐵律不破）→ 那條線的過網點 x。
+// 讀不到人（沒人在推進）＝null——呼叫端回落原本的 base 瞄準，不強制猜。
+function blockLeanCrossingX(game, atkTeam, lean) {
+  const pid = closingAttackerIdOf(game, atkTeam);
+  if (pid == null) return null;
+  const from = game.actors[pid];
+  if (!from) return null;
+  const aims = spikeAimsAt(from, atkTeam);
+  return netCrossingX(from, lean === 'cross' ? aims.cross : aims.line);
+}
+
+// 職業章批 4a：布置面板①「攔網重心」的 sim 消費端——`opts.team`＝這名攔網手的隊伍
+// （呼叫端才知道，見下方三處呼叫改動）。未布置（`blockLean` 不是 'line'/'cross'）
+// 或讀不到人＝原樣回傳 `base`，零效果（D3 凍結：預設值下逐值無效果）。
+// ★ 押錯的代價在這裡兌現 ★ 這是**全額覆蓋**（不是與 base 混合）：教練喊了方向，
+// 這一波的攔網賭注就整個押在那條線上——base 原本可能是對的（read 讀到真實球路），
+// 押錯了照樣蓋掉，牆就站錯邊（pressBlock「押錯就整面落空」同一種代價形狀）。
+function applyBlockLean(game, atkTeam, opts, base) {
+  if (!base) return base;
+  const lean = game.aiProfiles?.[opts?.team]?.blockLean;
+  if (lean !== 'line' && lean !== 'cross') return base;
+  const x = blockLeanCrossingX(game, atkTeam, lean);
+  if (x == null) return base;
+  return { ...base, x };
 }
 
 function blockAimX(game, aiState, atkTeam, persona, opts) {
@@ -2401,15 +2437,16 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
   if (decoyMix > 0) {
     const dx = decoyAimX(game, atkTeam);
     if (dx != null) {
-      if (decoyMix >= 1) return { x: dx, contactTicks: null };
+      if (decoyMix >= 1) return applyBlockLean(game, atkTeam, opts, { x: dx, contactTicks: null });
       const base = blockAimXBase(game, aiState, atkTeam, persona, opts);
       if (base) {
-        return { x: base.x * (1 - decoyMix) + dx * decoyMix, contactTicks: base.contactTicks };
+        return applyBlockLean(game, atkTeam, opts,
+          { x: base.x * (1 - decoyMix) + dx * decoyMix, contactTicks: base.contactTicks });
       }
-      return { x: dx, contactTicks: null };
+      return applyBlockLean(game, atkTeam, opts, { x: dx, contactTicks: null });
     }
   }
-  return blockAimXBase(game, aiState, atkTeam, persona, opts);
+  return applyBlockLean(game, atkTeam, opts, blockAimXBase(game, aiState, atkTeam, persona, opts));
 }
 
 function blockAimXBase(game, aiState, atkTeam, persona, opts) {
@@ -2448,7 +2485,7 @@ function blockAimResolver(game, aiState, team) {
     // 的輸入逐項相同——鎖存建計畫那一刻的 opts 會讓兩者對不起來，首次取用當場被
     // REPLANT_JUMP_M 判成「換人跟」而白付重新踩定成本。
     const own = blockAimX(game, aiState, at, blockPersonaOf(game, team),
-      { ...blockAimOptsOf(aiState), blockerId: pid });
+      { ...blockAimOptsOf(aiState), blockerId: pid, team });
     return own?.x ?? null;
   };
 }
@@ -2573,7 +2610,7 @@ function blockPlanTargetX(game, aiState, team, playerId, player, actor, tick) {
   const atkTeam = r.possession;
   if (!atkTeam || atkTeam === team) return null;
   const persona = blockPersonaOf(game, team);
-  const opts = blockAimOptsOf(aiState);
+  const opts = { ...blockAimOptsOf(aiState), team };
   const plan = aiState.blockPlan;
   if (!plan || plan.team !== team) {
     const unlocked = blockDecisionUnlocked(game, aiState, persona, player, tick);

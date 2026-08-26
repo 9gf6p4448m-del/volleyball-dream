@@ -987,7 +987,12 @@ function performServe(state, intent, ev) {
       * momentumScatterMul(state, team) // W7 B1：氣勢進發球散佈
       // 疲勞→發球準度（`stamina.js` 有完整理由）：滿體力恆 1＝三式數字逐值不變，
       // 掉檔之後才開始不準，且**越吃體力的式子受影響越大**
-      * staminaServeScatterMul(state, player, power ? 'power' : float ? 'float' : 'stand'),
+      * staminaServeScatterMul(state, player, power ? 'power' : float ? 'float' : 'stand')
+      // 職業章批 4a：賽前布置「發球攻擊」的代價兌現——指定追打對方接發最弱者時
+      // 套用風險乘子（`careerState.PRO_DEPLOY.CHASE_SERVE_SCATTER_MUL`，經
+      // `aiProfiles[team].serveScatterMul` 通道注入）。未布置＝欄位不存在＝`?? 1`
+      // 逐值不變（D3 凍結：預設值下無效果，sim-hash 不動）。
+      * (state.aiProfiles?.[team]?.serveScatterMul ?? 1),
   );
   const apex = Math.max(
     power ? TUNING.POWER_SERVE_APEX
