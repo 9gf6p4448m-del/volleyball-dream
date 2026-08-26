@@ -30,7 +30,11 @@ export const PRO_WANG_TEAMMATE_EV = 'pro-wang-teammate'; // 同隊變體：隊�
  * @param teamId     玩家所屬職業隊 id（`store.loadPro()`，非職業章存檔恆 null）
  * @returns 0 或 1 個事件的陣列（同 corpAnchorPreEvents 的回傳形狀）
  */
-export function proWangRivalPreEvents(career, matchEntry, teamId) {
+// 多年卷批 4A（2026-08-27 拍板）：年度重逢輕量句的旗標——含季號（每季一次，
+// 不是一生一次；events 陣列逐年最多 +1 條，十年上限 +10 可接受）
+export const PRO_WANG_ANNUAL_PREFIX = 'pro-wang-annual-';
+
+export function proWangRivalPreEvents(career, matchEntry, teamId, seasonIndex = 0) {
   if (matchEntry?.round !== 'pro') return [];
   if (teamId === WANG_PRO_TEAM_ID) {
     // 同隊變體：隊內首見——掛在球員視角「第一場職業賽前」（schedule 播放順序的
@@ -50,15 +54,42 @@ export function proWangRivalPreEvents(career, matchEntry, teamId) {
   }
   // 敵隊變體：循環賽首次對戰蒼羽泰坦
   if (matchEntry.opponentId !== WANG_PRO_TEAM_ID) return [];
-  if ((career?.events ?? []).includes(PRO_WANG_RIVAL_EV)) return [];
+  const played = (career?.events ?? []);
+  if (!played.includes(PRO_WANG_RIVAL_EV)) {
+    // 批 4A E1（敘事題①拍板「條件化」）：曾同隊（轉隊離開蒼羽）的玩家聽的是
+    // 前隊友重逢組——「你比我慢了四年」對前隊友故事上不成立（批 3 覆審留題）。
+    // 事件 id 仍用 PRO_WANG_RIVAL_EV＝一生一次記帳不變。★文案屬提案★
+    if (played.includes(PRO_WANG_TEAMMATE_EV)) {
+      return [{
+        id: PRO_WANG_RIVAL_EV,
+        lines: [
+          { speaker: '', text: '球員通道口，蒼羽的隊伍走過——王勝翔在隊列裡放慢了半步。' },
+          { speaker: '王勝翔', text: '穿上別隊的球衣站在對面……這樣也好。' },
+          { speaker: '王勝翔', text: '同一片天空扛過一年，我知道你所有的習慣——今天就讓你看看，牆那一邊的我。' },
+          { speaker: '', text: '網子只認今天站在對面的人。前隊友，也不例外。' },
+        ],
+      }];
+    }
+    return [{
+      id: PRO_WANG_RIVAL_EV,
+      lines: [
+        { speaker: '', text: '球員通道口，王勝翔已經在等——他比你早到了整整四年。' },
+        { speaker: '王勝翔', text: '……終於。同一個聯賽，同一片天空下了。' },
+        { speaker: '王勝翔', text: '高中那年我說要直接挑戰企業聯賽——我做到了，還多繞一圈爬到了頂端。你呢？' },
+        { speaker: '王勝翔', text: '你比我慢了四年。但今天，這四年不算數——網子只認今天站在對面的人。' },
+        { speaker: '', text: '制空者。這個聯賽的天花板，終於要跟你正面對上。' },
+      ],
+    }];
+  }
+  // 批 4A E2（敘事題②拍板「做」）：大事件已播 → 每季首次對上蒼羽一句輕量重逢句
+  // （不重播大事件、同季再遇（季後賽）不重複——旗標含季號）。★文案屬提案★
+  if (!Number.isInteger(seasonIndex) || seasonIndex <= 0) return [];
+  const annualId = `${PRO_WANG_ANNUAL_PREFIX}${seasonIndex}`;
+  if (played.includes(annualId)) return [];
   return [{
-    id: PRO_WANG_RIVAL_EV,
+    id: annualId,
     lines: [
-      { speaker: '', text: '球員通道口，王勝翔已經在等——他比你早到了整整四年。' },
-      { speaker: '王勝翔', text: '……終於。同一個聯賽，同一片天空下了。' },
-      { speaker: '王勝翔', text: '高中那年我說要直接挑戰企業聯賽——我做到了，還多繞一圈爬到了頂端。你呢？' },
-      { speaker: '王勝翔', text: '你比我慢了四年。但今天，這四年不算數——網子只認今天站在對面的人。' },
-      { speaker: '', text: '制空者。這個聯賽的天花板，終於要跟你正面對上。' },
+      { speaker: '王勝翔', text: '……又是你。今年的你，比去年難纏了嗎？網子那邊見。' },
     ],
   }];
 }

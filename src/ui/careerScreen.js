@@ -2774,7 +2774,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // 企業章批 4（A4-3）：首戰擎空航太＝王勝翔亮相（fireEvents 入帳一生一次）
           ...corpAnchorPreEvents(career, next),
           // 職業章批 5（G2）：王勝翔同場宿敵線——同隊/敵隊兩情境互斥，各自一生一次
-          ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null),
+          // 批 4A：第 4 參數＝季號（年度重逢句每季一次的旗標）
+          ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null, store.seasonIndex?.() ?? 0),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
