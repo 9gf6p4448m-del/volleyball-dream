@@ -365,3 +365,44 @@ test('覆審H修 棄賽湊滿循環末場且晉級：同輪 render 看得到準�
   assert.match(text, /準決賽/, '第一輪 render 就要看得到長出的準決賽（不是等下一輪自我修復）');
   assert.doesNotMatch(text, /賽季落幕/, '第一輪不得誤判賽季已收束（semi 未打）');
 });
+
+// ════════════════════════════════════════════════════════════════
+// 送審反例修（第二輪）：存檔寫入失敗時不得靜默撤銷棄賽判定
+// 改前紅：無條件 loadCareer 重讀＝讀回未棄賽舊檔，畫面出現「▶ 出戰 第7場」＝可白嫖重打
+// ════════════════════════════════════════════════════════════════
+test('送審修 寫入失敗的棄賽：當輪仍顯示棄賽已判（第7輪不得回到可出戰）', async () => {
+  const storage = proSave();
+  const s = createCareerStore(storage);
+  let c = s.loadCareer();
+  const league = c.schedule.filter((m) => m.round === 'pro');
+  s.saveCareer({
+    ...c,
+    results: league.slice(0, 6).map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: true, scoreFor: 2, scoreAgainst: 0, gp: 3,
+    })),
+  });
+  c = s.loadCareer();
+  s.saveCareer({
+    ...c,
+    pendingMatch: league[6].id,
+    events: [...new Set([...(c.events ?? []), 'first-loss'])],
+  });
+  // 包一層「從現在起 setItem 一律拋錯」的 storage（私密模式語意）
+  const failingStorage = {
+    getItem: (k) => storage.getItem(k),
+    setItem: () => { throw new Error('QuotaExceededError（模擬私密模式）'); },
+    removeItem: (k) => storage.removeItem(k),
+  };
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(failingStorage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  const text = allText(globalThis.document.body);
+  // 棄賽當輪仍要「已判」：第 7 輪顯示負場，不得出現「▶ 出戰」第 7 場對手的按鈕
+  assert.match(text, /6 勝 1 敗|6勝1敗/, '寫入失敗當輪畫面仍要顯示棄賽敗已判（settled 兜底）');
+  assert.doesNotMatch(text, /▶ 出戰 鐵骨戰王/, '不得讓玩家重打棄賽場次（反白嫖規則 07-22）');
+});

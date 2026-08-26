@@ -1836,13 +1836,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const settled = midValid ? career : resolveForfeit(career);
     if (settled !== career) {
       const forfeited = settled.results.length > career.results.length;
-      store.saveCareer(settled);
+      const saved = store.saveCareer(settled);
       // 職業章批 3 覆審 HIGH 修：saveCareer 起有內部副作用（職業章季後賽場次由
       // growProSchedule 在 RMW 裡長進存檔）——本地變數必須吃「寫入後重新讀出」的
       // 版本，不能停在 settled（長之前的形狀）。否則棄賽湊滿循環最後一場且晉級時，
       // 同一輪 render 的 seasonConcluded 會對「無 semi 列的過期 schedule」誤判已收束，
       // 玩家先看到假的「賽季落幕」、點結算再吃一句假的「存檔資料異常」。
-      career = store.loadCareer() ?? settled;
+      // ★送審反例修（第二輪）★ 只有寫入**成功**才信 loadCareer——寫入失敗時
+      // loadCareer 讀回的是「未棄賽的舊存檔」，無條件重讀＝當輪棄賽判定被靜默撤銷，
+      // 玩家可重打棄賽場次（反白嫖規則 07-22 被繞）。失敗維持 settled 兜底（與舊版
+      // 一致：當輪畫面棄賽已判，下次重整才因未落檔還原——那是存檔失敗的既有語意）。
+      career = (saved ? store.loadCareer() : null) ?? settled;
       if (forfeited) setMsg('上一場中途離開——依規記為棄賽敗（0:25）');
     }
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）。
