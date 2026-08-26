@@ -325,7 +325,7 @@ test('G3① 收尾卡恆有國外強權點名句', async () => {
   playAllPro(store);
   await openCareerScreen(storage);
   await tapDialogsAll(); // 球探分析師開場泡泡（同 D 系列面板既有行為）先消化掉
-  const closeBtn = findBtn(/賽季落幕——職業元年/);
+  const closeBtn = findBtn(/賽季落幕——第 1 年/);
   assert.ok(closeBtn, 'fixture 前提：職業賽季要打完，收尾卡入口才會出現');
   tap(closeBtn);
   await settle();
@@ -342,7 +342,7 @@ test('G3② 條件簡子嵐——同隊（海硯大學）存檔要播「更大�
   playAllPro(store);
   await openCareerScreen(storage);
   await tapDialogsAll();
-  tap(findBtn(/賽季落幕——職業元年/));
+  tap(findBtn(/賽季落幕——第 1 年/));
   await settle();
   const text = allText(globalThis.document.body);
   assert.match(text, /簡子嵐/, '同隊過的存檔要播出簡子嵐收束句');
@@ -357,7 +357,7 @@ test('G3② 條件簡子嵐——未同隊（別校）存檔零可見', async ()
   playAllPro(store);
   await openCareerScreen(storage);
   await tapDialogsAll();
-  tap(findBtn(/賽季落幕——職業元年/));
+  tap(findBtn(/賽季落幕——第 1 年/));
   await settle();
   const text = allText(globalThis.document.body);
   assert.doesNotMatch(text, /簡子嵐/, '未同隊存檔不得看到簡子嵐收束句');

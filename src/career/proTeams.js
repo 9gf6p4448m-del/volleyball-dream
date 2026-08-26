@@ -239,6 +239,22 @@ export function proBaseSalaryFor(team) {
   return PRO_BASE_SALARY[team?.tier] ?? PRO_BASE_SALARY[TIER.WEAK];
 }
 
+// 續約薪水（多年卷批 2）。★係數屬提案（試玩可改）★ 凍結的是性質
+// （acceptance-multiyear-batch2 B3）：名次單調、冠軍加成、恆正、壞值保守。
+const RENEWAL_RANK_MUL = [1.3, 1.2, 1.1, 1.1, 1.0, 1.0, 0.9, 0.9]; // rank 1..8
+const RENEWAL_FINISH_MUL = {
+  champion: 1.15, final: 1.05, semi: 1.0, league: 1.0,
+};
+
+/** 下一年的續約年薪：底薪 × 名次係數 × 季後賽係數。壞值照最保守給——不猜。 */
+export function proRenewalSalaryFor(team, proRank, proFinish) {
+  const base = proBaseSalaryFor(team);
+  const r = Number.isInteger(proRank) && proRank >= 1 && proRank <= RENEWAL_RANK_MUL.length
+    ? proRank : RENEWAL_RANK_MUL.length;
+  const f = RENEWAL_FINISH_MUL[proFinish] ?? 1.0;
+  return Math.max(1, Math.round(base * RENEWAL_RANK_MUL[r - 1] * f));
+}
+
 // ════════════════════════════════════════════════════════════════
 // 挖角邀約集合（企業章名次 → 哪些職業隊來邀）
 // ════════════════════════════════════════════════════════════════

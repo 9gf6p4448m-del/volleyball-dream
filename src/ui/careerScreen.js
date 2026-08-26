@@ -73,7 +73,7 @@ import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
 import {
-  isHighSchool, isCorporate, isPro, chapterSeasonOf, currentTeamName,
+  isHighSchool, isCorporate, isPro, chapterSeasonOf, chapterCompleted, currentTeamName,
 } from '../career/chapter.js';
 import { bestFinishOf, seasonFinishOf, FINISH_LABEL, TIER } from '../career/admission.js';
 import {
@@ -87,7 +87,7 @@ import {
   corpShakeOffEvents,
 } from '../career/corpEvents.js';
 // 職業章批 2（2026-08-26）：入章接線——資料層批 1 已鋪好
-import { PRO_TIER_LABEL, proTeamById } from '../career/proTeams.js';
+import { PRO_TIER_LABEL, proTeamById, proRenewalSalaryFor } from '../career/proTeams.js';
 // 職業章批 3：名次表／季後賽場次顯示（proSchedule.js 批 1 的純函式＋批 3 的 round 標記）
 import {
   proTable, PRO_PLAYER_ID, PLAYOFF_ROUND, growProSchedule,
@@ -2561,7 +2561,20 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // pickedXxx 非 null），順序本身不影響行為，只是沿用「當前章節優先」的既有排法
     // （裁定 (a) 的 degraded 攔截已收斂為 renderCareer 頭道閘——見棄賽分支後那段；
     //  此處分支鏈只會在存檔健康時執行）
-    if (proSeasonDone) {
+    // ★ 多年卷批 2（B1 接線順序）：職業分支的任何推進入口可按之前先回填 ★
+    // 舊職業存檔（08-26 單年版）沒 contract、已結算那筆封存沒 proFinish——
+    // 第一次推進會清空 results，晚於推進鈕＝冠軍事實永久遺失。冪等，no-op 不寫檔。
+    if (pickedPro) store.backfillProMultiyear?.();
+    // 多年卷批 2（B4）：退休後不再進出戰/收尾卡迴圈——生涯已收束佔位（真謝幕卡＝批 5）
+    if (pickedPro && store.proRetired?.()) {
+      root.appendChild(el('div', [
+        'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`,
+        'margin-top:8px', 'letter-spacing:3px',
+      ], '🏐 生涯已收束'));
+      root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.8',
+        'max-width:min(360px,92vw)', 'text-align:center'],
+      '你已高掛球鞋。謝幕儀式・敬請期待——生涯的一切都收在數據頁裡。'));
+    } else if (proSeasonDone) {
       const board = proTable({
         teamId: pickedPro.id, seed: career.seed,
         schedule: career.schedule, results: career.results,
@@ -2580,11 +2593,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         'margin-top:8px', 'letter-spacing:2px',
       ], champion ? '🏆 職業聯賽冠軍！'
         : (madePlayoffs ? '止步季後賽' : `聯賽第 ${board.playerRank} 名`)));
+      // 多年卷批 2（B6）：不再寫死「元年」——年份跟 chapterSeasonOf 走
+      const proYearN = chapterSeasonOf(store.loadChapter?.(), seasonN);
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'line-height:1.7'],
-        `職業元年賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`
+        `職業第 ${proYearN} 年賽季結束——${me?.wins ?? 0} 勝 ${me?.losses ?? 0} 敗・積分 ${me?.points ?? 0}`
         + (madePlayoffs ? `（循環第 ${board.playerRank} 名晉級季後賽）` : '')));
-      root.appendChild(button('▶ 賽季落幕——職業元年', true,
-        () => showProSeasonClosing({ champion, madePlayoffs, board })));
+      root.appendChild(button(`▶ 賽季落幕——第 ${proYearN} 年`, true,
+        () => showProSeasonClosing({ champion, madePlayoffs, board, seasonN })));
     } else if (corpSeasonDone) {
       const board = corpTable({
         corpId: pickedCorp.id, seed: career.seed,
@@ -3404,13 +3419,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     document.body.appendChild(overlay);
   }
 
-  // 職業章批 3（C5）：章末收尾卡——佔位（多年職業生涯／續約轉隊＝掛帳，卷宗 §五）。
-  // ★文案屬提案★ 出口回生涯畫面（重看名次也走同一顆鈕，冪等純顯示）。
-  // ★ 一定要在讀名次之前呼叫 settleProFinale ★ 才會把 proRank 封進存檔（同
-  // showCorpSeasonClosing 的既有教訓：首次進入且結算失敗（壞存檔）不得靜默照播）。
-  // 職業章目前是生涯終章（多年生涯是掛帳），所以**沒有**「前往下一個舞台」——
-  // 這一點與 showCorpSeasonClosing 的形狀刻意不同，不是漏做。
-  function showProSeasonClosing({ champion, madePlayoffs, board }) {
+  // 職業章批 3（C5）→ 多年卷批 2（B4）：季末收尾卡＝**續約談判卡**。
+  // ★文案與薪水數字屬提案★ 結算先於一切（settleProFinale 失敗不得靜默照播——
+  // showCorpSeasonClosing 的既有教訓）。三路：非末季未退休＝續約留隊（同一次 RMW
+  // 續約＋推進）／高掛球鞋（確認後 retirePro，真謝幕卡＝批 5）；末季＝不給續約鈕
+  // （2464/2666 死按鈕同型事故防線），只給謝幕佔位。轉隊選項＝批 3。
+  function showProSeasonClosing({ champion, madePlayoffs, board, seasonN = 1 }) {
     const settled = store.settleProFinale?.();
     if (!settled && !store.proFinaleSettled?.()) {
       const failOverlay = el('div', [
@@ -3419,35 +3433,85 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         'gap:12px', 'cursor:pointer', 'padding:26px 14px', 'text-align:center',
       ]);
       failOverlay.appendChild(el('div', ['font-size:15px', 'font-weight:800', `color:${COLOR.text}`,
-        'line-height:1.7'], '賽季結算失敗——存檔資料異常（職業資料解不開），職業元年戰績尚未封存'));
+        'line-height:1.7'], '賽季結算失敗——存檔資料異常（職業資料解不開），本季戰績尚未封存'));
       failOverlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`], '點擊返回生涯畫面'));
       failOverlay.addEventListener('pointerdown', () => { failOverlay.remove(); renderCareer(); });
       document.body.appendChild(failOverlay);
       return;
     }
+    const yearN = chapterSeasonOf(store.loadChapter?.(), seasonN);
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
-      'align-items:center', 'justify-content:center', 'background:#05070d',
-      'gap:16px', 'cursor:pointer',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#05070d', 'gap:16px', 'cursor:pointer', 'padding:26px 14px',
     ]);
     overlay.appendChild(el('div', [
       'font-size:40px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:10px',
       'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
-    ], '職業元年・完'));
+    ], `職業第 ${yearN} 年・完`));
     overlay.appendChild(el('div', ['font-size:15px', `color:${COLOR.text}`, 'letter-spacing:3px'],
-      champion ? '第一年就站上職業聯賽之巔'
-        : (madePlayoffs ? `季後賽止步——循環第 ${board.playerRank} 名的證明` : `聯賽第 ${board.playerRank} 名——職業初體驗`)));
+      champion ? (yearN === 1 ? '第一年就站上職業聯賽之巔' : '再一次站上職業聯賽之巔')
+        : (madePlayoffs ? `季後賽止步——循環第 ${board.playerRank} 名的證明` : `聯賽第 ${board.playerRank} 名——職業聯賽沒有簡單的一年`)));
     // 批 5（B5-3）：國外強權點名（世界觀存在、不可玩）＋條件簡子嵐（大學名冊封存判定）
     for (const line of proClosingLines(store.loadUniRoster?.() ?? null)) {
       overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:8px',
         'text-align:center', 'line-height:1.8', 'max-width:min(440px,90vw)'], line));
     }
-    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
-      'margin-top:18px'], '續約談判・敬請期待'));
+    // ★ 多年卷批 2（B4）：續約談判——薪水吃剛封存那筆的 proRank/proFinish
+    // （settle 在上面剛跑過或先前已跑，封存必然存在）★
+    const team = proTeamById(store.loadPro?.() ?? null);
+    const archive = store.loadSeasonArchive?.() ?? [];
+    let lastPro = null;
+    for (let i = archive.length - 1; i >= 0; i -= 1) {
+      if (archive[i]?.pro) { lastPro = archive[i]; break; }
+    }
+    const isFinalYear = chapterCompleted(store.loadChapter?.(), seasonN);
+    const isRetired = store.proRetired?.();
+    if (isRetired || isFinalYear) {
+      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
+        'margin-top:18px'], isRetired ? '生涯已收束' : '十年職業生涯走到終點——謝幕儀式・敬請期待'));
+    } else if (team && lastPro) {
+      const newSalary = proRenewalSalaryFor(team, lastPro.proRank, lastPro.proFinish);
+      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'letter-spacing:2px',
+        'margin-top:18px'], `${team.name}遞來了新合約`));
+      const renewBtn = button(`✍ 續約留隊——年薪 ${newSalary} 萬`, true, () => {
+        // B2：續約與推進同一次 RMW（advanceSeason 帶 proSalary）
+        if (store.advanceSeason?.({ proSalary: newSalary })) {
+          overlay.remove(); renderCareer();
+        }
+      });
+      renewBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      overlay.appendChild(renewBtn);
+      const retireBtn = button('👋 高掛球鞋', false, () => {
+        showProRetireConfirm(overlay);
+      });
+      retireBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      overlay.appendChild(retireBtn);
+    }
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
       '點擊任意處返回生涯畫面'));
     overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
     document.body.appendChild(overlay);
+  }
+
+  // 多年卷批 2（B4）：退休確認卡——不可逆動作要二段確認。
+  function showProRetireConfirm(closingOverlay) {
+    const confirm = el('div', [
+      'position:fixed', 'inset:0', 'z-index:39', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.96)',
+      'gap:16px', 'padding:26px 14px', 'text-align:center',
+    ]);
+    confirm.appendChild(el('div', ['font-size:18px', 'font-weight:900', `color:${COLOR.text}`,
+      'line-height:1.8', 'max-width:min(400px,92vw)'],
+    '確定要高掛球鞋嗎？生涯就此收束，不能反悔。'));
+    const yesBtn = button('確定退休', true, () => {
+      if (store.retirePro?.()) {
+        confirm.remove(); closingOverlay.remove(); renderCareer();
+      }
+    });
+    confirm.appendChild(yesBtn);
+    confirm.appendChild(button('再想想', false, () => confirm.remove()));
+    document.body.appendChild(confirm);
   }
 
   // ════════ 職業章 批 2（2026-08-26）：挖角/測試會演出 → 邀約自選 → 入隊 ════════
@@ -3680,7 +3744,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       sum.losses += sn.losses;
       // 批 3：大學聯賽冠軍（uniRank===1）計入生涯 🏆 顯示（titles 存檔欄位不動——
       // 那顆掛著高中衛冕加成語意，只是顯示合計）
-      if (sn.champion || sn.uniRank === 1) sum.titles += 1;
+      // 多年卷批 2（B5）：職業冠軍走 proFinish（proRank 是循環名次，循環第 4 也可能
+      // 奪冠——不得拿 proRank===1 當冠軍）；企業冠軍＝corpRank===1（企業無季後賽）
+      if (sn.champion || sn.uniRank === 1 || sn.corpRank === 1 || sn.proFinish === 'champion') {
+        sum.titles += 1;
+      }
       const card = el('div', [
         `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
         'padding:10px 16px', 'width:min(340px, 94vw)', 'text-align:left',
@@ -3690,13 +3758,23 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       head.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
         `第 ${sn.index} 屆${sn.current ? '（進行中）' : ''}`));
       // 批 3（拍板題 2 甲）：大學屆封存帶 uniRank ⇒ 顯示聯賽名次；高中屆（無此欄）
-      // 走原字串逐字不變
+      // 走原字串逐字不變。多年卷批 2（B5）：企業/職業屆同款標籤——企業冠軍＝
+      // corpRank 1；職業冠軍＝proFinish（循環名次不當冠軍判準）
+      const corpTag = Number.isInteger(sn.corpRank) && sn.corpRank >= 1
+        ? `・${sn.corpRank === 1 ? '🏆 聯賽冠軍' : `聯賽第 ${sn.corpRank} 名`}`
+        : '';
+      const proTag = Number.isInteger(sn.proRank) && sn.proRank >= 1
+        ? `・${sn.proFinish === 'champion' ? '🏆 職業冠軍'
+          : `${sn.proFinish === 'final' ? '亞軍・' : (sn.proFinish === 'semi' ? '四強・' : '')}循環第 ${sn.proRank} 名`}`
+        : '';
       const uniTag = Number.isInteger(sn.uniRank) && sn.uniRank >= 1
         ? `・${sn.uniRank === 1 ? '🏆 聯賽冠軍' : `聯賽第 ${sn.uniRank} 名`}`
         : '';
+      const isGoldRow = sn.champion || sn.uniRank === 1 || sn.corpRank === 1
+        || sn.proFinish === 'champion';
       head.appendChild(el('div', ['font-size:13px',
-        `color:${sn.champion || sn.uniRank === 1 ? COLOR.gold : COLOR.dim}`],
-      `${sn.wins} 勝 ${sn.losses} 敗${sn.champion ? '・🏆 全國冠軍' : ''}${uniTag}`));
+        `color:${isGoldRow ? COLOR.gold : COLOR.dim}`],
+      `${sn.wins} 勝 ${sn.losses} 敗${sn.champion ? '・🏆 全國冠軍' : ''}${uniTag}${corpTag}${proTag}`));
       card.appendChild(head);
       card.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.dim}`, 'line-height:1.5'],
         totalLine(sn.totals)));

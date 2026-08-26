@@ -45,6 +45,21 @@ import {
 } from './schema.js';
 import { slotKey, slotHeadKey, slotMidKey, headOf } from './saveSlots.js';
 
+// 職業季的季後賽結果四態（多年卷批 1 覆審 HIGH／批 2 回填共用的單一判定）。
+// proRank 是**循環**名次，循環第 4 也可能爆冷奪冠；高中 schema 的 champion/finish
+// 對職業恆假不重用（鍵名不撞名慣例）。schedule 只含玩家自己的場次，semi 敗＝
+// final 不存在。四態：champion／final（亞軍）／semi（四強止步）／league（未進四強）。
+function proFinishOf(schedule, results) {
+  const resultOf = (m) => (results ?? []).find((r) => r.matchId === m.id);
+  const finalMatch = (schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.FINAL);
+  const semiMatch = (schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.SEMI);
+  const finalRes = finalMatch ? resultOf(finalMatch) : null;
+  const semiRes = semiMatch ? resultOf(semiMatch) : null;
+  if (finalRes) return finalRes.won ? 'champion' : 'final';
+  if (semiRes) return 'semi';
+  return 'league';
+}
+
 export const SAVE_KEY = 'vd-save'; // ＝slotKey(1)：槽 1 沿用既有單檔 key（零遷移）
 
 // 企業章批 2：封存裡最近一筆帶 uniRank 的季（正常存檔＝U4 那筆，settleUniFinale 寫入）。
@@ -250,10 +265,20 @@ export function createCareerStore(storage, slot = 1) {
           const endingSeason = prev.season.index ?? 1;
           // 決定論鏈：下一季種子由本季種子衍生（與高中/大學同一顆 deriveSeasonSeed）
           const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
+          // 批 2（B2）：續約與推進**同一次 RMW**——拆兩次寫會留 crash 窗口
+          // （續約寫了沒推進／推進了沒續約）。壞值（0/負/非整數）＝不寫、合約保留。
+          const nextSalary = Number.isInteger(opts.proSalary) && opts.proSalary > 0
+            ? opts.proSalary : null;
           return {
             ...prev,
             // 旗標逐季重置：下一季打完才可再結算（不清＝第 2 季永遠不能結算）
-            career: { ...prev.career, proFinaleSettled: false },
+            career: {
+              ...prev.career,
+              proFinaleSettled: false,
+              ...(nextSalary !== null
+                ? { contract: { ...(prev.career.contract ?? {}), salary: nextSalary } }
+                : {}),
+            },
             season: {
               ...prev.season,
               index: endingSeason + 1,
@@ -836,18 +861,9 @@ export function createCareerStore(storage, slot = 1) {
         });
         const proRank = board?.playerRank ?? 0;
         // 批 1 覆審 HIGH 補（拍板 2026-08-27）：季後賽結果要在這裡封存——推進會清空
-        // results，這是唯一還握有該季季後賽事實的地方。proRank 是**循環**名次，
-        // 循環第 4 也可能爆冷奪冠；高中 schema 的 champion/finish 對職業恆假不重用
-        // （鍵名不撞名慣例）。四態：champion/final（亞軍）/semi（四強止步）/league
-        // （未進四強）。schedule 只含玩家自己的場次，semi 敗＝final 不存在。
-        const resultOf = (m) => (prev.season.results ?? []).find((r) => r.matchId === m.id);
-        const finalMatch = (prev.season.schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.FINAL);
-        const semiMatch = (prev.season.schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.SEMI);
-        const finalRes = finalMatch ? resultOf(finalMatch) : null;
-        const semiRes = semiMatch ? resultOf(semiMatch) : null;
-        let proFinish = 'league';
-        if (finalRes) proFinish = finalRes.won ? 'champion' : 'final';
-        else if (semiRes) proFinish = 'semi';
+        // results，這是唯一還握有該季季後賽事實的地方（判定邏輯抽在 proFinishOf，
+        // 批 2 舊檔回填共用同一顆）。
+        const proFinish = proFinishOf(prev.season.schedule, prev.season.results);
         const seasons = [...(prev.career.seasons ?? []), {
           ...archiveSeasonSummary(prev.season),
           proRank,
@@ -882,6 +898,52 @@ export function createCareerStore(storage, slot = 1) {
     // 已退休（UI 用；判「生涯結束了沒」一律走 chapter.proCareerOver，不得自組判式）
     proRetired() {
       return loadSave()?.career?.proRetired === true;
+    },
+    // ★★ 多年卷批 2（B1）★★ 舊職業存檔一次性回填——職業章單年版（08-26 上線）
+    // 的存檔沒有 contract，且已結算那筆封存沒有 proFinish。**必須先於推進鈕落地**：
+    // 第一次推進會清空 results，之後 proFinish 永遠補不回（送審員補抓的 MEDIUM）。
+    //   守衛：非職業章／壞隊 id＝no-op；兩樣都不缺＝no-op（冪等，不寫檔）。
+    //   proFinish 補值吃**當前** season 的 schedule/results——舊檔年限=1 推不動，
+    //   已結算的那季就是當前季，results 必然還在。
+    backfillProMultiyear() {
+      const save = loadSave();
+      if (!save) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false;
+      const team = proTeamById(save.career?.pro ?? null);
+      if (!team) return false;
+      const needContract = !save.career?.contract;
+      const seasons = save.career?.seasons ?? [];
+      let lastProIdx = -1;
+      for (let i = seasons.length - 1; i >= 0; i -= 1) {
+        if (seasons[i]?.pro) { lastProIdx = i; break; }
+      }
+      const needFinish = save.career?.proFinaleSettled === true
+        && lastProIdx >= 0 && seasons[lastProIdx]?.proFinish === undefined;
+      if (!needContract && !needFinish) return false; // 冪等 no-op：不寫檔
+      return writeSave((prev) => {
+        const prevSeasons = prev.career?.seasons ?? [];
+        const patched = needFinish
+          ? prevSeasons.map((sn, i) => (i === lastProIdx
+            ? { ...sn, proFinish: proFinishOf(prev.season.schedule, prev.season.results) }
+            : sn))
+          : prevSeasons;
+        return {
+          ...prev,
+          career: {
+            ...prev.career,
+            ...(needFinish ? { seasons: patched } : {}),
+            ...(needContract
+              ? {
+                contract: {
+                  salary: proBaseSalaryFor(team),
+                  sinceSeason: normalizeChapter(prev.career ?? null)?.enteredAtSeason
+                    ?? (prev.season.index ?? 1),
+                },
+              }
+              : {}),
+          },
+        };
+      });
     },
     // 職業謝幕已結算（同 corpFinaleSettled 慣例：UI 用旗標判斷收尾卡重看/重複結算）
     proFinaleSettled() {

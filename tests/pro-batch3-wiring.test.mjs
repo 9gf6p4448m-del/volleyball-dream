@@ -214,7 +214,7 @@ test('C1④ 循環 7/7 全敗：未進四強，不長季後賽、直接落到賽
   playProLeague(storage, { wins: false });
   const text = await renderAndGetText(storage);
   assert.doesNotMatch(text, /職業季後賽・四強單淘汰/);
-  assert.match(text, /賽季落幕——職業元年/);
+  assert.match(text, /賽季落幕——第 1 年/);
   assert.match(text, /聯賽第 8 名/);
 });
 
@@ -225,12 +225,12 @@ test('C5① 未進四強直接賽季落幕：點擊後結算成功、佔位文�
   const storage = proSave();
   playProLeague(storage, { wins: false });
   await renderAndGetText(storage);
-  tap(findBtn(/賽季落幕——職業元年/));
+  tap(findBtn(/賽季落幕——第 1 年/));
   await settle();
   const text = allText(globalThis.document.body);
-  assert.match(text, /職業元年・完/);
-  assert.match(text, /續約談判・敬請期待/);
-  assert.doesNotMatch(text, /前往下一個舞台/, '職業章目前是生涯終章，不該冒出下一章入口');
+  assert.match(text, /職業第 1 年・完/); // 多年卷批 2 改寫：收尾卡＝續約談判卡（acceptance-multiyear-batch2 B4/B6，凍結 5bb3b3e）
+  assert.match(text, /續約留隊/);
+  assert.doesNotMatch(text, /前往下一個舞台/, '職業章的下一步是續約選單，不是下一章入口');
   const save = JSON.parse(storage.getItem(SAVE_KEY));
   assert.equal(save.career.proFinaleSettled, true);
   assert.ok(Number.isInteger(save.career.seasons.at(-1)?.proRank), '封存筆要帶 proRank');
@@ -247,7 +247,7 @@ test('C5② 打進季後賽並奪冠：收尾卡顯示冠軍文案', async () =>
   playMatch(storage, final.id, true);
   const text = await renderAndGetText(storage);
   assert.match(text, /🏆 職業聯賽冠軍！/);
-  tap(findBtn(/賽季落幕——職業元年/));
+  tap(findBtn(/賽季落幕——第 1 年/));
   await settle();
   const text2 = allText(globalThis.document.body);
   assert.match(text2, /站上職業聯賽之巔/);
@@ -261,7 +261,7 @@ test('C5③ 打進季後賽但準決賽落敗：收尾卡顯示「止步季後�
   playMatch(storage, semi.id, false);
   const text = await renderAndGetText(storage);
   assert.match(text, /止步季後賽/);
-  tap(findBtn(/賽季落幕——職業元年/));
+  tap(findBtn(/賽季落幕——第 1 年/));
   await settle();
   const text2 = allText(globalThis.document.body);
   assert.match(text2, /季後賽止步——循環第 1 名的證明/);
@@ -273,11 +273,11 @@ test('C5④ 重入不重複結算：先用 store 提前結算過，UI 再點一�
   const s = createCareerStore(storage);
   assert.ok(s.settleProFinale(), 'fixture 前提：已提前結算過一次');
   await renderAndGetText(storage);
-  tap(findBtn(/賽季落幕——職業元年/));
+  tap(findBtn(/賽季落幕——第 1 年/));
   await settle();
   const text = allText(globalThis.document.body);
-  assert.match(text, /職業元年・完/);
-  assert.match(text, /續約談判・敬請期待/);
+  assert.match(text, /職業第 1 年・完/); // 多年卷批 2 改寫：收尾卡＝續約談判卡（acceptance-multiyear-batch2 B4/B6，凍結 5bb3b3e）
+  assert.match(text, /續約留隊/);
 });
 
 // ════════════════════════════════════════════════════════════════
