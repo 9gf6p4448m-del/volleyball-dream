@@ -1835,6 +1835,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     if (mid && !midValid) store.clearMidMatch?.();
     // 拍板 07-22：中途退出＝棄賽敗（開賽 pending 標記未清＝沒打完就跑）；
     // 局間存檔是唯一豁免（Q8 手機場景保護——那不是跑，是暫停）
+    // ★第三輪送審裁定 (a)（2026-08-26 Sawmah）★ 棄賽寫入失敗＝本輪存檔已知壞掉，
+    // 旗標傳到出戰段：停用出戰鈕＋明示（打了成績也存不住，且兜底賽程的季後賽場次
+    // 不在硬碟上，開打會在結算 recordResult 炸例外——送審實測重現）。
+    let saveDegraded = false;
     const settled = midValid ? career : resolveForfeit(career);
     if (settled !== career) {
       const forfeited = settled.results.length > career.results.length;
@@ -1853,6 +1857,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 「寫入成功會讀回的形狀」一致：棄賽已判（反白嫖守住）＋季後賽場次看得到。
       let view = saved ? store.loadCareer() : null;
       if (!view) {
+        saveDegraded = true; // 本輪畫面吃的是記憶體兜底——出戰段據此停用（裁定 a）
         const proId = store.loadPro?.() ?? null;
         view = proId
           ? { ...settled, schedule: growProSchedule(settled.schedule, settled.results, proId, settled.seed) }
@@ -2525,6 +2530,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       ));
       root.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`],
         '局間存檔——從換邊休息點恢復'));
+    } else if (next && saveDegraded) {
+      // ★第三輪送審裁定 (a)★ 存檔寫入壞掉的那一輪：出戰停用＋誠實明示。
+      // 不停用的話：①打完成績也存不住 ②兜底賽程的季後賽場次不在硬碟上，
+      // matchCareer 結算 recordResult 找不到場次會炸（送審第三輪實測）。
+      const degradedBtn = button(`▶ 出戰 ${opponentName(next.opponentId)}`, true, () => {});
+      degradedBtn.disabled = true;
+      root.appendChild(degradedBtn);
+      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`],
+        '⚠ 存檔空間異常——戰績目前寫不進存檔，出戰已暫停。清出儲存空間或離開私密瀏覽模式後，重新整理再出戰。'));
     } else if (next) {
       // stage 4 賽前事件：先播對話（trust 效果先套用），播完進場
       const startMatch = () => {

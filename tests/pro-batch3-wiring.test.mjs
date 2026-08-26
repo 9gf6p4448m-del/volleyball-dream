@@ -409,4 +409,11 @@ test('送審修 寫入失敗的棄賽：當輪仍顯示棄賽已判（第7輪不
   // 6 勝 1 敗＝晉級，畫面不得誤判賽季落幕（兜底 career 經記憶體端 growProSchedule 補長）
   assert.match(text, /準決賽/, '寫入失敗＋晉級：兜底畫面也要看得到長出的準決賽');
   assert.doesNotMatch(text, /賽季落幕/, '寫入失敗不得讓假「賽季落幕」復活（第一輪 HIGH 同款）');
+  // ★第三輪送審裁定 (a)（Sawmah 2026-08-26）★ 兜底賽程的季後賽場次不在硬碟上，
+  // 開打會在結算 recordResult 炸例外（送審實測）——degraded 當輪出戰鈕必須停用＋明示
+  const playBtn = walk(globalThis.document.body)
+    .find((n) => n.tag === 'button' && /▶ 出戰/.test(n.textContent ?? ''));
+  assert.ok(playBtn, 'degraded 畫面仍要有出戰鈕（看得到、按不了——不是憑空消失）');
+  assert.equal(playBtn.disabled, true, '裁定 (a)：存檔壞掉的當輪出戰鈕必須停用');
+  assert.match(text, /存檔空間異常/, '裁定 (a)：要誠實明示存檔異常與復原方法');
 });
