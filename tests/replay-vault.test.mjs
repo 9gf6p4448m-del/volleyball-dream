@@ -15,7 +15,8 @@ function fakeDom() {
     style: { cssText: '' }, textContent: '', children: [],
     appendChild(c) { this.children.push(c); return c; },
     addEventListener() {},
-    replaceChildren() { this.children = []; },
+    // 債清批 2026-08-26：照真實 DOM 語意帶參數（原版丟參數＝replaceChildren(card) 內容憑空消失）
+    replaceChildren(...nodes) { this.children = []; for (const n of nodes) this.appendChild(n); },
   });
   globalThis.document = { createElement: make, body: make() };
 }

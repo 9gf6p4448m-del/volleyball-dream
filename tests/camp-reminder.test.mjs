@@ -113,7 +113,8 @@ function fakeDom() {
     removeEventListener(ev, fn) {
       this.handlers[ev] = (this.handlers[ev] ?? []).filter((f) => f !== fn);
     },
-    replaceChildren() { this.children = []; },
+    // 債清批 2026-08-26：照真實 DOM 語意帶參數（原版丟參數＝replaceChildren(card) 內容憑空消失）
+    replaceChildren(...nodes) { this.children = []; for (const n of nodes) this.appendChild(n); },
   });
   globalThis.document = { createElement: (t) => make(t), body: make('body') };
   globalThis.window = { innerWidth: 400, matchMedia: () => ({ matches: true }) };

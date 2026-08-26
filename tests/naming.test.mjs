@@ -14,7 +14,8 @@ import {
 } from '../src/career/careerState.js';
 import { FRESHMAN_HANDWRITTEN, FRESHMAN_NAME_POOL } from '../src/career/graduation.js';
 
-// 槽序鏡射 careerState ROLE_ORDER（該常數未 export；序變會被本測試抓到）
+// 槽序鏡射 careerState ROLE_ORDER（債清批 2026-08-26 起已 export＝lineup.SLOT_ROLES；
+// 本鏡射刻意保留硬編碼不改 import——序變仍會被本測試抓到，import 的話就自動跟著變、失去守衛力）
 const ROLE_ORDER = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
 
 test('naming：七隊 squad 六人名非空、隊內唯一（含自由人）', () => {

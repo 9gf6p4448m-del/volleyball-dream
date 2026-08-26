@@ -26,7 +26,10 @@ function fieldMemberIds(members) {
 // 候選佇列＝玩家（排自己角色佇列首位）＋members 名冊原序：7 人創隊名冊產出恰為
 // ['A1','A2','A3','A4','A5','A6']（與 W3 硬編碼逐位等價——驗收閘 2）；招募後預設
 // 仍是創隊六人（轉學生上場是玩家的排陣決定，不進預設）。
-const SLOT_ROLES = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
+// 債清批 2026-08-26 起 export＝career 層槽序的單一事實來源（careerState.ROLE_ORDER、
+// uniTeam.UNI_ROLE_ORDER 皆 re-export 本值）；sim 層 game.js DEFAULT_LINEUP 形狀不同
+// （含 height/trust）、sim 凍結不在收斂範圍。
+export const SLOT_ROLES = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
 export function defaultStarters(members, playerId = 'A2', playerRole = 'outside') {
   const queues = { setter: [], outside: [], middle: [], opposite: [] };
   // W3(P4) 玩家=L 特例：自由人不入先發（FIVB）——玩家不進任何佇列，

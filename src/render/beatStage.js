@@ -57,10 +57,13 @@ export function defaultSubjects(template, opts = {}) {
       pose: opts.pose ?? null, sink: opts.sink ?? 0, kit: opts.opponentKit ?? null,
     }];
   }
-  // stands：遠景球場上的兩隊剪影（止步旁觀——你在看台上）
+  // stands：遠景球場上的兩隊剪影（止步旁觀——你在看台上）。
+  // 債清批 2026-08-26 接線：B 隊＝奪冠方吃 opts.opponentKit（rivalArc 傳天鷹）；
+  // A 隊＝匿名決賽對手，刻意不吃 opponentKit——此模板現僅高中章觸發（kitA 恆 null），
+  // 未來章節若重用且玩家不在場上，呼叫端不得傳 kitA（否則 A 剪影誤穿我方服）。
   return [
-    { id: 'B1', teamId: 'B', heightM: 1.88, role: 'outside', x: -0.8, z: -1.6, facing: 0 },
-    { id: 'B2', teamId: 'B', heightM: 1.8, role: 'middle', x: 0.6, z: -1.9, facing: 0 },
+    { id: 'B1', teamId: 'B', heightM: 1.88, role: 'outside', x: -0.8, z: -1.6, facing: 0, kit: opts.opponentKit ?? null },
+    { id: 'B2', teamId: 'B', heightM: 1.8, role: 'middle', x: 0.6, z: -1.9, facing: 0, kit: opts.opponentKit ?? null },
     { id: 'A1', teamId: 'A', heightM: 1.78, role: 'outside', x: -0.2, z: 1.7, facing: Math.PI },
     { id: 'A3', teamId: 'A', heightM: 1.75, role: 'setter', x: 1.1, z: 1.5, facing: Math.PI },
   ];

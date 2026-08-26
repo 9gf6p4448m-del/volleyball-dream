@@ -15,16 +15,16 @@
 //
 // 驗收＝`docs/kickoffs/acceptance-uni-batch6.md`（B6-3 建隊、B6-4 起始信任）。
 import { ATTRIBUTE_KEYS } from '../sim/player.js';
-import { PLAYER_TRUST_FLOOR } from './careerState.js';
+import { PLAYER_TRUST_FLOOR, ROLE_ORDER } from './careerState.js';
 import { ROSTER_GROWTH } from './roster.js';
 import { universityById } from './universities.js';
 import { TIER } from './admission.js';
 
-// 槽序＝`careerState.js:291` 的 ROLE_ORDER（大學資料表的 squad 照同一個序）。
-// 大二卷批 1 起 export：uniTurnover 的新生身高 fallback 要用它對照 school.heights
-// ——別再抄一份（同名不同義的溫床）。
-export const UNI_ROLE_ORDER = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
-const ROLE_ORDER = UNI_ROLE_ORDER;
+// 槽序＝careerState 的 ROLE_ORDER（大學資料表的 squad 照同一個序）。
+// 大二卷批 1 起 export：uniTurnover 的新生身高 fallback 要用它對照 school.heights；
+// 債清批 2026-08-26 收斂＝直接 re-export careerState 同一參照，別再抄一份
+// （同名不同義的溫床）。uniTeam 本就 import careerState，無新循環。
+export { ROLE_ORDER as UNI_ROLE_ORDER } from './careerState.js';
 
 /**
  * 各校的玩家起始信任（＝球權四軸裡的「球權」那一軸）。

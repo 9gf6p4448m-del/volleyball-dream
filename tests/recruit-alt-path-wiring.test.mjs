@@ -28,7 +28,8 @@ function fakeDom() {
       (this.listeners[ev] ??= []).push(fn);
     },
     removeEventListener() {},
-    replaceChildren() { this.children = []; },
+    // 債清批 2026-08-26：照真實 DOM 語意帶參數（原版丟參數＝replaceChildren(card) 內容憑空消失）
+    replaceChildren(...nodes) { this.children = []; for (const n of nodes) this.appendChild(n); },
     remove() {},
     focus() {},
     setAttribute() {},

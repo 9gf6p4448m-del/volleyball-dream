@@ -188,11 +188,17 @@ test('defaultSubjects confront/exit/rimlight-solo：B 側吃 opts.opponentKit，
   assert.equal(rimYes[0].kit, kit);
 });
 
-test('defaultSubjects confront-trio／stands：不受 opponentKit 影響（trio 全我方、stands 本卷未接線）', () => {
+// 債清批 2026-08-26 改寫（依據＝docs/kickoffs/acceptance-debt-cleanup-20260826.md M3）：
+// B4 當時斷言「stands 未接線」是凍結當時的範圍外狀態；本批把該掛帳接上——
+// stands B 隊改吃 opponentKit、A 隊（匿名決賽對手）維持不吃。trio 斷言原文不動。
+// 「凍結測試被新批行為改變」慣例第四例（前例：B1-4／大二批4／謝幕批2）。
+test('defaultSubjects confront-trio：不受 opponentKit 影響（全我方）；stands 債清批起 B 隊吃 opponentKit、A 隊不吃', () => {
   const trio = defaultSubjects('confront', { formation: 'trio', opponentKit: { jersey: 1 } });
   assert.ok(trio.every((s) => s.teamId === 'A' && s.kit === undefined));
-  const stands = defaultSubjects('stands', { opponentKit: { jersey: 1 } });
-  assert.ok(stands.every((s) => s.kit === undefined), 'B4 盤點：stands（止步旁觀）本卷未接線，維持現行');
+  const kit = { jersey: 1 };
+  const stands = defaultSubjects('stands', { opponentKit: kit });
+  assert.ok(stands.filter((s) => s.teamId === 'B').every((s) => s.kit === kit), '奪冠方剪影穿對手 kit');
+  assert.ok(stands.filter((s) => s.teamId === 'A').every((s) => s.kit === undefined), '匿名對手不吃 opponentKit');
 });
 
 // ---- 端到端：createGeoCharacter 實際吃到的球衣色（讀真實 InstancedMesh instanceColor）----

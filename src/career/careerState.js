@@ -12,7 +12,7 @@ import { OPPONENTS, opponentById } from './opponents.js';
 import { universityById } from './universities.js';
 import { corporationById } from './corporations.js';
 import { kitFor } from './teamKit.js';
-import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID } from './lineup.js';
+import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID, SLOT_ROLES } from './lineup.js';
 import {
   buildSchedule, nationalLegFor, roundRobinTable, RR_ADVANCE,
 } from './schedule.js';
@@ -339,8 +339,10 @@ export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside
 
 // ---- 對手建隊（參數檔→6 個 Player）----
 
-// 槽序與基準 trust 同 game.js DEFAULT_LINEUP（index 1＝隊上主攻核心）
-const ROLE_ORDER = ['setter', 'outside', 'middle', 'opposite', 'outside', 'middle'];
+// 槽序與基準 trust 同 game.js DEFAULT_LINEUP（index 1＝隊上主攻核心）。
+// 債清批 2026-08-26 收斂：單一事實來源＝lineup.SLOT_ROLES（本檔與 uniTeam.UNI_ROLE_ORDER、
+// corpTeam 皆同一參照）；naming.test 的鏡射硬編碼是刻意凍結守衛，序變仍會被抓。
+export const ROLE_ORDER = SLOT_ROLES;
 const BASE_TRUST = [20, 60, 20, 20, 20, 20];
 const FALLBACK_HEIGHTS = [1.83, 1.88, 1.96, 1.9, 1.86, 1.94];
 

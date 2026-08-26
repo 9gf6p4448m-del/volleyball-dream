@@ -42,3 +42,20 @@
 ## M5 範圍檢查
 
 - `git diff --stat` 逐檔對應 M1–M3；無範圍外行。
+
+---
+## 結案紀錄（2026-08-26 同日）
+
+- M1：9 檔壞版替身全換帶參數版，grep 壞版 pattern＝0 hits。覆審證實 9 檔被測模組
+  均無帶參數 replaceChildren 呼叫（真正呼叫者只在 careerScreen.js:740,1212,1222,1396
+  與 replayVault.js:151-167，均不在此 9 檔的 import 圖內）＝預防性對齊成立、零語意反轉。
+- M2：單一事實來源落 lineup.SLOT_ROLES（凍結時分母漏數 lineup.js:29，實際 3 處收斂成 1，
+  比凍結文更深、不降難度）；import 圖 lineup→careerState→uniTeam→corpTeam 嚴格線性無循環、
+  無 TDZ。naming.test 鏡射保留、僅更新註解。
+- M3：rivalArc cameraOpts.opponentKit＋beatStage stands B 隊吃 kit。新測 3 條改前紅
+  （worktree@e04637c 全紅在行為斷言）修後綠。kit-batch3 凍結測試依本文 M3 改寫
+  （「凍結測試被新批行為改變」慣例第四例），trio 斷言逐字未動。
+- M4：npm test 1784 全綠；sim-hash 合計 34772c06e02243fd＝基準。
+- M5：git diff --stat 16 檔＋新測試檔 1 個，逐檔對應 M1–M3，無範圍外行。
+- fresh 對抗覆審（sonnet code-reviewer，冷讀 diff）：APPROVE，0 findings，
+  五項必查逐項附路徑證據。

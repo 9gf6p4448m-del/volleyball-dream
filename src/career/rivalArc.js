@@ -374,6 +374,8 @@ export function rivalSpectatorEvents({ career, seasonIndex }) {
   const triggered = career.events ?? [];
   const id = `rival-act${act}-watch`;
   if (triggered.includes(id)) return [];
-  // 止步旁觀（三幕通用）：看台視角遠景＋頒獎台定格（stands 模板）
-  return [{ id, moment: 'post', lines: WATCH[act], camera: 'stands' }];
+  // 止步旁觀（三幕通用）：看台視角遠景＋頒獎台定格（stands 模板）。
+  // 債清批 2026-08-26 接線：場上 B 隊剪影＝天鷹（奪冠方）穿 RIVAL_KIT；
+  // A 隊＝匿名決賽對手維持預設（本事件僅高中章觸發、kitA 恆 null，不會誤穿我方校服）
+  return [{ id, moment: 'post', lines: WATCH[act], camera: 'stands', cameraOpts: { opponentKit: RIVAL_KIT } }];
 }
