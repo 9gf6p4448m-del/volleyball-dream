@@ -1231,8 +1231,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // 情報不足＝不可選：連帶清掉可能殘留的舊選擇（防止資料狀態變回不足時，
           // 畫面上按鈕消失了但 deploy 裡還留著上一次的值、確認出戰時悄悄生效）
           deploy.blockLean = null;
+          // ★送審殘留矛盾修（拍板 A 誠實方向延伸）★ 原文案「情報不足…不可押」暗示
+          // 「情報夠了＝有依據的注」，與過閘後「本來就沒情報」自相矛盾。閘的行為不變
+          //（交手過才可押＝D5 凍結），措辭改熟悉度敘事、不再涉及「情報」。
           slot1.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`],
-            '情報不足——這隊還沒累積夠交手紀錄，不可押'));
+            '還沒跟這隊交手過——攔網手押線要有實戰默契，先打過再說'));
         } else {
           // ★批 4a 覆審 HIGH 修（Sawmah 拍板 A：誠實降級）★ 原文案「這隊…偏向X」把
           // career.scouting（＝這隊對**你**的讀取紀錄）講成對手自己的攻擊慣性——

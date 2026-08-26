@@ -192,7 +192,7 @@ test('D4② 攔網重心：本場對手有足夠情蒐紀錄 ⇒ 押直線／押
   assert.match(text, /① 攔網重心/);
   assert.match(text, /押直線/);
   assert.match(text, /押斜線/);
-  assert.doesNotMatch(text, /情報不足——這隊還沒累積夠交手紀錄/);
+  assert.doesNotMatch(text, /還沒跟這隊交手過/); // 閘門文案（送審矛盾修後措辭）
   // ★批 4a 覆審 HIGH（Sawmah 拍板 A 誠實降級）★ 槽①是盲注不是情報決策——
   // 不得再出現「這隊…偏向X」式誤導句（career.scouting＝對手讀你的紀錄，
   // 與對手自己會攻哪條線零關聯）；改為明示賭注
@@ -211,7 +211,11 @@ test('D4③ 攔網重心：無足夠情蒐紀錄 ⇒ 情報不足、不給按鈕
   const storage = proReadyStorage({});
   const text = await openMatchupScreen(storage);
   assert.match(text, /① 攔網重心/);
-  assert.match(text, /情報不足——這隊還沒累積夠交手紀錄，不可押/);
+  // ★送審殘留矛盾修★ 槽①閘門措辭由「情報不足」改熟悉度敘事（行為不變：無紀錄不可押）。
+  // 斷言限縮槽①舊句——槽②的「情報不足…不知道誰接發最弱」是真情報（weakestReceiverIdOf
+  // 讀真實屬性）語意不矛盾，合法保留
+  assert.match(text, /還沒跟這隊交手過/);
+  assert.doesNotMatch(text, /情報不足——這隊還沒累積夠交手紀錄/, '槽①舊措辭不得再出現');
   assert.equal(findBtn(/^押直線$/), undefined, '情報不足時不得渲染可押的按鈕');
   assert.equal(findBtn(/^押斜線$/), undefined);
 });
