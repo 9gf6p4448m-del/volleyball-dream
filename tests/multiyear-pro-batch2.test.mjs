@@ -435,8 +435,10 @@ test('送審輪2修：同批連點「賽季落幕」只開一張收尾卡（不�
     .filter((n) => /職業第 1 年・完/.test(n.textContent ?? ''));
   assert.equal(cards.length, 1, '重入旗標必須擋下第二張收尾卡');
   // 推進後重開收尾卡要開得起來（旗標有還原）：續約進第 2 季再打完
+  // （批 4B 起推進會設屆間待辦——治具直接跳過，屆間卡本體由 batch4b 測試護）
   tap(findBtn(/續約留隊/));
   await settle();
+  assert.ok(createCareerStore(storage).chooseProGrowth?.('rest') ?? true, '治具：跳過屆間選擇');
   loseOutSeason(storage);
   await renderScreen(storage);
   tap(findBtn(/賽季落幕——第 2 年/));

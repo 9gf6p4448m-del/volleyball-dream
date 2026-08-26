@@ -47,3 +47,12 @@
 
 - 全套綠（2045 起跳）；sim-hash `34772c06e02243fd` 不動；舊章零擾動。
 - F1/F2/F3 各至少一條在無實作樹（本凍結 commit）上行為紅；實跑輸出回填。
+
+## F6 鑑別力紀錄（2026-08-27 實測）
+
+- 無實作樹（bab8b06）＋本批測試檔：11 案全執行全紅、無載入期旁枝（mergeOppScouting
+  走動態 import——批 3 HIGH-1 教訓）。行為紅代表條：F1「推進後屆間待辦（無實作＝
+  這裡紅）」、F2 聲望「聲望路必須可選」（optional call 落行為斷言）、F3 roundtrip
+  「存讀一致（投影漏存＝這裡紅）」——三條皆 AssertionError；其餘案紅於
+  chooseProGrowth 未定義的 TypeError（旁枝，不計入證據）。
+- 健康樹 11 綠；全套 2056 綠；sim-hash 不動。

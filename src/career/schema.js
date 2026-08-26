@@ -67,6 +67,8 @@ export function seasonFromCareer(career, prev = null) {
     results: career.results,
     growthPoints: career.growthPoints ?? 0,
     scouting: career.scouting ?? {},
+    // 多年卷批 4B（F3）：對手攻擊分佈記帳——投影欄位讀寫成對（events 漏存教訓）
+    oppScouting: career.oppScouting ?? {},
     events: career.events ?? [], // 已觸發劇情事件 id（W1 漏存→賽後對話無限重跳，見 lessons）
     titles: career.titles ?? 0, // W5 奪冠次數（投影欄位讀寫成對——events 漏存教訓）
     ...(career.pendingMatch !== undefined ? { pendingMatch: career.pendingMatch } : {}),
@@ -86,6 +88,7 @@ export function careerViewOf(save) {
     results: s.results,
     growthPoints: s.growthPoints ?? 0,
     ...(Object.keys(s.scouting ?? {}).length > 0 ? { scouting: s.scouting } : {}),
+    ...(Object.keys(s.oppScouting ?? {}).length > 0 ? { oppScouting: s.oppScouting } : {}),
     ...(Array.isArray(s.events) && s.events.length > 0 ? { events: s.events } : {}),
     ...((s.titles ?? 0) > 0 ? { titles: s.titles } : {}), // 非零才回讀（比照 scouting 慣例）
     ...(s.pendingMatch !== undefined ? { pendingMatch: s.pendingMatch } : {}),

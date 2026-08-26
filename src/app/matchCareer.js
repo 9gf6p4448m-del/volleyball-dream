@@ -2,7 +2,7 @@
 // node 可測（store 可注入假體）；three.js/DOM 一概不進本檔。
 // 開賽標記也住這裡：生涯場次的「開始→結束」生命週期收在同一模組。
 import {
-  recordResult, mergeScouting, markPending, matchOpponentDef,
+  recordResult, mergeScouting, mergeOppScouting, markPending, matchOpponentDef,
 } from '../career/careerState.js';
 import { matchStatsFor, growthPointsFor } from '../career/growth.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
@@ -84,9 +84,26 @@ export function settleCareerMatch({
   if (feintsUsed > 0 || chemGain.length) {
     saveOk = careerCtx.store.savePlayer(careerCtx.player) && saveOk;
   }
-  const scouted = mergeScouting(
+  let scouted = mergeScouting(
     careerCtx.career, careerCtx.matchEntry.opponentId, game.scoutTally[playerId],
   );
+  // 多年卷批 4B（F3）：對手攻擊分佈記帳——聚合**對手隊**球員的 zones（id 開頭
+  // ＝other 隊；玩家隊絕不混入＝§6.1-2 方向防線）。settledBefore 防重入（累加器
+  // 閘，同招募/默契慣例——重打已結算場次不得灌水）。
+  if (!settledBefore) {
+    const oppZones = { line: 0, cross: 0, middle: 0, tip: 0 };
+    let oppTotal = 0;
+    for (const [pid, tally] of Object.entries(game.scoutTally ?? {})) {
+      if (!pid.startsWith(other)) continue;
+      for (const k of ['line', 'cross', 'middle', 'tip']) {
+        const v = tally?.zones?.[k] ?? 0;
+        oppZones[k] += v; oppTotal += v;
+      }
+    }
+    if (oppTotal > 0) {
+      scouted = mergeOppScouting(scouted, careerCtx.matchEntry.opponentId, { zones: oppZones });
+    }
+  }
   saveOk = careerCtx.store.saveCareer(recordResult(scouted, {
     matchId: careerCtx.matchEntry.id,
     won,

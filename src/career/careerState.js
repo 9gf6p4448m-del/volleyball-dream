@@ -751,6 +751,29 @@ export function mergeScouting(career, opponentId, tally) {
   return { ...career, scouting: { ...(career.scouting ?? {}), [opponentId]: merged } };
 }
 
+/**
+ * 多年卷批 4B（F3）：**對手**攻擊分佈記帳——career.oppScouting[opponentId].zones
+ * 逐隊累加（{line,cross,middle,tip}，與 mergeScouting 同一套 zones 座標系）。
+ * ★方向相反，別搞混（§6.1-2）★ career.scouting＝「對手看過我」的分佈（餵給
+ * 對手 AI 的 scoutBlockMul）；oppScouting＝「我看過對手」的分佈（只餵 UI 情報
+ * 顯示，sim 零消費——記帳存在與否不改變任何比賽行為）。
+ */
+export function mergeOppScouting(career, opponentId, tally) {
+  if (!tally?.zones) return career;
+  const prev = career.oppScouting?.[opponentId] ?? {
+    zones: { line: 0, cross: 0, middle: 0, tip: 0 },
+  };
+  const merged = {
+    zones: {
+      line: prev.zones.line + (tally.zones.line ?? 0),
+      cross: prev.zones.cross + (tally.zones.cross ?? 0),
+      middle: prev.zones.middle + (tally.zones.middle ?? 0),
+      tip: prev.zones.tip + (tally.zones.tip ?? 0),
+    },
+  };
+  return { ...career, oppScouting: { ...(career.oppScouting ?? {}), [opponentId]: merged } };
+}
+
 // stage 6 自由人（第 7 人）：防守專精數值——高反應/速度/控制、低攻擊系
 export function buildLibero(team, name, level = 60) {
   const d = Math.min(100, level + 14);

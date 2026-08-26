@@ -240,6 +240,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   let transferConfirmOpen = false;
   // 多年卷批 5（D2）：謝幕卡重入守衛（同慣例）
   let proFinaleCardOpen = false;
+  // 多年卷批 4B（F1/F5）：屆間三選一卡重入守衛
+  let proGrowthOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -1254,8 +1256,20 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // career.scouting（＝這隊對**你**的讀取紀錄）講成對手自己的攻擊慣性——
           // 押線判定（applyBlockLean 抓場上真實推進者）與那份資料零關聯＝披著情報
           // 外衣的盲注。降級為明示賭注；真情報化（對手攻擊統計資料源）掛帳等試玩。
-          slot1.appendChild(el('div', ['font-size:10.5px', `color:${COLOR.dim}`],
-            '沒有對手攻擊路線的情報——押哪條線，靠你自己的判斷（押錯整面落空）'));
+          // 批 4B（F4）：情報網解鎖＋樣本 ≥6 ＝顯示真實對手攻擊分佈（oppScouting
+          // 賽後記帳，「我看對手」方向）；押線**判定**零改動——情報只改顯示。
+          const intelOn = store.proGrowthState?.()?.intel === true;
+          const oppZ = career.oppScouting?.[next.opponentId]?.zones ?? null;
+          const oppTotal = oppZ ? (oppZ.line + oppZ.cross + oppZ.middle + oppZ.tip) : 0;
+          if (intelOn && oppTotal >= 6) {
+            slot1.appendChild(el('div', ['font-size:10.5px', 'color:#8fd6c7'],
+              `情報網：這隊的攻擊分佈——直線 ${oppZ.line}・斜線 ${oppZ.cross}・中間 ${oppZ.middle}・吊球 ${oppZ.tip}（押線仍是賭，情報只幫你賭得聰明）`));
+          } else {
+            slot1.appendChild(el('div', ['font-size:10.5px', `color:${COLOR.dim}`],
+              intelOn
+                ? '情報網已開——但和這隊的交手樣本還不夠，攻擊分佈讀不出來'
+                : '沒有對手攻擊路線的情報——押哪條線，靠你自己的判斷（押錯整面落空）'));
+          }
           const row1 = el('div', ['display:flex', 'gap:6px']);
           for (const [key, label] of [['line', '押直線'], ['cross', '押斜線']]) {
             const active = deploy.blockLean === key;
@@ -2576,6 +2590,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 舊職業存檔（08-26 單年版）沒 contract、已結算那筆封存沒 proFinish——
     // 第一次推進會清空 results，晚於推進鈕＝冠軍事實永久遺失。冪等，no-op 不寫檔。
     if (pickedPro) store.backfillProMultiyear?.();
+    // 批 4B（F1）：屆間成長待辦——選定或跳過前不放行出戰（比照 corpPayday 的
+    // 旗標守衛＋return 慣例：覆蓋層收掉時會再 render 一次）。收束態（退休/滿十年）
+    // 不擋——謝幕優先於休賽季選擇（F1 凍結原文「pending 且未收束時」）
+    if (pickedPro && !proGrowthOpen && store.proGrowthPending?.() && !store.proCareerOver?.()) {
+      showProGrowthChoice();
+      return;
+    }
     // 多年卷批 2（B4）→ 覆審 M1 修：收束判準＝proCareerOver SSOT（批 1 拍板甲，
     // 退休**或**滿十年結算後皆收束——打滿十年的人不能被留在收尾卡迴圈裡；
     // 真謝幕卡＝批 5）。不得用 proRetired 自組判式（A5 明文）。
@@ -2775,7 +2796,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           ...corpAnchorPreEvents(career, next),
           // 職業章批 5（G2）：王勝翔同場宿敵線——同隊/敵隊兩情境互斥，各自一生一次
           // 批 4A：第 4 參數＝季號（年度重逢句每季一次的旗標）
-          ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null, store.seasonIndex?.() ?? 0),
+          ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null, store.seasonIndex?.() ?? 1),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
@@ -3583,6 +3604,70 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       transferMenuOpen = false;
       menu.remove();
     }));
+    document.body.appendChild(menu);
+  }
+
+  // ════════ 多年卷批 4B（F2/F5）：屆間三選一 ════════
+  // ★數值與文案屬提案★ 三路：聲望（信任+6）／傳承（教一位隊友，attrs+2，同人
+  // 一生一次）／情報（一次性解鎖對手攻擊分佈顯示）；跳過＝好好休息零效果。
+  function showProGrowthChoice() {
+    if (proGrowthOpen) return;
+    proGrowthOpen = true;
+    const g = store.proGrowthState?.() ?? { mentored: [], intel: false };
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:37', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#04060c', 'gap:12px', 'padding:26px 14px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
+      '屆間・休賽季'));
+    overlay.appendChild(el('div', ['font-size:20px', 'font-weight:900', `color:${COLOR.gold}`,
+      'letter-spacing:2px'], '這個冬天，你想怎麼過？'));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.8',
+      'max-width:min(400px,92vw)', 'text-align:center'],
+    '屬性已到天花板——老將的成長，長在別的地方。選一條路（每年一次）。'));
+    const pick = (option, memberId = null) => {
+      if (store.chooseProGrowth?.(option, memberId)) {
+        proGrowthOpen = false;
+        overlay.remove(); renderCareer();
+      }
+    };
+    overlay.appendChild(button('🗣 立威——隊內聲望（信任 +6）', false, () => pick('prestige')));
+    // 傳承：還有沒教過的隊友才列
+    const members = (store.loadRoster?.()?.members ?? [])
+      .filter((m) => !g.mentored.includes(m.id));
+    if (members.length > 0) {
+      overlay.appendChild(button('🎓 傳承——把經驗教給一位隊友', false, () => {
+        showProMentorPick(overlay, members);
+      }));
+    }
+    if (!g.intel) {
+      overlay.appendChild(button('🎞 情報網——解鎖對手攻擊分佈（賽前布置可見）', false,
+        () => pick('intel')));
+    }
+    overlay.appendChild(button('😴 好好休息（跳過）', false, () => pick('rest')));
+    document.body.appendChild(overlay);
+  }
+
+  function showProMentorPick(growthOverlay, members) {
+    const menu = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:rgba(4,6,12,0.96)', 'gap:8px', 'padding:26px 14px',
+    ]);
+    menu.appendChild(el('div', ['font-size:15px', 'font-weight:900', `color:${COLOR.gold}`],
+      '🎓 這一年，帶誰？'));
+    for (const m of members) {
+      menu.appendChild(button(`${m.fullName ?? m.id}`, false, () => {
+        if (store.chooseProGrowth?.('mentor', m.id)) {
+          proGrowthOpen = false;
+          menu.remove(); growthOverlay.remove(); renderCareer();
+        } else {
+          menu.remove();
+        }
+      }));
+    }
+    menu.appendChild(button('↩ 回上一頁', false, () => menu.remove()));
     document.body.appendChild(menu);
   }
 

@@ -281,9 +281,11 @@ export function createCareerStore(storage, slot = 1) {
           return {
             ...prev,
             // 旗標逐季重置：下一季打完才可再結算（不清＝第 2 季永遠不能結算）
+            // 批 4B（F1）：屆間成長待辦與推進同一次 RMW（HIGH-1 中斷復原紀律）
             career: {
               ...prev.career,
               proFinaleSettled: false,
+              proGrowthPending: endingSeason + 1,
               ...(nextSalary !== null
                 ? { contract: { ...(prev.career.contract ?? {}), salary: nextSalary } }
                 : {}),
@@ -975,6 +977,8 @@ export function createCareerStore(storage, slot = 1) {
               sinceSeason: endingSeason + 1,
             },
             proFinaleSettled: false,
+            // 批 4B（F1）：轉隊也是屆間——成長待辦同 RMW
+            proGrowthPending: endingSeason + 1,
           },
           roster: { capacity: members.length + 1, members, alumni: [] },
           lineup,
@@ -993,6 +997,69 @@ export function createCareerStore(storage, slot = 1) {
             pendingMatch: undefined,
           },
         };
+      });
+    },
+    // ★★ 多年卷批 4B（F1/F2）★★ 屆間三選一。守衛：職業章、pending＝當前屆數
+    // 才准選（過期 pending＝壞檔不猜）。選定/跳過都清 pending（同一次 RMW）。
+    //   ①prestige：fromSetter +6 封頂 100（可逐年重選）②mentor：隊友 attrs 每項
+    //   +2 clamp 90、同人一生一次（proGrowth.mentored）③intel：一次性解鎖
+    //   ④rest：跳過零效果。★數值屬提案★
+    proGrowthPending() {
+      const save = loadSave();
+      if (!save) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false;
+      return save.career?.proGrowthPending === (save.season.index ?? 1);
+    },
+    proGrowthState() {
+      const g = loadSave()?.career?.proGrowth ?? null;
+      return { mentored: [...(g?.mentored ?? [])], intel: g?.intel === true };
+    },
+    chooseProGrowth(option, memberId = null) {
+      const save = loadSave();
+      if (!save) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false;
+      if (save.career?.proGrowthPending !== (save.season.index ?? 1)) return false;
+      const g = save.career?.proGrowth ?? {};
+      if (!['prestige', 'mentor', 'intel', 'rest'].includes(option)) return false;
+      if (option === 'intel' && g.intel === true) return false; // 一次性
+      if (option === 'mentor') {
+        const target = (save.roster?.members ?? []).find((m) => m.id === memberId);
+        if (!target) return false;
+        if ((g.mentored ?? []).includes(memberId)) return false; // 同人一生一次
+      }
+      return writeSave((prev) => {
+        // 冪等雙保險：pending 條件綁 prev 讀值
+        if (prev?.career?.proGrowthPending !== (prev.season.index ?? 1)) return prev;
+        const prevG = prev.career?.proGrowth ?? {};
+        const nextCareer = { ...prev.career, proGrowthPending: null };
+        let player = prev.player;
+        let roster = prev.roster;
+        if (option === 'prestige' && player) {
+          player = {
+            ...player,
+            trust: {
+              ...(player.trust ?? {}),
+              fromSetter: Math.min(100, (player.trust?.fromSetter ?? 0) + 6),
+            },
+          };
+        } else if (option === 'mentor') {
+          if ((prevG.mentored ?? []).includes(memberId)) return prev;
+          roster = {
+            ...prev.roster,
+            members: (prev.roster?.members ?? []).map((m) => (m.id === memberId
+              ? {
+                ...m,
+                attributes: Object.fromEntries(Object.entries(m.attributes ?? {})
+                  .map(([k, v]) => [k, Math.min(90, (v ?? 0) + 2)])),
+              }
+              : m)),
+          };
+          nextCareer.proGrowth = { ...prevG, mentored: [...(prevG.mentored ?? []), memberId] };
+        } else if (option === 'intel') {
+          if (prevG.intel === true) return prev;
+          nextCareer.proGrowth = { ...prevG, intel: true };
+        }
+        return { ...prev, career: nextCareer, player, roster };
       });
     },
     // ★★ 多年卷批 2（B1）★★ 舊職業存檔一次性回填——職業章單年版（08-26 上線）
