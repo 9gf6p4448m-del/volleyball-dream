@@ -1,0 +1,367 @@
+// 職業章 批 3「賽季迴圈＋季後賽＋ATTR_CAP」— DOM 接線（2026-08-26）
+// 驗收＝docs/kickoffs/acceptance-pro-batch3.md（C1/C4/C5 的真實 UI 行為）。
+//
+// ★ 為什麼走真的 UI 路徑 ★ 同 tests/pro-entry-wiring.test.mjs：純函式測試證明不了
+// 「畫面真的會依季後賽場次改變」「收尾卡真的會呼叫 settleProFinale」。
+// 假 DOM 形狀沿 tests/pro-entry-wiring.test.mjs（帶參數 replaceChildren 版，
+// 債清批 2026-08-26 教訓：原版丟參數＝內容憑空消失）。
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { createCareerStore, SAVE_KEY } from '../src/career/careerStore.js';
+import { createCareer, createCareerPlayer } from '../src/career/careerState.js';
+import { buildStarterMembers } from '../src/career/roster.js';
+import { PLAYOFF_ROUND } from '../src/career/proSchedule.js';
+
+function fakeStorage() {
+  const m = new Map();
+  return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    removeItem: (k) => { m.delete(k); },
+  };
+}
+
+function fakeDom() {
+  const make = (tag = 'div') => ({
+    tag,
+    style: { cssText: '' },
+    textContent: '',
+    value: '',
+    dataset: {},
+    children: [],
+    handlers: {},
+    disabled: false,
+    classList: { add() {}, remove() {}, toggle() {} },
+    appendChild(c) { this.children.push(c); c.parent = this; return c; },
+    removeChild(c) { this.children = this.children.filter((x) => x !== c); },
+    remove() { this.parent?.removeChild(this); },
+    addEventListener(ev, fn) { (this.handlers[ev] ||= []).push(fn); },
+    removeEventListener(ev, fn) {
+      this.handlers[ev] = (this.handlers[ev] ?? []).filter((f) => f !== fn);
+    },
+    replaceChildren(...nodes) { this.children = []; for (const n of nodes) this.appendChild(n); },
+    setAttribute() {},
+    getAttribute() { return null; },
+    focus() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    getBoundingClientRect() {
+      return { top: 0, left: 0, width: 100, height: 100, bottom: 0, right: 0 };
+    },
+  });
+  globalThis.document = {
+    createElement: (t) => make(t),
+    createTextNode: (t) => ({ textContent: t }),
+    body: make('body'),
+    head: make('head'),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  globalThis.window = {
+    innerWidth: 400,
+    innerHeight: 700,
+    matchMedia: () => ({ matches: true, addEventListener() {} }),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  globalThis.requestAnimationFrame = (cb) => { cb(0); return 0; };
+}
+
+const tap = (node) => {
+  for (const fn of [...(node.handlers?.pointerdown ?? [])]) fn({ stopPropagation() {} });
+};
+const walk = (node, out = []) => {
+  out.push(node);
+  for (const c of node.children ?? []) walk(c, out);
+  return out;
+};
+const allText = (root) => walk(root).map((n) => n.textContent ?? '').join('｜');
+const settle = () => new Promise((r) => { setTimeout(r, 0); });
+const findBtn = (re) => walk(globalThis.document.body)
+  .find((n) => n.tag === 'button' && re.test(n.textContent ?? ''));
+
+/** U4 打滿、謝幕已結算的存檔（沿 pro-entry-wiring.test.mjs 的 u4Save 手法）。 */
+function u4Save(school = 'meixi') {
+  const storage = fakeStorage();
+  const store = createCareerStore(storage);
+  const career = createCareer({ seed: 99, playerName: '小夢' });
+  store.saveCareer(career);
+  store.savePlayer(createCareerPlayer('小夢', { seed: career.seed }));
+  const raw = JSON.parse(storage.getItem(SAVE_KEY));
+  raw.season.index = 3;
+  raw.roster = { capacity: 12, members: buildStarterMembers(), alumni: [] };
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  const s = createCareerStore(storage);
+  s.enterUniversity(school);
+  const play = () => {
+    const c = s.loadCareer();
+    const league = c.schedule.filter((m) => m.round === 'league');
+    s.saveCareer({
+      ...c,
+      results: league.map((m, i) => ({
+        matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+        scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+      })),
+    });
+  };
+  for (let y = 1; y < 4; y += 1) {
+    play();
+    assert.ok(s.advanceSeason(), `fixture 前提：第 ${y} 年推進成功`);
+  }
+  play();
+  assert.ok(s.settleUniFinale(), 'fixture 前提：U4 結算成功');
+  return storage;
+}
+
+/** 簽入企業隊＋打滿企業那一季＋結算＋簽入職業隊（尚未打職業任何一場）。 */
+function proSave(teamId = 'cangyu-titans', corpId = 'panshi-heavy') {
+  const storage = u4Save();
+  const s = createCareerStore(storage);
+  assert.ok(s.enterCorporate(corpId), 'fixture 前提：簽企業隊成功');
+  const c = s.loadCareer();
+  const corpGames = c.schedule.filter((m) => m.round === 'corp');
+  s.saveCareer({
+    ...c,
+    results: corpGames.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  assert.ok(s.settleCorpFinale(), 'fixture 前提：企業季結算成功');
+  assert.ok(s.enterPro(teamId), 'fixture 前提：簽職業隊成功');
+  return storage;
+}
+
+/** 職業聯賽打 `n` 場（全勝或全敗，決定進不進四強）。 */
+function playProLeague(storage, { wins = true } = {}) {
+  const s = createCareerStore(storage);
+  const c = s.loadCareer();
+  s.saveCareer({
+    ...c,
+    results: c.schedule.map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: wins,
+      scoreFor: wins ? 2 : 0, scoreAgainst: wins ? 0 : 2, gp: wins ? 3 : 1,
+    })),
+  });
+}
+
+function playMatch(storage, matchId, won) {
+  const s = createCareerStore(storage);
+  const c = s.loadCareer();
+  const entry = c.schedule.find((m) => m.id === matchId);
+  s.saveCareer({
+    ...c,
+    results: [...c.results, {
+      matchId, opponentId: entry.opponentId, won,
+      scoreFor: won ? 2 : 0, scoreAgainst: won ? 0 : 2, gp: won ? 3 : 1,
+    }],
+  });
+}
+
+async function renderAndGetText(storage) {
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(storage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  for (let i = 0; i < 12; i += 1) {
+    const cont = walk(globalThis.document.body).find((n) => /點擊繼續/.test(n.textContent ?? ''));
+    if (!cont) break;
+    tap(cont);
+    if (!(cont.handlers?.pointerdown ?? []).length) {
+      let p = cont.parent;
+      while (p && !(p.handlers?.pointerdown ?? []).length) p = p.parent;
+      if (p) tap(p); else break;
+    }
+    await settle();
+  }
+  return allText(globalThis.document.body);
+}
+
+// ════════════════════════════════════════════════════════════════
+// C1：職業聯賽名次表顯示
+// ════════════════════════════════════════════════════════════════
+test('C1① 職業聯賽打了幾場後：單循環區塊＋名次表出現（含玩家列）', async () => {
+  const storage = proSave();
+  playMatch(storage, createCareerStore(storage).loadCareer().schedule[0].id, true);
+  const text = await renderAndGetText(storage);
+  assert.match(text, /職業聯賽・單循環（7 場・每場三戰兩勝）/);
+  assert.match(text, /前 4 名晉級季後賽/);
+});
+
+test('C1② 循環未打完：季後賽區塊不出現（賽程還沒長出來）', async () => {
+  const storage = proSave();
+  playMatch(storage, createCareerStore(storage).loadCareer().schedule[0].id, true);
+  const text = await renderAndGetText(storage);
+  assert.doesNotMatch(text, /職業季後賽・四強單淘汰/);
+});
+
+test('C1③ 循環 7/7 全勝：季後賽區塊出現、「準決賽」場次可見、可「▶ 出戰」', async () => {
+  const storage = proSave();
+  playProLeague(storage, { wins: true });
+  const text = await renderAndGetText(storage);
+  assert.match(text, /職業季後賽・四強單淘汰/);
+  assert.match(text, /準決賽/);
+  assert.match(text, /▶ 出戰/, '準決賽要能出戰，不是鎖住的死賽程');
+});
+
+test('C1④ 循環 7/7 全敗：未進四強，不長季後賽、直接落到賽季落幕', async () => {
+  const storage = proSave();
+  playProLeague(storage, { wins: false });
+  const text = await renderAndGetText(storage);
+  assert.doesNotMatch(text, /職業季後賽・四強單淘汰/);
+  assert.match(text, /賽季落幕——職業元年/);
+  assert.match(text, /聯賽第 8 名/);
+});
+
+// ════════════════════════════════════════════════════════════════
+// C5：章末收尾卡——settleProFinale 接線＋佔位文案＋重入不重複結算
+// ════════════════════════════════════════════════════════════════
+test('C5① 未進四強直接賽季落幕：點擊後結算成功、佔位文案出現、無「前往下一個舞台」', async () => {
+  const storage = proSave();
+  playProLeague(storage, { wins: false });
+  await renderAndGetText(storage);
+  tap(findBtn(/賽季落幕——職業元年/));
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.match(text, /職業元年・完/);
+  assert.match(text, /續約談判・敬請期待/);
+  assert.doesNotMatch(text, /前往下一個舞台/, '職業章目前是生涯終章，不該冒出下一章入口');
+  const save = JSON.parse(storage.getItem(SAVE_KEY));
+  assert.equal(save.career.proFinaleSettled, true);
+  assert.ok(Number.isInteger(save.career.seasons.at(-1)?.proRank), '封存筆要帶 proRank');
+});
+
+test('C5② 打進季後賽並奪冠：收尾卡顯示冠軍文案', async () => {
+  const storage = proSave();
+  playProLeague(storage, { wins: true });
+  const afterLeague = createCareerStore(storage).loadCareer();
+  const semi = afterLeague.schedule.find((m) => m.round === PLAYOFF_ROUND.SEMI);
+  playMatch(storage, semi.id, true);
+  const afterSemi = createCareerStore(storage).loadCareer();
+  const final = afterSemi.schedule.find((m) => m.round === PLAYOFF_ROUND.FINAL);
+  playMatch(storage, final.id, true);
+  const text = await renderAndGetText(storage);
+  assert.match(text, /🏆 職業聯賽冠軍！/);
+  tap(findBtn(/賽季落幕——職業元年/));
+  await settle();
+  const text2 = allText(globalThis.document.body);
+  assert.match(text2, /站上職業聯賽之巔/);
+});
+
+test('C5③ 打進季後賽但準決賽落敗：收尾卡顯示「止步季後賽」文案（不是循環名次文案）', async () => {
+  const storage = proSave();
+  playProLeague(storage, { wins: true });
+  const afterLeague = createCareerStore(storage).loadCareer();
+  const semi = afterLeague.schedule.find((m) => m.round === PLAYOFF_ROUND.SEMI);
+  playMatch(storage, semi.id, false);
+  const text = await renderAndGetText(storage);
+  assert.match(text, /止步季後賽/);
+  tap(findBtn(/賽季落幕——職業元年/));
+  await settle();
+  const text2 = allText(globalThis.document.body);
+  assert.match(text2, /季後賽止步——循環第 1 名的證明/);
+});
+
+test('C5④ 重入不重複結算：先用 store 提前結算過，UI 再點一次仍看得到佔位卡（冪等不影響顯示）', async () => {
+  const storage = proSave();
+  playProLeague(storage, { wins: false });
+  const s = createCareerStore(storage);
+  assert.ok(s.settleProFinale(), 'fixture 前提：已提前結算過一次');
+  await renderAndGetText(storage);
+  tap(findBtn(/賽季落幕——職業元年/));
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.match(text, /職業元年・完/);
+  assert.match(text, /續約談判・敬請期待/);
+});
+
+// ════════════════════════════════════════════════════════════════
+// C4：ATTR_CAP 章節感知——UI 顯示
+// ════════════════════════════════════════════════════════════════
+test('C4① 職業章：成長區塊顯示天花板 100（傳奇解鎖）', async () => {
+  const storage = proSave();
+  const text = await renderAndGetText(storage);
+  assert.match(text, /職業章屬性天花板 100——傳奇解鎖/);
+});
+
+test('C4② 非職業章（企業章）：不顯示天花板訊息（維持 90，逐值不變）', async () => {
+  const storage = u4Save();
+  const s = createCareerStore(storage);
+  assert.ok(s.enterCorporate('panshi-heavy'));
+  const text = await renderAndGetText(storage);
+  assert.doesNotMatch(text, /屬性天花板.*傳奇解鎖/);
+});
+
+// ════════════════════════════════════════════════════════════════
+// 回歸：企業章既有行為不因批 3 改動而壞
+// ════════════════════════════════════════════════════════════════
+test('回歸：企業季顯示與收尾卡不受職業章批 3 新增分支影響', async () => {
+  const storage = u4Save();
+  const s = createCareerStore(storage);
+  assert.ok(s.enterCorporate('panshi-heavy'));
+  const c = s.loadCareer();
+  s.saveCareer({
+    ...c,
+    results: c.schedule.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  const text = await renderAndGetText(storage);
+  assert.match(text, /賽季落幕——企業元年/);
+  tap(findBtn(/賽季落幕——企業元年/));
+  await settle();
+  const text2 = allText(globalThis.document.body);
+  assert.match(text2, /企業元年・完/);
+  assert.match(text2, /前往下一個舞台/, '企業章仍要有下一章入口（職業章批 3 不得動到）');
+});
+
+// ════════════════════════════════════════════════════════════════
+// 批 3 覆審 HIGH 修：棄賽路徑的本地 career 要吃 saveCareer 之後重新讀出的版本
+// （saveCareer 起有內部副作用：growProSchedule 在 RMW 裡長季後賽場次）
+// 改前紅：settled 停在「長之前」形狀 ⇒ seasonConcluded 對無 semi 列誤判已收束
+// ⇒ 畫面直接落「賽季落幕」、看不到準決賽
+// ════════════════════════════════════════════════════════════════
+test('覆審H修 棄賽湊滿循環末場且晉級：同輪 render 看得到準決賽，不誤判賽季落幕', async () => {
+  const storage = proSave();
+  const s = createCareerStore(storage);
+  let c = s.loadCareer();
+  const league = c.schedule.filter((m) => m.round === 'pro');
+  // 前 6 場全勝（穩進前四）
+  s.saveCareer({
+    ...c,
+    results: league.slice(0, 6).map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: true, scoreFor: 2, scoreAgainst: 0, gp: 3,
+    })),
+  });
+  // 第 7 場開賽落 pending 後「中途離開」（loadMidMatch()=null ⇒ midValid=false ⇒ 棄賽裁決）。
+  // ★預燒 first-loss（一生一次的敗場對話）★——真實玩家到職業章早在高中就播過它；
+  // 不燒的話棄賽敗會觸發對話，onDone＝renderCareer() 整個重來＝重新 loadCareer 自我修復，
+  // HIGH 的錯誤畫面被對話洗掉、測試量不到（實測抓到的無鑑別力路徑）。
+  c = s.loadCareer();
+  s.saveCareer({
+    ...c,
+    pendingMatch: league[6].id,
+    events: [...new Set([...(c.events ?? []), 'first-loss'])],
+  });
+  // ★不走 renderAndGetText★ 它會點掉對話觸發重繪＝第二輪 loadCareer 自我修復，
+  // 把第一輪的錯誤畫面洗掉（壞版下照樣綠＝無鑑別力，實測抓到）。
+  // HIGH 的症狀只在**第一輪 render**：這裡 render 完直接驗畫面、不點任何對話。
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(storage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.match(text, /6 勝 1 敗|6勝1敗/, 'fixture 前提：棄賽敗已入帳（6 勝 1 敗）');
+  assert.match(text, /準決賽/, '第一輪 render 就要看得到長出的準決賽（不是等下一輪自我修復）');
+  assert.doesNotMatch(text, /賽季落幕/, '第一輪不得誤判賽季已收束（semi 未打）');
+});

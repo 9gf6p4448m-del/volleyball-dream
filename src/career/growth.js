@@ -126,16 +126,32 @@ export function applyOffseasonTraining(player) {
   };
 }
 
-// 屬性層加點（不可變；1 點＝+1，天花板 GROWTH.ATTR_CAP）
-export function spendAttribute(player, key) {
+// 職業章批 3（C4）：PRO 章天花板 100（「100 留給傳奇」兌現，見 GROWTH.ATTR_CAP 註解）；
+// 其餘章節維持 90，逐值不變。
+// ★ 單一入口 ★ 呼叫端（growth.js 自己與 UI 層）一律問 `attrCapFor()`，不得各自另判
+// 「章節是不是 pro」再挑數字——那會讓天花板散落多處各自維護（凍結驗收 C4）。
+// ★ 為什麼吃布林參數，不是直接 `import { isPro } from './chapter.js'` ★ growth.js 是
+// 最底層的純函式模組（本檔向來零 import）；而 `chapter.js → roster.js → growth.js`
+// 已經有一條依賴鏈（`chapter.js` 讀 `roster.js` 的 `OUR_TEAM_NAME`，`roster.js` 讀本檔
+// 的 `GROWABLE_ATTRS`），growth.js 若反過來 import chapter.js 會成環。呼叫端（如
+// `careerScreen.js`）自己用 `isPro(chapter)` 算好布林餵進來即可，維持本檔零依賴。
+export const PRO_ATTR_CAP = 100;
+export function attrCapFor(isProChapter = false) {
+  return isProChapter ? PRO_ATTR_CAP : GROWTH.ATTR_CAP;
+}
+
+// 屬性層加點（不可變；1 點＝+1，天花板走 attrCapFor——省略第三參數＝非職業章的 90，
+// 既有呼叫端／測試斷言零遷移）
+export function spendAttribute(player, key, isProChapter = false) {
   if (!GROWABLE_ATTRS.some((a) => a.key === key)) {
     throw new Error(`spendAttribute：不可加點的屬性 ${key}`);
   }
+  const cap = attrCapFor(isProChapter);
   const cur = player.attributes[key];
-  if (cur >= GROWTH.ATTR_CAP) throw new Error(`spendAttribute：${key} 已達上限 ${GROWTH.ATTR_CAP}`);
+  if (cur >= cap) throw new Error(`spendAttribute：${key} 已達上限 ${cap}`);
   return {
     ...player,
-    attributes: { ...player.attributes, [key]: Math.min(GROWTH.ATTR_CAP, cur + GROWTH.ATTR_STEP) },
+    attributes: { ...player.attributes, [key]: Math.min(cap, cur + GROWTH.ATTR_STEP) },
   };
 }
 

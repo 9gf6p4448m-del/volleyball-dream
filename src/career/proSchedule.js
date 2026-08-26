@@ -258,3 +258,94 @@ export function playoffChampionOf(finalBracket, results = []) {
   const m = finalBracket.matches[0];
   return results.find((r) => r.matchId === m.id)?.winnerId ?? null;
 }
+
+// ════════════════════════════════════════════════════════════════
+// 賽季迴圈接線（批 3，2026-08-26）——把批 1 的 bracket 純函式「長」進賽程
+// ════════════════════════════════════════════════════════════════
+// 驗收＝`docs/kickoffs/acceptance-pro-batch3.md`（C2）。
+//
+// ★ 為什麼是「長」出來，不是像高中/大學/企業那樣一開局就排好 ★ 準決賽的對手
+// （種子 1~4）要看循環賽真正打出來的名次表才知道是誰——不是賽制固定的敘事錨。
+// 唯一的接線點＝`careerStore.saveCareer`（每個會動 career.results 的路徑都經它：
+// 正常結算／棄賽／devSeed 治具），本檔只負責「給定 schedule/results，該不該長、
+// 長什麼」的純函式判斷，不碰任何 IO。
+//
+// ★ C2c：NPC 側另一組準決不需要玩家打 ★ 決定論直接算勝方（比照 devSeed/enterPro
+// 慣例用 seed 合成，**不呼叫 sim 引擎**），只有「含玩家那一場」的準決賽／決賽會
+// 長進 schedule，讓玩家用既有的「▶ 出戰」入口打；NPC 那一場永遠不進 schedule，
+// 也不佔用 career.results 的一格。
+const PLAYOFF_LABEL = { [PLAYOFF_ROUND.SEMI]: '準決賽', [PLAYOFF_ROUND.FINAL]: '冠軍戰' };
+
+/**
+ * NPC 對 NPC 的季後賽場次勝方（決定論；同 seed 同結果，不佔 schedule/results 任何一格）。
+ * 重用 league 對手互戰同一顆 `simulateSetScore`（level+hash 的既有慣例，不新造演算法）。
+ */
+export function npcPlayoffWinner(aId, bId, seed, tag) {
+  const A = proTeamById(aId);
+  const B = proTeamById(bId);
+  if (!A || !B) return null;
+  const [sa, sb] = simulateSetScore(A, B, seed, tag);
+  return sa > sb ? aId : bId;
+}
+
+/**
+ * 賽季迴圈接線：循環賽打滿後依名次表把季後賽場次長進 `schedule`；玩家勝出準決賽後
+ * 再長決賽（準決敗＝單淘汰止步，C2a，不長決賽）。**純函式、冪等**——已經長過的
+ * 場次、或還不夠格長的情況，一律回傳原 `schedule` **參考**（呼叫端用 `!==` 判斷
+ * 要不要落檔）。
+ * @param schedule  career.schedule（含循環賽場次，round==='pro'）
+ * @param results   career.results
+ * @param teamId    玩家所屬職業隊 id（用來在 `proTable` 認出玩家那一列）
+ * @param seed      生涯種子（NPC 準決定論用）
+ * @returns 新賽程陣列；沒有變化則回傳原 `schedule` 參考
+ */
+export function growProSchedule(schedule, results, teamId, seed = 1) {
+  const league = (schedule ?? []).filter((m) => m?.round === 'pro');
+  if (!league.length) return schedule; // 不是職業賽程（防呆：非 pro 章節呼叫端零影響）
+  const leagueDone = league.every((m) => (results ?? []).some((r) => r.matchId === m.id));
+  if (!leagueDone) return schedule; // 循環還沒打完
+
+  const hasResult = (id) => (results ?? []).some((r) => r.matchId === id);
+  const semiEntry = schedule.find((m) => m.round === PLAYOFF_ROUND.SEMI);
+
+  if (!semiEntry) {
+    // ① 循環剛打完：依名次表決定準決賽對手（C2a 對位正確／C2b 未進前四不長場次）
+    const { table } = proTable({ teamId, seed, schedule, results });
+    const seeds = playoffSeedsFrom(table);
+    if (!seeds || !seeds.includes(PRO_PLAYER_ID)) return schedule; // C2b：未進前四
+    const bracket = buildPlayoffBracket(seeds);
+    const mine = bracket.matches.find((m) => m.home === PRO_PLAYER_ID || m.away === PRO_PLAYER_ID);
+    const oppId = mine.home === PRO_PLAYER_ID ? mine.away : mine.home;
+    return [...schedule, {
+      id: mine.id, stage: 'pro', round: PLAYOFF_ROUND.SEMI, opponentId: oppId,
+      label: PLAYOFF_LABEL[PLAYOFF_ROUND.SEMI], format: mine.format,
+    }];
+  }
+
+  if (schedule.some((m) => m.round === PLAYOFF_ROUND.FINAL)) return schedule; // 決賽已長過，冪等
+  if (!hasResult(semiEntry.id)) return schedule; // 準決賽還沒打完
+  const semiResult = results.find((r) => r.matchId === semiEntry.id);
+  if (!semiResult.won) return schedule; // C2a：準決敗＝單淘汰止步，不長決賽
+
+  // ② 準決賽勝出：重建種子序＋bracket（proTable 只認 round==='pro' 的循環結果，
+  //    加了準決賽結果不影響名次表——同一份名次表、同一份 bracket，找得回 semiEntry）
+  const { table } = proTable({ teamId, seed, schedule, results });
+  const seeds = playoffSeedsFrom(table);
+  if (!seeds) return schedule; // 防呆：理論上循環已打完不會發生
+  const bracket = buildPlayoffBracket(seeds);
+  const mine = bracket.matches.find((m) => m.id === semiEntry.id);
+  const other = bracket.matches.find((m) => m.id !== semiEntry.id);
+  if (!mine || !other) return schedule; // 防呆：重建的 bracket 對不上落地的 semiEntry
+  const npcWinner = npcPlayoffWinner(other.home, other.away, seed, 'npc-semi');
+  const finalBracket = advancePlayoffToFinal(bracket, [
+    { matchId: mine.id, winnerId: PRO_PLAYER_ID },
+    { matchId: other.id, winnerId: npcWinner },
+  ]);
+  if (!finalBracket) return schedule; // 防呆
+  const finalMatch = finalBracket.matches[0];
+  const oppId = finalMatch.home === PRO_PLAYER_ID ? finalMatch.away : finalMatch.home;
+  return [...schedule, {
+    id: finalMatch.id, stage: 'pro', round: PLAYOFF_ROUND.FINAL, opponentId: oppId,
+    label: PLAYOFF_LABEL[PLAYOFF_ROUND.FINAL], format: finalMatch.format,
+  }];
+}

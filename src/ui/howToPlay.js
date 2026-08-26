@@ -430,9 +430,9 @@ export const HOW_TO_PLAY = [
             desc: '每場保底 2 點，贏球再 2 點；殺球、吊球、ACE、攔網得分各 1 點，每 2 次 Perfect 一傳折 1 點。單場最多 12 點。',
           },
           {
-            // growth.js:22-29 GROWABLE_ATTRS 六項；:14 ATTR_CAP 90
+            // growth.js:22-29 GROWABLE_ATTRS 六項；:14 ATTR_CAP 90（職業章 100，attrCapFor）
             term: '加在哪',
-            desc: '力量、彈跳、反應、速度、發球、攔網六項，1 點加 1，上限 90。',
+            desc: '力量、彈跳、反應、速度、發球、攔網六項，1 點加 1，上限 90（職業章解鎖到 100）。',
           },
           {
             // growth.js:20 註解：control/stamina 不開放逐場加點；trainingCamp.js:65-79 才動耐力

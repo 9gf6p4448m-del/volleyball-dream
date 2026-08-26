@@ -27,7 +27,8 @@ import { CORP_PAYDAY_EV } from './corpEvents.js';
 // 職業章批 2（2026-08-26）：入章接線——資料層（proTeams/proTeam/proSchedule）批 1 已鋪好
 import { proTeamById, proOffersFor } from './proTeams.js';
 import { buildProMembers, proStartTrustFor } from './proTeam.js';
-import { buildProSchedule } from './proSchedule.js';
+// 職業章批 3：growProSchedule（saveCareer 的季後賽接線）／proTable（settleProFinale 讀名次）
+import { buildProSchedule, proTable, growProSchedule } from './proSchedule.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -169,10 +170,25 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       return save ? careerViewOf(save) : null;
     },
+    // 職業章批 3：saveCareer 是所有「career.results 可能變動」路徑的單一匯合點
+    // ——正常賽末結算（matchCareer.settleCareerMatch）／棄賽（careerScreen 直接
+    // resolveForfeit 後落檔，不經 matchCareer）／devSeed 治具合成戰績，全部經這裡。
+    // 季後賽場次的長出（growProSchedule，純函式）掛在這唯一的匯合點上，而不是
+    // 到每個呼叫端各自補一次呼叫——分母收斂到 1（同 `02 §6.1` 第 7 條「防線按危險的
+    // 效果寫」，這裡的「效果」是任何會改變 career.results 的寫入）。非職業章／未簽
+    // 球隊時 `isPro` 一項判斷就短路，零額外成本。
     saveCareer(career) {
       return writeSave((prev) => {
         const next = prev ?? createSaveV2({ player: null });
-        return { ...next, season: seasonFromCareer(career, prev) };
+        let grown = career;
+        if (isPro(normalizeChapter(next.career ?? null))) {
+          const proId = next.career?.pro ?? null;
+          if (proId) {
+            const schedule = growProSchedule(career.schedule, career.results, proId, career.seed);
+            if (schedule !== career.schedule) grown = { ...career, schedule };
+          }
+        }
+        return { ...next, season: seasonFromCareer(grown, prev) };
       });
     },
     loadPlayer() {
@@ -753,6 +769,46 @@ export function createCareerStore(storage, slot = 1) {
           },
         };
       });
+    },
+    // ★★ 職業章批 3（2026-08-26）★★ 職業季末結算入口——只封存＋打旗標，不推進
+    // 屆數（職業章年限＝1，本來就沒有下一年；比照 settleCorpFinale 逐條）。
+    //   守衛：只有職業章才准結算（isPro 顯式檢查）；已結算（proFinaleSettled）→
+    //         no-op；未打完（!seasonConcluded——C3 單一定義，含季後賽全部有結果）
+    //         → no-op；壞存檔（pro id 解不開）→ 不猜、不結算。
+    //   封存鍵名用 proRank（同 corpRank 之於 uniRank 的教訓：鍵名不得撞名）。
+    settleProFinale() {
+      const save = loadSave();
+      const view = save ? careerViewOf(save) : null;
+      if (!view) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false; // 非職業章拒絕
+      if (!chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
+      if (save.career?.proFinaleSettled) return false; // 已結算，冪等 no-op
+      if (!seasonConcluded(view)) return false; // 未打完（含季後賽）不結算
+      const proId = save.career?.pro ?? null;
+      if (!proTeamById(proId)) return false; // 壞存檔：不猜、不結算
+      const ok = writeSave((prev) => {
+        // 冪等雙保險：no-op 條件與寫入內容綁同一份 prev 讀值（同 settleCorpFinale 慣例）
+        if (prev?.career?.proFinaleSettled) return prev;
+        const board = proTable({
+          teamId: proId, seed: prev.season.seed ?? 1,
+          schedule: prev.season.schedule ?? [], results: prev.season.results ?? [],
+        });
+        const proRank = board?.playerRank ?? 0;
+        const seasons = [...(prev.career.seasons ?? []), {
+          ...archiveSeasonSummary(prev.season),
+          proRank,
+          pro: proId,
+        }];
+        return {
+          ...prev,
+          career: { ...prev.career, seasons, proFinaleSettled: true },
+        };
+      });
+      return ok;
+    },
+    // 職業謝幕已結算（同 corpFinaleSettled 慣例：UI 用旗標判斷收尾卡重看/重複結算）
+    proFinaleSettled() {
+      return !!loadSave()?.career?.proFinaleSettled;
     },
     // 練習賽卷（2026-08-12）：屆間紅白對抗賽的成績（`practiceRecordOf` 的形狀）。
     // ★ 讀出來一律過 normalizePractice ★ 舊存檔沒有這個鍵、手改的存檔可能只有半組欄位；

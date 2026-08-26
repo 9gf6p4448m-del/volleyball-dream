@@ -13,6 +13,8 @@ import { universityById } from './universities.js';
 import { corporationById } from './corporations.js';
 // 職業章批 2（2026-08-26）：第四張對手表——同大學卷批 6／企業章批 2 的補全慣例
 import { proTeamById } from './proTeams.js';
+// 職業章批 3（2026-08-26）：季後賽場次的 round 標記——seasonConcluded 的 pro 分支要用
+import { PLAYOFF_ROUND } from './proSchedule.js';
 import { kitFor } from './teamKit.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID, SLOT_ROLES } from './lineup.js';
 import {
@@ -149,6 +151,22 @@ export function seasonConcluded(career) {
     .filter((m) => m?.round === 'league' || m?.round === 'corp');
   if (longSeason.length > 0) {
     return longSeason.every((m) => (career.results ?? []).some((r) => r.matchId === m.id));
+  }
+  // 職業章批 3（C3）：pro 分支——單一定義，不得另立第二顆判斷式。
+  // 未進季後賽＝循環（round==='pro'）全有結果；進季後賽＝循環＋玩家的季後賽場次
+  // （round==='semi'/'final'，含準決敗）全有結果。★這條假設 schedule 已經是「長好的」★
+  // ——季後賽場次的長出（`proSchedule.growProSchedule`）與 `career.results` 的寫入
+  // 是同一次 `careerStore.saveCareer` RMW 原子完成（見該檔），所以這裡讀到的
+  // schedule 恆是當下 results 對應的最終形狀，不會有「玩家贏了準決賽但決賽還沒長出來」
+  // 這種會被本函式誤判成「已收束」的中間態持久化到存檔裡。
+  const proLeague = (career.schedule ?? []).filter((m) => m?.round === 'pro');
+  if (proLeague.length > 0) {
+    const hasResult = (id) => (career.results ?? []).some((r) => r.matchId === id);
+    if (!proLeague.every((m) => hasResult(m.id))) return false;
+    const playoffRows = (career.schedule ?? []).filter(
+      (m) => m?.round === PLAYOFF_ROUND.SEMI || m?.round === PLAYOFF_ROUND.FINAL,
+    );
+    return playoffRows.every((m) => hasResult(m.id));
   }
   return ['eliminated', 'champion'].includes(careerStage(career));
 }
