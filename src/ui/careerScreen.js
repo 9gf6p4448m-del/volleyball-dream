@@ -87,7 +87,7 @@ import {
   corpShakeOffEvents,
 } from '../career/corpEvents.js';
 // 職業章批 2（2026-08-26）：入章接線——資料層批 1 已鋪好
-import { PRO_TIER_LABEL, proTeamById, proRenewalSalaryFor } from '../career/proTeams.js';
+import { PRO_TIER_LABEL, proTeamById, proRenewalSalaryFor, proBaseSalaryFor } from '../career/proTeams.js';
 // 職業章批 3：名次表／季後賽場次顯示（proSchedule.js 批 1 的純函式＋批 3 的 round 標記）
 import {
   proTable, PRO_PLAYER_ID, PLAYOFF_ROUND, growProSchedule,
@@ -238,6 +238,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 多年卷批 3（C4）：轉隊選單/確認的重入守衛（同 retireConfirmOpen 慣例）
   let transferMenuOpen = false;
   let transferConfirmOpen = false;
+  // 多年卷批 5（D2）：謝幕卡重入守衛（同慣例）
+  let proFinaleCardOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -2585,8 +2587,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.8',
         'max-width:min(360px,92vw)', 'text-align:center'],
       store.proRetired?.()
-        ? '你已高掛球鞋。謝幕儀式・敬請期待——生涯的一切都收在數據頁裡。'
-        : '十年職業生涯走到終點。謝幕儀式・敬請期待——生涯的一切都收在數據頁裡。'));
+        ? '你已高掛球鞋。'
+        : '十年職業生涯走到終點。'));
+      // 批 5（D2）：真謝幕入口——退休態與滿十年態**皆有**（批 2 覆審 M1 的族群
+      // 正是打滿十年的人）；冪等純顯示，重看不寫檔
+      root.appendChild(button('🎬 生涯謝幕', true, () => showProCareerFinale()));
     } else if (proSeasonDone) {
       const board = proTable({
         teamId: pickedPro.id, seed: career.seed,
@@ -3487,7 +3492,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const isRetired = store.proRetired?.();
     if (isRetired || isFinalYear) {
       overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
-        'margin-top:18px'], isRetired ? '生涯已收束' : '十年職業生涯走到終點——謝幕儀式・敬請期待'));
+        'margin-top:18px'], isRetired ? '生涯已收束' : '十年職業生涯走到終點——回到生涯畫面開啟謝幕'));
     } else if (team && lastPro) {
       const newSalary = proRenewalSalaryFor(team, lastPro.proRank, lastPro.proFinish);
       overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'letter-spacing:2px',
@@ -3578,6 +3583,69 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       menu.remove();
     }));
     document.body.appendChild(menu);
+  }
+
+  // ════════ 多年卷批 5（D1/D2）：退休謝幕總結卡 ════════
+  // 資料全吃 career.seasons 的職業封存（proRank/proFinish/salary 批 1 起逐季寫入；
+  // 舊檔缺 salary＝proBaseSalaryFor 回退——批 2 掛帳裁定：底薪可從隊 id 推回不遺失）。
+  // 冪等純顯示，不寫檔。★文案屬提案★
+  const PRO_FINISH_LABEL = {
+    champion: '🏆 冠軍', final: '亞軍', semi: '四強', league: '未進季後賽',
+  };
+  function showProCareerFinale() {
+    if (proFinaleCardOpen) return;
+    proFinaleCardOpen = true;
+    const chapter = store.loadChapter?.();
+    const proSeasons = (store.loadSeasonArchive?.() ?? []).filter((sn) => sn.pro);
+    const retired = store.proRetired?.();
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#04060c', 'gap:10px', 'padding:26px 14px', 'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'letter-spacing:5px'],
+      '生涯謝幕・職業歲月'));
+    overlay.appendChild(el('div', [
+      'font-size:26px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:3px',
+      'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
+    ], `${proSeasons.length} 年職業生涯`));
+    let titles = 0; let wins = 0; let losses = 0;
+    for (const sn of proSeasons) {
+      if (sn.proFinish === 'champion') titles += 1;
+      wins += sn.wins ?? 0; losses += sn.losses ?? 0;
+      const team = proTeamById(sn.pro);
+      const salary = sn.salary ?? proBaseSalaryFor(team);
+      const card = el('div', [
+        `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
+        'padding:10px 16px', 'width:min(360px, 94vw)', 'text-align:left',
+        'display:flex', 'flex-direction:column', 'gap:3px',
+      ]);
+      const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
+      head.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
+        `第 ${chapterSeasonOf(chapter, sn.index)} 年・${team?.name ?? sn.pro}`));
+      head.appendChild(el('div', ['font-size:13px',
+        `color:${sn.proFinish === 'champion' ? COLOR.gold : COLOR.dim}`],
+      PRO_FINISH_LABEL[sn.proFinish] ?? `循環第 ${sn.proRank} 名`));
+      card.appendChild(head);
+      card.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.dim}`, 'line-height:1.5'],
+        `循環第 ${sn.proRank} 名・${sn.wins ?? 0} 勝 ${sn.losses ?? 0} 敗・年薪 ${salary} 萬`));
+      overlay.appendChild(card);
+    }
+    overlay.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.text}`,
+      'margin-top:8px', 'letter-spacing:1px'],
+    `職業合計：${titles} 冠・${wins} 勝 ${losses} 敗`));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:10px',
+      'text-align:center', 'line-height:1.9', 'max-width:min(420px,92vw)'],
+    retired
+      ? '你選擇在還能跳的時候放下球——謝幕的時機，也是你自己決定的。'
+      : '十年，把一個聯賽從天花板打成了自己的地板。時間到了，球不會忘記你。'));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:16px'],
+      '點擊任意處返回生涯畫面'));
+    overlay.addEventListener('pointerdown', () => {
+      proFinaleCardOpen = false;
+      overlay.remove(); renderCareer();
+    });
+    document.body.appendChild(overlay);
   }
 
   // 多年卷批 2（B4）：退休確認卡——不可逆動作要二段確認。
