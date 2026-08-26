@@ -256,7 +256,10 @@ test('D1 謝幕卡內容：逐年列（隊名/名次/季後賽標籤/年薪）�
   assert.match(text, /職業合計：1 冠/, '冠軍數＝proFinish 計數');
   assert.match(text, /你選擇在還能跳的時候放下球/, '退休態收尾句');
   assert.ok(!/undefined/.test(text), '不得出現 undefined');
-  assert.ok(!/第 4 屆/.test(text), '非職業封存不進謝幕卡');
+  // 覆審 L2：改列數斷言（「屆」字恆不出現＝原斷言恆綠零鑑別力）
+  const yearRows = walk(globalThis.document.body)
+    .filter((n) => /^第 \d+ 年・/.test(n.textContent ?? ''));
+  assert.equal(yearRows.length, 2, '謝幕卡恰列 2 個職業年（大學/企業封存不進來）');
 });
 
 test('D1 舊檔缺 salary＝隊階底薪回退；D3 滿十年態收尾句不同', async () => {
@@ -279,6 +282,25 @@ test('D1 舊檔缺 salary＝隊階底薪回退；D3 滿十年態收尾句不同'
   assert.ok(!/undefined/.test(text), '不得出現 undefined');
   assert.match(text, /把一個聯賽從天花板打成了自己的地板/, '滿十年態收尾句');
   assert.ok(!/你選擇在還能跳的時候放下球/.test(text), '兩態不同句');
+});
+
+test('D1 壞封存防呆：proFinish=constructor 不印函式、proRank=0 顯示回退', async () => {
+  const storage = await twoYearRetiredSave();
+  const raw = saveOf(storage);
+  const last = raw.career.seasons.at(-1);
+  last.proFinish = 'constructor'; // 手改檔的原型鏈鍵
+  last.proRank = 0; // 壞 board 封存
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  await renderScreen(storage);
+  tap(findBtn(/生涯謝幕/));
+  await settle();
+  const text = allText();
+  assert.ok(!/native code/.test(text), '原型鏈鍵不得印出函式原始碼');
+  assert.ok(!/第 0 名/.test(text), '壞 rank 不得顯示第 0 名');
+  const { proRenewalSalaryFor: renew } = await import('../src/career/proTeams.js');
+  const { proTeamById: byId } = await import('../src/career/proTeams.js');
+  assert.ok(Number.isInteger(renew(byId('cangyu-titans'), 3, 'constructor')),
+    '同型：續約公式吃原型鏈鍵不得回 NaN');
 });
 
 test('D2 未收束（續約窗）無謝幕鈕；D3 佔位句已清', async () => {

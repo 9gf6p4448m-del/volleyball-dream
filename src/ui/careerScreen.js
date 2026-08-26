@@ -3623,12 +3623,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
       head.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
         `第 ${chapterSeasonOf(chapter, sn.index)} 年・${team?.name ?? sn.pro}`));
+      // 覆審 L1/L3/L4：查表走 hasOwn（原型鏈鍵如 'constructor' 會印出函式原始碼）；
+      // 缺 finish 回退「—」不與副標的循環名次重複；壞 rank（0/缺）副標也回退「—」
       head.appendChild(el('div', ['font-size:13px',
         `color:${sn.proFinish === 'champion' ? COLOR.gold : COLOR.dim}`],
-      PRO_FINISH_LABEL[sn.proFinish] ?? `循環第 ${sn.proRank} 名`));
+      Object.hasOwn(PRO_FINISH_LABEL, sn.proFinish ?? '') ? PRO_FINISH_LABEL[sn.proFinish] : '—'));
       card.appendChild(head);
+      const rankLabel = Number.isInteger(sn.proRank) && sn.proRank >= 1
+        ? `循環第 ${sn.proRank} 名` : '循環名次—';
       card.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.dim}`, 'line-height:1.5'],
-        `循環第 ${sn.proRank} 名・${sn.wins ?? 0} 勝 ${sn.losses ?? 0} 敗・年薪 ${salary} 萬`));
+        `${rankLabel}・${sn.wins ?? 0} 勝 ${sn.losses ?? 0} 敗・年薪 ${salary} 萬`));
       overlay.appendChild(card);
     }
     overlay.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.text}`,

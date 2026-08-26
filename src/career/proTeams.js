@@ -251,7 +251,8 @@ export function proRenewalSalaryFor(team, proRank, proFinish) {
   const base = proBaseSalaryFor(team);
   const r = Number.isInteger(proRank) && proRank >= 1 && proRank <= RENEWAL_RANK_MUL.length
     ? proRank : RENEWAL_RANK_MUL.length;
-  const f = RENEWAL_FINISH_MUL[proFinish] ?? 1.0;
+  // 批 5 覆審 L1 同型順修：原型鏈鍵（'constructor'）會查到函式→NaN 薪水寫進合約
+  const f = Object.hasOwn(RENEWAL_FINISH_MUL, proFinish ?? '') ? RENEWAL_FINISH_MUL[proFinish] : 1.0;
   return Math.max(1, Math.round(base * RENEWAL_RANK_MUL[r - 1] * f));
 }
 
