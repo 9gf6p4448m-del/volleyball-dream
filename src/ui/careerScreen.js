@@ -1242,6 +1242,20 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         slot1.appendChild(el('div', [
           'font-size:11.5px', 'font-weight:700', `color:${COLOR.text}`,
         ], '① 攔網重心'));
+        // 批 4B 覆審 HIGH-1 修：情報顯示只吃 F4 凍結的兩個條件（intel＋oppScouting
+        // 樣本≥6），**不得**巢在 oppFocus（「對手看我」方向、且要主角自己扣過球）
+        // 的閘裡——方向相反的前提會讓一次性解鎖對打不到球的位置永久失效。
+        // 押線鈕的 oppFocus 閘（D5 凍結）照舊在下方分支，不動。
+        const intelOn = store.proGrowthState?.()?.intel === true;
+        const oppZ = career.oppScouting?.[next.opponentId]?.zones ?? null;
+        const oppTotal = oppZ ? (oppZ.line + oppZ.cross + oppZ.middle + oppZ.tip) : 0;
+        if (intelOn) {
+          slot1.appendChild(el('div', ['font-size:10.5px',
+            oppTotal >= 6 ? 'color:#8fd6c7' : `color:${COLOR.dim}`],
+          oppTotal >= 6
+            ? `情報網：這隊的攻擊分佈——直線 ${oppZ.line}・斜線 ${oppZ.cross}・中間 ${oppZ.middle}・吊球 ${oppZ.tip}（押線仍是賭，情報只幫你賭得聰明）`
+            : '情報網已開——但和這隊的交手樣本還不夠，攻擊分佈讀不出來'));
+        }
         if (!oppFocus) {
           // 情報不足＝不可選：連帶清掉可能殘留的舊選擇（防止資料狀態變回不足時，
           // 畫面上按鈕消失了但 deploy 裡還留著上一次的值、確認出戰時悄悄生效）
@@ -1256,20 +1270,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // career.scouting（＝這隊對**你**的讀取紀錄）講成對手自己的攻擊慣性——
           // 押線判定（applyBlockLean 抓場上真實推進者）與那份資料零關聯＝披著情報
           // 外衣的盲注。降級為明示賭注；真情報化（對手攻擊統計資料源）掛帳等試玩。
-          // 批 4B（F4）：情報網解鎖＋樣本 ≥6 ＝顯示真實對手攻擊分佈（oppScouting
-          // 賽後記帳，「我看對手」方向）；押線**判定**零改動——情報只改顯示。
-          const intelOn = store.proGrowthState?.()?.intel === true;
-          const oppZ = career.oppScouting?.[next.opponentId]?.zones ?? null;
-          const oppTotal = oppZ ? (oppZ.line + oppZ.cross + oppZ.middle + oppZ.tip) : 0;
-          if (intelOn && oppTotal >= 6) {
-            slot1.appendChild(el('div', ['font-size:10.5px', 'color:#8fd6c7'],
-              `情報網：這隊的攻擊分佈——直線 ${oppZ.line}・斜線 ${oppZ.cross}・中間 ${oppZ.middle}・吊球 ${oppZ.tip}（押線仍是賭，情報只幫你賭得聰明）`));
-          } else {
-            slot1.appendChild(el('div', ['font-size:10.5px', `color:${COLOR.dim}`],
-              intelOn
-                ? '情報網已開——但和這隊的交手樣本還不夠，攻擊分佈讀不出來'
-                : '沒有對手攻擊路線的情報——押哪條線，靠你自己的判斷（押錯整面落空）'));
-          }
+          slot1.appendChild(el('div', ['font-size:10.5px', `color:${COLOR.dim}`],
+            intelOn
+              ? '押哪條線，最後仍是你自己拍板（押錯整面落空）'
+              : '沒有對手攻擊路線的情報——押哪條線，靠你自己的判斷（押錯整面落空）'));
           const row1 = el('div', ['display:flex', 'gap:6px']);
           for (const [key, label] of [['line', '押直線'], ['cross', '押斜線']]) {
             const active = deploy.blockLean === key;

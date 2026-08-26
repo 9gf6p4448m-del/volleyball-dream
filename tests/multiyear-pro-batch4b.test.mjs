@@ -151,12 +151,16 @@ test('F1 轉隊也設 pending；待辦＝新季屆數', () => {
 // ════════════════════════════════════════════════════════════════
 // F2 三路效果
 // ════════════════════════════════════════════════════════════════
-test('F2 聲望：fromSetter +6 且封頂 100', () => {
+test('F2 聲望：fromSetter +6 且封頂 100（貼門檻種值——覆審 MEDIUM-1：治具天然值封頂分支恆不執行）', () => {
   const storage = pendingY2Save();
-  const before = saveOf(storage).player.trust.fromSetter;
+  {
+    const raw = saveOf(storage);
+    raw.player.trust.fromSetter = 97; // 97+6>100——封頂分支真的被踩到
+    storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  }
   assert.ok(createCareerStore(storage).chooseProGrowth?.('prestige') ?? false,
     '聲望路必須可選（無實作＝這裡紅）');
-  assert.equal(saveOf(storage).player.trust.fromSetter, Math.min(100, before + 6));
+  assert.equal(saveOf(storage).player.trust.fromSetter, 100, '封頂 100（不得 103）');
 });
 
 test('F2 傳承：目標隊友 attrs 每項 +2 clamp 90；同人一生一次；壞 id 拒絕', () => {
@@ -213,6 +217,40 @@ test('F3 投影 roundtrip：oppScouting 存檔讀回一致【壞版自證條】'
   const back = createCareerStore(storage).loadCareer();
   assert.deepEqual(back.oppScouting?.['cangyu-titans']?.zones,
     { line: 5, cross: 2, middle: 1, tip: 0 }, '存讀一致（投影漏存＝這裡紅）');
+});
+
+test('F3 整合：settleCareerMatch 聚合只記對手側、重入不灌水【覆審 HIGH-2 補】', async () => {
+  const { settleCareerMatch } = await import('../src/app/matchCareer.js');
+  const storage = proSaveInProgress();
+  const store = createCareerStore(storage);
+  const career = store.loadCareer();
+  const player = store.loadPlayer();
+  const matchEntry = career.schedule[0];
+  const careerCtx = { store, career, player, matchEntry };
+  const game = {
+    players: { A2: { teamId: 'A' } },
+    match: { score: { A: 2, B: 0 }, winner: 'A' },
+    events: [],
+    scoutTally: {
+      A2: { zones: { line: 9, cross: 9, middle: 9, tip: 9 } }, // 我方——不得混入
+      B1: { zones: { line: 3, cross: 1, middle: 0, tip: 0 } },
+      BL: { zones: { line: 0, cross: 2, middle: 1, tip: 0 } }, // 對手自由人也算對手側
+    },
+  };
+  settleCareerMatch({ careerCtx, game, playerId: 'A2' });
+  const zones = saveOf(storage).season.oppScouting?.[matchEntry.opponentId]?.zones;
+  assert.deepEqual(zones, { line: 3, cross: 3, middle: 1, tip: 0 },
+    '只聚合 B 側（我方 A2 的 9 不得混入＝§6.1-2 方向防線）');
+  // 重入：用**重讀後**的 fresh ctx（重開頁語意）——settledBefore 閘該擋下二次累加。
+  // （同一份陳舊 careerCtx 的雙結算會整份覆寫回開賽快照＝既有架構性質、生產不可達
+  //   ——matchLoop 邊緣閘一頁只放行一次；覆審已判非本批引入，不在此測。）
+  const store2 = createCareerStore(storage);
+  settleCareerMatch({
+    careerCtx: { store: store2, career: store2.loadCareer(), player: store2.loadPlayer(), matchEntry },
+    game, playerId: 'A2',
+  });
+  const zones2 = saveOf(storage).season.oppScouting?.[matchEntry.opponentId]?.zones;
+  assert.deepEqual(zones2, { line: 3, cross: 3, middle: 1, tip: 0 }, '重入不灌水（不得加倍）');
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -383,12 +421,15 @@ test('F4 intel＋樣本≥6＝槽①顯示真實分佈；未解鎖照舊；樣�
   assert.match(t0, /沒有對手攻擊路線的情報/, '未解鎖照舊');
   const storage = pendingY2Save();
   assert.ok(createCareerStore(storage).chooseProGrowth('intel'));
-  const oppId = seedScoutingForNext(storage);
+  // ★覆審 HIGH-1 反例場景★ 不塞 scouting（主角打不到球的位置）——情報顯示
+  // 不得被「對手看我」方向的 oppFocus 閘擋住
   const raw = saveOf(storage);
+  const oppId = raw.season.schedule.find((m) => m.round === 'pro').opponentId;
   raw.season.oppScouting = { [oppId]: { zones: { line: 5, cross: 3, middle: 1, tip: 1 } } };
   storage.setItem(SAVE_KEY, JSON.stringify(raw));
   const t1 = await openMatchup(storage);
-  assert.match(t1, /情報網：這隊的攻擊分佈——直線 5・斜線 3/, '真實分佈顯示');
+  assert.match(t1, /情報網：這隊的攻擊分佈——直線 5・斜線 3/,
+    '真實分佈顯示（主角零扣球紀錄也要看得到——一次性解鎖不得因位置失效）');
   const low = pendingY2Save();
   assert.ok(createCareerStore(low).chooseProGrowth('intel'));
   seedScoutingForNext(low);
