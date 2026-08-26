@@ -58,3 +58,21 @@
 
 - A2 壞版自證與 A3「旗標不清」各留一條在 181ea94 檢出紅的紀錄（worktree 實跑，
   紅的斷言原文貼進回報）。
+
+## 修訂紀錄（2026-08-27，批 1 覆審後；Sawmah 逐條拍板）
+
+- **A2 加嚴（拍板「現在補」）**：封存欄位追加 `proFinish`（'champion'/'final'/'semi'/
+  'league' 四態，由該季 schedule+results 的季後賽場次判定）。原凍結漏項——覆審
+  HIGH：proRank 是循環名次非季後賽結果，champion/finish 吃高中 schema 對職業恆假，
+  推進清空 results 後奪冠事實永久不可還原；只有 settleProFinale 握有該季 results，
+  晚補救不回。只加欄位與斷言＝加嚴，不動既有鍵。
+- **A5 語意修正（拍板甲）**：proCareerOver ＝ proRetired ||（chapterCompleted **且
+  proFinaleSettled**）。原標準錯在哪：chapterCompleted 第 10 季「季初」即真，照原
+  定義做批 5 強制謝幕會整季跳過第 10 季（覆審 MEDIUM 實測 P2a）；為什麼現在才知道：
+  凍結時只驗了「滿 10 年後」的終態，沒驗「第 10 季進行中」的中間態。修正後第 10 季
+  未結算＝false（可正常開打）、結算後＝true。
+- **A7 紀錄更正**：原文「A2 在 181ea94 上必須紅」實測不成立（舊年限=1 使
+  chapterCompleted 守衛恰好放行、該行為在舊樹是綠的；整檔紅是 import 旁枝）。
+  正確鑑別力證據＝①壞版中間態（181ea94 僅改年限 1→10）A2/A3 行為紅（主對話實測）
+  ②突變測試：M1 把 chapterCompleted 守衛加回 settleProFinale → 9 條紅含 A2；
+  M2 拿掉推進時的 proFinaleSettled:false 重置 → A3 兩條紅（覆審員實測 scratchpad/mut）。

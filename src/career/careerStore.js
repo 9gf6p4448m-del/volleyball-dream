@@ -28,7 +28,7 @@ import { CORP_PAYDAY_EV } from './corpEvents.js';
 import { proTeamById, proOffersFor, proBaseSalaryFor } from './proTeams.js';
 import { buildProMembers, proStartTrustFor } from './proTeam.js';
 // 職業章批 3：growProSchedule（saveCareer 的季後賽接線）／proTable（settleProFinale 讀名次）
-import { buildProSchedule, proTable, growProSchedule } from './proSchedule.js';
+import { buildProSchedule, proTable, growProSchedule, PLAYOFF_ROUND } from './proSchedule.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -835,11 +835,25 @@ export function createCareerStore(storage, slot = 1) {
           schedule: prev.season.schedule ?? [], results: prev.season.results ?? [],
         });
         const proRank = board?.playerRank ?? 0;
+        // 批 1 覆審 HIGH 補（拍板 2026-08-27）：季後賽結果要在這裡封存——推進會清空
+        // results，這是唯一還握有該季季後賽事實的地方。proRank 是**循環**名次，
+        // 循環第 4 也可能爆冷奪冠；高中 schema 的 champion/finish 對職業恆假不重用
+        // （鍵名不撞名慣例）。四態：champion/final（亞軍）/semi（四強止步）/league
+        // （未進四強）。schedule 只含玩家自己的場次，semi 敗＝final 不存在。
+        const resultOf = (m) => (prev.season.results ?? []).find((r) => r.matchId === m.id);
+        const finalMatch = (prev.season.schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.FINAL);
+        const semiMatch = (prev.season.schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.SEMI);
+        const finalRes = finalMatch ? resultOf(finalMatch) : null;
+        const semiRes = semiMatch ? resultOf(semiMatch) : null;
+        let proFinish = 'league';
+        if (finalRes) proFinish = finalRes.won ? 'champion' : 'final';
+        else if (semiRes) proFinish = 'semi';
         const seasons = [...(prev.career.seasons ?? []), {
           ...archiveSeasonSummary(prev.season),
           proRank,
           pro: proId,
           salary: prev.career?.contract?.salary ?? null,
+          proFinish,
         }];
         return {
           ...prev,

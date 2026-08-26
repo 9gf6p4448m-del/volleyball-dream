@@ -170,15 +170,18 @@ export function chapterCompleted(chapter, seasonIndex = 1) {
 /**
  * 職業生涯結束了沒＝多年卷收束判斷的單一真相源（多年職業生涯卷批 1）。
  * 結束＝自選退休（career.proRetired，`careerStore.retirePro` 唯一寫入點）**或**
- * 滿硬上限（chapterCompleted，第 10 年）。非職業章恆 false——別的章的收束各有
- * 自己的 settle 旗標，不進這裡。
+ * 滿硬上限**且本季已結算**（批 1 覆審 MEDIUM、拍板甲 2026-08-27：chapterCompleted
+ * 第 10 季「季初」即真，不補結算旗標的話批 5 強制謝幕會整季跳過第 10 季——
+ * 「生涯結束」恆指最後一季**打完結算後**）。非職業章恆 false——別的章的收束
+ * 各有自己的 settle 旗標，不進這裡。
  *
- * @param career       save.career 整塊（要讀 proRetired 與 chapter）
+ * @param career       save.career 整塊（要讀 proRetired/proFinaleSettled 與 chapter）
  * @param seasonIndex  全域屆數（save.season.index）
  */
 export function proCareerOver(career, seasonIndex = 1) {
   if (!isPro(normalizeChapter(career ?? null))) return false;
   if (career?.proRetired === true) return true;
+  if (career?.proFinaleSettled !== true) return false; // 末季進行中＝還沒結束
   return chapterCompleted(career?.chapter, seasonIndex);
 }
 

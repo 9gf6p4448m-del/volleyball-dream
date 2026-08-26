@@ -124,7 +124,50 @@ test('A2 第 1 季（年限未滿）打完即可結算——封存帶 proRank/pr
   assert.equal(last.proRank, 8, '全敗恆第 8');
   assert.equal(last.pro, teamId);
   assert.equal(last.salary, proBaseSalaryFor(proTeamById(teamId)), '封存薪水＝現約年薪');
+  assert.equal(last.proFinish, 'league', '未進四強＝league（覆審 HIGH 修訂：季後賽結果入封存）');
   assert.equal(save.career.proFinaleSettled, true);
+});
+
+/** 循環全勝（恆第 1、進四強），再依 playoffResults 打季後賽場次。 */
+function winLeagueThenPlayoffs(storage, playoffResults) {
+  const s = createCareerStore(storage);
+  const c = s.loadCareer();
+  playRoundRobin(storage, 'pro', c.schedule
+    .filter((m) => m.round === 'pro')
+    .map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: true,
+      scoreFor: 2, scoreAgainst: 0, gp: 3,
+    })));
+  for (const won of playoffResults) {
+    const s2 = createCareerStore(storage);
+    const c2 = s2.loadCareer();
+    const next = c2.schedule.find((m) => m.round !== 'pro' && !c2.results.some((r) => r.matchId === m.id));
+    assert.ok(next, 'fixture 前提：季後賽場次已長出');
+    s2.saveCareer({
+      ...c2,
+      results: [...c2.results, {
+        matchId: next.id, opponentId: next.opponentId, won,
+        scoreFor: won ? 2 : 0, scoreAgainst: won ? 0 : 2, gp: won ? 3 : 1,
+      }],
+    });
+  }
+}
+
+test('A2 修訂：proFinish 三態——奪冠 champion／決賽敗 final／四強止步 semi', () => {
+  const champ = proSaveInProgress();
+  winLeagueThenPlayoffs(champ, [true, true]); // 準決賽勝＋決賽勝
+  assert.ok(createCareerStore(champ).settleProFinale());
+  assert.equal(saveOf(champ).career.seasons.at(-1).proFinish, 'champion');
+
+  const runnerUp = proSaveInProgress();
+  winLeagueThenPlayoffs(runnerUp, [true, false]); // 準決賽勝＋決賽敗
+  assert.ok(createCareerStore(runnerUp).settleProFinale());
+  assert.equal(saveOf(runnerUp).career.seasons.at(-1).proFinish, 'final');
+
+  const semiOut = proSaveInProgress();
+  winLeagueThenPlayoffs(semiOut, [false]); // 準決賽敗＝止步四強
+  assert.ok(createCareerStore(semiOut).settleProFinale());
+  assert.equal(saveOf(semiOut).career.seasons.at(-1).proFinish, 'semi');
 });
 
 test('A2 冪等：連呼第二次 false 且 seasons 長度不變', () => {
@@ -250,15 +293,20 @@ test('A5 retirePro 非職業章拒絕', () => {
   assert.equal(createCareerStore(storage).retirePro(), false);
 });
 
-test('A5 proCareerOver SSOT：未退 false／退休 true／滿 10 年 true／非職業章恆 false', () => {
+test('A5 proCareerOver SSOT（拍板甲）：未退 false／退休 true／末季進行中 false／末季結算後 true／非職業章恆 false', () => {
   const storage = settledProYear1();
   let save = saveOf(storage);
-  assert.equal(proCareerOver(save.career, save.season.index), false, '第 1 季未退＝false');
+  assert.equal(proCareerOver(save.career, save.season.index), false, '第 1 季已結算未退＝false（年限未滿）');
   assert.ok(createCareerStore(storage).retirePro());
   save = saveOf(storage);
   assert.equal(proCareerOver(save.career, save.season.index), true, '退休＝true');
-  const capped = { chapter: { id: CHAPTER.PRO, enteredAtSeason: 9 } };
-  assert.equal(proCareerOver(capped, 18), true, '章內第 10 年＝true');
+  // 拍板甲（2026-08-27 覆審 MEDIUM 修訂）：第 10 季「季初」不算生涯結束——
+  // 未結算＝false（否則批 5 強制謝幕會整季跳過第 10 季），結算後才 true
+  const cappedPlaying = { chapter: { id: CHAPTER.PRO, enteredAtSeason: 9 } };
+  assert.equal(proCareerOver(cappedPlaying, 18), false, '章內第 10 年進行中（未結算）＝false');
+  const cappedSettled = { chapter: { id: CHAPTER.PRO, enteredAtSeason: 9 }, proFinaleSettled: true };
+  assert.equal(proCareerOver(cappedSettled, 18), true, '章內第 10 年已結算＝true');
+  assert.equal(proCareerOver(cappedSettled, 17), false, '第 9 年已結算＝false（年限未滿，推進後旗標會清）');
   const uni = saveOf(settledUniSave());
   assert.equal(proCareerOver(uni.career, uni.season.index), false, '非職業章恆 false');
 });

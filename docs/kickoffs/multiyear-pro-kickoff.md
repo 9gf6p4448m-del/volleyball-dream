@@ -69,3 +69,15 @@
 
 國外強權可玩化；布置槽①真情報化；攔網線承諾機制；zonePanel 標題串接 LOW；
 多人連線前置；宿敵多年新變體事件；後段年份里程碑事件（試玩回報單調才開）。
+
+## 批 1 覆審交辦（2026-08-27，fresh opus 覆審 1H3M2L 的處置紀錄）
+
+- HIGH 冠軍封存＝批 1 已補（proFinish 四態，拍板「現在補」）；MEDIUM proCareerOver
+  時點＝批 1 已修（拍板甲：結算後才算收束）；MEDIUM A7 紀錄＝凍結檔已更正。
+- **批 2 必辦**：①舊職業存檔 contract 一次性回填（隊階底薪＋入章屆數；否則續約
+  公式吃 undefined 傳染）②UI 單年文案全清（「職業元年・完」「續約談判・敬請期待」
+  careerScreen 2584/2586/3436/3446 與 3407-3412 註解——文案說謊同型事故）③「進入
+  下一年」鈕用 chapterCompleted 擋末季死按鈕（2464/2666 同型事故已兩次）④生涯數據
+  頁 🏆 判準補 proFinish==='champion'（3683/3698-3699 現只認高中 champion 與 uniRank）。
+- LOW 備忘：writeSave 回「寫入成功」非「有變動」，跨分頁同槽的內層 no-op 仍回
+  true（enterPro/settleUniFinale 同款既有慣例）——批 2 UI 判式別拿回值當「有推進」。
