@@ -229,6 +229,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 教學局邀請卡是否已開（同一道防重入：renderCareer 可能被別的路徑再叫一次，
   // 疊兩張卡的話下面那張永遠按不到——campOpen 的教訓）
   let tutorialInviteOpen = false;
+  // 多年卷批 2 覆審 M2：退休確認卡重入守衛（雙指同批事件連點會疊兩張卡，
+  // 第二張的「確定退休」因 retirePro 冪等回 false 而變死按鈕——2464/2666 同型）
+  let retireConfirmOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -2565,15 +2568,19 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 舊職業存檔（08-26 單年版）沒 contract、已結算那筆封存沒 proFinish——
     // 第一次推進會清空 results，晚於推進鈕＝冠軍事實永久遺失。冪等，no-op 不寫檔。
     if (pickedPro) store.backfillProMultiyear?.();
-    // 多年卷批 2（B4）：退休後不再進出戰/收尾卡迴圈——生涯已收束佔位（真謝幕卡＝批 5）
-    if (pickedPro && store.proRetired?.()) {
+    // 多年卷批 2（B4）→ 覆審 M1 修：收束判準＝proCareerOver SSOT（批 1 拍板甲，
+    // 退休**或**滿十年結算後皆收束——打滿十年的人不能被留在收尾卡迴圈裡；
+    // 真謝幕卡＝批 5）。不得用 proRetired 自組判式（A5 明文）。
+    if (pickedPro && store.proCareerOver?.()) {
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${COLOR.gold}`,
         'margin-top:8px', 'letter-spacing:3px',
       ], '🏐 生涯已收束'));
       root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.8',
         'max-width:min(360px,92vw)', 'text-align:center'],
-      '你已高掛球鞋。謝幕儀式・敬請期待——生涯的一切都收在數據頁裡。'));
+      store.proRetired?.()
+        ? '你已高掛球鞋。謝幕儀式・敬請期待——生涯的一切都收在數據頁裡。'
+        : '十年職業生涯走到終點。謝幕儀式・敬請期待——生涯的一切都收在數據頁裡。'));
     } else if (proSeasonDone) {
       const board = proTable({
         teamId: pickedPro.id, seed: career.seed,
@@ -3495,7 +3502,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   }
 
   // 多年卷批 2（B4）：退休確認卡——不可逆動作要二段確認。
+  // 覆審 M2：重入旗標＋確定鈕無條件關卡（retirePro 冪等回 false 也不留死卡）。
   function showProRetireConfirm(closingOverlay) {
+    if (retireConfirmOpen) return;
+    retireConfirmOpen = true;
     const confirm = el('div', [
       'position:fixed', 'inset:0', 'z-index:39', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.96)',
@@ -3505,12 +3515,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       'line-height:1.8', 'max-width:min(400px,92vw)'],
     '確定要高掛球鞋嗎？生涯就此收束，不能反悔。'));
     const yesBtn = button('確定退休', true, () => {
-      if (store.retirePro?.()) {
-        confirm.remove(); closingOverlay.remove(); renderCareer();
-      }
+      store.retirePro?.();
+      retireConfirmOpen = false;
+      confirm.remove(); closingOverlay.remove(); renderCareer();
     });
     confirm.appendChild(yesBtn);
-    confirm.appendChild(button('再想想', false, () => confirm.remove()));
+    confirm.appendChild(button('再想想', false, () => {
+      retireConfirmOpen = false;
+      confirm.remove();
+    }));
     document.body.appendChild(confirm);
   }
 
@@ -3708,12 +3721,18 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const career = store.loadCareer();
     if (!career) return;
     const seasons = [...(store.loadSeasonArchive?.() ?? [])];
-    seasons.push({
-      ...archiveSeasonSummary({ index: store.seasonIndex?.() ?? 1, results: career.results }),
-      // 配色卷階段二 E5：雙源判定——archive 內的季一律已收束（能進陣列本身就是
-      // 收束的事實），陣列外這筆即時季問 liveSeasonOngoing（章節感知，同 showCareerFinale）
-      current: liveSeasonOngoing(career),
-    });
+    // 多年卷批 2 覆審 M3（pre-existing 順修）：「封存但未推進」窗口（settleXxxFinale
+    // 之後、advanceSeason 之前）同一屆會同時出現在 archive 與 live——續約迴圈讓這個
+    // 窗口從終局一次變成每年季末都經過，勝敗合計會算兩次。已封存同屆＝不再 push。
+    const liveIndex = store.seasonIndex?.() ?? 1;
+    if (!seasons.some((sn) => sn.index === liveIndex)) {
+      seasons.push({
+        ...archiveSeasonSummary({ index: liveIndex, results: career.results }),
+        // 配色卷階段二 E5：雙源判定——archive 內的季一律已收束（能進陣列本身就是
+        // 收束的事實），陣列外這筆即時季問 liveSeasonOngoing（章節感知，同 showCareerFinale）
+        current: liveSeasonOngoing(career),
+      });
+    }
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:36', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:safe center', 'overflow-y:auto',

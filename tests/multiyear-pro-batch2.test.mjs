@@ -382,3 +382,44 @@ test('B5 生涯數據頁：職業冠軍季亮 🏆 職業冠軍、亞軍/名次�
   await settle();
   assert.match(allText(), /🏆 職業冠軍/, '冠軍季標籤');
 });
+
+// ════════════════════════════════════════════════════════════════
+// 批 2 覆審修補（M1/M2/M3）的行為測試
+// ════════════════════════════════════════════════════════════════
+test('M1 修：末季（第 10 年）結算返回後＝收束佔位（proCareerOver 接線），不再落收尾卡迴圈', async () => {
+  const storage = proSaveInProgress();
+  const raw = saveOf(storage);
+  raw.season.index = raw.career.chapter.enteredAtSeason + 9;
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  loseOutSeason(storage);
+  assert.ok(createCareerStore(storage).settleProFinale(), '前提：末季結算成功');
+  await renderScreen(storage);
+  const text = allText();
+  assert.match(text, /生涯已收束/, '滿十年（未退休）也要進收束佔位');
+  assert.match(text, /十年職業生涯走到終點/, '文案分流：非退休態');
+  assert.ok(!findBtn(/賽季落幕/), '不得再出現收尾卡迴圈入口');
+});
+
+test('M2 修：同批事件連點「高掛球鞋」只開一張確認卡', async () => {
+  const storage = proSaveInProgress();
+  loseOutSeason(storage);
+  await renderScreen(storage);
+  tap(findBtn(/賽季落幕/));
+  await settle();
+  const retireBtn = findBtn(/高掛球鞋/);
+  tap(retireBtn); tap(retireBtn); // 雙指同批事件
+  await settle();
+  const confirms = walk(globalThis.document.body)
+    .filter((n) => /確定要高掛球鞋嗎/.test(n.textContent ?? ''));
+  assert.equal(confirms.length, 1, '重入旗標必須擋下第二張卡');
+});
+
+test('M3 修：「封存未推進」窗口開數據頁——同一屆不重複、合計不灌水', async () => {
+  const storage = settledProYear1(); // 第 9 屆已封存、未推進
+  await renderScreen(storage);
+  tap(findBtn(/回看生涯數據/));
+  await settle();
+  const rows = walk(globalThis.document.body)
+    .filter((n) => /^第 9 屆/.test(n.textContent ?? ''));
+  assert.equal(rows.length, 1, '同一屆只能出現一列');
+});

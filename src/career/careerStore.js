@@ -14,7 +14,7 @@ import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 import {
   normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted, isUniversity,
   enterCorporate as enterCorporateBlock, isCorporate,
-  enterPro as enterProBlock, isPro,
+  enterPro as enterProBlock, isPro, proCareerOver as proCareerOverOf,
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { universityById } from './universities.js';
@@ -895,9 +895,16 @@ export function createCareerStore(storage, slot = 1) {
         return { ...prev, career: { ...prev.career, proRetired: true } };
       });
     },
-    // 已退休（UI 用；判「生涯結束了沒」一律走 chapter.proCareerOver，不得自組判式）
+    // 已退休（UI 用；判「生涯結束了沒」一律走 proCareerOver()，不得自組判式）
     proRetired() {
       return loadSave()?.career?.proRetired === true;
+    },
+    // 生涯收束（覆審 M1：UI 的收束佔位要吃這顆，不得拿 proRetired 自組——
+    // 打滿十年未退休的人也算收束；語意＝chapter.proCareerOver 拍板甲）
+    proCareerOver() {
+      const save = loadSave();
+      if (!save) return false;
+      return proCareerOverOf(save.career ?? null, save.season.index ?? 1);
     },
     // ★★ 多年卷批 2（B1）★★ 舊職業存檔一次性回填——職業章單年版（08-26 上線）
     // 的存檔沒有 contract，且已結算那筆封存沒有 proFinish。**必須先於推進鈕落地**：
@@ -922,7 +929,12 @@ export function createCareerStore(storage, slot = 1) {
       if (!needContract && !needFinish) return false; // 冪等 no-op：不寫檔
       return writeSave((prev) => {
         const prevSeasons = prev.career?.seasons ?? [];
-        const patched = needFinish
+        // 覆審 L3：補值吃當前 season——守衛核對「封存那筆＝當前屆」，前提壞掉時
+        // 寧可不補也不靜默寫錯冠軍紀錄。（覆審 L1 的 salary 缺洞**不在這裡補**：
+        // B1 凍結明訂封存其他鍵逐值不動，且隊階底薪永遠可從隊 id 推回、不會遺失
+        // ——批 5 顯示薪水曲線時以隊階底薪回退即可，見卷宗掛帳。）
+        const idxMatches = prevSeasons[lastProIdx]?.index === (prev.season.index ?? 1);
+        const patched = needFinish && idxMatches
           ? prevSeasons.map((sn, i) => (i === lastProIdx
             ? { ...sn, proFinish: proFinishOf(prev.season.schedule, prev.season.results) }
             : sn))
@@ -931,7 +943,7 @@ export function createCareerStore(storage, slot = 1) {
           ...prev,
           career: {
             ...prev.career,
-            ...(needFinish ? { seasons: patched } : {}),
+            ...(needFinish && idxMatches ? { seasons: patched } : {}),
             ...(needContract
               ? {
                 contract: {
