@@ -11,6 +11,8 @@ import { OPPONENTS, opponentById } from './opponents.js';
 // 大學卷批 6：大學對手池（與 opponents 同構的另一張表；高中那張一行不動）
 import { universityById } from './universities.js';
 import { corporationById } from './corporations.js';
+// 職業章批 2（2026-08-26）：第四張對手表——同大學卷批 6／企業章批 2 的補全慣例
+import { proTeamById } from './proTeams.js';
 import { kitFor } from './teamKit.js';
 import { defaultLineup, effectiveOrder, trustOf, DEFAULT_LIBERO_ID, SLOT_ROLES } from './lineup.js';
 import {
@@ -59,8 +61,9 @@ function season1Schedule(seed) {
 export function opponentName(opponentId) {
   // 大學卷批 6：大學章的對手在另一張表（兩張表的 id 不重疊）
   // 企業章批 2：第三張表也算數（同大學卷批 6 對 universities 的補全）
+  // 職業章批 2：第四張表也算數（同上補全慣例——B4 分母清單第 1 項）
   return opponentById(opponentId)?.name ?? universityById(opponentId)?.name
-    ?? corporationById(opponentId)?.name ?? opponentId;
+    ?? corporationById(opponentId)?.name ?? proTeamById(opponentId)?.name ?? opponentId;
 }
 
 // seed＝生涯種子：每場比賽種子由 matchSeed 決定論導出（同生涯同場次可重現）
@@ -453,6 +456,12 @@ export function matchOpponentDef(opponentId, seasonIndex = 1, { titles = 0 } = {
   // 八家企業的陣容/王牌/AI 在戰鬥層整批被架空（覆審實查：賽前對陣畫面也被靜默跳過）。
   const corp = corporationById(opponentId);
   if (corp) return corp;
+  // 職業章批 2 同款補全（B4 分母清單第 2 項）：職業隊的 grades＝在隊年資，
+  // 沒有 reserves，同企業/大學處理——直接回資料表、不套 applySeasonRoster。
+  // 漏這條的話 careerMatchSetup 拿到 null → teams.B 落回通用隊（企業章批 2 的
+  // 覆審地雷重演），賽前對陣畫面也會被靜默跳過。
+  const pro = proTeamById(opponentId);
+  if (pro) return pro;
   const base = opponentById(opponentId);
   if (!base) return null;
   // W5 衛冕屆難度：對手升級只綁奪冠次數（titles），止步重來＝原強度
@@ -738,9 +747,11 @@ export function alliedAiProfileOf(player) {
 // 企業章批 3（A3-3）第 8 參數 corp：企業章已簽公司的 id（呼叫端由 `store.loadCorp()`
 // 供給）——A 面球衣改穿公司 kit。與 school 並存不衝突：兩者最多一個非 null
 //（同一份存檔不會同時「在大學」又「已簽企業」；同時給時 corp 優先＝現在的章）。
+// 職業章批 2（B4 分母清單第 4 項）第 9 參數 pro：職業章已簽球隊的 id（呼叫端由
+// `store.loadPro()` 供給）——A 面球衣改穿球隊 kit，優先序在 corp 之前（現在的章）。
 export function careerMatchSetup(
   career, player, matchEntry, roster = null, lineup = null, seasonIndex = 1, school = null,
-  corp = null,
+  corp = null, pro = null,
 ) {
   const def = matchOpponentDef(matchEntry.opponentId, seasonIndex, { titles: career.titles ?? 0 });
   if (!def) throw new Error(`careerMatchSetup：未知對手 ${matchEntry.opponentId}`);
@@ -748,8 +759,11 @@ export function careerMatchSetup(
   // 探針卷（2026-08-26 拍板題 1）：企業對手＝球探開季建檔——個別交手紀錄缺席時
   // 回退全生涯聚合（單循環下賽前必缺；寫成回退而非覆蓋＝語意誠實）。聚合為空
   // （零紀錄新檔）回 null ⇒ 參數不成立，sim 照舊不讀。高中/大學路徑逐字不變。
+  // 職業章批 2（B4 分母清單第 3 項）：拍板題 5「沿用企業章 scoutRead 三檔形狀」
+  // ——職業對手同樣走球探開季建檔回退，不是只有企業對手才有
   const seen = career.scouting?.[matchEntry.opponentId]
-    ?? (corporationById(matchEntry.opponentId) ? leagueScoutZones(career) : null);
+    ?? ((corporationById(matchEntry.opponentId) || proTeamById(matchEntry.opponentId))
+      ? leagueScoutZones(career) : null);
   const scoutRead = seen && (def.scoutRead ?? 0) > 0
     ? { B: { targetId: 'A2', read: def.scoutRead, zones: seen.zones } }
     : undefined;
@@ -836,8 +850,9 @@ export function careerMatchSetup(
   // 配色卷階段二 E1：大學章＋已選校時我方（A）補上入學校 kit；kitFor 缺欄位回 null
   // ⇒ 消費端（geoCharacter.resolveKit）回落側別預設——school 查無效（universityById
   // 落空）時 uniSchoolKit 為 null，跟高中章一樣不補 A 面，行為安全一致。
+  const proKit = pro ? kitFor(proTeamById(pro)) : null;
   const corpKit = corp ? kitFor(corporationById(corp)) : null;
-  const uniSchoolKit = corpKit ?? (school ? kitFor(universityById(school)) : null);
+  const uniSchoolKit = proKit ?? corpKit ?? (school ? kitFor(universityById(school)) : null);
   return {
     seed: matchSeed(career, matchEntry.id),
     teams: careerTeams(player, oppDef, members, lineup),
@@ -917,8 +932,10 @@ export function deserializeCareer(json) {
     // 只是把「參數檔」的範圍補全——查不到仍然照丟）。
     // 企業章批 2：`corporations.js` 是第三張——漏掉它的話 enterCorporate 寫完存檔，
     // 下一次 loadSave 直接 throw＝整份存檔讀不回來（A2 系列測試實抓）。
+    // 職業章批 2：`proTeams.js` 是第四張——同一顆地雷，漏掉的話 enterPro 寫完存檔，
+    // 下一次 loadSave 直接 throw＝整份存檔讀不回來（B4 分母清單第 5 項）。
     if (!opponentById(m.opponentId) && !universityById(m.opponentId)
-      && !corporationById(m.opponentId)) {
+      && !corporationById(m.opponentId) && !proTeamById(m.opponentId)) {
       throw new Error(`生涯存檔含未知對手：${m.opponentId}`);
     }
   }

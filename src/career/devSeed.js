@@ -18,6 +18,7 @@ import { FINISH, FINISH_RANK } from './admission.js';
 // 不得 import buildUniSchedule/uniSeasonTurnover/buildUniMembers（B2-2 機械判定）
 import { universityById } from './universities.js';
 import { corporationById } from './corporations.js';
+import { proTeamById } from './proTeams.js';
 
 // 三屆的名次組合：讓「三屆最佳成績」等於請求值，其餘兩屆固定較差（不影響最佳值，
 // 但避免三屆一模一樣——那會讓「取最好的一屆」這條邏輯在治具上驗不到東西）。
@@ -172,5 +173,48 @@ export function advanceToCorp(store, { corpId }) {
   });
   if (!store.settleUniFinale?.()) return false;
   if (!store.enterCorporate?.(corpId)) return false;
+  return true;
+}
+
+// ---- 職業章批 2：治具入章（acceptance-pro-batch2.md B5）----
+// `?devpro=<隊id>`，同 devcorp：只在 devSeedRequest 成立時被 main.js 消費，
+// 單獨出現零寫入。與 devcorp/devuni 同時出現時 devpro 優先（它本來就包含跑完
+// 企業季——含先走完 enterCorporate 與企業季合成戰績、settleCorpFinale）。
+export const DEV_PRO_PARAM = 'devpro';
+
+// 治具用的固定企業母隊（走完企業季用；固定一家＝決定論，同 DEV_CORP_UNI 的先例）。
+const DEV_PRO_CORP = 'panshi-heavy';
+
+/** 解 devpro 參數。隊不存在＝null（不啟動、不猜）——驗參數允許 import proTeams，
+ *  同 devcorp 之於 corporations 的既有先例。 */
+export function devProRequest(params) {
+  const raw = params?.get?.(DEV_PRO_PARAM) ?? null;
+  if (typeof raw !== 'string' || !raw) return null;
+  if (!proTeamById(raw)) return null;
+  return { teamId: raw };
+}
+
+/**
+ * 把當前槽推進到「已簽入指定職業隊、職業賽季開局」。
+ * ★ 全程走正式鏈 ★ advanceToCorp（含 enterUniversity → 逐年 advanceSeason →
+ * U4 打滿 → settleUniFinale → enterCorporate）→ 逐場合成企業季戰績 →
+ * settleCorpFinale → enterPro——治具合成的只有各年/各季戰績（與 advanceToCorp 同式）。
+ * 注意：直接簽指定隊＝繞過邀約集合檢查（治具語意，同 devcorp 繞過邀約集合）。
+ * @returns true＝到位；false＝中途任何一步失敗（不半吊子續跑）
+ */
+export function advanceToPro(store, { teamId }) {
+  if (!advanceToCorp(store, { corpId: DEV_PRO_CORP })) return false;
+  const career = store.loadCareer?.();
+  const league = (career?.schedule ?? []).filter((m) => m?.round === 'corp');
+  if (!league.length) return false;
+  store.saveCareer?.({
+    ...career,
+    results: league.map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  if (!store.settleCorpFinale?.()) return false;
+  if (!store.enterPro?.(teamId)) return false;
   return true;
 }

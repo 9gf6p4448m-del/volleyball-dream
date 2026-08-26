@@ -70,8 +70,10 @@ import { createRitualStage } from '../render/ritualStage.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
-import { isHighSchool, isCorporate, chapterSeasonOf, currentTeamName } from '../career/chapter.js';
-import { bestFinishOf, seasonFinishOf, FINISH_LABEL } from '../career/admission.js';
+import {
+  isHighSchool, isCorporate, isPro, chapterSeasonOf, currentTeamName,
+} from '../career/chapter.js';
+import { bestFinishOf, seasonFinishOf, FINISH_LABEL, TIER } from '../career/admission.js';
 import {
   universityById, admissibleSchoolsFor, alumniPlacementsFor, TIER_LABEL,
 } from '../career/universities.js';
@@ -82,6 +84,8 @@ import {
   CORP_CONTRACT_LINES, CORP_PAYDAY_CARD, corpPaydayDue, corpAnchorPreEvents, corpClosingLines,
   corpShakeOffEvents,
 } from '../career/corpEvents.js';
+// 職業章批 2（2026-08-26）：入章接線——資料層批 1 已鋪好
+import { PRO_TIER_LABEL, proTeamById } from '../career/proTeams.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -188,7 +192,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 配色卷階段二 E4：動態隊名單一入口——高中章恆 OUR_TEAM_NAME、大學章＝入學校名。
   // 呼叫端一律經這個函式取，不得自行判斷章節（v2 裁定二前提，同
   // isHighSchool(store.loadChapter?.()) 慣例）
-  const teamName = () => currentTeamName(store.loadChapter?.(), store.loadSchool?.(), store.loadCorp?.());
+  const teamName = () => currentTeamName(
+    store.loadChapter?.(), store.loadSchool?.(), store.loadCorp?.(), store.loadPro?.(),
+  );
 
   // 隊伍配色卷批 3（B2 對陣色條／B4 beatStage 共用單一入口）：我方現在實際穿的
   // kit——大學章已選校時走該校 kit（與 careerState.js:747 kits.A 同一組函式
@@ -196,6 +202,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 大學未選校）回傳 null——B2 消費端回落 teamKit.js 的 OUR_ANCHORS.jersey、
   // B4 消費端（beatStage resolveKit）回落現行硬編碼 TEAM_KIT.A，兩份錨定值本就同步
   const ourSchoolKit = () => {
+    // 職業章批 2（B4 分母清單第 4 項）：入職業隊後穿的是球隊 kit，優先序在 corp 之前
+    // （現在的章）——同 careerMatchSetup 的 proKit ?? corpKit ?? uniSchoolKit 慣例。
+    const pro = store.loadPro?.() ?? null;
+    if (pro) return kitFor(proTeamById(pro));
     // 企業章批 2 覆審 MEDIUM 修：簽約後穿的是公司 kit，不是舊大學的
     const corp = store.loadCorp?.() ?? null;
     if (corp) return kitFor(corporationById(corp));
@@ -889,7 +899,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 企業章批 3：corp 對手的 grades＝在隊年資（corporations.js 檔頭），
       // 套高中的 currentGrade 屆數推進＋夾限會把全隊畫成「三年級」——改標年資。
       // 判準＝這個 def 在企業表查得到（def 本身沒有章節欄位，id 是唯一可靠識別）。
-      if (corporationById(def.id ?? '')) return `年資 ${g} 年`;
+      // 職業章批 2：proTeams 同語意（proTeam.js 檔頭），同一判準補第四張表。
+      if (corporationById(def.id ?? '') || proTeamById(def.id ?? '')) return `年資 ${g} 年`;
       return GRADE_LABEL[Math.min(3, currentGrade(g, seasonN))] ?? '';
     };
     // N2（07-30）情蒐讀當屆值：成長型 ace 的身高走跨屆曲線（applySeasonRoster 掛的
@@ -993,10 +1004,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       if (def.scoutRead > 0 && career.scouting?.[next.opponentId]) {
         intel.appendChild(el('div', ['font-size:11.5px', 'color:#ffb454'],
           '⚠ 這隊研究過你——慣用線路會被讀'));
-      } else if (def.scoutRead > 0 && corporationById(next.opponentId)) {
+      } else if (def.scoutRead > 0 && (corporationById(next.opponentId) || proTeamById(next.opponentId))) {
         // 探針卷（M3）：企業對手＝球探建檔——點名被盯的具體線（段 F 教訓：
         // 只說「會被讀」玩家對不上帳）。聚合無明顯慣性（scoutFocusZone null）
         // ＝不顯示，不嚇唬沒有慣性的玩家。
+        // 職業章批 2（拍板題 5）：職業對手沿用同一套形狀（B4 分母清單第 3 項）。
         const focus = scoutFocusZone(
           leagueScoutZones(career, { excludeId: next.opponentId })?.zones,
         );
@@ -1927,8 +1939,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 批 3 B3：對手色塊——與 B2 同一入口 opponentAccentColor（不得兩處各自實作）；
       // 練習賽 opponentId 恆 null ⇒ 兩個 lookup 皆落空 ⇒ null ⇒ 不畫、不炸
       // 企業章批 2 覆審 LOW 修：第三張表也查（同 opponentName 的補全）
+      // 職業章批 2：第四張表也查（B4 分母清單第 1 項，同 opponentName 的補全）
       const oppDef = opponentById(m.opponentId) ?? universityById(m.opponentId)
-        ?? corporationById(m.opponentId) ?? null;
+        ?? corporationById(m.opponentId) ?? proTeamById(m.opponentId) ?? null;
       const accent = opponentAccentColor(oppDef);
       const titleRow = el('div', ['display:flex', 'align-items:center', 'gap:6px', 'min-width:0']);
       if (accent != null) {
@@ -2206,6 +2219,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 判準綁章節不綁年限——A3-4 分流）
     const pickedCorp = isCorporate(store.loadChapter?.())
       ? corporationById(store.loadCorp?.() ?? '') : null;
+    // 職業章批 2：pickedPro 同款提升（B4 分母清單第 6 項「章節標籤/色塊」）——
+    // 頭部/數據鈕/謝幕鈕三處與 pickedCorp 並列，優先序在 corp 之前（現在的章）
+    const pickedPro = isPro(store.loadChapter?.())
+      ? proTeamById(store.loadPro?.() ?? '') : null;
     const uniLeague = career.schedule.filter((x) => x.round === 'league');
     const corpGames = career.schedule.filter((x) => x.round === 'corp');
     // 企業賽季打完了沒（A3-1 的 seasonConcluded 擴充；corpGames 守衛同 uniLeague 慣例）
@@ -2217,7 +2234,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 企業章批 2 覆審 MEDIUM 修：簽約後的頭部要說實話——公司名＋企業聯賽年份，
       // 不是舊大學的「🎓 升學已定」。★只換頭部文案，分支結構不動★ inUniversity
       // 仍是「非高中」語意（上方註解的卡死防線靠它）。
-      if (pickedCorp) {
+      // 職業章批 2：pickedPro 同款頭部——簽下職業隊之後說實話（隊名＋職業聯賽年份）
+      if (pickedPro) {
+        root.appendChild(el('div', [
+          'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
+          'letter-spacing:2px',
+        ], `🏐 ${pickedPro.name}`));
+        root.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7'],
+          `職業聯賽——第 ${chapterSeasonOf(store.loadChapter?.(), seasonN)} 年`));
+      } else if (pickedCorp) {
         root.appendChild(el('div', [
           'font-size:20px', 'font-weight:900', `color:${COLOR.gold}`, 'margin-top:8px',
           'letter-spacing:2px',
@@ -2240,7 +2265,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 系統分不出章節，而且它會再播一次謝幕、再把人導去升學）。回顧走**數據頁**——
       // 同樣看得到三屆戰績，但它是唯讀的，不是章節流程的入口。
       root.appendChild(button(
-        pickedCorp ? '📊 回看生涯數據' : '📊 回看三年的數據', // A3-4：企業章不再是「三年」
+        // A3-4：企業章不再是「三年」；職業章批 2 同款
+        (pickedCorp || pickedPro) ? '📊 回看生涯數據' : '📊 回看三年的數據',
         false, () => showCareerTotals(),
       ));
       // 大學謝幕卷 批 2（B2-1，2026-08-25）：大四還在打的時候先亮出（禁用的）謝幕鈕——
@@ -2248,7 +2274,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 分支）。禁用樣式沿用既有的成長面板 disabled 慣例（opacity:0.5＋native disabled）。
       // A3-4：判準加 !pickedCorp——企業章年限（CHAPTER_SEASONS.corporate）未來被
       // 調大時，這顆大學語彙的「🎓 謝幕」鈕也不得在企業章冒出（批 2 修補送審追蹤項②）
-      if (!pickedCorp && chapterSeasonOf(store.loadChapter?.(), seasonN) >= 4 && !uniSeasonDone) {
+      // 職業章批 2：判準再加 !pickedPro（同一顆理由，職業章也不得冒出大學語彙的謝幕鈕）
+      if (!pickedCorp && !pickedPro && chapterSeasonOf(store.loadChapter?.(), seasonN) >= 4 && !uniSeasonDone) {
         const finaleBtn = el('button', [
           'min-width:220px', 'height:52px', 'padding:0 24px', 'border-radius:26px',
           'border:none', 'font-size:17px', 'font-weight:700', 'cursor:not-allowed',
@@ -3036,7 +3063,26 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
   // 企業章批 3（A3-2）：章末收尾卡——佔位（續約/轉隊/多年生涯＝掛帳，卷宗 §五）。
   // ★文案屬提案★ 出口回生涯畫面（不是死路；重看名次也走同一顆鈕，冪等純顯示）。
+  // 職業章批 2：收尾卡入口——比照 showUniFinaleCeremony 的順序要點，一定要在讀名次
+  // 之前（board 由呼叫端先算好傳入）呼叫 settleCorpFinale，才會把 corpRank 封進
+  // 存檔供 store.proOffers()／enterPro 讀（archivedCorpRank 的單一讀取點）。
+  // 首次進入且結算失敗（壞存檔——corp id 解不開）不得靜默照播（同 uni-finale 批 2 教訓）；
+  // 重看路徑（旗標已打、冪等回 false）不受影響。
   function showCorpSeasonClosing(board) {
+    const settled = store.settleCorpFinale?.();
+    if (!settled && !store.corpFinaleSettled?.()) {
+      const failOverlay = el('div', [
+        'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center', 'background:#05070d',
+        'gap:12px', 'cursor:pointer', 'padding:26px 14px', 'text-align:center',
+      ]);
+      failOverlay.appendChild(el('div', ['font-size:15px', 'font-weight:800', `color:${COLOR.text}`,
+        'line-height:1.7'], '賽季結算失敗——存檔資料異常（企業資料解不開），企業元年戰績尚未封存'));
+      failOverlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`], '點擊返回生涯畫面'));
+      failOverlay.addEventListener('pointerdown', () => { failOverlay.remove(); renderCareer(); });
+      document.body.appendChild(failOverlay);
+      return;
+    }
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:center', 'background:#05070d',
@@ -3055,9 +3101,161 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     }
     overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'letter-spacing:2px',
       'margin-top:18px'], '續約談判・敬請期待'));
+    // ★批 2 新增★ 已結算才長出「前往下一個舞台」——corpFinaleSettled 守衛
+    //（同大學章「謝幕先於下一章」的先例）；button() 內建 stopPropagation，
+    // 不會被 overlay 本身的整卡點擊出口搶走
+    if (store.corpFinaleSettled?.()) {
+      overlay.appendChild(button('▶ 前往下一個舞台', false, () => {
+        overlay.remove();
+        showProScouting();
+      }));
+    }
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
-      '點擊返回生涯畫面'));
+      '點擊其餘處返回生涯畫面'));
     overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+    document.body.appendChild(overlay);
+  }
+
+  // ════════ 職業章 批 2（2026-08-26）：挖角/測試會演出 → 邀約自選 → 入隊 ════════
+  // 拍板題 2＝差異化（同企業卷宗 §一、pro-chapter-kickoff.md）：不是選秀唱名，是
+  // 「球團主動來談」——corpRank 決定邀約集合（proOffersFor），玩家在集合內自選。
+  // ★文案屬提案★（試玩回饋即改）。dialogPlay 的 line 一律 {speaker,text} 物件
+  // （批 4 出廠 bug 教訓——探針卷抓過字串 lines＝空白泡泡）。
+  function proPitchLineFor(t) {
+    return {
+      [TIER.POWERHOUSE]: '『我們要冠軍，而你可以是拼圖最後一塊。』',
+      [TIER.MID]: '『主力位置留給你——這裡不會把你放板凳。』',
+      [TIER.WEAK]: '『我們不是最強的，但你會是場上最被需要的那個人。』',
+    }[t.tier] ?? '『來聊聊吧。』';
+  }
+
+  function showProScouting() {
+    const offers = store.proOffers?.() ?? [];
+    // 演出用：只挑前 2–3 家開口（純演出、不影響任何存檔——同 showCorpDraft 的
+    // 決定論輪派手法），完整名單留給下一張邀約卡
+    const pitchTeams = offers.slice(0, Math.min(3, offers.length));
+    const lines = [
+      { speaker: '', text: '企業聯賽賽季結束的那個禮拜，手機開始不安分。' },
+      ...pitchTeams.map((t) => ({ speaker: t.name, text: proPitchLineFor(t) })),
+      { speaker: '', text: '不只一支球隊，找上了你。' },
+    ];
+    dialogPlay([{ lines }], () => showProOffers());
+  }
+
+  // 提案文案（tier 分三檔，職業味——同 corpCard 的「球權/戰績/環境」三軸）
+  function proCostLines(t) {
+    return {
+      [TIER.POWERHOUSE]: {
+        ball: `頂級球隊人才濟濟——球權要跟${t.ace?.name ?? '王牌'}那個等級的人搶`,
+        record: '目標只有冠軍，一輸就會被問「你在幹嘛」',
+        tech: '隊上全是各隊挖來的悍將，逼你一路吊打自己的舒適圈',
+      },
+      [TIER.MID]: {
+        ball: '主力位置留給你——教練組要你當那個被信任的人',
+        record: '打進四強是底線，冠軍是要拼的',
+        tech: '隊友程度整齊，環境穩定但不會逼你變得更快',
+      },
+      [TIER.WEAK]: {
+        ball: '全隊看你——沒有人跟你搶球權',
+        record: '保級戰，輸幾場都沒人怪你',
+        tech: '資源最少，一切靠自己摸索',
+      },
+    }[t.tier] ?? { ball: '待談', record: '待談', tech: '待談' };
+  }
+
+  function proCard(t, onPick) {
+    const tierColor = { 豪門: COLOR.gold, 勁旅: COLOR.cyan, 新軍: COLOR.dim }[PRO_TIER_LABEL[t.tier]];
+    const cost = proCostLines(t);
+    const card = el('div', [
+      'width:min(560px,94vw)', `background:${COLOR.card}`, 'border-radius:16px',
+      'padding:14px 16px', 'display:flex', 'flex-direction:column', 'gap:8px',
+      `border:1px solid ${tierColor === COLOR.dim ? '#2c3a58' : tierColor}44`,
+    ]);
+    const head = el('div', ['display:flex', 'align-items:center', 'gap:8px']);
+    head.appendChild(el('div', ['font-size:19px', 'font-weight:900', `color:${COLOR.text}`], t.name));
+    head.appendChild(badge(PRO_TIER_LABEL[t.tier], `${tierColor}22`, tierColor));
+    card.appendChild(head);
+    if (t.ace) {
+      card.appendChild(el('div', ['font-size:12px', `color:${COLOR.cyan}`],
+        `王牌 ${t.ace.name}（${t.ace.title}）`));
+    }
+    for (const [label, text] of [['球權', cost.ball], ['戰績', cost.record], ['環境', cost.tech]]) {
+      const row = el('div', ['display:flex', 'gap:8px', 'align-items:flex-start']);
+      row.appendChild(el('div', ['font-size:11px', 'font-weight:800', `color:${COLOR.dim}`,
+        'flex:none', 'width:28px', 'padding-top:2px'], label));
+      row.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'line-height:1.6'], text));
+      card.appendChild(row);
+    }
+    const pick = el('div', ['display:flex', 'justify-content:flex-end']);
+    pick.appendChild(smallButton('▶ 簽這一隊', () => onPick(t)));
+    card.appendChild(pick);
+    return card;
+  }
+
+  function showProOffers() {
+    const offers = store.proOffers?.() ?? [];
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:39', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:#05070d', 'gap:10px', 'padding:24px 12px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'letter-spacing:4px'],
+      '職業聯賽・邀約'));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'line-height:1.7',
+      'text-align:center', 'max-width:560px'],
+    `測試會結束，正式的邀約送到你面前——${offers.length} 支職業隊向你招手。`));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
+      'text-align:center', 'max-width:560px', 'margin-bottom:4px'],
+    '這是你的第一份職業合約——選你想打的球，不是選最安全的那份。'));
+    for (const t of offers) {
+      overlay.appendChild(proCard(t, (picked) => {
+        overlay.remove();
+        showProConfirm(picked, () => showProOffers());
+      }));
+    }
+    document.body.appendChild(overlay);
+  }
+
+  // 二次確認：簽約是不可逆的（同 showCorpConfirm 的誤觸防線）
+  function showProConfirm(t, onCancel) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.94)',
+      'gap:14px', 'padding:24px',
+    ]);
+    overlay.appendChild(el('div', ['font-size:22px', 'font-weight:900', `color:${COLOR.gold}`], t.name));
+    overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'text-align:center',
+      'line-height:1.7', 'max-width:460px'], proCostLines(t).ball));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`], '簽了字就不能反悔。'));
+    const row = el('div', ['display:flex', 'gap:10px', 'flex-wrap:wrap', 'justify-content:center']);
+    row.appendChild(smallButton('再想想', () => { overlay.remove(); onCancel(); }));
+    row.appendChild(button('簽約', true, () => {
+      const ok = store.enterPro?.(t.id);
+      overlay.remove();
+      // 守衛擋下（壞存檔/重入）不得裝作簽成——回生涯頁，不進 done 卡
+      if (ok) showProDone(t);
+      else renderCareer();
+    }));
+    overlay.appendChild(row);
+    document.body.appendChild(overlay);
+  }
+
+  function showProDone(t) {
+    const overlay = el('div', [
+      'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'background:#05070d', 'gap:14px',
+      'cursor:pointer',
+    ]);
+    overlay.appendChild(el('div', ['font-size:30px', 'font-weight:900', `color:${COLOR.gold}`,
+      'letter-spacing:6px'], t.name));
+    overlay.appendChild(el('div', ['font-size:14px', `color:${COLOR.text}`, 'letter-spacing:2px'],
+      '職業初登場'));
+    overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'margin-top:16px',
+      'text-align:center', 'line-height:1.8'],
+    '職業聯賽賽季準備中——這一年的對手，是剩下那七支球隊。'));
+    overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:20px'],
+      '點擊任意處返回'));
+    overlay.addEventListener('pointerdown', () => { overlay.remove(); renderSlots(); });
     document.body.appendChild(overlay);
   }
 

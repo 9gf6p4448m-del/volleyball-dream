@@ -126,6 +126,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
         careerCtx.store?.loadSchool?.() ?? null,
         // 企業章批 3（A3-3）第 8 參數：已簽公司 id（其他章 loadCorp 恆 null）
         careerCtx.store?.loadCorp?.() ?? null,
+        // 職業章批 2 第 9 參數：已簽球隊 id（其他章 loadPro 恆 null）
+        careerCtx.store?.loadPro?.() ?? null,
       ))
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）

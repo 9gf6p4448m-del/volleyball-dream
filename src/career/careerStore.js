@@ -14,15 +14,20 @@ import { TRANSFER_ASKED_EV, TRANSFER_USED_EV } from './positionEvents.js';
 import {
   normalizeChapter, enterUniversity as enterUniversityBlock, chapterCompleted, isUniversity,
   enterCorporate as enterCorporateBlock, isCorporate,
+  enterPro as enterProBlock, isPro,
 } from './chapter.js';
 import { seasonFinishOf } from './admission.js';
 import { universityById } from './universities.js';
 import { buildUniSchedule, uniTable } from './uniSchedule.js';
 import { buildUniMembers, uniStartTrustFor, uniRankTrustBonus } from './uniTeam.js';
 import { corporationById, corpOffersFor } from './corporations.js';
-import { buildCorpMembers, corpStartTrustFor } from './corpTeam.js';
+import { buildCorpMembers, corpStartTrustFor, corpRankTrustBonus } from './corpTeam.js';
 import { buildCorpSchedule, corpTable } from './corpSchedule.js';
 import { CORP_PAYDAY_EV } from './corpEvents.js';
+// 職業章批 2（2026-08-26）：入章接線——資料層（proTeams/proTeam/proSchedule）批 1 已鋪好
+import { proTeamById, proOffersFor } from './proTeams.js';
+import { buildProMembers, proStartTrustFor } from './proTeam.js';
+import { buildProSchedule } from './proSchedule.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -48,6 +53,18 @@ function archivedUniRank(save) {
   const seasons = save?.career?.seasons ?? [];
   for (let i = seasons.length - 1; i >= 0; i -= 1) {
     const r = seasons[i]?.uniRank;
+    if (Number.isInteger(r) && r >= 1) return r;
+  }
+  return 0;
+}
+
+// 職業章批 2：封存裡最近一筆帶 corpRank 的季（正常存檔＝企業季那筆，settleCorpFinale
+// 寫入）。★單一讀取點★（同 archivedUniRank 的慣例）：proOffers 與 enterPro 的名次
+// 加成都問這裡——讀的是封存的真實路徑，不接受呼叫端外帶 rank。壞存檔回 0＝最低待遇。
+function archivedCorpRank(save) {
+  const seasons = save?.career?.seasons ?? [];
+  for (let i = seasons.length - 1; i >= 0; i -= 1) {
+    const r = seasons[i]?.corpRank;
     if (Number.isInteger(r) && r >= 1) return r;
   }
   return 0;
@@ -659,6 +676,77 @@ export function createCareerStore(storage, slot = 1) {
             ...prev.season,
             index: nextSeason,
             schedule: buildCorpSchedule({ corpId: corp.id, seed: prev.season?.seed ?? 1 }),
+            results: [],
+            events: [],
+            pendingMatch: undefined,
+          },
+        };
+      });
+    },
+    // ══════ 職業章 批 2（2026-08-26）══════
+    // 驗收＝docs/kickoffs/acceptance-pro-batch2.md（B1）。
+    // 簽了哪支職業隊（沒簽＝null；查得到才算數，同 loadCorp 慣例）。
+    loadPro() {
+      const id = loadSave()?.career?.pro;
+      return typeof id === 'string' && proTeamById(id) ? id : null;
+    },
+    // 入章時封存的企業名冊（比照 loadUniRoster）。沒入章＝null。
+    loadCorpRoster() {
+      const r = loadSave()?.career?.corpRoster ?? null;
+      return r?.members?.length ? structuredClone(r) : null;
+    },
+    // 邀約集合——★值從封存的 corpRank 來（同 corpOffers 之於 archivedUniRank 的慣例）★
+    // UI 一律呼叫這裡，不得自己拿 rank 當參數去呼叫 proOffersFor（招募替代路徑卷教訓）。
+    proOffers() {
+      return proOffersFor(archivedCorpRank(loadSave()));
+    },
+    /**
+     * 簽入職業隊＝入章。★★ 同一次 RMW ★★ 章節、球隊、名冊換血、球權、賽程、
+     * 屆數要嘛一起換好，要嘛一個都不換（同 enterCorporate 批 2 的半吊子存檔防線）。
+     * 守衛：只有「企業謝幕已結算」（corpFinaleSettled＝企業季已封存）的存檔可入章
+     * ——結算先於下一章；已在職業章＝冪等 no-op（不覆寫已簽的球隊）；壞 teamId
+     * ＝不猜、不入章。
+     * 球權（★數值屬提案★）：隊階起點（proStartTrustFor，沿大學/企業同一張表）
+     * ＋企業名次加成（corpRankTrustBonus——名次帶著走的職業章版本，批 1 已鋪好）；
+     * floorShare 照舊不碰（球權保底與章節無關）。
+     */
+    enterPro(teamId = null) {
+      const save = loadSave();
+      if (!save) return false;
+      if (save.career?.corpFinaleSettled !== true) return false;
+      if (isPro(normalizeChapter(save.career ?? null))) return false;
+      const team = proTeamById(teamId);
+      if (!team) return false;
+      return writeSave((prev) => {
+        // no-op 條件與寫入內容綁同一份 prev 讀值（同 enterCorporate 的雙保險慣例）
+        if (prev?.career?.corpFinaleSettled !== true) return prev;
+        if (isPro(normalizeChapter(prev.career ?? null))) return prev;
+        const nextSeason = (prev.season?.index ?? 0) + 1;
+        const members = buildProMembers(team.id);
+        const playerRole = prev.player?.currentRole ?? 'outside';
+        const lineup = defaultLineup(members, prev.player?.id ?? 'A2', playerRole);
+        const startTrust = Math.min(100,
+          proStartTrustFor(team) + corpRankTrustBonus(archivedCorpRank(prev)));
+        return {
+          ...prev,
+          career: {
+            ...enterProBlock(prev.career, nextSeason),
+            pro: team.id,
+            // 企業名冊封存（比照 uniRoster：不隨行，生涯數據頁還看得到）
+            corpRoster: prev.roster ?? null,
+          },
+          roster: { capacity: members.length + 1, members, alumni: [] },
+          lineup,
+          player: prev.player
+            ? {
+              ...prev.player,
+              trust: { ...(prev.player.trust ?? {}), fromSetter: startTrust },
+            }
+            : prev.player,
+          season: {
+            ...prev.season,
+            index: nextSeason,
+            schedule: buildProSchedule({ teamId: team.id, seed: prev.season?.seed ?? 1 }),
             results: [],
             events: [],
             pendingMatch: undefined,

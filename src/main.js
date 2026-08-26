@@ -18,7 +18,7 @@ import { createCareerScreen } from './ui/careerScreen.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
 import {
   devSeedRequest, buildSyntheticSave, devUniRequest, advanceToUniYear,
-  devCorpRequest, advanceToCorp,
+  devCorpRequest, advanceToCorp, devProRequest, advanceToPro,
 } from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentName } from './career/careerState.js';
@@ -131,9 +131,13 @@ async function showCareerEntry(ctx) {
       // 參數不合法＝devUniRequest 回 null＝忽略，停在升學那一刻照舊）
       // 企業章批 2：?devcorp=<企業id> 治具入章（走正式升學→四年→謝幕→簽約鏈；
       // 與 devuni 同時出現時 devcorp 優先——它本來就包含跑完大學四年）
+      // 職業章批 2：?devpro=<隊id> 治具入章（走正式企業季→結算→簽約鏈；
+      // 與 devcorp/devuni 同時出現時 devpro 優先——它本來就包含跑完企業一季）
+      const proReq = devProRequest(ctx.params);
       const corpReq = devCorpRequest(ctx.params);
       const uniReq = devUniRequest(ctx.params);
-      if (corpReq) advanceToCorp(store, corpReq);
+      if (proReq) advanceToPro(store, proReq);
+      else if (corpReq) advanceToCorp(store, corpReq);
       else if (uniReq) advanceToUniYear(store, uniReq);
     }
   }

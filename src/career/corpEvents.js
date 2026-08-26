@@ -7,6 +7,8 @@
 // ★ 拍板題 1 ★ 國外強權職業聯賽＝世界觀存在、本章僅敘事點名（接簡子嵐
 //   「更大的海」`events.js:503` 伏筆）；可玩與否留職業章再裁。
 import { CORPORATIONS, corporationById } from './corporations.js';
+// 職業章批 2 覆審 MEDIUM 修：甩開句對職業對手也適用（見 corpShakeOffEvents 註解）
+import { proTeamById } from './proTeams.js';
 import {
   leagueScoutZones, scoutFocusZone, SCOUT_COLD_SHARE, SCOUT_ZONE_LABEL,
 } from './careerState.js';
@@ -92,10 +94,14 @@ export function corpShakeOffEvents(career) {
   if (!results.length) return [];
   const last = results[results.length - 1];
   const entry = (career.schedule ?? []).find((m) => m.id === last.matchId);
-  if (entry?.round !== 'corp') return [];
+  // 職業章批 2 覆審 MEDIUM 修：round 閘原鎖死 'corp'——職業章賽前「被盯」警示
+  // 會顯示（careerScreen:1007 已補四表）、賽後甩開句卻恆空＝反制迴路單向斷裂
+  // （探針卷「感受不到＝機制不存在」）。判準改資料表口徑（同批 matchOpponentDef
+  // 的做法）：對手在企業表或職業表且 scoutRead>0 就適用，不再比對 round 字串。
+  if (entry?.round !== 'corp' && entry?.round !== 'pro') return [];
   const id = `corp-shakeoff-${last.matchId}`;
   if ((career.events ?? []).includes(id)) return [];
-  const corp = corporationById(entry.opponentId);
+  const corp = corporationById(entry.opponentId) ?? proTeamById(entry.opponentId);
   if (!corp || !(corp.scoutRead > 0)) return [];
   // 賽前被盯線＝聚合**剔除本場對手的紀錄**（mergeScouting 已把本場記進去，
   // 不剔會拿被污染的分佈自證——careerState.leagueScoutZones 的 excludeId 註解）
