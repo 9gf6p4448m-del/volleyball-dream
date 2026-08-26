@@ -28,6 +28,16 @@ export function proStartTrustFor(team) {
   return UNI_START_TRUST[team?.tier] ?? UNI_START_TRUST[TIER.MID];
 }
 
+// 多年卷批 3：職業名次轉隊信任加成——沿 corpRankTrustBonus 同一套哲學
+// （名次帶著走），鍵吃本季 proRank。★數值屬提案★（acceptance-multiyear-batch3 C2）。
+export function proRankTrustBonus(rank) {
+  if (!Number.isInteger(rank) || rank < 1) return 0;
+  if (rank === 1) return 6;
+  if (rank <= 3) return 4;
+  if (rank <= 6) return 2;
+  return 0;
+}
+
 function attributesFor(team, role, i) {
   const attrs = {};
   const isAce = team.ace?.slot === i;

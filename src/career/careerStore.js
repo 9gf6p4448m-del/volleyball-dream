@@ -25,8 +25,8 @@ import { buildCorpMembers, corpStartTrustFor, corpRankTrustBonus } from './corpT
 import { buildCorpSchedule, corpTable } from './corpSchedule.js';
 import { CORP_PAYDAY_EV } from './corpEvents.js';
 // 職業章批 2（2026-08-26）：入章接線——資料層（proTeams/proTeam/proSchedule）批 1 已鋪好
-import { proTeamById, proOffersFor, proBaseSalaryFor } from './proTeams.js';
-import { buildProMembers, proStartTrustFor } from './proTeam.js';
+import { proTeamById, proOffersFor, proBaseSalaryFor, proRenewalSalaryFor } from './proTeams.js';
+import { buildProMembers, proStartTrustFor, proRankTrustBonus } from './proTeam.js';
 // 職業章批 3：growProSchedule（saveCareer 的季後賽接線）／proTable（settleProFinale 讀名次）
 import { buildProSchedule, proTable, growProSchedule, PLAYOFF_ROUND } from './proSchedule.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
@@ -49,6 +49,15 @@ import { slotKey, slotHeadKey, slotMidKey, headOf } from './saveSlots.js';
 // proRank 是**循環**名次，循環第 4 也可能爆冷奪冠；高中 schema 的 champion/finish
 // 對職業恆假不重用（鍵名不撞名慣例）。schedule 只含玩家自己的場次，semi 敗＝
 // final 不存在。四態：champion／final（亞軍）／semi（四強止步）／league（未進四強）。
+/** 最後一筆職業季封存（多年卷批 3：轉隊 offer 與薪水都吃「剛結算那季」的名次）。 */
+function lastProSeasonOf(save) {
+  const seasons = save?.career?.seasons ?? [];
+  for (let i = seasons.length - 1; i >= 0; i -= 1) {
+    if (seasons[i]?.pro) return seasons[i];
+  }
+  return null;
+}
+
 function proFinishOf(schedule, results) {
   const resultOf = (m) => (results ?? []).find((r) => r.matchId === m.id);
   const finalMatch = (schedule ?? []).find((m) => m.round === PLAYOFF_ROUND.FINAL);
@@ -905,6 +914,83 @@ export function createCareerStore(storage, slot = 1) {
       const save = loadSave();
       if (!save) return false;
       return proCareerOverOf(save.career ?? null, save.season.index ?? 1);
+    },
+    // ★★ 多年卷批 3（C1）★★ 轉隊邀約集合——「成績→邀約集合自選」第四次重用：
+    // proOffersFor 吃**本季 proRank**（剛結算那季的封存），排除現隊。
+    // 只在「已結算、非末季、未退休」的續約窗開放；其餘一律空集合。
+    proTransferOffers() {
+      const save = loadSave();
+      if (!save) return [];
+      if (!isPro(normalizeChapter(save.career ?? null))) return [];
+      if (save.career?.proRetired === true) return [];
+      if (save.career?.proFinaleSettled !== true) return [];
+      if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return [];
+      const currentId = save.career?.pro ?? null;
+      const last = lastProSeasonOf(save);
+      if (!last) return [];
+      return proOffersFor(last.proRank).filter((t) => t.id !== currentId);
+    },
+    // ★★ 多年卷批 3（C2）★★ 轉隊＝換隊＋推進**同一次 RMW**（拆兩次寫會留
+    // 「換了隊沒推進」的半吊子存檔）。守衛全數複製到 prev 讀值（雙保險慣例）。
+    //   代價：名冊/lineup 重建、玩家 fromSetter 重置為新隊起點＋本季名次加成
+    //   （新環境不認識你——轉隊的機制代價，★數值屬提案★）；season.events 保留
+    //   （同章劇情/傳授旗標不重播）。新約薪水＝proRenewalSalaryFor(新隊, 本季名次,
+    //   本季 finish)——與續約同一顆公式換隊參數。
+    transferPro(teamId = null) {
+      const save = loadSave();
+      if (!save) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false;
+      if (save.career?.proRetired === true) return false;
+      if (save.career?.proFinaleSettled !== true) return false;
+      if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return false;
+      const team = proTeamById(teamId);
+      if (!team) return false;
+      if ((save.career?.pro ?? null) === team.id) return false;
+      const last = lastProSeasonOf(save);
+      if (!last) return false;
+      if (!proOffersFor(last.proRank).some((t) => t.id === team.id)) return false;
+      return writeSave((prev) => {
+        if (prev?.career?.proRetired === true) return prev;
+        if (prev?.career?.proFinaleSettled !== true) return prev;
+        if (chapterCompleted(prev.career?.chapter, prev.season.index ?? 1)) return prev;
+        if ((prev.career?.pro ?? null) === team.id) return prev;
+        const endingSeason = prev.season.index ?? 1;
+        const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
+        const lastPrev = lastProSeasonOf(prev);
+        const members = buildProMembers(team.id);
+        const playerRole = prev.player?.currentRole ?? 'outside';
+        const lineup = defaultLineup(members, prev.player?.id ?? 'A2', playerRole);
+        const startTrust = Math.min(100,
+          proStartTrustFor(team) + proRankTrustBonus(lastPrev?.proRank));
+        return {
+          ...prev,
+          career: {
+            ...prev.career,
+            pro: team.id,
+            contract: {
+              salary: proRenewalSalaryFor(team, lastPrev?.proRank, lastPrev?.proFinish),
+              sinceSeason: endingSeason + 1,
+            },
+            proFinaleSettled: false,
+          },
+          roster: { capacity: members.length + 1, members, alumni: [] },
+          lineup,
+          player: prev.player
+            ? {
+              ...prev.player,
+              trust: { ...(prev.player.trust ?? {}), fromSetter: startTrust },
+            }
+            : prev.player,
+          season: {
+            ...prev.season,
+            index: endingSeason + 1,
+            seed: nextSeed,
+            schedule: buildProSchedule({ teamId: team.id, seed: nextSeed }),
+            results: [],
+            pendingMatch: undefined,
+          },
+        };
+      });
     },
     // ★★ 多年卷批 2（B1）★★ 舊職業存檔一次性回填——職業章單年版（08-26 上線）
     // 的存檔沒有 contract，且已結算那筆封存沒有 proFinish。**必須先於推進鈕落地**：

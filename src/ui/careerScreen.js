@@ -235,6 +235,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 送審輪 2 補：同型效果的上一層入口——收尾卡本身也要重入守衛（同批雙點疊兩張
   // 收尾卡，推進一次後殘卡的續約鈕變死鈕）。防線按效果寫：所有關閉路徑統一還原
   let proClosingOpen = false;
+  // 多年卷批 3（C4）：轉隊選單/確認的重入守衛（同 retireConfirmOpen 慣例）
+  let transferMenuOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -3498,6 +3500,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       });
       renewBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
       overlay.appendChild(renewBtn);
+      // 批 3（C4）第三路：測試其他球團——offer 集合非空才顯示（末季/已退休由
+      // 上層分支擋掉，這裡的空集合只剩壞檔防呆）
+      const offers = store.proTransferOffers?.() ?? [];
+      if (offers.length > 0) {
+        const transferBtn = button('🔁 測試其他球團', false, () => {
+          showProTransferMenu(overlay, offers, lastPro);
+        });
+        transferBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+        overlay.appendChild(transferBtn);
+      }
       const retireBtn = button('👋 高掛球鞋', false, () => {
         showProRetireConfirm(overlay);
       });
@@ -3511,6 +3523,54 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       overlay.remove(); renderCareer();
     });
     document.body.appendChild(overlay);
+  }
+
+  // 多年卷批 3（C4）：轉隊選單——每隊一張卡（隊名/隊階/年薪報價），選定→確認
+  // →transferPro（換隊＋推進同一次 RMW）。年薪與寫入值同一次計算（B2 同紀律）。
+  function showProTransferMenu(closingOverlay, offers, lastPro) {
+    if (transferMenuOpen) return;
+    transferMenuOpen = true;
+    const menu = el('div', [
+      'position:fixed', 'inset:0', 'z-index:39', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:rgba(4,6,12,0.96)', 'gap:10px', 'padding:26px 14px',
+    ]);
+    menu.appendChild(el('div', ['font-size:16px', 'font-weight:900', `color:${COLOR.gold}`,
+      'letter-spacing:3px'], '🔁 測試其他球團'));
+    menu.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
+      'max-width:min(380px,92vw)', 'text-align:center'],
+    '轉隊＝新環境重新開始：隊友的信任要從頭建立。'));
+    for (const t of offers) {
+      const salary = proRenewalSalaryFor(t, lastPro?.proRank, lastPro?.proFinish);
+      const card = button(`${t.name}（${PRO_TIER_LABEL[t.tier] ?? t.tier}）——年薪 ${salary} 萬`, false, () => {
+        const confirm = el('div', [
+          'position:fixed', 'inset:0', 'z-index:40', 'display:flex', 'flex-direction:column',
+          'align-items:center', 'justify-content:center', 'background:rgba(4,6,12,0.96)',
+          'gap:16px', 'padding:26px 14px', 'text-align:center',
+        ]);
+        confirm.appendChild(el('div', ['font-size:16px', 'font-weight:900', `color:${COLOR.text}`,
+          'line-height:1.8', 'max-width:min(400px,92vw)'],
+        `確定轉入 ${t.name}？年薪 ${salary} 萬——隊友信任將重新累積。`));
+        confirm.appendChild(button('✍ 簽下轉隊合約', true, () => {
+          // transferPro 冪等（旗標守衛）：連點第二次 settled 已清＝false，不雙轉
+          if (store.transferPro?.(t.id)) {
+            transferMenuOpen = false;
+            proClosingOpen = false;
+            confirm.remove(); menu.remove(); closingOverlay.remove(); renderCareer();
+          } else {
+            confirm.remove();
+          }
+        }));
+        confirm.appendChild(button('再想想', false, () => confirm.remove()));
+        document.body.appendChild(confirm);
+      });
+      menu.appendChild(card);
+    }
+    menu.appendChild(button('↩ 回續約談判', false, () => {
+      transferMenuOpen = false;
+      menu.remove();
+    }));
+    document.body.appendChild(menu);
   }
 
   // 多年卷批 2（B4）：退休確認卡——不可逆動作要二段確認。
