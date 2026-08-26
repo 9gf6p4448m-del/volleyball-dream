@@ -128,27 +128,23 @@ test('W5 retargetEligible 純函式：預設開（快速比賽）／未受教關
   assert.equal(MC.retargetEligible(g, 'NOBODY'), false, '查無此人＝不受理');
 });
 
-test('W6 computeRetarget 純函式契約：無時間參數、角度線性封頂、退化護欄回 null', () => {
+test('W6 computeRetarget 純函式契約（拍板丙）：無時間參數、只判「算不算有變向」、退化護欄回 null', () => {
   assert.equal(typeof G.computeRetarget, 'function', 'computeRetarget 應存在');
   assert.equal(G.computeRetarget.length, 3, '參數＝(from, firstAim, newAim)——沒有任何時間量');
   const from = { x: 0, y: 3, z: 1.2 };
   const first = { x: 4.5, z: -5 };
-  // 退化護欄：新落點與擊球點重合 ⇒ null（不假拉滿）
+  // 退化護欄：新落點與擊球點重合 ⇒ null（無方向語意的退化輸入）
   assert.equal(G.computeRetarget(from, first, { x: 0, z: 1.2 }), null);
-  // 封頂 <1（F4 不得 100% 得利）
-  const capped = G.computeRetarget(from, first, { x: -4.5, z: -5 });
-  assert.ok(Math.abs(capped.deceiveP - G.TUNING.DBL_SPIKE_DECEIVE_GAIN) < 1e-9);
-  assert.ok(G.TUNING.DBL_SPIKE_DECEIVE_GAIN < 1);
   // 覆審修 3（滑鼠誤觸護欄）：newAim 與 firstAim 逐值相同或 ε 內 ⇒ null（同層護欄）
   assert.equal(G.computeRetarget(from, first, { ...first }), null, '同落點誤觸應回 null');
   assert.equal(G.computeRetarget(from, first, { x: first.x + 1e-8, z: first.z - 1e-8 }), null,
     'ε 內抖動同樣回 null');
-  // θ=0 但不同落點（同方向改深度）仍回物件＝收費語意不變（既有語意，只嚴不鬆）
-  const depth = G.computeRetarget(from, first, {
+  // 拍板丙：回傳不再攜帶任何機率（deceiveP 已隨機率騙牆層刪除）——真變向＝true
+  assert.equal(G.computeRetarget(from, first, { x: -4.5, z: -5 }), true, '真變向＝true');
+  // 同方向改深度＝合法變向（代價照付）；能不能得利看牆的真實站位蓋不蓋得到新深度
+  assert.equal(G.computeRetarget(from, first, {
     x: from.x + 0.6 * (first.x - from.x), z: from.z + 0.6 * (first.z - from.z),
-  });
-  assert.ok(depth !== null && Math.abs(depth.deceiveP) < 1e-9,
-    '同方向改深度＝合法變向（代價照付）但騙不到網口的牆');
+  }), true, '同方向改深度＝合法變向（收費語意不變）');
 });
 
 test('W7 生涯主角在職業章前的存檔形狀：doubleSpike 顯式 0（配 sim 端 ?? 1 閘不漏氣）', () => {
@@ -179,4 +175,44 @@ test('W8 滯空窗內短按（<14px）被吞：不變向、不重跳、不改寫
     assert.equal(second.retargetAim, undefined, '短按無方向語意，不得化為變向');
     assert.equal(second.timing, first.timing, '短按不得改寫第一段的出手品質');
   });
+});
+
+// ★ 拍板丙（MEDIUM-6 修）★最小位移閘：第二段解算後的落點與第一段落點差 <0.5m
+// ＝視同誤觸吞掉（同 14px 拖曳閘的語意——桌面點按（無拖曳）路徑原本沒有任何
+// 位移閘，點在原落點附近會白收變向全套代價）。ε 護欄（computeRetarget 1e-6m）
+// 保留為 sim 端最底層。
+test('W9 最小位移閘：第二段落點與第一段差 <0.5m＝吞掉不變向；≥0.5m 照常變向', () => {
+  const runWithDrag = (mkDrag) => withControls('A2', (c) => {
+    const g = rigSpikeCtx(1);
+    // 錨定幾何：把 A2 放在已知位置，第一段（無拖曳按鈕路徑）落回預設深區 aim
+    g.actors.A2.x = 0; g.actors.A2.z = 0.5;
+    c.collect(g);
+    c.beginAction();
+    c.endAction(); // 第一段出手（drag {0,0} ⇒ aimVec/aimNdc 皆 null ⇒ 預設 aim）
+    const first = c.collect(g)[0];
+    assert.equal(first.action, 'spike', '治具前提：第一段就是扣球情境');
+    const a = g.actors.A2;
+    const drag = mkDrag(first.aim, a);
+    c.beginAction();
+    c.dragAction(drag.dx, drag.dy);
+    c.endAction();
+    return c.collect(g)[0];
+  });
+  // 甲：第二段拖曳精確解算回第一段落點（差 0m <0.5m）⇒ 吞掉
+  const same = runWithDrag((aim, a) => {
+    const d = Math.hypot(aim.x - a.x, aim.z - a.z);
+    assert.ok(d >= 3 && d <= 9, `治具前提：預設落點距離 ${d} 須在拖曳可解算帶 3-9m 內`);
+    const len = ((d - 3) / 6) * 130; // 反解拖曳長度（collect 的 3+min(len,130)/130*6）
+    assert.ok(len > 14, '治具前提：拖曳長度須過 14px 閘（本測測的是 0.5m 閘，不是 14px 閘）');
+    return { dx: ((aim.x - a.x) / d) * len, dy: ((aim.z - a.z) / d) * len };
+  });
+  assert.equal(same.retargetAim, undefined,
+    '第二段解算落點與第一段差 <0.5m＝誤觸，吞掉不變向（MEDIUM-6）');
+  // 乙：同長度、轉向的拖曳（落點差 >0.5m）⇒ 照常變向
+  const turned = runWithDrag((aim, a) => {
+    const d = Math.hypot(aim.x - a.x, aim.z - a.z);
+    const len = ((d - 3) / 6) * 130;
+    return { dx: -len, dy: 0 }; // 往左打＝與深區落點差好幾公尺
+  });
+  assert.ok(turned.retargetAim, '真的改打別條線（差 ≥0.5m）不得被閘吞掉');
 });

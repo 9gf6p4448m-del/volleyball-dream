@@ -69,6 +69,11 @@ const autoReceiveDistOf = (player) => AUTO_RECEIVE_MUL
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
 const JUMP_WINDOW_MS = 900;  // 放開＝起跳揮擊後的出手有效窗
+// 批 4c 拍板丙（MEDIUM-6）：二段變向的最小位移閘——第二段換算後的落點與第一段
+// 落點差小於此值（公尺）＝視同誤觸吞掉（同拖曳 14px 閘的語意；桌面點按（無拖曳）
+// 路徑原本沒有任何位移閘，點在原落點附近會白收變向全套代價）。0.5m 為提案值
+//（未經真人試玩校準）
+const RETARGET_MIN_SHIFT_M = 0.5;
 
 // ★ 職業章批 4c「二段時間差」資格（純函式＝node 測試可紅綠，同 mbMomentFor 先例）★
 // 滯空第二段變向的輸入層閘：①技術已解鎖（`?? 1` 同 sim 端 game.js 的 dive 先例——
@@ -489,6 +494,15 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
             };
           } else if (rt.aimNdc) {
             retargetAim = groundPoint(rt.aimNdc);
+          }
+          // 批 4c 拍板丙（MEDIUM-6）：最小位移閘——解算後與第一段落點差
+          // <RETARGET_MIN_SHIFT_M＝這一下沒有「改打哪裡」的語意（桌面點按／
+          // 極短拖曳），吞掉不生效、不收變向代價。sim 端 computeRetarget 的
+          // ε 護欄（1e-6m）保留為最底層
+          if (retargetAim
+            && Math.hypot(retargetAim.x - aim.x, retargetAim.z - aim.z)
+              < RETARGET_MIN_SHIFT_M) {
+            retargetAim = null;
           }
         }
         // 進攻決策的扣球：保持有效到球可扣（不用 36-tick 緩衝），球掉太低才放棄讓 auto 保底

@@ -1,5 +1,8 @@
 // 職業章批 4c「二段時間差（案 C，地基級）」— sim 層／生涯層（2026-08-26）
 // 驗收＝docs/kickoffs/acceptance-pro-batch4c.md（F1-F5，動手前凍結）。
+// ★同日 Sawmah 拍板丙（純幾何降級）★：機率騙牆層（lane 申報＋retargetP 擲骰）
+// 整層刪除——F4 系列改寫為純幾何斷言（球飛新線＋牆按真實站位結算＋機率層刪乾淨），
+// F2 折損/體力斷言逐值改新提案值（timeMul 1.1／COST_SPIKE_TWIST 0.011）。
 // 輸入層接線（第二段拖曳→intent.retargetAim）另見 tests/pro-batch4c-wiring.test.mjs。
 //
 // ★ 改前紅紀律（壞版自證防 import 旁枝）★
@@ -30,14 +33,14 @@ TUNING.TOOL_CHANCE = 0;
 // ════════════════════════════════════════════════════════════════
 const AIM_FIRST = { x: 4.5, z: -5 };   // 第一段：右側斜線
 const AIM_NEW = { x: -4.5, z: -5 };    // 變向後：左側斜線（夾角 ~72° > θmax 60 ⇒ 封頂）
-// 兩條線各自的過網 x（from z=1.2 → z=-5，f=1.2/6.2）——覆審修 1 後的判準座標：
-// 攔網手承諾的 lane（blockLaneX）偏向哪條線，決定他吃不吃騙
+// 兩條線各自的過網 x（from z=1.2 → z=-5，f=1.2/6.2）——拍板丙後這是**治具的
+// 站位座標**：把牆的身體放在哪條線的過網點上（幾何蓋不蓋得到，bandContact 判）
 const CROSS_X_NEW = AIM_NEW.x * (1.2 / 6.2); // ≈ -0.871（變向後新線）
 const CROSS_X_FIRST = AIM_FIRST.x * (1.2 / 6.2); // ≈ +0.871（第一段承諾的線）
 
-// blockLaneX＝攔網手起跳承諾的 lane（隨 block intent 帶入，同 AI byPid.x 的管道；
-// null＝未承諾＝玩家手動攔網的形狀）。blockWhen 僅控制起跳先後（覆審修 1 後
-// 判準不讀時間——'before'/'after' 都能被騙/免疫，只看 lane 押哪條線）
+// blockLaneX＝隨 block intent 帶的 lane 申報。★拍板丙後 sim 已無任何消費者＝
+// 死欄位★——僅 F4③ 壞版自證用：塞回機率騙牆層的壞版（4050d89）會消費它。
+// blockWhen 僅控制起跳先後
 function rigSpike(seed, { aim = AIM_FIRST, retargetAim = null, blockX = null,
   blockLaneX = null,
   blockWhen = 'before', stamina = false, lockTech = false, staminaValue = null } = {}) {
@@ -59,8 +62,8 @@ function rigSpike(seed, { aim = AIM_FIRST, retargetAim = null, blockX = null,
   b.px = b.x; b.py = b.y + 0.05; b.pz = b.z;
   const blockIntent = (action = 'block') => {
     const bi = createIntent({ playerId: 'B2', tick: g.tick, action, aim: { x: 0, z: 0 } });
-    // 同 AI（ai.js blockPlan.byPid → it.laneX 逐 tick 申報）：建好 intent 再補屬性；
-    // null＝不帶＝未承諾
+    // 拍板丙後 intent.laneX 是 sim 忽略的死欄位（F4③ 壞版自證治具用）；
+    // null＝不帶
     if (blockLaneX !== null) bi.laneX = blockLaneX;
     return bi;
   };
@@ -68,8 +71,8 @@ function rigSpike(seed, { aim = AIM_FIRST, retargetAim = null, blockX = null,
   if (blockX !== null && blockWhen === 'before') {
     evs.push(...stepGame(g, [blockIntent()]));
   } else if (blockX !== null && blockWhen === 'after' && blockLaneX !== null) {
-    // 晚跳的牆在變向前也**申報過 lane**（AI 牆逐 tick 申報；快照取變向那一瞬的值）
-    //——這裡用無 action 的申報 intent 模擬「還沒起跳、但已在押線追蹤中」的形狀
+    // 晚跳治具：變向前先送一個無 action 的 intent（拍板丙後 laneX 無人消費，
+    // 這一步只是保留與改制前相同的 tick 節奏）
     evs.push(...stepGame(g, [blockIntent(null)]));
   } else {
     evs.push(...stepGame(g, []));
@@ -156,6 +159,9 @@ test('F2② 力量折損：任何落點（深殺球＋近網軟球）水平速�
     `近網軟球速度比 ${ratioAt(SOFT)} 應逐值＝${TUNING.DBL_SPIKE_POWER_MUL}（舊做法在此恆 1.0）`);
   // 折損是平打（F2-1 非時機軸的一半證據）：乘數本身 <1 且不讀任何時間量（純常數）
   assert.ok(TUNING.DBL_SPIKE_POWER_MUL < 1);
+  // 拍板丙代價降輕：timeMul 1.25→1.1 ⇒ POWER_MUL＝1/1.1（提案值，未經真人校準）
+  assert.ok(Math.abs(TUNING.DBL_SPIKE_POWER_MUL - 1 / 1.1) < 1e-12,
+    `拍板丙：DBL_SPIKE_POWER_MUL 應＝1/1.1，實際 ${TUNING.DBL_SPIKE_POWER_MUL}`);
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -172,6 +178,9 @@ test('F2③ 體力消耗：變向扣球比普通扣球多扣、量＝COST_SPIKE_
   const expected = STAMINA.COST_SPIKE_TWIST * attrCostMul(plain.g.players.A2);
   assert.ok(Math.abs(extra - expected) < 1e-9,
     `額外消耗 ${extra} 應＝COST_SPIKE_TWIST×attrCostMul＝${expected}`);
+  // 拍板丙代價降輕：0.022 減半為 0.011（提案值，未經真人校準）
+  assert.ok(Math.abs(STAMINA.COST_SPIKE_TWIST - 0.011) < 1e-12,
+    `拍板丙：COST_SPIKE_TWIST 應＝0.011，實際 ${STAMINA.COST_SPIKE_TWIST}`);
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -186,7 +195,8 @@ test('F2④ 重度疲勞檔（<25%）使不出來：球退回第一段的線、�
     `重度檔應照第一段的線飛（右半場），實際 x=${dead?.at?.x?.toFixed(2)}`);
   assert.ok(!evs.some((e) => e.type === 'TOUCH' && e.retarget === true),
     '重度檔的 TOUCH 不得帶 retarget');
-  assert.ok(!(g.rally.retargetP > 0), '重度檔不得武裝騙牆機率');
+  assert.equal(g.rally.retargetP, undefined,
+    '機率騙牆層已刪（拍板丙）——rally 不得再有武裝欄位');
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -209,161 +219,72 @@ test('F3 未解鎖逐值無效果：鎖技術後帶 retargetAim 與不帶，逐 
 });
 
 // ════════════════════════════════════════════════════════════════
-// F4① 騙押錯邊的牆（★覆審修 1 改斷言：Sawmah 拍板 a★）：
-// 承諾 lane 偏向**第一段的線**的攔網手被騙——被攔率顯著低於直接打同一條線；
-// 但**不歸零**（機率封頂 <1＝不得 100% 得利）。
-// 改寫依據：原治具綁 blockStartTick 時序（變向前開窗＝吃騙）＝隱藏時機軸，
-// 覆審實測 AI 牆天然比觸球晚 1-2 tick 起跳→自然節奏收益恆 0%、刻意晚出手反而
-// 漲到 46-69%（B7-3 型時機窗）。新判準讀牆自己承諾的 lane（blockLaneX），
-// 本測改成「lane 押第一段線 ⇒ 吃騙」；行為斷言只嚴不鬆——被騙者仍須存在、
-// 仍不得 100% 得利、事件仍須帶 retarget，一條沒少。
+// F4（拍板丙改寫＝純幾何）：機率騙牆層已刪，變向的收益回歸幾何——球飛新線，
+// 牆的**真實站位**沒蓋到就攔不到；蓋到就照樣被攔（tryBlock bandContact 用真實
+// 球路結算，零特殊判定）。原 F4①-④（lane 申報＋機率騙牆判準＋角度單調 deceiveP）
+// 隨該層一併刪除；F2-1 非時機軸的 sim 半邊由 wiring 檔 W6（computeRetarget
+// 無時間參數）與 F2②（折損純常數）看守。
 // ════════════════════════════════════════════════════════════════
-test('F4① 押第一段線的攔網會被騙（統計）、且非 100% 得利，BLOCK_DECEIVED 帶 retarget', () => {
-  let blockedDirect = 0;
-  let blockedTwist = 0;
-  let deceived = 0;
-  let armedP = null;      // 變向時武裝的機率（改後細節斷言用，殿後）
-  let flagsAllOk = true;  // BLOCK_DECEIVED 是否全帶 retarget（殿後）
+test('F4① 純幾何收益：變向到牆真實站位沒蓋到的空檔＝攔不到；直打牆蓋著的線＝攔得到', () => {
+  let blockedGap = 0;   // 變向到空檔（牆的身體在第一段的線上）
+  let blockedHeld = 0;  // 對照：直打牆蓋著的線（幾何帶真的在作用）
   for (let seed = 1; seed <= 300; seed += 1) {
-    // 兩組同治具：牆的身體在新線過網點（構得到球）、承諾的 lane 在第一段的線
-    //（押錯邊）。直打組 retargetP=0 ⇒ lane 不參與任何判定（對照乾淨）
-    const a = rigSpike(seed, { aim: AIM_NEW, blockX: CROSS_X_NEW, blockLaneX: CROSS_X_FIRST });
-    if (runToDead(a.g).some((e) => e.type === 'BLOCK_TOUCH')) blockedDirect += 1;
+    const gap = rigSpike(seed, { aim: AIM_FIRST, retargetAim: AIM_NEW, blockX: CROSS_X_FIRST });
+    if (runToDead(gap.g).some((e) => e.type === 'BLOCK_TOUCH')) blockedGap += 1;
+    const held = rigSpike(seed, { aim: AIM_FIRST, blockX: CROSS_X_FIRST });
+    if (runToDead(held.g).some((e) => e.type === 'BLOCK_TOUCH')) blockedHeld += 1;
+  }
+  assert.ok(blockedHeld > 0, '對照組：牆蓋著的線應存在成功攔網（幾何帶真的在作用）');
+  assert.ok(blockedGap < blockedHeld * 0.2,
+    `變向到空檔應幾乎攔不到：空檔被攔 ${blockedGap}、蓋著被攔 ${blockedHeld}`);
+});
 
+// ════════════════════════════════════════════════════════════════
+// F4② 純幾何代價面：牆的真實站位蓋著新線＝變向過去照樣被攔——沒有任何機率免死
+//（所見即所得；「不得完全無反應」與「不得 100% 得利」在純幾何下同一件事）
+// ════════════════════════════════════════════════════════════════
+test('F4② 純幾何代價：變向到牆蓋著的區＝照樣被攔（無機率免死）、零 BLOCK_DECEIVED', () => {
+  let blocked = 0;
+  let deceived = 0;
+  for (let seed = 1; seed <= 300; seed += 1) {
+    const d = rigSpike(seed, { aim: AIM_FIRST, retargetAim: AIM_NEW, blockX: CROSS_X_NEW });
+    const evs = runToDead(d.g);
+    if (evs.some((e) => e.type === 'BLOCK_TOUCH')) blocked += 1;
+    deceived += evs.filter((e) => e.type === 'BLOCK_DECEIVED').length;
+  }
+  assert.ok(blocked > 0, '牆站在新線上＝變向過去照樣被攔（所見即所得）');
+  assert.equal(deceived, 0,
+    '變向不得觸發任何 BLOCK_DECEIVED（機率騙牆層已刪；gaze 又與變向互斥＝deceiveP 恆 0）');
+});
+
+// ════════════════════════════════════════════════════════════════
+// F4③ ★壞版自證錨★機率騙牆層刪乾淨：治具刻意帶 laneX 申報（押第一段的線）＝
+// 壞版分支的完整觸發前提。把機率騙牆層塞回去（rally.retargetP 武裝＋tryBlock 的
+// retarget BLOCK_DECEIVED 分支＋stepGame laneX 鏡射，即 4050d89 版）：
+// retarget BLOCK_DECEIVED 會以 ~DBL_SPIKE_DECEIVE_GAIN 機率出現、rally.retargetP
+// ＝0.6、actor.blockLaneX＝申報值——三條斷言當場紅。改造後 intent.laneX 是被
+// 忽略的死欄位，sim 不長出任何新判定。
+// ════════════════════════════════════════════════════════════════
+test('F4③ 機率騙牆層刪乾淨：laneX 申報＋押錯邊也無 retarget BLOCK_DECEIVED、rally 無武裝欄位', () => {
+  let deceivedRetarget = 0;
+  let contacts = 0;
+  let lastRig = null; // 結構斷言殿後用（§6.1-1：壞版要紅在行為斷言，不是結構探針）
+  for (let seed = 1; seed <= 300; seed += 1) {
     const d = rigSpike(seed, {
       aim: AIM_FIRST, retargetAim: AIM_NEW, blockX: CROSS_X_NEW, blockLaneX: CROSS_X_FIRST,
     });
-    if (armedP === null) armedP = d.g.rally.retargetP;
+    lastRig = d.g;
     const evs = runToDead(d.g);
-    if (evs.some((e) => e.type === 'BLOCK_TOUCH')) blockedTwist += 1;
-    for (const e of evs) {
-      if (e.type === 'BLOCK_DECEIVED') {
-        if (e.retarget !== true) flagsAllOk = false;
-        deceived += 1;
-      }
-    }
+    if (evs.some((e) => e.type === 'BLOCK_TOUCH')) contacts += 1;
+    deceivedRetarget += evs.filter((e) => e.type === 'BLOCK_DECEIVED' && e.retarget === true).length;
   }
-  // ★行為斷言先行（改前紅要紅在「牆沒被騙」）★
-  assert.ok(blockedDirect > 0, '對照組應存在成功攔網');
-  assert.ok(deceived > 0, '應存在被第一段騙走的牆');
-  assert.ok(blockedTwist < blockedDirect * 0.7,
-    `攔網沒被騙：直打被攔 ${blockedDirect}、變向被攔 ${blockedTwist}`);
-  assert.ok(blockedTwist > 0,
-    `變向不得 100% 得利：300 局全躲過攔網（封頂 ${TUNING.DBL_SPIKE_DECEIVE_GAIN} 應 <1）`);
-  // 細節斷言殿後：封頂值、機率武裝、事件旗標
-  assert.ok(Math.abs(armedP - TUNING.DBL_SPIKE_DECEIVE_GAIN) < 1e-9,
-    '夾角超過 θmax 應封頂＝DBL_SPIKE_DECEIVE_GAIN');
-  assert.ok(TUNING.DBL_SPIKE_DECEIVE_GAIN < 1);
-  assert.ok(flagsAllOk, '變向的騙牆事件必須帶 retarget（gaze 欺敵已停用）');
-});
-
-// ════════════════════════════════════════════════════════════════
-// F4② 免疫面（★覆審修 1 改斷言：Sawmah 拍板 a★）：兩類牆不吃騙——
-//   甲、lane 承諾在**新線**（押對了：他賭的就是你變向後的那條）
-//   乙、無承諾（blockLaneX 未帶＝玩家手動攔網形狀：沒有可被騙的錯誤承諾）
-// 兩類都全樣本零 BLOCK_DECEIVED，且仍以真實球路結算（存在 BLOCK_TOUCH＝不是無反應）。
-// 改寫依據：原斷言「晚起跳＝免疫」是時機軸的另一半（同 F4① 註解）；免疫的
-// 正當理由改為「沒押錯邊」。只嚴不鬆：兩類牆都刻意**在變向前開窗**（起跳早於
-// 變向）——改回時間判準的壞版會在這裡騙到他們，本測當場紅（雙向自證之一）。
-// ════════════════════════════════════════════════════════════════
-test('F4② 押對新線／未承諾的牆不吃騙：零 BLOCK_DECEIVED、仍攔得到真實球路', () => {
-  for (const [label, laneX] of [['押對新線', CROSS_X_NEW], ['未承諾', null]]) {
-    let deceived = 0;
-    let blocked = 0;
-    let armed = true;
-    for (let seed = 1; seed <= 300; seed += 1) {
-      const d = rigSpike(seed, {
-        aim: AIM_FIRST, retargetAim: AIM_NEW, blockX: CROSS_X_NEW,
-        blockLaneX: laneX, blockWhen: 'before',
-      });
-      if (!(d.g.rally.retargetP > 0)) armed = false;
-      const evs = runToDead(d.g);
-      deceived += evs.filter((e) => e.type === 'BLOCK_DECEIVED').length;
-      if (evs.some((e) => e.type === 'BLOCK_TOUCH')) blocked += 1;
-    }
-    assert.equal(deceived, 0, `${label}的牆沒押第一段的線，不得被第一段騙`);
-    assert.ok(blocked > 0, `${label}的牆仍應以真實球路攔到球（F4 不得完全無反應）`);
-    // 防空轉守衛殿後：確認變向真的武裝了機率（否則上兩條在「機制根本沒動」時也綠）
-    assert.ok(armed, `變向本身應已武裝騙牆機率（${label}組防空轉守衛）`);
-  }
-});
-
-// ════════════════════════════════════════════════════════════════
-// F4③ ★覆審修 1 的壞版自證錨★天然出手時機也騙得到：牆在扣球**之後**才起跳
-// （AI 牆的自然節奏＝比觸球晚 1-2 tick），只要他承諾的 lane 押在第一段的線，
-// 照樣吃騙。把判準改回時間比較（blockStartTick ≤ retargetTick）的壞版：
-// blockStartTick > retargetTick ⇒ 本測的 deceived 恆 0 ⇒ 當場紅。
-// ════════════════════════════════════════════════════════════════
-test('F4③ 天然時機（出手後才起跳）＋押第一段線 ⇒ 仍被騙：時機因素已從判準消失', () => {
-  let deceived = 0;
-  let armed = true;
-  let lateJumpAll = true; // 治具前提守衛：每一局的牆都真的比扣球晚起跳
-  for (let seed = 1; seed <= 300; seed += 1) {
-    const d = rigSpike(seed, {
-      aim: AIM_FIRST, retargetAim: AIM_NEW, blockX: CROSS_X_NEW,
-      blockLaneX: CROSS_X_FIRST, blockWhen: 'after',
-    });
-    if (!(d.g.rally.retargetP > 0)) armed = false;
-    if (!(d.g.actors.B2.blockStartTick > d.g.rally.retargetTick)) lateJumpAll = false;
-    deceived += runToDead(d.g).filter((e) => e.type === 'BLOCK_DECEIVED').length;
-  }
-  assert.ok(lateJumpAll, '治具前提：牆必須真的比變向瞬間晚起跳（否則本測沒在測天然時機）');
-  assert.ok(deceived > 0,
-    '天然時機被騙率應 >0——恆 0 代表判準又長回了 blockStartTick 時間比較（覆審否決的時機軸）');
-  assert.ok(armed, '變向本身應已武裝騙牆機率（防空轉守衛）');
-});
-
-// ════════════════════════════════════════════════════════════════
-// F4④ lane 申報的鎖存紀律（覆審修 1 配套）：地面上逐 tick 滾動申報（追蹤中會變、
-// 不申報＝撤銷）、攔網窗開著（人在空中）期間凍結——空中換不了邊；未帶＝null
-// ════════════════════════════════════════════════════════════════
-test('F4④ blockLaneX 申報：地面滾動更新、窗開凍結、未帶＝null', () => {
-  const { g } = rigSpike(81, { blockX: 0, blockLaneX: 0.5 });
-  assert.equal(g.actors.B2.blockLaneX, 0.5, '窗開那一 tick 的申報應已寫入');
-  // 窗仍開著（blockUntil 未過）時再申報不同 laneX ⇒ 凍結不改寫
-  const again = createIntent({ playerId: 'B2', tick: g.tick, action: 'block', aim: { x: 0, z: 0 } });
-  again.laneX = -0.5;
-  stepGame(g, [again]);
-  assert.equal(g.actors.B2.blockLaneX, 0.5, '窗內不得改寫承諾（空中換不了邊）');
-  // 地面（無窗）滾動申報：申報→更新、再申報→再更新、不申報→撤銷回 null
-  const g3 = rigSpike(83, {}).g; // 無攔網窗
-  const declare = (laneX) => {
-    const di = createIntent({ playerId: 'B2', tick: g3.tick, action: null, aim: { x: 0, z: 0 } });
-    if (laneX !== null) di.laneX = laneX;
-    stepGame(g3, [di]);
-  };
-  declare(0.7);
-  assert.equal(g3.actors.B2.blockLaneX, 0.7, '地面申報應逐 tick 生效');
-  declare(-0.3);
-  assert.equal(g3.actors.B2.blockLaneX, -0.3, '追蹤中改押＝合法更新（人還在地上）');
-  declare(null);
-  assert.equal(g3.actors.B2.blockLaneX, null, '不申報＝撤銷（沒在組牆＝未承諾）');
-  // 未帶 laneX 的新窗＝null 未承諾（玩家手動攔網形狀）
-  const { g: g2 } = rigSpike(82, { blockX: 0, blockLaneX: null });
-  assert.equal(g2.actors.B2.blockLaneX, null, '未帶 laneX＝未承諾');
-});
-
-// ════════════════════════════════════════════════════════════════
-// F2-1 非時機軸（sim 半邊）：騙敵幅度只由**變向角**決定（變向選擇），
-// sim 的 retarget 路徑沒有任何時間輸入（另一半在 wiring 檔：輸入層不讀第二段按多久）
-// ════════════════════════════════════════════════════════════════
-test('F2-1 變向選擇軸：角度越大越能騙（單調）、深度不變向（θ=0）騙不到、超角封頂', () => {
-  const p = (retargetAim) => {
-    const { g } = rigSpike(61, { aim: AIM_FIRST, retargetAim });
-    return g.rally.retargetP;
-  };
-  // 同方向改深度＝沿「擊球點→第一段落點」的**射線**取點（擊球點在 (0,1.2)，
-  // 不是原點——直接縮放座標會偷改方向）
-  const sameLine = p({
-    x: 0 + 0.6 * (AIM_FIRST.x - 0),
-    z: 1.2 + 0.6 * (AIM_FIRST.z - 1.2),
-  });
-  const small = p({ x: 1.5, z: -5 });   // 小角度變向
-  const big = p({ x: -1.5, z: -5 });    // 大角度變向
-  const capped = p(AIM_NEW);            // 超過 θmax
-  assert.ok(Math.abs(sameLine) < 1e-9, '同方向改深度騙不到網口的牆（θ=0 ⇒ P=0）');
-  assert.ok(small > 0 && big > small, `角度單調：${small} < ${big} 應成立`);
-  assert.ok(Math.abs(capped - TUNING.DBL_SPIKE_DECEIVE_GAIN) < 1e-9, '超角封頂');
+  // ★行為斷言先行★（壞版＝塞回機率騙牆分支時，紅的是這一條）
+  assert.equal(deceivedRetarget, 0,
+    'retarget BLOCK_DECEIVED 恆 0——出現＝機率騙牆分支又被塞回來了（拍板丙已刪）');
+  assert.ok(contacts > 0, '治具前提：牆真的構得到球（否則零事件是空轉，不構成證據）');
+  // 結構斷言殿後：機率層的狀態欄位也要刪乾淨（半刪＝耦合債）
+  assert.equal(lastRig.rally.retargetP, undefined, '機率層欄位不得存在（rally.retargetP）');
+  assert.equal(lastRig.actors.B2.blockLaneX, undefined, 'lane 申報鏡射不得存在（actor.blockLaneX）');
 });
 
 // ════════════════════════════════════════════════════════════════

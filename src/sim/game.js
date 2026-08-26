@@ -246,20 +246,23 @@ export const TUNING = {
   THETA_MAX_DEG: 45,      // 視線與實際擊球方向的最大有效夾角
   DECEIVE_GAIN: 0.7,      // 騙過攔網機率 = min(θ/θmax,1) × 此值（線性）
   ERROR_GAIN: 0.5,        // 自身失誤增量 = (θ/θmax)² × 此值（平方）
-  // ★ 職業章批 4c「二段時間差」（acceptance-pro-batch4c.md F2）★
+  // ★ 職業章批 4c「二段時間差」（acceptance-pro-batch4c.md F2；2026-08-26 Sawmah
+  // 拍板丙＝純幾何降級）★
   // 扣球起跳後、滯空窗內的第二段變向（intent.retargetAim；只有玩家輸入層會帶，
-  // AI 無觸發路徑）。本質是**變向選擇**（打哪裡），不是時機判定——三個常數
-  // 全都不讀「什麼時候變向」（B7-3 教訓：時機軸整條是負的，不做按早按晚）。
-  // 三值皆為出廠自訂（未經真人試玩校準）：
+  // AI 無觸發路徑）。本質是**變向選擇**（打哪裡），不是時機判定——不讀
+  // 「什麼時候變向」（B7-3 教訓：時機軸整條是負的，不做按早按晚）。
+  // 拍板丙：機率騙牆層（lane 申報＋retargetP 擲骰）已整層刪除——opus 送審實測
+  // 因果不成立（lane 申報實為打點預測、判準退化為攻方幾何開關、全牆同判 96.3%）
+  // 且整招負期望（代價 −8.9pp > 騙牆收益 +4.5%）。變向的收益回歸**純幾何**：
+  // 球飛新線，牆的真實站位沒蓋到就攔不到——tryBlock 的 bandContact 本來就用
+  // 真實球路結算，這層天然存在、零特殊判定。
   //   POWER_MUL＝空中二次發力不完整，力量折損（F2-2 代價之一，平打不分角度）。
-  //     ★覆審修 2（Sawmah 拍板）★折損**折在飛行時間**：T×(1/POWER_MUL)＝球整體
-  //     變慢、弧變高、落點不變（spikeVelocity timeMul）。折在 speed 的舊做法被
-  //     過網淨空下限吞掉（61% 落點逐值零效果）；折在 T 則任何落點有效
-  //   DECEIVE_GAIN＝押錯邊的攔網手被第一段騙走的機率封頂（<1＝F4「不得 100% 得利」）
-  //   THETA_MAX_DEG＝變向角滿效角度——角度越大越能騙（線性、封頂），同 H3 範式
-  DBL_SPIKE_POWER_MUL: 0.8,
-  DBL_SPIKE_DECEIVE_GAIN: 0.6,
-  DBL_SPIKE_THETA_MAX_DEG: 60,
+  //     折損**折在飛行時間**：T×(1/POWER_MUL)＝球整體變慢、弧變高、落點不變
+  //    （spikeVelocity timeMul）。折在 speed 的舊做法被過網淨空下限吞掉
+  //    （61% 落點逐值零效果）；折在 T 則任何落點有效。
+  //     拍板丙代價降輕：timeMul 1.25→1.1（提案值，未經真人試玩校準）——
+  //     純幾何收益弱於已刪的機率層，代價同步降
+  DBL_SPIKE_POWER_MUL: 1 / 1.1,
   // 後排攻擊合法性判定的位置回溯窗（0.4s＠60Hz）：治標近似「起跳離地位置」，
   // 真正的滯空狀態機留給 Phase 2；見 takeoffZ()
   TAKEOFF_LOOKBACK_TICKS: 24,
@@ -306,14 +309,6 @@ export function createGame({
         blockUntil: -1, blockStartTick: -9999, blockHand: 'vertical', lastTouchTick: -9999,
         // 攔網時序卷 段 1：這個攔網窗是不是玩家手動投遞的（記債豁免，見 tryBlock）
         blockManual: false,
-        // 批 4c 覆審修 1：我此刻承諾的攔網 lane（網面 x）——AI blockPlan.byPid 的
-        // c.x 隨 intent 逐 tick 申報（stepGame 滾動鏡射，同 blockHand 走 intent 的
-        // 慣例）、攔網窗開著（人在空中）期間凍結。null＝未承諾（玩家手動攔網、
-        // 沒在組牆）＝二段變向騙不到他。executeTouch 在變向那一瞬快照全守方的
-        // 這個值（rally.retargetLanes）供 tryBlock 判「押錯邊」。
-        // 不在 sim-hash 的 actor 欄位清單（x/z/blockUntil/blockStartTick/
-        // lastTouchTick/divedUntil）內＝AI 不用此招時 hash 不動
-        blockLaneX: null,
         divedUntil: -1, // 魚躍倒地恢復期（此前不得移動/觸球）
         zHistory: [], // 每 tick 推入舊 z（見 takeoffZ）；固定長度＝回溯窗
       };
@@ -416,23 +411,6 @@ export function createGame({
       lastTouchTeam: null,
       lastToucherId: null,
       deceiveP: 0,       // H3：當前扣球夾帶的騙敵機率（攔網結算用）
-      // 批 4c 二段時間差：當前扣球夾帶的「騙押錯邊攔網」機率。
-      // ★覆審修 1（Sawmah 拍板 a）★tryBlock 騙的是**自己承諾的線偏向第一段**的牆
-      //（讀攔網手起跳時鎖存的 committed lane，見 actor.blockLaneX）——不再比時間
-      //（blockStartTick ≤ retargetTick 是隱藏時機軸：AI 牆天然比觸球晚 1-2 tick 起跳
-      // ⇒ 自然節奏收益恆 0%、延後出手反而漲＝B7-3 型時機窗，覆審實測否決）。
-      // retargetFirstX／retargetNewX＝第一段承諾線與變向後新線各自的過網 x
-      //（tryBlock 判「這面牆押的是哪條線」的座標基準）；retargetTick＝變向瞬間 tick
-      //（★純觀測★——判準已不讀它，留給表現層/探針）。
-      // retargetLanes＝變向**那一瞬**快照的守方 lane 承諾表 { pid: 網面x }
-      //（攔網手被騙與否，看的是變向發生時他押在哪——之後他跟著真實球路改押新線，
-      // 那是對公開資訊的合法反應，救不回已經被騙走的重心）。
-      // 未使用時恆 0／-1／0／0／null——不進 sim-hash 的 rally 欄位清單，AI 對局逐值不變
-      retargetP: 0,
-      retargetTick: -1,
-      retargetFirstX: 0,
-      retargetNewX: 0,
-      retargetLanes: null,
       lastSpikeZone: null, // 本波扣球的線路分類（line/cross/middle/tip；情蒐讀取用）
       lastSetKind: null,   // §十-4：最後一次舉球檔位 {team, kind:'quick'|'shoot'|'high'}（快攻分類資料底）
       // ★ 2026-08-11 爆接／poor 一傳卷：本波一傳離二傳站位多遠（公尺；無一傳＝null）★
@@ -498,14 +476,6 @@ export function stepGame(state, intents = []) {
     if (it.tick !== state.tick) continue; // 只吃本 tick 的 Intent（決定論保護）
     const actor = state.actors[it.playerId];
     if (!actor) continue;
-    // 批 4c 覆審修 1：攔網 lane 承諾的滾動鏡射——AI 牆員每 tick 隨 intent 申報自己
-    // blockPlan.byPid 的 c.x（追蹤中會變）；攔網窗開著（人已在空中）期間凍結＝
-    // 空中換不了邊，起跳那一刻的承諾就是這一跳的承諾。不帶 laneX 的 intent
-    //（沒在組牆、玩家手動）＝申報撤銷（null 未承諾）。executeTouch 在**變向那一瞬**
-    // 快照守方全員的這個值（rally.retargetLanes）＝被騙判定的唯一依據
-    if (actor.blockUntil < state.tick) {
-      actor.blockLaneX = Number.isFinite(it.laneX) ? it.laneX : null;
-    }
     applyMove(state, actor, it);
     if (it.action) tryAction(state, it, ev);
   }
@@ -675,9 +645,6 @@ function tryAction(state, intent, ev) {
       // 玩家手動窗（48-tick 計時器）的落地段 tick 25–48 是**已記債、本卷不處理**的項目：
       // 玩家在 sim 裡沒有攔網滯空狀態，那個窗與身體無關，砍它＝砍掉玩家的攔網手感。
       actor.blockManual = intent.manual === true;
-      // 批 4c 覆審修 1：blockLaneX（我押的線）由 stepGame 的滾動鏡射維護——
-      // 本 tick 的申報已在 tryAction 之前寫入，窗開之後（blockUntil ≥ tick）凍結
-      //＝一窗一承諾，人在空中換不了邊。這裡不再另外鎖存（單一機制）
       drainStamina(state, intent.playerId, STAMINA.COST_JUMP_BLOCK, ev); // W7 A1：一新窗＝一跳
     }
     actor.blockUntil = state.tick + TUNING.BLOCK_WINDOW;
@@ -778,9 +745,9 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     : null;
   const aimPoint = retarget ? intent.retargetAim : intent.aim;
   // H3：扣球帶視線欺敵——θ 越大越可能騙過攔網（線性），但自身落點越飄（平方）。
-  // 批 4c：二段變向與視線欺敵**同層擇一、不疊乘**——二段的「騙」本身就是
-  // 第一段身體承諾（aim）與實際球路（retargetAim）的夾角，再疊 gaze 等於同一個
-  // 欺敵算兩次；變向時 gaze 讀取整段停用（同 tool 與 deceive 擇一的先例）
+  // 批 4c（拍板丙）：二段變向與視線欺敵**同層擇一、不疊乘**——變向的欺敵本體
+  // 就是球飛新線（純幾何：牆的真實站位沒蓋到就攔不到），再疊 gaze 等於同一個
+  // 欺敵算兩次；變向時 gaze 讀取整段停用（deceiveP 歸零；同 tool 擇一的先例）
   const dec = intent.action === 'spike' && !retarget
     ? computeDeception(from, intent.aim, intent.gaze)
     : { deceiveP: 0, errorBoost: 0 };
@@ -933,17 +900,6 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
   rally.lastTouchTeam = team;
   rally.lastToucherId = player.id;
   rally.deceiveP = dec.deceiveP;
-  // 批 4c：變向的騙敵機率＋兩條線各自的過網 x（覆審修 1：tryBlock 用後兩者判
-  // 「這面牆承諾的 lane 偏向哪條線」——押第一段的才吃騙）；retargetTick 純觀測。
-  // 未變向恆 0／-1／0／0＝tryBlock 那條分支連 rand 都不消費（F3 決定論/逐值無效果）
-  rally.retargetP = retarget ? retarget.deceiveP : 0;
-  rally.retargetTick = retarget ? state.tick : -1;
-  rally.retargetFirstX = retarget ? netCrossX(from, intent.aim) : 0;
-  rally.retargetNewX = retarget ? netCrossX(from, aimPoint) : 0;
-  // 變向那一瞬快照守方全員的 lane 承諾（actor.blockLaneX＝守方公開狀態）——
-  // 被騙判定凍結在這一刻：之後守方跟著真實球路改押新線是合法反應，但救不回
-  // 變向發生時已押在第一段線上的重心（tryBlock 讀這份快照，不讀跳後的現值）
-  rally.retargetLanes = retarget ? snapshotBlockLanes(state, otherTeam(team)) : null;
   rally.profile = intent.action === 'spike' ? 'spike' : 'arc';
   rally.flightId += 1;
   rally.touchLockTick = state.tick;
@@ -1117,13 +1073,6 @@ function performServe(state, intent, ev) {
   rally.lastTouchTeam = team;
   rally.lastToucherId = player.id;
   rally.deceiveP = 0;
-  // 批 4c：發球開波清空（鏡射 deceiveP）；覆審 LOW：retargetTick 與兩條線的
-  // 過網 x 同組同壽命，一併清（半清＝耦合債）
-  rally.retargetP = 0;
-  rally.retargetTick = -1;
-  rally.retargetFirstX = 0;
-  rally.retargetNewX = 0;
-  rally.retargetLanes = null;
   rally.profile = 'serve';
   rally.flightId += 1;
   rally.serveTick = state.tick; // 真飄相位起點（飄浮發球側向亂流的時間基準）
@@ -1206,59 +1155,25 @@ export function computeDeception(from, aim, gaze) {
   };
 }
 
-// ★ 批 4c 二段時間差（純函式，範式照抄 computeDeception）★
-// 由擊球點、第一段承諾的線（firstAim）、空中改選的新落點（newAim）算出變向角 θ 與
-// 「騙已起跳攔網」機率（線性、封頂）。**輸入裡沒有任何時間量**——騙的幅度只由
-// 變向角決定（打哪裡），與「什麼時候變向」無關（F2-1 禁時機軸，B7-3 教訓）。
-// 回傳 null＝變向無效。兩層退化護欄同層並列：
-//   ① 新落點與擊球點重合（atan2(0,0) 會算出假角度）
+// ★ 批 4c 二段時間差（純函式；拍板丙＝純幾何後只管「算不算有變向」）★
+// 回傳 true＝變向成立（executeTouch 換 aimPoint、收代價、發 TOUCH retarget 旗標）、
+// null＝這一下不算變向（球照第一段 aim 飛、零收費）。**輸入裡沒有任何時間量**
+//（F2-1 禁時機軸，B7-3 教訓）。騙牆機率（deceiveP）計算已隨機率騙牆層整層刪除
+//——變向的收益現在是純幾何：球飛新線，牆的真實站位沒蓋到就攔不到（tryBlock
+// bandContact 用真實球路結算，這層天然存在、零特殊判定）。
+// 兩層退化護欄同層並列（sim 端最底層保留）：
+//   ① 新落點與擊球點重合（無方向語意的退化輸入）
 //   ② 覆審修 3（滑鼠誤觸）：newAim 與 firstAim 逐值相同或 ε 內——第二下沒改任何
 //      東西還收全套代價（力量折損＋大耗體力）＝誤觸稅；ε 取 1e-6m（浮點抖動級，
-//      無遊戲性意義）。θ=0 但**不同落點**（同方向改深度）不在此列，仍回物件＝
-//      代價照付、但攔網在網口，深度騙不到牆（deceiveP=0）——既有語意不變
+//      無遊戲性意義）。輸入層另有 0.5m 最小位移閘（matchControls，MEDIUM-6），
+//      擋的是「有位移但無遊戲性意義」的桌面點按／極短拖曳；本護欄是最後一道
 export function computeRetarget(from, firstAim, newAim) {
   if (!newAim || !firstAim) return null;
   if (newAim.x === from.x && newAim.z === from.z) return null;
   if (Math.abs(newAim.x - firstAim.x) < 1e-6 && Math.abs(newAim.z - firstAim.z) < 1e-6) {
     return null;
   }
-  let theta = 0;
-  if (!(firstAim.x === from.x && firstAim.z === from.z)
-    && !(firstAim.x === newAim.x && firstAim.z === newAim.z)) {
-    const a1 = Math.atan2(firstAim.x - from.x, firstAim.z - from.z);
-    const a2 = Math.atan2(newAim.x - from.x, newAim.z - from.z);
-    let diff = Math.abs(a1 - a2);
-    if (diff > Math.PI) diff = Math.PI * 2 - diff;
-    theta = (diff * 180) / Math.PI;
-  }
-  const t = Math.min(theta / TUNING.DBL_SPIKE_THETA_MAX_DEG, 1);
-  return { theta, deceiveP: t * TUNING.DBL_SPIKE_DECEIVE_GAIN };
-}
-
-// 批 4c 覆審修 1（純幾何）：擊球點→落點的直線過網（z=0）時的 x。
-// tryBlock 判「攔網手承諾的 lane 押的是哪條線」的座標基準——lane（blockLaneX）
-// 與兩條線都換算到同一個網面上比距離，不在落點座標系裡比（攔網結算全發生在網面）。
-// 不跨網（同側/平行）＝退化回落點 x：只有球真的過網才會走到 tryBlock，此退化
-// 僅防極端輸入的除零，不參與正常球路
-// 批 4c 覆審修 1：變向那一瞬的守方 lane 承諾快照（{ pid: 網面x }，未承諾者不入表）。
-// 只讀 actor.blockLaneX（守方自己申報的公開狀態），不碰任何 AI 私有結構；
-// 迭代順序＝players 建立順序（每次執行相同）＝決定論
-function snapshotBlockLanes(state, defTeam) {
-  const lanes = {};
-  for (const p of Object.values(state.players)) {
-    if (p.teamId !== defTeam) continue;
-    const lane = state.actors[p.id]?.blockLaneX;
-    if (lane != null) lanes[p.id] = lane;
-  }
-  return lanes;
-}
-
-function netCrossX(from, aim) {
-  const dz = from.z - aim.z;
-  if (Math.abs(dz) < 1e-9) return aim.x;
-  const f = from.z / dz;
-  if (!(f > 0 && f <= 1)) return aim.x;
-  return from.x + f * (aim.x - from.x);
+  return true;
 }
 
 // 出手品質（純函式）：蓄力進度 t（可>1）→散佈乘數。甜蜜區線性外皆 1、超蓄劣化。
@@ -1446,38 +1361,6 @@ function tryBlock(state, toTeam, ev) {
     return false;
   }
 
-  // ★ 批 4c 二段時間差：騙的是「押了第一段那條線」的牆（F4 公開線索紀律）★
-  // ★覆審修 1（Sawmah 拍板 a）★判準＝攔網手自己承諾的 lane 偏向第一段的線——
-  // 被騙的就是押錯邊的人，因果接線乾淨。lane 取**變向那一瞬**的快照
-  //（rally.retargetLanes；申報機制見 stepGame 滾動鏡射）：變向之後守方跟著真實
-  // 球路改押新線是對公開資訊的合法反應，但救不回變向發生時已押錯的重心——
-  // 讀跳那一刻的現值會讓「先重瞄再跳」的牆全數免疫，天然被騙率又歸零。
-  // 改制前比的是 blockStartTick ≤ retargetTick（時間軸）：AI 牆天然比觸球晚
-  // 1-2 tick 起跳 ⇒ 自然節奏收益恆 0%、刻意延後出手 33ms→46%/83ms→69%
-  //＝長出 B7-3 型時機窗，覆審實測否決；時機因素就此整段消失（本分支不讀任何
-  // tick 量——快照時點錨在變向這個動作本身，對所有牆同一瞬，不構成玩家可調的時機軸）。
-  // 反作弊：這裡讀的量（rally.retargetP/retargetFirstX/retargetNewX/retargetLanes＝
-  // 已經發生的那一揮的物理結果＋守方**自己**申報的公開承諾）都不碰玩家輸入意圖。
-  // 免疫兩類：lane 已在新線側/等距（押對了或沒押錯）、快照裡沒有他（未承諾＝
-  // 沒有可被騙的錯誤承諾——玩家手動攔網屬此類）。
-  // 「不得完全無反應」由三層保證：機率封頂 DBL_SPIKE_DECEIVE_GAIN<1、押對/未承諾
-  // 者免疫、骰輸之後照走下方以真實球路結算的幾何帶與屬性擲骰。
-  // 與 H3 互為擇一（executeTouch：retarget 時 deceiveP 恆 0），rand 至多消費一次；
-  // retargetP===0（未用/未解鎖）時本分支零 rand 消費＝隨機序列與改制前逐值相同。
-  const retargetLane = state.rally.retargetLanes
-    ? state.rally.retargetLanes[best.p.id] : undefined;
-  if (state.rally.retargetP > 0
-    && retargetLane != null
-    && Math.abs(retargetLane - state.rally.retargetFirstX)
-      < Math.abs(retargetLane - state.rally.retargetNewX)
-    && rand(state) < state.rally.retargetP) {
-    ev.push({
-      type: 'BLOCK_DECEIVED', tick: state.tick, team: toTeam,
-      blockerId: best.p.id, spikerId: state.rally.lastToucherId, retarget: true,
-    });
-    return false;
-  }
-
   // §十 階段二 2-B：**這裡不再有時機乘數**。
   // 起跳太晚（手還沒到頂）與太早（已在下墜）都已經在上面的幾何閘門結算掉了——
   // 頂邊 `blockTopEdge(p, airT, ...)` 隨跳躍相位升降，手不夠高就直接 `continue`，
@@ -1502,13 +1385,6 @@ function tryBlock(state, toTeam, ev) {
       r.lastTouchTeam = toTeam;
       r.lastToucherId = best.p.id;
       r.deceiveP = 0;
-      // 批 4c：與 deceiveP 同壽命（一波一效，鏡射清空）；覆審 LOW：retargetTick 與
-    // 兩條線的過網 x 同組同壽命，一併清（半清＝耦合債）
-    r.retargetP = 0;
-    r.retargetTick = -1;
-    r.retargetFirstX = 0;
-    r.retargetNewX = 0;
-    r.retargetLanes = null;
       r.profile = 'arc';
       r.flightId += 1;
       ev.push({
@@ -1546,13 +1422,6 @@ function tryBlock(state, toTeam, ev) {
     r.lastTouchTeam = toTeam;
     r.lastToucherId = best.p.id;
     r.deceiveP = 0;
-    // 批 4c：與 deceiveP 同壽命（一波一效，鏡射清空）；覆審 LOW：retargetTick 與
-    // 兩條線的過網 x 同組同壽命，一併清（半清＝耦合債）
-    r.retargetP = 0;
-    r.retargetTick = -1;
-    r.retargetFirstX = 0;
-    r.retargetNewX = 0;
-    r.retargetLanes = null;
     r.profile = 'arc';
     r.flightId += 1;
     ev.push({
@@ -1580,13 +1449,6 @@ function tryBlock(state, toTeam, ev) {
   r.lastTouchTeam = toTeam;
   r.lastToucherId = best.p.id;
   r.deceiveP = 0;
-  // 批 4c：與 deceiveP 同壽命（一波一效，鏡射清空）；覆審 LOW：retargetTick 與
-  // 兩條線的過網 x 同組同壽命，一併清（半清＝耦合債）
-  r.retargetP = 0;
-  r.retargetTick = -1;
-  r.retargetFirstX = 0;
-  r.retargetNewX = 0;
-  r.retargetLanes = null;
   r.profile = 'arc';
   r.flightId += 1;
   ev.push({ type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id });
@@ -2160,13 +2022,6 @@ function setupServePhase(state) {
   r.lastTouchTeam = null;
   r.lastToucherId = null;
   r.deceiveP = 0;
-  // 批 4c：與 deceiveP 同壽命（一波一效，鏡射清空）；覆審 LOW：retargetTick 與
-  // 兩條線的過網 x 同組同壽命，一併清（半清＝耦合債）
-  r.retargetP = 0;
-  r.retargetTick = -1;
-  r.retargetFirstX = 0;
-  r.retargetNewX = 0;
-  r.retargetLanes = null;
   r.touchLockTick = -1;
   r.callPid = null; // 要球一波一效（死球即清）
   r.audibleMainId = null; // 改叫同款一波一效（同 callPid 的清空時機）
