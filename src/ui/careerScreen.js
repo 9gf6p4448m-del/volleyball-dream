@@ -1264,7 +1264,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // 「情報夠了＝有依據的注」，與過閘後「本來就沒情報」自相矛盾。閘的行為不變
           //（交手過才可押＝D5 凍結），措辭改熟悉度敘事、不再涉及「情報」。
           slot1.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`],
-            '還沒跟這隊交手過——攔網手押線要有實戰默契，先打過再說'));
+            '攔網手對這隊還沒磨出押線默契——押線要靠實戰累積，先打再說'));
         } else {
           // ★批 4a 覆審 HIGH 修（Sawmah 拍板 A：誠實降級）★ 原文案「這隊…偏向X」把
           // career.scouting（＝這隊對**你**的讀取紀錄）講成對手自己的攻擊慣性——
@@ -1313,7 +1313,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         if (!weakId) {
           deploy.chaseTargetId = null; // 同上：情報不足時連帶清掉殘留選擇
           slot2.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`],
-            '情報不足——還沒和這隊交手過，不知道誰接發最弱'));
+            '接發情報還不夠——看不出這隊誰接發最弱'));
         } else {
           const active = deploy.chaseTargetId === weakId;
           const b2 = el('button', [

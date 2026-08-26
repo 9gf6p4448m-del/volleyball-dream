@@ -430,6 +430,18 @@ test('F4 intel＋樣本≥6＝槽①顯示真實分佈；未解鎖照舊；樣�
   const t1 = await openMatchup(storage);
   assert.match(t1, /情報網：這隊的攻擊分佈——直線 5・斜線 3/,
     '真實分佈顯示（主角零扣球紀錄也要看得到——一次性解鎖不得因位置失效）');
+  assert.doesNotMatch(t1, /還沒跟這隊交手過/, '不得同場出現「還沒交手過」假訊息（文案矛盾）');
+  assert.match(t1, /還沒磨出押線默契/, '押線閘句改默契語意（行為不動）');
+  // ★送審輪 2 HIGH 反面案★ 同場景 intel off——分佈不得白送（一次性解鎖的價值）
+  const noIntel = pendingY2Save();
+  assert.ok(createCareerStore(noIntel).chooseProGrowth('rest'));
+  const rawN = saveOf(noIntel);
+  const oppN = rawN.season.schedule.find((m) => m.round === 'pro').opponentId;
+  rawN.season.oppScouting = { [oppN]: { zones: { line: 5, cross: 3, middle: 1, tip: 1 } } };
+  noIntel.setItem(SAVE_KEY, JSON.stringify(rawN));
+  const tN = await openMatchup(noIntel);
+  assert.doesNotMatch(tN, /情報網：這隊的攻擊分佈/,
+    '未解鎖不得顯示分佈（閘拿掉＝這裡紅——輪 2 突變 M6 的護欄）');
   const low = pendingY2Save();
   assert.ok(createCareerStore(low).chooseProGrowth('intel'));
   seedScoutingForNext(low);
