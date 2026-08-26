@@ -74,6 +74,11 @@
 - L1 舊檔封存 salary 缺洞＝**不回填**（B1 凍結「其他鍵逐值不動」；隊階底薪可從
   隊 id 推回不會遺失）→ 批 5 薪水曲線顯示時以 proBaseSalaryFor 回退。
 - L2 續約寫入失敗靜默＝慣例債（大學推進鈕同款），批 5 或收尾批統一處理。
+- 送審輪 2（WARNING 1M/3L）：M2 同型上層入口＝已修（proClosingOpen 收尾卡重入旗標，
+  全關閉路徑還原＋跨季重開測試）；回填 idx 不符寫檔破口＝已修（守衛提前到 writeSave
+  外）；掛帳two＝retireConfirmOpen 僅按鈕還原（今日不可觸發）、showCareerFinale
+  live 列同型未去重（TODO(uni-finale) 接線時要一併處理）。收尾卡內 isRetired||
+  isFinalYear 自組判式與 SSOT 並存（語意等價）＝批 5 動收尾卡時收斂。
 
 ## 掛帳（承職業章照舊）
 

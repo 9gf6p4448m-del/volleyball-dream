@@ -924,8 +924,11 @@ export function createCareerStore(storage, slot = 1) {
       for (let i = seasons.length - 1; i >= 0; i -= 1) {
         if (seasons[i]?.pro) { lastProIdx = i; break; }
       }
+      // 送審輪 2 LOW 修：屆數核對提前到 writeSave 之外——index 不符（僅手改/損毀
+      // 檔可達）時不得進 writeSave，否則每次 render 都重寫存檔且回 true 違反冪等
       const needFinish = save.career?.proFinaleSettled === true
-        && lastProIdx >= 0 && seasons[lastProIdx]?.proFinish === undefined;
+        && lastProIdx >= 0 && seasons[lastProIdx]?.proFinish === undefined
+        && seasons[lastProIdx]?.index === (save.season.index ?? 1);
       if (!needContract && !needFinish) return false; // 冪等 no-op：不寫檔
       return writeSave((prev) => {
         const prevSeasons = prev.career?.seasons ?? [];

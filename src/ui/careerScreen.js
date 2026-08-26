@@ -232,6 +232,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 多年卷批 2 覆審 M2：退休確認卡重入守衛（雙指同批事件連點會疊兩張卡，
   // 第二張的「確定退休」因 retirePro 冪等回 false 而變死按鈕——2464/2666 同型）
   let retireConfirmOpen = false;
+  // 送審輪 2 補：同型效果的上一層入口——收尾卡本身也要重入守衛（同批雙點疊兩張
+  // 收尾卡，推進一次後殘卡的續約鈕變死鈕）。防線按效果寫：所有關閉路徑統一還原
+  let proClosingOpen = false;
 
   // 匯入用隱藏檔案選擇器（共用於兩個視圖）
   const fileInput = el('input', ['display:none']);
@@ -3432,6 +3435,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 續約＋推進）／高掛球鞋（確認後 retirePro，真謝幕卡＝批 5）；末季＝不給續約鈕
   // （2464/2666 死按鈕同型事故防線），只給謝幕佔位。轉隊選項＝批 3。
   function showProSeasonClosing({ champion, madePlayoffs, board, seasonN = 1 }) {
+    if (proClosingOpen) return;
+    proClosingOpen = true;
     const settled = store.settleProFinale?.();
     if (!settled && !store.proFinaleSettled?.()) {
       const failOverlay = el('div', [
@@ -3442,7 +3447,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       failOverlay.appendChild(el('div', ['font-size:15px', 'font-weight:800', `color:${COLOR.text}`,
         'line-height:1.7'], '賽季結算失敗——存檔資料異常（職業資料解不開），本季戰績尚未封存'));
       failOverlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`], '點擊返回生涯畫面'));
-      failOverlay.addEventListener('pointerdown', () => { failOverlay.remove(); renderCareer(); });
+      failOverlay.addEventListener('pointerdown', () => {
+        proClosingOpen = false;
+        failOverlay.remove(); renderCareer();
+      });
       document.body.appendChild(failOverlay);
       return;
     }
@@ -3484,6 +3492,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const renewBtn = button(`✍ 續約留隊——年薪 ${newSalary} 萬`, true, () => {
         // B2：續約與推進同一次 RMW（advanceSeason 帶 proSalary）
         if (store.advanceSeason?.({ proSalary: newSalary })) {
+          proClosingOpen = false;
           overlay.remove(); renderCareer();
         }
       });
@@ -3497,7 +3506,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     }
     overlay.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'margin-top:26px'],
       '點擊任意處返回生涯畫面'));
-    overlay.addEventListener('pointerdown', () => { overlay.remove(); renderCareer(); });
+    overlay.addEventListener('pointerdown', () => {
+      proClosingOpen = false;
+      overlay.remove(); renderCareer();
+    });
     document.body.appendChild(overlay);
   }
 
@@ -3517,6 +3529,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const yesBtn = button('確定退休', true, () => {
       store.retirePro?.();
       retireConfirmOpen = false;
+      proClosingOpen = false;
       confirm.remove(); closingOverlay.remove(); renderCareer();
     });
     confirm.appendChild(yesBtn);

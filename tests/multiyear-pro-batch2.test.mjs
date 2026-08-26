@@ -423,3 +423,36 @@ test('M3 修：「封存未推進」窗口開數據頁——同一屆不重複�
     .filter((n) => /^第 9 屆/.test(n.textContent ?? ''));
   assert.equal(rows.length, 1, '同一屆只能出現一列');
 });
+
+test('送審輪2修：同批連點「賽季落幕」只開一張收尾卡（不留死續約鈕）', async () => {
+  const storage = proSaveInProgress();
+  loseOutSeason(storage);
+  await renderScreen(storage);
+  const closeBtn = findBtn(/賽季落幕/);
+  tap(closeBtn); tap(closeBtn); // 雙指同批事件
+  await settle();
+  const cards = walk(globalThis.document.body)
+    .filter((n) => /職業第 1 年・完/.test(n.textContent ?? ''));
+  assert.equal(cards.length, 1, '重入旗標必須擋下第二張收尾卡');
+  // 推進後重開收尾卡要開得起來（旗標有還原）：續約進第 2 季再打完
+  tap(findBtn(/續約留隊/));
+  await settle();
+  loseOutSeason(storage);
+  await renderScreen(storage);
+  tap(findBtn(/賽季落幕——第 2 年/));
+  await settle();
+  assert.match(allText(), /職業第 2 年・完/, '旗標還原後第 2 季收尾卡照常開');
+});
+
+test('送審輪2修：回填遇屆數不符（損毀檔，只缺 proFinish）＝回 false 且不寫檔', () => {
+  const storage = settledProYear1();
+  const raw = saveOf(storage);
+  // 只剝 proFinish（contract 留著——缺 contract 時回填 contract 回 true 是正確行為）
+  const last = raw.career.seasons.at(-1);
+  delete last.proFinish;
+  last.index = 999; // 手改損毀：封存屆數與當前季對不上
+  storage.setItem(SAVE_KEY, JSON.stringify(raw));
+  const snapshot = storage.getItem(SAVE_KEY);
+  assert.equal(createCareerStore(storage).backfillProMultiyear(), false, '不得回 true');
+  assert.equal(storage.getItem(SAVE_KEY), snapshot, '不得寫檔');
+});
