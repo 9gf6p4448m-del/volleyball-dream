@@ -162,9 +162,12 @@ test('C2 轉隊成功：換隊＋推進同一次 RMW——隊/合約/名冊/line
   {
     const raw = saveOf(storage);
     raw.lineup.trust.P3 = 87;
+    // 送審輪 2：pendingMatch 斷言要有鑑別力得先種一筆（治具天然是 undefined＝恆真）
+    raw.season.pendingMatch = { matchId: 'pro-r1' };
     storage.setItem(SAVE_KEY, JSON.stringify(raw));
   }
   const before = saveOf(storage);
+  assert.notEqual(before.season.pendingMatch, undefined, '前提：治具已種 pendingMatch');
   const target = createCareerStore(storage).proTransferOffers?.()?.[0];
   assert.ok(target, '有 offer 可轉（無實作＝這裡紅）');
   assert.ok(createCareerStore(storage).transferPro?.(target.id) ?? false, '轉隊必須成功（無實作＝這裡紅）');
@@ -198,10 +201,14 @@ test('C2 轉隊成功：換隊＋推進同一次 RMW——隊/合約/名冊/line
 });
 
 test('C2 守衛：未結算/offer 外/現隊/末季/退休/壞 id 全拒絕且零寫入', () => {
-  const notSettled = proSaveInProgress();
-  loseOutSeason(notSettled);
+  // 送審輪 2：未結算案要讓 settled 守衛**真的被觸及**——首季未結算時 lastProSeasonOf
+  // 為 null 會被搶答；改用「Y1 已結算→推進→Y2 打完但未結算」檔（last 有、settled=false），
+  // 目標用 offer(Y1 rank 8) 內的非現隊
+  const notSettled = settledProYear1('cangyu-titans');
+  assert.ok(createCareerStore(notSettled).advanceSeason());
+  loseOutSeason(notSettled); // Y2 打完、尚未 settleProFinale
   const snap0 = notSettled.getItem(SAVE_KEY);
-  assert.equal(createCareerStore(notSettled).transferPro('tiegu-warlords'), false, '未結算拒絕');
+  assert.equal(createCareerStore(notSettled).transferPro('moye-outlaws'), false, '未結算拒絕');
   assert.equal(notSettled.getItem(SAVE_KEY), snap0, '零寫入');
 
   const storage = settledProYear1('moye-outlaws'); // 新軍現隊、proRank 8：offer 只有其他新軍
@@ -221,13 +228,17 @@ test('C2 守衛：未結算/offer 外/現隊/末季/退休/壞 id 全拒絕且�
   loseOutSeason(capped);
   assert.ok(createCareerStore(capped).settleProFinale());
   const snapC = capped.getItem(SAVE_KEY);
-  assert.equal(createCareerStore(capped).transferPro('tiegu-warlords'), false, '末季拒絕');
+  // 目標必須在 offer(rank 8) 集合內且非現隊——否則 offer 守衛搶答、末季守衛沒被驗到
+  assert.equal(createCareerStore(capped).transferPro('moye-outlaws'), false, '末季拒絕');
   assert.equal(capped.getItem(SAVE_KEY), snapC, '末季零寫入');
 
-  const retired = settledProYear1();
+  const retired = settledProYear1('cangyu-titans');
   assert.ok(createCareerStore(retired).retirePro());
-  assert.equal(createCareerStore(retired).transferPro(
-    createCareerStore(retired).proTransferOffers()[0]?.id ?? 'tiegu-warlords'), false, '退休拒絕');
+  // 目標固定 offer(rank 8) 內非現隊——退休後 proTransferOffers 回空、fallback 會
+  // 落到 offer 外＝零鑑別力（送審輪 2 抓到）
+  assert.equal(createCareerStore(retired).transferPro('moye-outlaws'), false, '退休拒絕');
+  const snapR = retired.getItem(SAVE_KEY);
+  assert.equal(retired.getItem(SAVE_KEY), snapR, '退休零寫入');
 });
 
 test('C2 決定論：同存檔同目標隊重演逐值一致；轉隊後可打可結算（迴圈活著）', () => {
