@@ -144,6 +144,19 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const bquickButton = createCallButton({
     label: '🖐 要 B 快', bottom: '14%', color: '#ffd166', bg: 'rgba(40,34,14,0.92)',
   });
+  // 職業章批 4b（改叫 B2）：非 S 位置的組合指令入口——與另外三顆同型浮鈕（先按鈕，
+  // 再視需要開子選單），bottom 另開一格（46%）避開既有四格（14/22/30/38%，
+  // 38% 是 `⚡ 跟上！`）。★ 這顆鈕不像另外三顆是單一動作 ★ 點下去要在
+  // 交叉／時間差／B快之間選一個（選項集合同 S 的⚡面板）——不重用 `panel`
+  // （那支被 `updateDecisions` 的狀態機每幀管理，非它自己開的面板會在下一幀被
+  // 無條件 `hide()`），另建一份獨立的 `createZonePanel()` 實例，生命週期全交給
+  // 改叫這一顆鈕自己管。
+  const audibleButton = createCallButton({
+    label: '📢 改叫', bottom: '46%', color: '#ffd166', bg: 'rgba(40,34,14,0.92)',
+  });
+  // 獨立面板（不吃 simpleMode）：另外三顆浮鈕在經典模式一樣能按，改叫比照——
+  // 這是它自己的彈窗，不是 `panel`（那支才是 simpleMode 決策系統的專屬元件）。
+  const audiblePanel = createZonePanel();
   // W4(P4) 附錄 B-3 封線影子（L 2.0 佈陣可視化——配套下達即現，純表現層）
   const blockShadow = createBlockShadow(ctx.scene);
   // 2026-08-04 試玩裁定：玩家自己的攔網涵蓋帶（看得見「我守得住多寬」；不畫球的預測落點）
@@ -168,6 +181,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     // bquickStateOf 的窗（811/811 開）——**量測位置不含 UI 佈線**，同日 camp-reminder
     // 才寫過「價值全在接線上」的教訓，八小時後在自己手上重演。
     boxScorePanel, callButton, cutButton, tandemButton, bquickButton,
+    audibleButton, audiblePanel, // 職業章批 4b（改叫）：一定要進這個 return——見上方教訓
     blockShadow, blockReach, heroStamina, diegetic,
     benchAccelBtn, comebackBtn, coachOptionDialog, timeoutCountdown,
     // ★ 新元件一定要進這個 return ★（2026-08-09 bquickButton 漏了這一行、

@@ -249,6 +249,12 @@ export function resolveTechGates(game, playerId, careerActive, hintsOff = false)
     // 注意這只是 UI 閘：邏輯層另有一道（evaluateCombination 的 scale===0 連 force 一起關），
     // 繞過面板直接送 replanCall 也產不出 combo——兩層各自獨立，不互為前提。
     canCallPlay: (!tech || (tech.callPlay ?? 0) >= 1) && (game.comboScale ?? 1) > 0,
+    // 職業章批 4b（改叫，B2）：非 S 位置的組合指令權——**與 canCallPlay 分開的閘**。
+    // 這把技術給的是「非 S 也能下指令」的地位，不是「這場有沒有組合攻擊」——那件事
+    // 仍由 comboScale 這道世界閘管，兩者都要過。canCallPlay 保留給既有三入口
+    // （S 面板／OH 內切／OPP 夾塞），零改動；改叫是第四個入口，走自己的技術閘，
+    // 解鎖時序（傳授事件）可以與叫戰術完全脫鉤。
+    canAudible: (!tech || (tech.audible ?? 0) >= 1) && (game.comboScale ?? 1) > 0,
     // 大學卷批 7（08-24）：兩招大學技術，與上列同一把尺（快速比賽 tech===null＝恆開）。
     // canPressBlock 只餵 MB 讀心面板的「壓手封X」兩個選項——B7-3 要求壓手不得有
     // 獨立於方向的入口，所以這個布林**只**決定那兩個選項出不出現，不另開鈕。

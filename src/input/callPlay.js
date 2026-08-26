@@ -42,6 +42,14 @@ export const CALL_DESCS = {
 export const CALL_MODES = {
   command: { icon: '⚡', word: '指令', color: '#ffd166', hint: '你是二傳——說了算' },
   replan:  { icon: '🔄', word: '改判', color: '#ffd166', hint: '一傳歪了——臨場換戰術' },
+  // 職業章批 4b（改叫 B2）：非 S 位置的入口鈕/面板用這個 mode 的 icon／word
+  // （矩形按鈕上印「📢改叫」，不是「⚡指令」——地位是掙來的，不是二傳的職權）。
+  // ⚠ 只用於**組面板/按鈕的顯示**：`resolveCalledPlay` 的 `outcome.mode` 恆回
+  // 'command'（approach.js:991「叫套路的人一定是 S」——這句話對 S 依然成立，改叫
+  // 是另一個入口，不改這支解析器）⇒ `callFeedbackOf` 讀到的永遠是 'command'，
+  // 結算字卡對 S／非 S 都印「⚡指令」。這是刻意的：結果面前兩者是同一件事
+  // （直接生效的指令），只有「誰能按下這顆鈕」不同，回饋字卡不必分兩種語氣。
+  audible: { icon: '📢', word: '改叫', color: '#ffd166', hint: '不是二傳——但這球換你決定' },
 };
 
 // 只有二傳叫得了套路；非 S 回 null＝**沒有可用的語意**（不是「另一種語意」）

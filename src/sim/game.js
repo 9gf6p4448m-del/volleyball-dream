@@ -180,6 +180,11 @@ export const TUNING = {
   // 信任雙倍下注＝要球後成功/失誤 trust 升降幅同倍放大（沿 trust.js 乘係數零新機制）
   CALL_SWEET_WIDEN: 0.06,
   CALL_TRUST_MUL: 2,
+  // 職業章批 4b（改叫，acceptance-pro-batch4b.md E3）：非 S 改叫指定的攻擊手，
+  // 那一波沒得分＝trust 扣加倍；得分照既有動態，不另給獎勵——地位是掙來的，不是
+  // 按鈕給的。倍數屬提案，沿用 CALL_TRUST_MUL 同一個量級（2）。只乘進 settlePoint
+  // 的失誤分支（見下方 audibleFailMul），trust.js 零改動——不另立第二套信任算法。
+  AUDIBLE_FAIL_MUL: 2,
   SWEET_ACC: 0.55,        // 甜蜜區散佈乘數（越小越準）
   OVER_ACC: 1.5,          // 超蓄散佈乘數
   PERFECT_RECV_ACC: 0.5,  // Perfect 接球（timing≥0.95）的散佈乘數
@@ -408,6 +413,12 @@ export function createGame({
       // E 路實測「授予後撐到二傳出手仍是原受控者只剩 55.5%」正是這個設計的必然結果，
       // 不是 bug——但**與玩家對「⚡跟上！」這顆按鈕的預期不符**，已送裁（見下）。
       callPid: null,
+      // 職業章批 4b（改叫 E3/E4）：非 S 呼叫者成功指令這一波時，`ai.js applyReplanCall`
+      // 記下的攻擊手 mainId——settlePoint 讀（`=== lastToucherId` 才算數，同 callPid
+      // 的比對範式）：那一波沒得分 ⇒ trust 扣加倍。S 呼叫的既有路徑不寫這格，永遠是
+      // null ⇒ 逐值無效果（同 callPid「要球一波一效，死球即清」的既有風險特性——
+      // 一次 rally 內若有多次交手，只認最近一次改叫，不另立更嚴格的旗標）。
+      audibleMainId: null,
       // 段 4 組合獎金的資料底：`{ pid, team }`＝本波組合的配合者且他**實際起跳**了。
       // 由 ai.js 的 applyRouteCommit 寫（那裡才同時看得到 attackCombo 與 routeCommit），
       // settlePoint 讀。放 rally 而不是 aiState 的理由：獎金要在**得分結算**那一刻兌現，
@@ -1417,8 +1428,18 @@ function settlePoint(state, winner, reason, ev) {
   r.passTeam = null;
   if (r.profile === 'spike' && r.lastToucherId) {
     // W4 題5：要球者的信任雙倍下注——要了球又是這記攻擊的歸因者＝升降幅同倍放大
-    const mul = r.callPid === r.lastToucherId ? TUNING.CALL_TRUST_MUL : 1;
+    const callMul = r.callPid === r.lastToucherId ? TUNING.CALL_TRUST_MUL : 1;
     const scored = reason === 'BALL_IN' && r.lastTouchTeam === winner;
+    // 職業章批 4b（改叫 E3）：這一波是非 S 改叫指定的攻擊手，且沒得分 ⇒ 失誤扣加倍；
+    // 得分＝照既有動態，不進這個乘子（只在 !scored 分支相乘，KILL 那支完全碰不到）。
+    // 未使用（audibleMainId 恆 null）時本行恆為 1，與 callMul 相乘後逐值等於原本的
+    // callMul——這正是 E4 要求的「逐值無效果」。
+    const audibleFailMul = (!scored && r.audibleMainId === r.lastToucherId)
+      ? TUNING.AUDIBLE_FAIL_MUL : 1;
+    // 覆審 MEDIUM 修：同一波「⚡跟上！」（callPid）與「改叫」（audibleMainId）都命中
+    // 同一位失誤者時**取重不疊乘**——疊乘＝4 倍扣是兩個獨立賭注的意外交互，
+    // 不是設計（兩注語意都是「這波我扛」，扛一次就好）。幅度屬提案試玩可調。
+    const mul = Math.max(callMul, audibleFailMul);
     if (scored) {
       applyAttackOutcome(state, r.lastToucherId, true, mul);
     } else if (reason === 'OUT' && r.lastTouchTeam !== winner) {
@@ -1928,6 +1949,7 @@ function setupServePhase(state) {
   r.deceiveP = 0;
   r.touchLockTick = -1;
   r.callPid = null; // 要球一波一效（死球即清）
+  r.audibleMainId = null; // 改叫同款一波一效（同 callPid 的清空時機）
   r.comboAssist = null; // 組合獎金候選同樣一波一效（另一個清空點在 ai.js：新的一波開帳時）
   // ★ 不清 comboAssistCredit ★ 這裡與 settlePoint 同一個 tick 同步執行（非局末的一般
   // 得分：settlePoint 的 else 分支直接呼叫本函式，不是隔幾個 tick 才跑）——若在這裡

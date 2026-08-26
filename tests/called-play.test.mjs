@@ -260,7 +260,10 @@ test('④ 指令與改判：圖示／詞兩條通道不同，且 request 規格�
   assert.notEqual(c.word, p.word, '詞相同＝念出來分不出來（最不倚賴視覺的一條）');
   // 舊制的第三種語意：非 S 的「請求」。廢除後不得再有規格，否則面板會把它畫回來
   assert.equal(CALL_MODES.request, undefined, 'CALL_MODES.request 還在＝請求語意沒拆乾淨');
-  assert.deepEqual(Object.keys(CALL_MODES).sort(), ['command', 'replan']);
+  // 職業章批 4b：新增 'audible'（非 S 位置的改叫入口鈕面 icon/word）——這是刻意的
+  // 第四種語意，不是「請求」復辟：above 那條 request===undefined 才是真正要守的
+  // 不變量；這裡只是把清單跟著新增的鍵同步，同 TECH_DEFS.length 的既有先例。
+  assert.deepEqual(Object.keys(CALL_MODES).sort(), ['audible', 'command', 'replan']);
 });
 
 test('④ 兩種結果的字卡不同，且失敗字卡講得出原因', () => {

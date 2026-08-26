@@ -11,7 +11,7 @@ import {
 } from '../sim/game.js';
 import {
   createAiState, aiCollectIntents, aiTimeoutWanted, aiTimeoutBoost, aiSubstitutionWanted,
-  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf, dutyPosition, AI,
+  callFeasibilityOf, cutStateOf, tandemStateOf, bquickStateOf, audibleStateOf, dutyPosition, AI,
 } from '../sim/ai.js';
 import { predictLanding } from '../sim/flight.js';
 import { contactAssistFor } from './contactAssist.js';
@@ -31,7 +31,9 @@ import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
 import { roleSwapOk } from '../ui/subPanel.js';
 // 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
-import { callOptionsFor, callFeedbackOf, CALL_MODES } from '../input/callPlay.js';
+import {
+  callOptionsFor, callFeedbackOf, CALL_MODES, CALL_LABELS,
+} from '../input/callPlay.js';
 import {
   blockBetFeedbackOf, mbCallFeedbackOf, createBlockBetArm, createBetCardGate,
 } from '../input/blockBetFeedback.js';
@@ -326,6 +328,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // flightId 就夠，同一個 flightId 只可能對應同一次入帳。
     comboCreditLatch: null,
     comboCreditSeenFlight: -1,
+    // 職業章批 4b（改叫）：子選單目前開著沒——鈕的可見性判斷要看它（避免選單開著
+    // 時鈕又自己跳回來，見鈕可見性管理區塊的說明），選定或窗關都會把它撥回 false。
+    audibleMenuOpen: false,
     // 屆間養成卷 E2（2026-08-09）：默契配對記帳（{隊友id: 次數}）。
     // ★ 落在 app 層＝純觀察 ★ 裁定書 do-not-touch 7 要求「sim 判定路徑一個位元組不改」，
     // 記在這裡才結構性滿足它（也避開 season-combo-gate 的 SEASON-SCAN 鐵律）。
@@ -2688,6 +2693,32 @@ export function onTandemTap(s) {
   s.tandemOutcomeLatch = null;
 }
 
+// 職業章批 4b（改叫 B2）：非 S 位置點下「📢 改叫」——開一個小面板選交叉／時間差／
+// B快（選項集合同 S 的⚡面板）。★ 重新問一次 `audibleStateOf` ★（不吃呼叫端傳來的
+// 快照）：範式同 `onCutTap`/`onTandemTap`/`onBquickTap`——鈕從「可見」到「被點到」
+// 之間可能跨了好幾個 sim tick，用點下當下的真狀態，不用鈕第一次浮現時的舊快照
+// （否則面板可能列出這一刻其實已經湊不出來的選項）。窗已經關了就地說原因，不靜默
+//（同三顆先例的紀律）。選定後**直接寫 `aiState.replanCall`**——與 S 的⚡面板同一條
+// 指令通道（`ai.js applyReplanCall`），零新 sim 路徑。
+export function onAudibleTap(s) {
+  const ast = audibleStateOf(s.game, s.aiState, s.playerId);
+  if (!ast.open) {
+    s.stage.floatText?.show('這球湊不出可以下的指令', '#c8d6eb', 1300);
+    return;
+  }
+  s.audibleMenuOpen = true;
+  const items = ast.types.map((type) => ({
+    key: `audible-${type}`,
+    label: `${CALL_MODES.audible.icon}${CALL_LABELS[type] ?? type}`,
+    color: 'neutral',
+    callType: type,
+  }));
+  s.stage.audiblePanel?.show('改叫——下指令！', items, (it) => {
+    s.audibleMenuOpen = false;
+    s.aiState.replanCall = { type: it.callType, callerId: s.playerId };
+  });
+}
+
 function onCallTap(s) {
   const { game, stage } = s;
   if (game.phase !== 'rally' || game.rally.touches !== 1) return; // 窗已過（防競態）
@@ -2886,6 +2917,8 @@ function frameStep(s, now) {
     if (stage.cutButton?.isVisible()) stage.cutButton.hide();
     if (stage.tandemButton?.isVisible()) stage.tandemButton.hide(); // 夾塞鈕同理
     if (stage.bquickButton?.isVisible()) stage.bquickButton.hide(); // B 快鈕同理
+    if (stage.audibleButton?.isVisible()) stage.audibleButton.hide(); // 改叫鈕同理
+    stage.audiblePanel?.hide(); // 子選單同樣不得留在回放期間的畫面上
     // ★ 08-07 補：字卡鎖存不因進入回放而作廢 ★ pending／latch 若在 stepSim 鎖存後、
     // 同幀還沒播出時玩家按了 🎬，回放期間下面兩個消費區塊（:2381/:2395 一帶）整段被
     // 這個 early-return 跳過，鎖存會存活到回放結束才補跳一張已經過時好幾秒的字卡。
@@ -3028,6 +3061,34 @@ function frameStep(s, now) {
     if (bquickOpen && !stage.bquickButton.isVisible()) {
       stage.bquickButton.show(() => onBquickTap(s));
     } else if (!bquickOpen && stage.bquickButton.isVisible()) stage.bquickButton.hide();
+  }
+  // ════════════════════════════════════════════════════════════════
+  // 職業章批 4b（改叫 B2）：非 S 位置的組合指令鈕——與另外三顆同一套逐 frame 問 sim
+  // 的範式，差別只有：①吃自己的技術閘 `canAudible`（不是 `canCallPlay`——那把管既有
+  // 三入口，見 matchConfig.js 的裁定）②排除 S 本人（S 走自己的⚡面板，這不是第二
+  // 入口）③窗開的定義來自 `audibleStateOf`（team-scoped 的 `callFeasibilityOf`
+  // 包了一層角色與隊伍歸屬檢查，理由見該函式檔頭）。
+  // 沒有兩態（`CUT_BUTTON_STATES`/`TANDEM_BUTTON_STATES` 那種）：這顆鈕點下去不是
+  // 「這球給不給你」，是「這球要不要下指令」，鈕面恆為同一個字——同 `bquickButton`
+  // 沒有兩態的理由同款（要球/下令型鈕，不是改線型）。
+  if (stage.audibleButton && !s.replay) {
+    const meNow = game.players[s.playerId];
+    const baseEligible = !!meNow && meNow.currentRole !== 'setter'
+      && s.gates.canAudible && onCourt(game, s.playerId);
+    const ast = baseEligible ? audibleStateOf(game, s.aiState, s.playerId) : { open: false, types: [] };
+    // 窗真的關了，選單卻還開著（玩家還沒選）——sim 這一刻再選也不會生效，
+    // 及時把選單收掉，不讓他對著一扇已經關上的窗做選擇
+    if (!ast.open && s.audibleMenuOpen) {
+      s.audibleMenuOpen = false;
+      stage.audiblePanel?.hide();
+    }
+    // 選單開著／已有一筆指令待消費時不重複跳鈕（同 `!s.aiState.cutCall` 的防雙擊範式）
+    const showTrigger = ast.open && !s.aiState.replanCall && !s.audibleMenuOpen;
+    if (showTrigger && !stage.audibleButton.isVisible()) {
+      stage.audibleButton.show(() => onAudibleTap(s));
+    } else if (!showTrigger && stage.audibleButton.isVisible()) {
+      stage.audibleButton.hide();
+    }
   }
   // B 快結算回饋（讀鎖存，理由同夾塞／內切那兩段）
   const bquickOc = s.bquickOutcomeLatch;

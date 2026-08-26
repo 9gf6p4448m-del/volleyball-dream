@@ -1581,11 +1581,39 @@ function applyReplanCall(game, aiState) {
   aiState.approach = { team, setTick: aiState.approach.setTick, routes };
   aiState.attackTempo = approachRouteOf(routes, shaped.mainId)?.tempo ?? 'three';
   aiState.callOutcome = out;
+  // 職業章批 4b（改叫 E3/E4）：呼叫者不是 S ⇒ 這是「改叫」入口（重用本函式的既有
+  // 指令通道，不另立第二套）。記下 mainId，settlePoint 讀（那一波沒得分＝trust
+  // 扣加倍）。S 呼叫的既有路徑（caller.currentRole === 'setter'）不寫這格，
+  // r.audibleMainId 維持 null——上面所有既有邏輯一行未動，這裡只新增一格記帳。
+  const caller = game.players[call.callerId];
+  if (caller && caller.currentRole !== 'setter') {
+    r.audibleMainId = shaped.mainId;
+  }
   // 純觀測（見 pushCallPlay）：走到這一行＝指令成立且線已經寫回 approach
   //（'infeasible'／'launched' 兩條路都在上面提前 return，發不出這一顆）。
   pushCallPlay(game, aiState, {
     callerId: call.callerId, callType: call.type, mainId: shaped.mainId,
   });
+}
+
+// ════════════════════════════════════════════════════════════════
+// 職業章批 4b（改叫，B2）—— 非 S 位置的組合指令窗
+// ════════════════════════════════════════════════════════════════
+// UI 用它決定「改叫」浮鈕顯不顯示、哪幾個戰術這球湊得出來（同 `callFeasibilityOf`
+// 的裁定乙：湊不出來的當場不列）。**不重建窗界或池子**——直接問 `callFeasibilityOf`
+// （S 面板背後那支），只多做兩件 S 不需要的事：①排除 S 本人（S 走自己的既有面板，
+// 這裡不是第二個入口）②把「這場我方是不是在這個窗裡」的隊伍歸屬也問一遍——
+// `callFeasibilityOf` 只看 `aiState.landingTeam`（whichever 隊在窗裡），不查
+// playerId；非 S 呼叫者必須先確認那正是**他自己這一隊**，否則會把敵隊的窗誤判成
+// 自己能叫（跨隊誤觸發，`aiState` 是全場唯一一份、兩隊共用同一個協調層狀態）。
+export function audibleStateOf(game, aiState, playerId) {
+  const player = game.players?.[playerId];
+  if (!player || player.currentRole === 'setter') return { open: false, types: [] };
+  if (aiState.landingTeam !== player.teamId) return { open: false, types: [] };
+  const feas = callFeasibilityOf(game, aiState);
+  if (!feas) return { open: false, types: [] };
+  const types = offeredCallTypes().filter((t) => feas[t]?.feasible !== false);
+  return { open: types.length > 0, types };
 }
 
 // ---- 叫戰術重做卷 段 1：受控玩家「不跑」的後果（Sawmah 2026-08-01 裁定 1A/1B/1C）----

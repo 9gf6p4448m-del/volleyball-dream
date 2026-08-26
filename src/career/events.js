@@ -99,6 +99,27 @@ export const EVENT_DEFS = [
       { speaker: '球探分析師', text: '高中你把球打好，大學你讓對面打不好。到了這裡——你決定對手看到什麼。' },
     ],
   },
+  // 職業章批 4b（改叫，2026-08-26）：批 4a 講情報戰，這一則講**地位**。
+  // 講者用「隊長」（角色而非具名）——同 teach-baitline 的理由：職業隊名冊隨簽約隊伍
+  // 變動，寫死某隊友名字在換隊時對不上人；隊長是每支球隊都有的位置。
+  // 提案值＝7（單循環打滿，同 teach-baitline）：原想錯開成 4（球季過半），但實測
+  // 撞上 tests/pro-batch3-wiring.test.mjs 既有治具（前 6 場全勝＋第 7 場棄賽的
+  // 「覆審H修」窗口）——proLeaguePlayed>=4 在那份治具的第 4 場賽後就到期，跳出
+  // 這則新對話，把該測試原本要驗的準決賽畫面洗掉（改前綠、改後紅，行為級回歸）。
+  // teach-baitline 的 7 已經證明能避開那個窗口（那份治具最多打到 6 場），改叫比照
+  // 同一個安全值——兩招會在同一場賽後一起到期（皆屬 post moment，UI 逐則播放，
+  // 不是同時疊字），代價是不再錯開，真人試玩後兩者的值都可再各自調整。
+  {
+    id: 'teach-audible',
+    moment: 'post',
+    when: { proLeaguePlayed: 7 },
+    effect: { unlock: 'audible' },
+    lines: [
+      { speaker: '隊長', text: '這裡不是學校球隊。教練不會因為你是新人放水，我們也不會因為你是新人幫你扛。' },
+      { speaker: '隊長', text: '你在這支球隊待到現在，該有的地位你自己掙來了——網前你也能直接喊套路，不必等二傳點頭。' },
+      { speaker: '隊長', text: '但喊了就是你的責任。喊對了，球照樣是你自己打進去的；喊錯了，這一分算你的——沒人替你扛。' },
+    ],
+  },
   // ---- 技術傳授線（改版裁定：技術經故事習得，每場一招；輸贏都教——敗者也有收穫）----
   {
     id: 'teach-tip',
@@ -388,6 +409,8 @@ export const ONCE_EVENT_IDS = new Set([
   'teach-call',
   // 批 7：大學兩招同樣是「教過就不再教」（舊存檔升上大學後不會重播）
   'teach-press', 'teach-chase',
+  // 職業章批 4b：改叫同樣「教過就不再教」
+  'teach-audible',
   'mb-warn', 'rematch-won', 'rematch-lost',
 ]);
 export function isOnceEvent(id) {

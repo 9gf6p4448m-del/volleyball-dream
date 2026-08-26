@@ -107,10 +107,11 @@ function runBlockWithControls(g, controls) {
 // 08-26 職業章批 4a：9→10（新增「餵線」）。這條斷言不是本批驗收條件，
 // 是大學卷批 7 遺留的長度硬編碼——新技術正常成長必然要更新它，同 growth.test.mjs
 // 的先例（B7-10 使用者已就「加新技術要動這條斷言」追認過）。
-test('B7-1 TECH_DEFS 恰 10 條（含批 4a 餵線）、key 唯一、每條有 name 與 desc', () => {
-  assert.equal(TECH_DEFS.length, 10);
+// 08-26 職業章批 4b：10→11（新增「改叫」）——同一先例再走一次。
+test('B7-1 TECH_DEFS 恰 11 條（含批 4a 餵線／批 4b 改叫）、key 唯一、每條有 name 與 desc', () => {
+  assert.equal(TECH_DEFS.length, 11);
   const keys = TECH_DEFS.map((d) => d.key);
-  assert.equal(new Set(keys).size, 10, 'key 不得重複');
+  assert.equal(new Set(keys).size, 11, 'key 不得重複');
   assert.ok(keys.includes('pressBlock') && keys.includes('chaseServe'));
   for (const d of TECH_DEFS) {
     assert.ok(typeof d.name === 'string' && d.name.length > 0, `${d.key} 少了 name`);
