@@ -402,20 +402,13 @@ test('送審修 寫入失敗的棄賽：當輪仍顯示棄賽已判（第7輪不
   screen.show('career');
   await settle();
   const text = allText(globalThis.document.body);
-  // 棄賽當輪仍要「已判」：第 7 輪顯示負場，不得出現「▶ 出戰」第 7 場對手的按鈕
-  assert.match(text, /6 勝 1 敗|6勝1敗/, '寫入失敗當輪畫面仍要顯示棄賽敗已判（settled 兜底）');
-  assert.doesNotMatch(text, /▶ 出戰 鐵骨戰王/, '不得讓玩家重打棄賽場次（反白嫖規則 07-22）');
-  // ★第三輪修的反向斷言（第二輪送審抓到的復活路徑）★ 失敗兜底也要看得到季後賽——
-  // 6 勝 1 敗＝晉級，畫面不得誤判賽季落幕（兜底 career 經記憶體端 growProSchedule 補長）
-  assert.match(text, /準決賽/, '寫入失敗＋晉級：兜底畫面也要看得到長出的準決賽');
-  assert.doesNotMatch(text, /賽季落幕/, '寫入失敗不得讓假「賽季落幕」復活（第一輪 HIGH 同款）');
-  // ★第三輪送審裁定 (a)（Sawmah 2026-08-26）★ 兜底賽程的季後賽場次不在硬碟上，
-  // 開打會在結算 recordResult 炸例外（送審實測）——degraded 當輪出戰鈕必須停用＋明示
-  const playBtn = walk(globalThis.document.body)
-    .find((n) => n.tag === 'button' && /▶ 出戰/.test(n.textContent ?? ''));
-  assert.ok(playBtn, 'degraded 畫面仍要有出戰鈕（看得到、按不了——不是憑空消失）');
-  assert.equal(playBtn.disabled, true, '裁定 (a)：存檔壞掉的當輪出戰鈕必須停用');
-  assert.match(text, /存檔空間異常/, '裁定 (a)：要誠實明示存檔異常與復原方法');
+  // ★裁定 (a) 頭道閘改寫（2026-08-26 Sawmah 拍板選項 i）★ 原「停用鈕＋畫面照舊」
+  // 形狀經四輪送審證明旁支繞不完，拍板改為頭道閘純警示頁——斷言依新形狀改寫：
+  // 警示＋逃生口可見；出戰鈕整個不渲染（比停用更強：連撕裂場次的入口都不存在）
+  assert.match(text, /存檔空間異常/, '裁定 (a)：頭道閘警示頁');
+  assert.match(text, /返回選檔/, '逃生口必須可見（玩家不被鎖死）');
+  assert.doesNotMatch(text, /▶ 出戰/, '頭道閘後出戰入口不渲染（撕裂場次無從點起）');
+  assert.doesNotMatch(text, /賽季落幕/, '不落入結算流程');
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -453,9 +446,9 @@ test('裁定(a)補全 degraded＋到期事件：跳過對話直達警示，不�
   assert.doesNotMatch(text, /別背著。輸球是全隊的事/,
     'degraded 輪不得播事件對話（入帳落不了碟＝會無限重播）');
   assert.match(text, /存檔空間異常/, 'degraded＋到期事件也要直達警示畫面');
-  const playBtn = walk(globalThis.document.body)
-    .find((n) => n.tag === 'button' && /▶ 出戰/.test(n.textContent ?? ''));
-  assert.equal(playBtn?.disabled, true, '出戰鈕停用（裁定 a 的承諾在此輪也成立）');
+  // 頭道閘改寫（拍板 i）：出戰鈕不再渲染，逃生口取代
+  assert.match(text, /返回選檔/, '逃生口可見');
+  assert.doesNotMatch(text, /▶ 出戰/, '頭道閘後無出戰入口');
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -495,10 +488,55 @@ test('裁定(a)最終形 degraded＋不晉級：鏈頂攔下，落幕鈕停用�
   screen.show('career');
   await settle();
   const text = allText(globalThis.document.body);
-  assert.match(text, /存檔空間異常/, 'degraded＋不晉級也要看到統一警示（鏈頂分流）');
+  assert.match(text, /存檔空間異常/, 'degraded＋不晉級也要看到統一警示（頭道閘）');
   assert.doesNotMatch(text, /資料解不開/, '不得落入措辭錯誤的既有結算失敗卡');
-  const closingBtn = walk(globalThis.document.body)
-    .find((n) => n.tag === 'button' && /賽季落幕/.test(n.textContent ?? ''));
-  assert.ok(closingBtn, '季末情境要有落幕鈕（看得到按不了）');
-  assert.equal(closingBtn.disabled, true, '落幕鈕必須停用（結算讀磁碟舊值必失敗）');
+  // 頭道閘改寫（拍板 i）：落幕鈕不再渲染（結算入口整個不存在），逃生口取代
+  assert.match(text, /返回選檔/, '逃生口可見');
+  assert.doesNotMatch(text, /賽季落幕/, '頭道閘後無結算入口');
+});
+
+// ════════════════════════════════════════════════════════════════
+// 裁定 (a) 頭道閘（收尾審反例）：企業章＋薪水卡到期＋degraded——
+// 改前紅：corpPaydayDue 分支排在舊「分支鏈頂 guard」之前 return，
+// 玩家看到可互動薪水卡而非警示（選了也存不住＝先騙後道歉）
+// ════════════════════════════════════════════════════════════════
+test('裁定(a)頭道閘 企業章薪水卡到期＋degraded：警示頁而非薪水卡', async () => {
+  // 企業章進行中（不簽職業）：u4Save→enterCorporate→打 3 場（>=2 未打滿=payday due）
+  const storage = u4Save();
+  const s = createCareerStore(storage);
+  assert.ok(s.enterCorporate('panshi-heavy'), 'fixture 前提：簽企業隊成功');
+  let c = s.loadCareer();
+  const corpGames = c.schedule.filter((m) => m.round === 'corp');
+  s.saveCareer({
+    ...c,
+    results: corpGames.slice(0, 3).map((m, i) => ({
+      matchId: m.id, opponentId: m.opponentId, won: i % 2 === 0,
+      scoreFor: i % 2 === 0 ? 2 : 1, scoreAgainst: i % 2 === 0 ? 0 : 2, gp: 3,
+    })),
+  });
+  // 第 4 場棄賽（pendingMatch）＋事件預燒（隔離 payday 這一條路徑）
+  c = s.loadCareer();
+  s.saveCareer({
+    ...c,
+    pendingMatch: corpGames[3].id,
+    events: [...new Set([...(c.events ?? []), 'first-loss'])],
+  });
+  const failingStorage = {
+    getItem: (k) => storage.getItem(k),
+    setItem: () => { throw new Error('QuotaExceededError（模擬私密模式）'); },
+    removeItem: (k) => storage.removeItem(k),
+  };
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(failingStorage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  const text = allText(globalThis.document.body);
+  assert.match(text, /存檔空間異常/, '頭道閘：企業章 degraded 也直達警示頁');
+  assert.doesNotMatch(text, /第一份薪水|照規矩|寄回家/,
+    '不得彈可互動的薪水選擇卡（選了存不住＝先騙後道歉）');
+  assert.match(text, /返回選檔/, '逃生口可見');
 });

@@ -1857,7 +1857,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 「寫入成功會讀回的形狀」一致：棄賽已判（反白嫖守住）＋季後賽場次看得到。
       let view = saved ? store.loadCareer() : null;
       if (!view) {
-        saveDegraded = true; // 本輪畫面吃的是記憶體兜底——出戰段據此停用（裁定 a）
+        saveDegraded = true; // 本輪畫面吃的是記憶體兜底——頭道閘據此攔下（裁定 a）
         const proId = store.loadPro?.() ?? null;
         view = proId
           ? { ...settled, schedule: growProSchedule(settled.schedule, settled.results, proId, settled.seed) }
@@ -1865,6 +1865,26 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       }
       career = view;
       if (forfeited) setMsg('上一場中途離開——依規記為棄賽敗（0:25）');
+    }
+    // ★裁定 (a) 頭道閘（2026-08-26 Sawmah 拍板選項 i）★
+    // degraded＝棄賽寫入失敗＝本輪存檔已知壞掉。四輪送審證明「把守衛放在各分支」
+    // 是打地鼠（對話段→季末鏈→薪水卡，旁支清單開放）——終解＝渲染函式唯一的
+    // 頭道閘：這裡直接畫警示頁＋返回選檔，return。後面整個函式不執行，
+    // 未來任何新分支天然被涵蓋（02 §6.1 收斂原則：讓旁支由建構上消失）。
+    // 事件/薪水卡/結算零丟失——入帳本來就落不了碟，存檔修好後照常到期。
+    if (saveDegraded) {
+      root.replaceChildren();
+      setMsg('');
+      root.appendChild(el('div', [
+        'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
+      ], '⚠ 存檔空間異常'));
+      root.appendChild(el('div', ['font-size:14px', `color:${COLOR.gold}`, 'max-width:520px'],
+        '戰績目前寫不進存檔——出戰、結算與劇情選擇已暫停（做了也存不住）。'
+        + '清出儲存空間或離開私密瀏覽模式後，重新整理再繼續。剛才的棄賽已依規記敗，'
+        + '存檔修復後會重新入帳。'));
+      root.appendChild(smallButton('返回選檔', renderSlots));
+      root.appendChild(msgEl);
+      return;
     }
     // stage 4 賽後事件：回到生涯畫面先播（入帳後不重複；播完重繪）。
     // W2(P4) canon 年級守衛：大山已畢業＝帶 elderId 的事件改播轉授版
@@ -1883,17 +1903,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 探針卷（M4）：企業場甩開情蒐的得利端回饋（per-match id 入帳一場一次）
       ...corpShakeOffEvents(career),
     ];
-    // ★裁定 (a) 補全（確認審反例 1）★ degraded 輪一律跳過會 return 的對話/儀式段
-    // （postEvs／mentor／招募儀式）直達警示畫面：存檔壞掉時事件入帳落不了碟，
-    // 播了＝每輪重讀舊碟重推同一事件＝無限對話迴圈，玩家永遠看不到停用鈕與警示
-    // （確認審以重現腳本證實三輪同句）。事件零丟失——存檔修好後照常到期播放。
-    if (postEvs.length && !saveDegraded) {
+    if (postEvs.length) {
       fireEvents(postEvs, career, player, () => renderCareer());
       return;
     }
     // W4(P4) Q9 導師接線（縫隙 1 層次二上線）：玩家=S 且最近一場有 box.mentor
     // → dueMentorLines 決定論選句（每場至多一句）；events 入帳防重播（mentor-<matchId>）
-    if (player.currentRole === 'setter' && !saveDegraded) {
+    if (player.currentRole === 'setter') {
       const lastR = career.results[career.results.length - 1];
       const mentorEvId = lastR ? `mentor-${lastR.matchId}` : null;
       if (lastR?.box?.mentor && !(career.events ?? []).includes(mentorEvId)) {
@@ -1909,7 +1925,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     }
     // W4 招募入隊：條件達成且有空位→入隊（單次原子 RMW，冪等），賽後結算畫面彈
     // 儀式演出（名字/位置/屬性亮相）；播完重繪即見新成員入名冊
-    const joined = saveDegraded ? [] : settleRecruitJoins(store, career.seed);
+    const joined = settleRecruitJoins(store, career.seed);
     if (joined.length) {
       showRecruitCeremony(joined, () => renderCareer());
       return;
@@ -2388,22 +2404,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 企業章批 3（A3-2）：企業賽季結束＝名次＋收尾卡；未結束照樣落到「▶ 出戰」
     // 職業章批 3（C1/C5）：同款分支，排在鏈首——章節互斥（同一份存檔只會有一個
     // pickedXxx 非 null），順序本身不影響行為，只是沿用「當前章節優先」的既有排法
-    // ★裁定 (a) 最終形（最終確認審反例）★ degraded 統一分流上移到整條鏈頂端：
-    // 棄賽寫入失敗的那一輪，不進任何結算/出戰流程——季末分支的 settle* 讀磁碟舊值
-    // 必回 false，玩家會卡在措辭錯誤（「資料解不開」）的失敗卡循環；有下一場的
-    // 情境則有結算炸例外風險（前輪送審實測）。鏈頂攔下＝結構上無可繞分支。
-    // 主按鈕看得到按不了（依情境給文字），警示措辭統一。
-    if (saveDegraded) {
-      const degradedNext = nextMatch(career);
-      const degradedBtn = button(
-        degradedNext ? `▶ 出戰 ${opponentName(degradedNext.opponentId)}` : '▶ 賽季落幕',
-        true, () => {},
-      );
-      degradedBtn.disabled = true;
-      root.appendChild(degradedBtn);
-      root.appendChild(el('div', ['font-size:12px', `color:${COLOR.gold}`],
-        '⚠ 存檔空間異常——戰績目前寫不進存檔，出戰與結算已暫停。清出儲存空間或離開私密瀏覽模式後，重新整理再繼續。'));
-    } else if (proSeasonDone) {
+    // （裁定 (a) 的 degraded 攔截已收斂為 renderCareer 頭道閘——見棄賽分支後那段；
+    //  此處分支鏈只會在存檔健康時執行）
+    if (proSeasonDone) {
       const board = proTable({
         teamId: pickedPro.id, seed: career.seed,
         schedule: career.schedule, results: career.results,
