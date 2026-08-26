@@ -1303,8 +1303,11 @@ function updateDecisions(s, now) {
     (gates.readTier === 'slow' && s.attackDecidingSince >= 0 && now - s.attackDecidingSince > 600);
   if (attackDeciding) {
     const feintHint = gates.canFeint ? '（按A滑B＝假動作）' : '';
+    // 批 4c：二段時間差的唯一 UI 露出（同 feintHint 先例——未解鎖空字串＝F1 零可見；
+    // 不另開按鈕：操作面就是既有的出手鈕在滯空中再拖一次，無新元素可畫）
+    const dblHint = gates.canDoubleSpike ? '（滯空再拖＝二段變向）' : '';
     panel.show(
-      (hintsLive ? '選攻擊區！' : '看攔網選區！') + feintHint,
+      (hintsLive ? '選攻擊區！' : '看攔網選區！') + feintHint + dblHint,
       zones.map((z) => ({
         key: z.key,
         label: hintsLive ? z.label + (z.blocked ? ' ✋' : '') : z.label,

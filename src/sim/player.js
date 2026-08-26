@@ -54,6 +54,7 @@ export function createPlayer({
       pipe: 1,       // 後排攻擊面板（手動 pipe）
       feint: 1,      // 按A滑B 假動作
       dive: 1,       // 魚躍救球（主動技）
+      doubleSpike: 1, // 批 4c 二段時間差（滯空第二段變向）——快速比賽預設開、生涯 0 起步
       feintUses: 8,  // 假動作使用次數（熟練度）；8＝1.0 基準乘子
       ...techniques,
     },

@@ -2130,12 +2130,21 @@ function decideOne(game, aiState, playerId) {
     // 開頭的 `atkTeam === team` 早退），所以自家進攻時窗恆不開。
     const action = blockPlanAirborne(aiState, team, tick, playerId) ? 'block' : null;
     const it = moveIntent(game, playerId, tick, actor, netSpot);
-    if (action) {
-      it.action = 'block';
-      // §十-4b：手態隨 intent 帶進 sim（game.js 窗開時定格到 actor.blockHand）
+    // 批 4c 覆審修 1（Sawmah 拍板 a）：我承諾的 lane（byPid 的 x＝這面牆此刻押的線）
+    // **逐 tick** 隨 intent 申報進 sim（game.js stepGame 滾動鏡射到 actor.blockLaneX，
+    // 窗開後凍結）——不是只在起跳那一 tick 帶：二段變向的被騙判定要的是「變向那一瞬
+    // 你押在哪」，快照時人多半還沒跳（AI 牆天然比觸球晚 1-2 tick 起跳），只帶跳那
+    // 一下等於永遠沒申報。game.js 讀不到 aiState，byPid 的承諾走 intent 這條既有
+    // 管道過去（同 hand 慣例），讀的仍是守方自己的公開承諾、不碰攻方輸入意圖
+    {
       const plan = aiState.blockPlan;
       const c = plan && plan.team === team ? plan.byPid[playerId] : null;
-      it.hand = (c ? c.hand : null) ?? 'vertical';
+      if (c && Number.isFinite(c.x)) it.laneX = c.x;
+      if (action) {
+        it.action = 'block';
+        // §十-4b：手態隨 intent 帶進 sim（game.js 窗開時定格到 actor.blockHand）
+        it.hand = (c ? c.hand : null) ?? 'vertical';
+      }
     }
     return it;
   }

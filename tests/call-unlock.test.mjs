@@ -141,8 +141,11 @@ test('⑤舊存檔相容：無 callPlay 欄的存檔可載入、不 crash、預�
   store.savePlayer(player);
 
   // 把存檔改寫成「本次改動之前的建置會寫出的樣子」＝techniques 沒有 callPlay 這個鍵
+  // （批 4c 枚舉先例型追改：createCareerPlayer 新增 doubleSpike 顯式 0，重建舊檔形狀
+  //   要一併刪掉——下方的期望鍵集合**一字未動**＝舊檔形狀保真，本測語意不變）
   const raw = JSON.parse(storage.raw.get('vd-save'));
   delete raw.player.techniques.callPlay;
+  delete raw.player.techniques.doubleSpike;
   assert.deepEqual(
     Object.keys(raw.player.techniques).sort(),
     ['block', 'dive', 'emergencySet', 'feint', 'feintUses', 'floatServe',

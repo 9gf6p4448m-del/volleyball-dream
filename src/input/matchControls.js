@@ -9,6 +9,7 @@ import {
 } from '../sim/rotation.js';
 import { standingReach } from '../sim/player.js';
 import { TUNING } from '../sim/game.js';
+import { staminaTier } from '../sim/stamina.js';
 // 收斂殘留清算（難度重校卷 題 C）：玩家端的魚躍三閘原本讀 TUNING.REACH_RADIUS(1.3)＝
 // 基準 A 舊值，與收斂後的真實可及脫鉤。改向單一真相取值，與 AI 端（ai.js 同一組條件）一致。
 import { REACH_ACTION, reachRadiusFor, RECEIVE_HANDPOINT_H_RATIO } from '../sim/reach.js';
@@ -68,6 +69,18 @@ const autoReceiveDistOf = (player) => AUTO_RECEIVE_MUL
 const BUFFER_TICKS = 36;     // 出手緩衝：放開後持續嘗試 0.6 秒（球一進可及範圍就出手）
 const SALVAGE_Y = 2.15;      // 第三擊球掉到此高度以下＝錯過扣球窗，保底送安全球
 const JUMP_WINDOW_MS = 900;  // 放開＝起跳揮擊後的出手有效窗
+
+// ★ 職業章批 4c「二段時間差」資格（純函式＝node 測試可紅綠，同 mbMomentFor 先例）★
+// 滯空第二段變向的輸入層閘：①技術已解鎖（`?? 1` 同 sim 端 game.js 的 dive 先例——
+// 快速比賽 createPlayer 預設全開、生涯顯式 0 起步）②非重度疲勞檔（F2-2；
+// staminaTier 讀的就是畫面上雙方都看得到的體力條＝對手也讀得到你還能不能變向）。
+// sim 端（executeTouch）用同一組條件再守一次——輸入層被繞過也長不出效果。
+export function retargetEligible(game, playerId) {
+  const me = game?.players?.[playerId];
+  if (!me) return false;
+  if ((me.techniques?.doubleSpike ?? 1) < 1) return false;
+  return staminaTier(game, me) < 2;
+}
 
 // simpleMode＝決策模式：Space 讓位給魚躍（蓄力只活在 classic；J 鍵保留給老手）
 export function createMatchControls(domElement, camera, initialPlayerId, rig, simpleMode = false) {
@@ -175,6 +188,23 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     const drag = charge.btnDrag;
     const ctx = lastGame ? contextAction(lastGame) : null;
     const spikeCtx = ctx === 'spike';
+    // ★ 職業章批 4c「二段時間差」★ 起跳後（扣球緩衝掛著、人還在滯空窗內）的第二次
+    // 拖曳放開＝**變向**，不是重新出手：只記新落點來源，不動 timing／jumpAt／gaze、
+    // 不再發 jumpSignal（人已在空中）。★F2-1 非時機軸★：第二段按多久（held）、
+    // 窗內何時放開，這裡**一個都不讀**——變向的全部語意就是「改打哪裡」。
+    // 資格（技術＋非重度疲勞）不符時不攔截＝落回既有路徑，行為與改制前逐值相同。
+    // 按鈕路徑拖曳太短（<14px＝無方向語意）＝這一下沒有落點可言，吞掉不變向也不重出手
+    //（落回舊路徑會原地重開滯空窗，那是把變向失手變成白拿的第二跳）。
+    if (spikeCtx && queuedAction && queuedAction.jumpAt !== null
+      && performance.now() - queuedAction.jumpAt <= JUMP_WINDOW_MS
+      && retargetEligible(lastGame, playerId)) {
+      const rt = drag
+        ? (Math.hypot(drag.dx, drag.dy) > 14 ? { aimVec: { ...drag } } : null)
+        : { aimNdc: { ...pointerNdc } };
+      if (rt) queuedAction.retarget = rt;
+      charge = null;
+      return;
+    }
     if (spikeCtx) {
       jumpSignal = true; // 起跳＝放開瞬間（windup 由 main 轉表現層）
       jumpStartedAt = performance.now();
@@ -408,6 +438,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
       let aim = { x: 0, z: -6.5 * TEAM_SIDE[me.teamId] }; // 預設瞄對方深區
       let gaze = null;
       let timing = 1;
+      let retargetAim = null; // 批 4c：滯空第二段變向的新落點（無變向＝null＝不帶欄位）
       // 攔網時序卷 段 1：這次的攔網是不是玩家**手動投遞**的（K 鍵／攔網鈕／
       // 「立即攔網」面板／主動作鈕在攔網情境）。sim 用它豁免物理滯空閘——
       // 玩家的 48-tick 窗是與身體無關的計時器，那段落地資格屬已記債項目。
@@ -444,6 +475,22 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         }
         gaze = queuedAction.gaze ?? rig.gazePoint(game);
         timing = queuedAction.timing;
+        // 批 4c：第二段變向的落點解算（與第一段 aimVec／aimNdc 同一套換算——同樣的
+        // 拖曳語意打同樣的地方）。只在動作仍是扣球時解（滯空窗過期降級 receive＝
+        // 變向自然作廢）；解不出（視角射線落空）＝不帶欄位＝沒變向，誠實落空
+        if (action === 'spike' && queuedAction.retarget) {
+          const rt = queuedAction.retarget;
+          if (rt.aimVec) {
+            const rlen = Math.hypot(rt.aimVec.dx, rt.aimVec.dy) || 1;
+            const rdist = 3 + (Math.min(rlen, 130) / 130) * 6;
+            retargetAim = {
+              x: a.x + (rt.aimVec.dx / rlen) * rdist,
+              z: a.z + (rt.aimVec.dy / rlen) * rdist,
+            };
+          } else if (rt.aimNdc) {
+            retargetAim = groundPoint(rt.aimNdc);
+          }
+        }
         // 進攻決策的扣球：保持有效到球可扣（不用 36-tick 緩衝），球掉太低才放棄讓 auto 保底
         // 發球等哨音沒有時限；其餘動作逾時作廢
         const waitingServe = game.phase === 'serve' && action === 'serve';
@@ -576,6 +623,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         it.hand = 'press';
         pressArmed = false;
       }
+      // 批 4c 二段時間差：與 it.manual／it.hand 同一招——建好 intent 再補屬性，
+      // 不擴充 createIntent 的白名單。sim 端消費點＝game.js executeTouch（資格再驗）
+      if (action === 'spike' && retargetAim) it.retargetAim = retargetAim;
       return [it];
     },
     // 出手成功（sim 發出我的觸球/發球事件）→ 清掉緩衝

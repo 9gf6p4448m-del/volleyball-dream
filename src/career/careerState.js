@@ -340,7 +340,10 @@ export function createCareerPlayer(name, { heightCm = 188, aspiration = 'outside
     // v:2＝技術欄位語意版本（normalizeCareerPlayer 的一次性遷移標記）
     techniques: {
       tip: 0, pipe: 0, feint: 0, feintUses: 0,
-      jumpServe: 0, floatServe: 0, dive: 0, callPlay: 0, v: 2,
+      jumpServe: 0, floatServe: 0, dive: 0, callPlay: 0,
+      // 批 4c：二段時間差**必須顯式 0**——sim 端閘門是 `?? 1`（同 dive 先例：快速比賽
+      // createPlayer 預設全開），缺欄會被當成已解鎖；其餘走 `?? 0` 閘的技術可缺欄
+      doubleSpike: 0, v: 2,
     },
   });
   // 單一事實源在 timeline（current＝末項快取）＋隱藏曲線 plan（逐屆揭曉）
@@ -586,8 +589,11 @@ export function normalizeCareerPlayer(player) {
   // 這兩欄不存在，補 0＝未受教。★不能留 undefined★：UI 閘門雖然是 `(tech.x ?? 0) >= 1`
   // 讀得動，但 B7-1 要求舊存檔讀出來逐值＝0——undefined 在技術列表顯示層是
   // 「這一招不存在」，與「還沒學會」是兩種意思。
+  // 職業章批 4c：doubleSpike 也要補 0，而且**非補不可**——它在 sim 端（game.js
+  // executeTouch）走 `?? 1` 閘（同 dive 先例：快速比賽 createPlayer 預設全開），
+  // 舊存檔缺欄＝undefined＝會被當成已解鎖，未受教就能空中變向
   for (const k of ['tip', 'pipe', 'feint', 'floatServe', 'dive', 'callPlay',
-    'pressBlock', 'chaseServe']) t[k] = t[k] ?? 0;
+    'pressBlock', 'chaseServe', 'doubleSpike']) t[k] = t[k] ?? 0;
   t.feintUses = t.feintUses ?? 0;
   // ⑤屆間養成卷 E1（2026-08-09）：默契欄缺席＝空紀錄。舊存檔讀出來是 undefined
   // （serializePlayer 是整個物件 JSON.stringify、deserializePlayer 不驗未知欄位），

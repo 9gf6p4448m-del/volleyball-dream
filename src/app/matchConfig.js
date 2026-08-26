@@ -255,6 +255,12 @@ export function resolveTechGates(game, playerId, careerActive, hintsOff = false)
     // （S 面板／OH 內切／OPP 夾塞），零改動；改叫是第四個入口，走自己的技術閘，
     // 解鎖時序（傳授事件）可以與叫戰術完全脫鉤。
     canAudible: (!tech || (tech.audible ?? 0) >= 1) && (game.comboScale ?? 1) > 0,
+    // 職業章批 4c（二段時間差）：這把閘只管**提示字**（matchLoop 攻擊面板標題的
+    // 「滯空再拖＝二段變向」，同 canFeint 的假動作提示先例）——F1 未解鎖零可見的
+    // UI 半邊。操作本體（第二段拖曳→intent.retargetAim）的閘在輸入層
+    // （matchControls.retargetEligible，讀 sim 玩家的 techniques＋疲勞檔，dive 先例）
+    // 與 sim 端（game.js executeTouch 資格判定）各自把關，三層獨立、不互為前提。
+    canDoubleSpike: !tech || (tech.doubleSpike ?? 0) >= 1,
     // 大學卷批 7（08-24）：兩招大學技術，與上列同一把尺（快速比賽 tech===null＝恆開）。
     // canPressBlock 只餵 MB 讀心面板的「壓手封X」兩個選項——B7-3 要求壓手不得有
     // 獨立於方向的入口，所以這個布林**只**決定那兩個選項出不出現，不另開鈕。

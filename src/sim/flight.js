@@ -41,7 +41,12 @@ export function velocityForTime(from, to, T) {
 // 未傳＝沿用歷史常數（探針/舊呼叫相容）。
 // AI 的過網預判與 sim 的實際擊球共用此函式（單一公式來源，不得各自手刻）
 const NET_CLEARANCE = COURT.NET_HEIGHT + BALL.RADIUS + 0.12; // 預設網口通過高度
-export function spikeVelocity(from, to, speed, minTime, clearance = NET_CLEARANCE) {
+// timeMul（批 4c 覆審修 2）：飛行時間拉伸倍率，**在所有下限（d/speed、minTime、
+// 過網淨空解）都取完之後**才乘上去——語意是「這一球整體變慢、弧變高、落點不變」。
+// 折在 speed 上的舊做法會被過網淨空下限吞掉（近網/軟角度 T 由淨空解主導，speed
+// 折了 T 不動＝零效果，覆審實測 61% 落點逐值無效）；折在 T 上則任何落點都有效。
+// 預設 1＝逐值同原式（AI 預判、既有呼叫端零改動）。
+export function spikeVelocity(from, to, speed, minTime, clearance = NET_CLEARANCE, timeMul = 1) {
   const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
   let T = Math.max(d / speed, minTime);
   if ((from.z > 0) !== (to.z > 0)) {
@@ -50,7 +55,7 @@ export function spikeVelocity(from, to, speed, minTime, clearance = NET_CLEARANC
     const denom = 0.5 * G * f * (1 - f);
     if (need > 0 && denom > 1e-9) T = Math.max(T, Math.sqrt(need / denom));
   }
-  return velocityForTime(from, to, T);
+  return velocityForTime(from, to, T * timeMul);
 }
 
 // 該球路通過網面（z=0）時的高度；不會過網（vz 同向或為零）回傳 null
