@@ -159,7 +159,13 @@ export function seasonConcluded(career) {
   // 是同一次 `careerStore.saveCareer` RMW 原子完成（見該檔），所以這裡讀到的
   // schedule 恆是當下 results 對應的最終形狀，不會有「玩家贏了準決賽但決賽還沒長出來」
   // 這種會被本函式誤判成「已收束」的中間態持久化到存檔裡。
-  const proLeague = (career.schedule ?? []).filter((m) => m?.round === 'pro');
+  // 國外聯賽卷批 2（F2-2）：`'foreign'` 併進**同一顆**判斷式——海外季的循環標記是
+  // `'foreign'`、季後賽標記沿用 `'semi'`/`'final'`，收束語意與職業季逐字相同（循環
+  // 全有結果＋玩家季後賽場次全有結果）。兩個標記不會同季共存（一份賽程只會由
+  // buildProSchedule 或 buildForeignSchedule 其中一支產生），合在同一個 filter 不會
+  // 互相污染——★不得另立第二顆判斷式★（債 C 的單一定義紀律）。漏併的話海外季會掉到
+  // 最下面的 careerStage 高中分支被誤判。
+  const proLeague = (career.schedule ?? []).filter((m) => m?.round === 'pro' || m?.round === 'foreign');
   if (proLeague.length > 0) {
     const hasResult = (id) => (career.results ?? []).some((r) => r.matchId === id);
     if (!proLeague.every((m) => hasResult(m.id))) return false;
@@ -224,7 +230,10 @@ export function advanceSeason(career, { invitedId = null, seasonIndex = null } =
   // 企業章批 1（2026-08-25）：`'corp'` 比照 `'league'`——同一種錯的第三章版本
   //（企業章階段一只有一年、chapterCompleted 即封頂，更沒有理由進到高中的推進）。
   // 職業章批 1（2026-08-26）：`'pro'` 比照 `'league'`／`'corp'`——同一種錯的第四章版本。
-  if ((career.schedule ?? []).some((m) => m?.round === 'league' || m?.round === 'corp' || m?.round === 'pro')) return career;
+  // 國外聯賽卷批 2 覆審 MEDIUM 修（2026-08-27）：`'foreign'` 比照前三者——批 2 把
+  // seasonConcluded 併了 'foreign' 之後，這裡不補的話 chapter 損毀的海外存檔會被
+  // 高中推進鏈接管（賽程換 group-1、results 歸零）。
+  if ((career.schedule ?? []).some((m) => m?.round === 'league' || m?.round === 'corp' || m?.round === 'pro' || m?.round === 'foreign')) return career;
   if (!seasonConcluded(career)) return career; // 賽季未結束＝不動（單一定義，債 C）
   const stage = careerStage(career); // 高中 schema：titles 記帳仍要分冠軍/止步
   const seed = deriveSeasonSeed(career.seed); // 決定論鏈：下一屆種子由本屆種子衍生

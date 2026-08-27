@@ -319,7 +319,12 @@ export function growProSchedule(schedule, results, teamId, seed = 1) {
   if (!leagueDone) return schedule; // 循環還沒打完
 
   const hasResult = (id) => (results ?? []).some((r) => r.matchId === id);
-  const semiEntry = schedule.find((m) => m.round === PLAYOFF_ROUND.SEMI);
+  // 國外聯賽卷批 2（F2-14，批 1 覆審 MEDIUM 對稱修）：加 `pro-semi` 前綴檢查——
+  // 海外版（`foreignSchedule.growForeignSchedule`）本來就查 `foreign-semi` 前綴，
+  // 國內版只按 round 找是不對稱的缺口（`'semi'` 這個 round 值兩章共用）。上面的
+  // league 守衛已經讓非職業賽程早退，這道是縱深防線：真的拿到混合賽程時，寧可
+  // 認不出 semiEntry 走「還沒長」分支，也不要把海外那場當成自己的準決賽。
+  const semiEntry = schedule.find((m) => m.round === PLAYOFF_ROUND.SEMI && m.id?.startsWith('pro-semi'));
 
   if (!semiEntry) {
     // ① 循環剛打完：依名次表決定準決賽對手（C2a 對位正確／C2b 未進前四不長場次）
@@ -335,7 +340,8 @@ export function growProSchedule(schedule, results, teamId, seed = 1) {
     }];
   }
 
-  if (schedule.some((m) => m.round === PLAYOFF_ROUND.FINAL)) return schedule; // 決賽已長過，冪等
+  // 覆審 LOW 對稱修（2026-08-27）：決賽冪等檢查比照 semiEntry 加 pro- 前綴——海外決賽條目不得被誤認
+  if (schedule.some((m) => m.round === PLAYOFF_ROUND.FINAL && m.id?.startsWith('pro-final'))) return schedule; // 決賽已長過，冪等
   if (!hasResult(semiEntry.id)) return schedule; // 準決賽還沒打完
   const semiResult = results.find((r) => r.matchId === semiEntry.id);
   if (!semiResult.won) return schedule; // C2a：準決敗＝單淘汰止步，不長決賽

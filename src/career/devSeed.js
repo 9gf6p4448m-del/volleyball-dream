@@ -224,3 +224,72 @@ export function advanceToPro(store, { teamId }) {
   if (!store.enterPro?.(teamId)) return false;
   return true;
 }
+
+// ---- 國外聯賽卷批 2：治具入海外（acceptance-foreign-batch2.md F2-9）----
+// `?devforeign=<海外隊id>`，同 devpro：只在 devSeedRequest 成立時被 main.js 消費，
+// 單獨出現零寫入。與 devpro/devcorp/devuni 同時出現時 devforeign 優先（它本來就
+// 包含跑完一整季國內職業季——含入職業章、打滿循環＋季後賽、結算）。
+export const DEV_FOREIGN_PARAM = 'devforeign';
+
+// 治具用的固定國內母隊（走完國內職業首季用；固定一支豪門＝決定論，同 DEV_PRO_CORP
+// 的先例）。挑豪門是因為治具要合成的是「前二／冠軍」的成就，母隊弱不弱不影響合成
+// （戰績是直接寫 results 的），但豪門讓治具落地的存檔比較像真實玩到這裡的樣子。
+const DEV_FOREIGN_PRO = 'cangyu-titans';
+
+/**
+ * 解 devforeign 參數。★只接受海外 id★——國內 id、壞 id 一律 null（不啟動、不猜）。
+ * 國內入章的治具入口是 `?devpro`（首約恆國內，批 1 覆審 CRITICAL 拍板）；兩個入口
+ * 各自只認自己那一邊的 id，不做「猜你想去哪」的相互回退。
+ */
+export function devForeignRequest(params) {
+  const raw = params?.get?.(DEV_FOREIGN_PARAM) ?? null;
+  if (typeof raw !== 'string' || !raw) return null;
+  if (!isForeignTeamId(raw)) return null;
+  return { teamId: raw };
+}
+
+/**
+ * 把當前槽推進到「已轉隊入指定海外隊、海外賽季開局」。
+ * ★ 全程走正式鏈 ★ advanceToPro（含大學四年→企業季→enterPro 國內母隊）→ 合成
+ * 國內職業首季戰績（全勝循環＋準決賽勝＋決賽勝＝proRank 1 且 proFinish 'champion'，
+ * 讓 `foreignUnlocked` 的兩條判準都成立）→ settleProFinale → transferPro(海外 id)。
+ * **一個存檔欄位都不直改**——海外的解鎖門檻、邀約集合守衛、RMW 內容全部由正式鏈
+ * 自己走過一遍（治具不得是繞過守衛的後門，否則它驗不到接線本身）。
+ *
+ * 季後賽場次是 `saveCareer` 匯合點「長」出來的（growProSchedule），所以循環、準決、
+ * 決賽各要一次 load→寫 results→save 的來回；每一輪都重新 `loadCareer` 拿長好的賽程。
+ * @returns true＝到位；false＝中途任何一步失敗（不半吊子續跑）
+ */
+export function advanceToForeign(store, { teamId }) {
+  // 覆審 MEDIUM 修（2026-08-27）：與 devForeignRequest 同一顆判準——國內/壞 id 在
+  // 跑任何鏈之前就拒絕（否則國內 id 會半吊子落在國內母隊季，違反本函式契約）。
+  if (!isForeignTeamId(teamId)) return false;
+  if (!advanceToPro(store, { teamId: DEV_FOREIGN_PRO })) return false;
+  // ① 國內職業循環全勝（7 勝＝勝點 21，對手最多 18 ⇒ 循環第 1，proRank≤2 成立）
+  const career = store.loadCareer?.();
+  const league = (career?.schedule ?? []).filter((m) => m?.round === 'pro');
+  if (!league.length) return false;
+  store.saveCareer?.({
+    ...career,
+    results: league.map((m) => ({
+      matchId: m.id, opponentId: m.opponentId, won: true,
+      scoreFor: 2, scoreAgainst: 0, gp: 3,
+    })),
+  });
+  // ② 準決賽 → ③ 決賽：各打贏一場（決賽勝＝proFinish 'champion'，門檻另一條判準）
+  for (const round of ['semi', 'final']) {
+    const c = store.loadCareer?.();
+    const m = (c?.schedule ?? []).find((x) => x?.round === round);
+    if (!m) return false; // 該長沒長＝接線壞了，治具不掩蓋
+    store.saveCareer?.({
+      ...c,
+      results: [...(c.results ?? []), {
+        matchId: m.id, opponentId: m.opponentId, won: true,
+        scoreFor: 2, scoreAgainst: 0, gp: 3,
+      }],
+    });
+  }
+  if (!store.settleProFinale?.()) return false;
+  if (!store.transferPro?.(teamId)) return false;
+  return true;
+}

@@ -92,3 +92,12 @@
    蓋到。②MEDIUM 掛帳＝growProSchedule 找 semiEntry 只按 round 不查 id 前綴
    （海外版有查、國內版沒有）——批 2 動 careerStore 接線時順修對稱（加 pro- 前綴
    檢查），凍結檔列明。
+8. **批 2 覆審記入（2026-08-27）**：①HIGH＝批 2 單獨部署會讓真人經未改的續約窗轉入
+   海外後季末永久卡死（careerScreen proGames 只認 round==='pro'、settleProFinale 唯一
+   呼叫點掛在其上）——**書面裁定：批 2 不單獨部署**，批 3 開工即接（F3-10 端到端
+   收束為批 3 凍結條）。②三條一行修已當批落地（careerState:233 章節守衛併 foreign／
+   advanceToForeign isForeignTeamId 閘／growProSchedule 決賽冪等 pro-final 前綴），
+   突變實測各恰 1 紅。③兩題設計裁定留給使用者（收尾時問）：海外「傳承」恆無效
+   （海外隊友建隊即 90 封頂、mentor clamp 90 ⇒ +2 恆 no-op 但燒掉一生一次；另
+   mentored 記槽位 id 不綁隊，跨隊轉隊會誤判已傳承——此屬多年卷既有債）；回國時
+   海外 4 隊名次直接餵國內 8 隊係數表（海外墊底=國內第 4 待遇）。

@@ -19,6 +19,7 @@ import { createSlotStoreProxy } from './career/careerStore.js';
 import {
   devSeedRequest, buildSyntheticSave, devUniRequest, advanceToUniYear,
   devCorpRequest, advanceToCorp, devProRequest, advanceToPro,
+  devForeignRequest, advanceToForeign,
 } from './career/devSeed.js';
 import { RIVAL_TEAM_ID } from './career/schedule.js';
 import { opponentName } from './career/careerState.js';
@@ -133,10 +134,16 @@ async function showCareerEntry(ctx) {
       // 與 devuni 同時出現時 devcorp 優先——它本來就包含跑完大學四年）
       // 職業章批 2：?devpro=<隊id> 治具入章（走正式企業季→結算→簽約鏈；
       // 與 devcorp/devuni 同時出現時 devpro 優先——它本來就包含跑完企業一季）
+      // 國外聯賽卷批 2：?devforeign=<海外隊id> 治具入海外（走正式國內職業季→
+      // 成就門檻→結算→轉隊鏈；與 devpro/devcorp/devuni 同時出現時 devforeign
+      // 最優先——它本來就包含跑完一整季國內職業季）
+      // ★優先序＝devforeign > devpro > devcorp > devuni★（包含關係由深到淺）
+      const foreignReq = devForeignRequest(ctx.params);
       const proReq = devProRequest(ctx.params);
       const corpReq = devCorpRequest(ctx.params);
       const uniReq = devUniRequest(ctx.params);
-      if (proReq) advanceToPro(store, proReq);
+      if (foreignReq) advanceToForeign(store, foreignReq);
+      else if (proReq) advanceToPro(store, proReq);
       else if (corpReq) advanceToCorp(store, corpReq);
       else if (uniReq) advanceToUniYear(store, uniReq);
     }

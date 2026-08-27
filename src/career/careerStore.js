@@ -29,6 +29,11 @@ import { proTeamById, proOffersFor, proBaseSalaryFor, proRenewalSalaryFor } from
 import { buildProMembers, proStartTrustFor, proRankTrustBonus } from './proTeam.js';
 // 職業章批 3：growProSchedule（saveCareer 的季後賽接線）／proTable（settleProFinale 讀名次）
 import { buildProSchedule, proTable, growProSchedule, PLAYOFF_ROUND } from './proSchedule.js';
+// 國外聯賽卷批 2（2026-08-27）：迴圈接線——批 1 已鋪好資料層（foreignTeams/foreignTeam/
+// foreignSchedule），本檔只做「依現隊／目標隊分流」，不重寫任何一條職業章邏輯。
+import { FOREIGN_TEAMS, isForeignTeamId } from './foreignTeams.js';
+import { buildForeignMembers } from './foreignTeam.js';
+import { buildForeignSchedule, foreignTable, growForeignSchedule } from './foreignSchedule.js';
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
@@ -94,6 +99,48 @@ function archivedCorpRank(save) {
   }
   return 0;
 }
+// ══════ 國外聯賽卷 批 2（2026-08-27）══════ 驗收＝acceptance-foreign-batch2.md
+/**
+ * 海外邀約解鎖了沒（F2-6，拍板題 1「成就門檻制」）。
+ * 判準＝**國內**職業季封存曾拿到 `proRank<=2`（年度前二，含奪冠）或
+ * `proFinish==='champion'`（循環第 3/4 爆冷奪冠也算——proRank 是循環名次，兩者
+ * 都要看，卷宗§一「成就資料」）。曾經達成即永久解鎖（逐筆掃整份 seasons）。
+ * ★ 海外季的成就不計 ★ 門檻認的是「在國內證明過自己」；已經在海外還要再拿一次
+ * 前二才解鎖是本末倒置，且回國後又要重新解鎖。壞存檔（proRank=0/缺欄位）＝未達成。
+ */
+function foreignUnlocked(save) {
+  const seasons = save?.career?.seasons ?? [];
+  return seasons.some((s) => {
+    if (!s?.pro || isForeignTeamId(s.pro)) return false; // 只認國內職業季
+    const rank = s.proRank;
+    return (Number.isInteger(rank) && rank >= 1 && rank <= 2) || s.proFinish === 'champion';
+  });
+}
+
+/**
+ * 轉隊窗的邀約集合（F2-7／F2-8）。★★ 單一來源函式 ★★ `proTransferOffers`（UI 讀）
+ * 與 `transferPro` 的守衛（寫入前檢查）都問這一顆——各算各的話，兩邊的判準遲早漂移成
+ * 「畫面上沒有的隊卻轉得過去」或反之（`02 §6.1` 第 7 條：防線按效果收斂到一份）。
+ * 三種情形：
+ *   ① 未解鎖（在國內）＝原國內集合 `proOffersFor(本季 proRank)`——逐值與改動前相同。
+ *   ② 已解鎖且現隊國內＝國內集合 ＋ 海外 4 隊。
+ *   ③ 現隊海外＝其餘 3 支海外隊 ＋ 國內全階開放（`proOffersFor(1)`，海外資歷＝
+ *      回國隨你挑；★數值屬提案★，凍結的是「回國路徑存在」這條性質）。
+ * 一律排除現隊；封存裡一筆職業季都沒有（壞檔）＝空集合，不猜。
+ * @param save 完整存檔物件（`transferPro` 的 RMW 內傳 `prev`，讓守衛綁同一份讀值）
+ */
+function transferOfferSetOf(save) {
+  const currentId = save?.career?.pro ?? null;
+  const last = lastProSeasonOf(save);
+  if (!last) return [];
+  const inForeign = isForeignTeamId(currentId);
+  // 在海外＝回國全階開放；在國內＝照本季名次的既有階梯（零漂移）
+  const domestic = inForeign ? proOffersFor(1) : proOffersFor(last.proRank);
+  // 已在海外的人不必再驗一次門檻（他就是靠門檻過來的）；在國內則要 foreignUnlocked
+  const foreign = inForeign || foreignUnlocked(save) ? FOREIGN_TEAMS : [];
+  return [...domestic, ...foreign].filter((t) => t.id !== currentId);
+}
+
 // Phase 2 雙 key 舊制（v1）：拍板不相容——偵測到即清空並提示重置，不做資料遷移
 export const LEGACY_CAREER_KEY = 'vd-career-v1';
 export const LEGACY_PLAYER_KEY = 'vd-career-player-v1';
@@ -208,7 +255,12 @@ export function createCareerStore(storage, slot = 1) {
         if (isPro(normalizeChapter(next.career ?? null))) {
           const proId = next.career?.pro ?? null;
           if (proId) {
-            const schedule = growProSchedule(career.schedule, career.results, proId, career.seed);
+            // 國外聯賽卷批 2（F2-3）：同一個匯合點依**現隊**分流——海外季走
+            // growForeignSchedule（foreign- 前綴的準決/決賽），國內季一字不動。
+            // 分母仍收斂在這唯一一點（不到各呼叫端各補一次），兩支都是純函式且
+            // 「沒變化就回原參考」，`!==` 判斷邏輯共用。
+            const grow = isForeignTeamId(proId) ? growForeignSchedule : growProSchedule;
+            const schedule = grow(career.schedule, career.results, proId, career.seed);
             if (schedule !== career.schedule) grown = { ...career, schedule };
           }
         }
@@ -295,7 +347,13 @@ export function createCareerStore(storage, slot = 1) {
               index: endingSeason + 1,
               seed: nextSeed,
               // 重建＝純循環 7 場（季後賽由 growProSchedule 打滿後自動長，不預長）
-              schedule: buildProSchedule({ teamId, seed: nextSeed }),
+              // 國外聯賽卷批 2（F2-4）：依**現隊**分流——海外＝雙循環 6 場
+              // （buildForeignSchedule）。其餘守衛與 RMW 內容一字不動；上方
+              // `proTeamById(teamId)` 的解析在批 1 併表後已涵蓋海外 id
+              //（批 1 覆審記入的「解析成功即放行」在此兌現）。
+              schedule: isForeignTeamId(teamId)
+                ? buildForeignSchedule({ teamId, seed: nextSeed })
+                : buildProSchedule({ teamId, seed: nextSeed }),
               results: [],
               pendingMatch: undefined,
             },
@@ -870,7 +928,12 @@ export function createCareerStore(storage, slot = 1) {
       const ok = writeSave((prev) => {
         // 冪等雙保險：no-op 條件與寫入內容綁同一份 prev 讀值（同 settleCorpFinale 慣例）
         if (prev?.career?.proFinaleSettled) return prev;
-        const board = proTable({
+        // 國外聯賽卷批 2（F2-5）：名次表依**現隊**分流——海外＝foreignTable
+        // （4 隊聯賽，proRank ∈ 1..4）。proFinishOf 沿用不動：它按 round
+        // （'semi'/'final'）判四態，海外季後賽的 round 值與職業共用同一份
+        // PLAYOFF_ROUND，天然適用（卷宗§一地基）。
+        const table = isForeignTeamId(proId) ? foreignTable : proTable;
+        const board = table({
           teamId: proId, seed: prev.season.seed ?? 1,
           schedule: prev.season.schedule ?? [], results: prev.season.results ?? [],
         });
@@ -931,10 +994,10 @@ export function createCareerStore(storage, slot = 1) {
       if (save.career?.proRetired === true) return [];
       if (save.career?.proFinaleSettled !== true) return [];
       if (chapterCompleted(save.career?.chapter, save.season.index ?? 1)) return [];
-      const currentId = save.career?.pro ?? null;
-      const last = lastProSeasonOf(save);
-      if (!last) return [];
-      return proOffersFor(last.proRank).filter((t) => t.id !== currentId);
+      // 國外聯賽卷批 2（F2-7/F2-8）：集合本身抽成 `transferOfferSetOf`（模組層單一
+      // 來源，transferPro 的守衛吃同一顆）。開窗守衛（已結算/非末季/未退休）留在這裡
+      // ——那是「什麼時候能轉」，與「能轉去哪」是兩個問題。
+      return transferOfferSetOf(save);
     },
     // ★★ 多年卷批 3（C2）★★ 轉隊＝換隊＋推進**同一次 RMW**（拆兩次寫會留
     // 「換了隊沒推進」的半吊子存檔）。守衛全數複製到 prev 讀值（雙保險慣例）。
@@ -954,7 +1017,8 @@ export function createCareerStore(storage, slot = 1) {
       if ((save.career?.pro ?? null) === team.id) return false;
       const last = lastProSeasonOf(save);
       if (!last) return false;
-      if (!proOffersFor(last.proRank).some((t) => t.id === team.id)) return false;
+      // 國外聯賽卷批 2（F2-8）：offer 守衛改吃單一來源函式（不得自己再算一份集合）
+      if (!transferOfferSetOf(save).some((t) => t.id === team.id)) return false;
       return writeSave((prev) => {
         if (prev?.career?.proRetired === true) return prev;
         if (prev?.career?.proFinaleSettled !== true) return prev;
@@ -962,11 +1026,18 @@ export function createCareerStore(storage, slot = 1) {
         if ((prev.career?.pro ?? null) === team.id) return prev;
         const lastPrev = lastProSeasonOf(prev);
         // 覆審 LOW-1：offer 集合守衛也綁 prev 讀值——「全數複製到 prev」才是實話
+        // 國外聯賽卷批 2（F2-8）：同一顆 `transferOfferSetOf`，只是餵 prev（含
+        // prev 的 career.pro 與 seasons，所以「在國內／在海外」「解鎖了沒」全部
+        // 讀的是同一份快照）。
         if (!lastPrev) return prev;
-        if (!proOffersFor(lastPrev.proRank).some((t) => t.id === team.id)) return prev;
+        if (!transferOfferSetOf(prev).some((t) => t.id === team.id)) return prev;
         const endingSeason = prev.season.index ?? 1;
         const nextSeed = deriveSeasonSeed(prev.season.seed ?? 1);
-        const members = buildProMembers(team.id);
+        // 國外聯賽卷批 2（F2-8）：名冊與賽程依**目標隊**分流（海外＝海外名冊 clamp
+        // 90 ＋雙循環 6 場）。薪水的 `proRenewalSalaryFor` 批 1 已在內部依
+        // `team.league` 分派，呼叫端一字不動＝不可能混座標系（拍板題 4）。
+        const toForeign = isForeignTeamId(team.id);
+        const members = toForeign ? buildForeignMembers(team.id) : buildProMembers(team.id);
         const playerRole = prev.player?.currentRole ?? 'outside';
         const lineup = defaultLineup(members, prev.player?.id ?? 'A2', playerRole);
         const startTrust = Math.min(100,
@@ -996,7 +1067,9 @@ export function createCareerStore(storage, slot = 1) {
             ...prev.season,
             index: endingSeason + 1,
             seed: nextSeed,
-            schedule: buildProSchedule({ teamId: team.id, seed: nextSeed }),
+            schedule: toForeign
+              ? buildForeignSchedule({ teamId: team.id, seed: nextSeed })
+              : buildProSchedule({ teamId: team.id, seed: nextSeed }),
             results: [],
             pendingMatch: undefined,
           },
@@ -1072,6 +1145,13 @@ export function createCareerStore(storage, slot = 1) {
     //   守衛：非職業章／壞隊 id＝no-op；兩樣都不缺＝no-op（冪等，不寫檔）。
     //   proFinish 補值吃**當前** season 的 schedule/results——舊檔年限=1 推不動，
     //   已結算的那季就是當前季，results 必然還在。
+    // 國外聯賽卷批 2（F2-5 後半）：對海外 id 的存檔**不炸也不誤補**——
+    //   `proTeamById` 併表後解得到海外隊（不會落到「壞隊 id」的 no-op）；
+    //   `proBaseSalaryFor` 批 1 已依 league 分派（真要補 contract 也是補海外表值，
+    //   不會寫進國內座標系的數字）；`proFinishOf` 按 round 判四態，海外季後賽
+    //   共用同一份 PLAYOFF_ROUND ⇒ 天然適用。既有存檔（走 transferPro 進海外的
+    //   一定有 contract、封存也一定有 proFinish）＝兩樣都不缺 ⇒ 冪等 no-op 不寫檔。
+    //   ★這條是驗證後的紀錄，不是推測★（tests/foreign-batch2.test.mjs F2-5 兩測）。
     backfillProMultiyear() {
       const save = loadSave();
       if (!save) return false;
