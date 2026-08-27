@@ -1955,8 +1955,10 @@ function applyEvents(s, frameEvents, now) {
     if (e.type === 'TOUCH' && e.kind === 'spike') {
       // 重扣門檻收斂到 receiveJuice.HEAVY_SPIKE_POWER_MIN 單一來源（批2 覆核修正：
       // 原本此處行內 0.7 與 receiveJuice 各一份＝兩份門檻，NJ-2「不得另抄」）
-      s.hitStopUntil = now + ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN ? 70 : 40);
-      if ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN) s.slowUntil = now + 450; // 重扣＝定格接慢動作
+      // Math.max：與丙1/丙2 的寫入者對稱——同一 frameEvents 批次（掉幀補跑多 tick）
+      // 內後到的事件不得反向蓋短已設好的窗（覆審 MEDIUM 修正）
+      s.hitStopUntil = Math.max(s.hitStopUntil, now + ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN ? 70 : 40));
+      if ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN) s.slowUntil = Math.max(s.slowUntil ?? 0, now + 450); // 重扣＝定格接慢動作
       s.shake = Math.max(s.shake, 0.12);
     } else if (e.type === 'TOUCH' && e.playerId === s.controlledId && e.touches === 1
         && stage.controls.consumeDigHeroSignal?.()) {
@@ -1977,7 +1979,7 @@ function applyEvents(s, frameEvents, now) {
         }
       }
     } else if (e.type === 'BLOCK_TOUCH') {
-      s.hitStopUntil = now + 60;
+      s.hitStopUntil = Math.max(s.hitStopUntil, now + 60); // Math.max 對稱，同上（覆審 MEDIUM 修正）
       s.shake = Math.max(s.shake, 0.2);
       // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
       if (e.playerId === s.controlledId && s.mbCommit) {
