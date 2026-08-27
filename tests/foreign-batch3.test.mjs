@@ -258,10 +258,13 @@ async function makeScreen(storage) {
   screen.show('career');
   await settle();
   await drainDialogs();
-  // 治具直接呼叫 transferPro/advanceSeason 會留下「屆間三選一」pending（每季一次）——
-  // 那不是本批驗收範圍，一律跳過（好好休息），讓畫面落回正常生涯流程。
-  for (let i = 0; i < 5; i += 1) {
-    const skip = findBtn(/好好休息/);
+  // 治具直接呼叫 transferPro/advanceSeason 會留下「屆間待辦」——那不是本批驗收
+  // 範圍，一律跳過，讓畫面落回正常生涯流程。
+  // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）新預期行為：屆間卡拆成路線／
+  // 體能兩段，各自一次「跳過」鈕（好好休息／這個冬天先不練），選完一段卡片就地
+  // 重畫剩下的段——迴圈次數＝5 季 ×2 段，改抓兩種跳過鈕文字、上限拉到 10 次。
+  for (let i = 0; i < 10; i += 1) {
+    const skip = findBtn(/好好休息|這個冬天先不練/);
     if (!skip) break;
     tap(skip);
     await settle();

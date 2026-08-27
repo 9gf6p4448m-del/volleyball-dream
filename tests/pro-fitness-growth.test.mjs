@@ -30,6 +30,31 @@
 //    ——UI 的 unlockControl 同樣走 careerScreen.js 直讀 `store.loadPractice()`，
 //    不吃 chooseProGrowth 內部這份被突變的值，這條突變確實恰紅一條。
 // 兩組突變都還原後，diff 對照突變前備份逐位元組相同；重跑本檔 10/10 全綠。
+//
+// ════════════════════════════════════════════════════════════════
+// FS-5 突變實測紀錄（職業屆間體能格「不互斥」改制，acceptance-pro-fitness-split.md，
+// 2026-08-27，★真的跑過★，指令＝`node --test tests/pro-fitness-growth.test.mjs`，
+// 基準＝本檔跑到這批新增鏈測（FIT-6/FIT-7）後 12 測全綠；兩組突變都在
+// careerStore.js 動手、跑完即用 Edit 逐字還原，最後 `diff` 對比還原前後檔案逐位
+// 元組相同，再重跑一次確認回到 12/0）
+// ════════════════════════════════════════════════════════════════
+// ①fitness 成功後不清 proFitnessPending：chooseProGrowth 的 writeSave 內
+//   `nextCareer = isFitnessOption ? { ...prev.career, proFitnessPending: null } : ...`
+//   把 fitness 分支改成 `{ ...prev.career }`（不清任何欄位）
+//   → 實測紅 3／12＝「FIT-2 成功：耐力 +2」（斷言體能 pending 清除失敗）＋
+//   「FIT-6 同一屆間…」（斷言體能 pending 清了失敗，測試在碰到「同屆重複 +2」
+//   那段斷言前就先紅——鑑別力仍然成立：旗標不清＝防重複的第一道線就已經破了）＋
+//   「FIT-7（FS-6）海外…」（海外存檔同一顆守衛，斷言 proFitnessPending 應為
+//   null 卻讀到屆數 11）。其餘 9 條不受影響。
+// ②路線選項誤連清 proFitnessPending：nextCareer 的路線分支改成
+//   `{ ...prev.career, proGrowthPending: null, proFitnessPending: null }`
+//   （模擬「選路線時手滑把體能旗標也一起寫進 nextCareer」）
+//   → 實測紅 2／12＝「FIT-6 同一屆間…」（斷言「選聲望後體能 pending 還在」
+//   失敗——路線一清、體能被連坐清空，正是「路線後仍可練體能」這條防線被打破）＋
+//   「FIT-7（FS-6）海外…」（同一顆守衛，斷言「路線清完後體能段未完成前仍不放行」
+//   失敗）。其餘 10 條（含 FIT-2 系列、FIT-3/FIT-4 DOM 測試）不受影響——它們不
+//   走「先選路線再選體能」這條鏈，測不到路線分支的旗標外溢。
+// 兩組突變都還原後，diff 對照突變前備份逐位元組相同；重跑本檔全綠（12/12）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -189,21 +214,28 @@ function setUnlockControl(storage, unlockControl) {
 // ════════════════════════════════════════════════════════════════
 // FIT-2：chooseProGrowth('fitness', attrKey) 單元
 // ════════════════════════════════════════════════════════════════
+// 新預期行為（職業屆間體能格「不互斥」改制，2026-08-27 拍板）：體能與路線
+// 各自一顆 pending——選 fitness 只清 proFitnessPending，proGrowthPending（路線）
+// 原封不動，語意欄位換成 proFitnessPending。
 test('FIT-2 成功：耐力 +2（幅度來自 OFFSEASON，非本檔另抄）', () => {
   const storage = pendingY2Save();
   const before = saveOf(storage).player.attributes.stamina;
   assert.ok(createCareerStore(storage).chooseProGrowth('fitness', 'stamina'));
   assert.equal(saveOf(storage).player.attributes.stamina, before + OFFSEASON.STAMINA_GAIN);
-  assert.equal(createCareerStore(storage).proGrowthPending(), false, 'pending 同其他選項清除');
+  assert.equal(createCareerStore(storage).proFitnessPending(), false, '體能 pending 清除');
+  assert.equal(createCareerStore(storage).proGrowthPending(), true,
+    '路線 pending 不受影響（新語意：兩段各自一顆旗標，不互斥）');
 });
 
+// 新預期行為：拒絕不清 pending，但那顆 pending 換成 proFitnessPending
+// （原本沿用共用旗標的斷言已不成立——體能有自己的欄位）。
 test('FIT-2 耐力到頂 80 拒絕（cap 守衛拿掉＝FIT-5①這裡紅）', () => {
   const storage = pendingY2Save();
   setAttr(storage, 'stamina', OFFSEASON.STAMINA_CAP);
   assert.equal(createCareerStore(storage).chooseProGrowth('fitness', 'stamina'), false);
   assert.equal(saveOf(storage).player.attributes.stamina, OFFSEASON.STAMINA_CAP, '不得超頂');
-  assert.equal(saveOf(storage).career.proGrowthPending, saveOf(storage).season.index,
-    '拒絕不清 pending（沒選成功）');
+  assert.equal(saveOf(storage).career.proFitnessPending, saveOf(storage).season.index,
+    '拒絕不清體能 pending（沒選成功；新語意欄位＝proFitnessPending）');
 });
 
 test('FIT-2 控球未解鎖拒絕（unlockControl 閘拿掉＝FIT-5②這裡紅）', () => {
@@ -373,4 +405,51 @@ test('FIT-3 全部 not ready：主卡灰字、不出子選單按鈕（裁定甲�
   assert.ok(!findBtn(/體能特訓——把身體再往上推一格/), '全 not ready 不出按鈕');
   assert.match(allText(), /體能特訓——身體已到你能推的極限（耐力已達上限 80、控球尚未開放——紅白賽科目全完成才開）/,
     '主卡灰字標示（裁定甲同款：全 not ready 才不出按鈕改灰字）');
+});
+
+// ════════════════════════════════════════════════════════════════
+// 新增鏈測（職業屆間體能格「不互斥」改制，2026-08-27 拍板，acceptance-pro-fitness-split
+// FS-4③／FS-6）：路線與體能同屆各自都能拿到、體能同屆間僅一次、兩段皆清才放行出戰；
+// 海外屆間卡同樣兩段。
+// ════════════════════════════════════════════════════════════════
+test('FIT-6 同一屆間：路線與體能各自一次——選聲望後仍可練體能；體能練完同屆不可再練；兩段皆清才放行出戰', async () => {
+  const storage = pendingY2Save();
+  // 路線先選聲望（不互斥：不動體能 pending）
+  assert.ok(createCareerStore(storage).chooseProGrowth('prestige'));
+  assert.equal(createCareerStore(storage).proGrowthPending(), false, '路線 pending 清了');
+  assert.equal(createCareerStore(storage).proFitnessPending(), true,
+    '體能 pending 還在——新語意：兩段互不影響');
+  // 體能：選聲望後仍可練、+2 生效
+  const before = saveOf(storage).player.attributes.stamina;
+  assert.ok(createCareerStore(storage).chooseProGrowth('fitness', 'stamina'),
+    '路線選過後仍可練體能（不互斥）');
+  assert.equal(saveOf(storage).player.attributes.stamina, before + OFFSEASON.STAMINA_GAIN);
+  assert.equal(createCareerStore(storage).proFitnessPending(), false, '體能 pending 也清了');
+  // 同屆間再練一次：旗標已清＝拒絕（不是到頂拒絕，是「同屆只能一次」拒絕）
+  const afterFirst = saveOf(storage).player.attributes.stamina;
+  assert.equal(createCareerStore(storage).chooseProGrowth('fitness', 'stamina'), false,
+    '同屆間體能只能執行一次');
+  assert.equal(saveOf(storage).player.attributes.stamina, afterFirst, '拒絕不改值');
+  // 兩段都清了——UI 出戰放行
+  await screenAtGrowthCard(storage);
+  assert.ok(findBtn(/▶ 出戰/), '兩段都完成後出戰放行');
+});
+
+test('FIT-7（FS-6）海外屆間卡也是兩段：路線與體能各自清空後才放行出戰', async () => {
+  const storage = pendingForeignSave();
+  await screenAtGrowthCard(storage);
+  assert.match(allText(), /這個冬天，你想怎麼過/, '前提：海外屆間卡有出');
+  assert.ok(!findBtn(/▶ 出戰/), '兩段都未完成前不放行出戰');
+  // 路線段：好好休息跳過
+  tap(findBtn(/好好休息/));
+  await settle();
+  assert.equal(saveOf(storage).career.proGrowthPending, null, '海外路線 pending 清了');
+  assert.ok(!findBtn(/▶ 出戰/), '體能段未完成前仍不放行');
+  // 體能段：卡片就地重畫成只剩體能段——先不練跳過
+  const skipFit = findBtn(/這個冬天先不練/);
+  assert.ok(skipFit, '路線清完後卡片就地重畫，應只剩體能段的跳過鈕');
+  tap(skipFit);
+  await settle();
+  assert.equal(saveOf(storage).career.proFitnessPending, null, '海外體能 pending 也清了');
+  assert.ok(findBtn(/▶ 出戰/), '兩段都完成後海外也放行出戰');
 });

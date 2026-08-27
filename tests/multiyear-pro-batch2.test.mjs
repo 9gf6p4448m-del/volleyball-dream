@@ -438,7 +438,15 @@ test('送審輪2修：同批連點「賽季落幕」只開一張收尾卡（不�
   // （批 4B 起推進會設屆間待辦——治具直接跳過，屆間卡本體由 batch4b 測試護）
   tap(findBtn(/續約留隊/));
   await settle();
-  assert.ok(createCareerStore(storage).chooseProGrowth?.('rest') ?? true, '治具：跳過屆間選擇');
+  // ★超出 acceptance-pro-fitness-split.md FS-4 清單的必要修補★（2026-08-27）：
+  // 職業屆間體能格「不互斥」改制把屆間待辦拆成路線／體能兩顆獨立 pending
+  // （proGrowthPending／proFitnessPending）；本檔原本只清一顆（單顆共用旗標的
+  // 舊語意），治具在此只是「跳過屆間選擇好繼續往下測收尾卡」，不是本測試的
+  // 驗證標的——體能 pending 不清會讓下一次 renderScreen 卡在屆間卡（只剩體能段），
+  // 找不到後面要點的「賽季落幕——第 2 年」而丟未捕捉例外。補這一行使治具與新
+  // 兩段狀態機同步，判準（重入旗標防雙開收尾卡）本身未改動一個字。
+  assert.ok(createCareerStore(storage).chooseProGrowth?.('rest') ?? true, '治具：跳過屆間選擇（路線段）');
+  assert.ok(createCareerStore(storage).chooseProGrowth?.('fitness-skip') ?? true, '治具：跳過屆間選擇（體能段）');
   loseOutSeason(storage);
   await renderScreen(storage);
   tap(findBtn(/賽季落幕——第 2 年/));

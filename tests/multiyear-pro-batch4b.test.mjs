@@ -338,7 +338,10 @@ async function renderScreen(storage) {
 }
 
 
-test('F5① 推進後 render＝屆間卡先出、出戰不放行；跳過後回畫面可出戰', async () => {
+// 新預期行為（職業屆間體能格「不互斥」改制，2026-08-27 拍板）：屆間卡拆成路線／
+// 體能兩段各自一次——路線跳過（好好休息）只清 proGrowthPending，出戰仍不放行；
+// 卡片就地重畫成只剩體能段；體能也跳過（先不練）才兩段皆清、真正放行出戰。
+test('F5① 推進後 render＝屆間卡先出、出戰不放行；路線跳過＋體能跳過後可出戰', async () => {
   const storage = pendingY2Save();
   await renderScreen(storage);
   assert.match(allText(), /這個冬天，你想怎麼過/, '屆間卡先出');
@@ -346,8 +349,15 @@ test('F5① 推進後 render＝屆間卡先出、出戰不放行；跳過後回�
   const restBtn = findBtn(/好好休息/);
   tap(restBtn); tap(restBtn); // 連點單效
   await settle();
-  assert.equal(saveOf(storage).career.proGrowthPending, null, 'pending 清掉');
-  assert.ok(findBtn(/▶ 出戰/), '跳過後可出戰');
+  assert.equal(saveOf(storage).career.proGrowthPending, null, '路線 pending 清掉');
+  // 新預期行為：體能段還沒做，出戰仍不放行；卡片重畫只剩體能段
+  assert.ok(!findBtn(/▶ 出戰/), '體能段未完成前仍不放行出戰');
+  const fitnessSkipBtn = findBtn(/這個冬天先不練/);
+  assert.ok(fitnessSkipBtn, '路線清完後卡片就地重畫，應只剩體能段的跳過鈕');
+  tap(fitnessSkipBtn); tap(fitnessSkipBtn); // 連點單效
+  await settle();
+  assert.equal(saveOf(storage).career.proFitnessPending, null, '體能 pending 也清掉');
+  assert.ok(findBtn(/▶ 出戰/), '兩段都跳過後可出戰');
 });
 
 test('F5② 傳承全鏈：選單選人→attrs 變→回畫面；教過的人下一年不再列', async () => {
@@ -362,7 +372,12 @@ test('F5② 傳承全鏈：選單選人→attrs 變→回畫面；教過的人�
   await settle();
   const save = saveOf(storage);
   assert.equal(save.career.proGrowth.mentored.length, 1, '教了一位');
-  assert.ok(findBtn(/▶ 出戰/), '選完回畫面');
+  // 新預期行為（不互斥改制）：路線段（傳承）清了、體能段還在——卡片就地重畫成
+  // 只剩體能段，出戰仍不放行；補跳體能才能拿到出戰
+  assert.ok(!findBtn(/▶ 出戰/), '體能段未完成前不放行出戰');
+  tap(findBtn(/這個冬天先不練/));
+  await settle();
+  assert.ok(findBtn(/▶ 出戰/), '兩段都完成後回畫面');
   loseOutSeason(storage);
   assert.ok(createCareerStore(storage).settleProFinale());
   assert.ok(createCareerStore(storage).advanceSeason());
@@ -412,15 +427,20 @@ function seedScoutingForNext(storage) {
   return oppId;
 }
 
+// 新預期行為（不互斥改制）：openMatchup 的前提是「出戰放行」——兩段 pending 都得
+// 清掉，這裡的 chooseProGrowth('rest'/'intel') 只清路線段，補一行 fitness-skip
+// 把體能段也清掉（治具本身不測體能，用跳過零效果最乾淨）。
 test('F4 intel＋樣本≥6＝槽①顯示真實分佈；未解鎖照舊；樣本不足另句', async () => {
   // 未解鎖：要用「交手過」的檔（槽①盲注句在 scouted 分支內；未交手另有一句）
   const plain = pendingY2Save();
   assert.ok(createCareerStore(plain).chooseProGrowth('rest'));
+  assert.ok(createCareerStore(plain).chooseProGrowth('fitness-skip'));
   seedScoutingForNext(plain);
   const t0 = await openMatchup(plain);
   assert.match(t0, /沒有對手攻擊路線的情報/, '未解鎖照舊');
   const storage = pendingY2Save();
   assert.ok(createCareerStore(storage).chooseProGrowth('intel'));
+  assert.ok(createCareerStore(storage).chooseProGrowth('fitness-skip'));
   // ★覆審 HIGH-1 反例場景★ 不塞 scouting（主角打不到球的位置）——情報顯示
   // 不得被「對手看我」方向的 oppFocus 閘擋住
   const raw = saveOf(storage);
@@ -435,6 +455,7 @@ test('F4 intel＋樣本≥6＝槽①顯示真實分佈；未解鎖照舊；樣�
   // ★送審輪 2 HIGH 反面案★ 同場景 intel off——分佈不得白送（一次性解鎖的價值）
   const noIntel = pendingY2Save();
   assert.ok(createCareerStore(noIntel).chooseProGrowth('rest'));
+  assert.ok(createCareerStore(noIntel).chooseProGrowth('fitness-skip'));
   const rawN = saveOf(noIntel);
   const oppN = rawN.season.schedule.find((m) => m.round === 'pro').opponentId;
   rawN.season.oppScouting = { [oppN]: { zones: { line: 5, cross: 3, middle: 1, tip: 1 } } };
@@ -444,6 +465,7 @@ test('F4 intel＋樣本≥6＝槽①顯示真實分佈；未解鎖照舊；樣�
     '未解鎖不得顯示分佈（閘拿掉＝這裡紅——輪 2 突變 M6 的護欄）');
   const low = pendingY2Save();
   assert.ok(createCareerStore(low).chooseProGrowth('intel'));
+  assert.ok(createCareerStore(low).chooseProGrowth('fitness-skip'));
   seedScoutingForNext(low);
   // scouted 過閘但 oppScouting 未記帳＝情報樣本 0 <6
   const t2 = await openMatchup(low);

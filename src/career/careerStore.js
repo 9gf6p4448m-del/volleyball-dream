@@ -338,6 +338,10 @@ export function createCareerStore(storage, slot = 1) {
               ...prev.career,
               proFinaleSettled: false,
               proGrowthPending: endingSeason + 1,
+              // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）：體能脫離路線互斥，
+              // 兩段各自一顆 pending、同一次 RMW 一起設——旗標分開才不會「選了路線
+              // 就順便偷放行體能」，也才擋得住同屆無限刷 +2。
+              proFitnessPending: endingSeason + 1,
               ...(nextSalary !== null
                 ? { contract: { ...(prev.career.contract ?? {}), salary: nextSalary } }
                 : {}),
@@ -1054,6 +1058,9 @@ export function createCareerStore(storage, slot = 1) {
             proFinaleSettled: false,
             // 批 4B（F1）：轉隊也是屆間——成長待辦同 RMW
             proGrowthPending: endingSeason + 1,
+            // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）：轉隊同樣是屆間，
+            // 體能待辦與路線待辦同一次 RMW 一起設（同上 advanceSeason 分支）。
+            proFitnessPending: endingSeason + 1,
           },
           roster: { capacity: members.length + 1, members, alumni: [] },
           lineup,
@@ -1087,6 +1094,14 @@ export function createCareerStore(storage, slot = 1) {
       if (!isPro(normalizeChapter(save.career ?? null))) return false;
       return save.career?.proGrowthPending === (save.season.index ?? 1);
     },
+    // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）：路線段的姊妹旗標——
+    // 體能是否還欠一段，UI 開卡閘要吃「路線 OR 體能」，不能只看路線這顆。
+    proFitnessPending() {
+      const save = loadSave();
+      if (!save) return false;
+      if (!isPro(normalizeChapter(save.career ?? null))) return false;
+      return save.career?.proFitnessPending === (save.season.index ?? 1);
+    },
     proGrowthState() {
       const g = loadSave()?.career?.proGrowth ?? null;
       return { mentored: [...(g?.mentored ?? [])], intel: g?.intel === true };
@@ -1095,13 +1110,25 @@ export function createCareerStore(storage, slot = 1) {
     // 'control'）。幅度/上限/控球解鎖判定**全部經 campAttrOptions／applyCampAttrTraining
     // 單一來源**（trainingCamp.js）——本檔不得另抄任何一個數字。unlockControl 吃
     // save.practice（紅白賽全科目完成才開放控球，同集訓那格的閘）。
+    // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）：路線（聲望/傳承/情報/跳過）
+    // 與體能（練/先不練）各自一段、各自一顆 pending——體能（'fitness'／'fitness-skip'）
+    // 吃 proFitnessPending，其餘四個路線選項照舊只吃 proGrowthPending、只清
+    // proGrowthPending（一行都不動 proFitnessPending，否則同屆可無限刷 +2 就白防了）。
+    // 舊存檔缺 proFitnessPending：undefined !== 屆數天然不成立，不需特判、自然拒絕
+    // （語意＝該屆沒有體能段，等下屆 advanceSeason 自然補上）。
     chooseProGrowth(option, memberId = null) {
       const save = loadSave();
       if (!save) return false;
       if (!isPro(normalizeChapter(save.career ?? null))) return false;
-      if (save.career?.proGrowthPending !== (save.season.index ?? 1)) return false;
+      const seasonIdx = save.season.index ?? 1;
+      const isFitnessOption = option === 'fitness' || option === 'fitness-skip';
+      if (isFitnessOption) {
+        if (save.career?.proFitnessPending !== seasonIdx) return false;
+      } else if (save.career?.proGrowthPending !== seasonIdx) return false;
       const g = save.career?.proGrowth ?? {};
-      if (!['prestige', 'mentor', 'intel', 'rest', 'fitness'].includes(option)) return false;
+      if (!['prestige', 'mentor', 'intel', 'rest', 'fitness', 'fitness-skip'].includes(option)) {
+        return false;
+      }
       if (option === 'intel' && g.intel === true) return false; // 一次性
       if (option === 'mentor') {
         const target = (save.roster?.members ?? []).find((m) => m.id === memberId);
@@ -1116,10 +1143,16 @@ export function createCareerStore(storage, slot = 1) {
         if (!opt?.ready) return false; // 到頂／未解鎖——單一來源判定
       }
       return writeSave((prev) => {
-        // 冪等雙保險：pending 條件綁 prev 讀值
-        if (prev?.career?.proGrowthPending !== (prev.season.index ?? 1)) return prev;
+        const prevSeasonIdx = prev.season.index ?? 1;
+        // 冪等雙保險：pending 條件綁 prev 讀值——體能／路線各驗各的旗標
+        if (isFitnessOption) {
+          if (prev?.career?.proFitnessPending !== prevSeasonIdx) return prev;
+        } else if (prev?.career?.proGrowthPending !== prevSeasonIdx) return prev;
         const prevG = prev.career?.proGrowth ?? {};
-        const nextCareer = { ...prev.career, proGrowthPending: null };
+        // 只清這次選的那一段的 pending——另一段（路線／體能）原封不動
+        const nextCareer = isFitnessOption
+          ? { ...prev.career, proFitnessPending: null }
+          : { ...prev.career, proGrowthPending: null };
         let player = prev.player;
         let roster = prev.roster;
         if (option === 'prestige' && player) {

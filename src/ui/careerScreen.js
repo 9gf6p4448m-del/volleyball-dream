@@ -2626,7 +2626,11 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 批 4B（F1）：屆間成長待辦——選定或跳過前不放行出戰（比照 corpPayday 的
     // 旗標守衛＋return 慣例：覆蓋層收掉時會再 render 一次）。收束態（退休/滿十年）
     // 不擋——謝幕優先於休賽季選擇（F1 凍結原文「pending 且未收束時」）
-    if (pickedPro && !proGrowthOpen && store.proGrowthPending?.() && !store.proCareerOver?.()) {
+    // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）：開卡閘改吃「路線 OR 體能」
+    // ——任一段還沒做完都要開卡（兩段各自一次，不再共用一顆旗標）。
+    if (pickedPro && !proGrowthOpen
+      && (store.proGrowthPending?.() || store.proFitnessPending?.())
+      && !store.proCareerOver?.()) {
       showProGrowthChoice();
       return;
     }
@@ -3682,9 +3686,16 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // ════════ 多年卷批 4B（F2/F5）：屆間三選一 ════════
   // ★數值與文案屬提案★ 三路：聲望（信任+6）／傳承（教一位隊友，attrs+2，同人
   // 一生一次）／情報（一次性解鎖對手攻擊分佈顯示）；跳過＝好好休息零效果。
+  // 職業屆間體能格「不互斥」改制（2026-08-27 拍板）：同一張卡兩段各自獨立——
+  // 路線段（只在 proGrowthPending 匹配當屆時渲染）＋體能段（只在 proFitnessPending
+  // 匹配當屆時渲染）。每次選完（不論哪一段）都重算兩顆 pending：都清了才真的關卡
+  // 回 renderCareer；還有一段沒做完就地重畫同一張卡，只剩下未完成的那段——
+  // crash 復原也吃同一份判準（重開時 renderCareer 的開卡閘重新讀 store，自然接得上）。
   function showProGrowthChoice() {
     if (proGrowthOpen) return;
     proGrowthOpen = true;
+    const routePending = store.proGrowthPending?.() ?? false;
+    const fitnessPending = store.proFitnessPending?.() ?? false;
     const g = store.proGrowthState?.() ?? { mentored: [], intel: false };
     const overlay = el('div', [
       'position:fixed', 'inset:0', 'z-index:37', 'display:flex', 'flex-direction:column',
@@ -3698,54 +3709,68 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.8',
       'max-width:min(400px,92vw)', 'text-align:center'],
     '屬性已到天花板——老將的成長，長在別的地方。選一條路（每年一次）。'));
-    const pick = (option, memberId = null) => {
-      if (store.chooseProGrowth?.(option, memberId)) {
-        proGrowthOpen = false;
-        overlay.remove(); renderCareer();
-      }
+    // 選完（路線或體能任一段）都走這裡：兩段都清了才真的關卡，否則就地重畫剩下的段。
+    const afterPick = () => {
+      proGrowthOpen = false;
+      overlay.remove();
+      const stillRoute = store.proGrowthPending?.() ?? false;
+      const stillFitness = store.proFitnessPending?.() ?? false;
+      if (stillRoute || stillFitness) showProGrowthChoice();
+      else renderCareer();
     };
-    overlay.appendChild(button('🗣 立威——隊內聲望（信任 +6）', false, () => pick('prestige')));
-    // 職業屆間體能格（2026-08-27 拍板）：數值/上限/解鎖閘全部經 campAttrOptions
-    // 單一來源（trainingCamp.js）算——本檔不重寫任何一個數字。
-    const growthPlayer = store.loadPlayer?.();
-    const fitUnlockControl = !!store.loadPractice?.()?.unlockControl;
-    const fitOpts = growthPlayer ? campAttrOptions(growthPlayer, { unlockControl: fitUnlockControl }) : [];
-    if (growthPlayer && fitOpts.some((o) => o.ready)) {
-      overlay.appendChild(button('🏋 體能特訓——把身體再往上推一格', false, () => {
-        showProFitnessPick(overlay, fitOpts);
-      }));
-    } else if (growthPlayer && fitOpts.length > 0) {
-      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
-        'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
-      `🏋 體能特訓——身體已到你能推的極限（${fitOpts.map((o) => `${o.name}${o.reason}`).join('、')}）`));
+    const pick = (option, memberId = null) => {
+      if (store.chooseProGrowth?.(option, memberId)) afterPick();
+    };
+    // ════ 路線段：聲望／傳承／情報／好好休息（四選一，選完只清 proGrowthPending）════
+    if (routePending) {
+      overlay.appendChild(button('🗣 立威——隊內聲望（信任 +6）', false, () => pick('prestige')));
+      // 傳承：還有沒教過的隊友才列
+      const unmentored = (store.loadRoster?.()?.members ?? [])
+        .filter((m) => !g.mentored.includes(m.id));
+      // 國外聯賽卷裁定（2026-08-27 Sawmah，甲案）：傳承 clamp 90（chooseProGrowth 同值）
+      // ——海外隊友建隊即 90 封頂 ⇒ +2 恆零效果。無人能受益時灰掉並標示，不讓玩家
+      // 白燒一生一次的選擇；判準吃「實際會不會漲」（有屬性 <90 的隊友才算可教），
+      // 不吃隊伍 league——未來海外名單若有 <90 的人，選項自動回來。
+      const members = unmentored
+        .filter((m) => Object.values(m.attributes ?? {}).some((v) => v < 90));
+      if (members.length > 0) {
+        overlay.appendChild(button('🎓 傳承——把經驗教給一位隊友', false, () => {
+          showProMentorPick(members, afterPick);
+        }));
+      } else if (unmentored.length > 0) {
+        overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
+          'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
+        '🎓 傳承——這裡的隊友，都已站在你能傳授的高度之上（本隊無可傳授）'));
+      }
+      if (!g.intel) {
+        overlay.appendChild(button('🎞 情報網——解鎖對手攻擊分佈（賽前布置可見）', false,
+          () => pick('intel')));
+      }
+      overlay.appendChild(button('😴 好好休息（跳過）', false, () => pick('rest')));
     }
-    // 傳承：還有沒教過的隊友才列
-    const unmentored = (store.loadRoster?.()?.members ?? [])
-      .filter((m) => !g.mentored.includes(m.id));
-    // 國外聯賽卷裁定（2026-08-27 Sawmah，甲案）：傳承 clamp 90（chooseProGrowth 同值）
-    // ——海外隊友建隊即 90 封頂 ⇒ +2 恆零效果。無人能受益時灰掉並標示，不讓玩家
-    // 白燒一生一次的選擇；判準吃「實際會不會漲」（有屬性 <90 的隊友才算可教），
-    // 不吃隊伍 league——未來海外名單若有 <90 的人，選項自動回來。
-    const members = unmentored
-      .filter((m) => Object.values(m.attributes ?? {}).some((v) => v < 90));
-    if (members.length > 0) {
-      overlay.appendChild(button('🎓 傳承——把經驗教給一位隊友', false, () => {
-        showProMentorPick(overlay, members);
-      }));
-    } else if (unmentored.length > 0) {
-      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
-        'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
-      '🎓 傳承——這裡的隊友，都已站在你能傳授的高度之上（本隊無可傳授）'));
+    // ════ 體能段：練一項／先不練（獨立一段，選完只清 proFitnessPending）════
+    if (fitnessPending) {
+      // 數值/上限/解鎖閘全部經 campAttrOptions 單一來源（trainingCamp.js）算——
+      // 本檔不重寫任何一個數字。
+      const growthPlayer = store.loadPlayer?.();
+      const fitUnlockControl = !!store.loadPractice?.()?.unlockControl;
+      const fitOpts = growthPlayer
+        ? campAttrOptions(growthPlayer, { unlockControl: fitUnlockControl }) : [];
+      if (growthPlayer && fitOpts.some((o) => o.ready)) {
+        overlay.appendChild(button('🏋 體能特訓——把身體再往上推一格', false, () => {
+          showProFitnessPick(fitOpts, afterPick);
+        }));
+      } else if (growthPlayer && fitOpts.length > 0) {
+        overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
+          'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
+        `🏋 體能特訓——身體已到你能推的極限（${fitOpts.map((o) => `${o.name}${o.reason}`).join('、')}）`));
+      }
+      overlay.appendChild(button('😌 這個冬天先不練（跳過體能）', false, () => pick('fitness-skip')));
     }
-    if (!g.intel) {
-      overlay.appendChild(button('🎞 情報網——解鎖對手攻擊分佈（賽前布置可見）', false,
-        () => pick('intel')));
-    }
-    overlay.appendChild(button('😴 好好休息（跳過）', false, () => pick('rest')));
     document.body.appendChild(overlay);
   }
 
-  function showProMentorPick(growthOverlay, members) {
+  function showProMentorPick(members, onDone) {
     const menu = el('div', [
       'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
@@ -3756,8 +3781,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     for (const m of members) {
       menu.appendChild(button(`${m.fullName ?? m.id}`, false, () => {
         if (store.chooseProGrowth?.('mentor', m.id)) {
-          proGrowthOpen = false;
-          menu.remove(); growthOverlay.remove(); renderCareer();
+          menu.remove(); onDone();
         } else {
           menu.remove();
         }
@@ -3769,7 +3793,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
   // 職業屆間體能格（2026-08-27 拍板）：子選單——ready 項顯示現值→加後值，
   // not ready 項灰字附 reason 原文（不可選）。數值全吃 campAttrOptions 單一來源。
-  function showProFitnessPick(growthOverlay, opts) {
+  function showProFitnessPick(opts, onDone) {
     const menu = el('div', [
       'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
@@ -3782,8 +3806,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         const after = Math.min(o.cap, o.value + o.gain);
         menu.appendChild(button(`${o.name} ${o.value} → ${after}（上限 ${o.cap}）`, false, () => {
           if (store.chooseProGrowth?.('fitness', o.key)) {
-            proGrowthOpen = false;
-            menu.remove(); growthOverlay.remove(); renderCareer();
+            menu.remove(); onDone();
           } else {
             menu.remove();
           }
