@@ -920,6 +920,10 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
     ballY: Math.round(from.y * 100) / 100, // 擊球高度：表現層分高手/低手動作與音效用
     power: Math.round(timing * 100) / 100, // 蓄力品質：表現層分輕吊/重扣音效用
     dist: Math.round(dist * 100) / 100, // 到位程度：接球品質來源（表現層可做勉強救球動作/音效）
+    // 丙3（接球微回饋批2，acceptance-netduel-batch2.md NJ-4，2026-08-27）：完美接球外露。
+    // 單一來源＝上面已算好的 `receivePerfectMul(rawT)`（t≥0.95）——純資料外露，
+    // 不得另抄 0.95 字面；只在接球類觸球（receive/dive）才有意義，spike/set 不帶這個鍵。
+    ...(isReceiveLike ? { perfect: receivePerfectMul(rawT) !== 1 } : {}),
     ...(blown ? { blown: true } : {}), // 爆接標記（播報/探針用）
     // §5 A3 跳舉標記（表現層/播報/探針用；不參與任何判定）——攔網手要讀的線索
     // 「二傳是否跳舉」在事件流裡就看得到，不必去翻協調層狀態

@@ -230,6 +230,26 @@ export function createSfx() {
     osc.stop(t + 0.09);
   }
 
+  // 丙3（接球微回饋批2，NJ-4）：完美接球「亮」音——短促雙泛音，疊在基底觸球音
+  // 之上（不是取代）。單一來源＝sim 外露的 e.perfect（receivePerfectMul／t≥0.95
+  // 同一判定），這裡不再另算門檻。
+  function perfectChime() {
+    if (!ensure()) return;
+    const t = ctx.currentTime;
+    for (const [freq, delay, gain] of [[1400, 0, 0.16], [2100, 0.03, 0.1]]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t + delay);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + delay);
+      g.gain.exponentialRampToValueAtTime(gain, t + delay + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + delay + 0.22);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(t + delay);
+      osc.stop(t + delay + 0.24);
+    }
+  }
+
   // 局點心跳：低頻 lub-dub 循環（張力時開），音量克制不搶戲
   let heartTimer = null;
   function thump(t, freq, gain) {
@@ -292,10 +312,12 @@ export function createSfx() {
           if (e.kind === 'spike') {
             if ((e.power ?? 1) < 0.45) thud(); // 輕吊＝悶短
             else crack(1);                     // 重扣＝爆裂
-          } else if (e.kind === 'receive' && (e.power ?? 0) >= 0.95) ping(980); // Perfect！
-          else if (e.kind === 'receive' && e.touches === 3) thud(); // 第三擊安全球
+          } else if (e.kind === 'receive' && e.touches === 3) thud(); // 第三擊安全球
           else if (e.kind === 'set') ping(760);
           else ping(600);
+          // 丙3：完美接球疊層音（receive／dive 皆涵蓋——原本只有 receive 才響，
+          // 且用 power≥0.95 另算門檻；現在直接讀 sim 外露的單一來源欄位）
+          if (e.perfect) perfectChime();
         }
       }
     },

@@ -73,6 +73,14 @@ import { easeInOutCubic } from '../render/ritualStage.js';
 import {
   sHotspotItems, lSignalItems, createLatencyStats, loudCallerOf,
 } from '../ui/diegeticItems.js';
+import { isHeavySpikeDig, isDiveSaveTouch, HEAVY_SPIKE_POWER_MIN } from '../ui/receiveJuice.js';
+
+// 接球微回饋批2（丙1/丙2/丙3，acceptance-netduel-batch2.md，2026-08-27）：三個
+// 時長常數，觸發判定全抽在 receiveJuice.js（純函式）／sim 的 perfect 欄位，這裡
+// 只放「亮多久」。全部【試玩必調】——提案值，試玩即改。
+const DIG_HIT_STOP_MS = 90;      // 丙1：重扣被救起瞬間定格（NJ-2 提案值）
+const DIVE_SAVE_SLOWMO_MS = 300; // 丙2：魚躍成功救起後的短慢動作（比重扣 450/神救球 650 短）
+const PERFECT_GLOW_MS = 260;     // 丙3：完美接球後球體發光時長
 
 // W8 暫停演出：暫停起算 ~0.9s（隊友跑進圈）後才切第一人稱圈內視角——
 // 先用三人稱看全隊聚攏一小段，再切進圈裡，避免自己的身體從鏡頭裡穿過
@@ -369,6 +377,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     hitStopUntil: 0,            // 打擊感（juice）：擊球定格、螢幕震動、重扣慢動作
     slowUntil: 0,
     shake: 0,
+    ballGlowUntil: 0,           // 丙3：完美接球——球體發光時窗（NJ-4）
     lastTouch: null,            // 最後觸球（死球時推導得分原因用）
     pendingDead: null,          // DEAD_BALL 先到、SCORE 緊隨（同批事件）：湊齊才顯示面板
     assistFlight: -1,
@@ -1808,6 +1817,10 @@ function applyEvents(s, frameEvents, now) {
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.controlledId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
   for (const e of frameEvents) {
+    // 丙1（接球微回饋批2，NJ-2）：在本次迭代任何東西改寫 s.lastTouch 之前先存一份
+    // 快照——下面「TOUCH/SERVE → s.lastTouch = e」那段會把它蓋成這個事件本身，
+    // 之後要問「上一次觸球是不是對方重扣」就問不到了。
+    const prevTouchForDig = s.lastTouch;
     // 4.5B §3 招牌演出追蹤：解除（對手救起/新發球）→武裝（成因事件）；
     // 起鏡只認 SCORE（追加條 B：勝負已定的那一拍之後——見下方 SCORE 分支）
     s.pendingSig = trackSignature(s.pendingSig, e, myTeam);
@@ -1920,9 +1933,30 @@ function applyEvents(s, frameEvents, now) {
         .onEvent(e, myTeam, game.rally.flightId, ctx);
       showBetCard(s, armed, cards);
     }
+    // 丙1（NJ-2）：重扣被救起——獨立於下面那組 if/else if 鏈（可能與丙2 魚躍慢動作
+    // 同一拍疊加：先短定格、定格結束後接慢動作，同「重扣自己那一下」既有的疊加範式）。
+    // 判定抽在 receiveJuice.js（單一門檻來源，不得另抄 0.7）；Math.max 防止蓋掉
+    // 同一事件已由其他分支（如下面的神救球）給出的更大值。
+    if (isHeavySpikeDig(prevTouchForDig, e)) {
+      s.hitStopUntil = Math.max(s.hitStopUntil, now + DIG_HIT_STOP_MS); // 【試玩必調】提案 90ms
+      s.shake = Math.max(s.shake, 0.08);
+    }
+    // 丙2（NJ-3）：魚躍成功救起——短慢動作獎勵（撲空無 TOUCH 事件，天然只獎成功，
+    // 見 receiveJuice.js 檔頭）。Math.max：若同一下已被神救球分支給了更長的
+    // slowUntil（650ms），這裡的 300ms 不會反而把它縮短。
+    if (isDiveSaveTouch(e)) {
+      s.slowUntil = Math.max(s.slowUntil, now + DIVE_SAVE_SLOWMO_MS); // 【試玩必調】提案 300ms
+    }
+    // 丙3（NJ-4）：完美接球——球體短暫發光時窗（單一來源＝sim 外露的 e.perfect，
+    // 這裡不再另算門檻）；音效疊層在 sfx.js 的 onEvents 同樣直接讀 e.perfect。
+    if (e.type === 'TOUCH' && e.perfect) {
+      s.ballGlowUntil = Math.max(s.ballGlowUntil, now + PERFECT_GLOW_MS);
+    }
     if (e.type === 'TOUCH' && e.kind === 'spike') {
-      s.hitStopUntil = now + ((e.power ?? 1) >= 0.7 ? 70 : 40);
-      if ((e.power ?? 1) >= 0.7) s.slowUntil = now + 450; // 重扣＝定格接慢動作
+      // 重扣門檻收斂到 receiveJuice.HEAVY_SPIKE_POWER_MIN 單一來源（批2 覆核修正：
+      // 原本此處行內 0.7 與 receiveJuice 各一份＝兩份門檻，NJ-2「不得另抄」）
+      s.hitStopUntil = now + ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN ? 70 : 40);
+      if ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN) s.slowUntil = now + 450; // 重扣＝定格接慢動作
       s.shake = Math.max(s.shake, 0.12);
     } else if (e.type === 'TOUCH' && e.playerId === s.controlledId && e.touches === 1
         && stage.controls.consumeDigHeroSignal?.()) {
@@ -3216,8 +3250,12 @@ function frameStep(s, now) {
   const myBall = updateAssistAndPoses(s);
 
   const alpha = s.accumulator / SIM_DT;
+  // 丙3（NJ-4）：完美接球發光——0..1 強度，從 ballGlowUntil 時窗算，餵給 ballView
+  // 純畫（同 hitStopUntil/slowUntil 的「matchLoop 管時間、view 只管畫」範式）
+  const ballGlow = Math.max(0, Math.min(1, (s.ballGlowUntil - now) / PERFECT_GLOW_MS));
   ctx.ballView.sync(game.ball, alpha, delta,
-    game.phase === 'rally' && game.rally.profile === 'serve' && game.rally.serveStyle === 'float');
+    game.phase === 'rally' && game.rally.profile === 'serve' && game.rally.serveStyle === 'float',
+    ballGlow);
   const netHitPower = ctx.court.update(delta, game.ball); // 網面受擊波動（純視覺）
   if (netHitPower > 0) stage.sfx.netHit(netHitPower);
   stage.matchView.sync(game, alpha, delta, frameEvents);

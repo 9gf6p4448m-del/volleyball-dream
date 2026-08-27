@@ -11,6 +11,10 @@ export function createBallView(scene, quality) {
     new THREE.MeshStandardMaterial({
       map: makeBallTexture(),
       roughness: 0.55,
+      // 丙3（接球微回饋批2，NJ-4）：完美接球短暫發光——emissive 常駐、intensity
+      // 平時 0（零視覺成本），glow>0 才亮（見 sync 的 glow 參數）
+      emissive: new THREE.Color(0xffd873),
+      emissiveIntensity: 0,
     }),
   );
   mesh.castShadow = quality.shadowSize > 0;
@@ -41,7 +45,9 @@ export function createBallView(scene, quality) {
     // alpha = 累積器剩餘時間 / SIM_DT，於上一步與當前步之間插值；dt＝幀時間（視覺滾動用）
     // floatFlight＝飄浮發球飛行中（07-24）：不轉＋不規則小幅飄移（knuckle 亂流視覺）——
     // 純渲染偏移不動 sim 落點；「殺傷」本體仍是 sim 接發品質懲罰，這裡補「看得到的飄」
-    sync(ball, alpha, dt = 1 / 60, floatFlight = false) {
+    // glow＝丙3 完美接球發光強度 0..1（matchLoop 依 ballGlowUntil 時窗算好餵進來，
+    // 這裡只管畫；省略＝0＝不亮，回放模式不傳這個參數，天生不受影響）
+    sync(ball, alpha, dt = 1 / 60, floatFlight = false, glow = 0) {
       const x = ball.px + (ball.x - ball.px) * alpha;
       const y = ball.py + (ball.y - ball.py) * alpha;
       const z = ball.pz + (ball.z - ball.pz) * alpha;
@@ -55,6 +61,7 @@ export function createBallView(scene, quality) {
       }
       mesh.position.set(x + fx, y + fy, z);
       mesh.rotation.x += (floatFlight ? 0.25 : 4.8) * dt; // 飄浮球＝不轉（近停）；其餘視覺滾動
+      mesh.material.emissiveIntensity = glow * 1.6; // 丙3：短暫發光（強度隨時窗衰減）
       blob.position.x = x;
       blob.position.z = z;
 
