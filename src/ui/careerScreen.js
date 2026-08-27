@@ -92,6 +92,11 @@ import { PRO_TIER_LABEL, proTeamById, proRenewalSalaryFor, proBaseSalaryFor } fr
 import {
   proTable, PRO_PLAYER_ID, PLAYOFF_ROUND, growProSchedule,
 } from '../career/proSchedule.js';
+// 國外聯賽卷批 3（2026-08-27）：UI 接線——資料層批 1／迴圈接線批 2 已鋪好
+import {
+  FOREIGN_LEAGUE_NAME, FOREIGN_TIER_LABEL, usdOf, isForeignTeamId,
+} from '../career/foreignTeams.js';
+import { foreignTable, FOREIGN_PLAYER_ID } from '../career/foreignSchedule.js';
 // 職業章批 5（2026-08-26）：敘事層——合約卡／王勝翔宿敵線／收尾點名（同構 corpEvents.js）
 import { PRO_CONTRACT_LINES, proWangRivalPreEvents, proClosingLines } from '../career/proEvents.js';
 import {
@@ -116,6 +121,17 @@ const GRADE_LABEL = { 1: '一年級', 2: '二年級', 3: '三年級' };
 const memberGradeLabel = (member) => (String(member?.origin ?? '').startsWith('corp:')
   ? `年資 ${member?.growth?.grade ?? '?'} 年`
   : GRADE_LABEL[member?.growth?.grade] ?? '');
+
+// 國外聯賽卷批 3（F3-2）：薪水顯示單一 helper——careerScreen 所有薪水顯示點
+// （續約鈕/轉隊卡/轉隊確認/季末結算列/謝幕卡）全經這裡，不得各自直拼「N 萬」。
+// 內部座標系一律台幣萬（同批 1 檔頭紀律）；判準＝`team.league==='foreign'`
+// （proTeams.js 既有同款判準，同源不旁生）。
+function salaryLabelOf(team, salaryWan) {
+  if (team?.league === 'foreign') {
+    return `$${usdOf(salaryWan)} 萬美金（約 ${salaryWan} 萬台幣）`;
+  }
+  return `${salaryWan} 萬`;
+}
 
 const COLOR = {
   bg: 'linear-gradient(180deg, #070a12 0%, #0b1120 55%, #070a12 100%)',
@@ -2342,14 +2358,21 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // ── 職業聯賽（批 3）──：八隊單循環 7 場＋勝點制積分表（鏡射企業 league 區；
     // C1 凍結驗收：名次表只計循環賽場次——playoffRows 的 round 是 'semi'/'final'，
     // 不落在這個 filter 裡，proTable 內部同理只認 round==='pro'）
-    const proRows2 = career.schedule.filter((x) => x.round === 'pro');
+    // 國外聯賽卷批 3（F3-6）：round==='foreign' 併入同一顆 filter——一份賽程只會由
+    // buildProSchedule 或 buildForeignSchedule 其中一支產生，兩標記不共存（同
+    // seasonConcluded 的既有紀律），合在同一顆不會互相污染；分流只在名次表/聯賽名。
+    const proTeamId2 = store.loadPro?.() ?? '';
+    const inForeignLeague = isForeignTeamId(proTeamId2);
+    const proRows2 = career.schedule.filter((x) => x.round === 'pro' || x.round === 'foreign');
     if (proRows2.length) {
+      const leagueLabel2 = inForeignLeague ? FOREIGN_LEAGUE_NAME : '職業聯賽';
       list.appendChild(el('div', [
         'font-size:14px', `color:${COLOR.cyan}`, 'letter-spacing:3px', 'margin-top:4px',
-      ], `職業聯賽・單循環（${proRows2.length} 場・每場三戰兩勝）`));
+      ], `${leagueLabel2}・${inForeignLeague ? '雙循環' : '單循環'}（${proRows2.length} 場・每場三戰兩勝）`));
       for (const m of proRows2) list.appendChild(rowFor(m));
-      const proBoard = proTable({
-        teamId: store.loadPro?.() ?? '',
+      const proTableFn = inForeignLeague ? foreignTable : proTable;
+      const proBoard = proTableFn({
+        teamId: proTeamId2,
         seed: career.seed,
         schedule: career.schedule,
         results: career.results,
@@ -2359,8 +2382,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           `background:${COLOR.card}`, 'border-radius:12px', 'padding:8px 14px',
           'display:flex', 'flex-direction:column', 'gap:4px',
         ]);
+        const proPlayerId2 = inForeignLeague ? FOREIGN_PLAYER_ID : PRO_PLAYER_ID;
         proBoard.table.forEach((row, i) => {
-          const me = row.id === PRO_PLAYER_ID;
+          const me = row.id === proPlayerId2;
           const line = el('div', [
             'display:flex', 'justify-content:space-between', 'font-size:13px',
             `color:${me ? COLOR.gold : (i < 4 ? COLOR.cyan : COLOR.dim)}`,
@@ -2384,7 +2408,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       if (playoffRows.length) {
         list.appendChild(el('div', [
           'font-size:14px', `color:${COLOR.gold}`, 'letter-spacing:3px', 'margin-top:8px',
-        ], '職業季後賽・四強單淘汰'));
+        ], inForeignLeague ? '海外季後賽・四強單淘汰' : '職業季後賽・四強單淘汰'));
         for (const m of playoffRows) list.appendChild(rowFor(m));
       }
     }
@@ -2513,7 +2537,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 大學賽季打完了沒（批 6）→ 債 C 收斂：判準單一定義在 seasonConcluded
     // （league 全有結果）；uniLeague.length 守衛保留＝league 空的壞存檔不進結算分支
     const uniSeasonDone = inUniversity && uniLeague.length > 0 && seasonConcluded(career);
-    const proGames = career.schedule.filter((x) => x.round === 'pro');
+    // 國外聯賽卷批 3（F3-6/F3-10）：併 'foreign'——批 2 覆審 HIGH 兌現：這顆漏併的話
+    // 玩家轉入海外後 proGames 恆空、proSeasonDone 恆 false，季末卡永遠不出現、
+    // settleProFinale 唯一呼叫點掛在其上，存檔卡死（見 kickoff §三-8）。
+    const proGames = career.schedule.filter((x) => x.round === 'pro' || x.round === 'foreign');
     // 職業賽季打完了沒（C3 的 seasonConcluded pro 分支——循環＋若晉級季後賽則含
     // 季後賽場次全有結果；proGames 守衛同 corpGames/uniLeague 慣例）
     const proSeasonDone = !!pickedPro && proGames.length > 0 && seasonConcluded(career);
@@ -2618,11 +2645,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       // 正是打滿十年的人）；冪等純顯示，重看不寫檔
       root.appendChild(button('🎬 生涯謝幕', true, () => showProCareerFinale()));
     } else if (proSeasonDone) {
-      const board = proTable({
+      // 國外聯賽卷批 3（F3-6）：季末收束卡的名次表——海外季吃 foreignTable
+      // （名次語意 1..4、聯賽名寰宇超級聯賽），國內季照舊 proTable。
+      const inForeignLeague3 = isForeignTeamId(pickedPro.id);
+      const board = (inForeignLeague3 ? foreignTable : proTable)({
         teamId: pickedPro.id, seed: career.seed,
         schedule: career.schedule, results: career.results,
       });
-      const me = board.table.find((r) => r.id === PRO_PLAYER_ID);
+      const me = board.table.find((r) => r.id === (inForeignLeague3 ? FOREIGN_PLAYER_ID : PRO_PLAYER_ID));
       // 季後賽戰況（有沒有打進四強／奪冠）——由賽程是否長出 semi/final 場次判斷，
       // 不是由循環名次判斷：循環第 4 名照樣可能爆冷奪冠（C2 種子制的醍醐味）
       const playoffRows = career.schedule.filter(
@@ -2631,11 +2661,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const madePlayoffs = playoffRows.length > 0;
       const finalRow = playoffRows.find((x) => x.round === PLAYOFF_ROUND.FINAL);
       const champion = !!(finalRow && career.results.find((r) => r.matchId === finalRow.id)?.won);
+      // 批 3 覆審 MEDIUM 修：國內兩個分支的字面沿改動前逐字不動（冠軍＝「職業聯賽
+      // 冠軍！」、名次＝「聯賽第 N 名」——兩分支改動前用的字就不同，不得共用一個
+      // label 順手統一）；海外才換 FOREIGN_LEAGUE_NAME。
       root.appendChild(el('div', [
         'font-size:22px', 'font-weight:900', `color:${champion ? COLOR.gold : COLOR.cyan}`,
         'margin-top:8px', 'letter-spacing:2px',
-      ], champion ? '🏆 職業聯賽冠軍！'
-        : (madePlayoffs ? '止步季後賽' : `聯賽第 ${board.playerRank} 名`)));
+      ], champion ? `🏆 ${inForeignLeague3 ? FOREIGN_LEAGUE_NAME : '職業聯賽'}冠軍！`
+        : (madePlayoffs ? '止步季後賽'
+          : `${inForeignLeague3 ? FOREIGN_LEAGUE_NAME : '聯賽'}第 ${board.playerRank} 名`)));
       // 多年卷批 2（B6）：不再寫死「元年」——年份跟 chapterSeasonOf 走
       const proYearN = chapterSeasonOf(store.loadChapter?.(), seasonN);
       root.appendChild(el('div', ['font-size:14px', `color:${COLOR.dim}`, 'line-height:1.7'],
@@ -3523,7 +3557,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const newSalary = proRenewalSalaryFor(team, lastPro.proRank, lastPro.proFinish);
       overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'letter-spacing:2px',
         'margin-top:18px'], `${team.name}遞來了新合約`));
-      const renewBtn = button(`✍ 續約留隊——年薪 ${newSalary} 萬`, true, () => {
+      const renewBtn = button(`✍ 續約留隊——年薪 ${salaryLabelOf(team, newSalary)}`, true, () => {
         // B2：續約與推進同一次 RMW（advanceSeason 帶 proSalary）
         if (store.advanceSeason?.({ proSalary: newSalary })) {
           proClosingOpen = false;
@@ -3572,9 +3606,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     menu.appendChild(el('div', ['font-size:12px', `color:${COLOR.dim}`, 'line-height:1.7',
       'max-width:min(380px,92vw)', 'text-align:center'],
     '轉隊＝新環境重新開始：隊友的信任要從頭建立。'));
-    for (const t of offers) {
+    // 國外聯賽卷批 3（F3-3/F3-8）：分組只吃 offers 集合內容本身（t.league）與現隊是否
+    // 海外——不另問 foreignUnlocked 之類的閘（教訓 3 防線：offers 集合已經是單一
+    // 事實源，UI 不得再巢一層方向相反的解鎖判斷）。
+    const inForeignNow = isForeignTeamId(store.loadPro?.() ?? '');
+    const domesticOffers = offers.filter((t) => t.league !== 'foreign');
+    const foreignOffers = offers.filter((t) => t.league === 'foreign');
+    const cardFor = (t) => {
       const salary = proRenewalSalaryFor(t, lastPro?.proRank, lastPro?.proFinish);
-      const card = button(`${t.name}（${PRO_TIER_LABEL[t.tier] ?? t.tier}）——年薪 ${salary} 萬`, false, () => {
+      const tierLabel = t.league === 'foreign'
+        ? (FOREIGN_TIER_LABEL[t.tier] ?? t.tier) : (PRO_TIER_LABEL[t.tier] ?? t.tier);
+      return button(`${t.name}（${tierLabel}）——年薪 ${salaryLabelOf(t, salary)}`, false, () => {
         if (transferConfirmOpen) return;
         transferConfirmOpen = true;
         const confirm = el('div', [
@@ -3584,7 +3626,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         ]);
         confirm.appendChild(el('div', ['font-size:16px', 'font-weight:900', `color:${COLOR.text}`,
           'line-height:1.8', 'max-width:min(400px,92vw)'],
-        `確定轉入 ${t.name}？年薪 ${salary} 萬——隊友信任將重新累積。`));
+        `確定轉入 ${t.name}？年薪 ${salaryLabelOf(t, salary)}——隊友信任將重新累積。`));
         confirm.appendChild(button('✍ 簽下轉隊合約', true, () => {
           // transferPro 冪等（旗標守衛）：連點第二次 settled 已清＝false，不雙轉
           transferConfirmOpen = false;
@@ -3602,7 +3644,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         }));
         document.body.appendChild(confirm);
       });
-      menu.appendChild(card);
+    };
+    if (domesticOffers.length) {
+      if (inForeignNow) {
+        menu.appendChild(el('div', [
+          'font-size:13px', 'font-weight:800', `color:${COLOR.cyan}`, 'letter-spacing:2px',
+          'margin-top:4px',
+        ], '🏠 回國'));
+      }
+      for (const t of domesticOffers) menu.appendChild(cardFor(t));
+    }
+    if (foreignOffers.length) {
+      menu.appendChild(el('div', [
+        'font-size:13px', 'font-weight:800', `color:${COLOR.gold}`, 'letter-spacing:2px',
+        'margin-top:4px',
+      ], inForeignNow ? '🌏 海外' : '🌏 海外邀約'));
+      for (const t of foreignOffers) menu.appendChild(cardFor(t));
     }
     menu.appendChild(button('↩ 回續約談判', false, () => {
       transferMenuOpen = false;
@@ -3699,11 +3756,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       'font-size:26px', 'font-weight:900', `color:${COLOR.gold}`, 'letter-spacing:3px',
       'text-shadow:0 4px 30px rgba(255,209,102,0.35)',
     ], `${proSeasons.length} 年職業生涯`));
-    let titles = 0; let wins = 0; let losses = 0;
+    let titles = 0; let wins = 0; let losses = 0; let foreignYears = 0;
     for (const sn of proSeasons) {
       if (sn.proFinish === 'champion') titles += 1;
       wins += sn.wins ?? 0; losses += sn.losses ?? 0;
       const team = proTeamById(sn.pro);
+      const isForeignSeason = isForeignTeamId(sn.pro);
+      if (isForeignSeason) foreignYears += 1;
       const salary = sn.salary ?? proBaseSalaryFor(team);
       const card = el('div', [
         `background:${COLOR.card}`, 'border-radius:12px', 'border:1px solid #2c3a58',
@@ -3711,8 +3770,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         'display:flex', 'flex-direction:column', 'gap:3px',
       ]);
       const head = el('div', ['display:flex', 'justify-content:space-between', 'align-items:center']);
+      // 國外聯賽卷批 3（F3-5）：海外季卡片帶 🌏 前綴；純國內生涯（isForeignSeason
+      // 恆 false）輸出與改動前逐字相同（零漂移）。
       head.appendChild(el('div', ['font-size:14px', 'font-weight:800'],
-        `第 ${chapterSeasonOf(chapter, sn.index)} 年・${team?.name ?? sn.pro}`));
+        `第 ${chapterSeasonOf(chapter, sn.index)} 年・${isForeignSeason ? '🌏 ' : ''}${team?.name ?? sn.pro}`));
       // 覆審 L1/L3/L4：查表走 hasOwn（原型鏈鍵如 'constructor' 會印出函式原始碼）；
       // 缺 finish 回退「—」不與副標的循環名次重複；壞 rank（0/缺）副標也回退「—」
       head.appendChild(el('div', ['font-size:13px',
@@ -3722,12 +3783,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const rankLabel = Number.isInteger(sn.proRank) && sn.proRank >= 1
         ? `循環第 ${sn.proRank} 名` : '循環名次—';
       card.appendChild(el('div', ['font-size:11.5px', `color:${COLOR.dim}`, 'line-height:1.5'],
-        `${rankLabel}・${sn.wins ?? 0} 勝 ${sn.losses ?? 0} 敗・年薪 ${salary} 萬`));
+        `${rankLabel}・${sn.wins ?? 0} 勝 ${sn.losses ?? 0} 敗・年薪 ${salaryLabelOf(team, salary)}`));
       overlay.appendChild(card);
     }
+    // F3-5：合計區加「海外 X 年」，只在有海外季時顯示——純國內生涯 foreignYears 恆 0，
+    // 字尾片段為空字串＝與改動前逐字相同（零漂移斷言）。
     overlay.appendChild(el('div', ['font-size:13px', 'font-weight:800', `color:${COLOR.text}`,
       'margin-top:8px', 'letter-spacing:1px'],
-    `職業合計：${titles} 冠・${wins} 勝 ${losses} 敗`));
+    `職業合計：${titles} 冠・${wins} 勝 ${losses} 敗${foreignYears > 0 ? `・海外 ${foreignYears} 年` : ''}`));
     overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:10px',
       'text-align:center', 'line-height:1.9', 'max-width:min(420px,92vw)'],
     retired
