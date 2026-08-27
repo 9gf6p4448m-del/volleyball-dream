@@ -804,6 +804,10 @@ export function createCareerStore(storage, slot = 1) {
       if (isPro(normalizeChapter(save.career ?? null))) return false;
       const team = proTeamById(teamId);
       if (!team) return false;
+      // 國外聯賽卷批 1 覆審 CRITICAL 修：首約恆國內——BY_ID 併表後海外 id 也解得到，
+      // 但 enterPro 的 buildProMembers/buildProSchedule 是純國內鏈，放行會寫出
+      // schedule=[] 的卡死存檔。海外唯一入口＝轉隊窗（門檻制，批 2 接線）。
+      if (team.league === 'foreign') return false;
       return writeSave((prev) => {
         // no-op 條件與寫入內容綁同一份 prev 讀值（同 enterCorporate 的雙保險慣例）
         if (prev?.career?.corpFinaleSettled !== true) return prev;

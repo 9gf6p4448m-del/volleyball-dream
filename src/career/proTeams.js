@@ -21,7 +21,16 @@
 //
 // 卷宗＝`docs/kickoffs/pro-chapter-kickoff.md`；
 // 驗收＝`docs/kickoffs/acceptance-pro-batch1.md`（動手前凍結）。
+//
+// ★ 國外聯賽卷 批 1（2026-08-27）併表 ★ `BY_ID` 併入 `foreignTeams.js` 的
+// `FOREIGN_TEAMS`——`proTeamById` 是全域 id 解析慣例（20+ 消費點，卷宗§一），併表後
+// 海外 id 零改動自動查得到；`PRO_TEAMS` 陣列本身（`proRounds`／`proOffersFor`／
+// `proTable` 建列消費點）維持純國內 8 隊不動，海外賽程另走 `foreignSchedule.js`。
+// `proBaseSalaryFor`／`proRenewalSalaryFor` 開頭依 `team?.league==='foreign'` 分派到
+// 海外表——國內路徑（下方兩函式本體）一個字元不動。
+// 驗收＝`docs/kickoffs/acceptance-foreign-batch1.md`（F1-3、F1-4）。
 import { TIER } from './admission.js';
+import { FOREIGN_TEAMS, foreignBaseSalaryFor, foreignRenewalSalaryFor } from './foreignTeams.js';
 
 export const PRO_TIER_LABEL = {
   [TIER.POWERHOUSE]: '豪門',
@@ -215,7 +224,7 @@ export const PRO_TEAMS = [
   },
 ];
 
-const BY_ID = new Map(PRO_TEAMS.map((t) => [t.id, t]));
+const BY_ID = new Map([...PRO_TEAMS, ...FOREIGN_TEAMS].map((t) => [t.id, t]));
 
 /** 查一支職業隊（查無回 null，同 `corporationById` 的慣例）。 */
 export function proTeamById(id) {
@@ -236,6 +245,7 @@ const PRO_BASE_SALARY = {
 
 /** 這支球隊的新人約底薪。壞值（查無隊階）照最低給——不猜。 */
 export function proBaseSalaryFor(team) {
+  if (team?.league === 'foreign') return foreignBaseSalaryFor(team);
   return PRO_BASE_SALARY[team?.tier] ?? PRO_BASE_SALARY[TIER.WEAK];
 }
 
@@ -248,6 +258,7 @@ const RENEWAL_FINISH_MUL = {
 
 /** 下一年的續約年薪：底薪 × 名次係數 × 季後賽係數。壞值照最保守給——不猜。 */
 export function proRenewalSalaryFor(team, proRank, proFinish) {
+  if (team?.league === 'foreign') return foreignRenewalSalaryFor(team, proRank, proFinish);
   const base = proBaseSalaryFor(team);
   const r = Number.isInteger(proRank) && proRank >= 1 && proRank <= RENEWAL_RANK_MUL.length
     ? proRank : RENEWAL_RANK_MUL.length;

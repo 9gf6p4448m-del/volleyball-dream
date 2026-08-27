@@ -22,6 +22,14 @@
 // 只做產生器與推進純函式——出戰入口/UI 顯示/推進接線是批 3 的事。
 //
 // 驗收＝`docs/kickoffs/acceptance-pro-batch1.md`（A5）。
+//
+// ★ 國外聯賽卷 批 1（2026-08-27）對稱守衛 ★ `proTeams.js` 併 BY_ID 後，`proTeamById`
+// 對海外 id 也回得出定義（不再是 null）——`buildProSchedule`／`proTable` 兩處純國內
+// 假設因此要各補一道守衛：`buildProSchedule` 拿海外 id 找不到任何一輪對戰（海外隊不在
+// `PRO_TEAMS` 的循環賽對戰表裡），`mine` 會是空陣列，原本壓軸重排那行 `.reduce` 無初值
+// 對空陣列會 throw；`proTable` 拿海外 id 會把玩家隊名塞進國內 8 隊的積分表，名次表變
+// 9 列、語意錯亂。兩處都改成「非本聯賽 id ⇒ 回空，不猜」，其餘國內路徑零改動。
+// 驗收＝`docs/kickoffs/acceptance-foreign-batch1.md`（F1-10）。
 import { PRO_TEAMS, proTeamById } from './proTeams.js';
 import { uniPointsFor } from './uniSchedule.js';
 
@@ -83,6 +91,9 @@ export function buildProSchedule({ teamId, seed = 1 }) {
     const pair = pairs.find(([a, b]) => a === me.id || b === me.id);
     if (pair) mine.push({ roundNo: i, opponentId: pair[0] === me.id ? pair[1] : pair[0] });
   });
+  // 對稱守衛（F1-10）：海外 id 併表後 proTeamById 認得，但不在國內循環賽對戰表裡
+  // ⇒ mine 是空陣列，不擋住的話下面的 .reduce 無初值會 throw。
+  if (!mine.length) return [];
   const oppOf = (x) => proTeamById(x.opponentId);
   const sameTier = mine.filter((x) => oppOf(x).tier === me.tier);
   const finale = (sameTier.length ? sameTier : mine)
@@ -143,7 +154,9 @@ const addMatch = (row, sf, sa, pf, pa) => {
  */
 export function proTable({ teamId, seed = 1, schedule = [], results = [] }) {
   const me = proTeamById(teamId);
-  if (!me) return { table: [], playerRank: null, played: 0, complete: false };
+  // 對稱守衛（F1-10）：me.league==='foreign' ＝海外 id（併表後 proTeamById 認得，
+  // 但不屬於這張國內 8 隊積分表）⇒ 回空，不把玩家塞進錯的聯賽。
+  if (!me || me.league === 'foreign') return { table: [], playerRank: null, played: 0, complete: false };
   const rows = new Map();
   rows.set(PRO_PLAYER_ID, emptyRow(PRO_PLAYER_ID, me.name));
   for (const t of PRO_TEAMS) {

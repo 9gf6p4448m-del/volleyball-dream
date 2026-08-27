@@ -19,6 +19,7 @@ import { FINISH, FINISH_RANK } from './admission.js';
 import { universityById } from './universities.js';
 import { corporationById } from './corporations.js';
 import { proTeamById } from './proTeams.js';
+import { isForeignTeamId } from './foreignTeams.js';
 
 // 三屆的名次組合：讓「三屆最佳成績」等於請求值，其餘兩屆固定較差（不影響最佳值，
 // 但避免三屆一模一樣——那會讓「取最好的一屆」這條邏輯在治具上驗不到東西）。
@@ -191,6 +192,11 @@ export function devProRequest(params) {
   const raw = params?.get?.(DEV_PRO_PARAM) ?? null;
   if (typeof raw !== 'string' || !raw) return null;
   if (!proTeamById(raw)) return null;
+  // 國外聯賽卷批 1 覆審 CRITICAL 修：BY_ID 併表後 proTeamById 對海外 id 也回真值，
+  // 但 devpro 走的 enterPro 鏈是「首約」——首約恆國內（門檻制：海外唯一入口＝
+  // 批 2 的 transferPro 正式鏈；治具入口另立 ?devforeign）。放行的話 enterPro
+  // 會寫出 schedule=[] 的卡死存檔（seasonConcluded 恆假、nextMatch 恆 null）。
+  if (isForeignTeamId(raw)) return null;
   return { teamId: raw };
 }
 
