@@ -118,7 +118,27 @@ replayDirector 電影腳本、不套回憶感濾鏡）。基準 HEAD=19984a5／2
   賽中要不要接是下一個試玩題。
 - 字卡圖示 ✋／🧱／💥 為提案值。
 
-## 8. 未做／疑義
+## 8. 對抗覆審修補（2026-08-27，1 HIGH）
+
+**【HIGH】局末/賽末的幕布蓋在重播上面**：局末那一分本身就會觸發 highlight
+（`keyPointOf` 在近局點恆真 ⇒「決勝分」與「關鍵分重扣」高度重疊，是最常見的收尾
+情境不是罕見邊界），而 `s.replay` 在同一幀的 `applyEvents` 裡設、`settleIfOver`
+（`matchLoop.js:2580`，由 `:3465` 呼叫）稍後才跑且不看 `s.replay` ⇒
+`setOverOverlay` 的全螢幕深色蒙版（`z-index:24, inset:0`）會蓋住整段重播。
+
+修法：`settleIfOver` 頂部 `if (s.replay) return;`（`matchLoop.js:2593`）＋因果註解。
+**不會弄丟幕布**：局終轉場靠 `s.prevPhase` 邊緣偵測，而 `prevPhase` 只在本函式內部
+更新（三處），早退不更新＝邊緣保留，重播結束（`endHighlightReplay` 清 `s.replay`）
+後的下一幀自然觸發，幕布／生涯落檔／典藏牆錄製（`recordVaultRally`）只是延後幾秒。
+`set_break` 同函式一併讓位，理由同理。
+
+端到端測試 2 條（`tests/highlight-replay.test.mjs`，用既有真球治具）：
+「局末得分：重播期間不得蓋上局終幕布，重播結束後才蓋」（逐幀跑完整段、每幀都呼叫
+`settleIfOver` 斷言零幕布，播完後下一幀必須補上、且仍是一次性）與「跳過也一樣」。
+突變自證：註解掉那行早退 → 這 2 條紅（皆紅在「起播後同幀呼叫 settleIfOver，幕布就
+蓋上來了」），還原後 28 綠。
+
+## 9. 未做／疑義
 
 - 未 commit、未 push、未 deploy（任務書指示）。
 - 真機目視未做（node 測試環境無 WebGL）：運鏡構圖好不好看要靠試玩。端到端測試

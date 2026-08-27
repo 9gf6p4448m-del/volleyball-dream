@@ -30,7 +30,7 @@ import {
   buildDirectorScript, stepAt, stepAtExact, tAtStep, SLOW_SPEED,
 } from '../src/render/replayDirector.js';
 import {
-  endHighlightReplay, startHighlightReplay, runHighlightFrame,
+  endHighlightReplay, startHighlightReplay, runHighlightFrame, settleIfOver,
 } from '../src/app/matchLoop.js';
 import { readFileSync } from 'node:fs';
 
@@ -541,4 +541,81 @@ test('★HR-5★ 局末那一分：跳過重播的點擊不得同時被 set_over
   const head = loop.slice(i, i + 400);
   assert.match(head, /if \(s\.replay\) return;/,
     'set_over 通道必須讓位給重播中的點擊——否則局末重播一點就重開局');
+});
+
+// ---- 覆審 HIGH（2026-08-27）：局末幕布不得蓋在重播上面 ----
+// 病灶時序：局末那一分（keyPointOf 在近局點恆真 ⇒「決勝分」與「關鍵分重扣」高度
+// 重疊）在同一幀的 applyEvents 裡設了 s.replay，而 settleIfOver 稍後才跑——它若不
+// 看 s.replay，setOverOverlay 的全螢幕深色蒙版（z-index:24, inset:0）就會蓋在重播
+// 上面，玩家整段看不見。修法＝settleIfOver 頂部早退（prevPhase 邊緣因此保留，
+// 重播結束後下一幀自然補上）。
+//
+// 突變自證（**真的做過**，2026-08-27）：把 `matchLoop.js` settleIfOver 頂部那行
+// `if (s.replay) return;` 註解掉後單跑本檔 → **2 紅**（下面這兩條，兩條都紅在
+// 「起播後同幀呼叫 settleIfOver，幕布就蓋上來了」那個斷言）：
+//   ①「★覆審 HIGH★ 局末得分：重播期間不得蓋上局終幕布，重播結束後才蓋」
+//      （訊息＝「重播期間絕不能蓋幕布」）
+//   ②「★覆審 HIGH★ 跳過也一樣：跳過當下不蓋，跳過後的下一幀才蓋」
+// 還原後 28 綠。
+test('★覆審 HIGH★ 局末得分：重播期間不得蓋上局終幕布，重播結束後才蓋', () => {
+  const game = createGame({ seed: 11, setTarget: 25 });
+  const ai = createAiState();
+  const tape = playOneRally(game, ai);
+  assert.ok(isPlayableTape(tape));
+  const { stage, rigCalls } = fakeFullStage();
+  const { ctx } = fakeCtx();
+  const overlay = [];
+  stage.setOverOverlay = { show: (...a) => overlay.push(a), hide: () => overlay.push(['hide']) };
+  // 局末：這一分打完局就結束了（phase 已是 set_over，幕布靠 prevPhase 邊緣觸發）
+  game.phase = 'set_over';
+  const s = {
+    stage, ctx, game, controlledId: game.match.rotations.A[0],
+    prevPhase: 'rally', replay: null, vcrLast: tape, careerCtx: null, tutorial: null,
+  };
+  // ① 同一幀：applyEvents 先起播 highlight，settleIfOver 稍後才跑
+  const plan = planHighlightReplay({ duelOutcome: 'stuff', winner: MY, myTeam: MY });
+  startHighlightReplay(s, plan, { sub: '我方得分　25 : 23' });
+  assert.ok(s.replay?.highlight, '局末那一分照樣要播 highlight');
+  settleIfOver(s);
+  assert.deepEqual(overlay, [], '重播期間絕不能蓋幕布');
+  assert.equal(s.prevPhase, 'rally', '早退不得吃掉 prevPhase 邊緣——吃了幕布就永遠不會來');
+  // ② 播到底之後，下一幀 settleIfOver 自然補上
+  const maxFrames = Math.ceil((plan.tailMs / 1000) * 60) + 60;
+  let frames = 0;
+  while (s.replay && frames < maxFrames) {
+    runHighlightFrame(s, 1000 + frames * 16.7, 1 / 60);
+    frames += 1;
+    if (!s.replay) break; // 這一幀播完了＝已離開重播，幕布歸下一幀管
+    settleIfOver(s);      // 每一幀都跑（與真實迴圈同序）——期間一次都不該蓋
+    assert.deepEqual(overlay, [], `第 ${frames} 幀就蓋了幕布`);
+  }
+  assert.equal(s.replay, null, '重播必須自己收尾');
+  assert.ok(frames > 5, `不得零幀閃過（實得 ${frames} 幀）`);
+  assert.deepEqual(overlay, [], '重播全程零幕布');
+  settleIfOver(s);
+  assert.equal(overlay.length, 1, '重播結束後的下一幀必須補上局終幕布（不得弄丟）');
+  assert.equal(s.prevPhase, 'set_over', '補上之後邊緣才消耗掉（一次性）');
+  settleIfOver(s);
+  assert.equal(overlay.length, 1, '轉場仍是一次性，不得每幀重蓋');
+  assert.ok(rigCalls.length > 0);
+});
+
+test('★覆審 HIGH★ 跳過也一樣：跳過當下不蓋，跳過後的下一幀才蓋', () => {
+  const game = createGame({ seed: 13, setTarget: 25 });
+  const tape = playOneRally(game, createAiState());
+  const { stage } = fakeFullStage();
+  const overlay = [];
+  stage.setOverOverlay = { show: (...a) => overlay.push(a), hide: () => overlay.push(['hide']) };
+  game.phase = 'set_over';
+  const s = {
+    stage, ctx: fakeCtx().ctx, game, controlledId: game.match.rotations.A[0],
+    prevPhase: 'rally', replay: null, vcrLast: tape, careerCtx: null, tutorial: null,
+  };
+  startHighlightReplay(s, planHighlightReplay({ duelOutcome: 'tool', winner: MY, myTeam: MY }), null);
+  settleIfOver(s);
+  assert.deepEqual(overlay, []);
+  assert.equal(endHighlightReplay(s), true, '玩家一鍵跳過');
+  assert.deepEqual(overlay, [], '跳過的那一下本身還不蓋（同幀 settleIfOver 已經跑過了）');
+  settleIfOver(s);
+  assert.equal(overlay.length, 1, '跳過後下一幀補上幕布');
 });

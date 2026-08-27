@@ -2573,9 +2573,24 @@ export function endTutorialSet(s) {
   s.game.phase = 'set_over';
 }
 
-// 局終/局間轉場（一次性）；生涯模式先落檔再顯示——點擊返回前進度已保住
-function settleIfOver(s) {
+// 局終/局間轉場（一次性）；生涯模式先落檔再顯示——點擊返回前進度已保住。
+// export：tests/highlight-replay.test.mjs 直測「重播期間幕布不得先蓋上來」——
+// 這條時序（applyEvents 設 s.replay 在前、本函式在同一幀稍後跑）讀原始碼看不出來，
+// 要真的把兩者按幀序呼叫一次才驗得到
+export function settleIfOver(s) {
   const { game, stage } = s;
+  // ★ 批3 覆審 HIGH ★ 重播中一律讓位。局末/賽末那一分本身就會觸發即時 highlight
+  // （keyPointOf 在近局點恆真＝「決勝分」與「關鍵分重扣」高度重疊，這是最常見的
+  // 收尾情境不是罕見邊界），而 s.replay 是在同一幀的 applyEvents 裡設的、本函式
+  // 稍後才跑 ⇒ 少這一條，setOverOverlay 的全螢幕深色蒙版（z-index:24, inset:0）
+  // 會蓋在重播上面，玩家整段看不見。
+  // ★ 為什麼「延後」是安全的、不會弄丟幕布 ★ 局終轉場靠 s.prevPhase 的邊緣偵測，
+  // 而 prevPhase **只在本函式內部更新**（:2589/:2606/:2652 三處，初值在
+  // createLoopState）。早退不更新 prevPhase＝邊緣保留著；重播結束
+  // （endHighlightReplay 清掉 s.replay）後的下一幀本函式自然觸發，幕布、生涯落檔
+  // 與典藏牆錄製（recordVaultRally）只是晚幾秒，一件都不會少。
+  // set_break（下方 :2649 一帶）同函式一併讓位，理由與行為同理正確。
+  if (s.replay) return;
   if (game.phase === 'set_over' && s.prevPhase !== 'set_over') {
     // 教學局（2026-08-12）：零獎勵、零落檔——第一屆沒有集訓格可聯動，純學操作。
     // ★ 早退在練習賽之前 ★ 走 settlePracticeMatch 會把成績寫進 `save.practice`，
