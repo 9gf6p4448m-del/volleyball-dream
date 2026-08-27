@@ -98,11 +98,18 @@ export function proWangRivalPreEvents(career, matchEntry, teamId, seasonIndex = 
 /**
  * 職業章收尾卡的點名句。國外強權恆點名（決策 7 敘事層級不變、世界觀存在、不可玩）；
  * 大學名冊封存含簡子嵐時加「更大的海」收束句（企業章 A4-4 慣例同款判準）。
- * @param uniRoster `store.loadUniRoster()` 的回傳（可為 null）
+ * @param uniRoster  `store.loadUniRoster()` 的回傳（可為 null）
+ * @param wentForeign 國外聯賽卷批 4（F4-4）：玩家是否已出海——由呼叫端算好一顆
+ *                    布林值遞進來（吃 `career.seasons` 封存或現隊是否海外，判準
+ *                    不在本函式內，見消費端 `isForeignTeamId` 的用法），本函式
+ *                    不吃 career 物件、不 import foreignTeams.js（避免反向依賴）。
+ *                    `false`／省略＝原句，逐字不變（零漂移）。
  */
-export function proClosingLines(uniRoster = null) {
+export function proClosingLines(uniRoster = null, wentForeign = false) {
   const lines = [
-    '本土最高的聯賽，你站到了這裡。但休息室的電視還亮著海外轉播——那邊的排球，是另一個次元的事，遠得像傳說。',
+    wentForeign
+      ? '本土最高的聯賽，你也曾站到這裡。但更遠的那片海，你已經親眼站上去過——休息室的電視放的，是你走過的地方，不再是傳說。'
+      : '本土最高的聯賽，你站到了這裡。但休息室的電視還亮著海外轉播——那邊的排球，是另一個次元的事，遠得像傳說。',
   ];
   const hasJian = (uniRoster?.members ?? []).some((m) => m?.fullName === '簡子嵐');
   if (hasJian) {

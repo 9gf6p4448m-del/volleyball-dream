@@ -97,6 +97,8 @@ import {
   FOREIGN_LEAGUE_NAME, FOREIGN_TIER_LABEL, usdOf, isForeignTeamId,
 } from '../career/foreignTeams.js';
 import { foreignTable, FOREIGN_PLAYER_ID } from '../career/foreignSchedule.js';
+// 國外聯賽卷批 4（2026-08-27）：敘事層——簡子嵐海外重逢一次性事件
+import { foreignJianEventFor } from '../career/foreignEvents.js';
 // 職業章批 5（2026-08-26）：敘事層——合約卡／王勝翔宿敵線／收尾點名（同構 corpEvents.js）
 import { PRO_CONTRACT_LINES, proWangRivalPreEvents, proClosingLines } from '../career/proEvents.js';
 import {
@@ -2835,6 +2837,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // 職業章批 5（G2）：王勝翔同場宿敵線——同隊/敵隊兩情境互斥，各自一生一次
           // 批 4A：第 4 參數＝季號（年度重逢句每季一次的旗標）
           ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null, store.seasonIndex?.() ?? 1),
+          // 國外聯賽卷批 4（F4-3）：簡子嵐海外重逢——掛在同一個賽前事件消費點、同一個
+          // career.events 已播旗標機制（同 proWangRivalPreEvents 的 played 判準）；
+          // round!=='foreign' 時恆空陣列（高中/大學/企業/國內職業/海外季後賽零誤觸發）
+          ...foreignJianEventFor(next, career?.events ?? [], store.loadUniRoster?.() ?? null),
         ];
         if (preEvs.length) fireEvents(preEvs, career, player, go);
         else go();
@@ -3536,7 +3542,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       champion ? (yearN === 1 ? '第一年就站上職業聯賽之巔' : '再一次站上職業聯賽之巔')
         : (madePlayoffs ? `季後賽止步——循環第 ${board.playerRank} 名的證明` : `聯賽第 ${board.playerRank} 名——職業聯賽沒有簡單的一年`)));
     // 批 5（B5-3）：國外強權點名（世界觀存在、不可玩）＋條件簡子嵐（大學名冊封存判定）
-    for (const line of proClosingLines(store.loadUniRoster?.() ?? null)) {
+    // 國外聯賽卷批 4（F4-4）：出海判準＝封存季任一為海外，或現隊為海外——settleProFinale
+    // 剛在上面跑過，本季若海外已入封存，此處吃 loadSeasonArchive 即涵蓋當季；
+    // loadPro 再補一層現況保險（未出海＝false，逐字沿用改動前文案，零漂移）。
+    const wentForeign = (store.loadSeasonArchive?.() ?? []).some((sn) => isForeignTeamId(sn.pro))
+      || isForeignTeamId(store.loadPro?.() ?? '');
+    for (const line of proClosingLines(store.loadUniRoster?.() ?? null, wentForeign)) {
       overlay.appendChild(el('div', ['font-size:12px', `color:${COLOR.text}`, 'margin-top:8px',
         'text-align:center', 'line-height:1.8', 'max-width:min(440px,90vw)'], line));
     }
