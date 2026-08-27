@@ -48,6 +48,18 @@
 - 驗收對照:凍結點 56c848c 起兩份 acceptance 檔零改動(git diff 實測);ND-1~6、
   NJ-1~6 逐條證據見 netduel-batch{1,2}-report.md 與測試檔頭突變紀錄。
 
+## 批3 結案回填(2026-08-27,試玩回饋開批)
+
+- 試玩回饋「得分後現場鏡頭不明所以」→ 批3 改成即時 highlight 重播(7b50aa5):
+  網口對決得分+關鍵分重扣,自動用既有 tape player 慢動作重播,運鏡重用 replayDirector
+  電影腳本(使用者兩次追記:精彩回顧風格運鏡、但不帶回憶感濾鏡),字卡標明得分方式,
+  可跳過。批1 的 netduel 現場鏡頭演出廢止(3 條測試搬家至 highlight-replay.test.mjs
+  且更嚴,oh/mb/opp/line 零改動)。
+- 覆審一輪 1 HIGH(局末重播被結算幕布同幀蓋住,近局點必現)→ settleIfOver 頂部
+  讓位修復(3b6e6d9),prevPhase 邊緣偵測保證幕布延後不弄丟;二輪覆審親跑突變
+  (2 紅/還原 2206 綠)裁定「真的修好」。
+- 凍結檔=acceptance-netduel-batch3.md(HR-1~8+兩條使用者追記);測試 2181→2206 綠。
+
 ## 掛帳
 
 - 甲的鏡距/時長、丙1 hit-stop 時長=提案值,試玩即改。
