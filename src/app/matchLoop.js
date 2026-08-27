@@ -64,7 +64,7 @@ import { hitLeadTicks, seqDurTicks } from '../render/geoAnimator.js';
 import { approachRouteOf, isQuickKind, TEMPO, SET_TO_HIT_TICKS } from '../sim/approach.js';
 import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey, ohSignatureArms,
-  lineKillDistance, SIG_LINE_M, timingVerdict,
+  lineKillDistance, SIG_LINE_M, timingVerdict, netDuelQualify, netDuelFire,
 } from '../ui/signatureBeats.js';
 import {
   loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
@@ -409,6 +409,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     sigBeat: null,
     keyPointRally: false,
     lastOppSpikerId: null,
+    // 網口對決（第五道簽名演出，2026-08-27 開卷批1）：任一隊扣球者，供 netduel 構圖
+    // 找扣球者（lastOppSpikerId 只記對面，這道演出不限受控者/隊伍，見 signatureBeats.js）
+    lastSpikerId: null,
     callLive: false,
     presentation: createPresentationCtx(careerCtx),
     // 4.5B §4：diegetic 決策耗時（窗開→指令送出；硬性驗收數據，落結案快照）
@@ -446,15 +449,22 @@ function createPresentationCtx(careerCtx) {
 function fireSignatureBeat(s, pending, now) {
   const { stage, game } = s;
   const key = sigKey(pending.kind);
+  // 網口對決（批1 ND-2d／kickoff 拍板 1）：既有四道只在我方得分才走得到這裡
+  // （signatureFire 對對方得分回傳 null）⇒ mine 對它們恆真、無感；netDuelFire
+  // 對對方得分也會發放，這裡要另外算 mine 決定全短版與是否計入敘事首次。
+  const myTeam = game.players[s.playerId]?.teamId ?? 'A';
+  const mine = pending.kind !== 'netduel' || pending.winner === myTeam;
   const plan = planSignatureBeat({
     kind: pending.kind,
     pref: s.presentation.pref,
     seen: s.presentation.isSeen(key),
     keyPoint: s.keyPointRally,
     now,
+    mine,
   });
   if (!plan) return;
-  s.presentation.markSeen(key);
+  // 網口對決：對面得手不算你的「敘事第一次」——只在我方觸發時才計入頻率經濟
+  if (mine) s.presentation.markSeen(key);
   let mateId = pending.mateId;
   if (pending.kind === 'opp' && !mateId) {
     const me = game.players[s.playerId];
@@ -464,7 +474,7 @@ function fireSignatureBeat(s, pending, now) {
   }
   s.sigBeat = {
     kind: pending.kind, focusId: pending.focusId, mateId,
-    at: pending.at ?? null, until: plan.until,
+    at: pending.at ?? null, spikerId: pending.spikerId ?? null, until: plan.until,
   };
   s.slowUntil = Math.max(s.slowUntil ?? 0, plan.until);
   if (pending.kind === 'opp') {
@@ -1801,8 +1811,10 @@ function applyEvents(s, frameEvents, now) {
     // 4.5B §3 招牌演出追蹤：解除（對手救起/新發球）→武裝（成因事件）；
     // 起鏡只認 SCORE（追加條 B：勝負已定的那一拍之後——見下方 SCORE 分支）
     s.pendingSig = trackSignature(s.pendingSig, e, myTeam);
-    if (e.type === 'TOUCH' && e.kind === 'spike' && e.team !== myTeam) {
-      s.lastOppSpikerId = e.playerId; // MB 俯視鏡的對面攻擊手（他抬頭看你）
+    if (e.type === 'TOUCH' && e.kind === 'spike') {
+      // 網口對決（批1）：任一隊扣球者都記——這道演出不限受控者，構圖要兩人都入鏡
+      s.lastSpikerId = e.playerId;
+      if (e.team !== myTeam) s.lastOppSpikerId = e.playerId; // MB 俯視鏡的對面攻擊手（他抬頭看你）
     }
     // ★ 位置體檢 2026-08-06 裁定 C：補上位置檢查（判定抽到 signatureBeats.ohSignatureArms）★
     // 檔頭寫明這是「OH 被騙的人」，但原本沒有任何 role 判斷＝任何位置都會起鏡。
@@ -1946,7 +1958,21 @@ function applyEvents(s, frameEvents, now) {
         && game.players[s.controlledId]?.currentRole === 'middle') {
         s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
       }
+      // 網口對決（第五道簽名演出，2026-08-27 開卷批1）：任一 BLOCK_TOUCH 都是
+      // 扣球 vs 攔網對決的成因——不限受控者/隊伍（「我方/對面」看的是隊伍，見
+      // signatureBeats.js 檔頭）。不覆蓋更具體的已武裝演出（MB「早到的人」同拍
+      // 優先，仲裁與上方「line」同款：`!s.pendingSig` 守門，具體優先於泛用）
+      if (!s.pendingSig) {
+        s.pendingSig = armSignature('netduel', {
+          focusId: e.playerId, spikerId: s.lastSpikerId, blockerTeam: e.team,
+        });
+      }
     } else if (e.type === 'DEAD_BALL') {
+      // 網口對決 qualify（ND-2b）：只在死球那一刻才知道是不是 tool／stuff——
+      // 判定收在 signatureBeats.netDuelQualify（純函式），這裡只做賦值
+      if (s.pendingSig?.kind === 'netduel') {
+        s.pendingSig = netDuelQualify(s.pendingSig, e);
+      }
       s.shake = Math.max(s.shake, 0.26);
       s.pendingDead = { reason: e.reason };
       // 4.5B「邊線是我的」（07-28 拍板 A 案，綁事件＝任何受控攻擊者）：我方殺球/
@@ -2083,7 +2109,12 @@ function applyEvents(s, frameEvents, now) {
       }
       // 4.5B §3：招牌演出起鏡——勝負已定的那一拍之後（追加條 B）。
       // 我方得分且武裝中＝發放；對方得分＝空手；一球一議（SCORE 後必清）
-      const fired = signatureFire(s.pendingSig, e, myTeam);
+      // 網口對決（批1 ND-2d）：不套 signatureFire 的「對面得分＝空手」——
+      // qualify 出的 winner 才是準；對面拿下也照樣起鏡（只是全短版另交
+      // fireSignatureBeat 的 mine 判斷，不在此處分岔）
+      const fired = s.pendingSig?.kind === 'netduel'
+        ? netDuelFire(s.pendingSig, e)
+        : signatureFire(s.pendingSig, e, myTeam);
       s.pendingSig = null;
       if (fired && !s.replay) fireSignatureBeat(s, fired, now);
     }

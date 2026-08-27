@@ -7,9 +7,11 @@
 // 新發球（SERVE＝操作開始）＝解除。matchLoop 只做狀態搬運，判定全在這裡。
 import { signatureMode, SHORT_BEAT_MS } from './presentation.js';
 import { COURT } from '../sim/constants.js';
+import { otherTeam, landedCourtTeam } from '../sim/rotation.js';
 
 // 全版時長（ms）：勝負已定後的死球窗內播畢；短版統一 SHORT_BEAT_MS（≤1.5s）
-export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600, line: 2400 };
+// netduel＝【試玩必調】提案值（net-duel-juice-kickoff.md 掛帳：鏡距/時長試玩即改）
+export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600, line: 2400, netduel: 2600 };
 
 // 「邊線是我的」咬線門檻（07-28 拍板 A 案；tools/line-kill-probe.mjs 實測定值：
 // AI 亂打 0.25m＝8.4% 殺球觸發≈場均 0.4 次；玩家選邊線區應更高。試玩嫌多嫌少
@@ -88,9 +90,45 @@ export function signatureFire(pending, e, myTeam) {
 
 // 節拍計畫：頻率框架（§2-3）落到這道演出——off＝null（真值字卡通道不經此處，
 // 全關不吃真值資訊）；full＝敘事第一次或關鍵分；short＝其餘。
-export function planSignatureBeat({ kind, pref, seen, keyPoint, now }) {
-  const mode = signatureMode({ pref, seen, keyPoint });
-  if (mode === 'off') return null;
+// `mine`（網口對決批1 新增，預設 true＝沿用既有四道行為不變）：既有四道只在我方
+// 得分時才會走到這裡（signatureFire 對對方得分回傳 null），故 mine 恆真、無感；
+// 網口對決「我方全版、對面短版」（kickoff 拍板 1）需要對面得分也起鏡但強制短版，
+// 判定收在這裡——不在 matchLoop 內散寫（ND-2d）。
+export function planSignatureBeat({ kind, pref, seen, keyPoint, now, mine = true }) {
+  if (pref === 'off') return null; // 全關對「我方/對面」一視同仁——off 不吃任何資訊
+  const mode = mine ? signatureMode({ pref, seen, keyPoint }) : 'short';
   const dur = mode === 'full' ? (SIG_FULL_MS[kind] ?? SHORT_BEAT_MS) : SHORT_BEAT_MS;
   return { kind, mode, dur, until: now + dur };
+}
+
+// ---- 網口對決（第五道簽名演出，2026-08-27 開卷批1）----
+// 武裝沿用泛用 armSignature('netduel', { focusId: 攔網方 playerId, spikerId, blockerTeam })
+// ——武裝於任一 BLOCK_TOUCH（不限受控者：這是隊伍對隊伍的對決瞬間，見 kickoff 拍板 2）。
+// 解除（TOUCH/SERVE）沿用泛用 trackSignature，本檔不重寫。
+
+// 定性（ND-2b）：只在 DEAD_BALL 才知道這球是不是網口對決的收尾。
+// reason='OUT'：武裝存續期間沒有任何 TOUCH 發生過（否則早被 trackSignature 解除），
+// 故此刻的最後觸球必是攔網方——打手出界，攻方得分。
+// reason='BALL_IN' 且落點在攻方半場：攔網蓋死，守方（攔網方）得分。
+// 其餘 reason（FOUR_HITS/BACK_ROW_ATTACK/POSITIONAL_FAULT/BALL_IN 落攔網方半場）
+// 與這次攔網無關的死球成因——解除，不播（不得播非 tool/stuff 的普通得分）。
+export function netDuelQualify(pending, e) {
+  if (!pending || pending.kind !== 'netduel' || e.type !== 'DEAD_BALL') return pending;
+  const attackTeam = otherTeam(pending.blockerTeam);
+  if (e.reason === 'OUT') {
+    return { ...pending, outcome: 'tool', winner: attackTeam };
+  }
+  if (e.reason === 'BALL_IN' && landedCourtTeam(e.at?.x, e.at?.z) === attackTeam) {
+    return { ...pending, outcome: 'stuff', winner: pending.blockerTeam };
+  }
+  return null;
+}
+
+// 起鏡（ND-2d）：只認 SCORE，且已由 netDuelQualify 定出 winner 才發放；
+// 與既有四道不同之處——**對面得分也發放**（讓玩家看見自己怎麼輸的），
+// full/short 的判定另交給 planSignatureBeat 的 `mine` 參數，這裡只決定播不播。
+export function netDuelFire(pending, e) {
+  if (!pending || pending.kind !== 'netduel' || pending.outcome == null) return null;
+  if (e.type !== 'SCORE') return null;
+  return e.team === pending.winner ? pending : null;
 }

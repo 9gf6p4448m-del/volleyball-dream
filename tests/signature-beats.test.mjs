@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   armSignature, trackSignature, signatureFire, planSignatureBeat, sigKey, SIG_FULL_MS,
   lineKillDistance, SIG_LINE_M,
-  timingVerdict,
+  timingVerdict, netDuelQualify, netDuelFire,
 } from '../src/ui/signatureBeats.js';
 import { timingQualityMul } from '../src/sim/game.js';
 import { SHORT_BEAT_MS } from '../src/ui/presentation.js';
@@ -97,4 +97,91 @@ test('timingVerdict：甜蜜區/早了/放太晚，與 sim 散佈乘數同一組
   assert.ok(timingQualityMul(0.9) < 1);
   assert.equal(timingQualityMul(0.5), 1);
   assert.ok(timingQualityMul(1.3) > 1);
+});
+
+// ---- 網口對決（第五道簽名演出，2026-08-27 開卷批1，acceptance-netduel-batch1.md）----
+// ND-6 突變實測紀錄（真的做過，2026-08-27）：
+//   ①在 trackSignature 註解掉 `if (e.type === 'TOUCH') return null;` 後單跑本檔，
+//     下面「球被救起＝解除」那個 netduel 斷言由綠轉紅（p 不再是 null）；還原後轉綠。
+//   ②把 netDuelQualify 改成不論 reason 一律 `return { ...pending, outcome: 'tool',
+//     winner: otherTeam(pending.blockerTeam) };`（略過 reason 分岔）後單跑本檔，
+//     下面「其餘 reason 一律解除」那個斷言由綠轉紅（FOUR_HITS 等也冒充 tool）；
+//     還原後轉綠。兩次都只改對應那一行，其餘程式碼不動。
+
+test('武裝：BLOCK_TOUCH 記攔網方 team/playerId（focusId=攔網者、spikerId=扣球者透傳）', () => {
+  const p = armSignature('netduel', { focusId: 'B2', spikerId: 'A4', blockerTeam: 'B' });
+  assert.equal(p.kind, 'netduel');
+  assert.equal(p.focusId, 'B2');
+  assert.equal(p.spikerId, 'A4');
+  assert.equal(p.blockerTeam, 'B');
+});
+
+test('網口對決：武裝後球被救起（TOUCH）或新發球（SERVE）＝解除（主角視角條款同款，沿用泛用 trackSignature）', () => {
+  const armed = () => armSignature('netduel', { blockerTeam: 'B' });
+  assert.equal(trackSignature(armed(), { type: 'TOUCH', team: 'A', kind: 'receive' }, 'A'), null, '對手救起＝解除');
+  assert.equal(trackSignature(armed(), { type: 'TOUCH', team: 'B', kind: 'receive' }, 'A'), null, '任何隊伍接續觸球都算成因未直接終結');
+  assert.equal(trackSignature(armed(), { type: 'SERVE', team: 'A' }, 'A'), null, '發球＝操作開始＝解除');
+  // 死球本身不解除（那一拍仍在終結中，解除與否要等 netDuelQualify 定性）
+  const p = trackSignature(armed(), { type: 'DEAD_BALL', reason: 'OUT' }, 'A');
+  assert.ok(p, 'DEAD_BALL 不經 trackSignature 解除——定性另有 netDuelQualify');
+});
+
+test('netDuelQualify：reason=OUT＝打手出界，攻方（攔網方的對手）得分', () => {
+  const p = armSignature('netduel', { blockerTeam: 'B' });
+  const q = netDuelQualify(p, { type: 'DEAD_BALL', reason: 'OUT' });
+  assert.equal(q.outcome, 'tool');
+  assert.equal(q.winner, 'A', '攔網方=B ⇒ 出界失分的是 B ⇒ 贏家是攻方 A');
+});
+
+test('netDuelQualify：reason=BALL_IN 且落點在攻方半場＝攔網蓋死，攔網方得分', () => {
+  const p = armSignature('netduel', { blockerTeam: 'B' });
+  // 攻方=A 佔 z>=0（見 rotation.js landedCourtTeam）：球蓋落在攻方半場
+  const q = netDuelQualify(p, { type: 'DEAD_BALL', reason: 'BALL_IN', at: { x: 0, z: 5 } });
+  assert.equal(q.outcome, 'stuff');
+  assert.equal(q.winner, 'B', '攔網方=B 蓋死攻方=A ⇒ 贏家是攔網方 B');
+});
+
+test('netDuelQualify：其餘 reason／落點不在攻方半場的 BALL_IN 一律解除，不冒充 tool/stuff', () => {
+  const p = armSignature('netduel', { blockerTeam: 'B' });
+  assert.equal(netDuelQualify(p, { type: 'DEAD_BALL', reason: 'FOUR_HITS' }), null);
+  assert.equal(netDuelQualify(p, { type: 'DEAD_BALL', reason: 'BACK_ROW_ATTACK' }), null);
+  assert.equal(netDuelQualify(p, { type: 'DEAD_BALL', reason: 'POSITIONAL_FAULT' }), null);
+  // BALL_IN 但落在攔網方自己半場（z<0＝B 半場）＝不是「攔網蓋死攻方」那個故事
+  assert.equal(netDuelQualify(p, { type: 'DEAD_BALL', reason: 'BALL_IN', at: { x: 0, z: -5 } }), null);
+  // 非 DEAD_BALL／非本道演出的 pending 透傳不動
+  assert.equal(netDuelQualify(null, { type: 'DEAD_BALL', reason: 'OUT' }), null);
+  assert.deepEqual(netDuelQualify(p, { type: 'TOUCH', team: 'A' }), p, '非 DEAD_BALL 事件不定性，原樣透傳');
+});
+
+test('netDuelFire：只認 SCORE，且 team 須等於 qualify 定出的 winner（未定性/team 不符一律不發放）', () => {
+  const toolWin = { kind: 'netduel', outcome: 'tool', winner: 'A' };
+  assert.equal(netDuelFire(toolWin, { type: 'SCORE', team: 'A' }), toolWin);
+  assert.equal(netDuelFire(toolWin, { type: 'SCORE', team: 'B' }), null);
+  assert.equal(netDuelFire(toolWin, { type: 'DEAD_BALL', reason: 'OUT' }), null, '非 SCORE 不發放');
+  assert.equal(netDuelFire({ kind: 'netduel' }, { type: 'SCORE', team: 'A' }), null, '未經 qualify（無 outcome）不發放');
+  assert.equal(netDuelFire(null, { type: 'SCORE', team: 'A' }), null);
+});
+
+test('planSignatureBeat：netduel 對面得手（mine=false）恆短版，不受 seen/關鍵分放大（甲播放方拍板 1）', () => {
+  const base = { kind: 'netduel', pref: 'on', now: 1000, mine: false };
+  assert.equal(planSignatureBeat({ ...base, seen: false, keyPoint: false }).mode, 'short');
+  assert.equal(planSignatureBeat({ ...base, seen: false, keyPoint: true }).mode, 'short', '對面得手就算逢關鍵分也不給全版');
+  assert.equal(planSignatureBeat({ ...base, pref: 'off' }), null, '演出全關時對面得手也不放');
+});
+
+test('planSignatureBeat：netduel 我方得手（mine 預設 true）＝走既有頻率經濟（首次全版/之後短版/關鍵分恆全版）', () => {
+  const base = { kind: 'netduel', pref: 'on', now: 1000 };
+  const first = planSignatureBeat({ ...base, seen: false, keyPoint: false });
+  assert.equal(first.mode, 'full');
+  assert.equal(first.dur, SIG_FULL_MS.netduel);
+  assert.equal(first.until, 1000 + SIG_FULL_MS.netduel);
+  assert.equal(planSignatureBeat({ ...base, seen: true, keyPoint: false }).mode, 'short');
+  assert.equal(planSignatureBeat({ ...base, seen: true, keyPoint: true }).mode, 'full', '關鍵分恆全版');
+  assert.ok(SIG_FULL_MS.netduel > SHORT_BEAT_MS, 'netduel 全版長於短版');
+});
+
+test('sigKey：netduel 自成一鍵，與既有四道不衝突', () => {
+  const keys = ['oh', 'mb', 'opp', 'line', 'netduel'].map(sigKey);
+  assert.equal(new Set(keys).size, 5);
+  assert.equal(sigKey('netduel'), 'sig-netduel');
 });
