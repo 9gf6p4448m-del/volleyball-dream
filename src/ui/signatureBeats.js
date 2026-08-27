@@ -10,8 +10,9 @@ import { COURT } from '../sim/constants.js';
 import { otherTeam, landedCourtTeam } from '../sim/rotation.js';
 
 // 全版時長（ms）：勝負已定後的死球窗內播畢；短版統一 SHORT_BEAT_MS（≤1.5s）
-// netduel＝【試玩必調】提案值（net-duel-juice-kickoff.md 掛帳：鏡距/時長試玩即改）
-export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600, line: 2400, netduel: 2600 };
+// ★ 沒有 netduel 這一鍵 ★（批3）：網口對決的現場鏡頭演出已廢止，改走即時 highlight
+// 重播（highlightReplay.js 自帶尾段時長常數），不再吃這裡的演出窗時長。
+export const SIG_FULL_MS = { oh: 2600, mb: 2400, opp: 2600, line: 2400 };
 
 // 「邊線是我的」咬線門檻（07-28 拍板 A 案；tools/line-kill-probe.mjs 實測定值：
 // AI 亂打 0.25m＝8.4% 殺球觸發≈場均 0.4 次；玩家選邊線區應更高。試玩嫌多嫌少
@@ -90,21 +91,25 @@ export function signatureFire(pending, e, myTeam) {
 
 // 節拍計畫：頻率框架（§2-3）落到這道演出——off＝null（真值字卡通道不經此處，
 // 全關不吃真值資訊）；full＝敘事第一次或關鍵分；short＝其餘。
-// `mine`（網口對決批1 新增，預設 true＝沿用既有四道行為不變）：既有四道只在我方
-// 得分時才會走到這裡（signatureFire 對對方得分回傳 null），故 mine 恆真、無感；
-// 網口對決「我方全版、對面短版」（kickoff 拍板 1）需要對面得分也起鏡但強制短版，
-// 判定收在這裡——不在 matchLoop 內散寫（ND-2d）。
-export function planSignatureBeat({ kind, pref, seen, keyPoint, now, mine = true }) {
+// ★ 批3 移除 `mine` 參數 ★ 它是批1 為「網口對決對面得分也起鏡但強制短版」加的，
+// 而網口對決已改走即時 highlight 重播（我方/對面的全短版判定搬到 planHighlightReplay）。
+// 既有四道只在我方得分時才會走到這裡（signatureFire 對對方得分回傳 null），
+// 留著它就是永遠為真的死參數。
+export function planSignatureBeat({ kind, pref, seen, keyPoint, now }) {
   if (pref === 'off') return null; // 全關對「我方/對面」一視同仁——off 不吃任何資訊
-  const mode = mine ? signatureMode({ pref, seen, keyPoint }) : 'short';
+  const mode = signatureMode({ pref, seen, keyPoint });
   const dur = mode === 'full' ? (SIG_FULL_MS[kind] ?? SHORT_BEAT_MS) : SHORT_BEAT_MS;
   return { kind, mode, dur, until: now + dur };
 }
 
-// ---- 網口對決（第五道簽名演出，2026-08-27 開卷批1）----
-// 武裝沿用泛用 armSignature('netduel', { focusId: 攔網方 playerId, spikerId, blockerTeam })
-// ——武裝於任一 BLOCK_TOUCH（不限受控者：這是隊伍對隊伍的對決瞬間，見 kickoff 拍板 2）。
+// ---- 網口對決（2026-08-27 開卷批1；批3 起改走即時 highlight 重播）----
+// 武裝沿用泛用 armSignature('netduel', { blockerTeam: 攔網方 team })——武裝於任一
+// BLOCK_TOUCH（不限受控者：這是隊伍對隊伍的對決瞬間，見 kickoff 拍板 2）。
 // 解除（TOUCH/SERVE）沿用泛用 trackSignature，本檔不重寫。
+// ★ 批3：定性（netDuelQualify）與起鏡（netDuelFire）原封不動，但下游換人 ★
+// 原本接的是 fireSignatureBeat（現場鏡頭演出窗＋cameraRig 'netduel' 構圖），試玩回饋
+// 「得分後現場鏡頭不明所以（球員已在歡呼、對決早結束）」⇒ 現場鏡頭路徑廢止，
+// outcome 改餵 highlightReplay.planHighlightReplay → 真慢動作重播＋字卡。
 
 // 定性（ND-2b）：只在 DEAD_BALL 才知道這球是不是網口對決的收尾。
 // reason='OUT'：武裝存續期間沒有任何 TOUCH 發生過（否則早被 trackSignature 解除），
@@ -126,7 +131,7 @@ export function netDuelQualify(pending, e) {
 
 // 起鏡（ND-2d）：只認 SCORE，且已由 netDuelQualify 定出 winner 才發放；
 // 與既有四道不同之處——**對面得分也發放**（讓玩家看見自己怎麼輸的），
-// full/short 的判定另交給 planSignatureBeat 的 `mine` 參數，這裡只決定播不播。
+// full/short 的判定另交給 planHighlightReplay（批3），這裡只決定播不播。
 export function netDuelFire(pending, e) {
   if (!pending || pending.kind !== 'netduel' || pending.outcome == null) return null;
   if (e.type !== 'SCORE') return null;

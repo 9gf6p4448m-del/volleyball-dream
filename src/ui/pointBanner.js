@@ -85,9 +85,14 @@ export function createPointBanner() {
     if (el) { el.remove(); el = null; }
   }
 
+  // 停留時長：死球節拍 1.8s（0.45s 進場 → 停留 → 退場 → 移除）。
+  // 批3（即時 highlight 重播）另傳 holdMs＝重播長度——字卡要陪重播從頭活到尾
+  // （HR-4），而重播比死球節拍長；跳過時呼叫端 hide()，不等這個計時器。
+  const DEFAULT_HOLD_MS = 1600;
+  const OUT_MS = 450;
   return {
-    // info: derivePointInfo 的回傳值
-    show(info) {
+    // info: derivePointInfo 的回傳值；opts.holdMs＝總可見時長（省略＝死球節拍）
+    show(info, { holdMs = DEFAULT_HOLD_MS } = {}) {
       dismiss();
       const accent = info.mine ? '#ffd166' : '#ff6b6b';
       el = document.createElement('div');
@@ -147,11 +152,12 @@ export function createPointBanner() {
       el.appendChild(shine);
       document.body.appendChild(el);
 
-      // 節拍對齊死球間隔 1.8s：0.45s 進場 → 停留 → 1.15s 起退場 → 1.6s 移除
+      // 節拍對齊死球間隔 1.8s：0.45s 進場 → 停留 → 退場（收尾前 OUT_MS）→ holdMs 移除
+      const hold = Math.max(OUT_MS, holdMs);
       outTimer = setTimeout(() => {
         if (el) el.style.animation = 'vd-banner-out 0.4s ease-in forwards';
-      }, 1150);
-      removeTimer = setTimeout(dismiss, 1600);
+      }, hold - OUT_MS);
+      removeTimer = setTimeout(dismiss, hold);
     },
     hide: dismiss,
   };

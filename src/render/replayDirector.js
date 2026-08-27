@@ -139,6 +139,21 @@ export function stepAt(script, t) {
   return Math.floor(stepAtExact(script, t));
 }
 
+// stepAtExact 的反函式：某一步落在演出時間軸的哪個 0..1（決定論查表）。
+// 賽中即時 highlight（批3 HR-6）要「從決定性一拍起播」，而腳本只給得出 step——
+// 分段速率把 sim 時間扭曲過（開場 2.5 倍快轉、決定性一拍後 0.35 倍慢動作），
+// 拿 step/totalSteps 當 t 會差到好幾秒，必須逐段換算。
+export function tAtStep(script, step) {
+  if (!(script?.totalMs > 0)) return 0;
+  let ms = 0;
+  for (const s of script.segments) {
+    if (step >= s.to) { ms += ((s.to - s.from) * SIM_DT * 1000) / s.speed; continue; }
+    if (step > s.from) ms += ((step - s.from) * SIM_DT * 1000) / s.speed;
+    break;
+  }
+  return Math.max(0, Math.min(1, ms / script.totalMs));
+}
+
 // 目前該用哪個鏡位（最後一個 step ≤ 目標步的 shot）
 export function shotAt(script, step) {
   let cur = script.shots[0] ?? null;

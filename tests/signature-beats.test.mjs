@@ -162,26 +162,11 @@ test('netDuelFire：只認 SCORE，且 team 須等於 qualify 定出的 winner�
   assert.equal(netDuelFire(null, { type: 'SCORE', team: 'A' }), null);
 });
 
-test('planSignatureBeat：netduel 對面得手（mine=false）恆短版，不受 seen/關鍵分放大（甲播放方拍板 1）', () => {
-  const base = { kind: 'netduel', pref: 'on', now: 1000, mine: false };
-  assert.equal(planSignatureBeat({ ...base, seen: false, keyPoint: false }).mode, 'short');
-  assert.equal(planSignatureBeat({ ...base, seen: false, keyPoint: true }).mode, 'short', '對面得手就算逢關鍵分也不給全版');
-  assert.equal(planSignatureBeat({ ...base, pref: 'off' }), null, '演出全關時對面得手也不放');
-});
-
-test('planSignatureBeat：netduel 我方得手（mine 預設 true）＝走既有頻率經濟（首次全版/之後短版/關鍵分恆全版）', () => {
-  const base = { kind: 'netduel', pref: 'on', now: 1000 };
-  const first = planSignatureBeat({ ...base, seen: false, keyPoint: false });
-  assert.equal(first.mode, 'full');
-  assert.equal(first.dur, SIG_FULL_MS.netduel);
-  assert.equal(first.until, 1000 + SIG_FULL_MS.netduel);
-  assert.equal(planSignatureBeat({ ...base, seen: true, keyPoint: false }).mode, 'short');
-  assert.equal(planSignatureBeat({ ...base, seen: true, keyPoint: true }).mode, 'full', '關鍵分恆全版');
-  assert.ok(SIG_FULL_MS.netduel > SHORT_BEAT_MS, 'netduel 全版長於短版');
-});
-
-test('sigKey：netduel 自成一鍵，與既有四道不衝突', () => {
-  const keys = ['oh', 'mb', 'opp', 'line', 'netduel'].map(sigKey);
-  assert.equal(new Set(keys).size, 5);
-  assert.equal(sigKey('netduel'), 'sig-netduel');
-});
+// ★ 批3 移除（2026-08-27）★ 原本這裡有三條 netduel 的**現場鏡頭演出**測試
+// （planSignatureBeat mine=false 恆短版／mine 預設 true 走頻率經濟／sigKey('netduel')
+// 自成一鍵）。批3 依 acceptance-netduel-batch3.md HR-2 把網口對決的現場鏡頭演出
+// **廢止**、改走即時 highlight 重播，那三條守的是已經不存在的路徑（`mine` 參數、
+// `SIG_FULL_MS.netduel`、netduel 的 seenSignature 計數全部移除）。
+// 它們守的行為沒有消失，是搬家了——「我方全版／對面短版」現在由
+// tests/highlight-replay.test.mjs 的 ★HR-3★ 兩條守（且更嚴：另外釘住短版真的比全版
+// 短、兩者皆 >0、對面逢關鍵分也不放大）。廢止本身另有 ★HR-2★ 兩條反向釘死。

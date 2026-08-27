@@ -58,7 +58,7 @@ export function createCameraRig(camera, initialPlayerId) {
   let huddleView = false;    // W8 暫停演出：第一人稱圍圈看教練戰術板
   let diveCam = false;       // W3(P4) L 魚躍演出：低機位貼地鏡頭（附錄 A4①）
   let tourProgress = null;   // W4(P4) Q10 冠軍館燈光秀巡場：0..1（null＝關）——與燈光秀共時間軸
-  let sigBeat = null;        // 4.5B §3 招牌演出：{kind:'oh'|'mb'|'opp'|'line'|'netduel', focusId, mateId, spikerId}（勝負已定後的回放性一拍）
+  let sigBeat = null;        // 4.5B §3 招牌演出：{kind:'oh'|'mb'|'opp'|'line', focusId, mateId, at}（勝負已定後的回放性一拍；重演導播也吃這四款）
   let setScan = false;       // 4.5B §4 S diegetic：分配決策＝自 S 視線回望自家半場（點隊友＝分配）
 
   function desiredMode(game) {
@@ -180,17 +180,6 @@ export function createCameraRig(camera, initialPlayerId) {
           const mz = mate ? (az + mate.z) / 2 : az;
           pos.set(mx + 2.3, 0.68, mz + side * 2.4);
           target.set(mx, 1.25, mz);
-        } else if (sigBeat.kind === 'netduel' && focus) {
-          // 網口對決（第五道簽名演出，批1 ND-4）：中距半身——機位退到側邊、
-          // 齊網頂高，橫向看攔網／扣球者隔網對峙（focus＝攔網方，spiker＝扣球方；
-          // 鏡位取兩人中點的側邊，視線橫跨網面＝網必在畫面內，不 along 網走，
-          // 符合鐵則「切換前後網在哪不變」）。焦點只有一人（spiker 缺）時退化為
-          // 單人半身特寫，仍不破網。
-          const spiker = sigBeat.spikerId ? game.actors[sigBeat.spikerId] : null;
-          const mx = spiker ? (focus.x + spiker.x) / 2 : focus.x;
-          const mz = spiker ? (focus.z + spiker.z) / 2 : focus.z;
-          pos.set(mx + 3.2, COURT.NET_HEIGHT + 0.35, mz + 0.2);
-          target.set(mx, COURT.NET_HEIGHT - 0.35, mz);
         } else {
           // 焦點缺席（資料缺）＝退回三人稱構圖
           pos.set(ax * 0.72, CAMERA_TUNING.THIRD_HEIGHT, az + side * CAMERA_TUNING.THIRD_BACK);

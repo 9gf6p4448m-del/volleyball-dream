@@ -66,6 +66,10 @@ import {
   trackSignature, armSignature, signatureFire, planSignatureBeat, sigKey, ohSignatureArms,
   lineKillDistance, SIG_LINE_M, timingVerdict, netDuelQualify, netDuelFire,
 } from '../ui/signatureBeats.js';
+import { planHighlightReplay } from '../ui/highlightReplay.js';
+import {
+  buildDirectorScript, stepAtExact, stepAt, shotAt, tAtStep,
+} from '../render/replayDirector.js';
 import {
   loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
 } from '../ui/presentation.js';
@@ -418,9 +422,6 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     sigBeat: null,
     keyPointRally: false,
     lastOppSpikerId: null,
-    // 網口對決（第五道簽名演出，2026-08-27 開卷批1）：任一隊扣球者，供 netduel 構圖
-    // 找扣球者（lastOppSpikerId 只記對面，這道演出不限受控者/隊伍，見 signatureBeats.js）
-    lastSpikerId: null,
     callLive: false,
     presentation: createPresentationCtx(careerCtx),
     // 4.5B §4：diegetic 決策耗時（窗開→指令送出；硬性驗收數據，落結案快照）
@@ -458,22 +459,18 @@ function createPresentationCtx(careerCtx) {
 function fireSignatureBeat(s, pending, now) {
   const { stage, game } = s;
   const key = sigKey(pending.kind);
-  // 網口對決（批1 ND-2d／kickoff 拍板 1）：既有四道只在我方得分才走得到這裡
-  // （signatureFire 對對方得分回傳 null）⇒ mine 對它們恆真、無感；netDuelFire
-  // 對對方得分也會發放，這裡要另外算 mine 決定全短版與是否計入敘事首次。
-  const myTeam = game.players[s.playerId]?.teamId ?? 'A';
-  const mine = pending.kind !== 'netduel' || pending.winner === myTeam;
+  // ★ 批3：這裡只服務 oh/mb/opp/line 四道現場演出 ★ 網口對決（批1 走這條）已改走
+  // 即時 highlight 重播，`mine`／markSeen 的 netduel 分支一併移除（不留死碼）——
+  // 四道都只在我方得分才走得到這裡（signatureFire 對對方得分回傳 null）。
   const plan = planSignatureBeat({
     kind: pending.kind,
     pref: s.presentation.pref,
     seen: s.presentation.isSeen(key),
     keyPoint: s.keyPointRally,
     now,
-    mine,
   });
   if (!plan) return;
-  // 網口對決：對面得手不算你的「敘事第一次」——只在我方觸發時才計入頻率經濟
-  if (mine) s.presentation.markSeen(key);
+  s.presentation.markSeen(key);
   let mateId = pending.mateId;
   if (pending.kind === 'opp' && !mateId) {
     const me = game.players[s.playerId];
@@ -483,7 +480,7 @@ function fireSignatureBeat(s, pending, now) {
   }
   s.sigBeat = {
     kind: pending.kind, focusId: pending.focusId, mateId,
-    at: pending.at ?? null, spikerId: pending.spikerId ?? null, until: plan.until,
+    at: pending.at ?? null, until: plan.until,
   };
   s.slowUntil = Math.max(s.slowUntil ?? 0, plan.until);
   if (pending.kind === 'opp') {
@@ -899,6 +896,10 @@ function bindInputHandlers(s) {
   // 快速比賽：換種子再開一局
   window.addEventListener('pointerdown', () => {
     if (s.game.phase !== 'set_over') return;
+    // ★ 批3 ★ 局末那一分也會播即時 highlight，而那一刻 game.phase 已經是 set_over
+    // （局終畫面要等重播播完才會出來）。少這一條，玩家「點畫面跳過重播」的那一下
+    // 會同時被這裡吃掉＝直接重開一局／跳進結算面板。重播中的點擊只歸跳過通道管
+    if (s.replay) return;
     if (s.careerCtx) {
       if (!s.boxShown) {
         s.boxShown = true;
@@ -940,18 +941,24 @@ function bindInputHandlers(s) {
     window.__phase1.aiState = s.aiState;
   });
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyR') startReplay(s); // 桌機 R＝回放上一球
+    // 桌機 R＝回放上一球；即時 highlight 播放中則是跳過（同一鍵、不另發明按鍵）
+    if (e.code === 'KeyR' && !endHighlightReplay(s)) startReplay(s);
   });
   window.addEventListener('pointerdown', () => {
     if (s.replay?.tape) { // 跳過整卷情蒐
       s.replay = null;
       s.tapeIdx = config.tapeClips.length;
       stage.floatText.show('跳過情蒐——比賽開始！', '#9fb0cc', 1000);
+      return;
     }
+    // 批3 HR-5：即時 highlight 一點即跳過（沿情蒐帶同一條輸入通道＝點畫面任一處）
+    endHighlightReplay(s);
   });
   // 魚躍：自動判斷（matchControls 自動輔助，拍板 07-24 常駐鈕移除）；
   // 桌機 L 鍵/簡化模式 Space 保留為隱藏手動（提前撲的主動權）
-  stage.handlers.replay = () => startReplay(s);
+  // 🎬 鈕：即時 highlight 播放中＝跳過（它自己 stopPropagation，吃不到上面那條
+  // window pointerdown），否則＝手動回放上一球。兩者互斥不衝突（HR-5）
+  stage.handlers.replay = () => { if (!endHighlightReplay(s)) startReplay(s); };
   window.addEventListener('keydown', (e) => {
     const diveKey = e.code === 'KeyL' || (config.simpleMode && e.code === 'Space');
     if (diveKey && !e.repeat && s.diveReady) {
@@ -970,6 +977,122 @@ function startReplay(s) {
   player.fastForward(Math.max(0, player.length - REPLAY_TAIL));
   s.replay = { player, acc: 0 };
   s.stage.floatText.show('🎬 回放', '#ffd166', 1200);
+}
+
+// ════════════════════════════════════════════════════════════
+// 即時 highlight 重播（批3，acceptance-netduel-batch3.md）
+// ════════════════════════════════════════════════════════════
+// ★ 運鏡＝重用結算典藏牆的導播腳本 ★（HR-6，使用者改訂：「用比賽內俯瞰的機制感覺
+// 不夠好……用我們以前高中結算的精彩回顧那種風格」）。buildDirectorScript 是決定論
+// 指令陣列：吃卷裡的事件切鏡、重用 cameraRig third/sset/sig 四款既有構圖、決定性
+// 一拍之後 0.35 倍慢動作。這裡只消費腳本，**不搬 replayStage 的舞台層**——
+// 那邊的暗場光池／霧／地板換色／HemisphereLight 是「回憶感」後製，掛在它自己的
+// scene 上，比賽內重播要的是現場原樣渲染（追記之二），故一格都不帶過來。
+//
+// 尾段起點（HR-3／HR-6 合流）：不從整卷頭播——取「決定性一拍」與「尾段時長上限」
+// 兩者中較晚的那個當起點，所以全版最多從決定性一拍起（看得見那一下），
+// 短版只給落地前那一段。時長常數在 highlightReplay.js（【試玩必調】）。
+// export：tests/highlight-replay.test.mjs 用真卷＋假 stage 端到端跑完整條播放路徑
+// （起播→逐幀→自行收尾），驗「不得卡死比賽」不是靠讀原始碼看出來的
+export function startHighlightReplay(s, plan, pointInfo) {
+  const { stage } = s;
+  const rec = s.vcrLast;
+  // HR-5 安全：卷不可播／已經在播（手動 🎬、情蒐帶）＝靜默跳過，不卡死也不重入
+  if (!isPlayableTape(rec) || s.replay) return;
+  const script = buildDirectorScript(rec);
+  if (!(script.totalMs > 0) || !script.totalSteps) return;
+  // 決定性一拍那顆鏡頭的演出時間位置（腳本自己標的 slow）
+  const decisive = script.shots.find((sh) => sh.cam.slow);
+  const tDecisive = decisive ? tAtStep(script, decisive.step) : 0;
+  const tTail = 1 - plan.tailMs / script.totalMs;
+  const t0 = Math.max(0, Math.min(1, Math.max(tDecisive, tTail)));
+  const player = createRallyPlayer(rec);
+  player.fastForward(stepAt(script, t0)); // 快轉到起點（不渲染）
+  const anchor = shotAt(script, player.index)?.cam.anchorId ?? null;
+  s.replay = {
+    player,
+    acc: 0,
+    highlight: { plan, script, t0, elapsedMs: 0, anchor: null },
+  };
+  // 現場鏡頭旗標一次全清：它們每個現場幀都會被重寫（:3048/3051/3264/3265/3283 一帶），
+  // 但重播期間 frameStep 早退、沒人重寫，殘留的 bench/dive/attack 旗標優先序高於
+  // 導播要的 sig/third，會把腳本的構圖整個劫走。重播結束後下一個現場幀自動復原
+  stage.rig.setBenchMode(false);
+  stage.rig.setDiveCam(false);
+  stage.rig.setAttackView(false);
+  stage.rig.setDefendView(false);
+  stage.rig.setHuddleView(false);
+  stage.rig.setSpikeMine(false);
+  if (anchor) { s.replay.highlight.anchor = anchor; stage.rig.setPlayerId(anchor); }
+  // HR-4 字卡：沿既有 pointBanner 通道（不新造 DOM 系統），壽命＝重播長度；
+  // 跳過時由 endHighlightReplay 直接 hide，不等計時器
+  stage.pointBanner.show(
+    { title: plan.caption, icon: plan.icon, mine: plan.mine, sub: pointInfo?.sub ?? '' },
+    { holdMs: Math.round((1 - t0) * script.totalMs) },
+  );
+}
+
+// 重播收尾（播完／跳過共用同一條路：HR-5「沿既有 replay 結束路徑」）。
+// 回傳 true＝真的收了一場 highlight（跳過通道據此判斷要不要改做別的事）。
+// export：tests/highlight-replay.test.mjs 用假 stage 直測「跳過真的回得了現場」。
+export function endHighlightReplay(s) {
+  if (!s.replay?.highlight) return false;
+  const { stage } = s;
+  s.replay = null; // 現場恢復＝frameStep 下一幀就跑回發球流程（sim 只是被凍結，沒被改）
+  stage.pointBanner?.hide();
+  stage.rig?.setSigBeat(null);
+  stage.rig?.setSetScan(false);
+  stage.rig?.setPlayerId(s.controlledId); // 鏡頭錨還給受控者
+  return true;
+}
+
+// 一幀 highlight：**絕對式**（吃演出時間 t 定狀態）——與 replayStage 同一套契約，
+// 掉幀不會累積漂移，跳過與播完同終態。
+export function runHighlightFrame(s, now, delta) {
+  const { stage, ctx } = s;
+  const hl = s.replay.highlight;
+  const { player } = s.replay;
+  hl.elapsedMs += delta * 1000;
+  const t = Math.min(1, hl.t0 + hl.elapsedMs / hl.script.totalMs);
+  const exact = stepAtExact(hl.script, t);
+  const target = Math.floor(exact);
+  const frameEvents = [];
+  while (player.index < target && !player.done) frameEvents.push(...player.step());
+  const shot = shotAt(hl.script, player.index);
+  if (shot) {
+    if (shot.cam.anchorId && shot.cam.anchorId !== hl.anchor) {
+      hl.anchor = shot.cam.anchorId;
+      stage.rig.setPlayerId(hl.anchor); // 鏡頭錨；受控者由 endHighlightReplay 還原
+    }
+    stage.rig.setSigBeat(shot.cam.mode === 'sig' ? shot.cam.sig : null);
+    stage.rig.setSetScan(shot.cam.mode === 'sset');
+  }
+  const alpha = Math.min(Math.max(exact - target, 0), 1);
+  const st = player.state;
+  ctx.ballView.sync(st.ball, alpha, delta,
+    st.rally?.profile === 'serve' && st.rally?.serveStyle === 'float');
+  stage.matchView.sync(st, alpha, delta, frameEvents);
+  stage.aimMarker.hide();
+  stage.landingMarker.hide();
+  stage.rig.update(st, alpha, delta);
+  // 重演鏡位拉遠（腳本自帶的 pullback；沿視線後退＝構圖不變、只是站遠一點看，
+  // 理由與 replayStage 同一條：sig 三構圖是為賽中死球窗調的，任意時刻套用會插進
+  // 別人後腦）。相機朝向＝matrixWorld 第三軸的反向，取完直接沿它退——
+  // 不為此把 three 拉進 app 層
+  const pull = shot?.cam.pullback ?? 0;
+  if (pull > 0) {
+    ctx.camera.updateMatrixWorld();
+    const m = ctx.camera.matrixWorld.elements;
+    ctx.camera.position.set(
+      ctx.camera.position.x + m[8] * pull,
+      ctx.camera.position.y + m[9] * pull,
+      ctx.camera.position.z + m[10] * pull,
+    );
+  }
+  ctx.renderer.render(ctx.scene, ctx.camera);
+  ctx.hud.frame(now, delta, 0);
+  if (stage.panel) stage.panel.hide();
+  if (t >= 1) endHighlightReplay(s);
 }
 
 // 學招預告（Sawmah 07-23 二輪拍板：字幕太快→對話框點擊逐句）：這場打完可偷學的技術
@@ -1053,6 +1176,9 @@ function syncControlled(s) {
 
 // 🎬 回放模式：凍結現場，半速重播上一球尾段（重新模擬＝逐格一致）
 function runReplayFrame(s, now, delta) {
+  // 批3：即時 highlight 走導播腳本（絕對式時間軸＋事件驅動運鏡），與手動 🎬／
+  // 情蒐帶的固定俯視是兩條路——後者一格不動
+  if (s.replay.highlight) { runHighlightFrame(s, now, delta); return; }
   const { stage, ctx } = s;
   const replay = s.replay;
   const { player } = replay;
@@ -1824,10 +1950,8 @@ function applyEvents(s, frameEvents, now) {
     // 4.5B §3 招牌演出追蹤：解除（對手救起/新發球）→武裝（成因事件）；
     // 起鏡只認 SCORE（追加條 B：勝負已定的那一拍之後——見下方 SCORE 分支）
     s.pendingSig = trackSignature(s.pendingSig, e, myTeam);
-    if (e.type === 'TOUCH' && e.kind === 'spike') {
-      // 網口對決（批1）：任一隊扣球者都記——這道演出不限受控者，構圖要兩人都入鏡
-      s.lastSpikerId = e.playerId;
-      if (e.team !== myTeam) s.lastOppSpikerId = e.playerId; // MB 俯視鏡的對面攻擊手（他抬頭看你）
+    if (e.type === 'TOUCH' && e.kind === 'spike' && e.team !== myTeam) {
+      s.lastOppSpikerId = e.playerId; // MB 俯視鏡的對面攻擊手（他抬頭看你）
     }
     // ★ 位置體檢 2026-08-06 裁定 C：補上位置檢查（判定抽到 signatureBeats.ohSignatureArms）★
     // 檔頭寫明這是「OH 被騙的人」，但原本沒有任何 role 判斷＝任何位置都會起鏡。
@@ -1994,15 +2118,13 @@ function applyEvents(s, frameEvents, now) {
         && game.players[s.controlledId]?.currentRole === 'middle') {
         s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
       }
-      // 網口對決（第五道簽名演出，2026-08-27 開卷批1）：任一 BLOCK_TOUCH 都是
-      // 扣球 vs 攔網對決的成因——不限受控者/隊伍（「我方/對面」看的是隊伍，見
-      // signatureBeats.js 檔頭）。不覆蓋更具體的已武裝演出（MB「早到的人」同拍
-      // 優先，仲裁與上方「line」同款：`!s.pendingSig` 守門，具體優先於泛用）
-      if (!s.pendingSig) {
-        s.pendingSig = armSignature('netduel', {
-          focusId: e.playerId, spikerId: s.lastSpikerId, blockerTeam: e.team,
-        });
-      }
+      // 網口對決（2026-08-27 批1 武裝、批3 起改播即時 highlight 重播）：任一
+      // BLOCK_TOUCH 都是扣球 vs 攔網對決的成因——不限受控者/隊伍（「我方/對面」
+      // 看的是隊伍，見 signatureBeats.js 檔頭）。不覆蓋更具體的已武裝演出
+      //（MB「早到的人」同拍優先，仲裁與上方「line」同款：`!s.pendingSig` 守門）。
+      // 承載的資料只剩 blockerTeam——定性（netDuelQualify）只需要它，鏡位改由
+      // 導播腳本自己從卷裡算（批3：現場鏡頭構圖廢止，focusId/spikerId 隨之退場）
+      if (!s.pendingSig) s.pendingSig = armSignature('netduel', { blockerTeam: e.team });
     } else if (e.type === 'DEAD_BALL') {
       // 網口對決 qualify（ND-2b）：只在死球那一刻才知道是不是 tool／stuff——
       // 判定收在 signatureBeats.netDuelQualify（純函式），這裡只做賦值
@@ -2129,12 +2251,19 @@ function applyEvents(s, frameEvents, now) {
       for (const id of game.match.rotations[e.team]) {
         stage.matchView.triggerPose(id, cheerPose);
       }
+      // 批3：即時 highlight 的定性資料（reason／最後觸球）在下面的 banner 區塊
+      // 就會被清成 null，先取一份快照——判定本身在 planHighlightReplay（純函式）
+      const deadSnap = s.pendingDead
+        ? { reason: s.pendingDead.reason, lastTouch: s.lastTouch }
+        : null;
+      let pointInfo = null;
       if (s.pendingDead) {
-        stage.pointBanner.show(derivePointInfo({
+        pointInfo = derivePointInfo({
           reason: s.pendingDead.reason, winner: e.team,
           myTeam: game.players[s.controlledId]?.teamId,
           lastTouch: s.lastTouch, controlledId: s.controlledId, score: e.score,
-        }));
+        });
+        stage.pointBanner.show(pointInfo);
         // 版面稽核 07-24：banner 佔 169-240px 帶與字卡帶基準位 178 重疊——
         // banner 在場時死球字卡（⭐/⚡/🧱）整帶下移讓位；banner 自動收（1.6s）即歸位
         //（SERVE 另有歸位是保險：玩家發球前的等待可能長於 banner 壽命）
@@ -2145,14 +2274,25 @@ function applyEvents(s, frameEvents, now) {
       }
       // 4.5B §3：招牌演出起鏡——勝負已定的那一拍之後（追加條 B）。
       // 我方得分且武裝中＝發放；對方得分＝空手；一球一議（SCORE 後必清）
-      // 網口對決（批1 ND-2d）：不套 signatureFire 的「對面得分＝空手」——
-      // qualify 出的 winner 才是準；對面拿下也照樣起鏡（只是全短版另交
-      // fireSignatureBeat 的 mine 判斷，不在此處分岔）
-      const fired = s.pendingSig?.kind === 'netduel'
-        ? netDuelFire(s.pendingSig, e)
-        : signatureFire(s.pendingSig, e, myTeam);
+      // ★ 批3：網口對決不再走現場鏡頭演出 ★ qualify 出的 outcome 改餵即時 highlight
+      // 重播（下面 planHighlightReplay）；oh/mb/opp/line 四道現場演出這條路徑零改動
+      const isDuel = s.pendingSig?.kind === 'netduel';
+      const duel = isDuel ? netDuelFire(s.pendingSig, e) : null;
+      const fired = isDuel ? null : signatureFire(s.pendingSig, e, myTeam);
       s.pendingSig = null;
       if (fired && !s.replay) fireSignatureBeat(s, fired, now);
+      // 即時 highlight 重播（批3 HR-2）：網口對決得分／關鍵分重扣得分 → 死球窗內
+      // 自動慢動作重播那一球尾段＋字卡。判定全在純函式，這裡只搬運
+      const hlPlan = planHighlightReplay({
+        duelOutcome: duel?.outcome ?? null,
+        reason: deadSnap?.reason ?? null,
+        lastTouch: deadSnap?.lastTouch ?? null,
+        winner: e.team,
+        myTeam,
+        keyPoint: s.keyPointRally, // 發球當下判定的真值（得分後分數已變，不能重問）
+        pref: s.presentation.pref,
+      });
+      if (hlPlan) startHighlightReplay(s, hlPlan, pointInfo);
     }
     // 主角字卡統一出口（判定在 heroCards.js 純函式：Perfect 一傳／攔網碰球／
     // 假動作騙贏／回歸建功——測試用真 sim 事件流直測，不必開瀏覽器目視）
