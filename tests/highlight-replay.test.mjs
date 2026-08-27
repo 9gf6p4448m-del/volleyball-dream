@@ -487,6 +487,7 @@ test('★HR-5／HR-6 端到端★ 真卷播到底：自己收尾回現場、字�
   const plan = planHighlightReplay({ duelOutcome: 'stuff', winner: MY, myTeam: MY });
   startHighlightReplay(s, plan, { sub: '我方得分　10 : 8' });
   assert.ok(s.replay?.highlight, '起播：s.replay 帶 highlight');
+  const expectPlaySec = ((1 - s.replay.highlight.t0) * s.replay.highlight.script.totalMs) / 1000;
   assert.deepEqual(banner[0][0], 'show', '字卡開播即出');
   assert.equal(banner[0][1].title, '攔網蓋死！');
   assert.ok(banner[0][2].holdMs > 0, '字卡壽命必須 >0');
@@ -499,8 +500,15 @@ test('★HR-5／HR-6 端到端★ 真卷播到底：自己收尾回現場、字�
   }
   assert.equal(s.replay, null, `重播必須自己收尾回現場，跑了 ${frames} 幀仍在播＝卡死`);
   assert.ok(frames > 5, `不得零幀閃過（實得 ${frames} 幀）`);
-  assert.ok(Math.abs(frames / 60 - plan.tailMs / 1000) < 0.4,
-    `實際播出長度應接近尾段常數：${(frames / 60).toFixed(2)}s vs ${plan.tailMs / 1000}s`);
+  // 期望值＝起播時算好的 (1−t0)×整卷（＝holdMs 的來源）——它數學上恆 ≤ 尾段常數
+  // （t0 ≥ tTail 或整卷本身短於常數），所以「防跑飛」方向不比原斷言弱；而卷比常數
+  // 短時（08-27 試玩把全版 3500→6000、治具球整卷僅 5.48s）它正確落在整卷長度,
+  // 原斷言「≈常數」的隱含假設（尾段<整卷）不再成立。這一條交叉驗證幀推進引擎
+  // 與起播數學是兩條獨立路徑,偏差窗維持 0.4s 不變。
+  assert.ok(expectPlaySec <= plan.tailMs / 1000 + 1e-6,
+    `播出長度上界必須仍由尾段常數控住：${expectPlaySec.toFixed(2)}s vs ${plan.tailMs / 1000}s`);
+  assert.ok(Math.abs(frames / 60 - expectPlaySec) < 0.4,
+    `實際播出長度應接近 (1−t0)×整卷：${(frames / 60).toFixed(2)}s vs ${expectPlaySec.toFixed(2)}s`);
   assert.deepEqual(banner[banner.length - 1], ['hide'], '收尾必須把字卡收掉（HR-4）');
   // 期間真的在渲染、真的用 rig 運鏡（不是固定俯視）
   assert.ok(rigCalls.filter(([k]) => k === 'update').length >= frames - 1);
