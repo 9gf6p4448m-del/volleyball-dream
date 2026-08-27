@@ -343,6 +343,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     // 職業章批 4b（改叫）：子選單目前開著沒——鈕的可見性判斷要看它（避免選單開著
     // 時鈕又自己跳回來，見鈕可見性管理區塊的說明），選定或窗關都會把它撥回 false。
     audibleMenuOpen: false,
+    // 教學可見性批（08-27）：最後一次改叫的 flightId——syncCallFeedback 憑它把結算
+    // 字卡從「⚡指令」換成「📢改叫」（純顯示分流，flightId 全域遞增故不需清）。
+    audibleIssuedFlight: null,
     // 屆間養成卷 E2（2026-08-09）：默契配對記帳（{隊友id: 次數}）。
     // ★ 落在 app 層＝純觀察 ★ 裁定書 do-not-touch 7 要求「sim 判定路徑一個位元組不改」，
     // 記在這裡才結構性滿足它（也避開 season-combo-gate 的 SEASON-SCAN 鐵律）。
@@ -503,7 +506,12 @@ function syncCallFeedback(s) {
   const key = `${out.flightId}:${out.mode}:${out.outcome}:${out.reason ?? ''}:${out.type}`;
   if (s.callFeedbackKey === key) return;
   s.callFeedbackKey = key;
-  const fb = callFeedbackOf(out, s.aiState.approach?.routes ?? null);
+  // 08-27 教學可見性批：這一筆若來自 📢 改叫（UI 端 latch 對 flightId），字卡印「📢改叫」
+  // ——按 📢 得到 ⚡ 會讓人不確定「我按的那顆有沒有算」。latch 不清：flightId 全域遞增，
+  // 舊值對不上任何新 outcome
+  const fromAudible = out.flightId != null && out.flightId === s.audibleIssuedFlight;
+  const fb = callFeedbackOf(out, s.aiState.approach?.routes ?? null,
+    fromAudible ? { audible: true } : null);
   if (fb) s.stage.floatText?.show(fb.text, fb.color, fb.ms);
 }
 
@@ -2949,6 +2957,9 @@ export function onAudibleTap(s) {
   s.stage.audiblePanel?.show('改叫——下指令！', items, (it) => {
     s.audibleMenuOpen = false;
     s.aiState.replanCall = { type: it.callType, callerId: s.playerId };
+    // 教學可見性批：記下這一波是改叫（syncCallFeedback 憑它把字卡換成「📢改叫」）。
+    // applyReplanCall 在二傳觸球前消費 ⇒ outcome.flightId 與此刻同值（touch 才 +1）
+    s.audibleIssuedFlight = s.game.rally?.flightId ?? null;
   });
 }
 

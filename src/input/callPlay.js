@@ -44,11 +44,13 @@ export const CALL_MODES = {
   replan:  { icon: '🔄', word: '改判', color: '#ffd166', hint: '一傳歪了——臨場換戰術' },
   // 職業章批 4b（改叫 B2）：非 S 位置的入口鈕/面板用這個 mode 的 icon／word
   // （矩形按鈕上印「📢改叫」，不是「⚡指令」——地位是掙來的，不是二傳的職權）。
-  // ⚠ 只用於**組面板/按鈕的顯示**：`resolveCalledPlay` 的 `outcome.mode` 恆回
-  // 'command'（approach.js:991「叫套路的人一定是 S」——這句話對 S 依然成立，改叫
-  // 是另一個入口，不改這支解析器）⇒ `callFeedbackOf` 讀到的永遠是 'command'，
-  // 結算字卡對 S／非 S 都印「⚡指令」。這是刻意的：結果面前兩者是同一件事
-  // （直接生效的指令），只有「誰能按下這顆鈕」不同，回饋字卡不必分兩種語氣。
+  // `resolveCalledPlay` 的 `outcome.mode` 仍恆回 'command'（approach.js:991「叫套路的人
+  // 一定是 S」——改叫是另一個入口，不改解析器）。
+  // ★ 08-27 使用者拍板（教學可見性批）★：結算字卡對「改叫的那一次」也印「📢改叫」——
+  // 原設計「S／非 S 都印⚡（結果面前是同一件事）」被試玩視角推翻：玩家按的是 📢 鈕，
+  // 字卡跳 ⚡ 會讓第一次用的人不確定「我按的那顆有沒有算」。分流只在**顯示層**
+  // （`callFeedbackOf` 的 opts.audible，由 matchLoop 以 UI 端 latch 對 flightId 判定），
+  // 解析器與 sim 一行未動。
   audible: { icon: '📢', word: '改叫', color: '#ffd166', hint: '不是二傳——但這球換你決定' },
 };
 
@@ -153,9 +155,13 @@ function reasonTextOf(reason, actualKind, type = null) {
 
 // aiState.callOutcome → 一則浮動字卡（null＝本波沒有叫牌，不出字卡）。
 // routes＝aiState.approach?.routes（拿主攻者實際跑的線，讓 mainKind 的回饋講得具體）
-export function callFeedbackOf(outcome, routes = null) {
+// opts.audible＝這一筆 outcome 來自 📢 改叫（UI 端 latch 判定，見 CALL_MODES 08-27 註記）
+// ⇒ 只換顯示用的 icon/word，成功/失敗判定與原因文案全部共用同一條路
+export function callFeedbackOf(outcome, routes = null, opts = null) {
   if (!outcome) return null;
-  const spec = CALL_MODES[outcome.mode] ?? CALL_MODES.command;
+  const spec = opts?.audible
+    ? CALL_MODES.audible
+    : (CALL_MODES[outcome.mode] ?? CALL_MODES.command);
   const name = CALL_LABELS[outcome.type] ?? outcome.type;
   const head = `${spec.icon}${spec.word}・${name}`;
   if (outcome.outcome === 'command') {

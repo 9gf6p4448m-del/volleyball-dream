@@ -11,10 +11,20 @@ const PERFECT_POWER = 0.95; // TOUCH.power ≥ 此值＝球到瞬間出手的完
 export function heroCardFor(e, ctx) {
   const { controlledId } = ctx;
   if (e.type === 'BLOCK_TOUCH' && e.playerId === controlledId) {
+    // 壓手賭贏（pressed 只在 zone='top' 且 blockHand='press' 時發，game.js:1383-1398）
+    // ——賭注的結果要讓玩家看得見（08-27 教學可見性批）。球回攻方半場仍是活球，不喊得分
+    if (e.pressed) {
+      return { pri: 20, text: '✋ 壓手成功——壓回去了！', color: '#ffd166', dur: 2200 };
+    }
     // 攔死金色／擦手青色分色（攔死直接得分另有 pointBanner「攔網得分 🧱」收尾）
     return e.graze
       ? { pri: 20, text: '👆 擦到了——快補！', color: '#6ee7ff', dur: 2200 }
       : { pri: 20, text: '🧱 攔網拍回！', color: '#ffd166', dur: 2200 };
+  }
+  // 二段變向做出來了（retarget 純觀測旗標，game.js:913）——手勢成立與否要看得見；
+  // 這一扣有沒有得分另看結果，字卡只認「變向成立」
+  if (e.type === 'TOUCH' && e.kind === 'spike' && e.retarget && e.playerId === controlledId) {
+    return { pri: 20, text: '🌀 二段變向！', color: '#ffd166', dur: 2200 };
   }
   if (e.type === 'BLOCK_DECEIVED' && e.spikerId === controlledId) {
     return { pri: 20, text: '🎭 晃過攔網！', color: '#ffd166', dur: 2200 };
