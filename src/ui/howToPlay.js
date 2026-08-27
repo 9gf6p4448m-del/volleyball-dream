@@ -19,6 +19,8 @@
 // ⇒ 現在每個段落可標 `mode:'simple'|'classic'`，未標＝兩者皆適用；
 //   模式判定一律問 `matchConfig.isSimpleMode`（單一真相源），不得自己再判一次。
 import { isSimpleMode } from '../app/matchConfig.js';
+// C6（B/C 債清批 2026-08-27）：餵線條目的量化文案不得手寫字面數字，插值自單一來源
+import { SCOUT_HOT_SHARE, SCOUT_COLD_SHARE, SCOUT_MIN_SAMPLE } from '../career/careerState.js';
 
 const COLOR = {
   text: '#eef2fa', dim: '#9fb0cc', gold: '#ffd166', cyan: '#6ee7ff',
@@ -522,7 +524,7 @@ export const HOW_TO_PLAY = [
         items: [
           {
             term: '🎯 餵線——對手眼中的你',
-            desc: '賽前對陣卡多一塊：你在這一隊眼中的扣球分佈、他們這場會押哪條線。故意連打同一條線餵假檔案，關鍵分改打別條，吃反常線折扣。',
+            desc: `賽前對陣卡多一塊：你在這一隊眼中的扣球分佈、他們這場會押哪條線。至少累積 ${SCOUT_MIN_SAMPLE} 球資料才讀得到你；某條線佔比超過 ${Math.round(SCOUT_HOT_SHARE * 100)}% 就會被押死，壓到 ${Math.round(SCOUT_COLD_SHARE * 100)}% 以下算冷門線。故意連打同一條線餵假檔案，關鍵分改打別條，吃反常線折扣。`,
           },
         ],
       },

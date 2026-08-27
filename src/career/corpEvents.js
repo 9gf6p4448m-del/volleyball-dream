@@ -10,7 +10,7 @@ import { CORPORATIONS, corporationById } from './corporations.js';
 // 職業章批 2 覆審 MEDIUM 修：甩開句對職業對手也適用（見 corpShakeOffEvents 註解）
 import { proTeamById } from './proTeams.js';
 import {
-  leagueScoutZones, scoutFocusZone, SCOUT_COLD_SHARE, SCOUT_ZONE_LABEL,
+  leagueScoutZones, scoutFocusZone, SCOUT_COLD_SHARE, SCOUT_MIN_SAMPLE, SCOUT_ZONE_LABEL,
 } from './careerState.js';
 
 // ── A4-1 入隊合約敘事（併入入社報到卡，零新機制）──
@@ -110,7 +110,7 @@ export function corpShakeOffEvents(career) {
   const mine = career.scouting?.[entry.opponentId]?.zones ?? null;
   if (!mine) return [];
   const total = (mine.line ?? 0) + (mine.cross ?? 0) + (mine.middle ?? 0) + (mine.tip ?? 0);
-  if (total < 6) return [];
+  if (total < SCOUT_MIN_SAMPLE) return [];
   if ((mine[focus.zone] ?? 0) / total >= SCOUT_COLD_SHARE) return [];
   return [{
     id,

@@ -6,6 +6,7 @@ import {
   applyPoaching,
   applySeasonRoster, graduatingAces, currentGrade, nationalGroupTable, matchOpponentDef,
   leagueScoutZones, scoutFocusZone, SCOUT_ZONE_LABEL, weakestReceiverIdOf,
+  SCOUT_HOT_SHARE, SCOUT_COLD_SHARE, SCOUT_MIN_SAMPLE,
 } from '../career/careerState.js';
 import {
   GROWTH, GROWABLE_ATTRS, TECH_DEFS, spendAttribute, attrCapFor,
@@ -250,6 +251,9 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   // 多年卷批 2 覆審 M2：退休確認卡重入守衛（雙指同批事件連點會疊兩張卡，
   // 第二張的「確定退休」因 retirePro 冪等回 false 而變死按鈕——2464/2666 同型）
   let retireConfirmOpen = false;
+  // 覆審 MEDIUM-2（B/C 債清批）：旗標歸位還不夠——舊卡節點掛在 document.body，
+  // 重繪時要一併收走，否則歸位後再開會疊兩張全螢幕卡（下面那張永遠關不掉）
+  let retireConfirmEl = null;
   // 送審輪 2 補：同型效果的上一層入口——收尾卡本身也要重入守衛（同批雙點疊兩張
   // 收尾卡，推進一次後殘卡的續約鈕變死鈕）。防線按效果寫：所有關閉路徑統一還原
   let proClosingOpen = false;
@@ -1083,10 +1087,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         baitBox.appendChild(el('div', [
           'font-size:11.5px', 'font-weight:800', `color:${COLOR.gold}`, 'text-align:center',
         ], '🎯 餵線——對手眼中的你'));
-        if (!(def.scoutRead > 0) || zoneTotal < 6) {
+        if (!(def.scoutRead > 0) || zoneTotal < SCOUT_MIN_SAMPLE) {
           // 誠實顯示「讀不到你」級文案——不畫假分佈（D2 凍結）
+          // C6（B/C 債清批）：量化——樣本門檔不得手寫字面數字，插值自 SCOUT_MIN_SAMPLE
           baitBox.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`, 'text-align:center'],
-            def.scoutRead > 0 ? '這隊還摸不透你——樣本不足，讀不到你' : '這隊沒在研究你——讀不到你'));
+            def.scoutRead > 0
+              ? `這隊還摸不透你——出手不到 ${SCOUT_MIN_SAMPLE} 球，樣本不足讀不到你`
+              : '這隊沒在研究你——讀不到你'));
         } else {
           for (const z of ['line', 'cross', 'middle', 'tip']) {
             const cnt = myZones[z] ?? 0;
@@ -1108,10 +1115,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
             ], `${pct}%`));
             baitBox.appendChild(row);
           }
+          // C6：量化——熱線/冷線門檻不得手寫字面數字，插值自 SCOUT_HOT_SHARE／SCOUT_COLD_SHARE
           baitBox.appendChild(el('div', [
             'font-size:11px', 'text-align:center', `color:${myFocus ? '#ff9d7a' : COLOR.dim}`,
           ], myFocus
-            ? `這場他們會押你的${SCOUT_ZONE_LABEL[myFocus.zone]}——關鍵分改打別線，吃反常線折扣`
+            ? `這場他們會押你的${SCOUT_ZONE_LABEL[myFocus.zone]}（佔比超過 ${Math.round(SCOUT_HOT_SHARE * 100)}%）`
+              + `——關鍵分改打別線，佔比壓到 ${Math.round(SCOUT_COLD_SHARE * 100)}% 以下吃反常線折扣`
             : '分佈平均——這場他們押不準你的慣用線'));
         }
         intel.appendChild(baitBox);
@@ -1263,7 +1272,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         // 批 4B 覆審 HIGH-1 修：情報顯示只吃 F4 凍結的兩個條件（intel＋oppScouting
         // 樣本≥6），**不得**巢在 oppFocus（「對手看我」方向、且要主角自己扣過球）
         // 的閘裡——方向相反的前提會讓一次性解鎖對打不到球的位置永久失效。
-        // 押線鈕的 oppFocus 閘（D5 凍結）照舊在下方分支，不動。
+        // 賭線鈕的 oppFocus 閘（D5 凍結）照舊在下方分支，不動。
         const intelOn = store.proGrowthState?.()?.intel === true;
         const oppZ = career.oppScouting?.[next.opponentId]?.zones ?? null;
         const oppTotal = oppZ ? (oppZ.line + oppZ.cross + oppZ.middle + oppZ.tip) : 0;
@@ -1271,7 +1280,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           slot1.appendChild(el('div', ['font-size:10.5px',
             oppTotal >= 6 ? 'color:#8fd6c7' : `color:${COLOR.dim}`],
           oppTotal >= 6
-            ? `情報網：這隊的攻擊分佈——直線 ${oppZ.line}・斜線 ${oppZ.cross}・中間 ${oppZ.middle}・吊球 ${oppZ.tip}（押線仍是賭，情報只幫你賭得聰明）`
+            ? `情報網：這隊的攻擊分佈——直線 ${oppZ.line}・斜線 ${oppZ.cross}・中間 ${oppZ.middle}・吊球 ${oppZ.tip}（賭線仍是賭，情報只幫你賭得聰明）`
             : '情報網已開——但和這隊的交手樣本還不夠，攻擊分佈讀不出來'));
         }
         if (!oppFocus) {
@@ -1282,18 +1291,23 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // 「情報夠了＝有依據的注」，與過閘後「本來就沒情報」自相矛盾。閘的行為不變
           //（交手過才可押＝D5 凍結），措辭改熟悉度敘事、不再涉及「情報」。
           slot1.appendChild(el('div', ['font-size:11px', `color:${COLOR.dim}`],
-            '攔網手對這隊還沒磨出押線默契——押線要靠實戰累積，先打再說'));
+            '攔網手對這隊還沒磨出賭線默契——賭線要靠實戰累積，先打再說'));
         } else {
           // ★批 4a 覆審 HIGH 修（Sawmah 拍板 A：誠實降級）★ 原文案「這隊…偏向X」把
           // career.scouting（＝這隊對**你**的讀取紀錄）講成對手自己的攻擊慣性——
-          // 押線判定（applyBlockLean 抓場上真實推進者）與那份資料零關聯＝披著情報
+          // 賭線判定（applyBlockLean 抓場上真實推進者）與那份資料零關聯＝披著情報
           // 外衣的盲注。降級為明示賭注；真情報化（對手攻擊統計資料源）掛帳等試玩。
           slot1.appendChild(el('div', ['font-size:10.5px', `color:${COLOR.dim}`],
             intelOn
               ? '押哪條線，最後仍是你自己拍板（押錯整面落空）'
               : '沒有對手攻擊路線的情報——押哪條線，靠你自己的判斷（押錯整面落空）'));
           const row1 = el('div', ['display:flex', 'gap:6px']);
-          for (const [key, label] of [['line', '押直線'], ['cross', '押斜線']]) {
+          // C5 加嚴（主對話覆核 2026-08-27）：本鈕舊字面與 MB 讀舉球面板的兩個紅色選項
+          // （封直線／封斜線的手蓋網動作，howToPlay.js:269 附近）同音同字尾、最容易混淆
+          // ——改用「賭」，與押線→賭線同一個改名，不是新裁定。「押哪條線」「押下去了」
+          // 「不押」等一般動詞用法不改（對象是「押」這個賭博動作本身，不是本複合詞按鈕標籤；
+          // 那個手蓋網動作本身的名稱維持逐字不動，本檔不重述它）。
+          for (const [key, label] of [['line', '賭直線'], ['cross', '賭斜線']]) {
             const active = deploy.blockLean === key;
             const b = el('button', [
               'flex:1', 'height:32px', 'border-radius:8px', 'border:none', 'cursor:pointer',
@@ -2001,6 +2015,13 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
   // ---- 生涯視圖（隊伍戰績＋賽程）----
   function renderCareer() {
+    // C4（B/C 債清批 2026-08-27）：生涯畫面整頁重繪＝退休確認卡這一層演出狀態
+    // 沒有被任何按鈕收尾就作廢了（confirm 掛在 document.body、不隨 root 重繪
+    // 一起消失，但語意上這次重繪已經不是它開的那個畫面）。旗標不歸位的話，
+    // 重繪後 showProRetireConfirm 頂部的重入守衛會永久擋死，再也打不開退休確認。
+    // 覆審 MEDIUM-2 補：連舊卡節點一起收走，不只歸位旗標——否則再開會疊卡。
+    retireConfirmOpen = false;
+    if (retireConfirmEl) { retireConfirmEl.remove(); retireConfirmEl = null; }
     let career = store.loadCareer();
     const player = store.loadPlayer();
     if (!career || !player) { renderSlots(); return; } // 槽空/壞檔→回選檔頁（W4 題2）
@@ -3572,11 +3593,20 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       const newSalary = proRenewalSalaryFor(team, lastPro.proRank, lastPro.proFinish);
       overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.text}`, 'letter-spacing:2px',
         'margin-top:18px'], `${team.name}遞來了新合約`));
+      // 覆審 MEDIUM-1（B/C 債清批）：失敗訊息只掛一則——文案寫「請再試一次」，
+      // 連點不防重複的話每點一次疊一條紅字
+      let renewFailMsg = null;
       const renewBtn = button(`✍ 續約留隊——年薪 ${salaryLabelOf(team, newSalary)}`, true, () => {
         // B2：續約與推進同一次 RMW（advanceSeason 帶 proSalary）
         if (store.advanceSeason?.({ proSalary: newSalary })) {
           proClosingOpen = false;
           overlay.remove(); renderCareer();
+        } else if (!renewFailMsg) {
+          // C3（B/C 債清批）：advanceSeason 回 false 不得靜默——覆蓋層還開著，
+          // 直接把訊息貼在裡面（root 層 setMsg 會被這張全螢幕覆蓋層蓋住看不到）
+          renewFailMsg = el('div', ['font-size:12px', `color:${COLOR.red}`, 'margin-top:10px'],
+            '⚠ 續約寫入失敗——請再試一次');
+          overlay.appendChild(renewFailMsg);
         }
       });
       renewBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -3642,6 +3672,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
         confirm.appendChild(el('div', ['font-size:16px', 'font-weight:900', `color:${COLOR.text}`,
           'line-height:1.8', 'max-width:min(400px,92vw)'],
         `確定轉入 ${t.name}？年薪 ${salaryLabelOf(t, salary)}——隊友信任將重新累積。`));
+        // 覆審 MEDIUM-1（B/C 債清批）：失敗訊息只掛一則，連點不疊加（同續約鈕）
+        let transferFailMsg = null;
         confirm.appendChild(button('✍ 簽下轉隊合約', true, () => {
           // transferPro 冪等（旗標守衛）：連點第二次 settled 已清＝false，不雙轉
           transferConfirmOpen = false;
@@ -3649,8 +3681,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
             transferMenuOpen = false;
             proClosingOpen = false;
             confirm.remove(); menu.remove(); closingOverlay.remove(); renderCareer();
-          } else {
-            confirm.remove();
+          } else if (!transferFailMsg) {
+            // C3（B/C 債清批）：轉隊寫入失敗不得靜默移除確認卡——留卡＋明示，
+            // 「再想想」鈕還在，玩家看得到失敗也還能退出
+            transferFailMsg = el('div', ['font-size:12px', `color:${COLOR.red}`, 'margin-top:10px'],
+              '⚠ 轉隊寫入失敗——請再試一次');
+            confirm.appendChild(transferFailMsg);
           }
         }));
         confirm.appendChild(button('再想想', false, () => {
@@ -3910,14 +3946,17 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const yesBtn = button('確定退休', true, () => {
       store.retirePro?.();
       retireConfirmOpen = false;
+      retireConfirmEl = null;
       proClosingOpen = false;
       confirm.remove(); closingOverlay.remove(); renderCareer();
     });
     confirm.appendChild(yesBtn);
     confirm.appendChild(button('再想想', false, () => {
       retireConfirmOpen = false;
+      retireConfirmEl = null;
       confirm.remove();
     }));
+    retireConfirmEl = confirm;
     document.body.appendChild(confirm);
   }
 

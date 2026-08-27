@@ -299,7 +299,9 @@ test('★HR-6 追記之二★ 只重用運鏡，不帶結算頁的回憶感後�
   const script = buildDirectorScript(tape);
   assert.deepEqual(Object.keys(script).sort(),
     ['dead', 'segments', 'shots', 'skipTo', 'totalMs', 'totalSteps', 'touches'].sort());
-  const CAM_FIELDS = ['mode', 'anchorId', 'sig', 'pullback', 'slow'];
+  // B/C 債清批 A1（2026-08-27）：新增 lift 欄位（決定性一拍／落點收尾抬高視角）——
+  // 仍是純運鏡宣告，本條斷言「只能是運鏡」的精神不變，白名單同步擴一項。
+  const CAM_FIELDS = ['mode', 'anchorId', 'sig', 'pullback', 'slow', 'lift'];
   for (const sh of script.shots) {
     for (const k of Object.keys(sh.cam)) {
       assert.ok(CAM_FIELDS.includes(k), `腳本鏡頭欄位只能是運鏡，出現 ${k}`);
@@ -438,6 +440,8 @@ function fakeCtx() {
     position: { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; } },
     matrixWorld: { elements: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
     updateMatrixWorld() { rendered.push('matrix'); },
+    // A2（B/C 債清批 2026-08-27）：lift 套用會重新 lookAt——假 camera 補這個介面
+    lookAt() {},
   };
   return {
     rendered,
@@ -453,7 +457,11 @@ function fakeCtx() {
 
 function fakeFullStage() {
   const rigCalls = [];
-  const rig = { update: () => rigCalls.push(['update']) };
+  const rig = {
+    update: () => rigCalls.push(['update']),
+    // A2（B/C 債清批 2026-08-27）：lift 套用要拿 rig 這一幀算好的注視點
+    getTarget: () => ({ x: 0, y: 0, z: 0 }),
+  };
   for (const k of ['setSigBeat', 'setSetScan', 'setPlayerId', 'setBenchMode', 'setDiveCam',
     'setAttackView', 'setDefendView', 'setHuddleView', 'setSpikeMine']) {
     rig[k] = (v) => rigCalls.push([k, v ?? null]);
@@ -471,6 +479,8 @@ function fakeFullStage() {
         show: (info, opts) => banner.push(['show', info, opts]),
         hide: () => banner.push(['hide']),
       },
+      // B1（B/C 債清批）：真卷會產生真事件，highlight 幀現在會餵 sfx
+      sfx: { onEvents: () => {} },
       panel: null,
     },
   };

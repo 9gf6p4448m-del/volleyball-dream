@@ -84,6 +84,10 @@ export function heightSettled(player, seasonIndex) {
 export function revealHeightForSeason(player, seasonIndex) {
   const h = player?.height;
   const plan = h?.plan;
+  // C1（B/C 債清批 2026-08-27）：`seasonIndex > plan.length`（第 4 屆起）走這條
+  // guard 回 reveal:null，是**明文設計**不是漏做——身高曲線只涵蓋高中三屆
+  // （buildHeightPlan 只生 [第1屆,第2屆,第3屆]），第 4 屆起即成長期已結束
+  // （heightSettled 判定同一顆 plan.length）。不得誤改成「補一屆」或拋錯。
   if (!Array.isArray(plan) || seasonIndex < 2 || seasonIndex > plan.length) {
     return { player, reveal: null };
   }

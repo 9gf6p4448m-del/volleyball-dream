@@ -99,6 +99,10 @@ export function createCameraRig(camera, initialPlayerId) {
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
     getMode() { return mode; },
+    // A2（B/C 債清批 2026-08-27）：重演消費端套用 lift 抬高鏡頭後要重新 lookAt
+    // 原本的注視點——不是重算方向，是拿回這一幀 update() 剛算好的那個 curTarget。
+    // 純讀取，不動任何 mode 分支（sig 招牌演出構圖零改動）。
+    getTarget() { return curTarget.clone(); },
 
     // 一人稱視線落點（gaze）：視線方向與地面的交點——餵給扣球 Intent 的「看哪」
     gazePoint(game) {

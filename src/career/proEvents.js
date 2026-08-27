@@ -96,7 +96,8 @@ export function proWangRivalPreEvents(career, matchEntry, teamId, seasonIndex = 
 
 // ── B5-3 收尾卡點名（同構 corpClosingLines，職業章＝生涯終章的收束版）──
 /**
- * 職業章收尾卡的點名句。國外強權恆點名（決策 7 敘事層級不變、世界觀存在、不可玩）；
+ * 職業章收尾卡的點名句。國外強權恆點名（決策 7 敘事層級不變、世界觀存在；C7 更新——
+ * 國外聯賽卷上線後已可玩，入口＝transferPro 轉隊海外，見 foreign-league 卷）；
  * 大學名冊封存含簡子嵐時加「更大的海」收束句（企業章 A4-4 慣例同款判準）。
  * @param uniRoster  `store.loadUniRoster()` 的回傳（可為 null）
  * @param wentForeign 國外聯賽卷批 4（F4-4）：玩家是否已出海——由呼叫端算好一顆

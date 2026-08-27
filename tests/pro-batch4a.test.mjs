@@ -342,5 +342,5 @@ test('D3-block② 設 blockLean=line：同種子整場結果與未設定時不�
   const base = playFullMatch(9001, 'north-tech');
   const leaned = playFullMatch(9001, 'north-tech', { blockLean: 'line' });
   assert.notDeepEqual(leaned, base,
-    '押線後同種子的整場結果應與未押不同——若逐值相同代表 blockLean 沒有真的接進判斷');
+    '賭線後同種子的整場結果應與未押不同——若逐值相同代表 blockLean 沒有真的接進判斷');
 });

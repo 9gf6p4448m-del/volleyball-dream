@@ -681,6 +681,11 @@ export function careerTeams(player, opponentDef = null, rosterMembers = null, li
 // 同一個邊界上（tests/monotony-probe：share 恰過/不過門檻時 scoutBlockMul 的回傳）。
 export const SCOUT_HOT_SHARE = 0.35;
 export const SCOUT_COLD_SHARE = 0.15;
+// C6（B/C 債清批 2026-08-27）：樣本門檻同樣是有意複製 sim 的字面（M5 禁改 sim，
+// game.js scoutBlockMul 的 `if (total < 6) return 1;` 是唯一真相），立名讓
+// career 層文案／判斷式不再各自手寫 6——tests/bc-debt-batch.test.mjs 有對表測試
+// 釘住兩邊同值，sim 那顆字面一旦漂移就會紅。
+export const SCOUT_MIN_SAMPLE = 6;
 export const SCOUT_ZONE_LABEL = { line: '直線', cross: '斜線', middle: '中路', tip: '吊球' };
 
 /**
@@ -714,7 +719,7 @@ export function scoutFocusZone(zones = null) {
   if (!zones) return null;
   const keys = ['line', 'cross', 'middle', 'tip'];
   const total = keys.reduce((n, k) => n + (zones[k] ?? 0), 0);
-  if (total < 6) return null;
+  if (total < SCOUT_MIN_SAMPLE) return null;
   let best = null;
   for (const k of keys) {
     const share = (zones[k] ?? 0) / total;

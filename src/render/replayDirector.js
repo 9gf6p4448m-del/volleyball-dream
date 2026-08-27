@@ -13,6 +13,12 @@ import { createRallyPlayer } from '../app/rallyTape.js';
 export const SLOW_SPEED = 0.35;   // 決定性一拍～落點：重用既有慢動作倍率語彙
 export const OPEN_SPEED = 2.5;    // 發球前佈陣：快帶過（等哨的 tick 不是戲）
 export const OPEN_MAX_STEPS = 90; // 開場最多播 1.5 秒；更早的佈陣直接快轉不計時
+// B/C 債清批（2026-08-27）A1：touch out／關鍵得分重播視角太低——可視時長幾乎全在
+// 兩個低鏡位（sig oh y=1.75、sig line y=0.5 貼地）。修法＝只在慢動作兩鏡位宣告
+// 抬高量，由消費端（matchLoop/replayStage）套用；cameraRig 現場招牌演出構圖零改動。
+// 【試玩必調】兩顆值可各自微調，互不牽動。
+export const DECISIVE_LIFT = 0.9; // 決定性一拍（sig oh/mb/opp）抬高量（m）
+export const LINE_LIFT = 1.1;     // 落點收尾（sig line，貼地機位）抬高量（m）——貼地鏡位更低，抬更多
 const ROLE_SIG = { outside: 'oh', middle: 'mb', opposite: 'opp' };
 
 // 掃一次卷，收「每一步發生了什麼」——導播與退化文字卡共用這份事實
@@ -81,6 +87,7 @@ export function buildDirectorScript(tape) {
         sig: { kind: sig, focusId: next.playerId, mateId: null },
         pullback: 2.6, // 重演拉遠（舞台層沿視線後退；見 replayStage 註解）
         slow: true,
+        lift: DECISIVE_LIFT, // A1：sig oh/mb/opp 貼身低機位太低，重演抬高視角
       });
     } else if (next.kind === 'set') {
       // 舉球：sset 語彙的半場回望（網前定點回望自家半場）
@@ -98,6 +105,7 @@ export function buildDirectorScript(tape) {
       sig: { kind: 'line', at: { x: dead.at.x, z: dead.at.z } },
       pullback: 1.2,
       slow: true,
+      lift: LINE_LIFT, // A1：sig line 貼地 y=0.5，重演幾乎全程停在這個低機位
     });
   }
 

@@ -155,6 +155,15 @@ export async function createReplayStage({ tape, width = 640, height = 360, onDon
       const dir = camera.getWorldDirection(new THREE.Vector3());
       camera.position.addScaledVector(dir, -pull);
     }
+    // A2（B/C 債清批 2026-08-27）：兩個慢動作低機位（sig oh/mb/opp、sig line）
+    // 結算頁重演同樣抬高視角——position.y 加上去後重新 lookAt rig 這一幀算好的
+    // 注視點（不是重算方向）。與比賽內 runHighlightFrame 同一套契約。
+    const lift = shot?.cam.lift ?? 0;
+    if (lift > 0) {
+      const target = rig.getTarget();
+      camera.position.y += lift;
+      camera.lookAt(target);
+    }
     renderer.render(scene, camera);
   }
 

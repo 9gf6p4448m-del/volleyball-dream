@@ -983,7 +983,8 @@ function startReplay(s) {
   const player = createRallyPlayer(rec);
   // 快轉到尾段起點（不渲染），只播殺球/落地的關鍵 3 秒
   player.fastForward(Math.max(0, player.length - REPLAY_TAIL));
-  s.replay = { player, acc: 0 };
+  // B1：手動🎬回放接 sfx——rallyFlights 沿既有 replayStage 慣例，不吃快轉段
+  s.replay = { player, acc: 0, startFlight: player.state.rally.flightId };
   s.stage.floatText.show('🎬 回放', '#ffd166', 1200);
 }
 
@@ -1017,10 +1018,15 @@ export function startHighlightReplay(s, plan, pointInfo) {
   const player = createRallyPlayer(rec);
   player.fastForward(stepAt(script, t0)); // 快轉到起點（不渲染）
   const anchor = shotAt(script, player.index)?.cam.anchorId ?? null;
+  // B1（比賽內回放接 sfx）：rallyFlights 沿 replayStage 慣例算「這波打了幾個 flight」
+  // ——起點快轉之後才記，不吃快轉本身那一段的 flight 數
+  const startFlight = player.state.rally.flightId;
   s.replay = {
     player,
     acc: 0,
-    highlight: { plan, script, t0, elapsedMs: 0, anchor: null },
+    highlight: {
+      plan, script, t0, elapsedMs: 0, anchor: null, startFlight,
+    },
   };
   // 現場鏡頭旗標一次全清：它們每個現場幀都會被重寫（:3048/3051/3264/3265/3283 一帶），
   // 但重播期間 frameStep 早退、沒人重寫，殘留的 bench/dive/attack 旗標優先序高於
@@ -1064,8 +1070,14 @@ export function runHighlightFrame(s, now, delta) {
   const t = Math.min(1, hl.t0 + hl.elapsedMs / hl.script.totalMs);
   const exact = stepAtExact(hl.script, t);
   const target = Math.floor(exact);
+  const from = player.index;
   const frameEvents = [];
   while (player.index < target && !player.done) frameEvents.push(...player.step());
+  // B1／B2：跳轉/快進大步時不餵 sfx（沿 replayStage.js:137 的 !jumped 慣例）——
+  // 一次推很多步的那批事件同時發聲會炸開一整串聲音。這裡沒人會主動快轉大步
+  // （跳過通道走 endHighlightReplay 直接清 s.replay，不會回頭把剩餘事件餵完），
+  // 這道防線接住的是掉幀／背景分頁恢復那種一幀跨很多 step 的情形。
+  const jumped = player.index - from > 60;
   const shot = shotAt(hl.script, player.index);
   if (shot) {
     if (shot.cam.anchorId && shot.cam.anchorId !== hl.anchor) {
@@ -1074,6 +1086,9 @@ export function runHighlightFrame(s, now, delta) {
     }
     stage.rig.setSigBeat(shot.cam.mode === 'sig' ? shot.cam.sig : null);
     stage.rig.setSetScan(shot.cam.mode === 'sset');
+  }
+  if (!jumped && frameEvents.length) {
+    stage.sfx.onEvents(frameEvents, { rallyFlights: player.state.rally.flightId - hl.startFlight });
   }
   const alpha = Math.min(Math.max(exact - target, 0), 1);
   const st = player.state;
@@ -1096,6 +1111,15 @@ export function runHighlightFrame(s, now, delta) {
       ctx.camera.position.y + m[9] * pull,
       ctx.camera.position.z + m[10] * pull,
     );
+  }
+  // A2（B/C 債清批）：兩個慢動作低機位（sig oh/mb/opp、sig line）重演時抬高視角
+  // ——腳本宣告 lift，這裡只認栏位、不判斷 kind（判斷邏輯留在導播那一層）。
+  // position.y 加上去之後重新 lookAt 原本 rig 這一幀算好的注視點，不是重算方向。
+  const lift = shot?.cam.lift ?? 0;
+  if (lift > 0) {
+    const target = stage.rig.getTarget();
+    ctx.camera.position.y += lift;
+    ctx.camera.lookAt(target);
   }
   ctx.renderer.render(ctx.scene, ctx.camera);
   ctx.hud.frame(now, delta, 0);
@@ -1137,7 +1161,10 @@ function startTapeClip(s) {
   // 重演器同時吃兩種格式，播放路徑共用
   const player = createRallyPlayer(clip);
   player.fastForward(Math.max(0, player.length - TAPE_TAIL));
-  s.replay = { player, acc: 0, tape: true };
+  // B1：情蒐帶接 sfx——同手動🎬慣例
+  s.replay = {
+    player, acc: 0, tape: true, startFlight: player.state.rally.flightId,
+  };
   s.stage.floatText.show(`📼 情蒐：對手關鍵球 ${s.tapeIdx + 1}/${clips.length}（點擊跳過）`, '#6ee7ff', 2000);
   s.tapeIdx += 1;
 }
@@ -1183,7 +1210,9 @@ function syncControlled(s) {
 }
 
 // 🎬 回放模式：凍結現場，半速重播上一球尾段（重新模擬＝逐格一致）
-function runReplayFrame(s, now, delta) {
+// export（B/C 債清批 2026-08-27，B1/B2）：tests/replay-lift.test.mjs 用假
+// stage/player 直測手動🎬／情蒐帶接 sfx 之後的行為（沿 runHighlightFrame 先例）
+export function runReplayFrame(s, now, delta) {
   // 批3：即時 highlight 走導播腳本（絕對式時間軸＋事件驅動運鏡），與手動 🎬／
   // 情蒐帶的固定俯視是兩條路——後者一格不動
   if (s.replay.highlight) { runHighlightFrame(s, now, delta); return; }
@@ -1191,9 +1220,17 @@ function runReplayFrame(s, now, delta) {
   const replay = s.replay;
   const { player } = replay;
   replay.acc += delta * REPLAY_SPEED;
+  const from = player.index;
+  const frameEvents = [];
   while (replay.acc >= SIM_DT && !player.done) {
-    player.step();
+    frameEvents.push(...player.step());
     replay.acc -= SIM_DT;
+  }
+  // B1／B2：手動🎬／情蒐帶接既有 sfx——同 runHighlightFrame／replayStage.js:137
+  // 的 !jumped 慣例，掉幀/背景分頁恢復一次推很多步時不餵（防事件連珠炮）
+  const jumped = player.index - from > 60;
+  if (!jumped && frameEvents.length) {
+    stage.sfx.onEvents(frameEvents, { rallyFlights: player.state.rally.flightId - replay.startFlight });
   }
   const rAlpha = Math.min(replay.acc / SIM_DT, 1);
   ctx.ballView.sync(player.state.ball, rAlpha, delta,

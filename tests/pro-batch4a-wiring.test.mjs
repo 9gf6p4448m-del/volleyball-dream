@@ -174,7 +174,7 @@ test('D4① 面板標題「賽前布置（職業限定）」一定出現（職�
   assert.match(text, /賽前布置（職業限定）/);
 });
 
-test('D4② 攔網重心：本場對手有足夠情蒐紀錄 ⇒ 押直線／押斜線兩鈕可點，點下去文案改變', async () => {
+test('D4② 攔網重心：本場對手有足夠情蒐紀錄 ⇒ 賭直線／賭斜線兩鈕可點，點下去文案改變', async () => {
   const storage = fakeStorage();
   storage.setItem(SAVE_KEY, JSON.stringify(buildSyntheticSave({ finish: FINISH.CHAMPION })));
   const store = createCareerStore(storage);
@@ -190,17 +190,17 @@ test('D4② 攔網重心：本場對手有足夠情蒐紀錄 ⇒ 押直線／押
   await settle();
   let text = allText(globalThis.document.body);
   assert.match(text, /① 攔網重心/);
-  assert.match(text, /押直線/);
-  assert.match(text, /押斜線/);
-  assert.doesNotMatch(text, /攔網手對這隊還沒磨出押線默契/); // 閘門文案（送審矛盾修後措辭）
+  assert.match(text, /賭直線/);
+  assert.match(text, /賭斜線/);
+  assert.doesNotMatch(text, /攔網手對這隊還沒磨出賭線默契/); // 閘門文案（送審矛盾修後措辭）
   // ★批 4a 覆審 HIGH（Sawmah 拍板 A 誠實降級）★ 槽①是盲注不是情報決策——
   // 不得再出現「這隊…偏向X」式誤導句（career.scouting＝對手讀你的紀錄，
   // 與對手自己會攻哪條線零關聯）；改為明示賭注
   assert.doesNotMatch(text, /這隊近期常被觀察到偏向/, '誤導性情蒐句必須拿掉');
   assert.match(text, /靠你自己的判斷/, '盲注要明示（誠實降級）');
 
-  const pressLine = findBtn(/^押直線$/);
-  assert.ok(pressLine, '押直線鈕要找得到');
+  const pressLine = findBtn(/^賭直線$/);
+  assert.ok(pressLine, '賭直線鈕要找得到');
   tap(pressLine);
   await settle();
   text = allText(globalThis.document.body);
@@ -214,10 +214,10 @@ test('D4③ 攔網重心：無足夠情蒐紀錄 ⇒ 情報不足、不給按鈕
   // ★送審殘留矛盾修★ 槽①閘門措辭由「情報不足」改熟悉度敘事（行為不變：無紀錄不可押）。
   // 斷言限縮槽①舊句——槽②的「情報不足…不知道誰接發最弱」是真情報（weakestReceiverIdOf
   // 讀真實屬性）語意不矛盾，合法保留
-  assert.match(text, /攔網手對這隊還沒磨出押線默契/);
+  assert.match(text, /攔網手對這隊還沒磨出賭線默契/);
   assert.doesNotMatch(text, /情報不足——這隊還沒累積夠交手紀錄/, '槽①舊措辭不得再出現');
-  assert.equal(findBtn(/^押直線$/), undefined, '情報不足時不得渲染可押的按鈕');
-  assert.equal(findBtn(/^押斜線$/), undefined);
+  assert.equal(findBtn(/^賭直線$/), undefined, '情報不足時不得渲染可押的按鈕');
+  assert.equal(findBtn(/^賭斜線$/), undefined);
 });
 
 test('D4④ 發球攻擊：從沒和這隊交手過 ⇒ 情報不足、不給按鈕（D5）', async () => {
@@ -254,7 +254,7 @@ test('D4⑤ 發球攻擊：對這隊已有 scouting 紀錄（哪怕是空紀錄�
 // ════════════════════════════════════════════════════════════════
 // D4 落檔：確認出戰後，選擇真的存進 store（經 saveDeployment，非只是畫面態）
 // ════════════════════════════════════════════════════════════════
-test('D4 落檔：押線後點「✓ 確認出戰」＝store.loadDeployment 讀得到剛才的選擇', async () => {
+test('D4 落檔：賭線後點「✓ 確認出戰」＝store.loadDeployment 讀得到剛才的選擇', async () => {
   const storage = fakeStorage();
   storage.setItem(SAVE_KEY, JSON.stringify(buildSyntheticSave({ finish: FINISH.CHAMPION })));
   const store = createCareerStore(storage);
@@ -270,7 +270,7 @@ test('D4 落檔：押線後點「✓ 確認出戰」＝store.loadDeployment 讀�
   await openCareerScreen(storage);
   tap(findBtn(/▶ 出戰/));
   await settle();
-  tap(findBtn(/^押斜線$/));
+  tap(findBtn(/^賭斜線$/));
   await settle();
   const confirmBtn = findBtn(/確認出戰/);
   assert.ok(confirmBtn, 'fixture 前提：預設陣容應合法、確認鈕要渲染出來');
