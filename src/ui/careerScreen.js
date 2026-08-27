@@ -3706,12 +3706,22 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     };
     overlay.appendChild(button('🗣 立威——隊內聲望（信任 +6）', false, () => pick('prestige')));
     // 傳承：還有沒教過的隊友才列
-    const members = (store.loadRoster?.()?.members ?? [])
+    const unmentored = (store.loadRoster?.()?.members ?? [])
       .filter((m) => !g.mentored.includes(m.id));
+    // 國外聯賽卷裁定（2026-08-27 Sawmah，甲案）：傳承 clamp 90（chooseProGrowth 同值）
+    // ——海外隊友建隊即 90 封頂 ⇒ +2 恆零效果。無人能受益時灰掉並標示，不讓玩家
+    // 白燒一生一次的選擇；判準吃「實際會不會漲」（有屬性 <90 的隊友才算可教），
+    // 不吃隊伍 league——未來海外名單若有 <90 的人，選項自動回來。
+    const members = unmentored
+      .filter((m) => Object.values(m.attributes ?? {}).some((v) => v < 90));
     if (members.length > 0) {
       overlay.appendChild(button('🎓 傳承——把經驗教給一位隊友', false, () => {
         showProMentorPick(overlay, members);
       }));
+    } else if (unmentored.length > 0) {
+      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
+        'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
+      '🎓 傳承——這裡的隊友，都已站在你能傳授的高度之上（本隊無可傳授）'));
     }
     if (!g.intel) {
       overlay.appendChild(button('🎞 情報網——解鎖對手攻擊分佈（賽前布置可見）', false,

@@ -503,3 +503,39 @@ test('覆審修 純國內季末摘要：名次列逐字＝「聯賽第 8 名」�
   assert.match(text, /聯賽第 8 名/, '前提：季末摘要卡有名次列');
   assert.doesNotMatch(text, /職業聯賽第 8 名/, '國內名次列不得被順手加上「職業」前綴');
 });
+
+// ════════════════════════════════════════════════════════════════
+// 裁定落地（2026-08-27 Sawmah 甲案）——海外「傳承」無可受益隊友時灰掉標示
+// 突變紀錄（主對話實測）：把 careerScreen 傳承的「有屬性 <90 才算可教」filter 拿掉
+// （members 退回 unmentored）→ 恰 1 紅（本測「海外屆間卡」）；還原後全綠。
+// ════════════════════════════════════════════════════════════════
+// makeScreen 會自動「好好休息」跳過屆間卡——本測要停在屆間卡上看選項，用不跳過的變體
+async function screenAtGrowthCard(storage) {
+  fakeDom();
+  const { createCareerScreen } = await import('../src/ui/careerScreen.js');
+  const { createCareerStore: mkStore } = await import('../src/career/careerStore.js');
+  const screen = createCareerScreen(mkStore(storage), {
+    primeSlot: () => {}, onQuick: () => {}, onPlay: () => {}, onPractice: () => {},
+  });
+  screen.show('career');
+  await settle();
+  await drainDialogs();
+  return screen;
+}
+
+test('裁定甲 海外屆間卡：傳承鈕不出現、改標「本隊無可傳授」；國內屆間卡傳承鈕照常', async () => {
+  // 海外：settledForeignSeason → advanceSeason → proGrowthPending → render 出屆間卡
+  const storage = settledForeignSeason();
+  assert.ok(createCareerStore(storage).advanceSeason(), '前提：海外季推進成功');
+  await screenAtGrowthCard(storage);
+  assert.match(allText(globalThis.document.body), /這個冬天，你想怎麼過/, '前提：屆間卡有出');
+  assert.ok(!findBtn(/傳承——把經驗教給/), '海外隊友全 90 封頂：傳承鈕不得出現');
+  assert.match(allText(globalThis.document.body), /本隊無可傳授/, '要有灰字標示，不能無聲消失');
+
+  // 國內對照：unlockedProSave（國內冠軍季已結算）→ advanceSeason → 傳承鈕照常
+  const s2 = unlockedProSave();
+  assert.ok(createCareerStore(s2).advanceSeason(), '前提：國內季推進成功');
+  await screenAtGrowthCard(s2);
+  assert.match(allText(globalThis.document.body), /這個冬天，你想怎麼過/, '前提：屆間卡有出');
+  assert.ok(findBtn(/傳承——把經驗教給/), '國內隊友 85 封頂（<90）：傳承鈕照常');
+});
