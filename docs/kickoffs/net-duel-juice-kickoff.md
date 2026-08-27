@@ -38,6 +38,16 @@
 - 批 1(甲):網口對決簽名演出。凍結檔 `acceptance-netduel-batch1.md`。
 - 批 2(丙1/2/3):接球微回饋三件。凍結檔 `acceptance-netduel-batch2.md`。
 
+## 結案回填(2026-08-27)
+
+- 批1=f1b3e2e(2169 綠)、批2=5157dec(2181 綠;含主對話覆核修正:重扣門檻 0.7 收斂
+  到 receiveJuice.HEAVY_SPIKE_POWER_MIN 單一來源,消滅 matchLoop 行內第二份)。
+- 對抗覆審(fresh code-reviewer,冷讀 0e59d91..HEAD):零 CRITICAL/HIGH、1 MEDIUM
+  (hitStop/slowUntil 寫入者 Math.max 不對稱,掉幀補跑批次可反向蓋短)→ 6146578 修畢,
+  修後 2181 綠。
+- 驗收對照:凍結點 56c848c 起兩份 acceptance 檔零改動(git diff 實測);ND-1~6、
+  NJ-1~6 逐條證據見 netduel-batch{1,2}-report.md 與測試檔頭突變紀錄。
+
 ## 掛帳
 
 - 甲的鏡距/時長、丙1 hit-stop 時長=提案值,試玩即改。
