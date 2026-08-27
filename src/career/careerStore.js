@@ -1337,6 +1337,23 @@ export function createCareerStore(storage, slot = 1) {
         };
       });
     },
+    // 多年職業生涯卷 小批（2026-08-27 夜）里程碑事件小獎勵消費點：applyExpel 逐出
+    // 「全隊 trust −5」的鏡像——這裡是正向、夾限到 100 上限（applyExpel 夾限 0 下限，
+    // 同一份 lineup.trust、同一種批次調整寫法，方向相反）。主角自身 trust 不在
+    // lineup.trust 裡（同 applyExpel 的「主角另計不受影響」慣例，天然沿用）。
+    // delta 非正數＝防呆 no-op（目前唯一呼叫端 careerScreen.js fireEvents 只會傳
+    // 具名正值常數，這裡保守擋掉誤用）。
+    applyTeamTrustBonus(delta) {
+      if (!Number.isFinite(delta) || delta <= 0) return false;
+      return writeSave((prev) => {
+        if (!prev) return prev;
+        const trust = Object.fromEntries(
+          Object.entries(prev.lineup?.trust ?? {})
+            .map(([id, v]) => [id, Math.max(0, Math.min(100, v + delta))]),
+        );
+        return { ...prev, lineup: { ...prev.lineup, trust } };
+      });
+    },
     // W3(P4) 轉位（教練談話接受後的存檔面）：單次 RMW 原子完成三處——
     // ①player.currentRole 改寫（naturalRole/身高/志願不動）②新角色造成的名冊缺額
     // 補位員入隊（縫隙 1「被取代者=補位員或招募生」；season.seed 決定論，同存檔同輸出）

@@ -102,6 +102,11 @@ import { foreignTable, FOREIGN_PLAYER_ID } from '../career/foreignSchedule.js';
 import { foreignJianEventFor } from '../career/foreignEvents.js';
 // 職業章批 5（2026-08-26）：敘事層——合約卡／王勝翔宿敵線／收尾點名（同構 corpEvents.js）
 import { PRO_CONTRACT_LINES, proWangRivalPreEvents, proClosingLines } from '../career/proEvents.js';
+// 多年職業生涯卷 小批（2026-08-27 夜）：後段年份里程碑事件（純新增、獨立於上一行）
+import { proMilestonePreEvents } from '../career/proMilestones.js';
+// 多年職業生涯卷 小批（2026-08-27 夜）：王勝翔宿敵生涯鏡像——與上面的 proEvents.js
+// 完全獨立的一條敘事線（零改動既有王勝翔宿敵線，見 proRivalArc.js 檔頭）
+import { rivalArcPreEvents } from '../career/proRivalArc.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
@@ -1805,6 +1810,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     for (const e of evs) {
       c = recordEvent(c, e.id);
       if (e.effect?.trust) updateTrust(player, e.effect.trust); // 持久 baseline（劇情層專用路徑）
+      // 多年職業生涯卷 小批（2026-08-27 夜）：里程碑事件小獎勵——全隊信任調整
+      // （applyExpel 逐出全隊 trust −5 的鏡像，方向相反）。MEDIUM 覆審修正措辭：
+      // 這行本身是 career 層寫入、src/sim 程式碼零改動，但寫入的 lineup.trust
+      // 會在下一場比賽經 careerState.js 建隊塞進 sim Player.trust.fromSetter，
+      // 觸發它的那一場分配權重因此改變——不是「效果與 sim 無關」。
+      if (e.effect?.teamTrust) store.applyTeamTrustBonus(e.effect.teamTrust);
       if (e.effect?.unlock) {
         // 故事線傳授：冪等解鎖（點數時代已買過的不受影響）
         const k = e.effect.unlock;
@@ -2862,6 +2873,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           // 職業章批 5（G2）：王勝翔同場宿敵線——同隊/敵隊兩情境互斥，各自一生一次
           // 批 4A：第 4 參數＝季號（年度重逢句每季一次的旗標）
           ...proWangRivalPreEvents(career, next, store.loadPro?.() ?? null, store.seasonIndex?.() ?? 1),
+          // 多年職業生涯卷 小批（2026-08-27 夜）：後段年份里程碑事件——只吃既有封存
+          // 資料（archive），與上一行完全獨立判定（各自的 career.events 旗標）
+          ...proMilestonePreEvents(career, next, store.loadSeasonArchive?.() ?? []),
+          // 多年職業生涯卷 小批（2026-08-27 夜）：王勝翔宿敵生涯鏡像——與上面的
+          // proWangRivalPreEvents 完全獨立的一條敘事線（零改動既有那條）
+          ...rivalArcPreEvents(career, next, store.loadPro?.() ?? null, store.loadSeasonArchive?.() ?? []),
           // 國外聯賽卷批 4（F4-3）：簡子嵐海外重逢——掛在同一個賽前事件消費點、同一個
           // career.events 已播旗標機制（同 proWangRivalPreEvents 的 played 判準）；
           // round!=='foreign' 時恆空陣列（高中/大學/企業/國內職業/海外季後賽零誤觸發）
