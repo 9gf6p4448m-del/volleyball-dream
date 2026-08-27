@@ -37,7 +37,7 @@ import { showHeightRitual } from './heightRitual.js';
 import { showGraduationRitual } from './graduationRitual.js';
 import { showTrainingCamp } from './trainingCamp.js';
 import {
-  chemistryPairsOf, isCampPending, clearCampPending, departedMatesOf,
+  chemistryPairsOf, isCampPending, clearCampPending, departedMatesOf, campAttrOptions,
 } from '../career/trainingCamp.js';
 import {
   drillsFor, recentTechniquesOf,
@@ -3705,6 +3705,20 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       }
     };
     overlay.appendChild(button('🗣 立威——隊內聲望（信任 +6）', false, () => pick('prestige')));
+    // 職業屆間體能格（2026-08-27 拍板）：數值/上限/解鎖閘全部經 campAttrOptions
+    // 單一來源（trainingCamp.js）算——本檔不重寫任何一個數字。
+    const growthPlayer = store.loadPlayer?.();
+    const fitUnlockControl = !!store.loadPractice?.()?.unlockControl;
+    const fitOpts = growthPlayer ? campAttrOptions(growthPlayer, { unlockControl: fitUnlockControl }) : [];
+    if (growthPlayer && fitOpts.some((o) => o.ready)) {
+      overlay.appendChild(button('🏋 體能特訓——把身體再往上推一格', false, () => {
+        showProFitnessPick(overlay, fitOpts);
+      }));
+    } else if (growthPlayer && fitOpts.length > 0) {
+      overlay.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
+        'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
+      `🏋 體能特訓——身體已到你能推的極限（${fitOpts.map((o) => `${o.name}${o.reason}`).join('、')}）`));
+    }
     // 傳承：還有沒教過的隊友才列
     const unmentored = (store.loadRoster?.()?.members ?? [])
       .filter((m) => !g.mentored.includes(m.id));
@@ -3748,6 +3762,37 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
           menu.remove();
         }
       }));
+    }
+    menu.appendChild(button('↩ 回上一頁', false, () => menu.remove()));
+    document.body.appendChild(menu);
+  }
+
+  // 職業屆間體能格（2026-08-27 拍板）：子選單——ready 項顯示現值→加後值，
+  // not ready 項灰字附 reason 原文（不可選）。數值全吃 campAttrOptions 單一來源。
+  function showProFitnessPick(growthOverlay, opts) {
+    const menu = el('div', [
+      'position:fixed', 'inset:0', 'z-index:38', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:safe center', 'overflow-y:auto',
+      'background:rgba(4,6,12,0.96)', 'gap:8px', 'padding:26px 14px',
+    ]);
+    menu.appendChild(el('div', ['font-size:15px', 'font-weight:900', `color:${COLOR.gold}`],
+      '🏋 這個冬天，練哪一項？'));
+    for (const o of opts) {
+      if (o.ready) {
+        const after = Math.min(o.cap, o.value + o.gain);
+        menu.appendChild(button(`${o.name} ${o.value} → ${after}（上限 ${o.cap}）`, false, () => {
+          if (store.chooseProGrowth?.('fitness', o.key)) {
+            proGrowthOpen = false;
+            menu.remove(); growthOverlay.remove(); renderCareer();
+          } else {
+            menu.remove();
+          }
+        }));
+      } else {
+        menu.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`, 'line-height:1.7',
+          'max-width:min(400px,92vw)', 'text-align:center', 'opacity:0.75'],
+        `${o.name}${o.value}——${o.reason}`));
+      }
     }
     menu.appendChild(button('↩ 回上一頁', false, () => menu.remove()));
     document.body.appendChild(menu);

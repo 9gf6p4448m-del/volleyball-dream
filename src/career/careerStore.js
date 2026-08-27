@@ -42,7 +42,7 @@ import {
   pendingWaiting, recruitTargetGone, waitingOf,
 } from './recruitment.js';
 import { positionFlagsOf, markPositionReady, approvePositionOpen } from './positionFlags.js';
-import { markCampPending } from './trainingCamp.js';
+import { markCampPending, campAttrOptions, applyCampAttrTraining } from './trainingCamp.js';
 import { normalizePractice } from './practiceMatch.js';
 import {
   createSaveV2, seasonFromCareer, careerViewOf, deserializeSave, serializeSave,
@@ -1091,18 +1091,29 @@ export function createCareerStore(storage, slot = 1) {
       const g = loadSave()?.career?.proGrowth ?? null;
       return { mentored: [...(g?.mentored ?? [])], intel: g?.intel === true };
     },
+    // 職業屆間體能格（2026-08-27 拍板）：第五路，第二參數當 attrKey 用（'stamina'／
+    // 'control'）。幅度/上限/控球解鎖判定**全部經 campAttrOptions／applyCampAttrTraining
+    // 單一來源**（trainingCamp.js）——本檔不得另抄任何一個數字。unlockControl 吃
+    // save.practice（紅白賽全科目完成才開放控球，同集訓那格的閘）。
     chooseProGrowth(option, memberId = null) {
       const save = loadSave();
       if (!save) return false;
       if (!isPro(normalizeChapter(save.career ?? null))) return false;
       if (save.career?.proGrowthPending !== (save.season.index ?? 1)) return false;
       const g = save.career?.proGrowth ?? {};
-      if (!['prestige', 'mentor', 'intel', 'rest'].includes(option)) return false;
+      if (!['prestige', 'mentor', 'intel', 'rest', 'fitness'].includes(option)) return false;
       if (option === 'intel' && g.intel === true) return false; // 一次性
       if (option === 'mentor') {
         const target = (save.roster?.members ?? []).find((m) => m.id === memberId);
         if (!target) return false;
         if ((g.mentored ?? []).includes(memberId)) return false; // 同人一生一次
+      }
+      if (option === 'fitness') {
+        if (!save.player || typeof memberId !== 'string') return false;
+        const unlockControl = normalizePractice(save.practice ?? null).unlockControl;
+        const opt = campAttrOptions(save.player, { unlockControl })
+          .find((o) => o.key === memberId);
+        if (!opt?.ready) return false; // 到頂／未解鎖——單一來源判定
       }
       return writeSave((prev) => {
         // 冪等雙保險：pending 條件綁 prev 讀值
@@ -1135,6 +1146,14 @@ export function createCareerStore(storage, slot = 1) {
         } else if (option === 'intel') {
           if (prevG.intel === true) return prev;
           nextCareer.proGrowth = { ...prevG, intel: true };
+        } else if (option === 'fitness' && player) {
+          // 守衛綁 prev 讀值（既有慣例）：unlockControl／ready 全部用 prev 重算，
+          // 不信任呼叫前的快照——與 mentor 分支的 prevG.mentored 二次核對同紀律。
+          const unlockControl = normalizePractice(prev.practice ?? null).unlockControl;
+          const opt = campAttrOptions(player, { unlockControl })
+            .find((o) => o.key === memberId);
+          if (!opt?.ready) return prev;
+          player = applyCampAttrTraining(player, memberId, { unlockControl });
         }
         return { ...prev, career: nextCareer, player, roster };
       });
