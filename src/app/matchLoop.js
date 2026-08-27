@@ -1269,16 +1269,24 @@ export function applyServeChoice(s, it) {
 }
 
 // 追發第二層：對方當前輪轉的後排三人（名單與座標由 controls 現算）＋返回。
-export function chasePanelItems(targets) {
+// 08-27 追發配飄跳發：沿用主面板慣例（變體＝並列按鈕、同色系），未受教不出現
+// （B7-4 同則：gate 在行為層）。驗收凍結＝acceptance-chase-style.md。
+export function chasePanelItems(targets, gates) {
   return [
-    ...targets.map((t) => ({ key: t.key, label: t.label, color: 'red', target: t })),
+    ...targets.map((t) => ({ key: t.key, label: t.label, color: 'red', target: t, style: null })),
+    ...(gates?.canFloatServe ? targets.map((t) => ({
+      key: `f-${t.key}`, label: `飄·${t.label}`, color: 'cyan', target: t, style: 'float',
+    })) : []),
+    ...(gates?.canJumpServe ? targets.map((t) => ({
+      key: `j-${t.key}`, label: `跳·${t.label}`, color: 'orange', target: t, style: 'jump',
+    })) : []),
     { key: 'chase-back', label: '← 返回', color: 'dim', back: true },
   ];
 }
 
 export function applyChaseChoice(s, it) {
   if (it.back) { s.chaseExpanded = false; return; }
-  s.stage.controls.serveNow(s.game, it.target.aim, null);
+  s.stage.controls.serveNow(s.game, it.target.aim, it.style ?? null);
   s.servedThisTurn = true;
   s.chaseExpanded = false;
 }
@@ -1636,7 +1644,7 @@ function updateDecisions(s, now) {
     const targets = controls.chaseServeTargets(game);
     panel.show(
       '追發：發給誰？',
-      chasePanelItems(targets),
+      chasePanelItems(targets, gates),
       (it) => applyChaseChoice(s, it),
     );
   } else if (serveDeciding) {
