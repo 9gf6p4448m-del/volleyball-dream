@@ -49,3 +49,5 @@
   練習賽卷：sim 加純觀測欄位（SERVE.style／TOUCH.routeKind／叫戰術觀測），行為零位移已由剝欄位對比驗證（同 seed 事件流逐位元相同、比分逐值相同）；科目系統四項復活
 - 2026-08-24　`2d06b4e`　2f60f04312b666db → 34772c06e02243fd
   壓手攔網的代價落地（Sawmah 2026-08-24 裁定「走 A」）。press 原本只在 zone=top 那一支生效、其餘兩區完全不讀 blockHand ⇒ 結構上不可能有代價：配對實測全樣本 +4.7pp「顯著」白拿。新增 BLOCK_PRESS_SIDE_MUL 1.6（擦側偏折加大＝手前伸、側邊更空）與 BLOCK_PRESS_BODY_MUL 0.7（正面攔死機率下降＝手在網另一側、有效面積變小），把壓手變成「賭這球會擦到我手頂」。★幅度由 tools/press-cost-sweep.mjs 掃出，不是憑感覺挑★：2768 個配對接觸點，每次真實 BLOCK_TOUCH 前一刻存 structuredClone 底稿、對七臂各重跑一次到該分結束（vertical 對照臂的配對區不一致 0）。動手前寫死的判準＝「全樣本淨值最接近 0 或略負、且 top 淨值仍顯著為正」，1.6/0.7 是唯一同時滿足的一組——全樣本 −1.1pp（雜訊內）、擦頂 +22.0pp（顯著）、擦側 −10.1pp（顯著）、正面 −6.8pp（顯著）。兩個乘數都只乘在既有的 blownHash／機率上，不多消費 rand。AI 攔網手也吃這兩顆鈕（blockPlan 會產 press），故行為變動是預期的、非 bug；本次僅 2 局逐值不同。
+- 2026-08-28　`1145dc7`　34772c06e02243fd → 34d7a1367a2a8d99
+  接球微回饋批2(5157dec 08-27)給TOUCH事件加perfect純觀測欄位(game.js executeTouch,不參與判定)——事件進雜湊故14場digest全變;行為零位移證據:worktree實跑7個commit,父7f62cc6合計仍=34772c06e02243fd逐字同基準,5157dec起=34d7a1367a2a8d99,全程14場tick/比分逐值同
