@@ -1180,7 +1180,7 @@ export function runHighlightFrame(s, now, delta) {
     ctx.camera.position.y += lift;
     ctx.camera.lookAt(target);
   }
-  ctx.renderer.render(ctx.scene, ctx.camera);
+  ctx.postFx.render(ctx.scene, ctx.camera); // 批3：渲染單一出口（A3）
   ctx.hud.frame(now, delta, 0);
   if (stage.panel) stage.panel.hide();
   if (t >= 1) endHighlightReplay(s);
@@ -1346,7 +1346,7 @@ export function runReplayFrame(s, now, delta) {
   stage.landingMarker.hide();
   ctx.camera.position.set(0, 12, 12.5);
   ctx.camera.lookAt(0, 0.6, 0);
-  ctx.renderer.render(ctx.scene, ctx.camera);
+  ctx.postFx.render(ctx.scene, ctx.camera); // 批3：渲染單一出口（A3）
   ctx.hud.frame(now, delta, 0);
   if (stage.panel) stage.panel.hide();
   if (player.done) {
@@ -3803,6 +3803,6 @@ function frameStep(s, now) {
   const aimAt = s.config.simpleMode ? null : stage.controls.currentAimPoint(game);
   if (aimAt) stage.aimMarker.show(aimAt);
   else stage.aimMarker.hide();
-  ctx.renderer.render(ctx.scene, ctx.camera);
+  ctx.postFx.render(ctx.scene, ctx.camera); // 批3：渲染單一出口（A3）
   ctx.hud.frame(now, delta, simSteps);
 }

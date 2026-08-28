@@ -449,6 +449,8 @@ function fakeCtx() {
       camera,
       scene: {},
       renderer: { render: () => rendered.push('render') },
+      // 批3：matchLoop 渲染出口改走 postFx（A3）——治具補同語意 stub，rendered 日誌形狀不變
+      postFx: { render: () => rendered.push('render') },
       hud: { frame: () => {} },
       ballView: { sync: () => {} },
     },

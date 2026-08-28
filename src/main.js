@@ -8,6 +8,8 @@ import { createGame } from './sim/game.js';
 import { createAiState } from './sim/ai.js';
 import { getQuality, describeQuality } from './render/quality.js';
 import { createRenderer, createScene, createCamera, createLights, bindResize } from './render/scene.js';
+import { createPostFx } from './render/postFx.js';
+import { createFloorReflection } from './render/floorReflection.js';
 import { createCourt } from './render/court.js';
 import { createArena } from './render/arena.js';
 import { createPlayers } from './render/players.js';
@@ -85,11 +87,14 @@ async function init() {
   const arena = createArena(scene);
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
+  // 批3 光效：?fx=high 才有 bloom＋地板反光；off＝直渲零成本；失敗＝退回直渲永不致死
+  const postFx = createPostFx(renderer, scene, camera, quality);
+  createFloorReflection(scene, quality);
   // HUD：預設極簡（小 FPS 角標）；?hud=1 或 bench 基準場景＝完整偵錯資訊
   const fullHud = params.get('hud') === '1' || params.get('mode') === 'bench';
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality), fullHud);
 
-  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena };
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, postFx };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else if (params.get('devkit') === '1') {
@@ -332,7 +337,7 @@ async function runMatch(ctx, careerCtx = null, quickRole = null, netStart = null
 // ---- Phase 0 基準測試模式（?mode=bench，保留降規測試基準）----
 
 async function runBench(ctx) {
-  const { renderer, scene, camera, quality, ballView, hud, loadingEl } = ctx;
+  const { renderer, scene, camera, quality, ballView, hud, loadingEl, postFx } = ctx;
 
   const controls = createCameraControls(camera, renderer.domElement);
   let players;
@@ -371,7 +376,7 @@ async function runBench(ctx) {
     ballView.sync(world.ball, accumulator / SIM_DT);
     players.update(delta);
     controls.update();
-    renderer.render(scene, camera);
+    postFx.render(scene, camera); // 批3：bench 也走光效出口——?fx=high 的降規數據才量得到
     hud.frame(now, delta, simSteps);
   }
   requestAnimationFrame(frame);

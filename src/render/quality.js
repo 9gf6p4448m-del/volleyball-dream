@@ -1,5 +1,6 @@
 // 畫質設定：URL 參數解析（供真機逐項降規找上限用，禁止程式自我降級）
 // ?quality=low|med|high  ?dpr=1  ?shadows=off|1024|2048|4096  ?aa=0|1  ?players=12  ?model=soldier.glb
+// ?fx=high  大作感卷批3：bloom＋地板反光（預設 off；Q5 拍板真機 60FPS 過閘才議改預設）
 
 const PRESETS = {
   low: { dpr: 1, shadowSize: 0, antialias: false },
@@ -32,7 +33,10 @@ export function getQuality(search = window.location.search) {
   const modelParam = q.get('model');
   const model = modelParam && /^[\w.-]+\.glb$/.test(modelParam) ? modelParam : 'soldier.glb';
 
-  return { preset: presetName, dpr, shadowSize, antialias, players, model };
+  // 批3 光效檔位：唯一合法升規值 'high'，其餘（含缺席/亂寫）一律 off——不得靜默升規
+  const fx = q.get('fx') === 'high' ? 'high' : 'off';
+
+  return { preset: presetName, dpr, shadowSize, antialias, players, model, fx };
 }
 
 function parseShadow(v, fallback) {
@@ -43,5 +47,5 @@ function parseShadow(v, fallback) {
 
 export function describeQuality(s) {
   const shadow = s.shadowSize === 0 ? 'off' : `${s.shadowSize}`;
-  return `${s.preset} · dpr ${s.dpr.toFixed(2)} · shadows ${shadow} · aa ${s.antialias ? 'on' : 'off'} · players ${s.players}`;
+  return `${s.preset} · dpr ${s.dpr.toFixed(2)} · shadows ${shadow} · aa ${s.antialias ? 'on' : 'off'} · players ${s.players} · fx ${s.fx}`;
 }

@@ -204,7 +204,7 @@ export async function createMatchView(
     }
     // 死球落點塵土（e.at＝球落地/犯規點）
     for (const e of events) {
-      if (e.type === 'DEAD_BALL' && e.at) dust.burst(e.at.x, e.at.z, 10, 0.9);
+      if (e.type === 'DEAD_BALL' && e.at) dust.burst(e.at.x, e.at.z, 16, 1.05); // 批3擴充【試玩必調】
     }
   }
 
@@ -497,7 +497,7 @@ export async function createMatchView(
 
 // ---- 灰塵粒子池（單一 Points、96 槽循環使用；死粒子藏到地下）----
 function createDust(scene) {
-  const N = 96;
+  const N = 144; // 批3擴充：死球爆塵加量後 96 槽會提早回收未死粒子【試玩必調】
   const pos = new Float32Array(N * 3).fill(-100);
   const vel = new Float32Array(N * 3);
   const life = new Float32Array(N);
