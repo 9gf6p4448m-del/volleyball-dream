@@ -52,9 +52,12 @@ function buildCss() {
   content:''; position:absolute; inset:5px; pointer-events:none;
   border:1px solid rgba(${GOLD_RGB},0.2);
 }
-/* 內縮雙線框裝飾層（貼在整頁容器上當外框，不佔版面、不吃點擊） */
+/* 內縮雙線框裝飾層（釘住視窗邊緣的畫框，不佔版面、不吃點擊）
+   fixed 而非 absolute：掛載處（careerScreen root）是捲動容器，absolute 的高度解析在
+   可視高度——內容超過一屏（手機橫向）時框的下緣會停在內容中間、按鈕掉到框外
+   （2026-08-28 Sawmah 真機截圖實證）。畫框釘住視窗四邊，內容在框下捲動才對。 */
 .vd-frame{
-  position:absolute; inset:14px; pointer-events:none;
+  position:fixed; inset:14px; pointer-events:none;
   border:1px solid rgba(${GOLD_RGB},0.4);
 }
 .vd-frame::after{
