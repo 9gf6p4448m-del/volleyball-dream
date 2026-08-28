@@ -42,6 +42,11 @@ function showFatalError(err) {
   const header = err?.name || err?.message
     ? `${err.name ?? 'Error'}: ${err.message ?? ''}`
     : String(err);
+  // ★ 音訊錯誤永不致死（2026-08-28 真機事故）★ 本遊戲零音檔、所有聲音都是可有可無
+  // 的合成音效——音訊裝置起不來（iOS 講完電話/LINE 語音後的暫時狀態）最壞就是沒聲音。
+  // sfx.js 的 ensure 已在源頭包好，這裡是效果層的最後防線：未來任何音訊路徑漏接，
+  // 也不准把還在跑的遊戲蓋上全螢幕死屏（那次畫面全黑，其實比賽還在底下跑）。
+  if (/audio/i.test(header)) { console.warn('[audio-nonfatal]', header); return; }
   const msg = err?.stack ? `${header}\n${err.stack}` : header;
   let el = document.getElementById('fatal-error');
   if (!el) {

@@ -5,21 +5,32 @@ export function createSfx() {
 
   let crowdStarted = false;
 
+  // ★ 音效失敗＝這一下沒聲音，永遠不准往外丟 ★（2026-08-28 Sawmah 真機事故）
+  // iOS 的音訊硬體會偶發起不來（剛講完電話/LINE 語音後常見）：new AudioContext 或
+  // resume() 丟「InvalidStateError: Failed to start the audio device」。本函式綁在
+  // **每一次 pointerdown** 上，裸奔的 rejection 會被 main.js 的 unhandledrejection
+  // 接去畫全螢幕 fatal 簾幕——遊戲明明還在跑，畫面卻整個被錯誤蓋死。
+  // 失敗不鎖死：ctx 留著/歸零，下一次手勢自然重試（iOS 的暫時狀態會自己好）。
   function ensure() {
-    if (!ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return null;
-      ctx = new AC();
+    try {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        ctx = new AC();
+      }
+      if (ctx.state === 'suspended') ctx.resume()?.catch(() => {});
+      if (!crowdStarted) startCrowd();
+      return ctx;
+    } catch {
+      return null; // 這一下靜音；下一次手勢重試
     }
-    if (ctx.state === 'suspended') ctx.resume();
-    if (!crowdStarted) startCrowd();
-    return ctx;
   }
   window.addEventListener('pointerdown', ensure);
 
   // 球場氛圍：低音量群眾雜訊底（loop），得分時 cheer 疊上去
   function startCrowd() {
-    crowdStarted = true;
+    crowdStarted = true; // 失敗也標記：氛圍底不重試（單次性），擊球音效照走 ensure
+    try {
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
@@ -39,6 +50,7 @@ export function createSfx() {
     src.connect(lp).connect(g).connect(ctx.destination);
     src.start();
     crowdGain = g;
+    } catch { /* 氛圍底起不來＝安靜的場館，比賽照打 */ }
   }
 
   // 群眾音量目標（局點發球前屏息＝壓低；得分後回常態）——平滑過渡
