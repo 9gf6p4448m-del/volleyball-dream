@@ -499,6 +499,32 @@ test('追發×式 穩定態按名字鈕：style null、timing=1（既有行為�
   });
 });
 
+test('追發層內切式：切換鈕在層內、切了不退層不發球、人名鈕原地換式（08-28 追修）', () => {
+  const g = serveGame();
+  const me = serverId(g.match);
+  withControls(me, (controls) => {
+    const s = fakeState(g, controls, me, { chaseExpanded: true, serveStyleSel: null });
+    const targets = controls.chaseServeTargets(g);
+    // 層內有切換鈕（有學才有——B7-4 行為層）
+    const items = chasePanelItems(targets, chaseGatesAll(), s.serveStyleSel);
+    const fl = items.find((i) => i.styleToggle === 'float');
+    assert.ok(fl, '追發層沒有飄浮切換鈕＝逼人返回繞路');
+    assert.ok(items.some((i) => i.styleToggle === 'jump'));
+    // 切了：不發球、不退層、狀態翻過去
+    applyChaseChoice(s, fl);
+    assert.equal(s.serveStyleSel, 'float');
+    assert.equal(s.servedThisTurn, false);
+    assert.equal(s.chaseExpanded, true, '切式把追發層關掉＝又要重新點進來');
+    // 重繪後人名鈕帶飄·前綴與 float style
+    const after = chasePanelItems(targets, chaseGatesAll(), s.serveStyleSel);
+    for (const i of after) if (i.target) assert.equal(i.style, 'float');
+    assert.ok(after.find((i) => i.target).label.startsWith('飄·'));
+    // 沒學的式不長鈕
+    const noJump = chasePanelItems(targets, gatesFor({ chaseServe: 1, floatServe: 1 }), null);
+    assert.ok(!noJump.some((i) => i.styleToggle === 'jump'));
+  });
+});
+
 test('追發層體力標記：值上鈕、tierOf≥1 標🥵（決策依據在決策點上）', () => {
   const g = serveGame();
   const me = serverId(g.match);

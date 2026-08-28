@@ -1449,11 +1449,26 @@ export function chasePanelItems(targets, gates, styleSel = null) {
         color, target: t, style,
       };
     }),
+    // 08-28 追修（Sawmah：「選追發沒辦法用飄球或跳發？」）：式切換鈕**追發層也要有**
+    // ——只放主面板等於逼人「返回→切式→再進來」三步繞路；這裡切了原地換式。
+    // 與主面板同一顆 serveStyleSel（applyChaseChoice 的 styleToggle 分支），不另存狀態。
+    ...(gates?.canFloatServe ? [{
+      key: 'chase-style-float', label: style === 'float' ? '✓ 飄浮' : '飄浮',
+      color: 'cyan', styleToggle: 'float',
+    }] : []),
+    ...(gates?.canJumpServe ? [{
+      key: 'chase-style-jump', label: style === 'jump' ? '✓ 跳發' : '跳發',
+      color: 'orange', styleToggle: 'jump',
+    }] : []),
     { key: 'chase-back', label: '← 返回', color: 'dim', back: true },
   ];
 }
 
 export function applyChaseChoice(s, it) {
+  if (it.styleToggle) { // 追發層原地切式（同主面板那顆狀態；不發球、不退層）
+    s.serveStyleSel = s.serveStyleSel === it.styleToggle ? null : it.styleToggle;
+    return;
+  }
   if (it.back) { s.chaseExpanded = false; return; }
   s.stage.controls.serveNow(s.game, it.target.aim, it.style ?? null);
   s.servedThisTurn = true;
