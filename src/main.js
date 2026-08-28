@@ -88,6 +88,21 @@ async function init() {
     // 題 3 色票裁定工具兼驗收 K6 量測工具；動態載入，不進正常路徑的 bundle 熱路
     const { runKitPreview } = await import('./render/kitPreview.js');
     runKitPreview(ctx);
+  } else if (params.get('net') === '1') {
+    // 多人連線卷 批3：貼碼連線 lobby → 兩端同 seed 同建隊開賽（動態載入不進單機熱路）
+    ctx.loadingEl.remove();
+    const { showNetLobby } = await import('./ui/netLobby.js');
+    showNetLobby(ctx, {
+      onStart: (netStart) => {
+        // ★ 同步先攔訊息進緩衝 ★ 對方可能在本機 runMatch 的動態載入空窗（幾百 ms）
+        // 就開始送 input——打在 lobby 舊 handler 上會被靜默丟掉，鎖步從此缺前幾格
+        // 永遠等不齊。bindMatch 接手時先補放緩衝再上線。
+        const buffered = [];
+        netStart.handlers.onMessage = (m) => buffered.push(m);
+        netStart.buffered = buffered;
+        runMatch(ctx, null, null, netStart);
+      },
+    });
   } else if (params.get('quick') === '1') {
     await runMatch(ctx, null); // 快速比賽直達（測試腳本/舊連結用）
   } else {
@@ -211,14 +226,39 @@ async function showCareerEntry(ctx) {
 
 // ---- 比賽模式（三段編排；細節在 src/app/*）----
 
-async function runMatch(ctx, careerCtx = null, quickRole = null) {
+async function runMatch(ctx, careerCtx = null, quickRole = null, netStart = null) {
   // 賽前準備①：設定解析（種子/模式/生涯建隊/情蒐帶——純函式，node 可測）
   const config = resolveMatchConfig({
     params: ctx.params,
     careerCtx,
     quickRole, // W3(P4) 快速比賽選位置（生涯場恆 null）
+    net: netStart ? { seed: netStart.seed, roles: netStart.roles } : null, // 批3 連線對戰
     randomSeed: Date.now() % 1000000007, // 開局隨機（快速比賽）；隨機化住在 main（sim 外）
   });
+  // 批3 連線對戰：本機玩家＝自己那隊的受控者；鎖步核心與 transport 掛進 config.net
+  let netPlayerId = null;
+  if (netStart) {
+    const { createLockstep } = await import('./net/lockstep.js');
+    const otherSlot = netStart.slot === 'A' ? 'B' : 'A';
+    netPlayerId = config.netPids[netStart.slot];
+    config.net = {
+      api: netStart.api,
+      lockstep: createLockstep({ delay: netStart.delay, localSlot: netStart.slot }),
+      remotePid: config.netPids[otherSlot],
+      // matchLoop 開機時把訊息路由從 lobby 轉到比賽（input 進鎖步、斷線走提示）
+      bindMatch: ({ onInput, onGone }) => {
+        const route = (m) => {
+          if (m.y === 'input') onInput({ t: m.t, f: m.f });
+          else if (m.y === 'bye') onGone('bye');
+          // 'ready' 與其他型別＝握手殘響，比賽期間直接忽略
+        };
+        netStart.handlers.onMessage = route;
+        for (const m of netStart.buffered ?? []) route(m); // 補放空窗期間的緩衝
+        netStart.buffered = null;
+        netStart.handlers.onClose = (reason) => onGone(reason);
+      },
+    };
+  }
   // W4(P4) Q10 三館制：依賽制切館（bo5 冠軍館／bo3 關鍵戰館／bo1 常規館）＋地板換色。
   const bestOf = config.gameOptions.series?.bestOf ?? 1;
   const venueKey = bestOf >= 5 ? 'final' : bestOf === 3 ? 'key' : 'regular';
@@ -255,11 +295,12 @@ async function runMatch(ctx, careerCtx = null, quickRole = null) {
   const aiState = createAiState();
   // 賽前準備②：技術閘門與讀攔網檔位（開場讀一次，場中不變）；
   // ?hints=off：想裸讀攔網的人強制 readTier='none'（取代已移除的 👁 提示手動開關）
-  const gates = resolveTechGates(game, PLAYER_ID, !!careerCtx, ctx.params.get('hints') === 'off');
+  const activePid = netPlayerId ?? PLAYER_ID; // 批3：連線＝控自己那隊的人（客機在 B 隊）
+  const gates = resolveTechGates(game, activePid, !!careerCtx, ctx.params.get('hints') === 'off');
   // 賽前準備③：舞台建置（three.js 視圖＋DOM UI）
-  const stage = await buildMatchStage({ ctx, config, gates, playerId: PLAYER_ID, game });
+  const stage = await buildMatchStage({ ctx, config, gates, playerId: activePid, game });
   // 回合迴圈開機（局終由 matchCareer.settleCareerMatch 收束）
-  startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId: PLAYER_ID, game, aiState });
+  startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId: activePid, game, aiState });
 }
 
 // ---- Phase 0 基準測試模式（?mode=bench，保留降規測試基準）----

@@ -53,6 +53,52 @@ export function buildQuickSetup(role) {
   return { teams, liberoA: null };
 }
 
+// 多人連線卷 批3（2026-08-28）—— 連線對戰建隊（拍板 5：快速比賽兩標準隊）。
+// 純函式：兩端各自用同樣的 (hostRole, guestRole) 呼叫，建出**逐值相同**的隊伍
+// ——決定論由 tests/net-setup.test.mjs 背書。主機玩家在 A 隊、客機在 B 隊（拍板 4
+// 對隊互打）；建隊邏輯＝buildQuickSetup 的最小變換，鏡像套到兩隊。
+// 回傳 { teams, liberoA, liberoB, pids: { A, B } }（pids＝兩側受控球員 id）。
+export function buildNetSetup(hostRole, guestRole) {
+  const teams = createDefaultTeams();
+  const out = { teams, liberoA: null, liberoB: null, pids: { A: 'A2', B: 'B2' } };
+  for (const [team, role] of [['A', hostRole], ['B', guestRole]]) {
+    if (!role || role === 'outside') continue;
+    if (role === 'libero') {
+      const subId = `${team}8`;
+      teams[team][1] = createPlayer({
+        id: subId, name: `${team}隊8號`, teamId: team,
+        naturalRole: 'outside', currentRole: 'outside', height: 1.88, trust: 60,
+        attributes: {
+          jump: 60, power: 62, reaction: 60, stamina: 60,
+          speed: 62, control: 68, serve: 60, block: 58,
+        },
+      });
+      const liberoId = `${team}2`;
+      const libero = createPlayer({
+        id: liberoId, name: `${team}隊2號`, teamId: team,
+        naturalRole: 'libero', currentRole: 'libero', height: 1.72, trust: 5,
+        attributes: {
+          jump: 40, power: 40, reaction: 74, stamina: 70,
+          speed: 72, control: 72, serve: 30, block: 30,
+        },
+      });
+      if (team === 'A') out.liberoA = libero; else out.liberoB = libero;
+      continue;
+    }
+    const idx = { setter: 0, middle: 2, opposite: 3 }[role];
+    if (idx === undefined) continue; // 未知角色＝照舊（防呆，與 buildQuickSetup 同款）
+    const me = teams[team][1];
+    const displaced = teams[team][idx];
+    me.naturalRole = role;
+    me.currentRole = role;
+    displaced.naturalRole = 'outside';
+    displaced.currentRole = 'outside';
+    teams[team][idx] = me;
+    teams[team][1] = displaced;
+  }
+  return out;
+}
+
 // 介面契約（tests/app-config.test.js 把關）：
 // resolveMatchConfig({ params, careerCtx, randomSeed }) → {
 //   seed, setTarget, simpleMode, autopilot, teamControl, assistOn,
@@ -79,12 +125,14 @@ export function isSimpleMode(params) {
 // 萬一收局訊號壞掉時局還是收得掉（不會變成永遠打不完的殭屍局）。
 export const TUTORIAL_SET_TARGET = 999;
 
-export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quickRole = null }) {
+export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quickRole = null, net = null }) {
   const seedParam = Number.parseInt(params.get('seed'), 10);
-  // 種子優先序：?seed=（重現/測試）→ 生涯場次種子（生涯種子×場次 id 決定論導出）→ 開局隨機
-  const seed = Number.isFinite(seedParam) ? seedParam
-    : careerCtx ? matchSeed(careerCtx.career, careerCtx.matchEntry.id)
-      : randomSeed;
+  // 種子優先序：連線對戰（主機 hello 定案，兩端必同）→ ?seed=（重現/測試）→
+  // 生涯場次種子（生涯種子×場次 id 決定論導出）→ 開局隨機
+  const seed = net ? net.seed
+    : Number.isFinite(seedParam) ? seedParam
+      : careerCtx ? matchSeed(careerCtx.career, careerCtx.matchEntry.id)
+        : randomSeed;
   // 正式局預設 25 分（deuce 規則不變；?points= 仍可覆寫測試用短局）
   const pointsParam = Number.parseInt(params.get('points'), 10);
   const setTarget = Number.isFinite(pointsParam)
@@ -96,7 +144,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   // 決策鎖 game.tick 不碰牆鐘；其餘全靠零輸入的自動保底路徑（皆 tick 決定論）
   const autopilot = params.get('autopilot') === '1';
   // 控制模式：預設固定主攻手（07-21 Sawmah 試玩後定案）；?teamcontrol=1 開全隊輪控實驗
-  const teamControl = params.get('teamcontrol') === '1';
+  const teamControl = net ? false : params.get('teamcontrol') === '1'; // 連線＝固定控自己
   // 操作輔助（?assist=off 關閉）：青色圈＝來球預測落點
   const assistOn = params.get('assist') !== 'off';
 
@@ -134,13 +182,18 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
       ))
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）
-  const quick = careerCtx ? null : buildQuickSetup(quickRole ?? params.get('role'));
+  const quick = (careerCtx || net) ? null : buildQuickSetup(quickRole ?? params.get('role'));
+  // 批3 連線對戰：兩隊對稱建隊（兩端各自用同 roles 建＝逐值同一場）
+  const netSetup = net ? buildNetSetup(net.roles.A, net.roles.B) : null;
   // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才；
   // 快速選 L＝玩家本人穿異色球衣）
-  const liberos = careerSetup?.liberos ?? {
+  const liberos = careerSetup?.liberos ?? (netSetup ? {
+    A: netSetup.liberoA ?? buildLibero('A', 'A隊自由人'),
+    B: netSetup.liberoB ?? buildLibero('B', 'B隊自由人'),
+  } : {
     A: quick?.liberoA ?? buildLibero('A', 'A隊自由人'),
     B: buildLibero('B', 'B隊自由人'),
-  };
+  });
   // W7 A1-A5 體力（雙方啟用）：P1（2026-07-30）移除 heavyExempt 後實測發現
   // costMul 0.6 下對手全 240 場體力最低 0.74＝連喘氣帶都碰不到、豁免從未咬合
   // ⇒ 改 1.0 對稱（Sawmah 詢問「要真實建議哪個」後採實作端建議）：同一套生理
@@ -183,7 +236,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
       ...(careerSetup.scoutRead ? { scoutRead: careerSetup.scoutRead } : {}),
       // W7 D2 舊隊情結：對戰原隊的隊友開場 trustDyn +8（場末即散）
       ...(careerSetup.trustDynInit ? { trustDynInit: careerSetup.trustDynInit } : {}),
-    } : (quick ? { teams: quick.teams } : {})),
+    } : netSetup ? { teams: netSetup.teams }
+      : (quick ? { teams: quick.teams } : {})),
   };
   // stage 5 情蒐錄影帶：賽前播對手預演的 2-3 球關鍵回放（決定論預生成；點擊跳過）
   // W5+ 學招預告連動：這場會教的招→帶子剪輯偏好（吊球場收吊球片段；不可偵測者略過）
@@ -204,6 +258,7 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
   return {
     seed, setTarget, simpleMode, autopilot, teamControl, assistOn,
     careerSetup, tapeClips, gameOptions,
+    ...(netSetup ? { netPids: netSetup.pids } : {}),
     // 配色卷批 1：各側球衣 kit（careerMatchSetup 供給；快速比賽/練習賽＝null＝預設藍紅）
     kits: careerSetup?.kits ?? null,
     // 配色卷階段二 E4：現在的隊名（單一入口 currentTeamName）——render 層（arena/

@@ -48,7 +48,7 @@ import {
   TUTORIAL_RELEASE_LINE, TUTORIAL_FINISH_LINE,
 } from '../career/practiceMatch.js';
 import { spikeAimsFor, netCrossingX } from '../sim/blockRead.js';
-import { createRallyRecorder, createRallyPlayer, isPlayableTape } from './rallyTape.js';
+import { createRallyRecorder, createRallyPlayer, isPlayableTape, PLAYER_AI_FIELDS } from './rallyTape.js';
 import { buildTeamBox } from '../career/boxScore.js';
 import { boxScoreLFor } from '../career/boxScoreL.js';
 import { upcomingTeach } from '../career/events.js';
@@ -67,6 +67,7 @@ import {
   lineKillDistance, SIG_LINE_M, timingVerdict, netDuelQualify, netDuelFire,
 } from '../ui/signatureBeats.js';
 import { planHighlightReplay } from '../ui/highlightReplay.js';
+import { applyPatches } from '../net/lockstep.js';
 import {
   buildDirectorScript, stepAtExact, stepAt, shotAt, tAtStep,
 } from '../render/replayDirector.js';
@@ -194,6 +195,24 @@ const TAPE_TAIL = 240;     // 情蒐錄影帶：尾段 4 秒、略快於一般�
 
 export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId, game, aiState }) {
   const s = createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game, aiState });
+  // 多人連線卷 批3：連線 session（config.net 由 netLobby 建好傳入）。
+  // localId＝本機玩家（恆單值）；remoteIds＝對方受控者——sim 邊界吃兩者聯集（批1）。
+  if (config.net) {
+    s.net = {
+      api: config.net.api,            // transport 把手（send/close）
+      lockstep: config.net.lockstep,  // 鎖步核心（批2）
+      remotePid: config.net.remotePid,
+      sampledTick: -1,                // 本機已取樣到哪個 tick（每 tick 恰取樣一次）
+      pendingPatch: null,             // commandWrite 暫存的本 tick 旁路指令
+      stallSince: 0,                  // 影格斷流的起點（斷線看門狗用，A3-4）
+    };
+    s.remoteIds = [config.net.remotePid];
+    // 對方訊息：input 進鎖步、bye/斷線走提示（transport 的 onMessage 已在 lobby 綁到這）
+    config.net.bindMatch({
+      onInput: (msg) => s.net.lockstep.pushRemote(msg),
+      onGone: (reason) => netOpponentGone(s, reason),
+    });
+  }
   bindInputHandlers(s);
   // W6 換人：面板的執行回呼（sim applySubstitution 唯一路徑）＋關板補播敘事對話
   if (stage.subPanel) {
@@ -610,6 +629,10 @@ export function avgStamina(game, team) {
 // W7 B3 我方暫停（stage.handlers.requestTimeout）：sim 執行＋集合帶位＋倒數條啟動＋
 // 教練選項對話框（W7.1 #3A，取代舊版被動浮字——Sawmah 原話「不知道按了獲得什麼」）
 function requestTimeout(s) {
+  if (s.net) { // 批3：applyTimeout 直改 game、不經鎖步通道——連線模式先關（見凍結檔）
+    s.stage.floatText?.show('連線對戰暫不支援暫停', '#c8d6eb', 1400);
+    return;
+  }
   const team = s.game.players[s.playerId].teamId;
   const r = applyTimeout(s.game, { team });
   if (r.ok) {
@@ -928,6 +951,14 @@ function bindInputHandlers(s) {
       }
       return; // boxShown 已 true：面板顯示中，任意處點擊不再有作用
     }
+    if (s.net) {
+      // 批4：連線對戰的「再來一局」＝回連線大廳重連。單機那條「換種子重開」在
+      // 連線下是**靜默分岔**——本機自己開新局、對方還在等影格，畫面上看起來像
+      // 連著其實各玩各的（而且 createGame 沒帶 teams＝連隊伍都不對）。
+      s.net.api.send({ y: 'bye', reason: 'set-over' });
+      window.location.assign(`${window.location.pathname}?net=1`);
+      return;
+    }
     s.seed += 1;
     s.game = createGame({
       seed: s.seed, setTarget: config.setTarget,
@@ -958,7 +989,7 @@ function bindInputHandlers(s) {
   });
   window.addEventListener('keydown', (e) => {
     // 桌機 R＝回放上一球；即時 highlight 播放中則是跳過（同一鍵、不另發明按鍵）
-    if (e.code === 'KeyR' && !endHighlightReplay(s)) startReplay(s);
+    if (e.code === 'KeyR' && !s.net && !endHighlightReplay(s)) startReplay(s);
   });
   window.addEventListener('pointerdown', () => {
     if (s.replay?.tape) { // 跳過整卷情蒐
@@ -974,7 +1005,7 @@ function bindInputHandlers(s) {
   // 桌機 L 鍵/簡化模式 Space 保留為隱藏手動（提前撲的主動權）
   // 🎬 鈕：即時 highlight 播放中＝跳過（它自己 stopPropagation，吃不到上面那條
   // window pointerdown），否則＝手動回放上一球。兩者互斥不衝突（HR-5）
-  stage.handlers.replay = () => { if (!endHighlightReplay(s)) startReplay(s); };
+  stage.handlers.replay = () => { if (!s.net && !endHighlightReplay(s)) startReplay(s); };
   window.addEventListener('keydown', (e) => {
     const diveKey = e.code === 'KeyL' || (config.simpleMode && e.code === 'Space');
     if (diveKey && !e.repeat && s.diveReady) {
@@ -1201,6 +1232,43 @@ function desiredControlled(s) {
   return s.localId;
 }
 
+// 多人連線卷 批3 —— 玩家指令的唯一寫入口。
+// ★ 分類判準（批2 A2-3 的所有權分析）★：這裡只走「**玩家（或牆鐘計時）發起**」的
+//   旁路寫（面板點選、1 秒自動快選）——它們在兩台機器上**不會自然同時發生**，
+//   必須經鎖步通道延遲 D tick 後兩端同 tick 套用，否則兩端 aiState 分岔。
+//   「生命週期清除」（死球歸零、窗界作廢——如 1379 一帶）是 game 狀態的決定論函數，
+//   兩台各自跑到同一 tick 自然做同一件事 ⇒ **維持直寫，不得改走本函數**（改了反而
+//   讓清除慢 D tick、且要吃兩份重複 patch）。
+// 單機模式＝原地直寫，行為與批3之前逐值相同。
+function commandWrite(s, fields) {
+  if (!s.net) { Object.assign(s.aiState, fields); return; }
+  s.net.pendingPatch = { ...(s.net.pendingPatch ?? {}), ...structuredClone(fields) };
+}
+
+// 連線對戰的狀態雜湊（A3-1 比對用）：整包 game 序列化後 FNV-1a。
+// 只在局終/賽終各算一次（每 tick 算會吃效能——JSON 一次 ~100KB）。
+function netStateHash(game) {
+  const text = JSON.stringify({ ...game, events: [] });
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+// 對方離場／斷線（A3-4：≤5 秒提示、比賽不卡死——sim 因鎖步缺影格自然凍結，
+// 這裡負責把「為什麼凍住」講給玩家聽並給出口）
+function netOpponentGone(s, reason) {
+  if (s.netGoneShown) return;
+  s.netGoneShown = true;
+  const label = reason === 'bye' ? '對方離開了比賽' : '與對方的連線中斷了';
+  s.stage.floatText?.show(`📡 ${label}`, '#ff9d7a', 4000);
+  s.stage.resultOverlay?.show?.(`📡 ${label}`, '點擊返回選單');
+  // 沒有 resultOverlay 也要有出口：3 秒後回選單（快速比賽無存檔可失）
+  setTimeout(() => { window.location.href = window.location.pathname; }, 4000);
+}
+
 // sim 邊界要的「AI 不代打的所有人」。單人模式回 [localId]＝與批1之前逐值等價。
 // 不另存一個 `controlledIds` 欄位：那會變成第二份事實，跟 localId 漂移。
 function controlledIdsOf(s) {
@@ -1295,7 +1363,7 @@ export function mbPanelItems(gates) {
 export function applyMbChoice(s, it) {
   const { game, aiState, stage } = s;
   const { controls } = stage;
-  aiState.blockCall = { team: game.players[s.localId].teamId, line: it.line };
+  commandWrite(s, { blockCall: { team: game.players[s.localId].teamId, line: it.line } });
   // 不再送出「立即起跳」——起跳交給自動跳攔（就位後在擊球瞬間開窗）
   controls.chooseMbTiming(false);
   if (it.press) controls.armPressBlock();
@@ -1470,12 +1538,12 @@ function updateDecisions(s, now) {
       s.shadowFadeAt = 0; // 新波佈陣＝舊收帶排程作廢
       s.stage.blockShadow?.set(digRead.suggestion, game.ball.x); // B-3 佈陣可視化
       showShadowHintOnce(s);
-      aiState.digBias = {
+      commandWrite(s, { digBias: {
         team: game.players[s.localId].teamId,
         choice: autoScheme?.dig ?? 'cross',
         block: autoScheme?.block,
         override: false,
-      };
+      } });
     }
   } else {
     s.digWindowSince = -1;
@@ -1568,12 +1636,12 @@ function updateDecisions(s, now) {
       s.shadowFadeAt = 0; // 新波佈陣＝舊收帶排程作廢
       stage.blockShadow?.set(choice.key, game.ball.x); // B-3 佈陣可視化
       showShadowHintOnce(s);
-      aiState.digBias = {
+      commandWrite(s, { digBias: {
         team: game.players[s.localId].teamId,
         choice: choice.dig,
         block: choice.block,
         override: choice.key !== digRead.suggestion,
-      };
+      } });
       // 07-27 四輪（Sawmah：字卡太多以體驗為主）：手選確認浮字移除——
       // 紅綠帶佈陣可視化即確認；結果卡（封到/讀對）保留。
       // 4.5B §4：攔網手偷瞄點頭確認（暗號收到——肢體確認非字卡）
@@ -1627,14 +1695,13 @@ function updateDecisions(s, now) {
       // 真值字卡由後續事件結算（得手/被識破），s.dumpLive 追蹤本波
       if (zone.kind === 'dump') {
         controls.chooseSetDump(zone);
-        aiState.attackerId = null; // 沒有第三擊——攻擊手協調層本波不啟動
+        commandWrite(s, { attackerId: null }); // 沒有第三擊——攻擊手協調層本波不啟動
         return; // 真值字卡由事件流結算（實際出手才追蹤，非按了就算）
       }
       controls.chooseSet(zone);
       // 決策注入 AI 協調層：攻擊手改為玩家選定——第三擊呼叫鎖定與一氣呵成助跑
       // （ensureFlightPlan touches===2 讀 attackerId）沿用既有機制
-      aiState.attackerId = zone.pid;
-      aiState.attackKind = zone.kind;
+      commandWrite(s, { attackerId: zone.pid, attackKind: zone.kind });
       if (zone.hesitant) floatText.show(`${zone.name}猶豫了一下…`, '#c8d6eb', 1400);
     };
     if (!setReady) {
@@ -1676,7 +1743,7 @@ function updateDecisions(s, now) {
           // 只寫指令槽——真正的重排（planCombination ＋ applyComboRoutes ＋
           // approachRoutesFor 整份重建，已起跑者不得改線）在 sim 的 applyReplanCall。
           // UI 不自己算一份 route ⇒ 同源鐵則；輸入進了 rallyTape 白名單 ⇒ 重演得出來
-          s.aiState.replanCall = { type: it.callType, callerId: s.localId };
+          commandWrite(s, { replanCall: { type: it.callType, callerId: s.localId } });
         },
       );
     } else if (stage.diegetic) {
@@ -1747,13 +1814,50 @@ function stepSim(s) {
     }
     // 先依球權決定受控者（固定模式下不動），再收集 Intent
     syncControlled(s);
-    // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源
-    const playerIntents = [...stage.controls.collect(game, s.aiState)];
-    // W4(P4) 題5：OPP 要球——浮鈕 tap 於下一個 sim tick 注入 'call' Intent
-    // （Intent 唯一輸入鐵律；VCR 同錄可重演）
-    if (s.pendingCallIntent) {
-      s.pendingCallIntent = false;
-      playerIntents.push({ tick: game.tick, playerId: s.playerId, action: 'call' });
+    // Intent 管線：玩家與 11 個 AI 同型、同一條管線；sim 不知來源。
+    // ★ collect 每 tick 恰呼叫一次 ★——它會消耗玩家的排隊動作（queuedAction），
+    // 連線模式影格未齊而 break 後下一幀重試同一 tick，重呼叫會把動作吃掉兩次，
+    // 所以 collect 放在取樣閘之內（單機閘恆開＝行為不變）。
+    let playerIntents = null;
+    if (!s.net || s.net.sampledTick < game.tick) {
+      playerIntents = [...stage.controls.collect(game, s.aiState)];
+      // W4(P4) 題5：OPP 要球——浮鈕 tap 於下一個 sim tick 注入 'call' Intent
+      // （Intent 唯一輸入鐵律；VCR 同錄可重演）
+      if (s.pendingCallIntent) {
+        s.pendingCallIntent = false;
+        playerIntents.push({ tick: game.tick, playerId: s.playerId, action: 'call' });
+      }
+    }
+    // 多人連線（批3）：鎖步——本機輸入送進通道、兩側影格到齊才准推進這一 tick。
+    // 影格未齊＝這一幀先不推進（畫面照渲染、輸入照收，下一幀再試）。
+    if (s.net) {
+      if (s.net.sampledTick < game.tick) {
+        const patch = s.net.pendingPatch;
+        s.net.pendingPatch = null;
+        const msg = s.net.lockstep.sample(game.tick, { intents: playerIntents, patch });
+        s.net.api.send({ y: 'input', ...msg });
+        s.net.sampledTick = game.tick;
+      }
+      if (!s.net.lockstep.ready(game.tick)) {
+        // 防補幀死亡螺旋：斷流期間 accumulator 不無限堆積（回流後不狂追）
+        s.accumulator = Math.min(s.accumulator, SIM_DT * 4);
+        // ★ 斷線看門狗（A3-4）——防線按「效果」寫，不按「入口」寫 ★
+        // 分頁被關、網路被拔、對方程式當掉……每一種斷法最後都表現為同一個效果：
+        // 影格斷流。ch.onclose 在對方分頁直接關閉時可能十幾秒都不觸發（Chrome 靠
+        // ICE 逾時），所以不賭事件、直接量效果：斷流 >4 秒＝對方不在了
+        //（驗收 A3-4 要求 ≤5 秒內提示；4 秒門檻留給輪詢與渲染的餘裕——實測 5000ms
+        // 門檻量到 5141ms 貼線，這不是網路品質判斷，正常抖動不會斷流整整 4 秒）。
+        // 局終（set_over）不算——比賽打完了，雙方本來就不再送影格。
+        if (game.phase !== 'set_over') {
+          if (!s.net.stallSince) s.net.stallSince = performance.now();
+          else if (performance.now() - s.net.stallSince > 4000) netOpponentGone(s, 'stall');
+        }
+        break;
+      }
+      s.net.stallSince = 0;
+      const frame = s.net.lockstep.consumeFrame(game.tick);
+      applyPatches(s.aiState, frame.patches, PLAYER_AI_FIELDS);
+      playerIntents = frame.intents; // 兩側真人的 Intent（tick 已改寫成本 tick）
     }
     // 4.6 §7 準度可讀性：受控者這一拍的**出手時機真值**（Intent 的 timing 原值——
     // TOUCH 事件的 power 已被超蓄夾到 0.85，分不出「放太晚」與「甜蜜區」）。
@@ -1769,6 +1873,13 @@ function stepSim(s) {
     ];
     const events = stepGame(game, intents);
     frameEvents.push(...events);
+    // 連線對戰（A3-1）：局終與賽終各印一次整包狀態雜湊——兩台 console 的這行
+    // 必須逐字相同（比分、rngState、全狀態都摻在裡面）
+    if (s.net && events.some((e) => e.type === 'SET_END' || e.type === 'MATCH_END')) {
+      const line = `[NET-HASH] tick=${game.tick} hash=${netStateHash(game)} score=${game.match.score.A}-${game.match.score.B}`;
+      console.log(line);
+      (window.__netHashes ??= []).push(line); // E2E 輪詢把手（A3-1）
+    }
     // 死球＝一球結束：本球錄影歸檔、開新錄影
     if (events.some((e) => e.type === 'DEAD_BALL')) {
       s.vcrLast = s.recorder.end() ?? s.vcrLast;
@@ -2359,7 +2470,7 @@ function applyEvents(s, frameEvents, now) {
         keyPoint: s.keyPointRally, // 發球當下判定的真值（得分後分數已變，不能重問）
         pref: s.presentation.pref,
       });
-      if (hlPlan) startHighlightReplay(s, hlPlan, pointInfo);
+      if (hlPlan && !s.net) startHighlightReplay(s, hlPlan, pointInfo); // 連線：重播會凍結鎖步，批3 先關
     }
     // 主角字卡統一出口（判定在 heroCards.js 純函式：Perfect 一傳／攔網碰球／
     // 假動作騙贏／回歸建功——測試用真 sim 事件流直測，不必開瀏覽器目視）
@@ -2725,7 +2836,8 @@ export function settleIfOver(s) {
     const winner = game.series?.winner ?? game.match.winner;
     const score = game.series ? game.series.setsWon : game.match.score;
     stage.setOverOverlay.show(winner, score,
-      game.players[s.localId].teamId, s.careerCtx ? '點擊任意處返回生涯' : undefined);
+      game.players[s.localId].teamId,
+      s.careerCtx ? '點擊任意處返回生涯' : s.net ? '點擊任意處回連線大廳' : undefined);
   }
   // W4(P4) Q8 局間（多局賽制限定）：huddle 過場——比分回顧＋教練指示＋下一局/存檔離開
   if (game.phase === 'set_break' && s.prevPhase !== 'set_break') {
@@ -2846,7 +2958,7 @@ export function onCutTap(s) {
     s.stage.floatText.show(fb.text, fb.color, 1300);
     return;
   }
-  s.aiState.cutCall = { pid: s.playerId, cut: true };
+  commandWrite(s, { cutCall: { pid: s.playerId, cut: true } });
   s.cutFeedbackDone = false;
   s.cutOutcomeLatch = null;
 }
@@ -2948,7 +3060,7 @@ export function onBquickTap(s) {
     s.stage.floatText.show(fb.text, fb.color, 1300);
     return;
   }
-  s.aiState.bquickCall = { pid: s.playerId };
+  commandWrite(s, { bquickCall: { pid: s.playerId } });
   s.bquickFeedbackDone = false;
   s.bquickOutcomeLatch = null;
 }
@@ -2980,7 +3092,7 @@ export function onTandemTap(s) {
     s.stage.floatText.show(fb.text, fb.color, 1300);
     return;
   }
-  s.aiState.tandemCall = { pid: s.playerId };
+  commandWrite(s, { tandemCall: { pid: s.playerId } });
   s.tandemFeedbackDone = false;
   s.tandemOutcomeLatch = null;
 }
@@ -3007,7 +3119,7 @@ export function onAudibleTap(s) {
   }));
   s.stage.audiblePanel?.show('改叫——下指令！', items, (it) => {
     s.audibleMenuOpen = false;
-    s.aiState.replanCall = { type: it.callType, callerId: s.playerId };
+    commandWrite(s, { replanCall: { type: it.callType, callerId: s.playerId } });
     // 教學可見性批：記下這一波是改叫（syncCallFeedback 憑它把字卡換成「📢改叫」）。
     // applyReplanCall 在二傳觸球前消費 ⇒ outcome.flightId 與此刻同值（touch 才 +1）
     s.audibleIssuedFlight = s.game.rally?.flightId ?? null;
@@ -3022,8 +3134,7 @@ function onCallTap(s) {
   s.callLive = true; // 4.5B §3：喊聲已出——這球我方出手得手＝「三米線起飛」兌現
   const granted = callHash01(game.rally.flightId * 613 + (game.seed ?? 0) * 17 + 9) < CALL_GRANT;
   if (granted) {
-    s.aiState.attackerId = s.playerId;
-    s.aiState.attackKind = 'dball';
+    commandWrite(s, { attackerId: s.playerId, attackKind: 'dball' });
   }
   stage.floatText.show(`${me.name}：「我來！」`, '#ffd166', 1300);
   const setter = Object.values(game.players)

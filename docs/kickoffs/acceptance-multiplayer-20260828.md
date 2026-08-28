@@ -133,6 +133,24 @@
 
 - 凍結基準 SHA：本檔 commit 的 SHA（`git diff --stat <SHA>..` 的比較點）
 
+## 六b、批3／批4 驗證紀錄（2026-08-28，Playwright MCP 實跑於 vite dev :5175）
+
+- **A3-1 過**：兩瀏覽器分頁走真 WebRTC 打完一整局（deuce 至 8-6、7051 tick 鎖步），
+  兩端輸出逐字相同：`[NET-HASH] tick=7051 hash=f9a9e6c8 score=8-6`。
+- **A3-2 過**：`tests/net-batch3.test.mjs` 靜態掃描——src/net/ 僅 transport.js 碰瀏覽器 API。
+- **A3-3 過**：邀請碼 659 字元、回覆碼 598 字元（≤4000）；各貼一次即連上。
+- **A3-4 過**：rally 進行中直接關閉對方分頁，4049ms 顯示「連線中斷」（看門狗按
+  「影格斷流」效果寫，不賭 ch.onclose——實測分頁關閉時該事件十幾秒不觸發）。
+- **A3-5 過**：390×844 手機直式（isMobile+touch）當主機走完整貼碼流程並開賽：
+  零橫向捲動、複製鈕 52px、tap 操作全程可完成。
+- **A4-1 過**：主機選舉球員＋客機選自由人，兩端 {seed,全員(id,name,role,team),雙方輪轉}
+  JSON 逐字相同；A2=setter、B2=libero。
+- **A4-2 過**：同 A3-1 場——雙方結算比分一致（8-6）。
+- **A4-3 過**：兩端 localStorage 含 career/vd- 的 key 全程為空（實測）＋
+  net 檔案零 careerStore/localStorage import（靜態測試）。
+- **批4 追修**：連線模式「再來一局」原本走單機換種子重開（靜默分岔＋丟 teams），
+  已改為送 bye 後回連線大廳。
+
 ## 七、開工前就發現的舊債（不在本卷範圍，如實記錄）
 
 `tools/sim-hash-baseline.json` 的基準（合計 `34772c06e02243fd`）**已對不上 HEAD `baf9539`**：
