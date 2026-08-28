@@ -35,7 +35,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         // 主遊戲零模型檔（幾何球員）；soldier.glb 只剩 ?mode=bench 用，改按需載入不預快取
-        globPatterns: ['**/*.{js,css,html,png,webmanifest}'],
+        // 大作感卷 批1/2（A5b）：SFX 取樣進 precache（體積小、常駐音效要離線可用）；
+        // BGM 刻意**不**加 glob——串流播放、換檔即生效，進 precache 反而鎖死舊版
+        globPatterns: ['**/*.{js,css,html,png,webmanifest}', 'audio/sfx/*.m4a'],
       },
       manifest: {
         name: '排球夢',

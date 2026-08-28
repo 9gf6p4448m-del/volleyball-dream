@@ -70,6 +70,8 @@ import {
   loadPresentationPref, savePresentationPref, createBeatTimeline, driveTimeline,
 } from './presentation.js';
 import { createRitualStage } from '../render/ritualStage.js';
+import { playMenu, cycleMenuTrack, BGM_TRACKS } from './bgm.js';
+import { get as getAudioPrefs, set as setAudioPrefs } from './audioPrefs.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
@@ -1848,6 +1850,10 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   function renderHome() {
     root.replaceChildren();
     setMsg('');
+    // 大作感卷 批2 A4a：主選單顯示期間播主題曲（autoplay 政策下允許「首次手勢後開始」，
+    // bgm.js 的 armRetry 已處理）；比賽結束/退出回選單交給這裡覆蓋 bgm.playMatch()，
+    // 不必在每個離開比賽的路徑另外插一次（設計裁定，見 acceptance-juice-batch12）
+    playMenu();
     // schema v2（Phase 3 W1）：偵測到 Phase 2 舊存檔已被清空——如實告知，不留懸念
     if (store.wasLegacyReset?.()) {
       setMsg('Phase 2 存檔不相容，已重置——新的名冊時代從這裡開始');
@@ -2912,6 +2918,44 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       prefBtn.textContent = prefLabel();
     });
     ioRow.appendChild(prefBtn);
+    // 大作感卷 批2 A4d：音量設定——靜音鈕＋音效/音樂滑桿＋選單曲切換，同風格擺
+    // 🎬 演出鈕旁。拖動/點擊即 setAudioPrefs（localStorage 立即寫入，重整後生效），
+    // sfx.js 的音效總線與 bgm.js 播放中的軌道都訂閱了 prefs 變更、不必重整頁面。
+    const muteBtn = smallButton(getAudioPrefs().muted ? '🔇 已靜音' : '🔊 靜音', () => {
+      const cur = getAudioPrefs();
+      setAudioPrefs({ muted: !cur.muted });
+      muteBtn.textContent = !cur.muted ? '🔇 已靜音' : '🔊 靜音';
+    });
+    ioRow.appendChild(muteBtn);
+    function volumeSlider(label, key) {
+      const wrap = el('div', [
+        'display:flex', 'align-items:center', 'gap:6px', 'height:40px', 'padding:0 12px',
+        'border-radius:20px', 'border:1px solid #2c3a58',
+      ]);
+      wrap.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`], label));
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0';
+      input.max = '1';
+      input.step = '0.05';
+      input.value = String(getAudioPrefs()[key]);
+      input.style.cssText = 'width:84px;height:32px;touch-action:manipulation;';
+      input.addEventListener('input', () => setAudioPrefs({ [key]: Number(input.value) }));
+      wrap.appendChild(input);
+      return wrap;
+    }
+    ioRow.appendChild(volumeSlider('音效', 'sfx'));
+    ioRow.appendChild(volumeSlider('音樂', 'bgm'));
+    const trackLabel = () => {
+      const n = BGM_TRACKS.menu.length;
+      const idx = ((getAudioPrefs().menuTrack % n) + n) % n;
+      return `🎵 選單曲 ${idx + 1}/${n}`;
+    };
+    const trackBtn = smallButton(trackLabel(), () => {
+      cycleMenuTrack();
+      trackBtn.textContent = trackLabel();
+    });
+    ioRow.appendChild(trackBtn);
     root.appendChild(ioRow);
     root.appendChild(msgEl);
   }

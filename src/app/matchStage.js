@@ -10,6 +10,7 @@ import { createMatchControls } from '../input/matchControls.js';
 import { createScoreboard } from '../ui/scoreboard.js';
 import { createCommentary } from '../ui/commentary.js';
 import { createSfx } from '../ui/sfx.js';
+import { playMatch } from '../ui/bgm.js';
 import { createTouchUi } from '../ui/touchUi.js';
 import { createActionButtons } from '../ui/actionButtons.js';
 import { createZonePanel } from '../ui/zonePanel.js';
@@ -65,6 +66,10 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     ? createCommentary(careerSetup?.opponent ?? null, careerSetup?.revenge ?? [])
     : null;
   const sfx = createSfx();
+  // 大作感卷 批2 A4a：比賽開始（舞台建置＝這場比賽的唯一入口，涵蓋生涯賽/快速賽/練習賽/
+  // 教學局）＝從主選單主題曲換成比賽氛圍層；曲目本身由 matchLoop 逐幀依緊張度調音量
+  // （setTension）。比賽結束/退出回選單交給 renderHome 的 playMenu() 覆蓋即可（設計裁定）
+  playMatch();
   const touchUi = createTouchUi();
   // 簡化模式：決策面板（攻擊/發球/攔網共用）；經典模式：全手動按鈕
   const panel = simpleMode ? createZonePanel() : null;

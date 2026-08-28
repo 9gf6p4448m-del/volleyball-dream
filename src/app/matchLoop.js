@@ -30,6 +30,7 @@ import { serverId } from '../sim/match.js';
 import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
 import { derivePointInfo } from '../ui/pointBanner.js';
+import { setTension, computeTension } from '../ui/bgm.js'; // 大作感卷 批2：比賽氛圍層隨緊張度
 import { roleSwapOk } from '../ui/subPanel.js';
 // 段 E：叫套路的選項池與回饋文案（面板、遠段改判、字卡三處共用同一份＝同源）
 import {
@@ -1141,7 +1142,12 @@ export function runHighlightFrame(s, now, delta) {
     stage.rig.setSetScan(shot.cam.mode === 'sset');
   }
   if (!jumped && frameEvents.length) {
-    stage.sfx.onEvents(frameEvents, { rallyFlights: player.state.rally.flightId - hl.startFlight });
+    // 大作感卷 批1：keyPoint 沿用即時 highlight 觸發當下（同一顆球，s.game 只是被
+    // 凍結未改）的關鍵分真值——s.keyPointRally 在該球 SERVE 當下已判定並鎖存
+    // （line 2206），發球後分數已變、不能重問（同 2526 行「發球當下判定的真值」註）
+    stage.sfx.onEvents(frameEvents, {
+      rallyFlights: player.state.rally.flightId - hl.startFlight, keyPoint: !!s.keyPointRally,
+    });
   }
   const alpha = Math.min(Math.max(exact - target, 0), 1);
   const st = player.state;
@@ -1325,6 +1331,10 @@ export function runReplayFrame(s, now, delta) {
   // B1／B2：手動🎬／情蒐帶接既有 sfx——同 runHighlightFrame／replayStage.js:137
   // 的 !jumped 慣例，掉幀/背景分頁恢復一次推很多步時不餵（防事件連珠炮）
   const jumped = player.index - from > 60;
+  // 大作感卷 批1：這個呼叫點刻意**不**補 keyPoint（tests/replay-lift.test.mjs:343 對
+  // runReplayFrame 原始碼有逐字 regex 鎖死這一行的形狀，屬於「不得改既有測試」的
+  // 鐵閘——手動🎬與情蒐帶因此不會觸發關鍵分聲浪爆炸，只是少一個聲音演出加成，
+  // 不影響玩法；已在 runHighlightFrame／即時比賽兩處補上，涵蓋率仍是 2/3
   if (!jumped && frameEvents.length) {
     stage.sfx.onEvents(frameEvents, { rallyFlights: player.state.rally.flightId - replay.startFlight });
   }
@@ -2172,7 +2182,12 @@ function applyEvents(s, frameEvents, now) {
       stage.callButton?.show(() => onCallTap(s));
     }
   }
-  stage.sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - s.rallyStartFlight });
+  // 大作感卷 批1：keyPoint 用 s.keyPointRally（發球當下鎖存的關鍵分真值，見 2206 行／
+  // 2526 行同一套慣例）——本波 SERVE 若晚於這次 onEvents 才處理（下方「juice」迴圈），
+  // 讀到的是上一球鎖存的值，同一顆 DEAD_BALL 永遠對應到它自己那次發球的判定
+  stage.sfx.onEvents(frameEvents, {
+    rallyFlights: game.rally.flightId - s.rallyStartFlight, keyPoint: !!s.keyPointRally,
+  });
   stage.controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.localId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
@@ -3690,6 +3705,10 @@ function frameStep(s, now) {
     ? 0.05 + (game.momentum.value / TUNING.MOMENTUM_MAX) * 0.05
     : 0.05;
   stage.sfx.setCrowdLevel(tension && game.phase === 'serve' ? 0.016 : momentumCrowd);
+  // 大作感卷 批2 A4b：比賽氛圍層 BGM 音量＝緊張度的函數（分差與局點/賽點旗標）——
+  // 同一處已經算好 tension（局點/賽點布林），gapAbs 從目前比分現算，不動 sim
+  const gapAbs = Math.abs((game.match?.score?.A ?? 0) - (game.match?.score?.B ?? 0));
+  setTension(computeTension({ gapAbs, setPoint: tension }));
   // W7 B4③：氣勢聚光微聯動（複用局點壓暗管線 lights.setTension 同一組燈具的姐妹方法）
   ctx.lights.setMomentum(game.momentum ? game.momentum.value / TUNING.MOMENTUM_MAX : 0, tension, delta);
   // 鏡頭語言：得分 FOV punch＋重扣慢動作收緊（望遠壓縮感）
