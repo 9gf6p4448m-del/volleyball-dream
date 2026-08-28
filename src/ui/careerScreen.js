@@ -1863,6 +1863,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // W4(P4) 題2：生涯入口收斂為選檔頁（進生涯前一層）——繼續/新生涯/匯入都在槽卡片上
     root.appendChild(button('▶ 生涯', true, renderSlots));
     root.appendChild(button('快速比賽', false, showQuickRolePicker));
+    // 多人連線卷批5 追修（2026-08-28 Sawmah：「不是從我們原本遊戲進去嗎」）：
+    // 連線對戰入口上主選單——手遊玩家不打網址（拍板 8）。用整頁導航不用回呼：
+    // lobby 與比賽的訊息路由都掛在 ?net=1 的載入路徑上（main.js），乾淨開頁最穩。
+    root.appendChild(button('📡 連線對戰', false, () => {
+      window.location.assign(`${window.location.pathname}?net=1`);
+    }));
     // 2026-08-12：常駐「怎麼玩」——`tutorial.js` 是開場一次性卡片（看過就再也不出現），
     // 忘了就查不到。這裡是可以隨時回來翻的那一份（生涯畫面底部也有同一個入口）。
     root.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));
