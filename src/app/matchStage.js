@@ -31,6 +31,7 @@ import { createCoachMarker } from '../render/coachMarker.js';
 import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
 import { timeoutUsedThisPoint } from '../sim/game.js';
+import { COLORS, FONTS, goldAlpha } from '../ui/theme.js';
 
 export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
@@ -264,25 +265,25 @@ function createLeaveButton(params, game, mode = null) {
   const btn = document.createElement('button');
   btn.textContent = '✕ 離開';
   // 位置：右上 🎬 回放鈕正下方（Sawmah 07-23 試玩回報：原左上會擋到播報泡泡與 FPS）
+  // 大作感卷 批4：黑底金框斜切 chip（凍結檔範圍 item 3 明文點名「離開」）
+  btn.className = 'vd-chip-gold vd-skew';
   btn.style.cssText = [
     'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 60px)',
     'right:calc(env(safe-area-inset-right, 0px) + 12px)',
-    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
-    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
-    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
-    'touch-action:manipulation',
+    'height:44px', 'padding:0 14px', 'font-size:14px',
+    'z-index:16', 'cursor:pointer', 'touch-action:manipulation',
   ].join(';');
 
   const overlay = document.createElement('div');
   overlay.style.cssText = [
     'position:fixed', 'inset:0', 'z-index:40', 'display:none',
     'align-items:center', 'justify-content:center',
-    'background:rgba(4,6,12,0.72)', 'font-family:system-ui,sans-serif',
+    `background:rgba(4,6,12,0.72)`, `font-family:${FONTS.zh}`,
   ].join(';');
   const card = document.createElement('div');
   card.style.cssText = [
-    'width:min(400px, 90vw)', 'background:rgba(18,24,40,0.96)', 'border-radius:16px',
-    'border:1px solid #2c3a58', 'padding:20px', 'text-align:center',
+    'width:min(400px, 90vw)', `background:${COLORS.bg2}f5`,
+    `border:1px solid ${goldAlpha(0.55)}`, 'padding:20px', 'text-align:center',
     'box-shadow:0 12px 40px rgba(0,0,0,0.6)',
   ].join(';');
   const text = document.createElement('div');
@@ -293,22 +294,23 @@ function createLeaveButton(params, game, mode = null) {
     tutorial: '離開隊內測試——這場不記戰績、不給獎勵，但教練不會再找你測第二次。確定離開？',
     practice: '離開紅白對抗賽——這場不記戰績，但科目進度不會保留（集訓格還在，可以重打）。確定離開？',
   }[mode] ?? '中途離開球場將記棄賽敗（0:25）——確定離開？';
-  text.style.cssText = ['color:#eef2fa', 'font-size:15px', 'line-height:1.6', 'margin-bottom:16px'].join(';');
+  text.style.cssText = [`color:${COLORS.text}`, 'font-size:15px', 'line-height:1.6', 'margin-bottom:16px'].join(';');
   const btnRow = document.createElement('div');
   btnRow.style.cssText = ['display:flex', 'gap:12px', 'justify-content:center'].join(';');
   const confirmBtn = document.createElement('button');
   confirmBtn.textContent = '確定離開';
+  // 危險動作維持警示色（不隨本批金色化——語意是「這會扣分」，跟金色語彙不合）
   confirmBtn.style.cssText = [
-    'height:46px', 'padding:0 20px', 'border-radius:23px', 'border:none',
+    'height:46px', 'padding:0 20px', 'border-radius:4px', 'border:none',
     'background:#8a3a3a', 'color:#ffe', 'font-size:15px', 'font-weight:700',
     'cursor:pointer', 'touch-action:manipulation',
   ].join(';');
   const cancelBtn = document.createElement('button');
   cancelBtn.textContent = '繼續比賽';
+  cancelBtn.className = 'vd-btn-gold';
   cancelBtn.style.cssText = [
-    'height:46px', 'padding:0 20px', 'border-radius:23px', 'border:1px solid #2c3a58',
-    'background:transparent', 'color:#eef2fa', 'font-size:15px', 'cursor:pointer',
-    'touch-action:manipulation',
+    'height:46px', 'padding:0 20px', 'border-radius:4px', 'font-size:15px',
+    'cursor:pointer', 'touch-action:manipulation',
   ].join(';');
   btnRow.appendChild(cancelBtn);
   btnRow.appendChild(confirmBtn);
@@ -347,13 +349,13 @@ function createLeaveButton(params, game, mode = null) {
 function createQuickLeaveButton(params) {
   const btn = document.createElement('button');
   btn.textContent = '✕ 離開';
+  // 大作感卷 批4：黑底金框斜切 chip（與生涯版離開鈕同語彙）
+  btn.className = 'vd-chip-gold vd-skew';
   btn.style.cssText = [
     'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 60px)',
     'right:calc(env(safe-area-inset-right, 0px) + 12px)',
-    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
-    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
-    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
-    'touch-action:manipulation',
+    'height:44px', 'padding:0 14px', 'font-size:14px',
+    'z-index:16', 'cursor:pointer', 'touch-action:manipulation',
   ].join(';');
   btn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
@@ -378,11 +380,12 @@ function createQuickLeaveButton(params) {
 function createReplayButton(handlers) {
   const replayBtn = document.createElement('button');
   replayBtn.textContent = '🎬';
+  // 大作感卷 批4：黑底金框斜切 chip（凍結檔範圍 item 3 明文點名「🎬」）
+  replayBtn.className = 'vd-chip-gold vd-skew';
   replayBtn.style.cssText = [
     'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 8px)',
     'right:calc(env(safe-area-inset-right, 0px) + 12px)',
-    'width:44px', 'height:44px', 'border-radius:50%', 'border:none',
-    'background:rgba(12,16,26,0.6)', 'font-size:20px', 'z-index:16',
+    'width:44px', 'height:44px', 'font-size:20px', 'z-index:16',
     'cursor:pointer', 'touch-action:manipulation',
   ].join(';');
   replayBtn.addEventListener('pointerdown', (e) => {
@@ -397,14 +400,14 @@ function createReplayButton(handlers) {
 // 點擊呼叫 handlers.requestTimeout（matchLoop 開機注入＝唯一執行路徑，走 sim applyTimeout）
 function createTimeoutButton({ handlers, playerId }) {
   const btn = document.createElement('button');
+  // 大作感卷 批4：黑底金框斜切 chip（凍結檔範圍 item 3 明文點名「暫停」）
+  btn.className = 'vd-chip-gold vd-skew';
   btn.style.cssText = [
     // 試玩回饋 07-24（#1）：改直排——⏱ 放 ⚙ 換人鈕正下方（同欄第四格）
     'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 164px)',
     'right:calc(env(safe-area-inset-right, 0px) + 12px)',
-    'height:44px', 'padding:0 14px', 'border-radius:22px', 'border:none',
-    'background:rgba(12,16,26,0.6)', 'color:#eef2fa', 'font-size:14px',
-    'font-family:system-ui,sans-serif', 'z-index:16', 'cursor:pointer',
-    'touch-action:manipulation',
+    'height:44px', 'padding:0 14px', 'font-size:14px',
+    'z-index:16', 'cursor:pointer', 'touch-action:manipulation',
   ].join(';');
   btn.textContent = '⏱ 暫停';
   btn.addEventListener('pointerdown', (e) => {
@@ -615,15 +618,21 @@ function createHeroStaminaBar() {
     'position:fixed', 'left:calc(env(safe-area-inset-left, 0px) + 10px)',
     'bottom:calc(env(safe-area-inset-bottom, 0px) + 10px)',
     'width:110px', 'z-index:14', 'display:none',
-    'font-family:system-ui,sans-serif', 'pointer-events:none', 'user-select:none',
+    `font-family:${FONTS.zh}`, 'pointer-events:none', 'user-select:none',
   ].join(';');
   const label = document.createElement('div');
   label.textContent = '體力';
-  label.style.cssText = 'font-size:10px;color:#9fb0cc;margin-bottom:2px;letter-spacing:1px';
+  label.style.cssText = `font-size:10px;color:${COLORS.textDim};margin-bottom:2px;letter-spacing:1px`;
   const track = document.createElement('div');
-  track.style.cssText = 'height:8px;border-radius:4px;background:rgba(255,255,255,0.14);overflow:hidden';
+  // 大作感卷 批4：斜切＋金漸層填色（凍結檔範圍 item 3 明文指定 goldDark→gold→goldLight）；
+  // 原本靠填色紅/金/綠三階分辨危急/警戒/健康，本批填色統一金漸層後這條資訊會不見——
+  // 危急時改用邊框變紅補回這個警示（合理補齊，見批4回報）
+  track.style.cssText = `height:8px;transform:skewX(-10deg);border:1px solid ${goldAlpha(0.5)};`
+    + `background:${COLORS.bg2}cc;overflow:hidden`;
   const fill = document.createElement('div');
-  fill.style.cssText = 'height:100%;width:100%;background:#60ffa0;transition:width 150ms linear';
+  fill.style.cssText = `height:100%;width:100%;`
+    + `background:linear-gradient(90deg, ${COLORS.goldDark}, ${COLORS.gold}, ${COLORS.goldLight});`
+    + 'transition:width 150ms linear';
   track.appendChild(fill);
   wrap.appendChild(label);
   wrap.appendChild(track);
@@ -639,8 +648,7 @@ function createHeroStaminaBar() {
       wrap.style.display = 'block';
       const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
       fill.style.width = `${pct}%`;
-      fill.style.background = value < STAMINA.TIER2_BELOW ? '#ff5b5b'
-        : value < STAMINA.TIER1_BELOW ? '#ffd166' : '#60ffa0';
+      track.style.borderColor = value < STAMINA.TIER2_BELOW ? '#ff5b5b' : goldAlpha(0.5);
     },
   };
 }

@@ -1,16 +1,23 @@
-// 得分原因面板：死球後顯示「誰得分＋為什麼」——即時犯規（四擊/後排攻擊/站位）
+// 得分原因面板（得分事件卡）：死球後顯示「誰得分＋為什麼」——即時犯規（四擊/後排攻擊/站位）
 // 與落地得分（殺球/ACE/攔網/出界/處理失誤）都一眼看懂，玩家不必猜裁決。
 // derivePointInfo 是純函式（可單測）；createPointBanner 才碰 DOM。
+// 大作感卷 批4：黑匾金框＋輕微斜切/旋轉，文字米金，強調字金色（凍結檔範圍 item 3）；
+// 「誰得分」這個資訊不能丟——保留 info.mine 的強調色分色（我方金／對方暖紅），
+// 只是底盤統一換成黑金匾，不再整塊染玻璃色。
+import { COLORS, FONTS, goldAlpha } from './theme.js';
 
 const STYLE_ID = 'vd-banner-style';
+// 基準姿態＝輕微斜切＋旋轉（skewX(-6deg) rotate(-1deg)）；所有位移/縮放動畫都疊在這個
+// 基準上（同 scoreboard.js 泡泡的作法），不然 WAAPI keyframe 的 transform 會互相覆蓋掉
+const BASE_TF = 'skewX(-6deg) rotate(-1deg)';
 const BANNER_CSS = `
 @keyframes vd-banner-in {
-  0% { opacity: 0; transform: translate(-50%, -26px) scale(0.88); }
-  60% { opacity: 1; transform: translate(-50%, 4px) scale(1.03); }
-  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  0% { opacity: 0; transform: translate(-50%, -26px) ${BASE_TF} scale(0.88); }
+  60% { opacity: 1; transform: translate(-50%, 4px) ${BASE_TF} scale(1.03); }
+  100% { opacity: 1; transform: translate(-50%, 0) ${BASE_TF} scale(1); }
 }
 @keyframes vd-banner-out {
-  to { opacity: 0; transform: translate(-50%, -18px) scale(0.94); }
+  to { opacity: 0; transform: translate(-50%, -18px) ${BASE_TF} scale(0.94); }
 }
 @keyframes vd-banner-shine {
   from { transform: translateX(-140%) skewX(-18deg); }
@@ -94,20 +101,20 @@ export function createPointBanner() {
     // info: derivePointInfo 的回傳值；opts.holdMs＝總可見時長（省略＝死球節拍）
     show(info, { holdMs = DEFAULT_HOLD_MS } = {}) {
       dismiss();
-      const accent = info.mine ? '#ffd166' : '#ff6b6b';
+      // 「誰得分」是這張卡存在的目的，強調色不能全部併成金色——我方金、對方暖紅
+      const accent = info.mine ? COLORS.gold : '#ff6b6b';
       el = document.createElement('div');
       el.style.cssText = [
         'position:fixed', 'left:50%', 'top:min(22vh, 190px)', 'z-index:18',
-        'transform:translate(-50%, 0)',
+        `transform:translate(-50%, 0) ${BASE_TF}`,
         'display:flex', 'align-items:center', 'gap:12px',
         'max-width:min(90vw, 480px)',
         'padding:12px 24px 12px 14px',
-        'border-radius:14px', 'overflow:hidden',
-        'background:linear-gradient(135deg, rgba(14,18,30,0.92), rgba(24,32,52,0.85))',
-        `border:1px solid ${accent}55`, `border-left:4px solid ${accent}`,
-        'backdrop-filter:blur(8px)', '-webkit-backdrop-filter:blur(8px)',
-        `box-shadow:0 10px 30px rgba(0,0,0,0.5), 0 0 24px ${accent}22`,
-        'font-family:system-ui,sans-serif', 'pointer-events:none', 'user-select:none',
+        'overflow:hidden',
+        `background:${COLORS.bg2}f0`,
+        `border:1px solid ${goldAlpha(0.85)}`, `border-left:6px solid ${accent}`,
+        `box-shadow:0 10px 30px rgba(0,0,0,0.55), inset 0 0 20px ${goldAlpha(0.08)}`,
+        `font-family:${FONTS.zh}`, 'pointer-events:none', 'user-select:none',
         'animation:vd-banner-in 0.45s cubic-bezier(0.16,1,0.3,1) both',
       ].join(';');
 
@@ -116,7 +123,7 @@ export function createPointBanner() {
       icon.style.cssText = [
         'width:44px', 'height:44px', 'flex:0 0 44px',
         'display:grid', 'place-items:center',
-        'font-size:24px', 'border-radius:12px',
+        'font-size:24px', `border:1px solid ${accent}55`,
         `background:${accent}22`,
         'animation:vd-banner-icon 0.5s cubic-bezier(0.34,1.56,0.64,1) both',
       ].join(';');
@@ -125,9 +132,9 @@ export function createPointBanner() {
       const title = document.createElement('div');
       title.textContent = info.title;
       title.style.cssText = [
-        'font-size:clamp(20px, 5.5vw, 30px)', 'font-weight:800',
-        'letter-spacing:3px', 'color:#f4f7ff', 'line-height:1.15',
-        'text-shadow:0 2px 10px rgba(0,0,0,0.55)', 'white-space:nowrap',
+        'font-size:clamp(20px, 5.5vw, 30px)', 'font-weight:900',
+        `letter-spacing:3px`, `color:${COLORS.text}`, 'line-height:1.15',
+        'text-shadow:0 2px 10px rgba(0,0,0,0.65)', 'white-space:nowrap',
       ].join(';');
       const sub = document.createElement('div');
       sub.textContent = info.sub;

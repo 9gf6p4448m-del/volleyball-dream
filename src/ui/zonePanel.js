@@ -1,12 +1,19 @@
 // 通用決策面板：攻擊選區／發球選區／攔網選線共用（同一套點按語言）
 // items: [{ key, label, color?('green'|'red'|'neutral') }]；點選回呼 onChoose(item)
-const COLORS = {
-  green: 'rgba(96,255,160,0.92)',
-  red: 'rgba(255,91,91,0.9)',
-  orange: 'rgba(255,176,76,0.94)', // 跳躍發球
-  cyan: 'rgba(110,231,255,0.92)',  // 飄浮發球
-  neutral: 'rgba(200,214,235,0.92)',
-  dim: 'rgba(122,130,146,0.72)',   // W3 S 分配：低 trust 快攻「猶豫」（可選但變暗）
+// 大作感卷 批4：按鈕改「黑底金框」同語彙換皮——底盤統一黑（theme.js 的 COLORS.bg2），照 it.color
+// 分類的語意保留成邊框/文字強調色（原本是整塊填色），不然攻擊分區的安全/危險色碼、
+// 發球飄浮/跳躍分類、W3 S 分配的低 trust「猶豫」變暗這些既有資訊會被本批全部併成金色、
+// 玩家瞬間分不出按鈕差異。neutral（預設分類）沒有特別語意，直接吃金色（凍結檔範圍
+// item 3 舉例的「黑底金框」）。
+import { COLORS as THEME, FONTS } from './theme.js';
+
+const ZONE_ACCENTS = {
+  green: '#7ee787',
+  red: '#ff6b6b',
+  orange: '#ffb04c', // 跳躍發球
+  cyan: '#6ee7ff',  // 飄浮發球
+  neutral: THEME.gold,
+  dim: THEME.textDim,   // W3 S 分配：低 trust 快攻「猶豫」（可選但變暗）
 };
 
 export function createZonePanel() {
@@ -22,16 +29,20 @@ export function createZonePanel() {
   title.style.cssText = [
     'position:fixed', 'left:50%', 'bottom:calc(env(safe-area-inset-bottom, 0px) + 168px)',
     'transform:translateX(-50%)', 'z-index:18', 'display:none',
-    'color:#ffd166', 'font-family:system-ui,sans-serif', 'font-size:18px', 'font-weight:700',
+    `color:${THEME.gold}`, `font-family:${FONTS.zh}`, 'font-size:18px', 'font-weight:700',
     'text-shadow:0 2px 6px rgba(0,0,0,0.7)', 'pointer-events:none',
   ].join(';');
   document.body.appendChild(title);
 
-  // 進場動畫 keyframes（注入一次）：按鈕自下滑入、逐顆錯開
+  // 進場動畫 keyframes（注入一次）：按鈕自下滑入、逐顆錯開。大作感卷 批4：
+  // skewX(-8deg) 斜切要跟著烤進 from/to 兩個 keyframe——CSS animation 的 fill:both
+  // 在動畫跑完後仍持續覆寫 transform，只在 inline cssText 上寫死斜切會在動畫播完後被蓋掉
   if (!document.getElementById('vd-pop-style')) {
     const st = document.createElement('style');
     st.id = 'vd-pop-style';
-    st.textContent = '@keyframes vd-pop{from{opacity:0;transform:translateY(16px) scale(0.92)}to{opacity:1;transform:translateY(0) scale(1)}}';
+    st.textContent = '@keyframes vd-pop{from{opacity:0;'
+      + 'transform:skewX(-8deg) translateY(16px) scale(0.92)}'
+      + 'to{opacity:1;transform:skewX(-8deg) translateY(0) scale(1)}}';
     document.head.appendChild(st);
   }
 
@@ -46,11 +57,13 @@ export function createZonePanel() {
       const b = document.createElement('button');
       b.textContent = it.label;
       b.dataset.zoneKey = it.key;
+      const accent = ZONE_ACCENTS[it.color ?? 'neutral'];
       b.style.cssText = [
-        'min-width:74px', 'height:60px', 'border-radius:14px', 'border:none',
-        `background:${COLORS[it.color ?? 'neutral']}`,
-        'color:#12131a', 'font-size:17px', 'font-weight:800',
-        'font-family:system-ui,sans-serif', 'touch-action:none', 'cursor:pointer',
+        'min-width:74px', 'height:60px', 'border-radius:4px',
+        `border:2px solid ${accent}`,
+        `background:${THEME.bg2}e6`,
+        `color:${accent}`, 'font-size:17px', 'font-weight:800',
+        `font-family:${FONTS.zh}`, 'touch-action:none', 'cursor:pointer',
         'box-shadow:0 2px 10px rgba(0,0,0,0.4)',
         `animation:vd-pop 0.2s ease-out ${i * 0.04}s both`,
       ].join(';');

@@ -15,6 +15,7 @@ import { createBallView } from './render/ballView.js';
 import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
+import { installTheme } from './ui/theme.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
 import {
   devSeedRequest, buildSyntheticSave, devUniRequest, advanceToUniYear,
@@ -63,6 +64,9 @@ window.addEventListener('error', (e) => showFatalError(e.error ?? e.message));
 window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason));
 
 async function init() {
+  // 大作感卷 批4：UI 皮膚 tokens／字體最早掛載——之後所有畫面（選單/HUD）都吃得到
+  // .vd-* class 與 CSS 變數；installTheme() 自己包好 try/catch，失敗也不擋開局
+  installTheme();
   // 遊戲頁禁右鍵選單與 iOS 捏合縮放（長按/拖曳是遊戲操作，不能跳原生 UI）
   window.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('gesturestart', (e) => e.preventDefault());

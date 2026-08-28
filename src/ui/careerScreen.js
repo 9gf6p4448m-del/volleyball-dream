@@ -112,6 +112,8 @@ import { rivalArcPreEvents } from '../career/proRivalArc.js';
 import {
   kitFor, cssColor, opponentAccentColor, OUR_ANCHORS,
 } from '../career/teamKit.js';
+// 大作感卷 批4：UI 皮膚 tokens 單一來源——COLOR 常數改指到這裡（見下方定義處的逐鍵說明）
+import { COLORS, FONTS } from './theme.js';
 
 // 隊友卡屬性標籤：可成長六項沿用 GROWABLE_ATTRS 名稱＋兩項不開放者
 // ★ 2026-08-09 Sawmah 裁定「耐力／控球」★ 這兩項原本在此寫「體力／控制」，而集訓面板
@@ -143,14 +145,18 @@ function salaryLabelOf(team, salaryWan) {
   return `${salaryWan} 萬`;
 }
 
+// 大作感卷 批4（冠軍黑金皮膚）：逐鍵評估——bg/text/dim/gold/card 是純底色與文字色，
+// 改指到新 tokens 就能讓存檔槽等子頁自動吃到基本換色（凍結檔範圍item 2 明文允許）。
+// red／cyan 保留原值：它們是「警示／次要資訊強調」的語意色（錯誤訊息、選中態、名次分級），
+// 不是「底色/文字色」，硬換成金色會讓錯誤提示與一般標題同色、選中態失去對比——語意不合不換。
 const COLOR = {
-  bg: 'linear-gradient(180deg, #070a12 0%, #0b1120 55%, #070a12 100%)',
-  text: '#eef2fa',
-  dim: '#9fb0cc',
-  gold: '#ffd166',
+  bg: `radial-gradient(90% 60% at 50% 8%, ${COLORS.bg2} 0%, ${COLORS.bg} 60%, ${COLORS.bg} 100%)`,
+  text: COLORS.text,
+  dim: COLORS.textDim,
+  gold: COLORS.gold,
   red: '#ff8a8a',
   cyan: '#6ee7ff',
-  card: 'rgba(18,24,40,0.85)',
+  card: 'rgba(20,16,8,0.88)',
 };
 
 // prefers-reduced-motion 動態查詢（不快取——尊重使用者中途切換系統設定）
@@ -1858,27 +1864,52 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     if (store.wasLegacyReset?.()) {
       setMsg('Phase 2 存檔不相容，已重置——新的名冊時代從這裡開始');
     }
-    root.appendChild(el('div', [
-      'font-size:52px', 'font-weight:900', 'letter-spacing:10px',
-      `color:${COLOR.gold}`, 'text-shadow:0 4px 24px rgba(0,0,0,0.8)',
-    ], '排球夢'));
-    root.appendChild(el('div', [
-      'font-size:15px', `color:${COLOR.dim}`, 'letter-spacing:4px', 'margin-bottom:10px',
-    ], '生涯模式'));
+    // 大作感卷 批4（E 冠軍典藏）：雙線外框＋頂部金暈——貼在 root 本身（root 本來就是
+    // position:fixed，天生 containing block）。inner 用 position:relative，讓它跟
+    // frame/glow 同屬「已定位元素」——CSS 疊放規則下同層已定位元素依 DOM 先後疊放，
+    // frame/glow 要先加才會被蓋在 inner 底下（照抄參考稿 dir5-champion.html 的
+    // .glow → .frame → .inner 順序）。純裝飾層，不吃點擊、不佔版面（不影響下方按鈕事件）。
+    const frame = document.createElement('div');
+    frame.className = 'vd-frame';
+    root.appendChild(frame);
+    const glow = document.createElement('div');
+    glow.className = 'vd-menu-glow';
+    root.appendChild(glow);
+
+    const inner = el('div', [
+      'position:relative', 'display:flex', 'flex-direction:column',
+      'align-items:center', 'gap:14px', 'padding-top:8px',
+    ]);
+    root.appendChild(inner);
+
+    const laurel = el('div', [], '✦ VOLLEY DREAM ✦');
+    laurel.className = 'vd-laurel';
+    inner.appendChild(laurel);
+
+    const title = el('div', [
+      'font-size:52px', 'font-weight:900', 'letter-spacing:10px', 'margin-top:4px',
+    ], '排球夢');
+    title.className = 'vd-gold-text';
+    inner.appendChild(title);
+
+    const rule = el('div', ['margin-bottom:2px']);
+    rule.className = 'vd-rule';
+    rule.appendChild(el('span', [], '生涯模式'));
+    inner.appendChild(rule);
 
     // W4(P4) 題2：生涯入口收斂為選檔頁（進生涯前一層）——繼續/新生涯/匯入都在槽卡片上
-    root.appendChild(button('▶ 生涯', true, renderSlots));
-    root.appendChild(button('快速比賽', false, showQuickRolePicker));
+    inner.appendChild(button('▶ 生涯', true, renderSlots));
+    inner.appendChild(button('快速比賽', false, showQuickRolePicker));
     // 多人連線卷批5 追修（2026-08-28 Sawmah：「不是從我們原本遊戲進去嗎」）：
     // 連線對戰入口上主選單——手遊玩家不打網址（拍板 8）。用整頁導航不用回呼：
     // lobby 與比賽的訊息路由都掛在 ?net=1 的載入路徑上（main.js），乾淨開頁最穩。
-    root.appendChild(button('📡 連線對戰', false, () => {
+    inner.appendChild(button('📡 連線對戰', false, () => {
       window.location.assign(`${window.location.pathname}?net=1`);
     }));
     // 2026-08-12：常駐「怎麼玩」——`tutorial.js` 是開場一次性卡片（看過就再也不出現），
     // 忘了就查不到。這裡是可以隨時回來翻的那一份（生涯畫面底部也有同一個入口）。
-    root.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));
-    root.appendChild(msgEl);
+    inner.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));
+    inner.appendChild(msgEl);
     // 2026-08-07 Sawmah 指定：build 戳記固定在主選單右下角。
     // 用途＝「我看不到新東西」時一秒分辨版本落差與邏輯問題（見 vite.config.js 的理由）。
     // `typeof` 守衛：測試環境直接 import 本檔時沒有 vite define，不能讓它 ReferenceError。
@@ -2928,10 +2959,12 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     });
     ioRow.appendChild(muteBtn);
     function volumeSlider(label, key) {
+      // 大作感卷 批4：音量列同步換皮成金框 chip（凍結檔範圍 item 2 明文點名）
       const wrap = el('div', [
         'display:flex', 'align-items:center', 'gap:6px', 'height:40px', 'padding:0 12px',
-        'border-radius:20px', 'border:1px solid #2c3a58',
+        'border-radius:20px',
       ]);
+      wrap.className = 'vd-chip-gold';
       wrap.appendChild(el('div', ['font-size:13px', `color:${COLOR.dim}`], label));
       const input = document.createElement('input');
       input.type = 'range';
@@ -4583,25 +4616,25 @@ function el(tag, css, text) {
   return node;
 }
 
+// 大作感卷 批4：全檔共用鈕改走 vd-btn-gold / vd-btn-gold-primary（theme.js）——尺寸/圓角
+// 走 inline（不歸 tokens 管），色彩/字體歸 class 管；全檔所有子頁的按鈕因此自動換皮
+// （凍結檔「讓存檔槽等子頁自動吃到基本換色」的意思），但事件綁定與呼叫順序完全不動。
 function button(label, primary, onTap) {
   const b = el('button', [
-    'min-width:220px', 'height:52px', 'padding:0 24px', 'border-radius:26px',
-    'border:none', 'font-size:17px', 'font-weight:700', 'cursor:pointer',
-    'touch-action:manipulation', 'letter-spacing:1px',
-    primary
-      ? `background:${COLOR.gold};color:#1a1405`
-      : `background:rgba(30,40,64,0.9);color:${COLOR.text}`,
+    'min-width:220px', 'height:52px', 'padding:0 24px', 'border-radius:4px',
+    'font-size:17px', 'cursor:pointer', 'touch-action:manipulation', 'letter-spacing:2px',
   ], label);
+  b.className = primary ? 'vd-btn-gold-primary' : 'vd-btn-gold';
   b.addEventListener('pointerdown', (e) => { e.stopPropagation(); onTap(); });
   return b;
 }
 
 function smallButton(label, onTap) {
   const b = el('button', [
-    'height:40px', 'padding:0 16px', 'border-radius:20px', 'border:1px solid #2c3a58',
-    'background:transparent', `color:${COLOR.dim}`, 'font-size:14px', 'cursor:pointer',
-    'touch-action:manipulation',
+    'height:40px', 'padding:0 16px', 'border-radius:20px', 'font-size:14px',
+    'cursor:pointer', 'touch-action:manipulation',
   ], label);
+  b.className = 'vd-chip-gold';
   b.addEventListener('pointerdown', (e) => { e.stopPropagation(); onTap(); });
   return b;
 }

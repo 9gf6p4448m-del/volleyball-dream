@@ -1,0 +1,129 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700;900&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#555; font-family:'Noto Serif TC',serif; }
+  .wrap { display:flex; gap:20px; padding:16px; }
+  .phone { width:390px; height:844px; border-radius:24px; overflow:hidden; position:relative; flex:none; }
+
+  /* ============ 主選單：冠軍典藏風（黑金） ============ */
+  .menu { background:radial-gradient(90% 60% at 50% 8%, #2a2210 0%, #14100a 45%, #0b0906 100%); }
+  .menu .frame { position:absolute; inset:14px; border:1px solid #d4af3766; pointer-events:none; }
+  .menu .frame::after { content:''; position:absolute; inset:5px; border:1px solid #d4af3722; }
+  .menu .glow { position:absolute; top:-60px; left:50%; transform:translateX(-50%); width:320px;
+    height:220px; background:radial-gradient(closest-side, #d4af3733, transparent); filter:blur(10px); }
+  .menu .inner { position:relative; height:100%; display:flex; flex-direction:column; align-items:center;
+    padding-top:150px; }
+  .menu .laurel { font-family:'Cinzel'; color:#d4af37; font-size:15px; letter-spacing:6px; }
+  .menu h1 { font-weight:900; font-size:86px; letter-spacing:6px; margin-top:10px;
+    background:linear-gradient(#f4e3ae, #d4af37 55%, #9a7b1e);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 3px 8px rgba(0,0,0,.8)); }
+  .menu .rule { display:flex; align-items:center; gap:10px; margin-top:12px; color:#d4af37; }
+  .menu .rule::before, .menu .rule::after { content:''; width:70px; height:1px;
+    background:linear-gradient(90deg, transparent, #d4af37); }
+  .menu .rule::after { background:linear-gradient(90deg, #d4af37, transparent); }
+  .menu .rule span { font-size:14px; letter-spacing:8px; color:#cbb886; }
+  .menu .btns { margin-top:58px; display:flex; flex-direction:column; gap:16px; width:280px; }
+  .btn { position:relative; text-align:center; padding:15px 0 12px; background:#151006ee;
+    border:1px solid #d4af3788; }
+  .btn::after { content:''; position:absolute; inset:3px; border:1px solid #d4af3733; pointer-events:none; }
+  .btn .zh { font-weight:700; font-size:21px; color:#f0e2b6; letter-spacing:6px; }
+  .btn .en { display:block; font-family:'Cinzel'; font-weight:600; font-size:10px; color:#9a854c;
+    letter-spacing:5px; margin-top:2px; }
+  .btn.primary { background:linear-gradient(#d4af37, #a8842a); }
+  .btn.primary .zh { color:#14100a; }
+  .btn.primary .en { color:#5c4a12; }
+
+  /* ============ 比賽 HUD ============ */
+  .match { background:#0b0906; }
+  .match .bg { position:absolute; inset:0; background:url('match-bg.png') center/cover;
+    filter:saturate(.92) sepia(.12) contrast(1.04); }
+  .match .vig { position:absolute; inset:0; box-shadow:inset 0 0 130px 40px rgba(8,6,2,.8); }
+  .mask { position:absolute; backdrop-filter:blur(16px); background:rgba(14,11,6,.4); border-radius:6px; }
+  /* 黑金比分板 */
+  .score { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:3;
+    background:rgba(14,11,6,.9); border:1px solid #d4af37; display:flex; align-items:stretch;
+    box-shadow:0 6px 18px rgba(0,0,0,.6), inset 0 0 24px rgba(212,175,55,.08); }
+  .score .t { display:flex; align-items:center; padding:0 12px; color:#f0e2b6; font-weight:700;
+    font-size:15px; letter-spacing:2px; white-space:nowrap; }
+  .score .n { font-family:'Cinzel'; font-weight:700; font-size:38px; color:#d4af37; padding:4px 14px 0;
+    border-left:1px solid #d4af3755; border-right:1px solid #d4af3755; }
+  .score .set { display:flex; flex-direction:column; justify-content:center; text-align:center;
+    padding:0 10px; font-family:'Cinzel'; font-weight:600; font-size:10px; color:#cbb886;
+    letter-spacing:2px; white-space:nowrap; }
+  /* 金匾字卡 */
+  .toast { position:absolute; top:84px; left:50%; transform:translateX(-50%); z-index:2;
+    background:rgba(14,11,6,.94); border:1px solid #d4af37; padding:10px 26px; white-space:nowrap;
+    color:#f0e2b6; font-weight:700; font-size:19px; letter-spacing:3px;
+    box-shadow:0 6px 16px rgba(0,0,0,.55), inset 0 0 18px rgba(212,175,55,.1); }
+  .toast em { font-style:normal; color:#d4af37; }
+  .toast::before, .toast::after { content:'◆'; position:absolute; top:50%; transform:translateY(-50%);
+    color:#d4af37; font-size:9px; }
+  .toast::before { left:8px; } .toast::after { right:8px; }
+  .killcard { position:absolute; top:190px; left:88px; min-width:214px; z-index:2;
+    background:rgba(14,11,6,.94); border:1px solid #d4af3799; border-left:6px solid #d4af37;
+    padding:9px 18px 10px 14px; box-shadow:0 6px 16px rgba(0,0,0,.5); }
+  .killcard b { font-size:19px; font-weight:900; color:#f0e2b6; letter-spacing:2px; }
+  .killcard span { display:block; font-family:'Cinzel'; font-weight:600; font-size:12px;
+    color:#d4af37; letter-spacing:3px; margin-top:3px; }
+  .postag { position:absolute; top:390px; left:88px; z-index:2; font-family:'Cinzel'; font-weight:700;
+    font-size:18px; color:#d4af37; padding:1px 10px; background:rgba(14,11,6,.85);
+    border:1px solid #d4af3788; }
+  .stamina { position:absolute; bottom:20px; left:20px; right:110px; z-index:2; }
+  .stamina label { font-family:'Cinzel'; font-weight:600; color:#d4af37; font-size:11px;
+    letter-spacing:5px; text-shadow:0 2px 4px #000; }
+  .stamina .bar { margin-top:4px; height:12px; background:rgba(14,11,6,.85);
+    border:1px solid #d4af3788; }
+  .stamina .bar i { display:block; height:100%; width:78%;
+    background:linear-gradient(90deg, #9a7b1e, #d4af37, #f4e3ae); }
+  .chip { position:absolute; right:16px; z-index:2; background:rgba(14,11,6,.88); color:#f0e2b6;
+    font-weight:700; font-size:13px; letter-spacing:2px; padding:8px 14px;
+    border:1px solid #d4af3788; }
+  .chip.leave { top:88px; }
+  .chip.pause { top:192px; color:#d4af37; }
+  .replaychip { position:absolute; top:14px; right:16px; z-index:2; background:rgba(14,11,6,.88);
+    border:1px solid #d4af3788; padding:5px 9px; font-size:14px; }
+</style></head>
+<body>
+<div class="wrap">
+  <div class="phone menu">
+    <div class="glow"></div><div class="frame"></div>
+    <div class="inner">
+      <div class="laurel">✦ VOLLEY DREAM ✦</div>
+      <h1>排球夢</h1>
+      <div class="rule"><span>生涯模式</span></div>
+      <div class="btns">
+        <div class="btn primary"><span class="zh">生涯</span><span class="en">CAREER</span></div>
+        <div class="btn"><span class="zh">快速比賽</span><span class="en">QUICK MATCH</span></div>
+        <div class="btn"><span class="zh">連線對戰</span><span class="en">ONLINE DUEL</span></div>
+        <div class="btn"><span class="zh">怎麼玩</span><span class="en">HOW TO PLAY</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="phone match">
+    <div class="bg"></div><div class="vig"></div>
+    <div class="mask" style="left:60px;top:78px;width:270px;height:52px"></div>
+    <div class="mask" style="right:4px;top:84px;width:96px;height:42px"></div>
+    <div class="mask" style="right:4px;top:188px;width:110px;height:44px"></div>
+    <div class="mask" style="left:90px;top:186px;width:210px;height:88px"></div>
+    <div class="mask" style="left:0;bottom:0;width:250px;height:44px;border-radius:0"></div>
+    <div class="mask" style="right:6px;top:10px;width:60px;height:44px"></div>
+    <div class="mask" style="left:80px;top:54px;width:230px;height:24px"></div>
+    <div class="mask" style="left:60px;top:0;width:270px;height:60px"></div>
+    <div class="score">
+      <div class="t">我隊</div><div class="n">1</div>
+      <div class="set">SET 1<br>25 PTS</div>
+      <div class="n">3</div><div class="t">遊集</div>
+    </div>
+    <div class="toast">對方<em>連下 3 分</em>！</div>
+    <div class="killcard"><b>💥 殺球得分</b><span>OPPONENT — 1:3</span></div>
+    <div class="postag">MB</div>
+    <div class="replaychip">🎬</div>
+    <div class="stamina"><label>STAMINA</label><div class="bar"><i></i></div></div>
+    <div class="chip leave">✕ 離開</div>
+    <div class="chip pause">⏱ 暫停 ×2</div>
+  </div>
+</div>
+</body></html>

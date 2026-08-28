@@ -1,0 +1,140 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@700;900&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#555; font-family:'Noto Serif TC',serif; }
+  .wrap { display:flex; gap:20px; padding:16px; }
+  .phone { width:390px; height:844px; border-radius:24px; overflow:hidden; position:relative; flex:none; }
+
+  /* ============ 主選單：熱血動漫漫畫風 ============ */
+  .menu { background:radial-gradient(90% 60% at 50% 8%, #2a2210 0%, #14100a 45%, #0b0906 100%); }
+  /* 對角橙黑分割 */
+  .menu .diag { position:absolute; inset:0;
+    background:linear-gradient(115deg, #060503 0 30%, #d4af37 30% 34%, transparent 34%); }
+  /* 半色調網點 */
+  .menu .dots { position:absolute; inset:0;
+    background-image:radial-gradient(#d4af37 1.1px, transparent 1.1px);
+    background-size:14px 14px; opacity:.05; }
+  /* 放射速度線（右下角） */
+  .menu .speed { position:absolute; right:-140px; bottom:-140px; width:420px; height:420px;
+    background:repeating-conic-gradient(from 0deg, #d4af37 0deg 2deg, transparent 2deg 14deg);
+    opacity:.07; border-radius:50%; }
+  .menu .inner { position:relative; height:100%; display:flex; flex-direction:column;
+    align-items:center; padding-top:178px; }
+  .menu .en { font-family:'Cinzel'; font-size:22px; background:transparent; padding:0 10px; letter-spacing:8px; color:#d4af37;
+    transform:rotate(-4deg); }
+  .menu h1 { font-weight:900; font-size:88px; line-height:1.05; transform:rotate(-4deg); letter-spacing:4px;
+    background:linear-gradient(#f4e3ae, #d4af37 55%, #9a7b1e); -webkit-background-clip:text;
+    background-clip:text; color:transparent; filter:drop-shadow(4px 4px 0 rgba(0,0,0,.65)); }
+  .menu .sub { margin-top:16px; background:#d4af37; color:#14100a; font-weight:700;
+    padding:4px 22px; transform:skewX(-12deg); font-size:15px; letter-spacing:6px; }
+  .menu .btns { margin-top:64px; display:flex; flex-direction:column; gap:18px; width:280px; }
+  .btn { position:relative; background:#151006ee; border:1px solid #d4af3766; color:#f0e2b6; font-weight:900; font-size:22px;
+    padding:16px 0 16px 34px; transform:skewX(-12deg); letter-spacing:4px;
+    box-shadow:6px 6px 0 rgba(0,0,0,.55); }
+  .btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:10px; background:#d4af37; }
+  .btn small { font-family:'Cinzel'; font-weight:400; font-size:13px; letter-spacing:3px;
+    color:#d4af37; margin-left:12px; }
+  .btn.alt { background:linear-gradient(#d4af37, #a8842a); color:#14100a; }
+  .btn.alt::before { background:#0e0b06; }
+  .btn.ghost { background:transparent; color:#f0e2b6; border:3px solid #d4af3788; padding:13px 0 13px 34px; }
+
+  /* ============ 比賽 HUD ============ */
+  .match { background:#111; }
+  .match .bg { position:absolute; inset:0; background:url('match-bg.png') center/cover; filter:saturate(.95) sepia(.1) contrast(1.05); }
+  /* 上黑帶漸層讓 HUD 浮起 */
+  .match .top-fade { position:absolute; top:0; left:0; right:0; height:210px;
+    background:linear-gradient(#0b0906f0 30%, transparent); }
+  /* 比分板：斜切黑塊 */
+  .score { position:absolute; top:18px; left:50%; transform:translateX(-50%) skewX(-12deg);
+    display:flex; align-items:stretch; box-shadow:5px 5px 0 rgba(0,0,0,.4); }
+  .score .t { background:#d4af37; color:#0e0b06; font-weight:900; font-size:15px;
+    display:flex; align-items:center; padding:0 10px; letter-spacing:1px; }
+  .score .n { background:#0e0b06; color:#d4af37; border-top:1px solid #d4af3766; border-bottom:1px solid #d4af3766; font-family:'Cinzel'; font-size:44px;
+    padding:2px 16px 0; }
+  .score .mid { background:#f0e2b6; color:#0e0b06; font-family:'Cinzel'; font-size:15px;
+    display:flex; flex-direction:column; justify-content:center; padding:0 10px; text-align:center; line-height:1.1; white-space:nowrap; }
+  .score .mid b { font-size:11px; letter-spacing:1px; color:#8c6d1a; }
+  .score .t.b { background:#3a3123; color:#f0e2b6; }
+  /* 氣勢條：斜切 */
+  .momentum { position:absolute; top:76px; left:50%; transform:translateX(-50%) skewX(-12deg);
+    width:220px; height:10px; background:#0e0b06cc; border:2px solid #0e0b06; }
+  .momentum i { display:block; height:100%; width:62%; background:linear-gradient(90deg,#9a7b1e,#d4af37,#f4e3ae); }
+  /* 漫畫字卡：白底黑框＋速度線 */
+  .toast { position:absolute; top:84px; white-space:nowrap; left:50%; transform:translateX(-50%) rotate(-3deg);
+    background:#0e0b06f2; border:2px solid #d4af37; padding:10px 24px;
+    font-weight:900; font-size:21px; color:#f0e2b6; box-shadow:6px 6px 0 rgba(0,0,0,.55); }
+  .toast::after { content:''; position:absolute; inset:0;
+    background:repeating-linear-gradient(90deg, transparent 0 12px, rgba(212,175,55,.06) 12px 13px); }
+  .toast em { color:#d4af37; font-style:normal; }
+  /* 得分事件卡：黑slab橙斜切 */
+  .killcard { position:absolute; top:190px; left:88px; min-width:214px; transform:skewX(-8deg);
+    background:#0e0b06; color:#fff; padding:10px 20px 12px 16px; border-left:8px solid #d4af37;
+    box-shadow:5px 5px 0 rgba(0,0,0,.35); }
+  .killcard b { font-size:20px; font-weight:900; letter-spacing:2px; }
+  .killcard span { display:block; font-size:13px; color:#f4e3ae; font-weight:700; margin-top:2px; }
+  /* 位置籤 */
+  .postag { position:absolute; top:390px; left:88px; background:#0e0b06; color:#f4e3ae;
+    font-family:'Cinzel'; font-size:24px; padding:2px 12px; transform:skewX(-12deg);
+    border-bottom:3px solid #d4af37; }
+  /* 底部體力 */
+  .stamina { position:absolute; bottom:20px; left:20px; right:110px; }
+  .stamina label { font-weight:900; color:#fff; font-size:12px; letter-spacing:3px;
+    text-shadow:2px 2px 0 #0e0b06; }
+  .stamina .bar { margin-top:4px; height:14px; background:#0e0b06cc; border:2px solid #0e0b06;
+    transform:skewX(-12deg); }
+  .stamina .bar i { display:block; height:100%; width:78%;
+    background:linear-gradient(90deg,#9a7b1e,#d4af37,#f4e3ae); }
+  /* 右下角鈕 */
+  .chip { position:absolute; right:16px; background:#0e0b06; color:#fff; font-weight:900;
+    font-size:14px; padding:8px 14px; transform:skewX(-12deg); border-left:5px solid #d4af37; }
+  .chip.leave { top:88px; }
+  .chip.pause { top:192px; }
+.replaychip { position:absolute; top:14px; right:16px; background:#0e0b06; color:#fff;
+    padding:6px 10px; transform:skewX(-12deg); border-left:4px solid #d4af37; font-size:15px; }
+  .stamina { z-index:2; } .stamina .bar { height:18px; }
+.mask { position:absolute; backdrop-filter:blur(16px); background:rgba(14,11,6,.42); border-radius:8px; }
+</style></head>
+<body>
+<div class="wrap">
+  <div class="phone menu">
+    <div class="diag"></div><div class="dots"></div><div class="speed"></div>
+    <div class="inner">
+      <div class="en">VOLLEY DREAM</div>
+      <h1>排球夢</h1>
+      <div class="sub">生 涯 模 式</div>
+      <div class="btns">
+        <div class="btn">生涯<small>CAREER</small></div>
+        <div class="btn alt">快速比賽<small style="color:#14100a">QUICK</small></div>
+        <div class="btn">📡 連線對戰<small>ONLINE</small></div>
+        <div class="btn ghost">怎麼玩<small style="color:#d4af37">HOW TO</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="phone match">
+    <div class="bg"></div>
+    <div class="top-fade"></div>
+    <div class="mask" style="left:60px;top:78px;width:270px;height:52px"></div>
+    <div class="mask" style="right:4px;top:84px;width:96px;height:42px"></div>
+    <div class="mask" style="right:4px;top:188px;width:110px;height:44px"></div>
+    <div class="mask" style="left:90px;top:186px;width:210px;height:88px"></div>
+    <div class="mask" style="left:0;bottom:0;width:250px;height:44px;border-radius:0"></div>
+    <div class="mask" style="right:6px;top:10px;width:60px;height:44px"></div>
+    <div class="mask" style="left:80px;top:54px;width:230px;height:24px"></div>
+    
+    <div class="score">
+      <div class="t">我隊</div><div class="n">1</div>
+      <div class="mid"><b>SET 1</b>25 PTS</div>
+      <div class="n">3</div><div class="t b">遊集</div>
+    </div>
+    <div class="momentum"><i></i></div>
+    <div class="toast">對方<em>連下 3 分</em>！</div>
+    <div class="killcard"><b>💥 殺球得分</b><span>對方得分　1 : 3</span></div>
+    <div class="postag">MB</div>
+    <div class="replaychip">🎬</div><div class="stamina"><label>體力 STAMINA</label><div class="bar"><i></i></div></div>
+    <div class="chip leave">✕ 離開</div>
+    <div class="chip pause">⏱ 暫停 ×2</div>
+  </div>
+</div>
+</body></html>
