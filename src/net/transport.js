@@ -113,5 +113,10 @@ export async function guestJoin(inviteCode, handlers = {}) {
   await pc.setRemoteDescription(await codeToDesc(inviteCode));
   await pc.setLocalDescription(await pc.createAnswer());
   const desc = await gatheredDescription(pc);
-  return { answerCode: await descToCode(desc) };
+  return {
+    answerCode: await descToCode(desc),
+    // 表單審視（08-28）：lobby 返回鍵要能收掉「等主機開賽」中的連線——
+    // 沒這把手，玩家按返回後 pc 還掛著，重新加入會有兩條半死的連線搶訊息
+    close() { try { pc.close(); } catch { /* 已關 */ } },
+  };
 }

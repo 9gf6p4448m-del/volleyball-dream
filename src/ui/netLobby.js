@@ -53,6 +53,20 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
   const TA = 'display:block;width:100%;min-height:96px;margin:8px 0;border-radius:10px;'
     + 'border:1px solid #3a4a66;background:#141c30;color:#e8eef8;font-size:13px;padding:10px';
 
+  // 表單審視（08-28）：每個子頁常駐「← 返回」——正常流程、連線碼貼錯、打洞卡死、
+  // 版本不符……任何狀態都有出口。返回＝收掉半途的連線（cleanup）再回首頁重來。
+  function backButton(box, cleanup) {
+    const b = h('button', BTN2, '← 返回');
+    b.onclick = () => {
+      try { cleanup?.(); } catch { /* 半死連線收不乾淨也要能回去 */ }
+      state.handlers.onMessage = null;
+      state.handlers.onClose = null;
+      home();
+    };
+    box.appendChild(b);
+    return b;
+  }
+
   function section(title) {
     const el = h('div', 'max-width:520px;margin:0 auto');
     el.appendChild(h('h2', 'font-size:20px;margin:14px 0 6px', title));
@@ -105,21 +119,31 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
       roleBtns.set(key, b);
       grid.appendChild(b);
     }
-    roleBtns.get('outside').style.background = '#6ee7ff';
-    roleBtns.get('outside').style.color = '#0c1220';
+    // 表單審視（08-28）：依 state.role 反白——從主機/加入頁按返回回來時，
+    // 選過的位置要還在（原本寫死反白 outside＝視覺與狀態不同步）
+    const activeRole = roleBtns.has(state.role) ? state.role : 'outside';
+    roleBtns.get(activeRole).style.background = '#6ee7ff';
+    roleBtns.get(activeRole).style.color = '#0c1220';
     box.appendChild(grid);
     // 批5：帶生涯隊伍上場（有存檔才亮；選了生涯＝位置跟生涯走、上面的位置格失效）
     box.appendChild(h('h3', 'margin:14px 0 4px', '帶哪支隊伍？'));
     const teamRow = h('div', 'display:grid;grid-template-columns:1fr 1fr;gap:8px');
     const stdBtn = h('button', BTN2 + ';margin:0', '標準隊伍');
     const carBtn = h('button', BTN2 + ';margin:0', '我的生涯隊伍');
-    stdBtn.style.background = '#6ee7ff'; stdBtn.style.color = '#0c1220';
     const careerPayload = careerTeam ? careerTeam() : null;
     const teamHint = h('p', 'opacity:.7;font-size:13px;margin:4px 0');
     if (!careerPayload) {
       carBtn.disabled = true;
       carBtn.style.opacity = '0.4';
       teamHint.textContent = '（沒有可用的生涯存檔＝只能帶標準隊）';
+    }
+    // 依 state.team 反白（返回後保留選擇；理由同位置格）
+    if (state.team && careerPayload) {
+      carBtn.style.background = '#6ee7ff'; carBtn.style.color = '#0c1220';
+      teamHint.textContent = `帶生涯隊伍上場——你的位置＝${careerPayload.role}（上面的位置選擇失效）`;
+    } else {
+      state.team = null; // 存檔沒了（換槽/清檔）＝退回標準隊，不留幽靈選擇
+      stdBtn.style.background = '#6ee7ff'; stdBtn.style.color = '#0c1220';
     }
     stdBtn.onclick = () => {
       state.team = null;
@@ -158,6 +182,7 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
       host = await hostCreate(dispatch);
     } catch (err) {
       box.appendChild(h('p', 'color:#ff9d7a', '建立失敗：' + err.message));
+      backButton(box, null); // 表單審視：失敗不留死路
       return;
     }
     box.appendChild(h('p', 'opacity:.8', '① 把邀請碼傳給朋友（LINE）'));
@@ -169,15 +194,19 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
     const go = h('button', BTN, '🔌 連線');
     const status = h('p', 'color:#6ee7ff');
     go.onclick = async () => {
+      if (!ta.value.trim()) { status.textContent = '先把朋友的回覆碼貼進上面那格'; return; }
+      go.disabled = true; go.style.opacity = '0.5'; // 防連點：accept 重入會直接丟例外
       try {
         status.textContent = '連線中…（雙方網路互相打洞，最多等十幾秒）';
         await host.accept(ta.value);
-      } catch (err) {
-        status.textContent = '回覆碼有問題：' + err.message;
+      } catch {
+        status.textContent = '回覆碼有問題——確認整串都有複製到、再貼一次';
+        go.disabled = false; go.style.opacity = '1'; // 失敗＝放行重試
       }
     };
     box.appendChild(go);
     box.appendChild(status);
+    backButton(box, () => host.api.close()); // 常駐出口：打洞卡死/對方沒回都能撤
     // 客機 join 到了 → 送 hello → 開賽
     state.handlers.onMessage = (m) => {
       if (m.y !== 'join') return;
@@ -190,7 +219,7 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
       root.remove();
       onStart({ slot: 'A', seed, delay: NET_DELAY, roles, teams, api: host.api, handlers: state.handlers });
     };
-    state.handlers.onClose = () => { status.textContent = '連線關閉了——回主選單重來'; };
+    state.handlers.onClose = () => { status.textContent = '連線失敗或已關閉——按「← 返回」重來'; };
   }
 
   // ---- 客機流程 ----
@@ -204,7 +233,10 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
     const go = h('button', BTN, '產生回覆碼');
     const out = h('div');
     const status = h('p', 'color:#6ee7ff');
+    let joinedHandle = null; // 返回鍵要收的把手
     go.onclick = async () => {
+      if (!ta.value.trim()) { status.textContent = '先把朋友的邀請碼貼進上面那格'; return; }
+      go.disabled = true; go.style.opacity = '0.5'; // 防連點：連按會建出第二條半死連線
       let joined;
       try {
         status.textContent = '處理中…';
@@ -216,10 +248,12 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
             api.send({ y: 'join', role: state.role, team: state.team });
           },
         });
-      } catch (err) {
-        status.textContent = '邀請碼有問題：' + err.message;
+      } catch {
+        status.textContent = '邀請碼有問題——確認整串都有複製到、再貼一次';
+        go.disabled = false; go.style.opacity = '1'; // 失敗＝放行重試
         return;
       }
+      joinedHandle = joined;
       out.textContent = '';
       out.appendChild(h('p', 'opacity:.8;margin-top:14px', '② 把回覆碼傳回給朋友（LINE），等他按連線'));
       codeBlock(out, joined.answerCode, '回覆碼');
@@ -227,6 +261,7 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
     box.appendChild(go);
     box.appendChild(out);
     box.appendChild(status);
+    backButton(box, () => joinedHandle?.close()); // 常駐出口：主機不按連線/版本不符都能撤
     state.handlers.onMessage = (m) => {
       if (m.y !== 'hello') return;
       const problem = helloProblem(m)
@@ -236,7 +271,7 @@ export function showNetLobby(ctx, { onStart, careerTeam = null }) {
       root.remove();
       onStart({ slot: 'B', seed: m.seed, delay: m.delay, roles: m.roles, teams: m.teams ?? null, api: state.api, handlers: state.handlers });
     };
-    state.handlers.onClose = () => { status.textContent = '連線關閉了——回主選單重來'; };
+    state.handlers.onClose = () => { status.textContent = '連線失敗或已關閉——按「← 返回」重來'; };
   }
 
   home();

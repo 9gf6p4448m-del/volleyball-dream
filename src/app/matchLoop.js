@@ -207,6 +207,11 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
       stallSince: 0,                  // 影格斷流的起點（斷線看門狗用，A3-4）
     };
     s.remoteIds = [config.net.remotePid];
+    // 表單審視（08-28）：✕ 離開在連線模式先送 bye——對方立刻收到「對方離開了比賽」，
+    // 不必乾等 4 秒斷流看門狗。pointerdown 先於離開鈕自己的導航 handler 跑，送得出去。
+    stage.leaveBtn?.el?.addEventListener('pointerdown', () => {
+      s.net?.api?.send({ y: 'bye', reason: 'leave' });
+    });
     // 對方訊息：input 進鎖步、bye/斷線走提示（transport 的 onMessage 已在 lobby 綁到這）
     config.net.bindMatch({
       onInput: (msg) => s.net.lockstep.pushRemote(msg),
