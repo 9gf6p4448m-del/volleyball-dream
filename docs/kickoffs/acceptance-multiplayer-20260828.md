@@ -151,6 +151,21 @@
 - **批4 追修**：連線模式「再來一局」原本走單機換種子重開（靜默分岔＋丟 teams），
   已改為送 bye 後回連線大廳。
 
+## 六c、批5 驗證紀錄（2026-08-28）
+
+- **A5-1 過**：`tests/net-career-team.test.mjs`——匯出→JSON→重建，先發 6 人
+  逐欄位（id 前綴換隊、name/role/height.current/trust 含地板/attributes）與
+  careerTeams 原生建隊一致；玩家=自由人變體另測（不入先發、重建歸位）。
+- **A5-2 過**：版本不符／先發非 6 人／身高、屬性、位置不合法——逐一明確拒絕
+  （人話理由），null＝標準隊合法；lobby 兩端（host 收 join、guest 收 hello）都過
+  `netTeamProblem` 才放行。
+- **A5-3 過**：E2E——`?devseed=semi` 種存檔、兩端都選「我的生涯隊伍」（A 隊＝
+  阿哲/大山/阿烈等生涯名冊、B 隊＝同名冊 remap 成 B 前綴），打完一局 3090 tick，
+  兩端 `[NET-HASH] tick=3090 hash=2cc84f2b score=5-3` 逐字相同。
+- 線上格式：height/trust 壓平成數字（sim Player 是 {current,timeline}/{fromSetter,
+  floorShare} 結構，player.js:37/62）、trustFloor 獨立欄位保信任地板；timeline/plan
+  生涯敘事資料不上線。
+
 ## 七、開工前就發現的舊債（不在本卷範圍，如實記錄）
 
 `tools/sim-hash-baseline.json` 的基準（合計 `34772c06e02243fd`）**已對不上 HEAD `baf9539`**：

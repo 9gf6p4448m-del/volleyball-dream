@@ -92,7 +92,24 @@ async function init() {
     // 多人連線卷 批3：貼碼連線 lobby → 兩端同 seed 同建隊開賽（動態載入不進單機熱路）
     ctx.loadingEl.remove();
     const { showNetLobby } = await import('./ui/netLobby.js');
+    // 批5：生涯隊伍匯出 provider——讀目前存檔槽（槽 1 預設；?slot= 可指定），
+    // 沒存檔／建不出來回 null（lobby 把「我的生涯隊伍」鈕反灰）。只讀不寫。
+    const { exportNetTeam } = await import('./career/netExport.js');
+    const careerTeam = () => {
+      try {
+        const slotParam = Number.parseInt(ctx.params.get('slot'), 10);
+        const store = createSlotStoreProxy();
+        if (Number.isFinite(slotParam)) store.useSlot(slotParam);
+        const player = store.loadPlayer();
+        if (!player) return null;
+        const roster = ensureStarterRoster(store);
+        return exportNetTeam({ player, members: roster?.members ?? [], lineup: store.loadLineup() });
+      } catch {
+        return null; // 存檔殘缺＝視同沒有，不擋標準隊路徑
+      }
+    };
     showNetLobby(ctx, {
+      careerTeam,
       onStart: (netStart) => {
         // ★ 同步先攔訊息進緩衝 ★ 對方可能在本機 runMatch 的動態載入空窗（幾百 ms）
         // 就開始送 input——打在 lobby 舊 handler 上會被靜默丟掉，鎖步從此缺前幾格
@@ -232,7 +249,7 @@ async function runMatch(ctx, careerCtx = null, quickRole = null, netStart = null
     params: ctx.params,
     careerCtx,
     quickRole, // W3(P4) 快速比賽選位置（生涯場恆 null）
-    net: netStart ? { seed: netStart.seed, roles: netStart.roles } : null, // 批3 連線對戰
+    net: netStart ? { seed: netStart.seed, roles: netStart.roles, teams: netStart.teams ?? null } : null, // 批3/5 連線對戰
     randomSeed: Date.now() % 1000000007, // 開局隨機（快速比賽）；隨機化住在 main（sim 外）
   });
   // 批3 連線對戰：本機玩家＝自己那隊的受控者；鎖步核心與 transport 掛進 config.net

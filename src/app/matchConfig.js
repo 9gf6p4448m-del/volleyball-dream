@@ -3,6 +3,7 @@
 // matchLoop.js＝回合迴圈；matchCareer.js＝生涯開賽標記與賽末收束。
 // 三段以明確資料介面銜接：config →（createGame）→ gates → stage → loop。
 import { careerMatchSetup, buildLibero } from '../career/careerState.js';
+import { rebuildSide } from '../career/netExport.js';
 import { practiceMatchSetup } from '../career/practiceMatch.js';
 import { matchSeed } from '../career/careerState.js';
 import { createDefaultTeams } from '../sim/game.js';
@@ -99,6 +100,29 @@ export function buildNetSetup(hostRole, guestRole) {
   return out;
 }
 
+// 批5：把生涯隊伍 payload 疊上 buildNetSetup 的結果（純函式）。
+// payload 已在 lobby 端過 netTeamProblem 驗證；這裡吃合法輸入。
+// 名冊 L（isPlayer=false）＝疊在 buildLibero 上（careerMatchSetup 869-877 同款規則）。
+export function applyNetCareerTeams(setup, teamPayloads) {
+  if (!teamPayloads) return setup;
+  for (const team of ['A', 'B']) {
+    const payload = teamPayloads[team];
+    if (!payload) continue;
+    const side = rebuildSide(payload, team);
+    setup.teams[team] = side.starters;
+    if (side.libero) {
+      // 玩家=L：payload 主角本人當自由人（不入先發——careerTeams 已排除）
+      if (team === 'A') setup.liberoA = side.libero; else setup.liberoB = side.libero;
+    } else if (side.liberoMember) {
+      const lb = buildLibero(team, side.liberoMember.name);
+      lb.attributes = { ...lb.attributes, ...side.liberoMember.attributes };
+      lb.techniques.dive = 1; // 自由人豁免魚躍鏡像（careerMatchSetup 同款拍板）
+      if (team === 'A') setup.liberoA = lb; else setup.liberoB = lb;
+    }
+  }
+  return setup;
+}
+
 // 介面契約（tests/app-config.test.js 把關）：
 // resolveMatchConfig({ params, careerCtx, randomSeed }) → {
 //   seed, setTarget, simpleMode, autopilot, teamControl, assistOn,
@@ -183,8 +207,9 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
     : null;
   // W3(P4) 快速比賽選位置（UI 傳入優先、?role= 網址測試用；生涯場一律忽略）
   const quick = (careerCtx || net) ? null : buildQuickSetup(quickRole ?? params.get('role'));
-  // 批3 連線對戰：兩隊對稱建隊（兩端各自用同 roles 建＝逐值同一場）
-  const netSetup = net ? buildNetSetup(net.roles.A, net.roles.B) : null;
+  // 批3 連線對戰：兩隊對稱建隊（兩端各自用同 roles 建＝逐值同一場）；
+  // 批5：某側帶生涯隊伍 payload ＝ 覆蓋該側的標準隊（applyNetCareerTeams）
+  const netSetup = net ? applyNetCareerTeams(buildNetSetup(net.roles.A, net.roles.B), net.teams) : null;
   // stage 6：自由人雙方都有（生涯吃參數檔；快速比賽用預設防守專才；
   // 快速選 L＝玩家本人穿異色球衣）
   const liberos = careerSetup?.liberos ?? (netSetup ? {

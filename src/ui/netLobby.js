@@ -9,6 +9,7 @@
 // 客機驗版本回 ready → 兩端各自開賽（同 seed 同建隊＝逐值同一場）。
 import { hostCreate, guestJoin } from '../net/transport.js';
 import { helloMsg, helloProblem, NET_VERSION } from '../net/codec.js';
+import { netTeamProblem } from '../career/netExport.js';
 
 const NET_DELAY = 3; // 固定輸入延遲（tick；50ms）【試玩必調——節奏怪就動這顆】
 
@@ -17,13 +18,16 @@ const ROLES = [
   ['opposite', '輔攻手'], ['libero', '自由人'],
 ];
 
-export function showNetLobby(ctx, { onStart }) {
+export function showNetLobby(ctx, { onStart, careerTeam = null }) {
   const root = document.createElement('div');
   root.style.cssText = 'position:fixed;inset:0;background:#0c1220;color:#e8eef8;'
     + 'z-index:900;overflow-y:auto;padding:18px 16px 40px;font-size:16px;'
     + '-webkit-overflow-scrolling:touch';
   document.body.appendChild(root);
-  const state = { role: 'outside', api: null, handlers: { onMessage: null, onClose: null } };
+  const state = {
+    role: 'outside', api: null, handlers: { onMessage: null, onClose: null },
+    team: null, // 批5：生涯隊伍 payload（null＝標準隊）
+  };
   // transport 的回呼是建立當下綁死的——lobby 與 matchLoop 先後要收訊息，
   // 這裡放一個可換的轉接頭（matchLoop 的 bindMatch 之後訊息改進比賽）
   const dispatch = {
@@ -104,6 +108,36 @@ export function showNetLobby(ctx, { onStart }) {
     roleBtns.get('outside').style.background = '#6ee7ff';
     roleBtns.get('outside').style.color = '#0c1220';
     box.appendChild(grid);
+    // 批5：帶生涯隊伍上場（有存檔才亮；選了生涯＝位置跟生涯走、上面的位置格失效）
+    box.appendChild(h('h3', 'margin:14px 0 4px', '帶哪支隊伍？'));
+    const teamRow = h('div', 'display:grid;grid-template-columns:1fr 1fr;gap:8px');
+    const stdBtn = h('button', BTN2 + ';margin:0', '標準隊伍');
+    const carBtn = h('button', BTN2 + ';margin:0', '我的生涯隊伍');
+    stdBtn.style.background = '#6ee7ff'; stdBtn.style.color = '#0c1220';
+    const careerPayload = careerTeam ? careerTeam() : null;
+    const teamHint = h('p', 'opacity:.7;font-size:13px;margin:4px 0');
+    if (!careerPayload) {
+      carBtn.disabled = true;
+      carBtn.style.opacity = '0.4';
+      teamHint.textContent = '（沒有可用的生涯存檔＝只能帶標準隊）';
+    }
+    stdBtn.onclick = () => {
+      state.team = null;
+      stdBtn.style.background = '#6ee7ff'; stdBtn.style.color = '#0c1220';
+      carBtn.style.background = '#3a4a66'; carBtn.style.color = '#e8eef8';
+      teamHint.textContent = careerPayload ? '' : teamHint.textContent;
+    };
+    carBtn.onclick = () => {
+      if (!careerPayload) return;
+      state.team = careerPayload;
+      state.role = careerPayload.role; // 位置跟生涯走
+      carBtn.style.background = '#6ee7ff'; carBtn.style.color = '#0c1220';
+      stdBtn.style.background = '#3a4a66'; stdBtn.style.color = '#e8eef8';
+      teamHint.textContent = `帶生涯隊伍上場——你的位置＝${careerPayload.role}（上面的位置選擇失效）`;
+    };
+    teamRow.appendChild(stdBtn); teamRow.appendChild(carBtn);
+    box.appendChild(teamRow);
+    box.appendChild(teamHint);
     const hostBtn = h('button', BTN, '🏠 建立對戰（主機）');
     hostBtn.onclick = () => hostFlow();
     box.appendChild(hostBtn);
@@ -147,11 +181,14 @@ export function showNetLobby(ctx, { onStart }) {
     // 客機 join 到了 → 送 hello → 開賽
     state.handlers.onMessage = (m) => {
       if (m.y !== 'join') return;
+      const teamProblem = netTeamProblem(m.team ?? null); // 批5：驗對方生涯隊伍
+      if (teamProblem) { status.textContent = '❌ 對方的隊伍：' + teamProblem; return; }
       const seed = Math.floor(Math.random() * 1000000007); // app 層隨機（sim 外，鐵律不碰）
       const roles = { A: state.role, B: m.role };
-      host.api.send(helloMsg({ seed, delay: NET_DELAY, roles }));
+      const teams = { A: state.team, B: m.team ?? null };
+      host.api.send(helloMsg({ seed, delay: NET_DELAY, roles, teams }));
       root.remove();
-      onStart({ slot: 'A', seed, delay: NET_DELAY, roles, api: host.api, handlers: state.handlers });
+      onStart({ slot: 'A', seed, delay: NET_DELAY, roles, teams, api: host.api, handlers: state.handlers });
     };
     state.handlers.onClose = () => { status.textContent = '連線關閉了——回主選單重來'; };
   }
@@ -176,7 +213,7 @@ export function showNetLobby(ctx, { onStart }) {
           onOpen: (api) => {
             status.textContent = '通了！等主機開賽…';
             state.api = api;
-            api.send({ y: 'join', role: state.role });
+            api.send({ y: 'join', role: state.role, team: state.team });
           },
         });
       } catch (err) {
@@ -192,11 +229,12 @@ export function showNetLobby(ctx, { onStart }) {
     box.appendChild(status);
     state.handlers.onMessage = (m) => {
       if (m.y !== 'hello') return;
-      const problem = helloProblem(m);
+      const problem = helloProblem(m)
+        ?? netTeamProblem(m.teams?.A ?? null) ?? netTeamProblem(m.teams?.B ?? null); // 批5
       if (problem) { status.textContent = '❌ ' + problem; return; } // 明確拒絕，不靜默降級
       state.api.send({ y: 'ready' });
       root.remove();
-      onStart({ slot: 'B', seed: m.seed, delay: m.delay, roles: m.roles, api: state.api, handlers: state.handlers });
+      onStart({ slot: 'B', seed: m.seed, delay: m.delay, roles: m.roles, teams: m.teams ?? null, api: state.api, handlers: state.handlers });
     };
     state.handlers.onClose = () => { status.textContent = '連線關閉了——回主選單重來'; };
   }

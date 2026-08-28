@@ -23,8 +23,10 @@ export function decodeMsg(text) {
   }
 }
 
-export function helloMsg({ seed, delay, roles, names }) {
-  return { y: 'hello', v: NET_VERSION, seed, delay, roles, names: names ?? null };
+export function helloMsg({ seed, delay, roles, names, teams }) {
+  // teams（批5）：{ A: 生涯隊伍 payload|null, B: 同 }——null＝該側用標準隊。
+  // payload 的形狀驗證由 career/netExport.js 的 netTeamProblem 專職（單一真相源）。
+  return { y: 'hello', v: NET_VERSION, seed, delay, roles, names: names ?? null, teams: teams ?? null };
 }
 
 // hello 相容性檢查：回 null＝相容；回字串＝人話拒絕理由
