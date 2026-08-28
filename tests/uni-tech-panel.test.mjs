@@ -52,12 +52,12 @@ function withControls(playerId, fn, simpleMode = true) {
 }
 
 // 假的 matchLoop state：applyMbChoice／applyServeChoice 只吃這幾個欄位。
-function fakeState(game, controls, controlledId, extra = {}) {
+function fakeState(game, controls, localId, extra = {}) {
   return {
     game,
     aiState: {},
     stage: { controls },
-    controlledId,
+    localId,
     servedThisTurn: false,
     chaseExpanded: false,
     ...extra,

@@ -47,6 +47,21 @@ const PLAYER_AI_FIELDS = [
 // 從發球佈陣的最後一秒開始，不從玩家放下手機的那一刻開始
 const PRESERVE_KEEP = 60;
 
+// 受控者的正規表示：null／單值／陣列 → 存的時候長度 ≤1 收斂成純量（v2 相容）、
+// 讀的時候一律展開成陣列（sim 的 aiCollectIntents 只吃陣列）。
+function normalizeControlled(controlled) {
+  if (controlled == null) return null;
+  if (!Array.isArray(controlled)) return controlled;
+  if (controlled.length === 0) return null;
+  if (controlled.length === 1) return controlled[0] ?? null;
+  return [...controlled];
+}
+
+function controlledToArray(c) {
+  if (c == null) return [];
+  return Array.isArray(c) ? c : [c];
+}
+
 function playerAiView(aiState) {
   const out = {};
   for (const k of PLAYER_AI_FIELDS) out[k] = aiState?.[k] ?? null;
@@ -80,13 +95,17 @@ export function createRallyRecorder() {
     },
     // 每個 sim tick 呼叫一次——**必須在 aiCollectIntents 之前**（那一步會演進 aiState，
     // 而重演端也是「先套 patch 再 collect」，順序對齊才逐格一致）
-    step(game, aiState, controlledId, playerIntents) {
+    // controlled：受控者 id，可以是單值（單人）或陣列（連線對戰，多個真人）。
+    // ★ 單值與長度 1 的陣列一律序列化成純量 ★ ⇒ 單人模式錄出來的卷與批1之前
+    //   **逐位元相同**，典藏牆既有的 v2 卷不必遷移、也不必動 TAPE_VERSION。
+    step(game, aiState, controlled, playerIntents) {
       if (cur === null) return;
       const st = {};
       if (playerIntents?.length) st.p = structuredClone(playerIntents);
-      if (controlledId !== prevControlled) {
-        st.c = controlledId ?? null;
-        prevControlled = controlledId ?? null;
+      const c = normalizeControlled(controlled);
+      if (JSON.stringify(c) !== JSON.stringify(prevControlled)) {
+        st.c = c;
+        prevControlled = c;
       }
       const view = playerAiView(aiState);
       for (const k of PLAYER_AI_FIELDS) {
@@ -139,7 +158,7 @@ export function createRallyPlayer(tape) {
       if (st.c !== undefined) controlled = st.c;
       lastIntents = [
         ...(st.p ?? []),
-        ...aiCollectIntents(state, aiState, controlled ? [controlled] : []),
+        ...aiCollectIntents(state, aiState, controlledToArray(controlled)),
       ];
       return stepGame(state, lastIntents);
     },

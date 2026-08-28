@@ -59,7 +59,7 @@ function baseSession({
     aiState: { claimId, passTier },
     stage,
     config: { assistOn },
-    controlledId: PID,
+    localId: PID,
     assistFlight: -1,
     assistLanding: null,
     lastReadyFlight: -1,

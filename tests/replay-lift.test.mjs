@@ -160,7 +160,7 @@ function highlightSetup({ cam, totalSteps, elapsedFrac, target = { x: 3, y: 4, z
   const s = {
     stage,
     ctx,
-    controlledId: 'A4',
+    localId: 'A4',
     replay: {
       player,
       acc: 0,
@@ -227,7 +227,7 @@ test('B1：runHighlightFrame 把該幀 frameEvents 餵給 stage.sfx.onEvents', (
   const s = {
     stage,
     ctx,
-    controlledId: 'A4',
+    localId: 'A4',
     replay: {
       player,
       acc: 0,
@@ -253,7 +253,7 @@ test('B2：一幀跨很多 step（jumped）時不得把整批事件一次餵爆 
   const s = {
     stage,
     ctx,
-    controlledId: 'A4',
+    localId: 'A4',
     replay: {
       player,
       acc: 0,

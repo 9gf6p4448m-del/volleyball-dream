@@ -231,7 +231,7 @@ function fakeStage() {
 
 test('★HR-5★ 跳過：一鍵立即回現場（s.replay 清空、字卡收掉、鏡頭錨還給受控者）', () => {
   const stage = fakeStage();
-  const s = { stage, controlledId: 'A4', replay: { player: {}, acc: 0, highlight: { plan: {} } } };
+  const s = { stage, localId: 'A4', replay: { player: {}, acc: 0, highlight: { plan: {} } } };
   assert.equal(endHighlightReplay(s), true, '有 highlight 在播＝這次跳過由它接手');
   assert.equal(s.replay, null, '回現場：sim 只是被凍結，清掉 replay 就繼續跑發球流程');
   assert.ok(stage.calls.some(([k]) => k === 'hide'), '字卡必須跟著收（HR-4「重播結束消失」）');
@@ -242,14 +242,14 @@ test('★HR-5★ 跳過：一鍵立即回現場（s.replay 清空、字卡收掉
 test('★HR-5★ 互斥：沒有 highlight 在播時 endHighlightReplay 不作為（手動 🎬／情蒐帶不被吃掉）', () => {
   const stage = fakeStage();
   const manual = { player: {}, acc: 0 };
-  const s = { stage, controlledId: 'A4', replay: manual };
+  const s = { stage, localId: 'A4', replay: manual };
   assert.equal(endHighlightReplay(s), false, '手動回放不歸這條路管');
   assert.equal(s.replay, manual, '手動回放不得被跳過通道清掉');
   const tape = { player: {}, acc: 0, tape: true };
-  const s2 = { stage, controlledId: 'A4', replay: tape };
+  const s2 = { stage, localId: 'A4', replay: tape };
   assert.equal(endHighlightReplay(s2), false);
   assert.equal(s2.replay, tape, '情蒐帶不得被吃掉');
-  const s3 = { stage, controlledId: 'A4', replay: null };
+  const s3 = { stage, localId: 'A4', replay: null };
   assert.equal(endHighlightReplay(s3), false);
   assert.equal(stage.calls.length, 0, '沒得收就什麼都不做（不誤收現場鏡頭）');
 });
@@ -493,7 +493,7 @@ test('★HR-5／HR-6 端到端★ 真卷播到底：自己收尾回現場、字�
   assert.ok(isPlayableTape(tape));
   const { stage, rigCalls, banner } = fakeFullStage();
   const { ctx, rendered } = fakeCtx();
-  const s = { stage, ctx, controlledId: 'A4', replay: null, vcrLast: tape };
+  const s = { stage, ctx, localId: 'A4', replay: null, vcrLast: tape };
   const plan = planHighlightReplay({ duelOutcome: 'stuff', winner: MY, myTeam: MY });
   startHighlightReplay(s, plan, { sub: '我方得分　10 : 8' });
   assert.ok(s.replay?.highlight, '起播：s.replay 帶 highlight');
@@ -537,14 +537,14 @@ test('★HR-5★ 起播守門（真呼叫、不是讀原始碼）：卷不可播
   const plan = planHighlightReplay({ duelOutcome: 'tool', winner: MY, myTeam: MY });
   const { stage, banner } = fakeFullStage();
   // ① 卷不可播
-  const s1 = { stage, controlledId: 'A4', replay: null, vcrLast: null };
+  const s1 = { stage, localId: 'A4', replay: null, vcrLast: null };
   startHighlightReplay(s1, plan, null);
   assert.equal(s1.replay, null, '不可播的卷＝靜默跳過，不得留下半個 replay');
   // ② 已經在播（手動 🎬）＝不重入
   const manual = { player: {}, acc: 0 };
   const game = createGame({ seed: 5, setTarget: 25 });
   const s2 = {
-    stage, controlledId: 'A4', replay: manual,
+    stage, localId: 'A4', replay: manual,
     vcrLast: playOneRally(game, createAiState()),
   };
   startHighlightReplay(s2, plan, null);
@@ -587,7 +587,7 @@ test('★覆審 HIGH★ 局末得分：重播期間不得蓋上局終幕布，�
   // 局末：這一分打完局就結束了（phase 已是 set_over，幕布靠 prevPhase 邊緣觸發）
   game.phase = 'set_over';
   const s = {
-    stage, ctx, game, controlledId: game.match.rotations.A[0],
+    stage, ctx, game, localId: game.match.rotations.A[0],
     prevPhase: 'rally', replay: null, vcrLast: tape, careerCtx: null, tutorial: null,
   };
   // ① 同一幀：applyEvents 先起播 highlight，settleIfOver 稍後才跑
@@ -626,7 +626,7 @@ test('★覆審 HIGH★ 跳過也一樣：跳過當下不蓋，跳過後的下�
   stage.setOverOverlay = { show: (...a) => overlay.push(a), hide: () => overlay.push(['hide']) };
   game.phase = 'set_over';
   const s = {
-    stage, ctx: fakeCtx().ctx, game, controlledId: game.match.rotations.A[0],
+    stage, ctx: fakeCtx().ctx, game, localId: game.match.rotations.A[0],
     prevPhase: 'rally', replay: null, vcrLast: tape, careerCtx: null, tutorial: null,
   };
   startHighlightReplay(s, planHighlightReplay({ duelOutcome: 'tool', winner: MY, myTeam: MY }), null);

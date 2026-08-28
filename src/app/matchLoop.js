@@ -222,7 +222,7 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
     renderer: s.ctx.renderer, scene: s.ctx.scene, camera: s.ctx.camera,
     quality: s.ctx.quality, rig: s.stage.rig,
     vcr: () => s.vcrLast,             // 上一球的回放資料
-    controlled: () => s.controlledId, // 當前受控球員（輪控除錯）
+    controlled: () => s.localId, // 當前受控球員（輪控除錯）
     tapeCount: s.config.tapeClips.length, // 情蒐錄影帶卷數（測試用）
     floatText: stage.floatText,       // 字卡把手（W6.1 疊排的自動化驗證用）
     cardStats: () => stage.floatText.stats(), // W7.1：字卡遙測（真人實玩後查密度）
@@ -366,7 +366,15 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     prevPhase: game.phase,
     fovPunchUntil: 0,
     rallyStartFlight: 0,        // 本球起始 flight（rally 長度＝歡呼強度）
-    controlledId: playerId,
+    // ★ 多人連線卷 批1（2026-08-28）：把「受控者」拆成兩個名字 ★
+    //   `localId`＝**這台機器的畫面跟著誰**——鏡頭錨、播報「我方」、主角字卡、
+    //     招牌演出、面板長在誰身上，全部吃它。連線後它**永遠是單值**（本機玩家）。
+    //   `remoteIds`＝**別台機器控的人**（連線對戰才會非空）。單人模式恆為 []。
+    //   sim 邊界（aiCollectIntents 的排除集合、rallyTape 的受控者）吃的是
+    //     `controlledIdsOf(s)`＝兩者的聯集——「AI 不代打誰」與「畫面跟著誰」
+    //     是兩個問題，過去共用一個欄位，連線時必然打架。
+    localId: playerId,
+    remoteIds: [],
     switchKey: '',
     lastWindupFlight: -1,       // AI 攻擊手起跳動畫：每個 flight 只播一次
     lastApproachFlight: -1,     // 同上，助跑段（零跳躍）獨立旗標
@@ -608,7 +616,7 @@ function requestTimeout(s) {
     s.timeoutHuddleTeam = team; // 集合帶位＋倒數條共用同一個事實源
     s.stage.commentary?.onEvents(
       [{ type: 'TIMEOUT', tick: s.game.tick, team, remaining: s.game.timeouts[team].remaining }],
-      s.game, s.aiState, performance.now(), s.controlledId,
+      s.game, s.aiState, performance.now(), s.localId,
     );
     // 教練選項（不選也行——死球窗結束 matchLoop 會自動收，boost 在 sim 端也會過期作廢）；
     // 與 teachDialog 同一卡位，開前防呆收一次避免疊字
@@ -927,7 +935,7 @@ function bindInputHandlers(s) {
       momentum: config.gameOptions.momentum,
     });
     s.aiState = createAiState();
-    s.controlledId = s.playerId;
+    s.localId = s.playerId;
     s.switchKey = '';
     s.replay = null;
     s.vcrLast = null; // 換局清回放資料，避免新局第一分前播到上一局最後一球
@@ -1056,7 +1064,7 @@ export function endHighlightReplay(s) {
   stage.pointBanner?.hide();
   stage.rig?.setSigBeat(null);
   stage.rig?.setSetScan(false);
-  stage.rig?.setPlayerId(s.controlledId); // 鏡頭錨還給受控者
+  stage.rig?.setPlayerId(s.localId); // 鏡頭錨還給受控者
   return true;
 }
 
@@ -1175,9 +1183,9 @@ function desiredControlled(s) {
   // 回場後（onCourt 再度成立）自動放行、恢復原本全隊輪控邏輯
   if (!onCourt(game, s.playerId)) return s.playerId;
   if (game.phase === 'serve') {
-    return game.match.servingTeam === 'A' ? serverId(game.match) : s.controlledId;
+    return game.match.servingTeam === 'A' ? serverId(game.match) : s.localId;
   }
-  if (game.phase !== 'rally') return s.controlledId;
+  if (game.phase !== 'rally') return s.localId;
   const claim = aiState.claimId;
   if (claim && game.players[claim].teamId === 'A') return claim; // 球歸誰誰上
   if (game.rally.possession === 'B') {
@@ -1190,7 +1198,13 @@ function desiredControlled(s) {
     }
     return best;
   }
-  return s.controlledId;
+  return s.localId;
+}
+
+// sim 邊界要的「AI 不代打的所有人」。單人模式回 [localId]＝與批1之前逐值等價。
+// 不另存一個 `controlledIds` 欄位：那會變成第二份事實，跟 localId 漂移。
+function controlledIdsOf(s) {
+  return s.remoteIds.length ? [s.localId, ...s.remoteIds] : [s.localId];
 }
 
 function syncControlled(s) {
@@ -1201,8 +1215,8 @@ function syncControlled(s) {
   if (key === s.switchKey) return;
   s.switchKey = key;
   const want = desiredControlled(s);
-  if (want !== s.controlledId) {
-    s.controlledId = want;
+  if (want !== s.localId) {
+    s.localId = want;
     s.stage.controls.setPlayerId(want);
     s.stage.rig.setPlayerId(want);
     s.stage.matchView.setControlled(want);
@@ -1281,7 +1295,7 @@ export function mbPanelItems(gates) {
 export function applyMbChoice(s, it) {
   const { game, aiState, stage } = s;
   const { controls } = stage;
-  aiState.blockCall = { team: game.players[s.controlledId].teamId, line: it.line };
+  aiState.blockCall = { team: game.players[s.localId].teamId, line: it.line };
   // 不再送出「立即起跳」——起跳交給自動跳攔（就位後在擊球瞬間開窗）
   controls.chooseMbTiming(false);
   if (it.press) controls.armPressBlock();
@@ -1349,7 +1363,7 @@ function updateDecisions(s, now) {
     aiState.blockCall = null;
   }
   if (aiState.digBias && (game.phase !== 'rally'
-    || (game.rally.possession === game.players[s.controlledId]?.teamId
+    || (game.rally.possession === game.players[s.localId]?.teamId
       && game.rally.touches >= 1))) {
     aiState.digBias = null;
     // B-3 影子收帶時機（07-27 六輪 Sawmah：留到死球太長、殘留到下一波）：
@@ -1374,7 +1388,7 @@ function updateDecisions(s, now) {
     s.digReadWasOverride = aiState.digBias.override === true;
   }
   // W7 C2：受控者不在場上（主角板凳教練視角）——沒有身體可決策，面板收起
-  if (!onCourt(game, s.controlledId)) {
+  if (!onCourt(game, s.localId)) {
     panel.hide();
     stage.diegetic?.hide();
     rig.setSetScan(false);
@@ -1387,7 +1401,7 @@ function updateDecisions(s, now) {
   const zonesRaw = controls.attackZones(game);
   const zones = zonesRaw && zonesRaw.filter((z) => z.key !== 'tip' || gates.canTip);
   const meBackRow = isBackRow(
-    game.match.rotations[game.players[s.controlledId].teamId], s.controlledId,
+    game.match.rotations[game.players[s.localId].teamId], s.localId,
   );
   // ①進攻決策：球正下墜、可決策高度、尚未選區
   const attackDeciding =
@@ -1457,7 +1471,7 @@ function updateDecisions(s, now) {
       s.stage.blockShadow?.set(digRead.suggestion, game.ball.x); // B-3 佈陣可視化
       showShadowHintOnce(s);
       aiState.digBias = {
-        team: game.players[s.controlledId].teamId,
+        team: game.players[s.localId].teamId,
         choice: autoScheme?.dig ?? 'cross',
         block: autoScheme?.block,
         override: false,
@@ -1474,7 +1488,7 @@ function updateDecisions(s, now) {
   rig.setDefendView(defendMoment || mbDeciding);
   // ③發球決策：發球員是受控玩家本人（AI 隊友發球自動）、哨音已過、尚未選
   const serveDeciding =
-    game.phase === 'serve' && serverId(game.match) === s.controlledId &&
+    game.phase === 'serve' && serverId(game.match) === s.localId &&
     game.tick >= game.serveReadyTick && !s.servedThisTurn;
   if (game.phase !== 'serve') s.servedThisTurn = false;
   // 批 7：離開發球階段＝追發那一層收起來（下一個發球回合從主面板重新開始）
@@ -1555,7 +1569,7 @@ function updateDecisions(s, now) {
       stage.blockShadow?.set(choice.key, game.ball.x); // B-3 佈陣可視化
       showShadowHintOnce(s);
       aiState.digBias = {
-        team: game.players[s.controlledId].teamId,
+        team: game.players[s.localId].teamId,
         choice: choice.dig,
         block: choice.block,
         override: choice.key !== digRead.suggestion,
@@ -1563,7 +1577,7 @@ function updateDecisions(s, now) {
       // 07-27 四輪（Sawmah：字卡太多以體驗為主）：手選確認浮字移除——
       // 紅綠帶佈陣可視化即確認；結果卡（封到/讀對）保留。
       // 4.5B §4：攔網手偷瞄點頭確認（暗號收到——肢體確認非字卡）
-      const team = game.players[s.controlledId].teamId;
+      const team = game.players[s.localId].teamId;
       const mbId = game.match.rotations[team].find((pid) => game.players[pid]?.currentRole === 'middle'
         && !isBackRow(game.match.rotations[team], pid));
       if (mbId) stage.matchView.triggerPose(mbId, 'nod');
@@ -1573,7 +1587,7 @@ function updateDecisions(s, now) {
       panel.hide();
       stage.diegetic.showDig(
         lSignalItems(digRead), digTitle,
-        (item) => pickDig(item.zone), s.controlledId, game.rally.flightId,
+        (item) => pickDig(item.zone), s.localId, game.rally.flightId,
       );
     } else {
       panel.show(
@@ -1639,7 +1653,7 @@ function updateDecisions(s, now) {
       // UI 不自己重建一顆池（那會變成第二份真相）。
       // 這不違反裁定 E 的「不得預先變灰」：那條禁的是**預判**一傳品質，
       // 而入口搬到遠段之後 passTier 已經定案（面板標題自己就印著），這裡讀的是已知事實。
-      const callItems = (s.gates.canCallPlay ? callOptionsFor(game, s.controlledId) : [])
+      const callItems = (s.gates.canCallPlay ? callOptionsFor(game, s.localId) : [])
           .filter((o) => (callFeas ? callFeas[o.type]?.feasible !== false : true))
           .map((o) => ({
           key: `call-${o.type}`,
@@ -1662,7 +1676,7 @@ function updateDecisions(s, now) {
           // 只寫指令槽——真正的重排（planCombination ＋ applyComboRoutes ＋
           // approachRoutesFor 整份重建，已起跑者不得改線）在 sim 的 applyReplanCall。
           // UI 不自己算一份 route ⇒ 同源鐵則；輸入進了 rallyTape 白名單 ⇒ 重演得出來
-          s.aiState.replanCall = { type: it.callType, callerId: s.controlledId };
+          s.aiState.replanCall = { type: it.callType, callerId: s.localId };
         },
       );
     } else if (stage.diegetic) {
@@ -1726,7 +1740,7 @@ function stepSim(s) {
     if (game.phase === 'serve') s.recorder.begin(game, s.aiState);
     // 決定論代打（?autopilot=1 治具）：發球時刻一到（tick 條件）立即發往固定深區
     if (s.config.autopilot && game.phase === 'serve' &&
-        serverId(game.match) === s.controlledId &&
+        serverId(game.match) === s.localId &&
         game.tick >= game.serveReadyTick && !s.servedThisTurn) {
       stage.controls.serveNow(game, stage.controls.serveZones(game)[0].aim, null);
       s.servedThisTurn = true;
@@ -1744,14 +1758,14 @@ function stepSim(s) {
     // 4.6 §7 準度可讀性：受控者這一拍的**出手時機真值**（Intent 的 timing 原值——
     // TOUCH 事件的 power 已被超蓄夾到 0.85，分不出「放太晚」與「甜蜜區」）。
     // 純表現層取值：只讀不寫，sim 不知道有人在看
-    const spikeIntent = playerIntents.find((i) => i.action === 'spike' && i.playerId === s.controlledId);
+    const spikeIntent = playerIntents.find((i) => i.action === 'spike' && i.playerId === s.localId);
     if (spikeIntent) s.lastSpikeTiming = spikeIntent.timing ?? 1;
     // 錄影必須在 aiCollectIntents 之前——那一步會演進 aiState，而重演端是
     // 「先套 patch 再 collect」；順序對齊才逐格一致（rallyTape.js 契約）
-    s.recorder.step(game, s.aiState, s.controlledId, playerIntents);
+    s.recorder.step(game, s.aiState, controlledIdsOf(s), playerIntents);
     const intents = [
       ...playerIntents,
-      ...aiCollectIntents(game, s.aiState, [s.controlledId]),
+      ...aiCollectIntents(game, s.aiState, controlledIdsOf(s)),
     ];
     const events = stepGame(game, intents);
     frameEvents.push(...events);
@@ -1874,7 +1888,7 @@ export function captureComboAssistCredit(s) {
 // 不用 `flightId` 當去重鍵（一波橫跨三個 flight，2026-08-07 已為此出過三張字卡），
 // 也不用物件 identity（窗內重新規劃會產生新物件、值卻相同）。
 //
-// ★ 玩家 id 用 `s.playerId` 不用 `s.controlledId` ★ 帶位接管會讓後者漂移到隊友身上。
+// ★ 玩家 id 用 `s.playerId` 不用 `s.localId` ★ 帶位接管會讓後者漂移到隊友身上。
 export function captureChemistryPair(s) {
   const r = s.game?.rally;
   // 窗界＝第二觸窗（組合只在這裡排程）。一離開就結算——包含死球／換球權那一刻。
@@ -1918,7 +1932,7 @@ export function flushChemistryWindow(s) {
 function showBetCard(s, armed, cards) {
   const { game } = s;
   if (!armed || s.blockBetKey === armed.flightId) return;
-  const bet = blockBetFeedbackOf(game, s.aiState, s.controlledId, armed.spikerId,
+  const bet = blockBetFeedbackOf(game, s.aiState, s.localId, armed.spikerId,
     { setterId: armed.setterId, ranRoute: armed.ranRoute });
   if (!bet) return;
   s.blockBetKey = armed.flightId; // 這一波已評過（不論有沒有被節流掉，不重評）
@@ -1993,7 +2007,7 @@ function applyEvents(s, frameEvents, now) {
   }
   stage.sfx.onEvents(frameEvents, { rallyFlights: game.rally.flightId - s.rallyStartFlight });
   stage.controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
-  if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.controlledId);
+  if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.localId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
   for (const e of frameEvents) {
     // 丙1（接球微回饋批2，NJ-2）：在本次迭代任何東西改寫 s.lastTouch 之前先存一份
@@ -2009,7 +2023,7 @@ function applyEvents(s, frameEvents, now) {
     // ★ 位置體檢 2026-08-06 裁定 C：補上位置檢查（判定抽到 signatureBeats.ohSignatureArms）★
     // 檔頭寫明這是「OH 被騙的人」，但原本沒有任何 role 判斷＝任何位置都會起鏡。
     // 抽成純函式的理由與 `mbCallFeedbackOf` 同一條：判定住在 UI 迴圈就沒有測試守得住。
-    if (ohSignatureArms(e, s.controlledId, game.players[s.controlledId]?.currentRole)) {
+    if (ohSignatureArms(e, s.localId, game.players[s.localId]?.currentRole)) {
       s.pendingSig = armSignature('oh', { focusId: e.blockerId }); // 被騙的人入鏡
     }
     if (e.type === 'TOUCH' && e.kind === 'spike' && e.playerId === s.playerId && s.callLive
@@ -2051,7 +2065,7 @@ function applyEvents(s, frameEvents, now) {
     // 判準改成只看「玩家有沒有下過封線指令」——`s.mbCommit` 只在面板回呼裡寫入，
     // 有值就代表他選過，角色檢查多餘且有害。
     if (e.type === 'BALL_OVER_NET' && s.mbCommit?.line
-      && e.toTeam === game.players[s.controlledId]?.teamId) {
+      && e.toTeam === game.players[s.localId]?.teamId) {
       // 判定抽在 blockBetFeedback.js（純函式＋測試守著），不內聯——
       // 前一版就是因為內聯而恆假了一整天沒人發現。
       const card = mbCallFeedbackOf(game.rally.lastSpikeZone, s.mbCommit);
@@ -2062,8 +2076,8 @@ function applyEvents(s, frameEvents, now) {
     // 球走留的線、後排起球＝也是你的功（神救球演出時已讓位不疊）
     // W4 Q9：改判記帳（box score 第四欄「改判成功率」——A2 預留消費就此定形入帳）
     if (e.type === 'TOUCH' && e.touches === 1 && s.digReadResult != null
-      && game.players[s.controlledId]?.currentRole === 'libero'
-      && e.team === game.players[s.controlledId].teamId) {
+      && game.players[s.localId]?.currentRole === 'libero'
+      && e.team === game.players[s.localId].teamId) {
       if (s.digReadWasOverride) {
         s.lOverrideTally.n += 1;
         if (s.digReadResult) s.lOverrideTally.ok += 1;
@@ -2080,8 +2094,8 @@ function applyEvents(s, frameEvents, now) {
     }
     // W4 B-2「封到」層：攔網觸球在指令線上（配套的封線賭對）——分開字卡、皆玩家的功。
     // 07-27 四輪：同波整流——封到卡出過＝讀對/讀反卡不再出（擦手情境曾連發兩張）
-    if (e.type === 'BLOCK_TOUCH' && e.team === game.players[s.controlledId]?.teamId
-      && game.players[s.controlledId]?.currentRole === 'libero'
+    if (e.type === 'BLOCK_TOUCH' && e.team === game.players[s.localId]?.teamId
+      && game.players[s.localId]?.currentRole === 'libero'
       && s.aiState.digBias?.block && s.aiState.digBias.block !== 'off'
       && game.rally.lastSpikeZone === s.aiState.digBias.block) {
       s.lWallCardAt = now;
@@ -2103,7 +2117,7 @@ function applyEvents(s, frameEvents, now) {
       const ctx = (e.type === 'TOUCH' && e.kind === 'spike' && e.team === myTeam)
         ? {
           ranRoute: s.aiState?.approach?.team === myTeam
-            && !!s.aiState.approach.routes?.some((r) => r.pid === s.controlledId),
+            && !!s.aiState.approach.routes?.some((r) => r.pid === s.localId),
         }
         : null;
       const armed = (s.blockBetArm ??= createBlockBetArm())
@@ -2137,7 +2151,7 @@ function applyEvents(s, frameEvents, now) {
       s.hitStopUntil = Math.max(s.hitStopUntil, now + ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN ? 70 : 40));
       if ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN) s.slowUntil = Math.max(s.slowUntil ?? 0, now + 450); // 重扣＝定格接慢動作
       s.shake = Math.max(s.shake, 0.12);
-    } else if (e.type === 'TOUCH' && e.playerId === s.controlledId && e.touches === 1
+    } else if (e.type === 'TOUCH' && e.playerId === s.localId && e.touches === 1
         && stage.controls.consumeDigHeroSignal?.()) {
       // W3(P4) L 魚躍演出（附錄 A4①）：改判成功/Perfect 撲必死球的起球確認——
       // 慢動作＋低機位貼地鏡頭＋倒抽氣→爆歡呼；隊友回饋（A4③）：當屆 S 專屬台詞
@@ -2159,7 +2173,7 @@ function applyEvents(s, frameEvents, now) {
       s.hitStopUntil = Math.max(s.hitStopUntil, now + 60); // Math.max 對稱，同上（覆審 MEDIUM 修正）
       s.shake = Math.max(s.shake, 0.2);
       // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
-      if (e.playerId === s.controlledId && s.mbCommit) {
+      if (e.playerId === s.localId && s.mbCommit) {
         stage.floatText.show('🧱 封到了！', '#ffd166', 1400);
         s.mbCommit = null;
       }
@@ -2167,8 +2181,8 @@ function applyEvents(s, frameEvents, now) {
       // 不限搶快——搶快只是達成路徑之一，攔死本身即 MB 的身分時刻）：
       // 玩家＝MB、結實封到（擦手不算）、這一拍直接終結（後續任何觸球即解除，
       // 見 trackSignature）才起鏡
-      if (e.playerId === s.controlledId && !e.graze
-        && game.players[s.controlledId]?.currentRole === 'middle') {
+      if (e.playerId === s.localId && !e.graze
+        && game.players[s.localId]?.currentRole === 'middle') {
         s.pendingSig = armSignature('mb', { focusId: s.lastOppSpikerId });
       }
       // 網口對決（2026-08-27 批1 武裝、批3 起改播即時 highlight 重播）：任一
@@ -2190,7 +2204,7 @@ function applyEvents(s, frameEvents, now) {
       // 吊球 BALL_IN 且落點咬線（≤SIG_LINE_M）——不覆蓋更特定的已武裝演出
       //（假動作/攔死/要球）；SCORE 我方（同批緊隨）才起鏡
       if (!s.pendingSig && e.reason === 'BALL_IN' && e.at
-        && s.lastTouch?.playerId === s.controlledId
+        && s.lastTouch?.playerId === s.localId
         && (s.lastTouch.kind === 'spike' || s.lastTouch.kind === 'tip')) {
         const lineD = lineKillDistance(e.at);
         if (lineD !== null && lineD <= SIG_LINE_M) {
@@ -2210,7 +2224,7 @@ function applyEvents(s, frameEvents, now) {
       }
       // 4.6 §7：出手失手的成因**歸給時機、不歸運氣**（既有字卡通道，不新增通道）。
       // 只在受控者本人的攻擊上出——4.5B 字卡減量哲學：不是每球都要講話
-      if (e.reason === 'OUT' && s.lastTouch?.playerId === s.controlledId
+      if (e.reason === 'OUT' && s.lastTouch?.playerId === s.localId
         && (s.lastTouch.kind === 'spike' || s.lastTouch.kind === 'tip')) {
         const tm = timingVerdict(s.lastSpikeTiming, TUNING);
         if (tm === 'late') cards.push({ pri: 12, text: '放太晚——手型跑掉了', color: '#c8d6eb', dur: 1600 });
@@ -2267,7 +2281,7 @@ function applyEvents(s, frameEvents, now) {
           feed.push({ type: 'TIMEOUT_BOOST', tick: game.tick, team: 'B', boost: bBoost });
           s.pendingOppBoost = bBoost; // 散圈回場時再浮字（見下方暫停窗收尾）
         }
-        stage.commentary?.onEvents(feed, game, s.aiState, now, s.controlledId);
+        stage.commentary?.onEvents(feed, game, s.aiState, now, s.localId);
       }
       // W1(P4) A1 對手疲勞換人：判準在 ai.js（決定論）、sim 唯一寫入路徑
       // applySubstitution（與我方同一條）；播報一句＝字卡（沿對手暫停的浮字語言，
@@ -2313,8 +2327,8 @@ function applyEvents(s, frameEvents, now) {
       if (s.pendingDead) {
         pointInfo = derivePointInfo({
           reason: s.pendingDead.reason, winner: e.team,
-          myTeam: game.players[s.controlledId]?.teamId,
-          lastTouch: s.lastTouch, controlledId: s.controlledId, score: e.score,
+          myTeam: game.players[s.localId]?.teamId,
+          lastTouch: s.lastTouch, controlledId: s.localId, score: e.score,
         });
         stage.pointBanner.show(pointInfo);
         // 版面稽核 07-24：banner 佔 169-240px 帶與字卡帶基準位 178 重疊——
@@ -2350,7 +2364,7 @@ function applyEvents(s, frameEvents, now) {
     // 主角字卡統一出口（判定在 heroCards.js 純函式：Perfect 一傳／攔網碰球／
     // 假動作騙贏／回歸建功——測試用真 sim 事件流直測，不必開瀏覽器目視）
     const heroCard = heroCardFor(e, {
-      controlledId: s.controlledId,
+      controlledId: s.localId,
       playerName: e.playerId ? game.players[e.playerId]?.name : '',
     });
     if (heroCard) cards.push(heroCard);
@@ -2391,7 +2405,7 @@ export function updateAssistAndPoses(s) {
     // ★ 逐幀重算、不比照 assistLanding 做 flight 級快取 ★：tier 由球的「當前高度」
     // 決定，同一波球會隨下墜從 spike→set→receive 逐檔切換，快取住第一幀的結果
     // 會讓圈永遠停在最初那一檔，不會跟著球降下來。
-    const controlledPlayer = game.players[s.controlledId];
+    const controlledPlayer = game.players[s.localId];
     const assist = controlledPlayer
       ? contactAssistFor({
         game, player: controlledPlayer, tuning: TUNING,
@@ -2411,14 +2425,14 @@ export function updateAssistAndPoses(s) {
     stage.landingMarker.hide();
   }
   // 「這球歸你」：AI 呼叫鎖定指到受控者 → 光圈變橘＋提示
-  const myBall = game.phase === 'rally' && aiState.claimId === s.controlledId;
+  const myBall = game.phase === 'rally' && aiState.claimId === s.localId;
   stage.matchView.setHot(myBall);
   // 玩家放開起跳／點攔網 → 立即播動作（後續由 sim 事件接手）
-  if (stage.controls.consumeJumpSignal()) stage.matchView.triggerPose(s.controlledId, 'windup');
-  if (stage.controls.consumeBlockSignal()) stage.matchView.triggerPose(s.controlledId, 'block');
+  if (stage.controls.consumeJumpSignal()) stage.matchView.triggerPose(s.localId, 'windup');
+  if (stage.controls.consumeBlockSignal()) stage.matchView.triggerPose(s.localId, 'block');
   // AI 接球/舉球預備（07-28 動作協調性）：claim 者在球到之前先擺好姿勢——
   // 原本兩者都是「球碰到手才播動作」。用協調層算好的接觸點倒數（同扣球那套）
-  if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.controlledId
+  if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.localId
     && aiState.contactPoint?.ticks != null && aiState.flightId !== s.lastReadyFlight) {
     const toContact = aiState.contactPoint.ticks - (game.tick - aiState.planTick);
     const lead = game.rally.touches === 1 ? SET_READY_LEAD : RECEIVE_READY_LEAD;
@@ -2439,7 +2453,7 @@ export function updateAssistAndPoses(s) {
   // C-3 死碼註解），contact-frame-probe 07-30 重測：高手接球實際觸點占比僅 2.0%
   // （07-29 舊數據 20.8% 是收斂前的量，已隨手點幾何一起緊縮，非本層改動所致）。
   // 這極少數殘留由 TOUCH 事件當場改播 overhead＝與修前完全相同的行為，不會變差
-  if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.controlledId
+  if (game.phase === 'rally' && aiState.claimId && aiState.claimId !== s.localId
     && aiState.contactPoint?.ticks != null && aiState.flightId !== s.lastContactFlight
     && game.rally.touches <= 1) {
     const toContact = aiState.contactPoint.ticks - (game.tick - aiState.planTick);
@@ -2462,7 +2476,7 @@ export function updateAssistAndPoses(s) {
   // （§2-2 approach3/4 觸發前）——站定等二傳觸球。`attackerId !== claimId` 排除
   // 第三擊本人正忙著接/舉球或已在助跑/揮擊的窗口，一個 flight 只觸發一次；
   // 之後 approach3/4 的 trigger 會自然蓋掉這個 hold（見 update() 的 trigger 邏輯）
-  if (game.phase === 'rally' && aiState.attackerId && aiState.attackerId !== s.controlledId
+  if (game.phase === 'rally' && aiState.attackerId && aiState.attackerId !== s.localId
     && aiState.attackerId !== aiState.claimId && aiState.flightId !== s.lastWaitFlight) {
     s.lastWaitFlight = aiState.flightId;
     stage.matchView.triggerPose(aiState.attackerId, 'transitionWait');
@@ -2473,7 +2487,7 @@ export function updateAssistAndPoses(s) {
   // （起跳 tick→實際擊球 p50=36 tick）畫面上是站著＝Sawmah 看到的「停一下才跳」。
   // 助跑起手同步提前：讓 approach3/4 的末幀（交棒 windup 的那一幀）正好踩在起跳 tick。
   const early = game.phase === 'rally' ? earlyTakeoffOf(aiState) : null;
-  if (early && aiState.attackerId !== s.controlledId && game.players[aiState.attackerId]) {
+  if (early && aiState.attackerId !== s.localId && game.players[aiState.attackerId]) {
     const atkTeam = game.players[aiState.attackerId].teamId;
     const back = isBackRow(game.match.rotations[atkTeam], aiState.attackerId);
     const seq = back ? 'approach4' : 'approach3';
@@ -2526,7 +2540,7 @@ export function updateAssistAndPoses(s) {
       // 才會不同，那個人本來就會走下面 hitPoint 倒數，這裡不得重複代播。
       // 玩家自己操作的角色不由 AI 代播姿勢
       if (pid === aiState.attackerId || pid === aiState.claimId
-        || pid === s.controlledId || !game.players[pid]) continue;
+        || pid === s.localId || !game.players[pid]) continue;
       const key = `${team}:${setTick}:${pid}`;
       const back = isBackRow(game.match.rotations[team], pid);
       const seq = back ? 'approach4' : 'approach3';
@@ -2543,7 +2557,7 @@ export function updateAssistAndPoses(s) {
   // AI 攻擊手「先跳後揮」：第三擊球下墜接近攻擊手時先播起跳引臂（觸球才揮臂）
   const jumpedEarly = !!early && s.earlyTakeoffKey === early.key;
   if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId &&
-      aiState.claimId !== s.controlledId && aiState.flightId !== s.lastWindupFlight) {
+      aiState.claimId !== s.localId && aiState.flightId !== s.lastWindupFlight) {
     const atk = game.actors[aiState.claimId];
     const b = game.ball;
     // 07-28 追修（Sawmah 試玩：「還是會停在球下才攻擊」）：原條件＝球高<3.6m
@@ -2590,7 +2604,7 @@ export function updateAssistAndPoses(s) {
   // 提前量走 hitLeadTicks 單一真相（序列調時長自動跟著調）＋SPIKE_CONTACT_BIAS；
   // 旗標與上面的起跳段分開（起跳段觸發後整塊就不再進來，不能寄生在裡面）
   if (game.phase === 'rally' && game.rally.touches === 2 && aiState.claimId
-    && aiState.claimId !== s.controlledId && aiState.flightId !== s.lastSwingFlight
+    && aiState.claimId !== s.localId && aiState.flightId !== s.lastSwingFlight
     && game.players[aiState.claimId] && aiState.hitPoint?.ticks != null) {
     const atk = game.actors[aiState.claimId];
     const b = game.ball;
@@ -2653,7 +2667,7 @@ export function settleIfOver(s) {
       s.stage.practiceHud?.hide();
       s.careerCtx?.store?.clearMidMatch?.(); // 同正式賽：不留「已結束比賽的假續玩入口」
       stage.setOverOverlay.show(null, game.match.score,
-        game.players[s.controlledId].teamId, '點擊任意處看今天練了什麼', '🏐 練習結束——收工');
+        game.players[s.localId].teamId, '點擊任意處看今天練了什麼', '🏐 練習結束——收工');
       s.prevPhase = game.phase;
       return;
     }
@@ -2670,7 +2684,7 @@ export function settleIfOver(s) {
       if (!saveOk) stage.floatText.show('⚠ 科目成績寫入失敗（儲存空間不可用）', '#ff8a8a', 2600);
       const pWinner = game.series?.winner ?? game.match.winner;
       stage.setOverOverlay.show(pWinner, game.match.score,
-        game.players[s.controlledId].teamId, '點擊任意處看科目結算');
+        game.players[s.localId].teamId, '點擊任意處看科目結算');
       s.prevPhase = game.phase;
       return;
     }
@@ -2711,7 +2725,7 @@ export function settleIfOver(s) {
     const winner = game.series?.winner ?? game.match.winner;
     const score = game.series ? game.series.setsWon : game.match.score;
     stage.setOverOverlay.show(winner, score,
-      game.players[s.controlledId].teamId, s.careerCtx ? '點擊任意處返回生涯' : undefined);
+      game.players[s.localId].teamId, s.careerCtx ? '點擊任意處返回生涯' : undefined);
   }
   // W4(P4) Q8 局間（多局賽制限定）：huddle 過場——比分回顧＋教練指示＋下一局/存檔離開
   if (game.phase === 'set_break' && s.prevPhase !== 'set_break') {
@@ -3176,8 +3190,8 @@ function saveMidAndQuit(s) {
 function updateDiveReady(s) {
   if (!s.gates.canDive) return;
   // W7 C2：受控者不在場上（板凳教練視角）——沒有身體可撲
-  if (!onCourt(s.game, s.controlledId)) { s.diveReady = false; return; }
-  const meActor = s.game.actors[s.controlledId];
+  if (!onCourt(s.game, s.localId)) { s.diveReady = false; return; }
+  const meActor = s.game.actors[s.localId];
   s.diveReady = s.game.phase === 'rally' && !s.replay && s.game.tick >= meActor.divedUntil;
 }
 
@@ -3260,9 +3274,9 @@ function frameStep(s, now) {
   // 4.5B §3：招牌演出鏡位窗（勝負已定後的死球窗；到期/SERVE 即收）
   if (s.sigBeat && now >= s.sigBeat.until) s.sigBeat = null;
   stage.rig.setSigBeat(s.sigBeat);
-  const meNow = game.players[s.controlledId];
+  const meNow = game.players[s.localId];
   if (meNow?.currentRole === 'libero') {
-    const onNow = onCourt(game, s.controlledId);
+    const onNow = onCourt(game, s.localId);
     if (onNow && s.lWasOnCourt === false) {
       stage.floatText.show(`🔄 異色球衣——${meNow.name} 進場`, '#6ee7ff', 1400);
       stage.sfx.cheer?.(0.5);
@@ -3472,7 +3486,7 @@ function frameStep(s, now) {
   const netHitPower = ctx.court.update(delta, game.ball); // 網面受擊波動（純視覺）
   if (netHitPower > 0) stage.sfx.netHit(netHitPower);
   stage.matchView.sync(game, alpha, delta, frameEvents);
-  stage.rig.setSpikeMine(s.aiState?.claimId === s.controlledId); // 扣球一人稱只認「舉給我」
+  stage.rig.setSpikeMine(s.aiState?.claimId === s.localId); // 扣球一人稱只認「舉給我」
   stage.rig.setBenchMode(benched); // W7 C2①：板凳側位廣角，優先於其餘鏡頭模式
   // W8 暫停演出：圈內第一人稱窗——聚攏 0.9s 後進、散圈走回前 0.5s 退（板凳視角優先）；
   // 同一顆布林餵 rig（鏡頭）與 matchView（隱藏受控者本體防擋鏡）
@@ -3542,7 +3556,7 @@ function frameStep(s, now) {
   // 留著只是壓在球場中央擋讀攔網。旗標沿用既有的 `attackDecidingSince`（>=0＝面板開著），
   // 不另立狀態。
   stage.routeCue?.sync(
-    s.attackDecidingSince >= 0 ? null : myRouteFor(game, s.aiState, s.controlledId),
+    s.attackDecidingSince >= 0 ? null : myRouteFor(game, s.aiState, s.localId),
   );
   // 2026-08-04 試玩裁定：攔網涵蓋帶——玩家看得見「我的手守得住哪一段網」。
   // 顯示條件刻意與**自動跳攔**（`matchControls.js:511-513`）逐條對齊：前排＋站在攔網帶內
@@ -3550,8 +3564,8 @@ function frameStep(s, now) {
   // 「看到帶子卻沒跳」或「跳了卻沒帶子」的分岔。
   // armed＝對方已進入扣球階段（profile==='spike'）⇒ 亮起來；其餘時候淡淡的不搶視線。
   {
-    const me = game.players[s.controlledId];
-    const a = game.actors[s.controlledId];
+    const me = game.players[s.localId];
+    const a = game.actors[s.localId];
     const r = game.rally;
     // ★ 2026-08-04 二修（Sawmah 實玩：「剛剛扣球也有閃過那個白色的帶」）★
     // 原本只看「球權在對方」，但球一過網 `possession` 就切了（`game.js:1029`）
@@ -3559,7 +3573,7 @@ function frameStep(s, now) {
     // 對方**已經接起球、開始組織**才是該準備攔網的時刻；球還在飛過去的路上不算。
     const blocking = me && a && game.phase === 'rally'
       && r.possession && r.possession !== me.teamId && r.touches >= 1
-      && isFrontRow(game.match.rotations[me.teamId], s.controlledId)
+      && isFrontRow(game.match.rotations[me.teamId], s.localId)
       && Math.abs(a.z) < NEAR_NET_Z; // 向 matchControls 取單一真相，不放第二份
     // 四版：連**前排隊友**的格子一起畫（見 blockReach.js 檔頭）。理由是封線指令
     // （`AI.BLOCK_SCHEME_SHIFT` 0.9m）是整面牆同方向平移、而玩家不跟著平移
@@ -3569,7 +3583,7 @@ function frameStep(s, now) {
     if (blocking) {
       const rot = game.match.rotations[me.teamId];
       for (const pid of rot) {
-        if (pid === s.controlledId) continue;
+        if (pid === s.localId) continue;
         if (!isFrontRow(rot, pid)) continue;
         const ma = game.actors[pid];
         if (!ma || Math.abs(ma.z) >= NEAR_NET_Z) continue; // 退防的人不畫（他不在牆上）
@@ -3595,9 +3609,9 @@ function frameStep(s, now) {
     stage.comebackBtn.sync(benched, avail.enabled, avail.reason);
   }
   // W7 A6：主角 HUD 體力條（受控者本人；stamina 未啟用傳 null 短路隱藏）
-  stage.heroStamina?.update(game.stamina ? (game.stamina[s.controlledId] ?? 1) : null);
-  stage.scoreboard.update(game, myBall, s.controlledId,
-    stage.commentary ? stage.commentary.line(game, s.aiState, s.controlledId, now) : undefined);
+  stage.heroStamina?.update(game.stamina ? (game.stamina[s.localId] ?? 1) : null);
+  stage.scoreboard.update(game, myBall, s.localId,
+    stage.commentary ? stage.commentary.line(game, s.aiState, s.localId, now) : undefined);
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());
   stage.touchUi.update(stage.controls.uiState());
   const aimAt = s.config.simpleMode ? null : stage.controls.currentAimPoint(game);
