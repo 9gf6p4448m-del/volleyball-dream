@@ -879,6 +879,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
           pos,
           label: game.players[pid]?.name ?? '？',
           aim: basePosition(opp, pos),
+          // 發球面板重做（08-28 Sawmah：「追發用來觀察體力低或是破壞陣容」）：
+          // 把決策依據放上按鈕——體力值由面板端配 tierOf 顯示，不在這裡算檔位
+          stamina: game.stamina?.[pid] ?? 1,
         }));
     },
 

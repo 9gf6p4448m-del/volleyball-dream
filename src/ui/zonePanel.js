@@ -88,8 +88,8 @@ export function createZonePanel() {
   // 貼底＝拇指位＋視線區淨空。其他面板維持預設（零擾動）
   function show(titleText, items, onChoose, onFake = null, layout = 'default') {
     const low = layout === 'low';
-    wrap.style.bottom = `calc(env(safe-area-inset-bottom, 0px) + ${low ? 22 : 90}px)`;
-    title.style.bottom = `calc(env(safe-area-inset-bottom, 0px) + ${low ? 88 : 168}px)`;
+    const base = low ? 22 : 90;
+    wrap.style.bottom = `calc(env(safe-area-inset-bottom, 0px) + ${base}px)`;
     title.textContent = titleText;
     const key = titleText + items.map((i) => i.key + (i.color ?? '')).join(',');
     if (key !== shownKey) {
@@ -98,6 +98,9 @@ export function createZonePanel() {
     }
     wrap.style.display = 'flex';
     title.style.display = 'block';
+    // 08-28 表單審視：標題抬到按鈕群「實際高度」之上——原本定死 +168px，
+    // 按鈕一疊到第二排就把標題蓋掉（發球面板 7 顆在手機橫式必疊兩排，試玩截圖抓到）
+    title.style.bottom = `calc(env(safe-area-inset-bottom, 0px) + ${base + wrap.offsetHeight + 10}px)`;
   }
   function hide() {
     wrap.style.display = 'none';

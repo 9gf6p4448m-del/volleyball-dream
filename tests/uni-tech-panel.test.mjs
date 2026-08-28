@@ -414,71 +414,109 @@ test('B7-5 第二層的「返回」不發球、只收起來', () => {
 // ════════════════════════════════════════════════════════════
 const chaseGatesAll = () => gatesFor({ chaseServe: 1, floatServe: 1, jumpServe: 1 });
 
-test('追發×式 兩閘皆關：第二層與舊制逐項相同（三名＋返回，style 全 null）', () => {
+// ════ 08-28 發球面板重做（Sawmah 拍板甲案，取代 08-27 acceptance-chase-style 並列制）════
+// 舊制式×人全展開（兩層 21 顆）被試玩抓出重複：追發層落點＝後排三人站的深區。
+// 新規格：式＝主面板切換鈕；追發層＝純選人＋體力標記（追發用途＝打體力低的人）。
+
+test('追發×式 兩閘皆關：第二層＝三名＋返回，style 全 null（無式可套）', () => {
   const g = serveGame();
   const me = serverId(g.match);
   withControls(me, (controls) => {
     const targets = controls.chaseServeTargets(g);
-    const locked = chasePanelItems(targets, gatesFor({ chaseServe: 1 }));
-    assert.equal(locked.length, 4, '未受教長出變體＝gate 沒做在行為層（B7-4 同則）');
-    for (const it of locked) if (it.target) assert.equal(it.style, null);
-    // 不帶 gates（既有呼叫端形狀）也必須是舊制
+    const locked = chasePanelItems(targets, gatesFor({ chaseServe: 1 }), 'float');
+    assert.equal(locked.length, 4, '追發層＝純選人：三名＋返回，不再有式×人展開');
+    for (const it of locked) if (it.target) assert.equal(it.style, null, '沒學飄卻套上式＝gate 沒做在行為層');
+    // 不帶 gates/styleSel（既有呼叫端形狀）也必須是穩定制
     assert.equal(chasePanelItems(targets).length, 4);
   });
 });
 
-test('追發×式 解鎖後：每個目標各多「飄·名」「跳·名」，逐目標 style/aim 成對', () => {
+test('式切換：主面板切飄/跳＝同排換式、短球退場；再按一次回穩定；切換不發球', () => {
   const g = serveGame();
   const me = serverId(g.match);
   withControls(me, (controls) => {
-    const targets = controls.chaseServeTargets(g);
-    const items = chasePanelItems(targets, chaseGatesAll());
-    assert.equal(items.filter((i) => i.style === 'float').length, 3);
-    assert.equal(items.filter((i) => i.style === 'jump').length, 3);
-    for (const t of targets) {
-      const f = items.find((i) => i.style === 'float' && i.target === t);
-      const j = items.find((i) => i.style === 'jump' && i.target === t);
-      assert.ok(f && f.label.includes(t.label), '飄變體要看得出發給誰');
-      assert.ok(j && j.label.includes(t.label), '跳變體要看得出發給誰');
+    const s = fakeState(g, controls, me, { serveStyleSel: null });
+    const zs = controls.serveZones(g);
+    // 穩定態：4 落點＋飄/跳切換鈕＋追發
+    const base = servePanelItems(chaseGatesAll(), zs, s.serveStyleSel);
+    assert.equal(base.filter((i) => i.zone).length, 4);
+    assert.ok(base.some((i) => i.styleToggle === 'float') && base.some((i) => i.styleToggle === 'jump'));
+    // 按「飄浮」＝切式不發球
+    applyServeChoice(s, base.find((i) => i.styleToggle === 'float'));
+    assert.equal(s.serveStyleSel, 'float');
+    assert.equal(s.servedThisTurn, false, '切式那一按就把球發出去＝玩家還沒選落點');
+    const floatPanel = servePanelItems(chaseGatesAll(), zs, s.serveStyleSel);
+    const floatZones = floatPanel.filter((i) => i.zone);
+    assert.equal(floatZones.length, 3, '飄浮沒有短球（舊制同）');
+    for (const i of floatZones) {
+      assert.equal(i.style, 'float');
+      assert.ok(i.label.startsWith('飄'), '切了式看不出來＝標籤沒跟著換');
     }
+    // 再按一次＝回穩定
+    applyServeChoice(s, floatPanel.find((i) => i.styleToggle === 'float'));
+    assert.equal(s.serveStyleSel, null);
+    // 未學跳發＝不長跳發切換鈕（B7-4 行為層）
+    const noJump = servePanelItems(gatesFor({ chaseServe: 1, floatServe: 1 }), zs, null);
+    assert.ok(!noJump.some((i) => i.styleToggle === 'jump'));
   });
 });
 
-test('★追發×式 tap 到底★ 飄追發 intent style=float 且瞄選中的人；跳追發 timing>1.1', () => {
+test('★追發×式 tap 到底★ 切飄後追發 intent style=float 且瞄選中的人；切跳 timing>1.1', () => {
   const me0 = serverId(serveGame().match);
-  const intentOf = (pick) => {
+  const intentOf = (styleSel, idx) => {
     const g = serveGame();
     return withControls(me0, (controls) => {
       const s = fakeState(g, controls, me0);
       const targets = controls.chaseServeTargets(g);
-      const items = chasePanelItems(targets, chaseGatesAll());
-      applyChaseChoice(s, items.find((i) => pick(i, targets)));
+      const items = chasePanelItems(targets, chaseGatesAll(), styleSel);
+      applyChaseChoice(s, items.find((i) => i.target === targets[idx]));
       const [it] = controls.collect(g, null);
-      return { it, target: targets[1] };
+      return { it, target: targets[idx] };
     });
   };
-  const f = intentOf((i, ts) => i.style === 'float' && i.target === ts[1]);
+  const f = intentOf('float', 1);
   assert.equal(f.it.action, 'serve');
-  assert.equal(f.it.style, 'float', '★紅法＝現行實作★ style 寫死 null，飄追發根本發不出飄球');
+  assert.equal(f.it.style, 'float', '★紅法★ 切了飄追發發的還是普通球');
   assert.ok(Math.abs(f.it.aim.x - f.target.aim.x) < 1e-6
     && Math.abs(f.it.aim.z - f.target.aim.z) < 1e-6, '配了式就丟了人＝追發語意壞掉');
-  const j = intentOf((i, ts) => i.style === 'jump' && i.target === ts[1]);
+  const j = intentOf('jump', 1);
   assert.ok(j.it.timing > 1.1, '★紅法★ 跳追發 timing 沒過跳發門檻＝發的還是一般球');
   assert.ok(Math.abs(j.it.aim.x - j.target.aim.x) < 1e-6
     && Math.abs(j.it.aim.z - j.target.aim.z) < 1e-6);
 });
 
-test('追發×式 按原本名字鈕：style 仍 null、timing=1（既有行為逐值不變）', () => {
+test('追發×式 穩定態按名字鈕：style null、timing=1（既有行為逐值不變）', () => {
   const g = serveGame();
   const me = serverId(g.match);
   withControls(me, (controls) => {
     const s = fakeState(g, controls, me);
     const targets = controls.chaseServeTargets(g);
-    const items = chasePanelItems(targets, chaseGatesAll());
-    applyChaseChoice(s, items.find((i) => i.target === targets[0] && i.style === null));
+    const items = chasePanelItems(targets, chaseGatesAll(), null);
+    applyChaseChoice(s, items.find((i) => i.target === targets[0]));
     const [it] = controls.collect(g, null);
     assert.equal(it.style, null);
     assert.equal(it.timing, 1);
+  });
+});
+
+test('追發層體力標記：值上鈕、tierOf≥1 標🥵（決策依據在決策點上）', () => {
+  const g = serveGame();
+  const me = serverId(g.match);
+  withControls(me, (controls) => {
+    const targets0 = controls.chaseServeTargets(g);
+    // 真實引擎欄位：game.stamina＝{pid:0..1}（stamina 未啟用時為 null——
+    // 該情況 chaseServeTargets 回 1、面板顯示 100% 不標🥵，走 ?? 1 路徑）
+    g.stamina = g.stamina ?? {};
+    g.stamina[targets0[0].pid] = 0.42; // tier 1（<0.5 喘氣帶）
+    g.stamina[targets0[1].pid] = 0.9;  // tier 0
+    const targets = controls.chaseServeTargets(g);
+    const items = chasePanelItems(targets, chaseGatesAll(), null);
+    const tired = items.find((i) => i.target?.pid === targets0[0].pid);
+    const fresh = items.find((i) => i.target?.pid === targets0[1].pid);
+    assert.ok(tired.label.includes('🥵') && tired.label.includes('42%'),
+      `喘的人沒標出來：${tired.label}`);
+    assert.ok(!fresh.label.includes('🥵') && fresh.label.includes('90%'),
+      `沒喘的人被亂標：${fresh.label}`);
   });
 });
 
@@ -489,7 +527,7 @@ test('B7-5 落點區照舊可用（追發沒有把原本四個區擠掉）', () 
     const zs = controls.serveZones(g);
     const items = servePanelItems(gatesFor({ pressBlock: 0, chaseServe: 1 }), zs);
     for (const k of ['dl', 'dm', 'dr', 'short']) {
-      assert.ok(items.some((i) => i.key === k), `落點區 ${k} 不見了`);
+      assert.ok(items.some((i) => i.zone?.key === k), `落點區 ${k} 不見了`);
     }
   });
 });

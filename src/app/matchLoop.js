@@ -5,6 +5,7 @@
 // 與賽前準備（matchConfig/matchStage）僅以 config/gates/stage 資料介面銜接，
 // 與賽末收束（matchCareer）僅在局終呼叫 settleCareerMatch 一次。
 import { SIM_DT, MAX_FRAME_DELTA } from '../sim/constants.js';
+import { tierOf } from '../sim/stamina.js';
 import {
   createGame, stepGame, applySubstitution, applyTimeout, applyTimeoutBoost, resumeFromTimeout,
   startNextSet, applyLiberoRecall, restageRotation, TUNING,
@@ -323,6 +324,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     game, aiState,
     seed: config.seed,          // 快速比賽局終點擊換局：seed+1 再開
     servedThisTurn: false,      // 每個發球回合只處理一次發球決策
+    serveStyleSel: null,        // 發球面板重做（08-28）：式切換（null=穩定|'float'|'jump'）
+                                // ——跨發球回合沿用（打法是習慣）；只影響本機面板產生的
+                                // Intent，連線模式下 style 隨 Intent 走鎖步通道，天然同步
     chaseExpanded: false,       // 批 7 追發：發球面板是否已展開到「發給誰」那一層
     whistledServe: false,       // 每個發球回合只吹一次發球前短哨
     diveReady: false,           // 魚躍鈕當幀可用性（Space/L 鍵共用判定）
@@ -965,10 +969,15 @@ function bindInputHandlers(s) {
       return;
     }
     s.seed += 1;
+    // 08-28 修（發球面板重做時踩出的既有 bug）：重開局必須沿用**整包**開場設定。
+    // 舊寫法只帶 seed/setTarget/stamina/momentum——liberos 被丟掉＝新局沒有 A7/B7，
+    // 但 matchView 的單位表是開場建的、還留著自由人 ⇒ sync 每幀查無此人直接炸
+    // （matchView.js:260 讀 players[id].teamId of undefined）；快速選位置的 teams
+    // 同樣被丟＝重開局你選的位置無聲消失。任何人打完快速比賽按「再來一局」必中。
     s.game = createGame({
-      seed: s.seed, setTarget: config.setTarget,
-      stamina: config.gameOptions.stamina, // W7：快速比賽重開局保持體力/氣勢設定
-      momentum: config.gameOptions.momentum,
+      ...config.gameOptions, // teams/liberos/stamina/momentum 與開場同一場設定
+      seed: s.seed,
+      setTarget: config.setTarget,
     });
     s.aiState = createAiState();
     s.localId = s.playerId;
@@ -1376,18 +1385,36 @@ export function applyMbChoice(s, it) {
 }
 
 // 發球主面板的選項：四落點區 ＋ 飄浮/跳發變體 ＋ 追發入口（各自吃自己的閘）。
-export function servePanelItems(gates, zs) {
+// ═══ 發球面板重做（08-28 Sawmah 拍板甲案）═══
+// 舊制＝式×落點全展開（穩4＋飄3＋跳3＋追發層再 3×3）：兩層合計 21 顆鈕，其中追發層
+// 的落點就是後排三人站的深左/深中/深右——同一批球用兩種標籤賣兩次（重複由 Sawmah
+// 試玩抓出）。新制＝**式是切換、落點單排**：
+//   穩定＝深左/深中/深右/短球；切到飄/跳＝同排換式（短球退場——飄/跳無短球，舊制同）；
+//   追發層＝純選人（式沿用當前切換）＋體力直接標在人名上（追發的用途＝打體力低的、
+//   破壞陣容——決策依據要在決策點上，不逼玩家自己去瞄場上的迷你條）。
+// 未受教不出現照舊（B7-4：gate 在行為層）。取代 acceptance-chase-style.md 的並列制。
+export function servePanelItems(gates, zs, styleSel = null) {
+  const style = (styleSel === 'float' && gates?.canFloatServe) ? 'float'
+    : (styleSel === 'jump' && gates?.canJumpServe) ? 'jump' : null;
+  const prefix = style === 'float' ? '飄' : style === 'jump' ? '跳' : null;
+  const color = style === 'float' ? 'cyan' : style === 'jump' ? 'orange' : 'neutral';
   return [
-    ...zs.map((z) => ({ key: z.key, label: z.label, color: 'neutral', zone: z, style: null })),
-    // 飄浮/跳躍球路＝故事線傳授的技術（未習得不出現）
-    ...(gates?.canFloatServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
-      key: `f-${z.key}`, label: `飄${z.label.slice(1)}`, color: 'cyan', zone: z, style: 'float',
-    })) : []),
-    ...(gates?.canJumpServe ? zs.filter((z) => z.key !== 'short').map((z) => ({
-      key: `j-${z.key}`, label: `跳${z.label.slice(1)}`, color: 'orange', zone: z, style: 'jump',
-    })) : []),
-    // 批 7 追發：★一個入口、不是十個★——落點區照舊，追發自己展開一層問「發給誰」。
-    // 未受教＝這個入口不存在（B7-4：gate 在行為層，不是把鈕變灰）。
+    // 落點單排：式只換這排的字與色（key 帶式＝切換時面板真的重繪）
+    ...zs.filter((z) => (style ? z.key !== 'short' : true)).map((z) => ({
+      key: `${style ?? 's'}-${z.key}`,
+      label: prefix ? `${prefix}${z.label.slice(1)}` : z.label,
+      color, zone: z, style,
+    })),
+    // 式切換鈕（按下不發球；再按一次回穩定）
+    ...(gates?.canFloatServe ? [{
+      key: 'style-float', label: style === 'float' ? '✓ 飄浮' : '飄浮',
+      color: 'cyan', styleToggle: 'float',
+    }] : []),
+    ...(gates?.canJumpServe ? [{
+      key: 'style-jump', label: style === 'jump' ? '✓ 跳發' : '跳發',
+      color: 'orange', styleToggle: 'jump',
+    }] : []),
+    // 批 7 追發：★一個入口、不是十個★——未受教＝入口不存在
     ...(gates?.canChaseServe
       ? [{ key: 'chase', label: '🎯 追發', color: 'red', chase: true }]
       : []),
@@ -1395,23 +1422,33 @@ export function servePanelItems(gates, zs) {
 }
 
 export function applyServeChoice(s, it) {
+  if (it.styleToggle) { // 切式不發球；同鈕再按＝回穩定
+    s.serveStyleSel = s.serveStyleSel === it.styleToggle ? null : it.styleToggle;
+    return;
+  }
   if (it.chase) { s.chaseExpanded = true; return; } // 展開第二層，這一按不發球
   s.stage.controls.serveNow(s.game, it.zone.aim, it.style);
   s.servedThisTurn = true;
 }
 
-// 追發第二層：對方當前輪轉的後排三人（名單與座標由 controls 現算）＋返回。
-// 08-27 追發配飄跳發：沿用主面板慣例（變體＝並列按鈕、同色系），未受教不出現
-// （B7-4 同則：gate 在行為層）。驗收凍結＝acceptance-chase-style.md。
-export function chasePanelItems(targets, gates) {
+// 追發第二層（08-28 重做，見 servePanelItems 檔頭）：★純選人★＋體力直接標在鈕上
+// （tierOf 檔位＝與場上喘氣演出同一條真相源：≥1 檔標 🥵）；式沿用主面板當前切換
+// （key 帶式＝切換後重繪；gate 在行為層照舊——沒學的式套不上去）。
+export function chasePanelItems(targets, gates, styleSel = null) {
+  const style = (styleSel === 'float' && gates?.canFloatServe) ? 'float'
+    : (styleSel === 'jump' && gates?.canJumpServe) ? 'jump' : null;
+  const prefix = style === 'float' ? '飄·' : style === 'jump' ? '跳·' : '';
+  const color = style === 'float' ? 'cyan' : style === 'jump' ? 'orange' : 'red';
   return [
-    ...targets.map((t) => ({ key: t.key, label: t.label, color: 'red', target: t, style: null })),
-    ...(gates?.canFloatServe ? targets.map((t) => ({
-      key: `f-${t.key}`, label: `飄·${t.label}`, color: 'cyan', target: t, style: 'float',
-    })) : []),
-    ...(gates?.canJumpServe ? targets.map((t) => ({
-      key: `j-${t.key}`, label: `跳·${t.label}`, color: 'orange', target: t, style: 'jump',
-    })) : []),
+    ...targets.map((t) => {
+      const st = t.stamina ?? 1;
+      const tired = tierOf(st) >= 1 ? '🥵' : '';
+      return {
+        key: `${style ?? 's'}-${t.key}`,
+        label: `${prefix}${t.label}${tired}｜體力${Math.round(st * 100)}%`,
+        color, target: t, style,
+      };
+    }),
     { key: 'chase-back', label: '← 返回', color: 'dim', back: true },
   ];
 }
@@ -1774,20 +1811,19 @@ function updateDecisions(s, now) {
     // 名單與座標都由 controls.chaseServeTargets 現算（B7-6：輪轉推進後跟著變）。
     const targets = controls.chaseServeTargets(game);
     panel.show(
-      '追發：發給誰？',
-      chasePanelItems(targets, gates),
+      '追發：發給誰？（式＝沿用你切的飄/跳）',
+      chasePanelItems(targets, gates, s.serveStyleSel),
       (it) => applyChaseChoice(s, it),
     );
   } else if (serveDeciding) {
     // 穩定×4＋強力×3（強＝低平快、散佈大；短球無強力——它本來就是輕放）
     const zs = controls.serveZones(game);
-    const styleHint = [
-      gates.canFloatServe ? '藍＝飄浮' : null,
-      gates.canJumpServe ? '橘＝跳發' : null,
-    ].filter(Boolean).join('、');
+    // 08-28 重做：式改切換鈕（見 servePanelItems 檔頭），標題跟著現在的式走
+    const styleName = s.serveStyleSel === 'float' && gates.canFloatServe ? '飄浮'
+      : s.serveStyleSel === 'jump' && gates.canJumpServe ? '跳發' : null;
     panel.show(
-      styleHint ? `選發球目標！（${styleHint}）` : '選發球目標！',
-      servePanelItems(gates, zs),
+      styleName ? `選發球目標！（${styleName}）` : '選發球目標！',
+      servePanelItems(gates, zs, s.serveStyleSel),
       (it) => applyServeChoice(s, it),
     );
   } else {
