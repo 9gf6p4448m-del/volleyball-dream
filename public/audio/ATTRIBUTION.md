@@ -19,6 +19,7 @@ repo 內每個音檔的來源與授權。CC0 不強制標名，仍列出以便�
 | crowd_loop.m4a | 體育館群眾底噪 loop | opengameart.org/content/crowd-shoutingspeaking-ambience | CC0／starninjas (OpenGameArt) |
 | cheer.m4a | 得分歡呼 | opengameart.org/content/free-crowd-cheering-sounds「04 - Strong cheering - II - Short」節錄 | CC-BY 4.0／Gregor Quendel (OpenGameArt) |
 | cheer_big.m4a | 關鍵分大聲浪 | 同上「01 - Strong cheering and strong rhythmic cheering」節錄 | CC-BY 4.0／Gregor Quendel (OpenGameArt) |
+| squeak.m4a | 鞋底摩擦（急停/變向） | freesound.org/people/shakaharu/sounds/88502「sneaker skid squeak rubber」節錄 6.97–7.33s | CC0／shakaharu (Freesound) |
 
 ## bgm/（AAC stereo 128kbps，**不進** precache、串流載入；換檔即生效——替換同名檔即可）
 
