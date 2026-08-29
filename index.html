@@ -50,20 +50,33 @@
         position: fixed;
         inset: 0;
         display: flex;
+        flex-direction: column;
+        gap: 14px;
         align-items: center;
         justify-content: center;
         color: #eef2fa;
         font-family: system-ui, sans-serif;
         font-size: 18px;
-        background: #1c2230;
+        background: radial-gradient(ellipse at 50% 30%, #253048 0%, #1c2230 55%, #12161f 100%);
         z-index: 20;
+        text-align: center;
       }
+      /* 大作感二卷 批2：啟動畫面——金字 logo＋彈跳球＋脈動載入字（純 CSS，載入完成整塊 remove 行為不變） */
+      #loading .ld-logo {
+        font-size: clamp(34px, 10vw, 64px); font-weight: 900; letter-spacing: 0.14em;
+        color: #ffd166; text-shadow: 0 0 26px rgba(255, 209, 102, 0.45), 0 2px 8px rgba(0,0,0,0.6);
+      }
+      #loading .ld-sub { font-size: clamp(11px, 3vw, 14px); letter-spacing: 0.5em; text-indent: 0.5em; opacity: 0.7; }
+      #loading .ld-ball { font-size: 30px; animation: ldBounce 0.9s ease-in-out infinite; }
+      #loading .ld-msg { font-size: 14px; opacity: 0.65; animation: ldPulse 1.6s ease-in-out infinite; }
+      @keyframes ldBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+      @keyframes ldPulse { 0%, 100% { opacity: 0.65; } 50% { opacity: 0.25; } }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="hud"></div>
-    <div id="loading">排球夢 — 載入模型中…</div>
+    <div id="loading"><div class="ld-logo">排球夢</div><div class="ld-sub">VOLLEYBALL DREAM</div><div class="ld-ball">🏐</div><div class="ld-msg">載入模型中…</div></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

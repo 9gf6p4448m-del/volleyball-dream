@@ -81,6 +81,10 @@ import {
   sHotspotItems, lSignalItems, createLatencyStats, loudCallerOf,
 } from '../ui/diegeticItems.js';
 import { isHeavySpikeDig, isDiveSaveTouch, HEAVY_SPIKE_POWER_MIN } from '../ui/receiveJuice.js';
+import { shouldCelebrateChampionship } from '../career/championship.js';
+import { createConfetti } from '../render/confetti.js';
+import { showChampionBanner } from '../ui/championBanner.js';
+import { createHaptics } from '../ui/haptics.js';
 
 // 接球微回饋批2（丙1/丙2/丙3，acceptance-netduel-batch2.md，2026-08-27）：三個
 // 時長常數，觸發判定全抽在 receiveJuice.js（純函式）／sim 的 perfect 欄位，這裡
@@ -422,6 +426,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     slowUntil: 0,
     shake: 0,
     ballGlowUntil: 0,           // 丙3：完美接球——球體發光時窗（NJ-4）
+    celebration: null,          // 大作感二卷 批1：奪冠慶祝演出（物件見 startCelebration；null＝無）
+    haptics: createHaptics(),   // 大作感二卷 批2：手機震動（偏好/支援閘內建，iOS 自動靜默）
     lastTouch: null,            // 最後觸球（死球時推導得分原因用）
     pendingDead: null,          // DEAD_BALL 先到、SCORE 緊隨（同批事件）：湊齊才顯示面板
     assistFlight: -1,
@@ -949,6 +955,9 @@ function bindInputHandlers(s) {
     // （局終畫面要等重播播完才會出來）。少這一條，玩家「點畫面跳過重播」的那一下
     // 會同時被這裡吃掉＝直接重開一局／跳進結算面板。重播中的點擊只歸跳過通道管
     if (s.replay) return;
+    // 批1：慶祝演出中點擊＝跳過（endCelebration 補顯 overlay，與播畢殊途同歸）；
+    // return 擋住下面的 boxScorePanel——跳過的那一下不得同時被當成「看結算」
+    if (s.celebration) { endCelebration(s); return; }
     if (s.careerCtx) {
       if (!s.boxShown) {
         s.boxShown = true;
@@ -2313,6 +2322,7 @@ function applyEvents(s, frameEvents, now) {
     if (isHeavySpikeDig(prevTouchForDig, e)) {
       s.hitStopUntil = Math.max(s.hitStopUntil, now + DIG_HIT_STOP_MS); // 【試玩必調】提案 90ms
       s.shake = Math.max(s.shake, 0.08);
+      s.haptics?.buzz('dig'); // 批2：定格的觸覺版
     }
     // 丙2（NJ-3）：魚躍成功救起——短慢動作獎勵（撲空無 TOUCH 事件，天然只獎成功，
     // 見 receiveJuice.js 檔頭）。Math.max：若同一下已被神救球分支給了更長的
@@ -2331,7 +2341,10 @@ function applyEvents(s, frameEvents, now) {
       // Math.max：與丙1/丙2 的寫入者對稱——同一 frameEvents 批次（掉幀補跑多 tick）
       // 內後到的事件不得反向蓋短已設好的窗（覆審 MEDIUM 修正）
       s.hitStopUntil = Math.max(s.hitStopUntil, now + ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN ? 70 : 40));
-      if ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN) s.slowUntil = Math.max(s.slowUntil ?? 0, now + 450); // 重扣＝定格接慢動作
+      if ((e.power ?? 1) >= HEAVY_SPIKE_POWER_MIN) {
+        s.slowUntil = Math.max(s.slowUntil ?? 0, now + 450); // 重扣＝定格接慢動作
+        s.haptics?.buzz('spike'); // 批2：只有重扣震，輕吊不震（與慢動作同門檻）
+      }
       s.shake = Math.max(s.shake, 0.12);
     } else if (e.type === 'TOUCH' && e.playerId === s.localId && e.touches === 1
         && stage.controls.consumeDigHeroSignal?.()) {
@@ -2340,6 +2353,7 @@ function applyEvents(s, frameEvents, now) {
       // （45 秒節流——前輩的關心不是罐頭）。塵土粒子＝試玩債（快照記錄）
       s.slowUntil = now + 650;
       s.diveCamUntil = now + 850;
+      s.haptics?.buzz('dive'); // 批2：神救球
       s.digReadResult = null; // 神救球演出優先，不疊讀對字卡
       stage.sfx.gaspCheer?.();
       stage.floatText.show('⚡ 神救球！', '#6ee7ff', 1600);
@@ -2354,6 +2368,7 @@ function applyEvents(s, frameEvents, now) {
     } else if (e.type === 'BLOCK_TOUCH') {
       s.hitStopUntil = Math.max(s.hitStopUntil, now + 60); // Math.max 對稱，同上（覆審 MEDIUM 修正）
       s.shake = Math.max(s.shake, 0.2);
+      s.haptics?.buzz('block'); // 批2
       // 07-27 MB 結果回饋：你封到球了（讀舉承諾的兌現）
       if (e.playerId === s.localId && s.mbCommit) {
         stage.floatText.show('🧱 封到了！', '#ffd166', 1400);
@@ -2906,9 +2921,22 @@ export function settleIfOver(s) {
     // W4(P4) Q8：多局系列＝顯示局數與系列勝方（bo1 照舊單局分數）
     const winner = game.series?.winner ?? game.match.winner;
     const score = game.series ? game.series.setsWon : game.match.score;
-    stage.setOverOverlay.show(winner, score,
-      game.players[s.localId].teamId,
-      s.careerCtx ? '點擊任意處返回生涯' : s.net ? '點擊任意處回連線大廳' : undefined);
+    const overlayHint = s.careerCtx ? '點擊任意處返回生涯' : s.net ? '點擊任意處回連線大廳' : undefined;
+    // 大作感二卷 批1：冠軍戰勝利→慶祝演出（彩帶/運鏡/聲浪/字卡），overlay 延到
+    // endCelebration 收口。結算與典藏錄製都在上面完成了——演出無論怎麼死，進度都在；
+    // startCelebration 崩潰＝直接落回現行流程（J1-5 永不致死）
+    const championTitle = s.careerCtx ? shouldCelebrateChampionship(
+      s.careerCtx.matchEntry, winner === game.players[s.playerId].teamId,
+    ) : null;
+    if (championTitle) {
+      try {
+        startCelebration(s, { title: championTitle, winner, score, hint: overlayHint });
+      } catch {
+        stage.setOverOverlay.show(winner, score, game.players[s.localId].teamId, overlayHint);
+      }
+    } else {
+      stage.setOverOverlay.show(winner, score, game.players[s.localId].teamId, overlayHint);
+    }
   }
   // W4(P4) Q8 局間（多局賽制限定）：huddle 過場——比分回顧＋教練指示＋下一局/存檔離開
   if (game.phase === 'set_break' && s.prevPhase !== 'set_break') {
@@ -3321,6 +3349,30 @@ export function practiceRewardLine(settled) {
   return `${head}　完成 2 項可多挑一項屬性特訓、全完成再開控球格（本場不記戰績）`;
 }
 
+// 大作感二卷 批1：奪冠慶祝演出——彩帶（主場景 Points）＋tour 弧線運鏡（複用燈光秀
+// 鏡位）＋群眾長聲浪＋冠軍字卡。sim 已在 set_over、生涯結算已完成，演出純表現層；
+// 牆鐘時間軸（frameStep 推進），點擊跳過與播畢共用 endCelebration 收口。
+const CELEBRATION_SEC = 8; // 【試玩必調】演出全長（秒）
+function startCelebration(s, { title, winner, score, hint }) {
+  if (!s.stage.confettiFx) s.stage.confettiFx = createConfetti(s.ctx.scene);
+  s.stage.confettiFx.start(CELEBRATION_SEC);
+  const banner = showChampionBanner(title);
+  s.stage.sfx.crowdSurge?.(CELEBRATION_SEC + 1.5); // 聲浪鎖滿整段演出【試玩必調】
+  s.stage.sfx.cheer?.(1.8, { forceBig: true });
+  s.haptics?.buzz('champion');
+  s.celebration = { startedAt: null, winner, score, hint, banner, midCheered: false };
+}
+
+function endCelebration(s) {
+  const c = s.celebration;
+  if (!c) return;
+  s.celebration = null;
+  try { c.banner.dispose(); } catch { /* 已移除＝無事可做 */ }
+  s.stage.confettiFx?.hide(); // 更新迴圈跟著 s.celebration 一起停，殘片不藏會凍在半空
+  s.stage.rig.setTourProgress(null);
+  s.stage.setOverOverlay.show(c.winner, c.score, s.game.players[s.localId].teamId, c.hint);
+}
+
 // W4(P4) Q10 燈光秀收場（自然結束或點擊跳過共用）：恢復常態燈光/鏡頭、補播情蒐帶
 function endOpeningShow(s) {
   s.openingShow = null;
@@ -3422,6 +3474,21 @@ function frameStep(s, now) {
       stage.rig.setTourProgress(showP);
       delta = 0;
     }
+  }
+
+  // 大作感二卷 批1：奪冠慶祝時間軸——tour 弧線運鏡＋彩帶更新＋中段再爆一次歡呼；
+  // 牆鐘驅動（sim 已 set_over 凍結，delta 只餵彩帶）。點擊跳過走 bindInputHandlers
+  if (s.celebration) {
+    const c = s.celebration;
+    if (c.startedAt === null) c.startedAt = now;
+    const p = Math.min((now - c.startedAt) / (CELEBRATION_SEC * 1000), 1);
+    stage.rig.setTourProgress(p);
+    stage.confettiFx?.update(delta);
+    if (!c.midCheered && p >= 0.45) {
+      c.midCheered = true;
+      stage.sfx.cheer?.(1.5, { forceBig: true }); // 【試玩必調】中段二波
+    }
+    if (p >= 1) endCelebration(s);
   }
 
   const game = s.game;

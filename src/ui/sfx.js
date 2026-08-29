@@ -110,6 +110,15 @@ export function createSfx() {
     crowdGain.gain.setTargetAtTime(level, ctx.currentTime, 0.5);
   }
 
+  // 大作感二卷 批1：長時間群眾聲浪（奪冠慶祝）——衝高並鎖住爆炸視窗 seconds 秒，
+  // 讓 matchLoop 逐幀灌進來的常態值整段被忽略（同 keyPoint 爆炸的既有機制，只是窗更長）
+  function crowdSurge(seconds = 1.5, level = 0.14) {
+    if (!ensure() || !crowdGain) return;
+    const t = ctx.currentTime;
+    crowdGain.gain.setTargetAtTime(level, t, 0.1);
+    crowdExplodeUntil = t + seconds;
+  }
+
   // W4(P4) Q10 主客場氛圍：{A:mul, B:mul} 得分歡呼偏向（null＝中立）——
   // 關鍵戰館打宿敵＝對手得分聲量放大、我方縮（「他們的主場」的聽覺事實）
   let crowdBias = null;
@@ -436,6 +445,7 @@ export function createSfx() {
       squeakGlobalGateT = 0;
     },
     whistle,
+    crowdSurge, // 大作感二卷 批1：奪冠慶祝長聲浪
     onCourtMotion, // 08-29：鞋底摩擦聲——matchLoop 逐幀餵 game，純觀測 actors 位移
     setHeartbeat,
     setCrowdLevel,

@@ -3,6 +3,8 @@
 // 私密模式連 localStorage 物件都可能 throw——比照 careerStore.js:1671
 // safeLocalStorage 的做法，退化為記憶體存檔（本次分頁有效，不 throw）。
 const KEY = 'vd-audio';
+// vibrate（大作感二卷 批2）是選配鍵：不進 DEFAULT——缺席＝開，只有明確 set({vibrate:false})
+// 才關（消費端一律用 `=== false` 判定）。理由：既有測試鎖了 set→get 往返的完整物件形狀
 const DEFAULT = { muted: false, sfx: 1, bgm: 0.8, menuTrack: 0 };
 
 let mem = null; // 私密模式 fallback（Map，本次分頁有效）

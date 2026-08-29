@@ -2958,6 +2958,14 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
       muteBtn.textContent = !cur.muted ? '🔇 已靜音' : '🔊 靜音';
     });
     ioRow.appendChild(muteBtn);
+    // 大作感二卷 批2：手機震動開關（擊球分級觸覺回饋）。iOS Safari 不支援 vibrate
+    // ＝開了也靜默（haptics.js 的支援閘），偏好仍照存——換安卓裝置即生效
+    const vibLabel = () => (getAudioPrefs().vibrate === false ? '📴 震動：關' : '📳 震動：開');
+    const vibBtn = smallButton(vibLabel(), () => {
+      setAudioPrefs({ vibrate: getAudioPrefs().vibrate === false });
+      vibBtn.textContent = vibLabel();
+    });
+    ioRow.appendChild(vibBtn);
     function volumeSlider(label, key) {
       // 大作感卷 批4：音量列同步換皮成金框 chip（凍結檔範圍 item 2 明文點名）
       const wrap = el('div', [
