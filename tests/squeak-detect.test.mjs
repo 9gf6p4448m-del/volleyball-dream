@@ -51,3 +51,23 @@ test('缺輸入或門檻非法 → 一律 null（防呆，不 throw）', () => {
   assert.equal(detectSqueak({ dx: 1, dz: 0 }, { dx: 1, dz: 0 }, { speedThresh: 0 }), null);
   assert.equal(detectSqueak({ dx: 1, dz: 0 }, { dx: 1, dz: 0 }, {}), null);
 });
+
+// 08-29 二修（叮叮叮事故）：stop 另設較高門檻——AI 走位每次到點都是急停，同門檻時
+// 密度 21.9 次/rally；只有超過 stopSpeedThresh 的全速衝刺急煞才觸發 stop
+test('急煞門檻：速度介於兩門檻間的到位急停 → 不觸發；超過急煞門檻 → 觸發', () => {
+  const stopThresh = THRESH * 2.375; // 同 sfx.js 的 3.8/1.6 比例
+  const mild = THRESH * 1.8; // 在跑、但未達衝刺
+  assert.equal(
+    detectSqueak({ dx: mild, dz: 0 }, { dx: 0, dz: 0 }, { speedThresh: THRESH, stopSpeedThresh: stopThresh }),
+    null,
+  );
+  const sprint = stopThresh * 1.1;
+  const hit = detectSqueak({ dx: sprint, dz: 0 }, { dx: 0, dz: 0 }, { speedThresh: THRESH, stopSpeedThresh: stopThresh });
+  assert.equal(hit?.kind, 'stop');
+});
+
+test('急煞門檻不影響 turn：未達衝刺速度的反向變向照樣觸發 turn', () => {
+  const mild = THRESH * 1.8;
+  const hit = detectSqueak({ dx: mild, dz: 0 }, { dx: -mild, dz: 0 }, { speedThresh: THRESH, stopSpeedThresh: THRESH * 2.375 });
+  assert.equal(hit?.kind, 'turn');
+});

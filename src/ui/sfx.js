@@ -328,41 +328,27 @@ export function createSfx() {
     }
   }
 
-  // 鞋底摩擦「唧」（08-29 試玩回饋）：急停/急變向時短促高頻滑音——排球館的空間感
-  // 底味，音量刻意壓低不搶戲。取樣優先（'squeak'，檔案未進 repo 前走合成）；
-  // 音高每次隨機微變，12 人同場才不會像同一顆按鍵音
+  // 鞋底摩擦「唧」：急停/急變向時的排球館空間感底味，音量刻意壓低不搶戲；
+  // 音高每次隨機微變，12 人同場才不會像同一顆按鍵音。
+  // ★取樣專屬、無合成 fallback★（08-29 二修）：第一版的合成 chirp（鋸齒波過高 Q
+  // 帶通）聽起來是電子「叮」不是鞋聲，得分瞬間急煞群聚連發成「叮叮叮」被打槍。
+  // 合成鞋聲是聽感題、無法離線驗證——沒放真實 squeak.m4a 之前這裡就是靜默，
+  // 這是刻意行為不是漏接（與其他音效「合成 fallback 保底」的慣例相反）
   function squeak(intensity = 1) {
     if (!ctx || !busGain) return; // 只在已解鎖的 ctx 上響；不為底味音效硬 ensure
     const rate = 0.9 + Math.random() * 0.25;
-    if (playSample(ctx, busGain, 'squeak', { gain: 0.45 + 0.35 * intensity, rate })) return;
-    const t = ctx.currentTime;
-    const dur = 0.07 + Math.random() * 0.05;
-    const f0 = 2300 * rate;
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(f0, t);
-    osc.frequency.exponentialRampToValueAtTime(f0 * (1.25 + Math.random() * 0.3), t + dur);
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = f0 * 1.15;
-    bp.Q.value = 6;
-    const g = ctx.createGain();
-    const peak = 0.05 * (0.6 + 0.4 * intensity); // 【試玩必調】底味音量
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.03);
-    osc.connect(bp).connect(g).connect(busGain);
-    osc.start(t);
-    osc.stop(t + dur + 0.05);
+    playSample(ctx, busGain, 'squeak', { gain: 0.45 + 0.35 * intensity, rate });
   }
 
   // 逐幀觀測 actors 位移（matchLoop 每 render 幀呼叫；只讀 x/z/px/pz，不碰 sim）。
   // 同一 sim tick 只判一次；每人冷卻＋全場最小間隔雙重節流——rally 中 12 人都在跑，
-  // 不節流會變蟲鳴。門檻 1.6 m/s：低於慢跑起步的走位不響，全速跑動的急停/變向才響
+  // 不節流會變蟲鳴。門檻依 08-29 探針收緊：原值（stop 同門檻 1.6/冷卻 0.5/間隔 0.12）
+  // 實測 21.9 次/rally、死球前 0.6s 連發 2.6 響＝叮叮叮的元凶；收緊後 7.9 次/rally、死球前 0.79 響
   let squeakLastTick = -1;
   let squeakGlobalGateT = 0;
   const squeakMemo = new Map(); // actorId -> { dx, dz, coolUntil }
-  const SQUEAK_SPEED_THRESH = 1.6 * SIM_DT; // m/s → m/tick【試玩必調】
+  const SQUEAK_SPEED_THRESH = 1.6 * SIM_DT; // 變向門檻 m/s → m/tick【試玩必調】
+  const SQUEAK_STOP_THRESH = 3.8 * SIM_DT; // 急煞門檻：全速衝刺才算【試玩必調】
   function onCourtMotion(game) {
     if (!ctx || !busGain) return;
     if (!game?.actors || game.phase !== 'rally') {
@@ -377,10 +363,12 @@ export function createSfx() {
       const memo = squeakMemo.get(id);
       if (memo) {
         if (t >= memo.coolUntil && t >= squeakGlobalGateT) {
-          const hit = detectSqueak(memo, cur, { speedThresh: SQUEAK_SPEED_THRESH });
+          const hit = detectSqueak(memo, cur, {
+            speedThresh: SQUEAK_SPEED_THRESH, stopSpeedThresh: SQUEAK_STOP_THRESH,
+          });
           if (hit) {
-            memo.coolUntil = t + 0.5; // 【試玩必調】同一人冷卻
-            squeakGlobalGateT = t + 0.12; // 【試玩必調】全場最小間隔
+            memo.coolUntil = t + 1.5; // 【試玩必調】同一人冷卻
+            squeakGlobalGateT = t + 0.5; // 【試玩必調】全場最小間隔
             squeak(hit.intensity);
           }
         }
