@@ -21,6 +21,7 @@ export const SAMPLE_MANIFEST = {
   crowd_loop: { file: 'crowd_loop.m4a', trim: 1 }, // 【試玩必調】群眾底噪（loop）
   cheer: { file: 'cheer.m4a', trim: 1 }, // 【試玩必調】一般得分歡呼
   cheer_big: { file: 'cheer_big.m4a', trim: 1 }, // 【試玩必調】關鍵分／大聲量歡呼
+  squeak: { file: 'squeak.m4a', trim: 1 }, // 【試玩必調】鞋底摩擦（急停/變向）；檔案未進 repo＝走合成 fallback
 };
 
 const buffers = new Map(); // name -> AudioBuffer（跨 AudioContext 可重用，dispose 重建 ctx 不必重抓）
@@ -56,7 +57,11 @@ export function loadSamples(ctx) {
 
 // 有 buffer→建 source 接上 dest 播放、回傳 source（truthy，loop 版供呼叫端 stop）；
 // 無 buffer 或播放本身出錯→回傳 false，呼叫端據此走合成 fallback。
-export function playSample(ctx, dest, name, { gain = 1, rate = 1, loop = false } = {}) {
+// delay＝延後幾秒開播（WebAudio 排程，非 setTimeout）；fadeIn＝淡入秒數（>0 時
+// 用指數包絡從近零爬到目標音量——得分歡呼「湧起」而非「拍臉」的關鍵，08-29 試玩回饋）
+export function playSample(ctx, dest, name, {
+  gain = 1, rate = 1, loop = false, delay = 0, fadeIn = 0,
+} = {}) {
   const buf = buffers.get(name);
   if (!ctx || !dest || !buf) return false;
   try {
@@ -66,9 +71,16 @@ export function playSample(ctx, dest, name, { gain = 1, rate = 1, loop = false }
     if (rate !== 1) src.playbackRate.value = rate;
     const trim = SAMPLE_MANIFEST[name]?.trim ?? 1;
     const g = ctx.createGain();
-    g.gain.value = Math.max(0, gain * trim);
+    const target = Math.max(0, gain * trim);
+    const t0 = ctx.currentTime + Math.max(0, delay);
+    if (fadeIn > 0 && target > 0) {
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(target, t0 + fadeIn);
+    } else {
+      g.gain.value = target;
+    }
     src.connect(g).connect(dest);
-    src.start();
+    src.start(t0);
     return src;
   } catch {
     return false; // 起不來＝這一下沒聲音，維持靜默、不擋其他事件

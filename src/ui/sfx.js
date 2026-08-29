@@ -8,6 +8,8 @@
 // 機械改成 `.connect(busGain)`，合成路徑一格邏輯都沒變。
 import { loadSamples, playSample } from './sfxSamples.js';
 import { get as getAudioPrefs, subscribe as subscribeAudioPrefs } from './audioPrefs.js';
+import { detectSqueak } from './squeakDetect.js';
+import { SIM_DT } from '../sim/constants.js';
 
 export function createSfx() {
   let ctx = null;
@@ -118,10 +120,12 @@ export function createSfx() {
   // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）
   // 批1：取樣優先——單一 'whistle' 取樣涵蓋長短兩種呼叫（真實哨音不像合成版能調
   // durMs 拉長縮短，取樣播出來就是原長度；沒取樣才退回下面原本按 durMs 合成的版本）
-  function whistle(durMs = 450) {
+  // delaySec：08-29 試玩回饋「得分突兀」——死球三層改成落地→哨音→歡呼的真實時序，
+  // 哨音由呼叫端（onEvents DEAD_BALL）延後排程；其他呼叫端（發球短哨）不帶延遲、零改動
+  function whistle(durMs = 450, delaySec = 0) {
     if (!ensure()) return;
-    if (playSample(ctx, busGain, 'whistle')) return;
-    const t = ctx.currentTime;
+    if (playSample(ctx, busGain, 'whistle', { delay: delaySec })) return;
+    const t = ctx.currentTime + delaySec;
     const dur = durMs / 1000;
     const osc = ctx.createOscillator();
     osc.type = 'square';
@@ -147,11 +151,15 @@ export function createSfx() {
   // 批1：取樣優先——scale≥1.4 或呼叫端明講 forceBig（onEvents 的 DEAD_BALL keyPoint
   // 用這個把手，不吃 scale 門檻，因為 biasMul 可能把 scale 壓低到 1.4 以下）才用
   // cheer_big，其餘用 cheer；沒取樣才退回下面原本的合成版本（scale 仍決定其強度）
-  function cheer(scale = 1, { forceBig = false } = {}) {
+  // delaySec/fadeInSec：得分歡呼「湧起」而非同刻拍臉（08-29 試玩回饋）；合成路徑
+  // 本來就有 0.18s 起漲包絡，只需平移起點；取樣路徑把淡入交給 playSample 的 fadeIn
+  function cheer(scale = 1, { forceBig = false, delaySec = 0, fadeInSec = 0 } = {}) {
     if (!ensure()) return;
     const big = forceBig || scale >= 1.4;
-    if (playSample(ctx, busGain, big ? 'cheer_big' : 'cheer', { gain: Math.min(scale, 1.6) })) return;
-    const t = ctx.currentTime;
+    if (playSample(ctx, busGain, big ? 'cheer_big' : 'cheer', {
+      gain: Math.min(scale, 1.6), delay: delaySec, fadeIn: fadeInSec,
+    })) return;
+    const t = ctx.currentTime + delaySec;
     const len = Math.floor(ctx.sampleRate * (1.1 + 0.35 * scale));
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
@@ -320,6 +328,70 @@ export function createSfx() {
     }
   }
 
+  // 鞋底摩擦「唧」（08-29 試玩回饋）：急停/急變向時短促高頻滑音——排球館的空間感
+  // 底味，音量刻意壓低不搶戲。取樣優先（'squeak'，檔案未進 repo 前走合成）；
+  // 音高每次隨機微變，12 人同場才不會像同一顆按鍵音
+  function squeak(intensity = 1) {
+    if (!ctx || !busGain) return; // 只在已解鎖的 ctx 上響；不為底味音效硬 ensure
+    const rate = 0.9 + Math.random() * 0.25;
+    if (playSample(ctx, busGain, 'squeak', { gain: 0.45 + 0.35 * intensity, rate })) return;
+    const t = ctx.currentTime;
+    const dur = 0.07 + Math.random() * 0.05;
+    const f0 = 2300 * rate;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(f0, t);
+    osc.frequency.exponentialRampToValueAtTime(f0 * (1.25 + Math.random() * 0.3), t + dur);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = f0 * 1.15;
+    bp.Q.value = 6;
+    const g = ctx.createGain();
+    const peak = 0.05 * (0.6 + 0.4 * intensity); // 【試玩必調】底味音量
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.03);
+    osc.connect(bp).connect(g).connect(busGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  // 逐幀觀測 actors 位移（matchLoop 每 render 幀呼叫；只讀 x/z/px/pz，不碰 sim）。
+  // 同一 sim tick 只判一次；每人冷卻＋全場最小間隔雙重節流——rally 中 12 人都在跑，
+  // 不節流會變蟲鳴。門檻 1.6 m/s：低於慢跑起步的走位不響，全速跑動的急停/變向才響
+  let squeakLastTick = -1;
+  let squeakGlobalGateT = 0;
+  const squeakMemo = new Map(); // actorId -> { dx, dz, coolUntil }
+  const SQUEAK_SPEED_THRESH = 1.6 * SIM_DT; // m/s → m/tick【試玩必調】
+  function onCourtMotion(game) {
+    if (!ctx || !busGain) return;
+    if (!game?.actors || game.phase !== 'rally') {
+      squeakMemo.clear(); // 死球/發球站定期間歸零，下一段 rally 重新起算
+      return;
+    }
+    if (game.tick === squeakLastTick) return;
+    squeakLastTick = game.tick;
+    const t = ctx.currentTime;
+    for (const [id, a] of Object.entries(game.actors)) {
+      const cur = { dx: a.x - a.px, dz: a.z - a.pz };
+      const memo = squeakMemo.get(id);
+      if (memo) {
+        if (t >= memo.coolUntil && t >= squeakGlobalGateT) {
+          const hit = detectSqueak(memo, cur, { speedThresh: SQUEAK_SPEED_THRESH });
+          if (hit) {
+            memo.coolUntil = t + 0.5; // 【試玩必調】同一人冷卻
+            squeakGlobalGateT = t + 0.12; // 【試玩必調】全場最小間隔
+            squeak(hit.intensity);
+          }
+        }
+        memo.dx = cur.dx;
+        memo.dz = cur.dz;
+      } else {
+        squeakMemo.set(id, { dx: cur.dx, dz: cur.dz, coolUntil: 0 });
+      }
+    }
+  }
+
   // 局點心跳：低頻 lub-dub 循環（張力時開），音量克制不搶戲
   let heartTimer = null;
   function thump(t, freq, gain) {
@@ -371,8 +443,12 @@ export function createSfx() {
       crowdSampleSrc = null;
       crowdSynthSrc = null;
       crowdExplodeUntil = 0;
+      squeakMemo.clear();
+      squeakLastTick = -1;
+      squeakGlobalGateT = 0;
     },
     whistle,
+    onCourtMotion, // 08-29：鞋底摩擦聲——matchLoop 逐幀餵 game，純觀測 actors 位移
     setHeartbeat,
     setCrowdLevel,
     setCrowdBias, // W4(P4) Q10 主客場氛圍：得分歡呼按隊伍偏向縮放（宿敵客場感）
@@ -387,9 +463,14 @@ export function createSfx() {
           if (!tryPlay('block')) thud();
         } else if (e.type === 'DEAD_BALL') {
           // 音層：落地悶擊 → 哨音 → 歡呼（長 rally 歡呼加倍）；floorThud/whistle
-          // 內部自己會先嘗試取樣，這裡不必另外攔截
+          // 內部自己會先嘗試取樣，這裡不必另外攔截。
+          // 08-29 試玩回饋「得分音效突兀」：原本三層同一瞬間齊發＝音牆拍臉。改成
+          // 真實球場時序——球落地、裁判反應半拍才鳴哨、觀眾再晚半拍湧起歡呼（帶淡入）
+          const WHISTLE_DELAY = 0.22; // 【試玩必調】哨音延後秒數
+          const CHEER_DELAY = 0.42; // 【試玩必調】歡呼延後秒數
+          const CHEER_FADE = 0.25; // 【試玩必調】歡呼淡入秒數
           floorThud();
-          whistle(480);
+          whistle(480, WHISTLE_DELAY);
           // W4(P4) Q10：應援偏向——得分隊決定歡呼聲量倍率（同批事件裡撈 SCORE）
           const scorer = events.find((s2) => s2.type === 'SCORE')?.team ?? null;
           const biasMul = scorer && crowdBias ? (crowdBias[scorer] ?? 1) : 1;
@@ -397,10 +478,13 @@ export function createSfx() {
           const keyPoint = !!opts.keyPoint;
           let scale = Math.min(1 + (opts.rallyFlights ?? 0) / 10, 1.8) * biasMul;
           if (keyPoint) scale *= 1.6; // 【試玩必調】關鍵分加碼倍率
-          cheer(scale, { forceBig: keyPoint }); // forceBig：biasMul 壓低 scale 時仍保底 cheer_big
+          // forceBig：biasMul 壓低 scale 時仍保底 cheer_big
+          cheer(scale, { forceBig: keyPoint, delaySec: CHEER_DELAY, fadeInSec: CHEER_FADE });
           if (keyPoint && ctx && crowdGain) {
             const t = ctx.currentTime;
-            crowdGain.gain.setTargetAtTime(0.14, t, 0.05); // 爆炸值【試玩必調】
+            // 爆炸排程對齊延後的歡呼；視窗仍從死球起算 1.5s（含延遲前段——那段也要
+            // 擋住 matchLoop 的常態呼叫，否則排程好的爆炸會被搶先蓋掉）
+            crowdGain.gain.setTargetAtTime(0.14, t + CHEER_DELAY, 0.05); // 爆炸值【試玩必調】
             crowdExplodeUntil = t + 1.5; // 視窗內 setCrowdLevel 忽略常態值，撐滿爆炸
           }
         } else if (e.type === 'TOUCH') {
