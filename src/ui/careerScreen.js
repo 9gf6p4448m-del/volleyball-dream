@@ -2978,14 +2978,17 @@ export function createCareerScreen(store, {
       muteBtn.textContent = !cur.muted ? '🔇 已靜音' : '🔊 靜音';
     });
     ioRow.appendChild(muteBtn);
-    // 大作感二卷 批2：手機震動開關（擊球分級觸覺回饋）。iOS Safari 不支援 vibrate
-    // ＝開了也靜默（haptics.js 的支援閘），偏好仍照存——換安卓裝置即生效
-    const vibLabel = () => (getAudioPrefs().vibrate === false ? '📴 震動：關' : '📳 震動：開');
-    const vibBtn = smallButton(vibLabel(), () => {
-      setAudioPrefs({ vibrate: getAudioPrefs().vibrate === false });
-      vibBtn.textContent = vibLabel();
-    });
-    ioRow.appendChild(vibBtn);
+    // 大作感二卷 批2：手機震動開關（擊球分級觸覺回饋）。iOS Safari 完全沒有
+    // vibrate API（Apple 限制、非 bug）——不支援的裝置直接不長這顆鈕（08-30
+    // Sawmah 用 iPhone：按了沒感覺的開關只會造成困惑），支援的裝置（安卓）才顯示
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      const vibLabel = () => (getAudioPrefs().vibrate === false ? '📴 震動：關' : '📳 震動：開');
+      const vibBtn = smallButton(vibLabel(), () => {
+        setAudioPrefs({ vibrate: getAudioPrefs().vibrate === false });
+        vibBtn.textContent = vibLabel();
+      });
+      ioRow.appendChild(vibBtn);
+    }
     function volumeSlider(label, key) {
       // 大作感卷 批4：音量列同步換皮成金框 chip（凍結檔範圍 item 2 明文點名）
       const wrap = el('div', [
