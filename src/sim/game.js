@@ -230,6 +230,23 @@ export const TUNING = {
   BLOCK_PRESS_BODY_MUL: 0.7,
   BLOCK_GRAZE_SLOW: 0.45,   // 擦側後穿越速度保留比（減速但仍常飛向深區/界外）
   BLOCK_GRAZE_TOP_SLOW: 0.75, // 擦頂後速度保留比（指尖擦過＝球保留大半前速衝深區/底線外）
+  // ★攻守平衡卷 批1（2026-08-31，B1-1~B1-3）：攔網出射橫速往場內收★
+  // 病灶：body 攔到 `vx *= 0.6`、擦頂 `vx * 0.9`——走廊來球的 vx 本來就指向界外，
+  // 攔網擋掉 vz 之後球順著殘餘橫速飄出「邊線」外（left|cross body 攔到實測 127/127
+  // 全出界、觸球後攻方得分率 92-100%）＝攔網結構性替攻方打手出界。診斷與目標帶
+  // 見 docs/kickoffs/balance-recal-kickoff-20260831.md。
+  BLOCK_GRAZE_TOP_VX_KEEP: 0.65, // 擦頂橫速保留（原字面值 0.9）【試玩必調】
+  BLOCK_REBOUND_VX_KEEP: 0.15,   // body 攔到回拍橫速保留（原字面值 0.6）【試玩必調】
+  BLOCK_REBOUND_VX_IN: 1.0,      // 回拍朝場內折的橫速幅度（手面朝內的物理）【試玩必調】
+  BLOCK_REBOUND_VY: 1.7,         // 回拍上拋速度（原字面值 2.2；壓低＝回拍球更快落地）【試玩必調】
+  // 攻守平衡卷 批2（B2-1）：一速球（快攻/背快）落點散佈乘數。一速的準備窗只有半拍，
+  // 落點控制本來就該比大炮差——修前 quick 家族 87-97% 波贏、被摸率≈0、被救起 4-18%
+  // ＝牆與後排結構性碰不到。只乘在快攻扣球的散佈上，不動球速（時間差優勢保留）。
+  QUICK_SCATTER_MUL: 1.6,        // 【試玩必調】
+  // 攻守平衡卷 批3（B2-1）：一速球飛行時間乘數（走 spikeVelocity timeMul，同批4c
+  // 變向折損的先例：同落點、球更慢、不被淨空下限吞掉）。半拍出手沒有全揮臂球速；
+  // 散佈鈕（批2）實測只把快攻走廊 94-97%→87-89% 就報酬遞減——守方缺的是反應時間。
+  QUICK_TIME_MUL: 1.15,          // 【試玩必調】
   // §十-4b 意圖層：tool 路線（打手出界的攻擊端）。被牆蓋住的強攻有機率改瞄
   // 「牆手頂帶＋出界深區」——擦到手＝攔網方失分，沒擦到＝自打出界（真實 tool 的賭局）
   TOOL_CHANCE: 0,           // ⚠ 出廠關閉（2026-07-31 Sawmah 裁定乙）：tool 意圖對現行
@@ -796,7 +813,11 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
       // 批 4c：變向後散佈錨在**新落點**（aimPoint）——變向的代價走力量折損＋體力
       //（F2-2 凍結的兩項），不疊散佈懲罰；未變向時 aimPoint === intent.aim 逐值同原式
       state, aimPoint, player.attributes.control, intent.action,
-      dec.errorBoost, qualityMul,
+      dec.errorBoost,
+      // 批2：一速球散佈乘數只進散佈、不回寫 qualityMul（上面 blown 判定不受影響）
+      qualityMul * (intent.action === 'spike'
+        && (intent.routeKind === 'quick' || intent.routeKind === 'bquick')
+        ? TUNING.QUICK_SCATTER_MUL : 1),
     );
   // 力度：封頂 1；超蓄（放太晚）力度也掉——手型跑掉了
   const timing = rawT > TUNING.OVERCHARGE_T ? Math.min(clamp01(rawT), 0.85) : clamp01(rawT);
@@ -848,7 +869,10 @@ function executeTouch(state, intent, player, actor, ev, dist = 0) {
       clearance,
       // 批 4c 覆審修 2：變向的力量折損折在飛行時間（T×1/POWER_MUL）——
       // 水平速度比恆＝POWER_MUL，不被 minTime／淨空下限吞掉；未變向＝1 逐值同原式
-      retarget ? 1 / TUNING.DBL_SPIKE_POWER_MUL : 1,
+      // 批3：一速球飛行時間乘數（與變向折損相乘；非快攻＝1 逐值同原式）
+      (retarget ? 1 / TUNING.DBL_SPIKE_POWER_MUL : 1)
+        * (intent.routeKind === 'quick' || intent.routeKind === 'bquick'
+          ? TUNING.QUICK_TIME_MUL : 1),
     );
   } else {
     let apex = TUNING.RECEIVE_APEX;
@@ -1400,9 +1424,12 @@ function tryBlock(state, toTeam, ev) {
     // 擦手（one-touch）：沒攔死但擦到手的邊緣——BLOCK_TOUCH 一樣不計 3 次觸球。
     // 方向性偏折（§十-4b）：擦到哪裡決定飛去哪裡——「打手出界」的物理成因在此。
     if (zone === 'top') {
-      // 擦頂＝指尖帶：球保留大半前速衝攔網方深區／底線外，微上挑
+      // 擦頂＝指尖帶：球保留大半前速衝攔網方深區／底線外，微上挑。
+      // 批1（B1-4）：橫速保留 0.9→TUNING（0.45）——走廊球擦頂後不再順橫速出邊線；
+      // 前速（vz）不動＝衝深區/底線外的 wipe 語意保留
       b.vz *= TUNING.BLOCK_GRAZE_TOP_SLOW;
-      b.vx = b.vx * 0.9 + (blownHash(state, `${best.p.id}:gx`) - 0.5) * 1.0;
+      b.vx = b.vx * TUNING.BLOCK_GRAZE_TOP_VX_KEEP
+        + (blownHash(state, `${best.p.id}:gx`) - 0.5) * 1.0;
       b.vy = 0.9 + blownHash(state, `${best.p.id}:gy`) * 0.8;
     } else {
       // 擦側＝帶外緣：球被向外側撥（撥向球相對手中心的那一側）——改變救球幾何，
@@ -1444,10 +1471,15 @@ function tryBlock(state, toTeam, ev) {
     * scoutBlockMul(state, toTeam) * bodyMul;
   if (rand(state) >= chance) return false; // 手身也沒成形（手型/時差）＝乾淨過網
 
-  // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零
+  // 攔到：球被拍回攻方側上空；攔網觸球不計入 3 次觸球，雙方觸球數歸零。
+  // 批1（B1-1/B1-2）：手面朝場內——回拍橫速大幅收斂＋往場內折。原 `vx *= 0.6`
+  // 讓走廊球被「成功攔到」反而順勢出邊線送分（kickoff 有 127/127 實測）。
+  // blownHash 不消費 rand——隨機序列不動，行為差異可乾淨歸因到出射本身
   b.vz = -b.vz * 0.35;
-  b.vx *= 0.6;
-  b.vy = 2.2;
+  b.vx = b.vx * TUNING.BLOCK_REBOUND_VX_KEEP
+    - Math.sign(b.x) * TUNING.BLOCK_REBOUND_VX_IN
+      * (0.6 + blownHash(state, `${best.p.id}:rx`) * 0.8);
+  b.vy = TUNING.BLOCK_REBOUND_VY;
   const r = state.rally;
   r.touches = 0;
   r.lastTouchTeam = toTeam;

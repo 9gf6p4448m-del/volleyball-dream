@@ -106,6 +106,13 @@ export const AI = {
   DUMP_RATE: 0.07,        // S 前排二次球機率（球到位時偶發）
   JUMP_SET_RATE: 0.35,    // §5 A3 跳舉發生率（理由見 ensureFlightPlan 的抽選處）
   DIG_SHIFT: 0.35,        // Dig 收縮：後排向球側平移係數（上限 ±1.2m）
+  // 攻守平衡卷 批4（B2-1/B2-4）：邊翼後衛外開＋前壓——走廊深角的守備縫。
+  // 真實量測（落地前一 tick 快照，避開結算重置假影）：走廊 kill 的守方最近人
+  // p50=2.21-2.24m、p25=2.03——緊貼魚躍可及 2.0 的外側 0.2-0.3m ＝結構縫。
+  // 邊翼 dig 位原本 (±3, 6.2)，走廊落點叢集在 (±4.1, 5.0)。真實排球的一、五號位
+  // 後衛就是貼邊線守直線/斜線走廊的人。
+  DIG_WING_OUT: 0.5,      // 邊翼外開 m【試玩必調】
+  DIG_WING_FWD: 0.4,      // 邊翼額外前壓 m【試玩必調】
   DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
   //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
   TIMEOUT_STREAK: 4,      // W7 B3：被對方連得幾分時 AI 喊暫停（拍板＝4）
@@ -989,6 +996,11 @@ export function digTargetFor(game, team, playerId, bias = null) {
   const ballLx = TEAM_SIDE[team] * game.ball.x;
   let shift = Math.max(-1.2, Math.min(1.2, ballLx * AI.DIG_SHIFT));
   let forward = 0.8; // 收前 0.8m（lz 7→6.2）：防守預備深度
+  // 批4：邊翼（槽位 |lx|>1）外開＋前壓，把走廊深角收進可及圈（中路槽照舊）。
+  // 前壓在 bias 分支「之後」疊加——tip 的前壓短區也要吃邊翼加成，否則指令型
+  // forward 覆寫會把邊翼前壓靜默吃掉（block-read 測試的 z 差距斷言抓過這一版）
+  const dLx0 = TEAM_SIDE[team] * d.x;
+  const outward = Math.abs(dLx0) > 1 ? Math.sign(dLx0) * AI.DIG_WING_OUT : 0;
   if (bias === 'line') {
     // 偏移 1.3m（07-27 試玩回饋：0.9 在六人陣型裡看不見——指揮要有可見的重量）
     shift = Math.max(-2.2, Math.min(2.2, shift + Math.sign(ballLx) * 1.3));
@@ -997,12 +1009,13 @@ export function digTargetFor(game, team, playerId, bias = null) {
   } else if (bias === 'tip') {
     forward = 2.2; // 前壓短區（吊球斷點）
   }
+  if (outward !== 0) forward += AI.DIG_WING_FWD; // 批4：邊翼前壓（任何 bias 都疊加）
   // D-1（Phase 5 W2 掃尾-11，07-30）：收縮 shift 上限 ±2.2 是「相對偏好槽」的量，
   // 偏好槽本身已在 ±3（DUTY_SLOTS）——兩者相加會出界（3+2.2=5.2 > 半場內界 4.1），
   // 修前無場地夾限。比照攔網手同一份 clampCourtX（ai.js 下方），只夾 x（z 的前壓
   // 不在本題範圍內，未一併處理）
   return {
-    x: clampCourtX(d.x + TEAM_SIDE[team] * shift),
+    x: clampCourtX(d.x + TEAM_SIDE[team] * (shift + outward)),
     z: d.z - TEAM_SIDE[team] * forward,
   };
 }
