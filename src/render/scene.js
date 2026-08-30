@@ -85,10 +85,13 @@ export function createLights(scene, quality) {
   // W4(P4) Q10 冠軍館燈光秀：暗場→聚光逐盞亮→底光回升（牆鐘驅動；rig 巡場同窗）。
   // 進行中 setTension/setMomentum 短路——常態燈控不與演出打架；跳過＝stopOpeningShow
   let show = null; // { t0, dur }
+  // 三卷批2 MVP 燈暗聚光：底光/主燈快速壓暗、聚光微增（人物從暗裡浮出）——
+  // 同燈光秀慣例：進行中常態燈控短路；收口走 stopMvpDim（還原值與 stopOpeningShow 同源）
+  let mvpDim = null; // { t0, dur }
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   return {
     setTension(active, dt) {
-      if (show) return;
+      if (show || mvpDim) return;
       const t = active ? 1 : 0;
       tension += (t - tension) * (1 - Math.exp(-3 * dt));
       hemi.intensity = 0.5 - 0.22 * tension;
@@ -98,7 +101,7 @@ export function createLights(scene, quality) {
     // value：momentum.value/MOMENTUM_MAX 正規化後的 −1..1（呼叫端已除好，這裡不吃 sim 常數）；
     // 局點張力優先——tensionActive 時目標收斂回 0，避免與局點壓暗管線疊加打架
     setMomentum(value, tensionActive, dt) {
-      if (show) return;
+      if (show || mvpDim) return;
       const target = tensionActive ? 0 : value;
       momentumGlow += (target - momentumGlow) * (1 - Math.exp(-3 * dt));
       const mul = 1 + momentumGlow * 0.1; // 「微」增亮/微收，幅度封頂 ±10%——不可搶戲
@@ -124,6 +127,27 @@ export function createLights(scene, quality) {
     },
     openingShowActive() {
       return !!show;
+    },
+    // 三卷批2：MVP 燈暗（K2-4）——前 18% 快速壓暗後定住；stopMvpDim 完全還原常態
+    startMvpDim(now, dur = 4500) {
+      mvpDim = { t0: now, dur };
+    },
+    stopMvpDim() {
+      mvpDim = null;
+      this.stopOpeningShow(); // 還原值單一來源（hemi 0.5／key 2.6／rim 0.7／spot 常態）
+    },
+    updateMvpDim(now) {
+      if (!mvpDim) return null;
+      const p = Math.min((now - mvpDim.t0) / mvpDim.dur, 1);
+      const dip = clamp01(p / 0.18); // 【試玩必調】壓暗速度（前 18% 到位）
+      hemi.intensity = 0.5 - 0.4 * dip; // → 0.1
+      key.intensity = 2.6 - 2.0 * dip; // → 0.6
+      rim.intensity = 0.7 + 0.3 * dip; // 輪廓補光：人物邊緣從暗場切出來
+      for (const spot of spots) {
+        spot.intensity = SPOT_BASE * (1 + 0.35 * dip); // 聚光微增＝舞台感【試玩必調】
+        spot.color.copy(SPOT_BASE_COLOR);
+      }
+      return p;
     },
     // 每幀驅動；回傳 0..1 進度（rig 巡場共用時間軸）、結束回 null 並自動恢復常態
     updateOpeningShow(now) {

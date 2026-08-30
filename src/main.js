@@ -12,6 +12,7 @@ import { createPostFx } from './render/postFx.js';
 import { createFloorReflection } from './render/floorReflection.js';
 import { createCourt } from './render/court.js';
 import { createArena } from './render/arena.js';
+import { createCrowdAnim } from './render/crowdAnim.js';
 import { createPlayers } from './render/players.js';
 import { createBallView } from './render/ballView.js';
 import { createCameraControls } from './input/cameraControls.js';
@@ -19,6 +20,7 @@ import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
 import { createAttract } from './render/attract.js';
 import { installTheme } from './ui/theme.js';
+import { showBootLogo } from './ui/bootLogo.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
 import {
   devSeedRequest, buildSyntheticSave, devUniRequest, advanceToUniYear,
@@ -79,6 +81,12 @@ async function init() {
   const container = document.getElementById('app');
   const loadingEl = document.getElementById('loading');
 
+  // 三卷批3：發行商開場 logo——疊在 #loading 上、不阻塞開機（底下照常載入）；
+  // bench 基準場景不演（量測不蓋演出）；建立失敗不得擋開機（K3-2 永不致死）
+  if (params.get('mode') !== 'bench') {
+    try { showBootLogo(); } catch { /* logo 死了開機照走 */ }
+  }
+
   const renderer = createRenderer(container, quality);
   const scene = createScene();
   const camera = createCamera();
@@ -86,6 +94,8 @@ async function init() {
   const court = createCourt(scene, quality);
   // 夜賽場館（W4 Q10 三館制：預設常規館；開賽時依賽制切館）
   const arena = createArena(scene);
+  // 三卷批1：得分觀眾反應動畫（反應窗外零成本；崩潰自我停用永不致死）
+  const crowdAnim = createCrowdAnim(scene, arena);
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
   // 批3 光效：?fx=high 才有 bloom＋地板反光；off＝直渲零成本；失敗＝退回直渲永不致死
@@ -95,7 +105,7 @@ async function init() {
   const fullHud = params.get('hud') === '1' || params.get('mode') === 'bench';
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality), fullHud);
 
-  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, postFx };
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, crowdAnim, postFx };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else if (params.get('devkit') === '1') {

@@ -97,6 +97,10 @@ export function createArena(scene, venueKey = 'regular') {
     venueLabel() {
       return currentSig ? (VENUES[currentSig.split('|')[0]] ?? VENUES.regular).label : '';
     },
+    // 三卷批1：觀眾把手（crowdAnim 用）——換館重建後自動指到新 mesh
+    getCrowd() {
+      return group?.userData?.crowdMesh ?? null;
+    },
   };
   api.setVenue(venueKey);
   return api;
@@ -173,13 +177,22 @@ function buildCrowd(group, spec, opts = {}) {
   const m4 = new THREE.Matrix4();
   const color = new THREE.Color();
   const awayColor = new THREE.Color(opts.awayBanner?.color ?? '#5a7dd8');
+  // 三卷批1：base 快照（觀眾反應動畫的還原基準）——建置行為不變，只多記一份
+  const basePos = new Float32Array(spots.length * 3);
+  const presentArr = new Uint8Array(spots.length);
   spots.forEach(([x, y, z, away], i) => {
     // 決定論變化：出席率（缺席者移到地下）、身高與左右微偏
     const h = hash01(i * 7919 + 13);
     const present = h < spec.attendance;
     const jx = (hash01(i * 104729 + 7) - 0.5) * 0.22;
     const jy = (hash01(i * 1301 + 3) - 0.5) * 0.14;
-    m4.makeTranslation(present ? x + jx : 0, present ? y + jy : -50, z);
+    const px = present ? x + jx : 0;
+    const py = present ? y + jy : -50;
+    m4.makeTranslation(px, py, z);
+    basePos[i * 3] = px;
+    basePos[i * 3 + 1] = py;
+    basePos[i * 3 + 2] = z;
+    presentArr[i] = present ? 1 : 0;
     crowd.setMatrixAt(i, m4);
     if (away && hash01(i * 271 + 5) < 0.8) {
       color.copy(awayColor).multiplyScalar(0.55 + hash01(i * 33 + 1) * 0.3);
@@ -190,7 +203,10 @@ function buildCrowd(group, spec, opts = {}) {
   });
   crowd.instanceMatrix.needsUpdate = true;
   if (crowd.instanceColor) crowd.instanceColor.needsUpdate = true;
+  crowd.userData.crowdBase = basePos;
+  crowd.userData.crowdPresent = presentArr;
   group.add(crowd);
+  group.userData.crowdMesh = crowd;
 }
 
 // 場邊 LED 廣告板：自由區外緣、面向球場；MeshBasic（不受光）＝自發光 LED 感

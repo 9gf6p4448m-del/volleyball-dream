@@ -89,6 +89,8 @@ import { createIntroNameplate } from '../ui/introNameplate.js';
 import { roleLabel } from '../career/heightAdvice.js';
 import { createConfetti } from '../render/confetti.js';
 import { showChampionBanner } from '../ui/championBanner.js';
+import { selectMvp } from '../career/mvp.js';
+import { showMvpCard } from '../ui/mvpCard.js';
 import { createHaptics } from '../ui/haptics.js';
 
 // 接球微回饋批2（丙1/丙2/丙3，acceptance-netduel-batch2.md，2026-08-27）：三個
@@ -970,6 +972,8 @@ function bindInputHandlers(s) {
     // 批1：慶祝演出中點擊＝跳過（endCelebration 補顯 overlay，與播畢殊途同歸）；
     // return 擋住下面的 boxScorePanel——跳過的那一下不得同時被當成「看結算」
     if (s.celebration) { endCelebration(s); return; }
+    // 三卷批2：MVP 演出中點擊＝跳過（endMvpShow 補顯 overlay，與播畢殊途同歸）
+    if (s.mvpShow) { endMvpShow(s); return; }
     if (s.careerCtx) {
       if (!s.boxShown) {
         s.boxShown = true;
@@ -2209,6 +2213,11 @@ function applyEvents(s, frameEvents, now) {
   stage.sfx.onEvents(frameEvents, {
     rallyFlights: game.rally.flightId - s.rallyStartFlight, keyPoint: !!s.keyPointRally,
   });
+  // 三卷批1：觀眾反應——同一顆 DEAD_BALL、同一份 s.keyPointRally 鎖存值（與上面 sfx
+  // 同源，K1-2 不另判關鍵分）；crowdAnim 內部自包 try/catch（K1-4 永不致死）
+  if (frameEvents.some((e) => e.type === 'DEAD_BALL')) {
+    s.ctx.crowdAnim?.onScore(now, { keyPoint: !!s.keyPointRally });
+  }
   stage.controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.localId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
@@ -2952,7 +2961,8 @@ export function settleIfOver(s) {
         stage.setOverOverlay.show(winner, score, game.players[s.localId].teamId, overlayHint);
       }
     } else {
-      stage.setOverOverlay.show(winner, score, game.players[s.localId].teamId, overlayHint);
+      // 三卷批2：普通勝負也走 MVP（生涯正式賽限定；內部自動落回現行 overlay）
+      showMvpOrOverlay(s, { winner, score, hint: overlayHint });
     }
   }
   // W4(P4) Q8 局間（多局賽制限定）：huddle 過場——比分回顧＋教練指示＋下一局/存檔離開
@@ -3476,7 +3486,41 @@ function endCelebration(s) {
   try { c.banner.dispose(); } catch { /* 已移除＝無事可做 */ }
   s.stage.confettiFx?.hide(); // 更新迴圈跟著 s.celebration 一起停，殘片不藏會凍在半空
   s.stage.rig.setTourProgress(null);
-  s.stage.setOverOverlay.show(c.winner, c.score, s.game.players[s.localId].teamId, c.hint);
+  // 三卷批2：慶祝先、MVP 次之（各自可跳，K2-3）——非生涯路徑內部自動落回 overlay
+  showMvpOrOverlay(s, { winner: c.winner, score: c.score, hint: c.hint });
+}
+
+// 大作感三卷 批2：賽後 MVP 演出——燈暗聚光（scene.js 調光範式）＋金字卡＋三數據。
+// 結算已在 settleIfOver 完成（K2-5 結算先於演出）；生涯正式賽才演（練習/教學在
+// settleIfOver 已早退、連線與快速比賽這裡擋）；選不出 MVP（rows 空）或建卡崩潰＝
+// 直接落回現行 overlay（永不致死），跳過與播畢共用 endMvpShow 收口（殊途同歸）。
+const MVP_SEC = 4.5; // 【試玩必調】演出全長（秒）
+function buildMvpData(s) {
+  const { game } = s;
+  const winner = game.series?.winner ?? game.match.winner;
+  if (!winner) return null;
+  const rows = Object.values(buildTeamBox(game.events, game.players, winner));
+  return selectMvp(rows);
+}
+function showMvpOrOverlay(s, next) {
+  if (s.careerCtx && !s.net) {
+    try {
+      const data = buildMvpData(s);
+      if (data) {
+        s.mvpShow = { startedAt: null, card: showMvpCard(data), ...next };
+        return;
+      }
+    } catch { /* 演出建不起來＝走現行流程 */ }
+  }
+  s.stage.setOverOverlay.show(next.winner, next.score, s.game.players[s.localId].teamId, next.hint);
+}
+function endMvpShow(s) {
+  const m = s.mvpShow;
+  if (!m) return;
+  s.mvpShow = null;
+  try { m.card.dispose(); } catch { /* 已移除＝無事可做 */ }
+  try { s.ctx.lights.stopMvpDim(); } catch { /* 燈還原失敗不得擋 overlay */ }
+  s.stage.setOverOverlay.show(m.winner, m.score, s.game.players[s.localId].teamId, m.hint);
 }
 
 // W4(P4) Q10 燈光秀收場（自然結束或點擊跳過共用）：恢復常態燈光/鏡頭、補播情蒐帶
@@ -3610,6 +3654,17 @@ function frameStep(s, now) {
       stage.sfx.cheer?.(1.5, { forceBig: true }); // 【試玩必調】中段二波
     }
     if (p >= 1) endCelebration(s);
+  }
+
+  // 三卷批2：MVP 演出時間軸——燈暗聚光（牆鐘驅動；sim 已 set_over 凍結）
+  if (s.mvpShow) {
+    const m = s.mvpShow;
+    if (m.startedAt === null) {
+      m.startedAt = now;
+      ctx.lights.startMvpDim(now, MVP_SEC * 1000);
+    }
+    ctx.lights.updateMvpDim(now);
+    if (now - m.startedAt >= MVP_SEC * 1000) endMvpShow(s);
   }
 
   const game = s.game;
@@ -3885,6 +3940,7 @@ function frameStep(s, now) {
   // 局點張力：燈光收攏＋心跳（deuce 內建於 setPointTeam 判定）
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
   ctx.lights.setTension(tension, delta);
+  ctx.crowdAnim?.update(now); // 三卷批1：觀眾反應每幀驅動（窗外內部早退＝零成本）
   stage.sfx.setHeartbeat(tension);
   // W7 B4②：氣勢聲量聯動——我方（A）有利＝聲量爬升、對方有利＝場館變安靜（壓迫感，非噓聲）；
   // 優先序：局點發球前屏息＞氣勢聯動（tension 成立時氣勢聯動整個讓位，不疊算）
