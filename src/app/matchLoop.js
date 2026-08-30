@@ -82,6 +82,9 @@ import {
 } from '../ui/diegeticItems.js';
 import { isHeavySpikeDig, isDiveSaveTouch, HEAVY_SPIKE_POWER_MIN } from '../ui/receiveJuice.js';
 import { shouldCelebrateChampionship } from '../career/championship.js';
+import { lineupIntroShot, introPhase, INTRO_SEC } from './lineupIntro.js';
+import { createIntroNameplate } from '../ui/introNameplate.js';
+import { roleLabel } from '../career/heightAdvice.js';
 import { createConfetti } from '../render/confetti.js';
 import { showChampionBanner } from '../ui/championBanner.js';
 import { createHaptics } from '../ui/haptics.js';
@@ -269,7 +272,11 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   // 演出結束才播情蒐帶（決賽時序：燈光秀→錄影帶→發球）；局間存檔續玩不重播
   const showFirst = s.config.venue?.key === 'final' && !careerCtx?.resumeMid;
   if (showFirst) s.openingShow = 'pending';
-  if (s.config.tapeClips.length && !showFirst) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
+  // 大作感二卷 批3（J3-1 修訂版）：生涯正式賽入場運鏡——練習/教學（含於 practice）/
+  // 局間續玩不演；排程順序＝燈光秀（決賽館限定）→ 入場運鏡 → 情蒐帶 → 發球
+  const wantsIntro = !!careerCtx && !careerCtx.practice && !careerCtx.resumeMid;
+  if (wantsIntro) s.lineupIntro = 'pending';
+  if (s.config.tapeClips.length && !showFirst && !wantsIntro) startTapeClip(s); // 生涯開賽：先播情蒐錄影帶（點擊跳過）
   showTeachPreview(s); // 學招預告字幕（拍板 07-23：情蒐帶開頭；無帶素材時開賽直接顯示）
   // W4(P4) Q8 局間存檔續玩：快照開機即在 set_break（prevPhase 同值＝一次性轉場
   // 不會觸發）——直接喚起局間 huddle，「從局間 huddle 前恢復」的拍板語意
@@ -290,9 +297,11 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
         : null;
     }
   }
-  // 燈光秀跳過（點擊任意處）：立即恢復常態燈光、進正常開賽流程
+  // 燈光秀/入場運鏡跳過（點擊任意處）：立即恢復常態、進正常開賽流程——一次點擊只跳
+  // 一段（else if），連點兩下依序跳燈光秀→入場
   window.addEventListener('pointerdown', () => {
     if (s.openingShow === 'running') endOpeningShow(s);
+    else if (s.lineupIntro && s.lineupIntro !== 'pending') endLineupIntro(s);
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) s.last = performance.now();
@@ -452,7 +461,8 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     wasBenched: false,
     // W4(P4) Q10 冠軍館燈光秀：null｜'pending'｜'running'（牆鐘驅動、sim 凍結、可跳過）
     openingShow: null,
-    openingTapeStarted: false, // 燈光秀後補播情蒐帶（一次性）
+    openingTapeStarted: false, // 燈光秀/入場運鏡後補播情蒐帶（一次性，兩處收口共用）
+    lineupIntro: null,         // 大作感二卷 批3：入場運鏡 null｜'pending'｜{startedAt,layout,names,nameplate,shownPhase}
     // W7.1 #3A：目前正在集合帶位/倒數的暫停隊伍（'A'|'B'|null）——matchLoop 唯一事實源，
     // matchView/countdown 都吃這個
     timeoutHuddleTeam: null,
@@ -3349,6 +3359,74 @@ export function practiceRewardLine(settled) {
   return `${head}　完成 2 項可多挑一項屬性特訓、全完成再開控球格（本場不記戰績）`;
 }
 
+// 大作感二卷 批3：入場運鏡——佈景與名牌資料組裝。拿不到陣容/任何一步炸掉＝
+// endLineupIntro 落回正常開賽流程（J3-4 永不致死）；名牌資料同源＝game.players
+// （對位圖的名冊建進 sim players 的同一份）＋ opponentById 的隊名/王牌稱號（J3-3）
+function beginLineupIntro(s, now) {
+  try {
+    const { game } = s;
+    const myTeam = game.players[s.playerId]?.teamId ?? 'A';
+    const ids = Object.keys(game.actors).filter((id) => onCourt(game, id));
+    const oppIds = ids.filter((id) => game.players[id].teamId !== myTeam);
+    const myIds = ids.filter((id) => game.players[id].teamId === myTeam);
+    if (!oppIds.length || !myIds.length) throw new Error('lineup empty');
+    const meanZ = (list) => list.reduce((a, id) => a + game.actors[id].z, 0) / list.length;
+    const oppDef = opponentById(s.careerCtx?.matchEntry?.opponentId);
+    const aceName = oppDef?.ace?.name ?? null;
+    const acePid = aceName
+      ? oppIds.find((id) => game.players[id].name === aceName) ?? null : null;
+    const meOn = onCourt(game, s.playerId);
+    const layout = {
+      oppZ: meanZ(oppIds),
+      myZ: meanZ(myIds),
+      oppAce: acePid ? { x: game.actors[acePid].x, z: game.actors[acePid].z } : null,
+      myStar: meOn
+        ? { x: game.actors[s.playerId].x, z: game.actors[s.playerId].z }
+        : { x: 0, z: meanZ(myIds) }, // 主角在板凳＝看我方列隊中心
+    };
+    const names = {
+      oppTeam: oppDef?.name ?? '對手',
+      label: s.careerCtx?.matchEntry?.label ?? '',
+      oppAceName: acePid ? game.players[acePid].name : null,
+      oppAceTitle: oppDef?.ace?.title ?? '王牌',
+      myName: game.players[s.playerId]?.name ?? '',
+      myRole: roleLabel(game.players[s.playerId]?.currentRole) ?? '先發',
+    };
+    return { startedAt: now, layout, names, nameplate: createIntroNameplate(), shownPhase: null };
+  } catch {
+    endLineupIntro(s);
+    return null;
+  }
+}
+
+// 段落切換時換名牌內容（同段不重設，CSS 過場才走得完）
+function updateIntroNameplate(li, p) {
+  const phase = introPhase(p);
+  if (phase === li.shownPhase) return;
+  li.shownPhase = phase;
+  const n = li.names;
+  if (phase === 'oppLine') li.nameplate.show(n.oppTeam, n.label || '先發陣容');
+  else if (phase === 'oppAce') {
+    if (n.oppAceName) li.nameplate.show(n.oppAceName, `${n.oppTeam}・${n.oppAceTitle}`);
+    // 王牌對不上名單＝名牌沿用隊名段，鏡頭自己會退回列隊中心（lineupIntroShot fallback）
+  } else if (phase === 'myStar') li.nameplate.show(n.myName, `${n.myRole}・先發`);
+  else li.nameplate.hide();
+}
+
+// 跳過與播畢共用：收名牌/鏡位，補播情蒐帶（與 endOpeningShow 共用一次性旗標）
+function endLineupIntro(s) {
+  const li = s.lineupIntro;
+  s.lineupIntro = null;
+  if (li && li !== 'pending') {
+    try { li.nameplate.dispose(); } catch { /* 已移除＝無事可做 */ }
+  }
+  s.stage.rig.setCineShot(null);
+  if (s.config.tapeClips.length && !s.openingTapeStarted) {
+    s.openingTapeStarted = true;
+    startTapeClip(s);
+  }
+}
+
 // 大作感二卷 批1：奪冠慶祝演出——彩帶（主場景 Points）＋tour 弧線運鏡（複用燈光秀
 // 鏡位）＋群眾長聲浪＋冠軍字卡。sim 已在 set_over、生涯結算已完成，演出純表現層；
 // 牆鐘時間軸（frameStep 推進），點擊跳過與播畢共用 endCelebration 收口。
@@ -3378,7 +3456,8 @@ function endOpeningShow(s) {
   s.openingShow = null;
   s.ctx.lights.stopOpeningShow();
   s.stage.rig.setTourProgress(null);
-  if (s.config.tapeClips.length && !s.openingTapeStarted) {
+  // 批3：入場運鏡還排在後面時，情蒐帶讓給 endLineupIntro 收口（時序：燈光秀→入場→帶）
+  if (s.config.tapeClips.length && !s.openingTapeStarted && !s.lineupIntro) {
     s.openingTapeStarted = true;
     startTapeClip(s);
   }
@@ -3473,6 +3552,20 @@ function frameStep(s, now) {
     else {
       stage.rig.setTourProgress(showP);
       delta = 0;
+    }
+  }
+
+  // 大作感二卷 批3：入場運鏡時間軸——燈光秀讓位（互斥），sim 凍結（delta=0）、
+  // 點擊跳過走 startMatchLoop 的 pointerdown 通道
+  if (!s.openingShow && s.lineupIntro) {
+    if (s.lineupIntro === 'pending') s.lineupIntro = beginLineupIntro(s, now);
+    if (s.lineupIntro) {
+      const li = s.lineupIntro;
+      const p = Math.min((now - li.startedAt) / (INTRO_SEC * 1000), 1);
+      stage.rig.setCineShot(lineupIntroShot(p, li.layout));
+      updateIntroNameplate(li, p);
+      if (p >= 1) endLineupIntro(s);
+      else delta = 0;
     }
   }
 

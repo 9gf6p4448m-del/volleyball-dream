@@ -58,6 +58,7 @@ export function createCameraRig(camera, initialPlayerId) {
   let huddleView = false;    // W8 暫停演出：第一人稱圍圈看教練戰術板
   let diveCam = false;       // W3(P4) L 魚躍演出：低機位貼地鏡頭（附錄 A4①）
   let tourProgress = null;   // W4(P4) Q10 冠軍館燈光秀巡場：0..1（null＝關）——與燈光秀共時間軸
+  let cineShot = null;       // 大作感二卷 批3 入場運鏡：{pos:{x,y,z}, target:{x,y,z}}（外部腳本逐幀餵，null＝關）
   let sigBeat = null;        // 4.5B §3 招牌演出：{kind:'oh'|'mb'|'opp'|'line', focusId, mateId, at}（勝負已定後的回放性一拍；重演導播也吃這四款）
   let setScan = false;       // 4.5B §4 S diegetic：分配決策＝自 S 視線回望自家半場（點隊友＝分配）
 
@@ -65,6 +66,7 @@ export function createCameraRig(camera, initialPlayerId) {
     const me = game.players[playerId];
     if (!me) return 'third';
     if (tourProgress !== null) return 'tour'; // 開場燈光秀巡場——凌駕一切（sim 凍結中）
+    if (cineShot) return 'cine'; // 批3 入場運鏡（sim 凍結中；優先序僅次於燈光秀）
     if (benchMode) return 'bench'; // 板凳視角最高優先——沒有身體可跟，不吃攻防切換
     if (sigBeat) return 'sig'; // 4.5B §3 招牌演出：死球窗內的回放性一拍（SERVE 即收）
     if (huddleView) return 'huddle'; // 暫停圍圈：主角在場上時的第一人稱
@@ -96,6 +98,7 @@ export function createCameraRig(camera, initialPlayerId) {
     setSigBeat(b) { sigBeat = b; }, // 4.5B §3：null＝關；{kind, focusId, mateId}
     setSetScan(v) { setScan = v; }, // 4.5B §4：S 分配決策窗
     setTourProgress(p) { tourProgress = p; }, // null＝關；0..1＝燈光秀巡場進度
+    setCineShot(v) { cineShot = v; }, // 批3：外部腳本鏡位（lineupIntro.js 產）；null＝關
     setLook(nx, ny) { look = { x: nx, y: ny }; },
     resetLook() { look = { x: 0, y: 0 }; },
     getMode() { return mode; },
@@ -143,6 +146,18 @@ export function createCameraRig(camera, initialPlayerId) {
         const r = 19 - p * 5; // 漸進貼場
         pos.set(Math.cos(ang) * r, 9.5 - p * 4.2, Math.sin(ang) * r);
         target.set(0, 3.5 - p * 2.3, 0);
+        curPos.copy(pos);
+        curTarget.copy(target);
+        camera.position.copy(curPos);
+        camera.lookAt(curTarget);
+        return;
+      }
+      if (mode === 'cine') {
+        // 批3 入場運鏡：鏡位完全由外部腳本決定（lineupIntro.js 純函式產出）；
+        // 同 tour——直接落位並同步 curPos/curTarget，結束時 desiredMode 換模式
+        // 走既有 transition 平滑收場
+        pos.set(cineShot.pos.x, cineShot.pos.y, cineShot.pos.z);
+        target.set(cineShot.target.x, cineShot.target.y, cineShot.target.z);
         curPos.copy(pos);
         curTarget.copy(target);
         camera.position.copy(curPos);
