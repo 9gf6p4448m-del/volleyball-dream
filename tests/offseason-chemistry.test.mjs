@@ -183,14 +183,22 @@ test('E2②：玩家不可能同時是跑者與舉球者；舉球者那條臂記
 });
 
 // 驗收 4：二傳臂非空（裁定書量級 3.69 次/局）
+// ★ 2026-08-31 Sawmah 裁定（攻守平衡卷凍結程序）：單種子 1000 → 跨 SEEDS 總和 ★
+// 攻守平衡卷批1-4 的行為變更讓 seed 1000 恰好整場 0 筆（10 種子實掃平均 2.5 次/局、
+// 配對正確＝機制活著，純種子運氣）。斷言語意不降（總和 > 0 照舊），只換樣本底——
+// 單一種子賭彈道運氣，物理一動就反覆誤報。
 test('E2③：玩家站二傳時，默契計數 > 0（那一格不是空集合）', () => {
-  const r = playWithCapture({ role: 'setter', seed: 1000 });
-  const total = Object.values(r.tally).reduce((a, b) => a + b, 0);
-  assert.ok(total > 0, `二傳臂空集合（tally=${JSON.stringify(r.tally)}）`);
+  const merged = {};
+  for (const seed of SEEDS) {
+    const r = playWithCapture({ role: 'setter', seed });
+    for (const [pid, n] of Object.entries(r.tally)) merged[pid] = (merged[pid] ?? 0) + n;
+  }
+  const total = Object.values(merged).reduce((a, b) => a + b, 0);
+  assert.ok(total > 0, `二傳臂空集合（tally=${JSON.stringify(merged)}）`);
   // 誘餌恆為欄中 ⇒ 二傳的配對對象應落在名冊的 middle 上
   const members = buildStarterMembers();
   const mids = new Set(members.filter((m) => m.role === 'middle').map((m) => m.id));
-  for (const pid of Object.keys(r.tally)) {
+  for (const pid of Object.keys(merged)) {
     assert.ok(mids.has(pid), `二傳臂配到了非欄中的 ${pid}`);
   }
 });
