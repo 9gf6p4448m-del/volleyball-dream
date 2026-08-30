@@ -133,12 +133,10 @@ export function createSfx() {
   // 哨音由呼叫端（onEvents DEAD_BALL）延後排程；其他呼叫端（發球短哨）不帶延遲、零改動
   function whistle(durMs = 450, delaySec = 0) {
     if (!ensure()) return;
-    // 08-30 試玩回饋：短哨（發球 200ms）不得播整段取樣——跟得分長哨變成同一種吵。
-    // 短呼叫＝截前 0.25s＋壓音量的輕嗶；長呼叫（死球 480ms）照播完整取樣
-    const short = durMs < 400;
-    if (playSample(ctx, busGain, 'whistle', short
-      ? { delay: delaySec, maxDur: 0.25, gain: 0.5 } // 【試玩必調】短哨長度/音量
-      : { delay: delaySec })) return;
+    // 08-30 試玩三修：短哨（發球 200ms）回歸「最一開始」的合成短嗶（下方方波＋顫音，
+    // 長度跟著 durMs 收短）——先播整段取樣被嫌吵、截 0.25s 仍被嫌不舒服，兩版都退場。
+    // 只有長哨（死球 480ms）用真實哨音取樣
+    if (durMs >= 400 && playSample(ctx, busGain, 'whistle', { delay: delaySec })) return;
     const t = ctx.currentTime + delaySec;
     const dur = durMs / 1000;
     const osc = ctx.createOscillator();
