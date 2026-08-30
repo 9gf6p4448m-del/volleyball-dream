@@ -23,15 +23,16 @@ repo 內每個音檔的來源與授權。CC0 不強制標名，仍列出以便�
 
 ## bgm/（AAC stereo 128kbps，**不進** precache、串流載入；換檔即生效——替換同名檔即可）
 
-| 檔案 | 用途 | 曲名 | 授權 |
-|---|---|---|---|
-| bgm_menu_01.m4a | 主選單候選①（管弦熱血） | "Heroic Age" | CC-BY 4.0／Kevin MacLeod (incompetech.com) |
-| bgm_menu_02.m4a | 主選單候選②（管弦昂揚） | "Egmont Overture Finale" | CC-BY 4.0／Kevin MacLeod (incompetech.com) |
-| bgm_menu_03.m4a | 主選單候選③（電子對照） | "Chase Pulse Faster" | CC-BY 4.0／Kevin MacLeod (incompetech.com) |
-| bgm_match_tension.m4a | 比賽緊張氛圍層（純打擊樂） | "Satiate - only percussion" | CC-BY 4.0／Kevin MacLeod (incompetech.com) |
+2026-08-30 正式主題曲上線：全部換為 Sawmah 以 Google Flow Music（Lyria 模型）生成的原創曲，
+取代先前的 Kevin MacLeod CC-BY 示範曲（該批已無檔案在 repo，標注義務隨之解除）。
+每組生成了兩個候選，未採用的備選 WAV 在 Sawmah 的下載資料夾，換裝＝後製同流程蓋同名檔。
 
-### Kevin MacLeod 曲目的必要標注文字（CC-BY 4.0）
+| 檔案 | 用途 | 生成曲名（首選） | 備選 | 來源 |
+|---|---|---|---|---|
+| bgm_menu_01.m4a | 主選單①（管弦熱血） | "Championship Serve" | "Point Break Fanfare" | Flow Music 生成（2026-08-30） |
+| bgm_menu_02.m4a | 主選單②（管弦昂揚） | "Victory March" | "Championship Celebration" | 同上 |
+| bgm_menu_03.m4a | 主選單③（電子動感） | "Electric Court" | "Cyber Spike" | 同上 |
+| bgm_match_tension.m4a | 比賽緊張氛圍層（純打擊樂） | "Match Point Tension"（節錄 8-74s 做 60s 無縫循環） | "Heartbeat Pulse" | 同上 |
 
-"Heroic Age" / "Egmont Overture Finale" / "Chase Pulse Faster" / "Satiate" by Kevin MacLeod (incompetech.com)
-Licensed under Creative Commons: By Attribution 4.0 License
-http://creativecommons.org/licenses/by/4.0/
+後製（可重現）：選單曲＝去頭部靜音＋30ms 淡入＋響度對齊 mean -14.6dB＋limiter 0.97；
+比賽層＝acrossfade 6s 環接、對齊 mean -16.7dB。

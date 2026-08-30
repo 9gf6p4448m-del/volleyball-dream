@@ -10,12 +10,10 @@ const SECTIONS = [
     ],
   },
   {
-    head: '音樂（CC-BY 4.0）',
+    head: '音樂',
     rows: [
-      '"Heroic Age" / "Egmont Overture Finale" / "Chase Pulse Faster" / "Satiate"',
-      'by Kevin MacLeod (incompetech.com)',
-      'Licensed under Creative Commons: By Attribution 4.0',
-      'creativecommons.org/licenses/by/4.0/',
+      '主題曲三首與比賽氛圍層 — Google Flow Music（Lyria）生成',
+      '製作人：Sawmah（2026-08-30）',
     ],
   },
   {
