@@ -75,6 +75,8 @@ import { get as getAudioPrefs, set as setAudioPrefs } from './audioPrefs.js';
 import { createVaultCard, openReplayViewer } from './replayVault.js';
 import { createChaseDiagram } from './chaseDiagram.js';
 import { showHowToPlay } from './howToPlay.js';
+import { showTrophyRoom } from './trophyRoom.js';
+import { showCredits } from './credits.js';
 import {
   isHighSchool, isCorporate, isPro, chapterSeasonOf, chapterCompleted, currentTeamName,
 } from '../career/chapter.js';
@@ -211,7 +213,9 @@ function countUp(node, target, delayMs, durMs = 320) {
 // 技術軸各校打平，代價只剩球權與戰績兩軸）。
 export const ADMISSION_COST_LINE = '代價都寫在卡片上了——強的隊伍不會把球給你，弱的隊伍陪你贏不到什麼。想清楚再選。';
 
-export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPractice = null }) {
+export function createCareerScreen(store, {
+  onPlay, onQuick, primeSlot, onPractice = null, onAttract = null,
+}) {
   const root = el('div', [
     'position:fixed', 'inset:0', 'z-index:30', 'display:none',
     // safe center：內容高於視窗時退化為 flex-start——修手機頂部被裁切、捲不到
@@ -228,6 +232,15 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     'min-height:20px', 'font-size:14px', `color:${COLOR.red}`, 'text-align:center',
   ]);
   const setMsg = (text) => { msgEl.textContent = text ?? ''; };
+
+  // 大作感二卷 批5：主選單 attract——home 顯示時通知外層開 3D 背景迴圈，並把
+  // 底色改半透明讓場館透出來；離開 home（選檔頁/生涯頁/hide）關迴圈、回不透明。
+  // onAttract 掛了炸不得影響選單（J5-3）
+  const HOME_ATTRACT_BG = 'linear-gradient(180deg, rgba(12,15,22,0.5) 0%, rgba(12,15,22,0.72) 55%, rgba(12,15,22,0.88) 100%)';
+  function setAttract(on) {
+    root.style.background = on ? HOME_ATTRACT_BG : COLOR.bg;
+    try { onAttract?.(on); } catch { /* attract 起不來＝維持現行純色背景 */ }
+  }
 
   // 配色卷階段二 E4：動態隊名單一入口——高中章恆 OUR_TEAM_NAME、大學章＝入學校名。
   // 呼叫端一律經這個函式取，不得自行判斷章節（v2 裁定二前提，同
@@ -1856,6 +1869,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
   function renderHome() {
     root.replaceChildren();
     setMsg('');
+    setAttract(true); // 批5：主選單背景＝3D 場館慢運鏡
     // 大作感卷 批2 A4a：主選單顯示期間播主題曲（autoplay 政策下允許「首次手勢後開始」，
     // bgm.js 的 armRetry 已處理）；比賽結束/退出回選單交給這裡覆蓋 bgm.playMatch()，
     // 不必在每個離開比賽的路徑另外插一次（設計裁定，見 acceptance-juice-batch12）
@@ -1909,6 +1923,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 2026-08-12：常駐「怎麼玩」——`tutorial.js` 是開場一次性卡片（看過就再也不出現），
     // 忘了就查不到。這裡是可以隨時回來翻的那一份（生涯畫面底部也有同一個入口）。
     inner.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));
+    // 大作感二卷 批7：製作名單（CC-BY 素材標注義務落在玩家看得到的地方）
+    inner.appendChild(button('📜 製作名單', false, () => showCredits()));
     inner.appendChild(msgEl);
     // 2026-08-07 Sawmah 指定：build 戳記固定在主選單右下角。
     // 用途＝「我看不到新東西」時一秒分辨版本落差與邏輯問題（見 vite.config.js 的理由）。
@@ -1928,6 +1944,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
 
   function renderSlots() {
     root.replaceChildren();
+    setAttract(false); // 批5：離開主選單即收 attract
     setMsg('');
     root.appendChild(el('div', [
       'font-size:30px', 'font-weight:900', 'letter-spacing:8px', `color:${COLOR.gold}`,
@@ -2151,6 +2168,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     // 事件/薪水卡/結算零丟失——入帳本來就落不了碟，存檔修好後照常到期。
     if (saveDegraded) {
       root.replaceChildren();
+    setAttract(false); // 批5：離開主選單即收 attract
       setMsg('');
       root.appendChild(el('div', [
         'font-size:26px', 'font-weight:800', `color:${COLOR.text}`, 'letter-spacing:2px',
@@ -2938,6 +2956,8 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     const ioRow = el('div', ['display:flex', 'gap:10px', 'margin-top:4px', 'flex-wrap:wrap']);
     ioRow.appendChild(smallButton('返回選檔', renderSlots)); // 生涯的上一層＝選檔頁（W4 題2）
     ioRow.appendChild(smallButton('📊 生涯數據', showCareerTotals)); // W4 Q9 累積頁
+    // 大作感二卷 批6：獎盃房（只讀封存；與生涯數據分工——那頁看數字，這頁看榮耀）
+    ioRow.appendChild(smallButton('🏆 獎盃房', () => showTrophyRoom(store)));
     // 2026-08-12：怎麼玩（與主選單同一頁）——查玩法不必先退出生涯
     ioRow.appendChild(smallButton('❓ 怎麼玩', () => showHowToPlay()));
     ioRow.appendChild(smallButton('匯出存檔', exportSave));
@@ -4602,7 +4622,7 @@ export function createCareerScreen(store, { onPlay, onQuick, primeSlot, onPracti
     return box;
   }
 
-  function hide() { root.style.display = 'none'; }
+  function hide() { root.style.display = 'none'; setAttract(false); /* 批5 */ }
 
   return {
     // view：'home' | 'career'（'career' 需有存檔，否則退回主選單）

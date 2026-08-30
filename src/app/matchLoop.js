@@ -81,7 +81,9 @@ import {
   sHotspotItems, lSignalItems, createLatencyStats, loudCallerOf,
 } from '../ui/diegeticItems.js';
 import { isHeavySpikeDig, isDiveSaveTouch, HEAVY_SPIKE_POWER_MIN } from '../ui/receiveJuice.js';
-import { shouldCelebrateChampionship } from '../career/championship.js';
+import { shouldCelebrateChampionship, isLeagueFinaleEntry, leagueChampionshipTitleOf } from '../career/championship.js';
+import { uniTable } from '../career/uniSchedule.js';
+import { corpTable } from '../career/corpSchedule.js';
 import { lineupIntroShot, introPhase, INTRO_SEC } from './lineupIntro.js';
 import { createIntroNameplate } from '../ui/introNameplate.js';
 import { roleLabel } from '../career/heightAdvice.js';
@@ -2935,9 +2937,14 @@ export function settleIfOver(s) {
     // 大作感二卷 批1：冠軍戰勝利→慶祝演出（彩帶/運鏡/聲浪/字卡），overlay 延到
     // endCelebration 收口。結算與典藏錄製都在上面完成了——演出無論怎麼死，進度都在；
     // startCelebration 崩潰＝直接落回現行流程（J1-5 永不致死）
-    const championTitle = s.careerCtx ? shouldCelebrateChampionship(
+    let championTitle = s.careerCtx ? shouldCelebrateChampionship(
       s.careerCtx.matchEntry, winner === game.players[s.playerId].teamId,
     ) : null;
+    // 批4：聯賽冠軍看積分不看單場——最終輪結算完（勝敗皆可）榜首即封王；
+    // 名次算不出來（存檔壞/欄位缺）＝不慶祝、照常結算（J4-3 落回現行流程）
+    if (!championTitle && s.careerCtx) {
+      try { championTitle = leagueCelebrationTitle(s); } catch { championTitle = null; }
+    }
     if (championTitle) {
       try {
         startCelebration(s, { title: championTitle, winner, score, hint: overlayHint });
@@ -3357,6 +3364,27 @@ export function practiceRewardLine(settled) {
     return `${head}　完成 2 項以上 ⇒ 集訓的屬性特訓可挑兩項（本場不記戰績）`;
   }
   return `${head}　完成 2 項可多挑一項屬性特訓、全完成再開控球格（本場不記戰績）`;
+}
+
+// 大作感二卷 批4：聯賽（積分制）冠軍判定——settleCareerMatch 已把本場結果寫回
+// store（matchCareer.js 的 saveCareer 在本函式呼叫點之前），這裡重讀存檔現算積分榜。
+// 積分表函式與季末結算頁同一份（uniTable/corpTable，J4-3 單一事實來源不另抄規則）
+function leagueCelebrationTitle(s) {
+  const entry = s.careerCtx?.matchEntry;
+  if (!isLeagueFinaleEntry(entry)) return null; // 非最終輪：零成本早退
+  const { store } = s.careerCtx;
+  const career = store.loadCareer?.();
+  if (!career) return null;
+  const board = entry.id.startsWith('uni-')
+    ? uniTable({
+      schoolId: store.loadSchool?.() ?? '', seed: career.seed,
+      schedule: career.schedule, results: career.results,
+    })
+    : corpTable({
+      corpId: store.loadCorp?.() ?? '', seed: career.seed,
+      schedule: career.schedule, results: career.results,
+    });
+  return leagueChampionshipTitleOf(entry, board.playerRank, board.complete);
 }
 
 // 大作感二卷 批3：入場運鏡——佈景與名牌資料組裝。拿不到陣容/任何一步炸掉＝

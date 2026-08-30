@@ -17,6 +17,7 @@ import { createBallView } from './render/ballView.js';
 import { createCameraControls } from './input/cameraControls.js';
 import { createHud } from './ui/hud.js';
 import { createCareerScreen } from './ui/careerScreen.js';
+import { createAttract } from './render/attract.js';
 import { installTheme } from './ui/theme.js';
 import { createSlotStoreProxy } from './career/careerStore.js';
 import {
@@ -211,16 +212,22 @@ async function showCareerEntry(ctx) {
       for (const p of wanted) store.approveOpenPosition(p.trim());
     }
   };
+  // 大作感二卷 批5：主選單 attract 背景迴圈——careerScreen 的 home 顯示時開、
+  // 離開時關；進比賽前在各回呼裡再停一次（雙保險：不與 matchLoop 的 rAF 並存）。
+  // debugVault 示範路徑不接（直開 career 視圖，沒有 home）
+  const attract = createAttract(ctx);
   const screen = createCareerScreen(store, {
     primeSlot,
+    onAttract: (on) => { if (on) attract.start(); else attract.stop(); },
     // W3(P4)：快速比賽＝位置遊樂場——careerScreen 選位面板傳 role（null＝OH 現況）
-    onQuick: (role = null) => { runMatch(ctx, null, role); },
+    onQuick: (role = null) => { attract.stop(); runMatch(ctx, null, role); },
     onPlay: ({ career, player, matchEntry, resumeMid = null }) => {
       // W2：出戰前補齊/讀取名冊（空名冊一次性升級），隊友屬性由名冊驅動
       // W3：ensureStarterRoster 一併補齊 lineup；先發輪轉序由 save.lineup 驅動建隊
       const roster = ensureStarterRoster(store);
       // W1(P4)：seasonIndex 供對手 ace 畢業遞補換算（careerMatchSetup 第 6 參數）
       // W4(P4) Q8：resumeMid＝局間存檔續玩（game 直接吃快照、跳過情蒐帶）
+      attract.stop();
       runMatch(ctx, {
         store, career, player, matchEntry, roster,
         lineup: store.loadLineup(), seasonIndex: store.seasonIndex?.() ?? 1,
@@ -234,6 +241,7 @@ async function showCareerEntry(ctx) {
     // 兩個掛點」：差別只有多帶一個 tutorial 旗標（逐步引導＋提前收局＋零獎勵）
     onPractice: ({ career, player, drills, seasonIndex, tutorial = false }) => {
       const roster = ensureStarterRoster(store);
+      attract.stop();
       runMatch(ctx, {
         store, career, player, roster,
         matchEntry: practiceMatchEntry(seasonIndex),
