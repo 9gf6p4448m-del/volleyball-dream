@@ -3893,8 +3893,6 @@ function frameStep(s, now) {
     ? 0.05 + (game.momentum.value / TUNING.MOMENTUM_MAX) * 0.05
     : 0.05;
   stage.sfx.setCrowdLevel(tension && game.phase === 'serve' ? 0.016 : momentumCrowd);
-  // 08-29：鞋底摩擦聲——sfx 內部自己讀 actors 的 x/z/px/pz 判急停變向，純觀測不碰 sim
-  stage.sfx.onCourtMotion?.(game);
   // 大作感卷 批2 A4b：比賽氛圍層 BGM 音量＝緊張度的函數（分差與局點/賽點旗標）——
   // 同一處已經算好 tension（局點/賽點布林），gapAbs 從目前比分現算，不動 sim
   const gapAbs = Math.abs((game.match?.score?.A ?? 0) - (game.match?.score?.B ?? 0));

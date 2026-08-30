@@ -8,8 +8,6 @@
 // 機械改成 `.connect(busGain)`，合成路徑一格邏輯都沒變。
 import { loadSamples, playSample } from './sfxSamples.js';
 import { get as getAudioPrefs, subscribe as subscribeAudioPrefs } from './audioPrefs.js';
-import { detectSqueak } from './squeakDetect.js';
-import { SIM_DT } from '../sim/constants.js';
 
 export function createSfx() {
   let ctx = null;
@@ -126,17 +124,12 @@ export function createSfx() {
     crowdBias = bias;
   }
 
-  // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）
-  // 批1：取樣優先——單一 'whistle' 取樣涵蓋長短兩種呼叫（真實哨音不像合成版能調
-  // durMs 拉長縮短，取樣播出來就是原長度；沒取樣才退回下面原本按 durMs 合成的版本）
-  // delaySec：08-29 試玩回饋「得分突兀」——死球三層改成落地→哨音→歡呼的真實時序，
-  // 哨音由呼叫端（onEvents DEAD_BALL）延後排程；其他呼叫端（發球短哨）不帶延遲、零改動
+  // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）。
+  // 08-30 試玩四修定案：**全回合成**（durMs 控長短）——真實哨音取樣三案（整段/截斷/
+  // 只留長哨）逐一被試玩退回，whistle.m4a 已除役出 repo。教訓在 memory：短促功能音
+  // 合成版勝過真實素材；delaySec 供死球時序拆層（08-29）延後排程用
   function whistle(durMs = 450, delaySec = 0) {
     if (!ensure()) return;
-    // 08-30 試玩三修：短哨（發球 200ms）回歸「最一開始」的合成短嗶（下方方波＋顫音，
-    // 長度跟著 durMs 收短）——先播整段取樣被嫌吵、截 0.25s 仍被嫌不舒服，兩版都退場。
-    // 只有長哨（死球 480ms）用真實哨音取樣
-    if (durMs >= 400 && playSample(ctx, busGain, 'whistle', { delay: delaySec })) return;
     const t = ctx.currentTime + delaySec;
     const dur = durMs / 1000;
     const osc = ctx.createOscillator();
@@ -352,44 +345,16 @@ export function createSfx() {
     playSample(ctx, busGain, 'squeak', { gain: 0.45 + 0.35 * intensity, rate });
   }
 
-  // 逐幀觀測 actors 位移（matchLoop 每 render 幀呼叫；只讀 x/z/px/pz，不碰 sim）。
-  // 同一 sim tick 只判一次；每人冷卻＋全場最小間隔雙重節流——rally 中 12 人都在跑，
-  // 不節流會變蟲鳴。門檻依 08-29 探針收緊：原值（stop 同門檻 1.6/冷卻 0.5/間隔 0.12）
-  // 實測 21.9 次/rally、死球前 0.6s 連發 2.6 響＝叮叮叮的元凶；收緊後 7.9 次/rally、死球前 0.79 響
-  let squeakLastTick = -1;
-  let squeakGlobalGateT = 0;
-  const squeakMemo = new Map(); // actorId -> { dx, dz, coolUntil }
-  const SQUEAK_SPEED_THRESH = 1.6 * SIM_DT; // 變向門檻 m/s → m/tick【試玩必調】
-  const SQUEAK_STOP_THRESH = 4.2 * SIM_DT; // 急煞門檻：全速衝刺才算【試玩必調】（08-30 嫌頻繁 3.8→4.2）
-  function onCourtMotion(game) {
+  // 08-30 試玩改版：鞋聲觸發源從「移動偵測」換成「重扣/攔網事件」（Sawmah：移動版
+  // 太頻繁又不像；扣球攔網＝起跳前踩地那一步，語意也更對）。全場最小間隔防連響。
+  // 若再被退回＝整個移除鞋聲（拍板選項已備案）
+  let squeakGateT = 0;
+  const SQUEAK_GATE_SEC = 0.8; // 【試玩必調】兩聲鞋擦最小間隔
+  function squeakOnPlay(intensity = 0.7) {
     if (!ctx || !busGain) return;
-    if (!game?.actors || game.phase !== 'rally') {
-      squeakMemo.clear(); // 死球/發球站定期間歸零，下一段 rally 重新起算
-      return;
-    }
-    if (game.tick === squeakLastTick) return;
-    squeakLastTick = game.tick;
-    const t = ctx.currentTime;
-    for (const [id, a] of Object.entries(game.actors)) {
-      const cur = { dx: a.x - a.px, dz: a.z - a.pz };
-      const memo = squeakMemo.get(id);
-      if (memo) {
-        if (t >= memo.coolUntil && t >= squeakGlobalGateT) {
-          const hit = detectSqueak(memo, cur, {
-            speedThresh: SQUEAK_SPEED_THRESH, stopSpeedThresh: SQUEAK_STOP_THRESH,
-          });
-          if (hit) {
-            memo.coolUntil = t + 2.5; // 【試玩必調】同一人冷卻（08-30 嫌頻繁 1.5→2.5）
-            squeakGlobalGateT = t + 1.0; // 【試玩必調】全場最小間隔（08-30 嫌頻繁 0.5→1.0）
-            squeak(hit.intensity);
-          }
-        }
-        memo.dx = cur.dx;
-        memo.dz = cur.dz;
-      } else {
-        squeakMemo.set(id, { dx: cur.dx, dz: cur.dz, coolUntil: 0 });
-      }
-    }
+    if (ctx.currentTime < squeakGateT) return;
+    squeakGateT = ctx.currentTime + SQUEAK_GATE_SEC;
+    squeak(intensity);
   }
 
   // 局點心跳：低頻 lub-dub 循環（張力時開），音量克制不搶戲
@@ -443,13 +408,10 @@ export function createSfx() {
       crowdSampleSrc = null;
       crowdSynthSrc = null;
       crowdExplodeUntil = 0;
-      squeakMemo.clear();
-      squeakLastTick = -1;
-      squeakGlobalGateT = 0;
+      squeakGateT = 0;
     },
     whistle,
     crowdSurge, // 大作感二卷 批1：奪冠慶祝長聲浪
-    onCourtMotion, // 08-29：鞋底摩擦聲——matchLoop 逐幀餵 game，純觀測 actors 位移
     setHeartbeat,
     setCrowdLevel,
     setCrowdBias, // W4(P4) Q10 主客場氛圍：得分歡呼按隊伍偏向縮放（宿敵客場感）
@@ -461,6 +423,7 @@ export function createSfx() {
         if (e.type === 'SERVE') {
           if (!tryPlay('spike_mid')) crack(0.7);
         } else if (e.type === 'BLOCK_TOUCH') {
+          squeakOnPlay(0.8); // 08-30：攔網移位踩地的鞋擦
           if (!tryPlay('block')) thud();
         } else if (e.type === 'DEAD_BALL') {
           // 音層：落地悶擊 → 哨音 → 歡呼（長 rally 歡呼加倍）；floorThud/whistle
@@ -491,6 +454,7 @@ export function createSfx() {
         } else if (e.type === 'TOUCH') {
           if (e.kind === 'spike') {
             const hard = (e.power ?? 1) >= 0.45; // 重扣＝爆裂／輕吊＝悶短
+            if (hard) squeakOnPlay(0.7); // 08-30：重扣起跳前踩地的鞋擦（輕吊不擦）
             if (!tryPlay(hard ? 'spike_hard' : 'spike_soft')) {
               if (hard) crack(1); else thud();
             }

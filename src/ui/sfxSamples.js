@@ -17,7 +17,6 @@ export const SAMPLE_MANIFEST = {
   set_touch: { file: 'set_touch.m4a', trim: 1 }, // 【試玩必調】舉球
   net: { file: 'net.m4a', trim: 1 }, // 【試玩必調】觸網
   floor: { file: 'floor.m4a', trim: 1 }, // 【試玩必調】落地
-  whistle: { file: 'whistle.m4a', trim: 1 }, // 【試玩必調】裁判哨音
   crowd_loop: { file: 'crowd_loop.m4a', trim: 1 }, // 【試玩必調】群眾底噪（loop）
   cheer: { file: 'cheer.m4a', trim: 1 }, // 【試玩必調】一般得分歡呼
   cheer_big: { file: 'cheer_big.m4a', trim: 1 }, // 【試玩必調】關鍵分／大聲量歡呼

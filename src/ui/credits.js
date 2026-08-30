@@ -5,7 +5,6 @@ const SECTIONS = [
   {
     head: '音效素材（CC-BY，依授權須標注）',
     rows: [
-      '裁判哨音 — "Whistles" by dklon（OpenGameArt），CC-BY 3.0',
       '得分歡呼／關鍵分聲浪 — "Free Crowd Cheering Sounds" by Gregor Quendel（OpenGameArt），CC-BY 4.0',
     ],
   },
