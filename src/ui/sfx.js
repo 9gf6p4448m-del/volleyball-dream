@@ -133,7 +133,12 @@ export function createSfx() {
   // 哨音由呼叫端（onEvents DEAD_BALL）延後排程；其他呼叫端（發球短哨）不帶延遲、零改動
   function whistle(durMs = 450, delaySec = 0) {
     if (!ensure()) return;
-    if (playSample(ctx, busGain, 'whistle', { delay: delaySec })) return;
+    // 08-30 試玩回饋：短哨（發球 200ms）不得播整段取樣——跟得分長哨變成同一種吵。
+    // 短呼叫＝截前 0.25s＋壓音量的輕嗶；長呼叫（死球 480ms）照播完整取樣
+    const short = durMs < 400;
+    if (playSample(ctx, busGain, 'whistle', short
+      ? { delay: delaySec, maxDur: 0.25, gain: 0.5 } // 【試玩必調】短哨長度/音量
+      : { delay: delaySec })) return;
     const t = ctx.currentTime + delaySec;
     const dur = durMs / 1000;
     const osc = ctx.createOscillator();
@@ -357,7 +362,7 @@ export function createSfx() {
   let squeakGlobalGateT = 0;
   const squeakMemo = new Map(); // actorId -> { dx, dz, coolUntil }
   const SQUEAK_SPEED_THRESH = 1.6 * SIM_DT; // 變向門檻 m/s → m/tick【試玩必調】
-  const SQUEAK_STOP_THRESH = 3.8 * SIM_DT; // 急煞門檻：全速衝刺才算【試玩必調】
+  const SQUEAK_STOP_THRESH = 4.2 * SIM_DT; // 急煞門檻：全速衝刺才算【試玩必調】（08-30 嫌頻繁 3.8→4.2）
   function onCourtMotion(game) {
     if (!ctx || !busGain) return;
     if (!game?.actors || game.phase !== 'rally') {
@@ -376,8 +381,8 @@ export function createSfx() {
             speedThresh: SQUEAK_SPEED_THRESH, stopSpeedThresh: SQUEAK_STOP_THRESH,
           });
           if (hit) {
-            memo.coolUntil = t + 1.5; // 【試玩必調】同一人冷卻
-            squeakGlobalGateT = t + 0.5; // 【試玩必調】全場最小間隔
+            memo.coolUntil = t + 2.5; // 【試玩必調】同一人冷卻（08-30 嫌頻繁 1.5→2.5）
+            squeakGlobalGateT = t + 1.0; // 【試玩必調】全場最小間隔（08-30 嫌頻繁 0.5→1.0）
             squeak(hit.intensity);
           }
         }

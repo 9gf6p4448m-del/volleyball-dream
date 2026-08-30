@@ -58,9 +58,11 @@ export function loadSamples(ctx) {
 // 有 buffer→建 source 接上 dest 播放、回傳 source（truthy，loop 版供呼叫端 stop）；
 // 無 buffer 或播放本身出錯→回傳 false，呼叫端據此走合成 fallback。
 // delay＝延後幾秒開播（WebAudio 排程，非 setTimeout）；fadeIn＝淡入秒數（>0 時
-// 用指數包絡從近零爬到目標音量——得分歡呼「湧起」而非「拍臉」的關鍵，08-29 試玩回饋）
+// 用指數包絡從近零爬到目標音量——得分歡呼「湧起」而非「拍臉」的關鍵，08-29 試玩回饋）；
+// maxDur＝只播取樣的前幾秒（尾端 40ms 淡出防喀）——短哨等「取樣比需要長」的情境用
+// （08-30 試玩回饋：發球短哨播了整段哨音、跟得分長哨一樣吵）
 export function playSample(ctx, dest, name, {
-  gain = 1, rate = 1, loop = false, delay = 0, fadeIn = 0,
+  gain = 1, rate = 1, loop = false, delay = 0, fadeIn = 0, maxDur = 0,
 } = {}) {
   const buf = buffers.get(name);
   if (!ctx || !dest || !buf) return false;
@@ -78,6 +80,12 @@ export function playSample(ctx, dest, name, {
       g.gain.exponentialRampToValueAtTime(target, t0 + fadeIn);
     } else {
       g.gain.value = target;
+    }
+    if (maxDur > 0 && !loop) {
+      const cut = Math.max(0.06, maxDur);
+      g.gain.setValueAtTime(target, t0 + cut - 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + cut);
+      src.stop(t0 + cut + 0.01);
     }
     src.connect(g).connect(dest);
     src.start(t0);
