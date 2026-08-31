@@ -65,8 +65,10 @@ test('★側稅退役★ 擦側中性：同一顆球壓手與直立的撥出速�
   assert.ok(checked >= 10, `只驗到 ${checked} 個種子，樣本不足以說治具穩定`);
 });
 
-// ★代價・吞下去★ 治具：球貼網低平過網（y 落在網高與 PRESS_SEAL_GAP 之間的低窗）。
-// 抄 sideTouch 幾何但 x=0（避開擦側）、y 壓到窗內（過網下限＝網高+球半徑≈2.535、天花板＝網高+GAP）。
+// ★代價・吞下去★ 治具：陡降球貼網鑽縫（y 落在低窗、vy 過下墜閘）。
+// 抄 sideTouch 幾何但 x=0（避開擦側）、y 壓到窗內（過網下限＝網高+球半徑≈2.535、
+// 天花板＝網高+GAP）、vy=-8/vz=9（俯衝比 0.89 ≥ PRESS_SEAL_STEEP_RATIO）——起點貼網（z=-0.2）
+// 讓過網瞬間仍在窗內。
 function lowTouch(seed, hand) {
   const g = createGame({ seed });
   g.phase = 'rally';
@@ -74,7 +76,7 @@ function lowTouch(seed, hand) {
     profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
   });
   const b = g.ball;
-  b.x = 0; b.y = 2.56; b.z = -0.35; b.vx = 0; b.vy = -0.2; b.vz = 9;
+  b.x = 0; b.y = 2.87; b.z = -0.35; b.vx = 0; b.vy = -8; b.vz = 9;
   b.px = b.x; b.py = b.y; b.pz = b.z;
   g.actors.A3.x = 0; g.actors.A3.z = 0.5;
   const seen = [];
@@ -106,6 +108,40 @@ test('★代價・吞下去★ 低窗球：直立攔得到、壓手被鑽過去�
   assert.ok(swallowEvents >= swallowed,
     `吞下去 ${swallowed} 次但 BLOCK_SWALLOW 事件只有 ${swallowEvents} 張＝字卡驅動源漏發`);
   assert.equal(vSwallowEvents, 0, '直立臂不得出現吞下去事件（它攔得到）');
+});
+
+test('★下墜閘★ 低平球（vy 不過閘）鑽不了縫：壓手照樣攔得到（吞下去≠低平飛過）', () => {
+  // 同窗高但 vy 平飄——08-31 Sawmah 追修的核心：吞下去的球是往下墜的
+  let vTouched = 0; let pTouched = 0; let pSwallow = 0;
+  for (let seed = 1; seed <= 60; seed += 1) {
+    const flat = (hand) => {
+      const g = createGame({ seed });
+      g.phase = 'rally';
+      Object.assign(g.rally, {
+        profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
+      });
+      const b = g.ball;
+      b.x = 0; b.y = 2.56; b.z = -0.35; b.vx = 0; b.vy = -0.2; b.vz = 9;
+      b.px = b.x; b.py = b.y; b.pz = b.z;
+      g.actors.A3.x = 0; g.actors.A3.z = 0.5;
+      const seen = [];
+      for (let i = 0; i < 24 && g.phase === 'rally'; i += 1) {
+        const ev = stepGame(g, [blockIntent('A3', g.tick, hand)]);
+        seen.push(...ev);
+        if (ev.find((e) => e.type === 'BLOCK_TOUCH')) return { hit: true, seen };
+        if (g.ball.z > 1.5 || g.ball.vz < 0) return { hit: false, seen };
+      }
+      return { hit: false, seen };
+    };
+    const v = flat('vertical');
+    const pr = flat('press');
+    if (v.hit) vTouched += 1;
+    if (pr.hit) pTouched += 1;
+    if (pr.seen.some((e) => e.type === 'BLOCK_SWALLOW')) pSwallow += 1;
+  }
+  assert.ok(vTouched >= 8, `治具走鐘：直立只攔到 ${vTouched} 次`);
+  assert.ok(pTouched >= vTouched, `低平球壓手攔到 ${pTouched} < 直立 ${vTouched}＝下墜閘沒有放行低平球`);
+  assert.equal(pSwallow, 0, '低平球不得發吞下去事件（它不是往下墜的）');
 });
 
 test('★吞下去 鑑別力★ 低窗關閉（GAP 壓到全域下限之下）⇒ 壓手攔得到同一批球', () => {

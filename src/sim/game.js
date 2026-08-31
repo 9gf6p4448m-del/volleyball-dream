@@ -236,9 +236,16 @@ export const TUNING = {
   // 08-24 的「接觸後 EV≈0」漏了這筆帳（幅度由 press-cost-sweep 變體掃出）。
   BLOCK_PRESS_SIDE_MUL: 1.0,   // 擦側稅退役（保留常數形狀；≠1 需重跑 sweep）
   BLOCK_PRESS_BODY_MUL: 1.2,   // 正面攔死加成【試玩必調】
-  PRESS_SEAL_GAP: 0.2,        // 吞下去低窗：網高之上此高度內的過網球對壓手是穿透【試玩必調】
-  //   （有效吞球帶＝球心過網下限 ~2.535（網高+球半徑）到 2.43+GAP——GAP 0.15 時只剩
-  //   ~4cm 形同虛設；0.25 又會把 y~2.67 的正常正面接觸吞掉＝半面盲區。0.2＝約 10cm 貼網低平帶）
+  PRESS_SEAL_GAP: 0.15,       // 吞下去低窗：網高之上此高度內的過網球對壓手是穿透【試玩必調】
+  PRESS_SEAL_STEEP_RATIO: 0.7, // 俯衝角閘（08-31 Sawmah 追修）：|vy| ≥ 此比例×橫速
+  //   （≈35°+ 俯衝）才鑽得過低窗——吞下去的球是往下墜、落在攔網手腳邊。物理帳：從
+  //   網帶高度落地 2m 內需要俯衝角 ≥45°；全力平抽再陡（vy −6）也會衝 4-5m 深＝那不叫
+  //   吞。vy 絕對值閘（−3／−6 兩檔）實測落點 p50 4.6-4.9m 全被否決，改角度閘。
+  //   低平球會撞到拱起的前臂＝正常被壓手攔到【試玩必調】
+  //   GAP 掃描（配對重演）：0.15＝全樣本 +2.0 雜訊內（公平）／0.20＝−8.2 顯著（過兇）
+  //   ／0.25＝連 y~2.67 正常正面接觸都吞（盲區）。⚠ 08-31 事故：一次無 assert 的
+  //   replace 靜默失敗讓 0.2 帶著 −8.2 的帳本上過線（4119ba2/ba91490 訊息寫 0.15 與
+  //   事實不符）——低窗×網帶碰撞的有效帶不能幾何心算，改值必附改後實測。
   BLOCK_GRAZE_SLOW: 0.45,   // 擦側後穿越速度保留比（減速但仍常飛向深區/界外）
   BLOCK_GRAZE_TOP_SLOW: 0.75, // 擦頂後速度保留比（指尖擦過＝球保留大半前速衝深區/底線外）
   // ★攻守平衡卷 批1（2026-08-31，B1-1~B1-3）：攔網出射橫速往場內收★
@@ -1398,7 +1405,8 @@ function tryBlock(state, toTeam, ev) {
     // 有低窗——過網高度落在窗內的球對壓手成員是**穿透**（從手與網的縫隙鑽進去，
     // 落在攔網手腳邊）。直臂貼網面、低窗不存在（沿用全域下限 NET_HEIGHT-0.15）。
     // 這是壓手的專屬幾何代價（與觸網並列）；攻方打低打陡＝瞄這條窗的選擇。
-    if (actor.blockHand === 'press' && b.y < COURT.NET_HEIGHT + TUNING.PRESS_SEAL_GAP) {
+    if (actor.blockHand === 'press' && b.y < COURT.NET_HEIGHT + TUNING.PRESS_SEAL_GAP
+      && -b.vy >= TUNING.PRESS_SEAL_STEEP_RATIO * Math.hypot(b.vx, b.vz)) {
       // 純觀測事件（BLOCK_DECEIVED 先例：零 rand、零判定語意）：球在他的可攔帶內
       // 卻從手與網帶之間鑽過去——表現層「球被吞下去了」字卡的驅動源
       if (!swallowEmitted && Math.abs(actor.x - b.x) <= TUNING.BLOCK_REACH_X) {

@@ -2,7 +2,7 @@
   "note": "Phase 5 §十 階段二：sim 行為逐值雜湊基準（2-B timing 幾何化併入後重立）。--write 只在拍板允許行為變更時用，且必須帶 --reason=\"…\"；每次改寫的 commit 與理由自動記到 tools/sim-hash-baseline-CHANGELOG.md。",
   "seedBase": 1,
   "perOpponent": 2,
-  "total": "82ae4c8ae1ed68f4",
+  "total": "7dedc192cd2ba84d",
   "matches": [
     {
       "opponent": "north-tech",
@@ -35,16 +35,16 @@
     {
       "opponent": "obsidian",
       "seed": 15839,
-      "digest": "3f405936b0e77db0",
-      "ticks": 22052,
-      "score": "25-22"
+      "digest": "570d042a82a0feec",
+      "ticks": 23002,
+      "score": "25-16"
     },
     {
       "opponent": "obsidian",
       "seed": 15940,
-      "digest": "c3686be65bbbccc7",
-      "ticks": 20712,
-      "score": "25-18"
+      "digest": "c75406691dce072f",
+      "ticks": 25954,
+      "score": "26-24"
     },
     {
       "opponent": "gale-shore",
