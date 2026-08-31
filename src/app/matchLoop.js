@@ -96,6 +96,9 @@ import { hawkeyeCallOf, showHawkeye, HAWKEYE } from '../ui/hawkeye.js';
 import { pickInterviewLine, showInterviewCard } from '../ui/interviewCard.js';
 import { showMvpCard } from '../ui/mvpCard.js';
 import { createHaptics } from '../ui/haptics.js';
+import {
+  createPhotoOrbit, setHudHidden, capturePhoto, deliverPhoto, photoFilename,
+} from '../render/photoMode.js';
 
 // 接球微回饋批2（丙1/丙2/丙3，acceptance-netduel-batch2.md，2026-08-27）：三個
 // 時長常數，觸發判定全抽在 receiveJuice.js（純函式）／sim 的 perfect 欄位，這裡
@@ -257,6 +260,12 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   stage.handlers.requestComeback = () => requestComeback(s);
   // W7.1 二輪：暫停「提早開賽」（真實 30s 窗，玩家可縮短到走回位緩衝）
   stage.handlers.requestTimeoutResume = () => resumeFromTimeout(s.game);
+  // 池底卷 批2 P1：照片模式四個開口——📷 鈕（比賽按鈕列，回放播放中也是同一顆，見
+  // matchStage.js createPhotoButton 註解）＋照片工具列的快門/HUD切換/返回三顆
+  stage.handlers.photoEnter = () => enterPhotoMode(s);
+  stage.handlers.photoExit = () => exitPhotoMode(s);
+  stage.handlers.photoShutter = () => { takePhoto(s).catch(() => {}); };
+  stage.handlers.photoHudToggle = () => togglePhotoModeHud(s);
   // 偵錯把手：供自動化測試與真機除錯檢視執行期狀態（不參與遊戲邏輯）
   window.__phase1 = {
     game: s.game, aiState: s.aiState,
@@ -308,6 +317,7 @@ export function startMatchLoop({ ctx, config, gates, stage, careerCtx, playerId,
   // 燈光秀/入場運鏡跳過（點擊任意處）：立即恢復常態、進正常開賽流程——一次點擊只跳
   // 一段（else if），連點兩下依序跳燈光秀→入場
   window.addEventListener('pointerdown', () => {
+    if (s.photoMode) return; // 池底卷 批2 P1：照片模式短路——拖曳轉鏡頭不誤判成跳過演出
     if (s.openingShow === 'running') endOpeningShow(s);
     else if (s.lineupIntro && s.lineupIntro !== 'pending') endLineupIntro(s);
   });
@@ -413,6 +423,7 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     recorder: createRallyRecorder(),
     vcrLast: null,
     replay: null,               // { player, acc, tape? }
+    photoMode: null,            // 池底卷 批2 P1：{ orbit, hudHidden } — null＝比賽正常進行
     prevPhase: game.phase,
     fovPunchUntil: 0,
     rallyStartFlight: 0,        // 本球起始 flight（rally 長度＝歡呼強度）
@@ -1048,10 +1059,15 @@ function bindInputHandlers(s) {
     window.__phase1.aiState = s.aiState;
   });
   window.addEventListener('keydown', (e) => {
+    if (s.photoMode) return; // 池底卷 批2 P1：照片模式短路——R 鍵不觸發回放
     // 桌機 R＝回放上一球；即時 highlight 播放中則是跳過（同一鍵、不另發明按鍵）
     if (e.code === 'KeyR' && !s.net && !endHighlightReplay(s)) startReplay(s);
   });
   window.addEventListener('pointerdown', () => {
+    // 池底卷 批2 P1：照片模式中畫布拖曳＝環繞相機，不能被這支「點畫面任一處＝跳過
+    // 情蒐帶/highlight」的全域監聽誤判成跳過（OrbitControls 的 pointerdown 不會
+    // stopPropagation，會冒泡到這裡）
+    if (s.photoMode) return;
     if (s.replay?.tape) { // 跳過整卷情蒐
       s.replay = null;
       s.tapeIdx = config.tapeClips.length;
@@ -1073,6 +1089,57 @@ function bindInputHandlers(s) {
       stage.controls.diveNow(s.game);
     }
   });
+}
+
+// 池底卷 批2 P1：照片模式——凍結＝比照 s.replay 短路 frameStep（見下方 frameStep 的
+// `if (s.photoMode)` 早退，排在 `if (s.replay)` 之前，同一幀不會兩者都跑）。
+// 相機還原（驗收②）不需要手動存/還原：`stage.rig.update()` 只在一般（非凍結）分支被
+// 呼叫，frameStep 早退時整段跳過；OrbitControls 對 camera.position/quaternion 的任何
+// 改動，下一個一般幀 rig.update() 內的 `camera.position.copy(curPos); camera.lookAt
+// (curTarget)`（cameraRig.js:280-281）會無條件覆蓋回腳本姿態——curPos/curTarget 凍結
+// 期間沒被更新，本來是什麼就還原成什麼。HUD 還原同理交給 setHudHidden(false)。
+export function enterPhotoMode(s) {
+  // 防呆：鈕本身已按 !s.tutorial && !s.config?.net 才建（見 matchStage.js），這裡
+  // 再擋一次（鍵盤/測試直呼時）；已在照片模式中則忽略（不重建 controls）
+  if (s.photoMode || s.tutorial || s.config?.net) return;
+  const orbit = createPhotoOrbit(s.ctx.camera, s.ctx.renderer?.domElement);
+  if (!orbit) return; // 崩潰自我停用：接管失敗＝無害回落，比賽照常
+  s.stage.controls?.setSuspended(true); // 驗收⑤：比賽輸入短路（畫布拖曳交給 OrbitControls）
+  s.photoMode = { orbit, hudHidden: true };
+  setHudHidden(true); // 進入即先給乾淨畫面，👁 鈕可切回（【試玩必調】預設值）
+  s.stage.photoBar?.show();
+  s.stage.photoBtn?.hide();
+}
+
+export function exitPhotoMode(s) {
+  if (!s.photoMode) return;
+  s.photoMode.orbit.dispose();
+  s.photoMode = null;
+  s.stage.controls?.setSuspended(false);
+  setHudHidden(false);
+  s.stage.photoBar?.hide();
+  s.stage.photoBtn?.show();
+}
+
+export function togglePhotoModeHud(s) {
+  if (!s.photoMode) return;
+  s.photoMode.hudHidden = !s.photoMode.hudHidden;
+  setHudHidden(s.photoMode.hudHidden);
+}
+
+// 快門：見 photoMode.js capturePhoto/deliverPhoto——當幀 render 後同步 toBlob，
+// 不常駐 preserveDrawingBuffer、不改 renderer 設定
+export async function takePhoto(s) {
+  if (!s.photoMode) return;
+  const blob = await capturePhoto({ renderer: s.ctx.renderer, scene: s.ctx.scene, camera: s.ctx.camera });
+  if (blob) await deliverPhoto(blob, photoFilename());
+}
+
+// frameStep 的 `if (s.photoMode)` 分支委派至此：只跑相機與渲染，一個位元組不碰
+// game/accumulator——tick 凍結的證明見 tests/poolbottom-b2-photomode.test.mjs
+export function runPhotoModeFrame(s) {
+  try { s.photoMode.orbit.controls.update(); } catch { /* orbit 內部壞掉不致命，畫面照渲染 */ }
+  try { s.ctx.postFx.render(s.ctx.scene, s.ctx.camera); } catch { /* 渲染管線壞掉：吞掉，下一幀再試 */ }
 }
 
 // 🎬 回放：重播＝從快照重新模擬（決定論保證逐格一致）；只播最後 3 秒、半速
@@ -3701,6 +3768,15 @@ function frameStep(s, now) {
   s.last = now;
   if (delta > MAX_FRAME_DELTA) delta = MAX_FRAME_DELTA;
   if (delta < 0) delta = 0;
+
+  // 池底卷 批2 P1：照片模式——比 s.replay 早一層短路，凍結一切（sim／回放／演出牆鐘）
+  // 只跑相機與渲染。不論凍結當下正在直播還是正在看重播，凍結內容都原樣停在畫面上；
+  // 退出後從原本那個分支（s.replay 或一般直播）接手——見 runPhotoModeFrame 與
+  // enterPhotoMode 的檔頭註解（相機/HUD 還原機制、牆鐘時間軸「不炸」的選擇記錄）。
+  if (s.photoMode) {
+    runPhotoModeFrame(s);
+    return;
+  }
 
   if (s.replay) {
     // ★ 2026-08-07 MEDIUM-3：回放期間內切鈕必須先收 ★ 下面兩個內切區塊都排在這個

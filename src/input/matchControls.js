@@ -111,6 +111,10 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   let digHeroSignal = false;        // W3 L 演出武裝：Perfect/魚躍起球——TOUCH 確認後消費
   let manualOwned = false;          // 本球玩家已接管走位（碰過搖桿＝整球歸你；發球階段重置）
   let diveLand = { flightId: -1, landing: null }; // 自動魚躍落點閘的逐 flight 快取
+  // 池底卷 批2 P1：照片模式短路（凍結檔驗收⑤）——凍結期間畫布上的觸控交給
+  // OrbitControls 環繞相機，這裡的鍵盤/指標監聽必須讓路，否則同一次拖曳會同時
+  // 轉鏡頭又餵進 joystick/charge，退出後殘留的 queuedAction 會在下一 tick 誤發動作。
+  let suspended = false;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -135,6 +139,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   };
 
   window.addEventListener('keydown', (e) => {
+    if (suspended) return; // 照片模式短路：鍵盤操作不進比賽
     if ((e.code === 'KeyJ' || (e.code === 'Space' && !simpleMode)) && !e.repeat) {
       e.preventDefault();
       beginCharge('key'); // J（classic 加空白鍵）＝主動作蓄力；簡化模式 Space＝魚躍
@@ -144,6 +149,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
     keys.add(e.code);
   });
   window.addEventListener('keyup', (e) => {
+    if (suspended) return; // 照片模式短路：鍵盤操作不進比賽
     if ((e.code === 'KeyJ' || e.code === 'Space') && charge?.pointerId === 'key') {
       releaseCharge();
       return;
@@ -162,6 +168,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   // 攔網：一點即出（獨立按鈕/K 鍵；不經蓄力）
   // W7 C2：主角在板凳（教練視角）不可觸發攔網——lastGame 尚未就緒時放行（開賽前防呆，原行為）
   function blockTap() {
+    if (suspended) return; // 照片模式短路：涵蓋 pressBlock()（touchUi 按鈕）繞過 DOM 監聽的路徑
     if (lastGame && !onCourt(lastGame, playerId)) return;
     queuedAction = {
       timing: 1, gaze: null, aimNdc: null, aimVec: null,
@@ -176,6 +183,9 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   // 開始蓄力（指標路徑與按鈕路徑共用；扣球情境＝同時自動助跑，見 collect）
   // W7 C2：板凳教練視角無身體可蓄力（lastGame 未就緒時放行＝開賽前防呆，原行為）
   function beginCharge(source) {
+    // 照片模式短路：涵蓋 beginAction()（actionButtons/classic 面板）繞過 DOM 監聽的路徑
+    // ——HUD 在照片模式中可用 👁 鈕切回可見，這些鈕届時仍可觸控，蓄力/攔網一律在這裡擋
+    if (suspended) return;
     if (charge) return;
     if (lastGame && !onCourt(lastGame, playerId)) return;
     charge = {
@@ -249,6 +259,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   }
 
   domElement.addEventListener('pointerdown', (e) => {
+    if (suspended) return; // 照片模式短路：畫布觸控交給 OrbitControls，不進比賽操作
     // 觸控：左 40% 螢幕＝走位搖桿；其餘不做事（出手一律走右側按鈕，防誤觸）
     if (e.pointerType === 'touch') {
       if (e.clientX < window.innerWidth * 0.4 && !joystick) {
@@ -264,6 +275,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   });
 
   domElement.addEventListener('pointermove', (e) => {
+    if (suspended) return; // 照片模式短路
     if (joystick && e.pointerId === joystick.pointerId) {
       joystick.dx = e.clientX - joystick.ox;
       joystick.dy = e.clientY - joystick.oy;
@@ -273,6 +285,7 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
   });
 
   const endPointer = (e) => {
+    if (suspended) return; // 照片模式短路
     if (joystick && e.pointerId === joystick.pointerId) {
       joystick = null;
       return;
@@ -954,6 +967,18 @@ export function createMatchControls(domElement, camera, initialPlayerId, rig, si
         return { x: a.x + dirx * dist, z: a.z + dirz * dist };
       }
       return groundPoint(pointerNdc);
+    },
+    // 池底卷 批2 P1：照片模式進出時由 matchLoop 呼叫——suspend＝立即丟掉任何進行中的
+    // 蓄力/搖桿/緩衝出手（否則凍結期間的拖曳殘留會在退出後的下一 tick 誤發動作）。
+    setSuspended(v) {
+      suspended = !!v;
+      if (suspended) {
+        joystick = null;
+        charge = null;
+        queuedAction = null;
+        jumpSignal = false;
+        blockSignal = false;
+      }
     },
   };
 }

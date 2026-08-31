@@ -32,6 +32,7 @@ import { careerReturnUrl } from './matchCareer.js';
 import { STAMINA } from '../sim/stamina.js';
 import { timeoutUsedThisPoint } from '../sim/game.js';
 import { COLORS, FONTS, goldAlpha } from '../ui/theme.js';
+import { PHOTO_BAR_ID } from '../render/photoMode.js';
 
 export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const { renderer, scene, camera, quality, hud, loadingEl, params } = ctx;
@@ -40,9 +41,11 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   // matchLoop 開機時注入（dive 鈕 07-24 移除＝改自動）；
   // W6：requestSub（換人執行）/onSubPanelClose（面板關閉→補播換人敘事）
   // W7 B3：requestTimeout（我方暫停鈕點擊執行）；W7 C2④：requestComeback（回場鈕點擊執行）
+  // 池底卷 批2 P1：photoEnter/photoExit/photoShutter/photoHudToggle——四顆照片模式鈕的執行回呼
   const handlers = {
     replay: null, requestSub: null, onSubPanelClose: null,
     requestTimeout: null, requestComeback: null, requestTimeoutResume: null,
+    photoEnter: null, photoExit: null, photoShutter: null, photoHudToggle: null,
   };
 
   let matchView;
@@ -177,6 +180,16 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   const diegetic = simpleMode && params.get('panel') !== 'classic' ? createDiegeticUi() : null;
   showTutorialOnce(simpleMode);
 
+  // 池底卷 批2 P1：📷 照片模式——凍結檔驗收④「教學局與連線賽不提供入口」，用鈕不建
+  // （結構上不存在，不是隱藏）當唯一保證；matchLoop 的 enterPhotoMode 另有防呆同判準。
+  // 「重播窗內 📷 鈕」的映射（如實記錄，同 kickoff 裁定映射段）：本作 🎬 回放沒有獨立
+  // DOM 視窗——重播直接在同一塊 3D 畫布上原地播放（見 matchLoop runReplayFrame），
+  // 按鈕列本就仍在畫面上、仍可點——因此比賽按鈕列這一顆 📷，同時就是回放播放中的入口，
+  // 不必另建第二顆重疊在畫布上的鈕。
+  const noPhotoEntry = !!(config.practice?.tutorial || config.net);
+  const photoBtn = noPhotoEntry ? null : createPhotoButton(handlers);
+  const photoBar = noPhotoEntry ? null : createPhotoModeBar(handlers);
+
   return {
     handlers, matchView, rig, controls, scoreboard, commentary, sfx, touchUi,
     panel, actionButtons, replayBtn, leaveBtn, teachDialog, subPanel, timeoutBtn,
@@ -193,6 +206,7 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
     // ★ 新元件一定要進這個 return ★（2026-08-09 bquickButton 漏了這一行、
     // 從上線起一次沒出現過——接線的價值源碼掃描驗不到，見下方那段註解）
     practiceHud, coachMarker,
+    photoBtn, photoBar, // 池底卷 批2 P1
   };
 }
 
@@ -394,6 +408,71 @@ function createReplayButton(handlers) {
   });
   document.body.appendChild(replayBtn);
   return { el: replayBtn };
+}
+
+// 池底卷 批2 P1：📷 進入照片模式——按鈕列第 6 格（8/60/112/164/216 已占，見上方各鈕
+// 註解的直排慣例），點下即凍結（handlers.photoEnter，matchLoop 接 enterPhotoMode）
+// 【試玩必調】268px 只是「下一格」的算術延伸，未經真機驗證是否與其餘常駐鈕視覺對齊
+function createPhotoButton(handlers) {
+  const btn = document.createElement('button');
+  btn.textContent = '📷';
+  btn.className = 'vd-chip-gold vd-skew';
+  btn.style.cssText = [
+    'position:fixed', 'top:calc(env(safe-area-inset-top, 0px) + 268px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 12px)',
+    'width:44px', 'height:44px', 'font-size:20px', 'z-index:16',
+    'cursor:pointer', 'touch-action:manipulation',
+  ].join(';');
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    handlers.photoEnter?.();
+  });
+  document.body.appendChild(btn);
+  return {
+    el: btn,
+    hide() { btn.style.display = 'none'; },
+    show() { btn.style.display = ''; },
+  };
+}
+
+// 池底卷 批2 P1：照片模式工具列（📸 快門／👁 HUD 開關／✕ 返回比賽）——id 固定為
+// photoMode.js 的 PHOTO_BAR_ID，批次 HUD 隱藏白名單靠這個 id 認得自己、不會被自己藏起來。
+// 觸控優先：56px 見方（比其餘常駐 chip 略大——這是拍照時唯一要摸的三顆鈕）。
+// 【試玩必調】56px 鈕徑、12px 間距、18px 底邊距——提案值，未經真機拇指熱區實測
+function createPhotoModeBar(handlers) {
+  const wrap = document.createElement('div');
+  wrap.id = PHOTO_BAR_ID;
+  wrap.style.cssText = [
+    'position:fixed', 'left:50%', 'transform:translateX(-50%)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 18px)',
+    'display:none', 'gap:12px', 'z-index:50',
+  ].join(';');
+  const mk = (label, title) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.title = title;
+    b.className = 'vd-chip-gold vd-skew';
+    b.style.cssText = [
+      'width:56px', 'height:56px', 'font-size:22px',
+      'cursor:pointer', 'touch-action:manipulation',
+    ].join(';');
+    return b;
+  };
+  const shutterBtn = mk('📸', '拍照');
+  const hudBtn = mk('👁', '顯示/隱藏介面');
+  const exitBtn = mk('✕', '返回比賽');
+  shutterBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); handlers.photoShutter?.(); });
+  hudBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); handlers.photoHudToggle?.(); });
+  exitBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); handlers.photoExit?.(); });
+  wrap.appendChild(shutterBtn);
+  wrap.appendChild(hudBtn);
+  wrap.appendChild(exitBtn);
+  document.body.appendChild(wrap);
+  return {
+    el: wrap,
+    show() { wrap.style.display = 'flex'; },
+    hide() { wrap.style.display = 'none'; },
+  };
 }
 
 // W7 B3：我方暫停鈕——⚙ 換人鈕同排（左側）；死球窗＋有額度才可按，其餘反灰（同 subPanel 鈕範式）；
