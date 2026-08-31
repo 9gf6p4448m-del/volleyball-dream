@@ -13,6 +13,7 @@ import { createFloorReflection } from './render/floorReflection.js';
 import { createCourt } from './render/court.js';
 import { createArena } from './render/arena.js';
 import { createCrowdAnim } from './render/crowdAnim.js';
+import { createOfficials } from './render/officials.js';
 import { createPlayers } from './render/players.js';
 import { createBallView } from './render/ballView.js';
 import { createCameraControls } from './input/cameraControls.js';
@@ -96,6 +97,8 @@ async function init() {
   const arena = createArena(scene);
   // 三卷批1：得分觀眾反應動畫（反應窗外零成本；崩潰自我停用永不致死）
   const crowdAnim = createCrowdAnim(scene, arena);
+  // 真實感卷 批1：主審＋司線員（死球窗外零更新；建置失敗自我退場永不致死）
+  const officials = createOfficials(scene);
   const ballView = createBallView(scene, quality);
   bindResize(renderer, camera);
   // 批3 光效：?fx=high 才有 bloom＋地板反光；off＝直渲零成本；失敗＝退回直渲永不致死
@@ -105,7 +108,7 @@ async function init() {
   const fullHud = params.get('hud') === '1' || params.get('mode') === 'bench';
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality), fullHud);
 
-  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, crowdAnim, postFx };
+  const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, crowdAnim, officials, postFx };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else if (params.get('devkit') === '1') {

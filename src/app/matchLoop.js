@@ -90,6 +90,7 @@ import { roleLabel } from '../career/heightAdvice.js';
 import { createConfetti } from '../render/confetti.js';
 import { showChampionBanner } from '../ui/championBanner.js';
 import { selectMvp } from '../career/mvp.js';
+import { hawkeyeCallOf, showHawkeye, HAWKEYE } from '../ui/hawkeye.js';
 import { showMvpCard } from '../ui/mvpCard.js';
 import { createHaptics } from '../ui/haptics.js';
 
@@ -2218,6 +2219,26 @@ function applyEvents(s, frameEvents, now) {
   if (frameEvents.some((e) => e.type === 'DEAD_BALL')) {
     s.ctx.crowdAnim?.onScore(now, { keyPoint: !!s.keyPointRally });
   }
+  // 真實感卷 批1：裁判手勢/司線旗——同一批事件（與 sfx/觀眾同源時序，R1-2）
+  s.ctx.officials?.onEvents(frameEvents);
+  // 真實感卷 批2：鷹眼貼線複審——落點貼線才演（hawkeyeCallOf 讀 sim 真值、恆維持原判）；
+  // 每局至多 maxPerSet 次；重播/慶祝/MVP/連線/局終不演（R2-2 不打架、局終讓給慶祝鏈）
+  for (const e of frameEvents) {
+    if (e.type !== 'DEAD_BALL' || !e.at) continue;
+    if (e.reason !== 'BALL_IN' && e.reason !== 'OUT') continue;
+    if (s.replay || s.celebration || s.mvpShow || s.net || game.phase === 'set_over') continue;
+    const hkSet = game.series?.setIndex ?? 0;
+    if (s.hawkeyeSet !== hkSet) { s.hawkeyeSet = hkSet; s.hawkeyeCount = 0; }
+    if (s.hawkeyeCount >= HAWKEYE.maxPerSet) continue;
+    try {
+      const call = hawkeyeCallOf(e.at, e.reason === 'BALL_IN');
+      if (call) {
+        s.hawkeyeCount += 1;
+        s.hawkeyeCard?.dispose?.();
+        s.hawkeyeCard = showHawkeye({ at: e.at, verdict: call.verdict });
+      }
+    } catch { /* 演出死了比賽照打（永不致死） */ }
+  }
   stage.controls.onEvents(frameEvents); // 出手成功 → 清出手緩衝
   if (stage.commentary) stage.commentary.onEvents(frameEvents, game, s.aiState, now, s.localId);
   // juice：重扣/攔網定格＋震動、死球大震（殺球落地的重量感）
@@ -3941,6 +3962,7 @@ function frameStep(s, now) {
   const tension = game.phase !== 'set_over' && setPointTeam(game) !== null;
   ctx.lights.setTension(tension, delta);
   ctx.crowdAnim?.update(now); // 三卷批1：觀眾反應每幀驅動（窗外內部早退＝零成本）
+  ctx.officials?.update(now); // 真實感卷批1：裁判演出（死球窗外內部早退）
   stage.sfx.setHeartbeat(tension);
   // W7 B4②：氣勢聲量聯動——我方（A）有利＝聲量爬升、對方有利＝場館變安靜（壓迫感，非噓聲）；
   // 優先序：局點發球前屏息＞氣勢聯動（tension 成立時氣勢聯動整個讓位，不疊算）
