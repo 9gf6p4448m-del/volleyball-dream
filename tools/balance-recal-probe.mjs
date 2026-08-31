@@ -1,9 +1,11 @@
-// 攻守平衡卷回歸基準探針（2026-08-31 收編自 scratchpad left-line-route-probe）：
-// route×zone 全表——kill/攔死/攔出界/被救起/波贏＋kill 落點與守方最近人。
-// ⚠ 「守方最近人」欄位量的是 DEAD_BALL 結算後（球員已重置回發球陣型）的距離，
-// 只能當跨格相對參考；要量真實落地前距離用落地前一 tick 快照（見卷宗）。
-// 用法：node tools/balance-recal-probe.mjs [場數=120]。日後任何動攻守平衡的卷，
-// 前後各跑一次貼對照表（目標帶見 docs/kickoffs/balance-recal-kickoff-20260831.md）。
+// 攻守平衡卷回歸基準探針（2026-08-31 收編自 scratchpad left-line-route-probe；
+// 08-31 修復收編時吃掉 import 的事故版）：route×zone 全表——kill/攔死/攔出界/被救起/
+// 波贏＋kill 落點與守方最近人。
+// ⚠「守方最近人」量的是 DEAD_BALL 結算後（球員已重置回發球陣型）的距離，只能當
+// 跨格相對參考；要量真實落地前距離用落地前一 tick 快照（見攻守平衡卷卷宗）。
+// 用法：node tools/balance-recal-probe.mjs [場數=120]。任何動攻守平衡的卷前後各跑
+// 一次貼對照表（目標帶見 docs/kickoffs/balance-recal-kickoff-20260831.md）。距離
+import { createGame, stepGame } from '../src/sim/game.js';
 import { createAiState, aiCollectIntents } from '../src/sim/ai.js';
 
 const SEEDS = Number(process.argv[2] ?? 120);

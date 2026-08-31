@@ -247,6 +247,11 @@ export const TUNING = {
   // 變向折損的先例：同落點、球更慢、不被淨空下限吞掉）。半拍出手沒有全揮臂球速；
   // 散佈鈕（批2）實測只把快攻走廊 94-97%→87-89% 就報酬遞減——守方缺的是反應時間。
   QUICK_TIME_MUL: 1.15,          // 【試玩必調】
+  // 真實感卷 批3（R3-1~R3-3）：觸網犯規——攔網觸球後有機率判觸網（死球判給攻方）。
+  // 決定論 blownHash 零 rand 消耗；壓手倍率＝手伸過網、收手擦網風險更高
+  // （與「壓手的代價」同一設計軸：賭頂帶大賺、其餘要付錢）。頻率帶 0.3-1.5 次/局。
+  NET_FAULT_CHANCE: 0.035,       // 每次攔網觸球的觸網機率【試玩必調】
+  NET_FAULT_PRESS_MUL: 2.5,      // 壓手倍率【試玩必調】
   // §十-4b 意圖層：tool 路線（打手出界的攻擊端）。被牆蓋住的強攻有機率改瞄
   // 「牆手頂帶＋出界深區」——擦到手＝攔網方失分，沒擦到＝自打出界（真實 tool 的賭局）
   TOOL_CHANCE: 0,           // ⚠ 出廠關閉（2026-07-31 Sawmah 裁定乙）：tool 意圖對現行
@@ -1268,6 +1273,18 @@ function scatterTarget(state, aim, accuracyAttr, action, extraInaccuracy = 0, qu
 // ---- 物理推進與裁決 ----
 
 function stepRally(state, ev) {
+  // 真實感卷 批3：上一 tick 攔網觸球立的觸網旗——隔一 tick 才結算（「攔網與判分
+  // 不得同 tick 交錯裁決」既有鐵則，full-set 掃描鎖著）。球在觸網那一 tick 照常被
+  // 拍回/擦走，下一 tick 開場吹哨判給攻方；字卡/裁判手勢走既有 DEAD_BALL 通道。
+  if (state.rally.netFaultPid) {
+    const faultPid = state.rally.netFaultPid;
+    state.rally.netFaultPid = null;
+    const blockTeam = state.players[faultPid]?.teamId;
+    if (blockTeam) {
+      settlePoint(state, otherTeam(blockTeam), 'NET_FAULT', ev);
+      return; // 球已死，本 tick 不再推進
+    }
+  }
   const b = state.ball;
   const prevZ = b.z;
   const prevY = b.y;
@@ -1335,6 +1352,15 @@ function stepRally(state, ev) {
       const loser = state.rally.lastTouchTeam ?? state.match.servingTeam;
       settlePoint(state, otherTeam(loser), 'OUT', ev); // 界外：最後觸球隊失分
     }
+  }
+}
+
+// 真實感卷 批3：攔網觸球的觸網判定——只立旗（rally.netFaultPid），結算由過網
+// 呼叫端與落地同層執行（不在攔網分支深處佈置下一球）。blownHash＝決定論零 rand 消耗。
+function rollNetFault(state, best) {
+  const mul = best.actor.blockHand === 'press' ? TUNING.NET_FAULT_PRESS_MUL : 1;
+  if (blownHash(state, `${best.p.id}:netf`) < TUNING.NET_FAULT_CHANCE * mul) {
+    state.rally.netFaultPid = best.p.id;
   }
 }
 
@@ -1419,6 +1445,7 @@ function tryBlock(state, toTeam, ev) {
         type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id,
         zone, pressed: true,
       });
+      rollNetFault(state, best); // 批3：壓手觸網風險最高
       return true;
     }
     // 擦手（one-touch）：沒攔死但擦到手的邊緣——BLOCK_TOUCH 一樣不計 3 次觸球。
@@ -1459,6 +1486,7 @@ function tryBlock(state, toTeam, ev) {
       type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id,
       graze: true, zone,
     });
+    rollNetFault(state, best); // 批3：擦手也可能收手擦網
     return true;
   }
   // 【第三層】屬性擲骰（手身區才走到這）：`block` 屬性**只**決定碰到之後的結果分佈，
@@ -1488,6 +1516,7 @@ function tryBlock(state, toTeam, ev) {
   r.profile = 'arc';
   r.flightId += 1;
   ev.push({ type: 'BLOCK_TOUCH', tick: state.tick, team: toTeam, playerId: best.p.id });
+  rollNetFault(state, best); // 批3：正面攔擊的落手擦網
   return true;
 }
 
