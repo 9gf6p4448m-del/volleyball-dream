@@ -63,3 +63,27 @@ Sawmah：「OH 打大炮位 直線幾乎都會得分」。三支探針實跑定�
 - B5-5 middle/tip 連動 ±3pp；批5 完成後複驗 B1-1（期望攔網罰得動後 line 順勢 ≤60，
   屆時仍 >60 則如實記錄、列為卷尾遺留）
 - 通用條款沿卷首（一批一鈕、前後全表、sim-hash --write、紅測試徵求同意）
+
+## 批6 右系/交叉殘差（08-31 晚場；Sawmah 裁定乙＝再開一批，AskUserQuestion 紀錄在案）
+
+背景：批5 後兩格帶外 right|cross 86.5／cross|cross 89.4（本輪重跑 120 場基準 85.3／90.0，
+攔死 3.8%／0.9%）。診斷（scratchpad b6-diagnose-probe / b6-wall-align-probe，120 場）：
+- 「翼手 block 屬性偏低」舊推測**否證**：觸球者屬性中位左右皆 58。
+- right|cross＝翼手（OPP）**滯空率 41.7%** vs 鏡像 left|cross（OH）68.1%，對位誤差反而更小
+  （p50 0.17 vs 0.21）——右側傳距短、時間預算少，讀期從中軸 ±1.5m 跑不到邊；接觸偏
+  帶邊緣（side 擦 27% vs 5%）。
+- cross|cross＝**滯空率 0.0%**（quick|cross 1.6% 同族）——read 對 X 交叉節奏結構上跳不起來，
+  屬「read 對快攻來不及」憲法賭注的同一格。
+
+### 驗收凍結（動手前訂；通用條款沿卷首：一批一鈕、配對前後全表落檔、sim-hash --write、
+### 紅測試徵求同意）
+- B6-1 right|cross 波贏 ≤85%（基準 85.3）
+- B6-2 right|cross 攔死 ≥5%（基準 3.8；B5-4 收尾）
+- B6-3 cross|cross 波贏 ≤85%（基準 90.0）
+- B6-4 組合攻擊保命：cross|cross 波贏仍 ≥ left|cross（X 交叉必須維持「比一般高球好」的
+  存在價值；壓到低於普攻＝本批失敗回退）
+- B6-5 連動：left 系／quick 系／middle／tip 各格 ±3pp 內；B5-3（quick ≥ left 同 zone）維持
+- 手段限守方**站位面**（讀期陣型、地板站位）；人格時序（誰何時解鎖、吃哪個下降沿）
+  屬憲法 §零不動；攻擊端數值不動（批2/3 已動過，不疊）
+- 批6a 鈕＝讀期翼手站寬（新常數，關牆間距 BLOCK_SPREAD 不連動）；cross|cross 若 6a 後
+  仍帶外，另立批6b 一鈕（地板守備向走廊，或 MB 讓位涵蓋 cross route），不在 6a 內混改
