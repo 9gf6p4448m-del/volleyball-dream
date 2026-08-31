@@ -367,10 +367,16 @@ function playWithControlled(seed, pid, { press = false } = {}) {
 test('E ★AI 路徑逐值同舊★ 沒人按夾塞時，獎金受益者恆等於 `attackCombo.partnerId`', () => {
   // 舊碼寫死 partnerId。自動排程的 `mainId` 恆等於 `attackerId` ⇒ 兩人裡不是攻擊手的
   // 那個就是 partner ⇒ 新舊寫法在這條路上必須逐筆同值。這條紅＝改動漏進了 AI 路徑。
+  // ★ 2026-08-31 補樣本（攻守平衡卷批1-5 後）：3 seed 的決定論波數 9 → 5、跌破門檻 6
+  // ＝樣本守衛响了（上面註解預留的「日後平衡微調」正是這次）。照 08-09 E2 先例與
+  // E2③ 同輪 Sawmah 裁定（換樣本底不降語意）：補 2 顆種子（+7919 等差），門檻 6
+  // 一格不動、不變量斷言一字不動——樣本越多這條不變量只會更嚴。
   const grants = [
     ...playWithControlled(500000, 'A3'),
     ...playWithControlled(507919, 'A3'),
     ...playWithControlled(515838, 'A6'),
+    ...playWithControlled(523757, 'A3'),
+    ...playWithControlled(531676, 'A6'),
   ];
   // ★ 門檻依實測真值重訂（2026-08-07，debug 後 2026-08-08 修正一次）★ 這三個 seed 是
   // 固定的（零 rng 分岔），波數因此是決定論值：修好「換帳只認非 null」那個假發放

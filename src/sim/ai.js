@@ -113,6 +113,11 @@ export const AI = {
   // 後衛就是貼邊線守直線/斜線走廊的人。
   DIG_WING_OUT: 0.5,      // 邊翼外開 m【試玩必調】
   DIG_WING_FWD: 0.4,      // 邊翼額外前壓 m【試玩必調】
+  // 攻守平衡卷 批5（B5-1/B5-4）：雙人牆分工縫——read 的 MB 往斜線過網點讓的比例。
+  // 0＝現狀（疊在翼手同點）、1＝整個站到斜線過網點上。門檻沿 classifySpikeZone 的
+  // 中路界線 1.8（接觸點在中路＝本來就是 MB 自己的球，不讓）。
+  BLOCK_SEAM_MIX: 0.65,   // 【試玩必調】
+  BLOCK_SEAM_MIN_X: 1.8,
   DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
   //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
   TIMEOUT_STREAK: 4,      // W7 B3：被對方連得幾分時 AI 喊暫停（拍板＝4）
@@ -2493,7 +2498,22 @@ function blockAimX(game, aiState, atkTeam, persona, opts) {
 function blockAimXBase(game, aiState, atkTeam, persona, opts) {
   if (persona === BLOCK_PERSONA.READ) {
     const hit = predictContactPoint(game.ball, AI.SPIKE_APPROACH_Y);
-    if (hit) return { x: hit.x, contactTicks: hit.ticks };
+    if (hit) {
+      let x = hit.x;
+      // ★攻守平衡卷 批5：雙人牆分工縫★ 實測（卷宗 PROBE-db31/bg31）：兩翼高球
+      // 75-98% 有兩名前排到攻擊手 x ±0.7m 內＝雙人牆有成形，但全員錨同一個接觸點 x
+      // ⇒ 直線被雙重覆蓋、斜線角在 1.2-1.5m 外整條沒人（斜線格攔死 0-2% 的幾何成因）。
+      // 真實雙人牆＝翼手守直線、MB 讓半步關斜線縫。幾何零新造：斜線過網點複用
+      // blockSetterTendency AIM_CROSSING_MIX 同一組 spikeAimsAt/netCrossingX。
+      // 只動 read 的 MB 一人；翼手照舊錨接觸點＝人格時序憲法（誰何時解鎖）一格不動，
+      // 這是站位分工不是決策時機。blockerId＝守方自己的 pid（卷六反作弊界線內）。
+      const me = opts?.blockerId ? game.players[opts.blockerId] : null;
+      if (me?.currentRole === 'middle' && Math.abs(hit.x) >= AI.BLOCK_SEAM_MIN_X) {
+        const crossX = netCrossingX(hit, spikeAimsAt(hit, atkTeam).cross);
+        x += (crossX - x) * AI.BLOCK_SEAM_MIX;
+      }
+      return { x, contactTicks: hit.ticks };
+    }
   }
   // 段 2（裁定 2＋5）：commit 的**賭注方向**改讀二傳配分傾向，不再走 `blockCommitRead`。
   // ⚠ `blockCommitRead` **沒有退場**——它是 commit 起跳時鐘鎖不住時的**退路訊號**
