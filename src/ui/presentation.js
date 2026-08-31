@@ -115,12 +115,41 @@ export function keyPointOf(game) {
   return isSetPoint(m.score, m.target);
 }
 
-// 大作感四卷 批1（J2，純函式）：賽點視覺共用判準——scorebug 徽章呼吸與 LED 跑馬燈
-// 警示色都吃這一個值，不各自重判（沿用既有 keyPointOf，不另立判準）。
+// 局點屬於哪一隊（不判是不是局點的隊伍中立版——供 isMatchPointOf 內部用；不export、
+// 不與 scoreboard.js 的 setPointTeam 共用是因為兩檔刻意不互相 import 造成耦合，
+// 判準本身逐字相同，任一方改動要同步看另一份）
+function setPointTeamOfScore(score, target) {
+  for (const team of ['A', 'B']) {
+    const other = team === 'A' ? 'B' : 'A';
+    if (score[team] + 1 >= target && score[team] + 1 - score[other] >= 2) return team;
+  }
+  return null;
+}
+
+// 池底卷 P4（純函式）：局點 vs 賽點分兩級——賽點＝拿下這一局會同時拿下整場的局點。
+// series 為 null（單局賽）＝局點即賽點；bestOf 多局賽只有「拿下此局即達 setsToWin」
+// 那一隊的局點才是賽點（例：bestOf3 第一局局點通常只是 1-0，不是賽點；決勝局局點
+// 才是賽點）。局點判定沿用既有 isSetPoint，不另立判準。
+export function isMatchPointOf(game) {
+  const m = game?.match;
+  if (!m) return false;
+  const spTeam = setPointTeamOfScore(m.score, m.target);
+  if (!spTeam) return false;
+  const s = game.series;
+  if (!s) return true; // 單局賽：局點即賽點
+  return (s.setsWon?.[spTeam] ?? 0) + 1 >= s.setsToWin;
+}
+
+// 大作感四卷 批1（J2，純函式）→ 池底卷 P4 細化加嚴：賽點視覺共用判準——scorebug
+// 徽章呼吸與 LED 跑馬燈警示色都吃這一個值，不各自重判。原判準是「局點即全版」
+// （keyPointOf），P4 裁定改為只有「賽點」（isMatchPointOf，局點的會終場子集）才觸發
+// 呼吸/警示色——bestOf3 首局局點若呼吸/變紅，Sawmah 回報「氾濫」，普通局點徽章
+// 改靜態顯示，只有真正決定整場勝負的那一分才強調。keyPointOf 本身語意不動（賽點
+// 判定的子集關係仍成立），rally 端 keyPointRally（sfx/觀眾反應/重播）不受影響。
 // 教學局（tutorial=true）與局終（set_over）恆 false——死球後若已局終，兩處視覺都要
 // 一起還原成常態，不留在警示狀態。
 export function keyPointVisualOn(game, tutorial = false) {
   if (tutorial) return false;
   if (game?.phase === 'set_over') return false;
-  return keyPointOf(game);
+  return isMatchPointOf(game);
 }

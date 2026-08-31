@@ -1,31 +1,75 @@
-// 大作感四卷 批1（J2 賽點視覺）——驗收凍結 docs/kickoffs/juice4-kickoff-20260831.md：
+// 大作感四卷 批1（J2 賽點視覺）——驗收凍結 docs/kickoffs/juice4-kickoff-20260831.md。
+// 池底卷 批1（P4 局點/賽點分兩級）——驗收凍結
+// docs/kickoffs/poolbottom-kickoff-20260831.md：細化加嚴，原判準「局點即全版」改為
+// 「只有賽點才呼吸/變紅，普通局點徽章靜態顯示」（series 非決勝局的局點不是賽點；
+// series 為 null 的單局賽局點即賽點，沿用 J2 舊語意不變）。
 // ①scorebug 局點徽章呼吸（賽點才呼吸，普通局點不呼吸）②LED 跑馬燈警示色（死球後
-// 不再是賽點要還原）③教學局不觸發。賽點判定沿用既有 keyPointOf，不另立判準——
-// scorebug 與 marquee 共用同一個純函式 keyPointVisualOn（presentation.js），本檔
-// 直測這個共用判準＋ scoreboard.setPointBadgeState（純函式）＋ arena.js 的真實
-// InstancedMesh/CanvasTexture 換色路徑（withDomStub，同 kit-batch3 慣例）。
+// 不再是賽點要還原）③教學局不觸發。賽點判定沿用既有 isSetPoint/keyPointOf 判局點，
+// isMatchPointOf 疊加「series 內拿下此局是否達 setsToWin」——scorebug 與 marquee
+// 共用同一個純函式 keyPointVisualOn（presentation.js），本檔直測這個共用判準＋
+// scoreboard.setPointBadgeState（純函式）＋ arena.js 的真實 InstancedMesh/CanvasTexture
+// 換色路徑（withDomStub，同 kit-batch3 慣例）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { keyPointOf, keyPointVisualOn } from '../src/ui/presentation.js';
+import { keyPointOf, keyPointVisualOn, isMatchPointOf } from '../src/ui/presentation.js';
 import { setPointBadgeState, setPointTeam } from '../src/ui/scoreboard.js';
 import {
   createArena, MARQUEE_NORMAL_BG, MARQUEE_NORMAL_FG, MARQUEE_ALERT_BG, MARQUEE_ALERT_FG,
 } from '../src/render/arena.js';
 
-function mkGame(score, target = 25, phase = 'rally') {
-  return { match: { score, target }, phase };
+function mkGame(score, target = 25, phase = 'rally', series = null) {
+  return { match: { score, target }, phase, series };
+}
+
+function mkSeries({ bestOf = 3, setsToWin = 2, setsWon = { A: 0, B: 0 } } = {}) {
+  return { bestOf, setsToWin, setsWon };
 }
 
 // ---- keyPointVisualOn（單一事實來源：scorebug 與 marquee 都吃這個）----
 
-test('keyPointVisualOn：與 keyPointOf 同值（非教學局、非局終）——不另立判準', () => {
+test('keyPointVisualOn：單局賽（series=null）與 keyPointOf 同值——局點即賽點', () => {
   const g1 = mkGame({ A: 24, B: 22 }, 25); // 賽點
   const g2 = mkGame({ A: 10, B: 8 }, 25); // 非賽點
   assert.equal(keyPointVisualOn(g1, false), keyPointOf(g1));
   assert.equal(keyPointVisualOn(g1, false), true);
   assert.equal(keyPointVisualOn(g2, false), keyPointOf(g2));
   assert.equal(keyPointVisualOn(g2, false), false);
+});
+
+// ---- 池底卷 P4：isMatchPointOf 兩級判準 ----
+
+test('isMatchPointOf：bestOf3 第一局局點（雙方 setsWon 皆 0）——是局點但不是賽點', () => {
+  const g = mkGame({ A: 24, B: 20 }, 25, 'rally', mkSeries({ setsWon: { A: 0, B: 0 } }));
+  assert.equal(keyPointOf(g), true, '前提：分數上確實是局點');
+  assert.equal(isMatchPointOf(g), false, '拿下這局只會 1-0，還不能收下整場');
+  assert.equal(keyPointVisualOn(g, false), false, '呼吸/警示色只認賽點，首局局點不觸發');
+});
+
+test('isMatchPointOf：bestOf3 決勝局局點（1-1 進第三局）——是賽點', () => {
+  const g = mkGame({ A: 24, B: 20 }, 25, 'rally', mkSeries({ setsWon: { A: 1, B: 1 } }));
+  assert.equal(isMatchPointOf(g), true, '拿下這局即 2-1 收下整場');
+  assert.equal(keyPointVisualOn(g, false), true, '賽點＝呼吸＋變紅');
+});
+
+test('isMatchPointOf：bestOf3 第二局局點——若拿下即可 2-0 收下整場，也算賽點', () => {
+  const g = mkGame({ A: 24, B: 20 }, 25, 'rally', mkSeries({ setsWon: { A: 1, B: 0 } }));
+  assert.equal(isMatchPointOf(g), true, 'A 已贏第一局，這局再贏即 2-0 收下整場');
+  const g2 = mkGame({ A: 20, B: 24 }, 25, 'rally', mkSeries({ setsWon: { A: 1, B: 0 } }));
+  assert.equal(isMatchPointOf(g2), false, 'B 就算贏這局也只追平 1-1，還不是賽點');
+});
+
+test('isMatchPointOf：單局賽（series=null）局點即賽點——沿用 J2 舊語意', () => {
+  const g = mkGame({ A: 24, B: 20 }, 25, 'rally', null);
+  assert.equal(isMatchPointOf(g), true);
+});
+
+test('isMatchPointOf：非局點分數／教學局／局終——恆 false', () => {
+  assert.equal(isMatchPointOf(mkGame({ A: 10, B: 8 }, 25)), false, '非局點');
+  const g = mkGame({ A: 24, B: 20 }, 25, 'rally', mkSeries({ setsWon: { A: 1, B: 1 } }));
+  assert.equal(keyPointVisualOn(g, true), false, '教學局恆 false（J2③沿舊）');
+  const gOver = mkGame({ A: 25, B: 20 }, 25, 'set_over', mkSeries({ setsWon: { A: 1, B: 1 } }));
+  assert.equal(keyPointVisualOn(gOver, false), false, '局終恆 false（沿舊）');
 });
 
 test('keyPointVisualOn：教學局恆 false（即使分數上是賽點）', () => {

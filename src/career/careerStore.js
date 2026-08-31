@@ -37,6 +37,7 @@ import { buildForeignSchedule, foreignTable, growForeignSchedule } from './forei
 import { applySeasonTurnover, buildDeficitFillIns } from './graduation.js';
 import { defaultLineup, FRESHMAN_TRUST } from './lineup.js';
 import { revealHeightForSeason } from './heightGrowth.js';
+import { buildLeagueSeason } from './leagueSeason.js';
 import {
   canExpel, EXPEL_TRUST_PENALTY, RECRUIT_TRUST, buildRecruitMember, nextRecruitId,
   pendingWaiting, recruitTargetGone, waitingOf,
@@ -1665,6 +1666,10 @@ export function archiveSeasonSummary(season) {
     // 舊條目沒有這個欄位＝`admission.normalizeSeasonLog` 回退用 champion 判（見該檔）。
     finish: seasonFinishOf({ results }),
     totals,
+    // 池底卷 批1 P3：聯盟全員數據埋點（純累積，榜 UI 明列不做）——同一次封存順帶
+    // 寫入，不另開一次落檔；不進 TOP_KEYS（schema.js 慣例）＝舊條目沒有這個欄位
+    // 也不擋讀檔，讀取端走 leagueSeason.js 的 leagueSeasonOf() 回退（見該檔）
+    leagueSeason: buildLeagueSeason(season, totals),
   };
 }
 

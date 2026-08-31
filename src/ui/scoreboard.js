@@ -305,8 +305,9 @@ export function createScoreboard(playerId) {
       }
 
       // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）；
-      // J2①：呼吸動畫只在「賽點」（keyPointOf，局點的會終場子集）才播，判定抽成純函式
-      // setPointBadgeState 供測試直測（不重寫判準，沿用既有 setPointTeam/keyPointOf）
+      // J2①→池底卷 P4：呼吸動畫只在「賽點」（isMatchPointOf，局點的會終場子集；
+      // series 內非決勝局的局點不算）才播，判定抽成純函式 setPointBadgeState 供測試
+      // 直測（不重寫判準，沿用既有 setPointTeam；賽點分級判準見 keyPointVisualOn）
       const badge = setPointBadgeState(game, myTeam, !!opts.tutorial);
       if (badge.show) {
         setPtEl.style.display = 'block';
@@ -340,9 +341,10 @@ export function createScoreboard(playerId) {
   };
 }
 
-// J2①（純函式，供測試直測）：局點徽章顯示狀態——show/text/mine 沿用既有
-// setPointTeam 判定（不另立判準）；breathe 只有在「賽點」（keyPointOf，局點的
-// 會終場子集）且非教學局才為真——普通局點徽章照樣顯示，只是不呼吸
+// J2①→池底卷 P4（純函式，供測試直測）：局點徽章顯示狀態——show/text/mine 沿用既有
+// setPointTeam 判定（不另立判準）；breathe 只有在「賽點」（isMatchPointOf，局點的
+// 會終場子集，series 非決勝局的局點不算）且非教學局才為真——普通局點徽章照樣
+// 顯示，只是不呼吸（P4 裁定：bestOf 首局局點就呼吸變紅太氾濫）
 export function setPointBadgeState(game, myTeam, tutorial = false) {
   const spTeam = setPointTeam(game);
   if (!spTeam || game.phase === 'set_over') {

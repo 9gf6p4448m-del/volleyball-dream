@@ -660,6 +660,14 @@ export function avgStamina(game, team) {
   return ids.reduce((sum, id) => sum + (game.stamina[id] ?? 1), 0) / ids.length;
 }
 
+// 池底卷 P2：擦地員暫停/局間窗共用的 off/reduced-motion 守衛（showSetBreak 內聯一份
+// 局部 motionOff、這裡給沒有那個局部變數的呼叫點共用，判準逐字相同、刻意不合併成
+// 單一事實來源——兩處各自獨立小段，合併要動 showSetBreak 既有結構，非本卷範圍）
+function reducedMotionOn() {
+  return typeof window !== 'undefined'
+    && (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
+}
+
 // W7 B3 我方暫停（stage.handlers.requestTimeout）：sim 執行＋集合帶位＋倒數條啟動＋
 // 教練選項對話框（W7.1 #3A，取代舊版被動浮字——Sawmah 原話「不知道按了獲得什麼」）
 function requestTimeout(s) {
@@ -673,6 +681,10 @@ function requestTimeout(s) {
     s.timeoutHuddleTeam = team; // 集合帶位＋倒數條共用同一個事實源
     // J4：暫停集合 edge——死球態（applyTimeout 只在死球窗才會 ok），rally 進行中不會走到這裡
     s.ctx.crowdAnim?.onTimeout(performance.now());
+    // 池底卷 P2：擦地員暫停窗——同一個 edge，off/reduced-motion/教學局不出
+    if (!s.tutorial && s.presentation.pref !== 'off' && !reducedMotionOn()) {
+      s.ctx.moppers?.onTimeoutHuddle(performance.now());
+    }
     s.stage.commentary?.onEvents(
       [{ type: 'TIMEOUT', tick: s.game.tick, team, remaining: s.game.timeouts[team].remaining }],
       s.game, s.aiState, performance.now(), s.localId,
@@ -2532,6 +2544,10 @@ function applyEvents(s, frameEvents, now) {
         s.timeoutHuddleTeam = 'B';
         // J4：暫停集合 edge（對手喊暫停，同我方一套事實源，同一觸發點）
         s.ctx.crowdAnim?.onTimeout(now);
+        // 池底卷 P2：擦地員暫停窗——同一個 edge，off/reduced-motion/教學局不出
+        if (!s.tutorial && s.presentation.pref !== 'off' && !reducedMotionOn()) {
+          s.ctx.moppers?.onTimeoutHuddle(now);
+        }
         cards.push({ pri: 25, text: '對方喊暫停——趁機換人 ⚙', color: '#ff9d7a', dur: 1800 });
         const feed = [{ type: 'TIMEOUT', tick: game.tick, team: 'B', remaining: game.timeouts.B.remaining }];
         const bBoost = aiTimeoutBoost(game, 'B');
@@ -3047,6 +3063,9 @@ function showSetBreak(s) {
   const motionOff = typeof window !== 'undefined'
     && (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
   if (s.presentation.pref === 'off' || motionOff) { openCard(); return; }
+  // 池底卷 P2：擦地員局間窗——與 3D 圍攏過場同一道 off/reduced-motion/教學局守衛
+  // （過了上面那行 return 才代表演出開著），不獨立重判
+  if (!s.tutorial) s.ctx.moppers?.onSetBreak(performance.now());
   const full = !s.presentation.isSeen('huddle3d');
   s.presentation.markSeen('huddle3d');
   const total = full ? 3800 : 2000; // 首次全長、之後短版（≤2s）；上限 ≤4s（拍板題4）
@@ -4045,10 +4064,12 @@ function frameStep(s, now) {
   ctx.lights.setTension(tension, delta);
   ctx.crowdAnim?.update(now); // 三卷批1：觀眾反應每幀驅動（窗外內部早退＝零成本）
   ctx.officials?.update(now); // 真實感卷批1：裁判演出（死球窗外內部早退）
+  ctx.moppers?.update(now); // 池底卷批1 P2：擦地員（窗外零成本早退）
   ctx.arena?.tickMarquee?.(delta); // 候補池卷P1-2：LED跑馬燈（只動texture offset）
-  // J2②：LED 警示色——與 scorebug 徽章呼吸共用 keyPointVisualOn（單一事實來源，
-  // 不各自重判）；死球後若不再是賽點（含局終）要自動還原，故每幀直接問當下真值，
-  // 不鎖存；教學局恆不觸發（keyPointVisualOn 內建）
+  // J2②→池底卷 P4：LED 警示色——與 scorebug 徽章呼吸共用 keyPointVisualOn（單一
+  // 事實來源，不各自重判；P4 起改判 isMatchPointOf——series 非決勝局的普通局點
+  // 不再觸發警示色，只有真正賽點才觸發）；死球後若不再是賽點（含局終）要自動還原，
+  // 故每幀直接問當下真值，不鎖存；教學局恆不觸發（keyPointVisualOn 內建）
   ctx.arena?.setMarqueeAlert?.(keyPointVisualOn(game, !!s.tutorial));
   // 候補池卷P3-1 表現層：發球計時 8 秒起警示一次（AI 永不觸發＝天然只提醒玩家）
   if (game.phase === 'serve' && (game.serveClockTicks ?? 0) > 0) {
