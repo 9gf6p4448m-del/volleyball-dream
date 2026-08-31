@@ -1,15 +1,16 @@
-// 壓手攔網的代價（2026-08-24 Sawmah 裁定「走 A」）——行為鎖定
+// 壓手攔網的行為鎖定
 //
-// ★ 這一檔在守什麼 ★
-// press 原本只在 zone==='top' 那一支生效、其餘兩區完全不讀 blockHand ⇒ **結構上不可能
-// 有代價**，配對實測全樣本 +4.7pp 顯著白拿（tools/press-cost-sweep.mjs）。
-// 代價現在由 sim 的兩顆鈕給：
-//   BLOCK_PRESS_SIDE_MUL 1.6 —— 手前伸、側邊更空 ⇒ 擦側被撥出去的橫向速度更大
-//   BLOCK_PRESS_BODY_MUL 0.7 —— 手在網的另一側 ⇒ 正面攔死的有效面積變小
-// 壓手因此是「賭這球會擦到我手頂」：擦頂 +22.0pp、擦側 −10.1pp、正面 −6.8pp、
-// 全樣本 −1.1pp（雜訊內）。
-//
-// ★ 鑑別力 ★ 把任一顆鈕改回 1.0，本檔就要紅——這正是「代價被拿掉」的形狀。
+// ★★ 2026-08-31 語意重定（Sawmah 討論定案，推翻 08-24「正面當成本」）★★
+// 真實排球的壓手：手面朝下 ⇒ 手頂與正面都是優勢；專屬代價＝①觸網（realism-batch3）
+// ②「吞下去」——手臂拱過網、拱形下緣與網帶之間的低窗，貼網低平球從縫隙鑽進去。
+// 「擦側=打手」稅退役（打手瞄的是任何牆的外緣，非壓手專屬；08-24 那是記帳發明）。
+// 本檔現在守的形狀：
+//   側＝中性（SIDE_MUL 恆 1.0；≠1 要重跑 press-cost-sweep）
+//   正面＝加成（BODY_MUL 1.2 > 1，方向與 08-24 相反——這是裁定的核心）
+//   低窗＝壓手專屬穿透（PRESS_SEAL_GAP；直臂不受影響）——雙向都驗
+//   擦頂壓死增益仍在
+// 平衡帳本（press-cost-sweep 變體 1907 配對點）：全樣本 +2.0±3.1（雜訊內）、
+// top +25.3 顯著——「接觸後小幅為正」係因壓手綁封線承諾（接觸前已付賭錯線的稅）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,23 +45,12 @@ function sideTouch(seed, hand) {
   return null;
 }
 
-// ★期望值寫死在測試裡，不讀 TUNING★（第三輪覆審抓到的恆真式）：
-// 原本拿量到的比值去比「當下的常數自己」，於是常數改成 1.0、甚至改成 0.5
-//（反向＝壓手反而更不容易被撥出界＝變成獎勵）都是綠的——那顆鈕的**幅度與方向**
-// 完全沒有測試在守，只有「分支存在與否」被守到。
-// 1.6 的來源＝tools/press-cost-sweep.mjs 的掃描（2768 個配對接觸點），
-// 要改這個數字就要重跑掃描並更新 B7-3 的修訂紀錄。
-// ★ 2026-08-31 依測試自訂的修訂程序更新（1.6/0.7 → 1.3/0.85）★
-// 觸網犯規「只掛壓手」上線後帳本重算：已重跑 press-cost-sweep（1907 配對接觸點），
-// 08-24 同一凍結判準下唯一達標組＝1.30/0.85（全樣本 −0.9 雜訊內、top +24.3 顯著）。
-const EXPECTED_SIDE_MUL = 1.3;
-const EXPECTED_BODY_MUL = 0.85;
+const EXPECTED_SIDE_MUL = 1.0;
+const EXPECTED_BODY_MUL = 1.2;
 
-test('★代價一★ 擦側：壓手把球撥得更開（逐值＝1.6 倍）', () => {
+test('★側稅退役★ 擦側中性：同一顆球壓手與直立的撥出速度逐值相同', () => {
   assert.equal(TUNING.BLOCK_PRESS_SIDE_MUL, EXPECTED_SIDE_MUL,
-    `常數被改成 ${TUNING.BLOCK_PRESS_SIDE_MUL} 了——幅度是掃描掃出來的，改它要重跑 press-cost-sweep`);
-  assert.ok(EXPECTED_SIDE_MUL > 1,
-    '方向反了：壓手應該讓球被撥得**更開**（代價），小於 1 會變成獎勵');
+    `常數被改成 ${TUNING.BLOCK_PRESS_SIDE_MUL} 了——改它要重跑 press-cost-sweep 並更新語意紀錄`);
   let checked = 0;
   for (let seed = 1; seed <= 20; seed += 1) {
     const v = sideTouch(seed, 'vertical');
@@ -68,33 +58,67 @@ test('★代價一★ 擦側：壓手把球撥得更開（逐值＝1.6 倍）', 
     if (!v || !p) continue;
     assert.equal(v.zone, 'side', `種子 ${seed} 的對照組不是擦側，治具走鐘`);
     assert.equal(p.zone, 'side', `種子 ${seed} 的壓手組不是擦側，兩組不可比`);
-    // 同一顆球、同一站位，唯一變因是手態 ⇒ 橫向速度的比值就是那顆鈕
-    const ratio = Math.abs(p.vx) / Math.abs(v.vx);
-    assert.ok(Math.abs(ratio - EXPECTED_SIDE_MUL) < 1e-9,
-      `種子 ${seed}：壓手/直立的橫向速度比 ${ratio.toFixed(4)}，不等於期望的 ${EXPECTED_SIDE_MUL}`);
-    assert.ok(ratio > 1, `種子 ${seed}：壓手撥得比直立還少（比值 ${ratio.toFixed(4)}）＝代價變獎勵`);
+    assert.ok(Math.abs(Math.abs(p.vx) - Math.abs(v.vx)) < 1e-12,
+      `種子 ${seed}：擦側撥出速度因手態而異＝側稅沒有退役乾淨`);
     checked += 1;
   }
   assert.ok(checked >= 10, `只驗到 ${checked} 個種子，樣本不足以說治具穩定`);
 });
 
-test('★代價一 鑑別力★ 把 SIDE_MUL 調回中性，壓手與直立就變成一模一樣', () => {
-  const prev = TUNING.BLOCK_PRESS_SIDE_MUL;
-  assert.notEqual(prev, 1.0, '原值本來就是中性 ⇒ 這條測試變成恆真式（它只證明 1.0 等於 1.0）');
-  TUNING.BLOCK_PRESS_SIDE_MUL = 1.0;
+// ★代價・吞下去★ 治具：球貼網低平過網（y 落在網高與 PRESS_SEAL_GAP 之間的低窗）。
+// 抄 sideTouch 幾何但 x=0（避開擦側）、y 壓到窗內（過網下限＝網高+球半徑≈2.535、天花板＝網高+GAP）。
+function lowTouch(seed, hand) {
+  const g = createGame({ seed });
+  g.phase = 'rally';
+  Object.assign(g.rally, {
+    profile: 'spike', possession: 'B', touches: 3, lastTouchTeam: 'B', lastToucherId: 'B2',
+  });
+  const b = g.ball;
+  b.x = 0; b.y = 2.56; b.z = -0.35; b.vx = 0; b.vy = -0.2; b.vz = 9;
+  b.px = b.x; b.py = b.y; b.pz = b.z;
+  g.actors.A3.x = 0; g.actors.A3.z = 0.5;
+  for (let i = 0; i < 24 && g.phase === 'rally'; i += 1) {
+    const ev = stepGame(g, [blockIntent('A3', g.tick, hand)]);
+    const bt = ev.find((e) => e.type === 'BLOCK_TOUCH');
+    if (bt) return bt;
+    if (g.ball.z > 1.5 || g.ball.vz < 0) return null;
+  }
+  return null;
+}
+
+test('★代價・吞下去★ 低窗球：直立攔得到、壓手被鑽過去（雙向）', () => {
+  // 這族治具的自然命中率 ~30%（同 bodyOutcome 註解的 27.5%）——門檻按這個底訂
+  let swallowed = 0; let verticalTouched = 0;
+  for (let seed = 1; seed <= 60; seed += 1) {
+    const v = lowTouch(seed, 'vertical');
+    const p = lowTouch(seed, 'press');
+    if (v) verticalTouched += 1;
+    if (v && !p) swallowed += 1;
+  }
+  assert.ok(verticalTouched >= 8, `直立只攔到 ${verticalTouched} 次＝治具球高走鐘（該在直立可攔帶）`);
+  assert.equal(swallowed, verticalTouched,
+    `低窗球有 ${verticalTouched - swallowed} 次被壓手攔到＝吞下去的窗沒有生效`);
+});
+
+test('★吞下去 鑑別力★ 低窗關閉（GAP 壓到全域下限之下）⇒ 壓手攔得到同一批球', () => {
+  const prev = TUNING.PRESS_SEAL_GAP;
+  assert.ok(prev > 0, '低窗常數不存在或為 0＝機制沒接上');
+  const prevBody = TUNING.BLOCK_PRESS_BODY_MUL;
+  TUNING.PRESS_SEAL_GAP = -0.15; // 窗完全關閉（回到全域下限）
+  TUNING.BLOCK_PRESS_BODY_MUL = 1.0; // 單變因隔離：正面加成也歸中性（它會讓壓手多攔）
   try {
-    let same = 0; let checked = 0;
-    for (let seed = 1; seed <= 20; seed += 1) {
-      const v = sideTouch(seed, 'vertical');
-      const p = sideTouch(seed, 'press');
-      if (!v || !p) continue;
-      checked += 1;
-      if (Math.abs(Math.abs(p.vx) - Math.abs(v.vx)) < 1e-12) same += 1;
+    // 配對相等：窗關＋加成歸零後，壓手在同一批種子的接觸數必須跟直立一模一樣
+    let vTouched = 0; let pTouched = 0;
+    for (let seed = 1; seed <= 60; seed += 1) {
+      if (lowTouch(seed, 'vertical')) vTouched += 1;
+      if (lowTouch(seed, 'press')) pTouched += 1;
     }
-    assert.ok(checked > 0 && same === checked,
-      `中性值下仍有 ${checked - same}/${checked} 個種子不同 ⇒ 擦側的差異不是那顆鈕造成的`);
+    assert.ok(vTouched >= 8, `治具走鐘：直立只攔到 ${vTouched} 次`);
+    assert.equal(pTouched, vTouched,
+      `窗關＋中性下壓手接觸數仍差 ${vTouched - pTouched}＝低窗不是這個常數在管`);
   } finally {
-    TUNING.BLOCK_PRESS_SIDE_MUL = prev;
+    TUNING.PRESS_SEAL_GAP = prev;
+    TUNING.BLOCK_PRESS_BODY_MUL = prevBody;
   }
 });
 
@@ -122,7 +146,7 @@ function bodyOutcome(seed, hand) {
   return { blocked: false, zone: null };
 }
 
-test('★代價二★ 正面：壓手攔死的次數少於直立（手在網的另一側，有效面積變小）', () => {
+test('★增益二★ 正面：壓手攔死的次數多於直立（手面朝下＝球被折進對方場內）', () => {
   const N = 1200;
   let vBlocked = 0; let pBlocked = 0; let bodyZone = 0;
   for (let seed = 1; seed <= N; seed += 1) {
@@ -133,15 +157,15 @@ test('★代價二★ 正面：壓手攔死的次數少於直立（手在網的�
   }
   assert.ok(bodyZone > 20,
     `治具只跑出 ${bodyZone} 次 body 區接觸，樣本不足以分辨有沒有差異`);
-  assert.ok(pBlocked < vBlocked,
-    `壓手攔死 ${pBlocked} 次、直立 ${vBlocked} 次——壓手沒有比較難攔死 ⇒ `
-    + 'BLOCK_PRESS_BODY_MUL 沒有生效（代價落空）');
+  assert.ok(pBlocked > vBlocked,
+    `壓手攔死 ${pBlocked} 次、直立 ${vBlocked} 次——壓手正面沒有比較會攔死 ⇒ `
+    + 'BLOCK_PRESS_BODY_MUL 加成沒有生效（08-31 語意重定的核心）');
 });
 
-test('★代價二 鑑別力★ 把 BODY_MUL 調回中性，兩者的攔死次數就會相等', () => {
+test('★增益二 鑑別力★ 把 BODY_MUL 調回中性，兩者的攔死次數就會相等', () => {
   const prev = TUNING.BLOCK_PRESS_BODY_MUL;
   assert.equal(prev, EXPECTED_BODY_MUL, `常數被改成 ${prev} 了`);
-  assert.ok(EXPECTED_BODY_MUL < 1, '方向反了：壓手應該讓正面**更難**攔死（代價），大於 1 會變成獎勵');
+  assert.ok(EXPECTED_BODY_MUL > 1, '方向反了：08-31 裁定壓手正面是**加成**，小於 1 是被推翻的 08-24 舊語意');
   TUNING.BLOCK_PRESS_BODY_MUL = 1.0;
   try {
     const N = 1200;
