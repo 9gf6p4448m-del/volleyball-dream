@@ -50,8 +50,11 @@ function sideTouch(seed, hand) {
 // 完全沒有測試在守，只有「分支存在與否」被守到。
 // 1.6 的來源＝tools/press-cost-sweep.mjs 的掃描（2768 個配對接觸點），
 // 要改這個數字就要重跑掃描並更新 B7-3 的修訂紀錄。
-const EXPECTED_SIDE_MUL = 1.6;
-const EXPECTED_BODY_MUL = 0.7;
+// ★ 2026-08-31 依測試自訂的修訂程序更新（1.6/0.7 → 1.3/0.85）★
+// 觸網犯規「只掛壓手」上線後帳本重算：已重跑 press-cost-sweep（1907 配對接觸點），
+// 08-24 同一凍結判準下唯一達標組＝1.30/0.85（全樣本 −0.9 雜訊內、top +24.3 顯著）。
+const EXPECTED_SIDE_MUL = 1.3;
+const EXPECTED_BODY_MUL = 0.85;
 
 test('★代價一★ 擦側：壓手把球撥得更開（逐值＝1.6 倍）', () => {
   assert.equal(TUNING.BLOCK_PRESS_SIDE_MUL, EXPECTED_SIDE_MUL,
