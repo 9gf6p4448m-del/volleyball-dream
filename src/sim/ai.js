@@ -116,7 +116,9 @@ export const AI = {
   // 攻守平衡卷 批5（B5-1/B5-4）：雙人牆分工縫——read 的 MB 往斜線過網點讓的比例。
   // 0＝現狀（疊在翼手同點）、1＝整個站到斜線過網點上。門檻沿 classifySpikeZone 的
   // 中路界線 1.8（接觸點在中路＝本來就是 MB 自己的球，不讓）。
-  BLOCK_SEAM_MIX: 0.65,   // 【試玩必調】
+  // 【試玩必調】批6a：0.65→0.85（診斷 kickoff 批6：讓 65% 後離斜線過網點仍差 0.6m、
+  // crossX 幾何實測準；1.0 會棄守中路 cross|middle +6.8，0.85＝240 場配對全帶內）
+  BLOCK_SEAM_MIX: 0.85,
   BLOCK_SEAM_MIN_X: 1.8,
   DIVE_RATE: 0.16,        // AI 魚躍積極度預設（快速比賽；生涯我方綁解鎖、對手 opponents 分級）
   //  ↑ balance-sim 定：0.5 讓奪冠 8→26% 失控，降到 0.16 求溫和（魚躍有感但 rally 不失衡）
