@@ -108,6 +108,7 @@ import { foreignJianEventFor } from '../career/foreignEvents.js';
 import { PRO_CONTRACT_LINES, proWangRivalPreEvents, proClosingLines } from '../career/proEvents.js';
 // 多年職業生涯卷 小批（2026-08-27 夜）：後段年份里程碑事件（純新增、獨立於上一行）
 import { proMilestonePreEvents } from '../career/proMilestones.js';
+import { milestoneShowContent, showMilestoneShow } from './milestoneShow.js';
 // 多年職業生涯卷 小批（2026-08-27 夜）：王勝翔宿敵生涯鏡像——與上面的 proEvents.js
 // 完全獨立的一條敘事線（零改動既有王勝翔宿敵線，見 proRivalArc.js 檔頭）
 import { rivalArcPreEvents } from '../career/proRivalArc.js';
@@ -1826,6 +1827,33 @@ export function createCareerScreen(store, {
     return evs.filter((e) => !played.has(e.id));
   }
 
+  const MILESTONE_SHOW_SEC = 3.2; // 【試玩必調】里程碑全螢幕卡時長（秒）
+
+  // J1：里程碑「當下」全螢幕演出——evs 裡凡是 milestoneShowContent 認得的 id，先各自
+  // 播一張全螢幕卡（可跳過，跳過與播畢殊途同歸），播完（或本來就沒有）才呼叫 next；
+  // 建卡崩潰＝自我停用，直接跳去下一張（永不卡住 next，J1④「不阻塞」）。
+  function playMilestoneShows(evs, next) {
+    const queue = evs.map((e) => milestoneShowContent(e.id)).filter(Boolean);
+    if (!queue.length) { next(); return; }
+    const step = (i) => {
+      if (i >= queue.length) { next(); return; }
+      try {
+        let advanced = false;
+        const advance = () => {
+          if (advanced) return;
+          advanced = true;
+          clearTimeout(timer);
+          step(i + 1);
+        };
+        const card = showMilestoneShow(queue[i], advance);
+        const timer = setTimeout(() => { card.dispose(); advance(); }, MILESTONE_SHOW_SEC * 1000);
+      } catch {
+        step(i + 1); // 建卡本身就炸＝這張卡放棄，繼續下一張
+      }
+    };
+    step(0);
+  }
+
   function fireEvents(evs, career, player, after) {
     let c = career;
     for (const e of evs) {
@@ -1849,7 +1877,9 @@ export function createCareerScreen(store, {
     // W4：一次性事件入帳跨屆旗標（debut 類生涯內不再重播）
     store.markPlayedOnce?.(evs.filter((e) => isOnceEvent(e.id)).map((e) => e.id));
     if (!okCareer || !okPlayer) setMsg('⚠ 存檔寫入失敗——事件進度可能未保存');
-    dialogPlay(evs, after);
+    // 結算（記帳/存檔）已在上面完成——J1 演出純粹加在後面，即使演出整段失敗
+    // dialogPlay 仍會被呼叫（playMilestoneShows 的 try/catch 保底）
+    playMilestoneShows(evs, () => dialogPlay(evs, after));
   }
 
   function exportSave() {

@@ -25,7 +25,7 @@ import { effectiveTrust } from '../sim/trust.js';
 import { mbPanelTitle } from '../input/blockRead.js';
 import { digReadCorrect, schemeByKey, noteScheme, counterReadOf } from '../input/liberoRead.js';
 import { myRouteFor } from '../input/myRoute.js';
-import { applySeasonRoster } from '../career/careerState.js';
+import { applySeasonRoster, careerRecord, matchSeed } from '../career/careerState.js';
 import { serverId } from '../sim/match.js';
 import { STAMINA } from '../sim/stamina.js';
 import { setPointTeam } from '../ui/scoreboard.js';
@@ -86,6 +86,7 @@ import { uniTable } from '../career/uniSchedule.js';
 import { corpTable } from '../career/corpSchedule.js';
 import { lineupIntroShot, introPhase, INTRO_SEC } from './lineupIntro.js';
 import { createIntroNameplate } from '../ui/introNameplate.js';
+import { pickAnnouncerLine, createAnnouncerCaption } from '../ui/lineupAnnouncer.js';
 import { roleLabel } from '../career/heightAdvice.js';
 import { createConfetti } from '../render/confetti.js';
 import { createFireworks } from '../render/fireworks.js';
@@ -3473,7 +3474,23 @@ function beginLineupIntro(s, now) {
       myName: game.players[s.playerId]?.name ?? '',
       myRole: roleLabel(game.players[s.playerId]?.currentRole) ?? '先發',
     };
-    return { startedAt: now, layout, names, nameplate: createIntroNameplate(), shownPhase: null };
+    // 大作感四卷 批2（J5）：播報員開場白——決定論句池（matchSeed 同源、對手名/戰績
+    // 代入），掛在 oppLine 段一起播（見 updateAnnouncerCaption）。與運鏡/名牌各自
+    // try/catch：播報字幕建不起來不該連累已經算好的鏡位資料（J5 崩潰自我停用）。
+    let caption = null;
+    let announcerLine = null;
+    try {
+      const record = careerRecord(s.careerCtx?.career ?? { results: [] });
+      const seed = matchSeed(s.careerCtx?.career ?? { seed: 1 }, s.careerCtx?.matchEntry?.id ?? '');
+      announcerLine = pickAnnouncerLine(seed, {
+        opp: oppDef?.name ?? '對手', wins: record.wins, losses: record.losses,
+      });
+      caption = createAnnouncerCaption();
+    } catch { caption = null; announcerLine = null; }
+    return {
+      startedAt: now, layout, names, nameplate: createIntroNameplate(), shownPhase: null,
+      caption, announcerLine,
+    };
   } catch {
     endLineupIntro(s);
     return null;
@@ -3494,12 +3511,22 @@ function updateIntroNameplate(li, p) {
   else li.nameplate.hide();
 }
 
+// J5②：播報字幕限 oppLine 段（開場第一段，鏡頭正在掃對手列隊）——不佔用後面
+// oppAce/myStar/overview 段落，intro 總時長（INTRO_SEC）零改動
+function updateAnnouncerCaption(li, p) {
+  if (!li.caption) return;
+  const onWindow = introPhase(p) === 'oppLine';
+  if (onWindow) li.caption.show(li.announcerLine);
+  else li.caption.hide();
+}
+
 // 跳過與播畢共用：收名牌/鏡位，補播情蒐帶（與 endOpeningShow 共用一次性旗標）
 function endLineupIntro(s) {
   const li = s.lineupIntro;
   s.lineupIntro = null;
   if (li && li !== 'pending') {
     try { li.nameplate.dispose(); } catch { /* 已移除＝無事可做 */ }
+    try { li.caption?.dispose(); } catch { /* 已移除＝無事可做 */ }
   }
   s.stage.rig.setCineShot(null);
   if (s.config.tapeClips.length && !s.openingTapeStarted) {
@@ -3703,6 +3730,7 @@ function frameStep(s, now) {
       const p = Math.min((now - li.startedAt) / (INTRO_SEC * 1000), 1);
       stage.rig.setCineShot(lineupIntroShot(p, li.layout));
       updateIntroNameplate(li, p);
+      updateAnnouncerCaption(li, p);
       if (p >= 1) endLineupIntro(s);
       else delta = 0;
     }
