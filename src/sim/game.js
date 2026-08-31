@@ -1385,6 +1385,7 @@ function tryBlock(state, toTeam, ev) {
   // 【第一層】幾何閘門：在窗內、手構得到的人組成牆；帶＝各人區間的聯集，
   // 球的過網 x 落在帶內才算碰到手。多人加成由此湧現，不靠任何加成係數。
   const members = [];
+  let swallowEmitted = false; // 吞下去觀測事件一次過網只發一張
   for (const p of Object.values(state.players)) {
     if (p.teamId !== toTeam) continue;
     if (!isFrontRowOf(state, toTeam, p.id)) continue;
@@ -1397,7 +1398,18 @@ function tryBlock(state, toTeam, ev) {
     // 有低窗——過網高度落在窗內的球對壓手成員是**穿透**（從手與網的縫隙鑽進去，
     // 落在攔網手腳邊）。直臂貼網面、低窗不存在（沿用全域下限 NET_HEIGHT-0.15）。
     // 這是壓手的專屬幾何代價（與觸網並列）；攻方打低打陡＝瞄這條窗的選擇。
-    if (actor.blockHand === 'press' && b.y < COURT.NET_HEIGHT + TUNING.PRESS_SEAL_GAP) continue;
+    if (actor.blockHand === 'press' && b.y < COURT.NET_HEIGHT + TUNING.PRESS_SEAL_GAP) {
+      // 純觀測事件（BLOCK_DECEIVED 先例：零 rand、零判定語意）：球在他的可攔帶內
+      // 卻從手與網帶之間鑽過去——表現層「球被吞下去了」字卡的驅動源
+      if (!swallowEmitted && Math.abs(actor.x - b.x) <= TUNING.BLOCK_REACH_X) {
+        swallowEmitted = true;
+        ev.push({
+          type: 'BLOCK_SWALLOW', tick: state.tick, team: toTeam, playerId: p.id,
+          spikerId: state.rally.lastToucherId ?? null,
+        });
+      }
+      continue;
+    }
     // 頂邊吃「起跳後經過幾 tick」（2-B 之前 blockTopEdge 忽略 t＝退化成跳躍頂點，
     // 行為與改制前逐值相同；換的是介面不是數值）。W7：累了跳不高
     const airT = state.tick - actor.blockStartTick;

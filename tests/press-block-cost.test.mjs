@@ -77,27 +77,35 @@ function lowTouch(seed, hand) {
   b.x = 0; b.y = 2.56; b.z = -0.35; b.vx = 0; b.vy = -0.2; b.vz = 9;
   b.px = b.x; b.py = b.y; b.pz = b.z;
   g.actors.A3.x = 0; g.actors.A3.z = 0.5;
+  const seen = [];
   for (let i = 0; i < 24 && g.phase === 'rally'; i += 1) {
     const ev = stepGame(g, [blockIntent('A3', g.tick, hand)]);
+    seen.push(...ev);
     const bt = ev.find((e) => e.type === 'BLOCK_TOUCH');
-    if (bt) return bt;
-    if (g.ball.z > 1.5 || g.ball.vz < 0) return null;
+    if (bt) { bt._events = seen; return bt; }
+    if (g.ball.z > 1.5 || g.ball.vz < 0) return { _miss: true, _events: seen };
   }
-  return null;
+  return { _miss: true, _events: seen };
 }
+const touched = (r) => r && !r._miss;
 
-test('★代價・吞下去★ 低窗球：直立攔得到、壓手被鑽過去（雙向）', () => {
+test('★代價・吞下去★ 低窗球：直立攔得到、壓手被鑽過去（雙向）＋觀測事件只發給壓手臂', () => {
   // 這族治具的自然命中率 ~30%（同 bodyOutcome 註解的 27.5%）——門檻按這個底訂
-  let swallowed = 0; let verticalTouched = 0;
+  let swallowed = 0; let verticalTouched = 0; let swallowEvents = 0; let vSwallowEvents = 0;
   for (let seed = 1; seed <= 60; seed += 1) {
     const v = lowTouch(seed, 'vertical');
     const p = lowTouch(seed, 'press');
-    if (v) verticalTouched += 1;
-    if (v && !p) swallowed += 1;
+    if (touched(v)) verticalTouched += 1;
+    if (touched(v) && !touched(p)) swallowed += 1;
+    if (p._events.some((e) => e.type === 'BLOCK_SWALLOW')) swallowEvents += 1;
+    if (v._events.some((e) => e.type === 'BLOCK_SWALLOW')) vSwallowEvents += 1;
   }
   assert.ok(verticalTouched >= 8, `直立只攔到 ${verticalTouched} 次＝治具球高走鐘（該在直立可攔帶）`);
   assert.equal(swallowed, verticalTouched,
     `低窗球有 ${verticalTouched - swallowed} 次被壓手攔到＝吞下去的窗沒有生效`);
+  assert.ok(swallowEvents >= swallowed,
+    `吞下去 ${swallowed} 次但 BLOCK_SWALLOW 事件只有 ${swallowEvents} 張＝字卡驅動源漏發`);
+  assert.equal(vSwallowEvents, 0, '直立臂不得出現吞下去事件（它攔得到）');
 });
 
 test('★吞下去 鑑別力★ 低窗關閉（GAP 壓到全域下限之下）⇒ 壓手攔得到同一批球', () => {
@@ -110,8 +118,8 @@ test('★吞下去 鑑別力★ 低窗關閉（GAP 壓到全域下限之下）�
     // 配對相等：窗關＋加成歸零後，壓手在同一批種子的接觸數必須跟直立一模一樣
     let vTouched = 0; let pTouched = 0;
     for (let seed = 1; seed <= 60; seed += 1) {
-      if (lowTouch(seed, 'vertical')) vTouched += 1;
-      if (lowTouch(seed, 'press')) pTouched += 1;
+      if (touched(lowTouch(seed, 'vertical'))) vTouched += 1;
+      if (touched(lowTouch(seed, 'press'))) pTouched += 1;
     }
     assert.ok(vTouched >= 8, `治具走鐘：直立只攔到 ${vTouched} 次`);
     assert.equal(pTouched, vTouched,

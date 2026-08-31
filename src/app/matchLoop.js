@@ -2157,6 +2157,11 @@ function applyEvents(s, frameEvents, now) {
     if (e.type === 'SIDE_SWITCH') {
       cards.push({ pri: 45, text: '🔄 決勝局 8 分——換邊！', color: '#ffd166', dur: 2600 });
     }
+    // 真實感卷・吞下去（08-31 Sawmah 定名）：貼網低平球從壓手與網帶之間鑽過去。
+    // 兩邊都看得到——攻方學到「壓手可以鑽」、守方學到「壓手要付的代價」
+    if (e.type === 'BLOCK_SWALLOW') {
+      cards.push({ pri: 30, text: '🕳 球被吞下去了！', color: '#ffd166', dur: 2200 });
+    }
     // W4 題3 二次球真值字卡：實際出手（S 第二擊 spike）才立旗——
     // 得手「🎯偷襲得手！」／被識破（對手接起/攔到）「被看穿了——他守著淺區」；
     // 出界失分＝pointBanner 講故事，不出偷襲字卡（真值：那不是被識破，是自己失手）
