@@ -265,6 +265,10 @@ export const TUNING = {
   // 變向折損的先例：同落點、球更慢、不被淨空下限吞掉）。半拍出手沒有全揮臂球速；
   // 散佈鈕（批2）實測只把快攻走廊 94-97%→87-89% 就報酬遞減——守方缺的是反應時間。
   QUICK_TIME_MUL: 1.15,          // 【試玩必調】
+  // 候補池卷 P3-1：發球計時違例——備妥（serveReadyTick）後逾此 tick 數未發球＝
+  // 判給接發方（真實規則 8 秒；遊戲取寬鬆 12s 防手機分心誤傷）。AI 發球 ~1-2s
+  // 結構上永不觸發；教學局由 matchConfig 傳 serveClockTicks:0 關閉。
+  SERVE_CLOCK_TICKS: 720,        // 12s@60Hz【試玩必調】
   // 真實感卷 批3（R3-1~R3-3）：觸網犯規——★只掛壓手★（08-31 Sawmah 裁定）。
   // 起跳是自動的，基礎率＝玩家無法迴避的隨機失分，違反「代價掛決定」的自家憲法
   // （攔網時序卷「不評時機」、壓手的代價卷同軸）；直臂（vertical）攔網零觸網。
@@ -333,7 +337,7 @@ export const TUNING = {
 // careerMatchSetup 依屆數給），與 aiProfiles／scoutRead／liberos 同一條注入範式。
 export function createGame({
   seed = 1, teams, setTarget, aiProfiles, scoutRead, liberos, benches, stamina, momentum,
-  trustDynInit, series, comboScale,
+  trustDynInit, series, comboScale, serveClockTicks = TUNING.SERVE_CLOCK_TICKS,
 } = {}) {
   const rosters = teams ?? createDefaultTeams();
   const players = {};
@@ -442,6 +446,7 @@ export function createGame({
       winner: null,
     } : null,
     phase: 'serve', // 'serve' | 'rally' | 'set_break'（多局局間） | 'set_over'
+    serveClockTicks, // 候補池卷 P3-1：0＝關閉（教學局）
     serveReadyTick: 0,
     ball: createBall(),
     rally: {
@@ -503,6 +508,15 @@ export function stepGame(state, intents = []) {
   // （UI 的「下一局」按鈕／治具的自動推進）——局間存檔的同步點就在這裡
   if (state.phase === 'set_over' || state.phase === 'set_break') return [];
   const ev = [];
+
+  // 候補池卷 P3-1：發球計時違例——「玩家發球無時限」的洞（setupServePhase 註解早已
+  // 點名，體力回復為此改過一次性）由此補上。逾時＝判給接發方；rally.profile 先清＝
+  // 這一分沒有 rally、settlePoint 的攻擊歸因區塊不得吃到上一波殘值。
+  if (state.phase === 'serve' && state.serveClockTicks > 0
+    && state.tick > state.serveReadyTick + state.serveClockTicks) {
+    state.rally.profile = null;
+    settlePoint(state, otherTeam(state.match.servingTeam), 'SERVE_CLOCK', ev);
+  }
 
   // 快照上一步位置：供 render 層插值（同 ball 的 px/py/pz 慣例）；
   // 同時推入 zHistory（回溯窗），供後排攻擊合法性判定近似起跳位置用

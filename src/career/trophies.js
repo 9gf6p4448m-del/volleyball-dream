@@ -6,6 +6,7 @@
 import {
   MILESTONE_VETERAN_YEAR, MILESTONE_DYNASTY_TITLES, MILESTONE_FINAL_PUSH_YEAR,
 } from './proMilestones.js';
+import { isForeignTeamId } from './foreignTeams.js';
 
 // seasons＝loadSeasonArchive() 回傳（逐季，含各章）；回傳 [{icon,title,sub}] 依時間序
 export function collectTrophies({ seasons = [] } = {}) {
@@ -22,7 +23,12 @@ export function collectTrophies({ seasons = [] } = {}) {
       proSeasons += 1;
       if (sn.proFinish === 'champion') {
         proTitles += 1;
-        list.push({ icon: '🏆', title: '季後賽總冠軍', sub: `第 ${n} 季` });
+        // 候補池卷 P4-1（銷大作感二卷小債）：章別從封存的 pro 隊 id 推導——
+        // 封存本來就存 `pro: proId`（careerStore settleProFinale），不必新增欄位。
+        // 舊檔缺 pro 欄位＝回落不分章的舊標題（誠實：不猜）。
+        const title = sn.pro == null ? '季後賽總冠軍'
+          : isForeignTeamId(sn.pro) ? '海外聯賽總冠軍' : '職業聯賽總冠軍';
+        list.push({ icon: '🏆', title, sub: `第 ${n} 季` });
       }
     }
   }
@@ -38,3 +44,4 @@ export function collectTrophies({ seasons = [] } = {}) {
   }
   return list;
 }
+

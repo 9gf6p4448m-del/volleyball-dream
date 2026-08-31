@@ -47,6 +47,7 @@ export function derivePointInfo({ reason, winner, myTeam, lastTouch, controlledI
   else if (reason === 'FOUR_HITS') { title = '四擊犯規'; icon = '🚫'; }
   else if (reason === 'BACK_ROW_ATTACK') { title = '後排攻擊違例'; icon = '🚫'; }
   else if (reason === 'NET_FAULT') { title = '攔網觸網犯規'; icon = '🚫'; }
+  else if (reason === 'SERVE_CLOCK') { title = '發球逾時'; icon = '⏱'; }
   else if (reason === 'OUT') {
     icon = '📏';
     title = kind === 'serve' ? '發球出界'

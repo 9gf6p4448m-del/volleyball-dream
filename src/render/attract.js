@@ -28,6 +28,7 @@ export function createAttract(ctx) {
       const shot = attractShot((now - t0) / 1000);
       ctx.camera.position.set(shot.pos.x, shot.pos.y, shot.pos.z);
       ctx.camera.lookAt(shot.target.x, shot.target.y, shot.target.z);
+      ctx.arena?.tickMarquee?.(1 / 60); // 候補池卷P1-2：選單背景的LED跑馬燈照捲
       ctx.postFx.render(ctx.scene, ctx.camera); // 渲染單一出口（同 matchLoop A3 慣例）
     } catch {
       running = false; // 這一幀炸了＝整段放棄，選單不受影響

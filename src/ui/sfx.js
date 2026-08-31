@@ -124,6 +124,33 @@ export function createSfx() {
     crowdBias = bias;
   }
 
+  // 候補池卷 P2-1：關鍵分應援節奏拍手——純合成（哨音教訓：勿用真實素材）。
+  // 一拍＝三層短噪音爆衝過帶通（頻率錯開＝群眾感），節奏 0.24s/拍；走 busGain
+  // 匯流排＝吃總音量/靜音鈕。全部【試玩必調】。
+  function rhythmClaps(startDelay = 0.5, count = 4) {
+    if (!ensure() || !busGain) return;
+    const t0 = ctx.currentTime + startDelay;
+    for (let i = 0; i < count; i += 1) {
+      for (let l = 0; l < 3; l += 1) {
+        const t = t0 + i * 0.24 + l * 0.012;
+        const noise = ctx.createBufferSource();
+        const len = Math.floor(ctx.sampleRate * 0.05);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let j = 0; j < len; j += 1) d[j] = (Math.random() * 2 - 1) * (1 - j / len) ** 2;
+        noise.buffer = buf;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 1500 + l * 420;
+        bp.Q.value = 1.2;
+        const g = ctx.createGain();
+        g.gain.value = 0.05;
+        noise.connect(bp).connect(g).connect(busGain);
+        noise.start(t);
+      }
+    }
+  }
+
   // 裁判哨音：高頻方波＋顫音（比賽儀式感——死球長哨、發球前短哨）。
   // 08-30 試玩四修定案：**全回合成**（durMs 控長短）——真實哨音取樣三案（整段/截斷/
   // 只留長哨）逐一被試玩退回，whistle.m4a 已除役出 repo。教訓在 memory：短促功能音
@@ -450,6 +477,7 @@ export function createSfx() {
             // 擋住 matchLoop 的常態呼叫，否則排程好的爆炸會被搶先蓋掉）
             crowdGain.gain.setTargetAtTime(0.14, t + CHEER_DELAY, 0.05); // 爆炸值【試玩必調】
             crowdExplodeUntil = t + 1.5; // 視窗內 setCrowdLevel 忽略常態值，撐滿爆炸
+            rhythmClaps(CHEER_DELAY + 0.15, 4); // 候補池卷P2-1：關鍵分應援節奏拍手
           }
         } else if (e.type === 'TOUCH') {
           if (e.kind === 'spike') {

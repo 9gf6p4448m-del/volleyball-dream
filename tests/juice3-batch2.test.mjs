@@ -95,7 +95,8 @@ test('K2-3 跳過通道：MVP 演出中點擊＝endMvpShow（與播畢殊途同�
   const s = src('src/app/matchLoop.js');
   assert.ok(s.includes('if (s.mvpShow) { endMvpShow(s); return; }'));
   // endMvpShow 收口必顯 overlay（燈還原失敗也不得擋）
-  const fn = s.slice(s.indexOf('function endMvpShow'), s.indexOf('function endMvpShow') + 600);
+  // 候補池卷 P2-2 後 endMvpShow 多了採訪分支——掃描窗跟著函式實長放大（斷言不變）
+  const fn = s.slice(s.indexOf('function endMvpShow'), s.indexOf('function endMvpShow') + 1600);
   assert.ok(fn.includes('setOverOverlay.show'));
   assert.ok(fn.includes('stopMvpDim'));
 });

@@ -91,6 +91,7 @@ import { createConfetti } from '../render/confetti.js';
 import { showChampionBanner } from '../ui/championBanner.js';
 import { selectMvp } from '../career/mvp.js';
 import { hawkeyeCallOf, showHawkeye, HAWKEYE } from '../ui/hawkeye.js';
+import { pickInterviewLine, showInterviewCard } from '../ui/interviewCard.js';
 import { showMvpCard } from '../ui/mvpCard.js';
 import { createHaptics } from '../ui/haptics.js';
 
@@ -975,6 +976,8 @@ function bindInputHandlers(s) {
     if (s.celebration) { endCelebration(s); return; }
     // 三卷批2：MVP 演出中點擊＝跳過（endMvpShow 補顯 overlay，與播畢殊途同歸）
     if (s.mvpShow) { endMvpShow(s); return; }
+    // 候補池卷P2-2：採訪字卡點擊＝跳過（同款殊途同歸）
+    if (s.interview) { endInterview(s); return; }
     if (s.careerCtx) {
       if (!s.boxShown) {
         s.boxShown = true;
@@ -2156,6 +2159,12 @@ function applyEvents(s, frameEvents, now) {
   for (const e of frameEvents) {
     if (e.type === 'SIDE_SWITCH') {
       cards.push({ pri: 45, text: '🔄 決勝局 8 分——換邊！', color: '#ffd166', dur: 2600 });
+    }
+    // 候補池卷 P2-3：換人舉牌——讀既有 SUBSTITUTION 事件流，名字同 sim 名冊單一來源
+    if (e.type === 'SUBSTITUTION') {
+      const inName = game.players[e.inId]?.name ?? e.inId;
+      const outName = game.players[e.outId]?.name ?? e.outId;
+      cards.push({ pri: 25, text: `🪧 換人：${inName} 上 ⇄ ${outName} 下`, color: '#9db2ff', dur: 2400 });
     }
     // 真實感卷・吞下去（08-31 Sawmah 定名）：貼網低平球從壓手與網帶之間鑽過去。
     // 兩邊都看得到——攻方學到「壓手可以鑽」、守方學到「壓手要付的代價」
@@ -3533,7 +3542,7 @@ function showMvpOrOverlay(s, next) {
     try {
       const data = buildMvpData(s);
       if (data) {
-        s.mvpShow = { startedAt: null, card: showMvpCard(data), ...next };
+        s.mvpShow = { startedAt: null, card: showMvpCard(data), mvpName: data.name, ...next };
         return;
       }
     } catch { /* 演出建不起來＝走現行流程 */ }
@@ -3546,7 +3555,26 @@ function endMvpShow(s) {
   s.mvpShow = null;
   try { m.card.dispose(); } catch { /* 已移除＝無事可做 */ }
   try { s.ctx.lights.stopMvpDim(); } catch { /* 燈還原失敗不得擋 overlay */ }
+  // 候補池卷 P2-2：MVP 後接賽後採訪（純演出、可跳過；建卡失敗直接落 overlay 永不致死）
+  if (m.mvpName) {
+    try {
+      const line = pickInterviewLine((s.game.seed ?? 0)
+        + (s.game.match?.score?.A ?? 0) * 31 + (s.game.match?.score?.B ?? 0));
+      s.interview = { startedAt: null, card: showInterviewCard(m.mvpName, line),
+        winner: m.winner, score: m.score, hint: m.hint };
+      return;
+    } catch { /* 演出死了走現行流程 */ }
+  }
   s.stage.setOverOverlay.show(m.winner, m.score, s.game.players[s.localId].teamId, m.hint);
+}
+
+const INTERVIEW_SEC = 4.5; // 【試玩必調】採訪字卡時長
+function endInterview(s) {
+  const iv = s.interview;
+  if (!iv) return;
+  s.interview = null;
+  try { iv.card.dispose(); } catch { /* 已移除 */ }
+  s.stage.setOverOverlay.show(iv.winner, iv.score, s.game.players[s.localId].teamId, iv.hint);
 }
 
 // W4(P4) Q10 燈光秀收場（自然結束或點擊跳過共用）：恢復常態燈光/鏡頭、補播情蒐帶
@@ -3680,6 +3708,13 @@ function frameStep(s, now) {
       stage.sfx.cheer?.(1.5, { forceBig: true }); // 【試玩必調】中段二波
     }
     if (p >= 1) endCelebration(s);
+  }
+
+  // 候補池卷P2-2：採訪字卡時間軸（牆鐘；播畢自動收）
+  if (s.interview) {
+    const iv = s.interview;
+    if (iv.startedAt === null) iv.startedAt = now;
+    if (now - iv.startedAt >= INTERVIEW_SEC * 1000) endInterview(s);
   }
 
   // 三卷批2：MVP 演出時間軸——燈暗聚光（牆鐘驅動；sim 已 set_over 凍結）
@@ -3968,6 +4003,16 @@ function frameStep(s, now) {
   ctx.lights.setTension(tension, delta);
   ctx.crowdAnim?.update(now); // 三卷批1：觀眾反應每幀驅動（窗外內部早退＝零成本）
   ctx.officials?.update(now); // 真實感卷批1：裁判演出（死球窗外內部早退）
+  ctx.arena?.tickMarquee?.(delta); // 候補池卷P1-2：LED跑馬燈（只動texture offset）
+  // 候補池卷P3-1 表現層：發球計時 8 秒起警示一次（AI 永不觸發＝天然只提醒玩家）
+  if (game.phase === 'serve' && (game.serveClockTicks ?? 0) > 0) {
+    if (game.tick > game.serveReadyTick + 480 && !s.serveClockWarned) {
+      s.serveClockWarned = true;
+      stage.floatText.show('⏱ 發球計時——4 秒內要出手！', '#ffd166', 2200);
+    }
+  } else if (s.serveClockWarned) {
+    s.serveClockWarned = false;
+  }
   stage.sfx.setHeartbeat(tension);
   // W7 B4②：氣勢聲量聯動——我方（A）有利＝聲量爬升、對方有利＝場館變安靜（壓迫感，非噓聲）；
   // 優先序：局點發球前屏息＞氣勢聯動（tension 成立時氣勢聯動整個讓位，不疊算）

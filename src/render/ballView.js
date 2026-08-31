@@ -14,6 +14,9 @@ export function sparkSpawnCount(speed) {
   return Math.min(3, 1 + Math.floor((speed - TRAIL_SPEED) / 6));
 }
 
+const _spinAxis = new THREE.Vector3();
+const _spinQ = new THREE.Quaternion();
+
 export function createBallView(scene, quality) {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.105, 24, 18),
@@ -91,7 +94,16 @@ export function createBallView(scene, quality) {
         fy = (Math.sin(t * 3.9 + 0.6) + Math.sin(t * 8.3)) * 0.03;
       }
       mesh.position.set(x + fx, y + fy, z);
-      mesh.rotation.x += (floatFlight ? 0.25 : 4.8) * dt; // 飄浮球＝不轉（近停）；其餘視覺滾動
+      // 候補池卷 P1-1：轉速∝球速、轉軸垂直於水平行進方向（上旋視覺）——重扣狂轉、
+      // 慢球慢滾；飄浮球維持近停（真飄的招牌，轉了等於視覺說謊）。純視覺不碰 sim。
+      const spd = Math.hypot(ball.vx ?? 0, ball.vz ?? 0);
+      if (floatFlight || spd < 0.5) {
+        mesh.rotation.x += (floatFlight ? 0.25 : 1.2) * dt;
+      } else {
+        _spinAxis.set(ball.vz, 0, -ball.vx).normalize();
+        _spinQ.setFromAxisAngle(_spinAxis, Math.min(18, 2 + spd * 0.9) * dt); // 【試玩必調】
+        mesh.quaternion.premultiply(_spinQ);
+      }
       mesh.material.emissiveIntensity = glow * 1.6; // 丙3：短暫發光（強度隨時窗衰減）
       blob.position.x = x;
       blob.position.z = z;

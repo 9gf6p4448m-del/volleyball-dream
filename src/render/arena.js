@@ -101,6 +101,12 @@ export function createArena(scene, venueKey = 'regular') {
     getCrowd() {
       return group?.userData?.crowdMesh ?? null;
     },
+    // 候補池卷 P1-2：跑馬燈捲動（呼叫端每幀給 dt；換館重建後自動指到新紋理）
+    tickMarquee(dt) {
+      const list = group?.userData?.marquees;
+      if (!list) return;
+      for (const t of list) t.offset.x = (t.offset.x + dt * 0.03) % 1; // 【試玩必調】捲速
+    },
   };
   api.setVenue(venueKey);
   return api;
@@ -231,7 +237,43 @@ function buildAdBoards(group, spec, teamName) {
   put(-edgeX, 5.5, Math.PI / 2, 2);
   put(-edgeX, -5.5, Math.PI / 2, 0);
   put(0, edgeZ, Math.PI, 1);
-  put(0, -edgeZ, 0, 2);
+  // 候補池卷 P1-2：短邊 z<0 那面改 LED 跑馬燈（虛構品牌輪播、canvas 紋理捲動——
+  // 每幀只動 texture offset＝近零成本）；tickMarquee 由 matchLoop/attract 各自驅動
+  const mTex = makeMarqueeTexture(adTexts);
+  const mMat = new THREE.MeshBasicMaterial({ map: mTex, toneMapped: false });
+  const m = new THREE.Mesh(geo, mMat);
+  m.position.set(0, 0.46, -edgeZ);
+  m.updateMatrix();
+  group.add(m);
+  group.userData.marquees = [mTex];
+}
+
+// 跑馬燈紋理：把整組廣告詞串成一條長帶（repeat 捲動）；虛構品牌沿 VENUES 既有詞庫
+function makeMarqueeTexture(texts) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 4096;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0b1020';
+  ctx.fillRect(0, 0, 4096, 128);
+  ctx.font = 'bold 72px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffd166';
+  const line = `${texts.join('　★　')}　★　`;
+  // measureText 韌性回退：治具 DOM stub 的 2d ctx 沒有這個方法（kit-batch3 withDomStub）——
+  // 用字數估寬即可（跑馬燈重複鋪滿，精度無所謂）
+  const lineW = typeof ctx.measureText === 'function'
+    ? ctx.measureText(line).width : line.length * 40;
+  let x = 20;
+  while (x < 4096 + 800) {
+    ctx.fillText(line, x, 68);
+    x += Math.max(200, lineW);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.set(0.28, 1); // 一面板只露帶子的一段
+  return tex;
 }
 
 // 頂部桁架（關鍵戰館/冠軍館）：縱橫工字樑剪影——縣立競技場的鋼構氣質

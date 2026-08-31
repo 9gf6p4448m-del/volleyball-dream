@@ -20,11 +20,17 @@ test('各章冠軍逐一入列；非冠軍季不入列', () => {
     { index: 5, uniRank: 1 },
     { index: 8, corpRank: 1 },
     { index: 9, proFinish: 'semi' },
-    { index: 10, proFinish: 'champion' },
+    { index: 10, proFinish: 'champion', pro: 'cangyu-titans' },
+    { index: 12, proFinish: 'champion', pro: 'aurora-orion' },
+    { index: 13, proFinish: 'champion' }, // 舊檔無 pro 欄位＝回落不分章標題
   ];
   const list = collectTrophies({ seasons });
   const titles = list.map((t) => t.title);
-  assert.deepEqual(titles, ['全國冠軍', '大學聯賽冠軍', '企業聯賽冠軍', '季後賽總冠軍']);
+  // 候補池卷 P4-1（08-31）：季後賽總冠軍分章——職業/海外從封存 pro id 推導，
+  // 舊檔缺欄位回落舊標題（本斷言原鎖「不分章」＝正是被銷的那筆債）
+  // 三座職業冠軍治具順帶觸發「王朝」里程碑（≥MILESTONE_DYNASTY_TITLES）＝誠實連動
+  assert.deepEqual(titles, ['全國冠軍', '大學聯賽冠軍', '企業聯賽冠軍',
+    '職業聯賽總冠軍', '海外聯賽總冠軍', '季後賽總冠軍', '王朝']);
   assert.ok(list.every((t) => t.icon && t.sub));
 });
 

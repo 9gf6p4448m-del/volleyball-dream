@@ -189,6 +189,8 @@ export function resolveMatchConfig({ params, careerCtx = null, randomSeed, quick
         seasonIndex: careerCtx.seasonIndex ?? 2,
         seed,
         tutorial: !!careerCtx.practice.tutorial, // 教學局＝同一條路，只是多一個旗標
+        // 候補池卷 P3-1：教學局關發球計時（分步教學會停在發球相位讀卡，計時＝誤傷）
+        ...(careerCtx.practice.tutorial ? { serveClockTicks: 0 } : {}),
       })
       : careerMatchSetup(
         careerCtx.career, careerCtx.player, careerCtx.matchEntry,
