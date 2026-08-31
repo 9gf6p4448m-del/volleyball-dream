@@ -168,6 +168,17 @@ export function createCommentary(opponentDef = null, revenge = []) {
           // 大事：晃過攔網（主詞＝被晃的攔網者，隊色跟他）
           const blkTeam = game.players[e.blockerId]?.teamId ?? null;
           setBeat(`${nameOf(game, e.blockerId)} 被晃過去了！`, now, BEAT_TTL, LEVEL_MAJOR, blkTeam);
+        } else if (e.type === 'BLOCK_SWALLOW') {
+          // 統一敘事卷 N2：吞下去播報（主詞＝攻擊手；名字取不到就講球不講人）
+          const swTeam = game.players[e.spikerId]?.teamId ?? null;
+          setBeat(e.spikerId != null && game.players[e.spikerId]
+            ? `${nameOf(game, e.spikerId)} 這球吞進去了！`
+            : '這球吞進去了！', now, BEAT_TTL, LEVEL_MAJOR, swTeam);
+        } else if (e.type === 'NET_DUEL_TOOL') {
+          // 統一敘事卷 N2：打手出界播報（合成事件，來源＝matchLoop netDuelFire 'tool'）
+          setBeat(e.playerId != null && game.players[e.playerId]
+            ? `${nameOf(game, e.playerId)} 借手得分！`
+            : '借手得分！', now, BEAT_TTL, LEVEL_MAJOR, evTeam);
         } else if (e.type === 'BLOCK_TOUCH') {
           // 擦手＝球擦進攔網方半場（隊友快救）；攔死回彈＝攻方那邊球還活著；兩者皆大事
           setBeat(e.graze

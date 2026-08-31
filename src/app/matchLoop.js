@@ -2372,6 +2372,9 @@ function applyEvents(s, frameEvents, now) {
     // 得分原因面板：追蹤最後觸球（含發球/攔網）；DEAD_BALL+SCORE 湊齊即顯示
     if (e.type === 'TOUCH' || e.type === 'SERVE') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: e.kind ?? 'serve', power: e.power };
+      // 統一敘事卷 N2：BLOCK_TOUCH 會把 lastTouch 蓋成攔網者——tool 播報的主詞
+      // 是攻擊手，另存最後一次 spike 觸球（DEAD_BALL 清理與 lastTouch 同點）
+      if (e.kind === 'spike') s.lastSpikeTouch = { team: e.team, playerId: e.playerId };
     } else if (e.type === 'BLOCK_TOUCH') {
       s.lastTouch = { team: e.team, playerId: e.playerId, kind: 'block' };
     }
@@ -2680,6 +2683,7 @@ function applyEvents(s, frameEvents, now) {
         setTimeout(() => stage.floatText.setBaseOffset?.(0), 1700);
         s.pendingDead = null;
         s.lastTouch = null;
+        s.lastSpikeTouch = null;
       }
       // 4.5B §3：招牌演出起鏡——勝負已定的那一拍之後（追加條 B）。
       // 我方得分且武裝中＝發放；對方得分＝空手；一球一議（SCORE 後必清）
@@ -2687,6 +2691,16 @@ function applyEvents(s, frameEvents, now) {
       // 重播（下面 planHighlightReplay）；oh/mb/opp/line 四道現場演出這條路徑零改動
       const isDuel = s.pendingSig?.kind === 'netduel';
       const duel = isDuel ? netDuelFire(s.pendingSig, e) : null;
+      // 統一敘事卷 N1/N2：打手出界即時字卡（家族視覺同 BLOCK_SWALLOW/BLOCK_DECEIVED：
+      // #ffd166/2200）＋播報——重播（planHighlightReplay）不播的場合（連線、pref off）
+      // 這個情境也要有回饋；spiker 主詞用 lastSpikeTouch（lastTouch 已被攔網觸蓋掉）
+      if (duel?.outcome === 'tool') {
+        cards.push({ pri: 30, text: '✋ 打手出界！', color: '#ffd166', dur: 2200 });
+        stage.commentary?.onEvents([{
+          type: 'NET_DUEL_TOOL', tick: game.tick, team: e.team,
+          playerId: s.lastSpikeTouch?.playerId ?? null,
+        }], game, s.aiState, now, s.localId);
+      }
       const fired = isDuel ? null : signatureFire(s.pendingSig, e, myTeam);
       s.pendingSig = null;
       if (fired && !s.replay) fireSignatureBeat(s, fired, now);
