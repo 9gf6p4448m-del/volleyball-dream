@@ -74,7 +74,7 @@ import {
   buildDirectorScript, stepAtExact, stepAt, shotAt, tAtStep,
 } from '../render/replayDirector.js';
 import {
-  loadPresentationPref, keyPointOf, createBeatTimeline, driveTimeline,
+  loadPresentationPref, keyPointOf, keyPointVisualOn, createBeatTimeline, driveTimeline,
 } from '../ui/presentation.js';
 import { easeInOutCubic } from '../render/ritualStage.js';
 import {
@@ -88,6 +88,7 @@ import { lineupIntroShot, introPhase, INTRO_SEC } from './lineupIntro.js';
 import { createIntroNameplate } from '../ui/introNameplate.js';
 import { roleLabel } from '../career/heightAdvice.js';
 import { createConfetti } from '../render/confetti.js';
+import { createFireworks } from '../render/fireworks.js';
 import { showChampionBanner } from '../ui/championBanner.js';
 import { selectMvp } from '../career/mvp.js';
 import { hawkeyeCallOf, showHawkeye, HAWKEYE } from '../ui/hawkeye.js';
@@ -669,6 +670,8 @@ function requestTimeout(s) {
   const r = applyTimeout(s.game, { team });
   if (r.ok) {
     s.timeoutHuddleTeam = team; // 集合帶位＋倒數條共用同一個事實源
+    // J4：暫停集合 edge——死球態（applyTimeout 只在死球窗才會 ok），rally 進行中不會走到這裡
+    s.ctx.crowdAnim?.onTimeout(performance.now());
     s.stage.commentary?.onEvents(
       [{ type: 'TIMEOUT', tick: s.game.tick, team, remaining: s.game.timeouts[team].remaining }],
       s.game, s.aiState, performance.now(), s.localId,
@@ -2526,6 +2529,8 @@ function applyEvents(s, frameEvents, now) {
       // 平衡）＝對面戰術板畫出＋播報告知，玩家可據以應對
       if (aiTimeoutWanted(game, 'B') && applyTimeout(game, { team: 'B' }).ok) {
         s.timeoutHuddleTeam = 'B';
+        // J4：暫停集合 edge（對手喊暫停，同我方一套事實源，同一觸發點）
+        s.ctx.crowdAnim?.onTimeout(now);
         cards.push({ pri: 25, text: '對方喊暫停——趁機換人 ⚙', color: '#ff9d7a', dur: 1800 });
         const feed = [{ type: 'TIMEOUT', tick: game.tick, team: 'B', remaining: game.timeouts.B.remaining }];
         const bBoost = aiTimeoutBoost(game, 'B');
@@ -3003,6 +3008,9 @@ export function settleIfOver(s) {
   // W4(P4) Q8 局間（多局賽制限定）：huddle 過場——比分回顧＋教練指示＋下一局/存檔離開
   if (game.phase === 'set_break' && s.prevPhase !== 'set_break') {
     showSetBreak(s);
+    // J4：局間 edge（只在剛轉進 set_break 那一刻叫一次）——settleIfOver(s) 沒有 now
+    // 參數，沿 requestTimeout 同款慣例直接取牆鐘
+    s.ctx.crowdAnim?.onSetBreak(performance.now());
   }
   s.prevPhase = game.phase;
 }
@@ -3507,6 +3515,10 @@ const CELEBRATION_SEC = 8; // 【試玩必調】演出全長（秒）
 function startCelebration(s, { title, winner, score, hint }) {
   if (!s.stage.confettiFx) s.stage.confettiFx = createConfetti(s.ctx.scene);
   s.stage.confettiFx.start(CELEBRATION_SEC);
+  // 大作感四卷 批1（J3）：奪冠煙火——只在這條 championTitle 成立的慶祝鏈啟動
+  // （非冠軍勝場走 showMvpOrOverlay，不經過本函式，天然不放）；崩潰自我停用見 fireworks.js
+  if (!s.stage.fireworksFx) s.stage.fireworksFx = createFireworks(s.ctx.scene);
+  s.stage.fireworksFx.start(CELEBRATION_SEC);
   const banner = showChampionBanner(title);
   s.stage.sfx.crowdSurge?.(CELEBRATION_SEC + 1.5); // 聲浪鎖滿整段演出【試玩必調】
   s.stage.sfx.cheer?.(1.8, { forceBig: true });
@@ -3520,6 +3532,7 @@ function endCelebration(s) {
   s.celebration = null;
   try { c.banner.dispose(); } catch { /* 已移除＝無事可做 */ }
   s.stage.confettiFx?.hide(); // 更新迴圈跟著 s.celebration 一起停，殘片不藏會凍在半空
+  s.stage.fireworksFx?.hide(); // J3①：慶祝窗結束即停且釋放（固定池歸零，不留在半空）
   s.stage.rig.setTourProgress(null);
   // 三卷批2：慶祝先、MVP 次之（各自可跳，K2-3）——非生涯路徑內部自動落回 overlay
   showMvpOrOverlay(s, { winner: c.winner, score: c.score, hint: c.hint });
@@ -3703,6 +3716,7 @@ function frameStep(s, now) {
     const p = Math.min((now - c.startedAt) / (CELEBRATION_SEC * 1000), 1);
     stage.rig.setTourProgress(p);
     stage.confettiFx?.update(delta);
+    stage.fireworksFx?.update(delta); // J3①：與彩帶同一牆鐘時間軸驅動
     if (!c.midCheered && p >= 0.45) {
       c.midCheered = true;
       stage.sfx.cheer?.(1.5, { forceBig: true }); // 【試玩必調】中段二波
@@ -4004,6 +4018,10 @@ function frameStep(s, now) {
   ctx.crowdAnim?.update(now); // 三卷批1：觀眾反應每幀驅動（窗外內部早退＝零成本）
   ctx.officials?.update(now); // 真實感卷批1：裁判演出（死球窗外內部早退）
   ctx.arena?.tickMarquee?.(delta); // 候補池卷P1-2：LED跑馬燈（只動texture offset）
+  // J2②：LED 警示色——與 scorebug 徽章呼吸共用 keyPointVisualOn（單一事實來源，
+  // 不各自重判）；死球後若不再是賽點（含局終）要自動還原，故每幀直接問當下真值，
+  // 不鎖存；教學局恆不觸發（keyPointVisualOn 內建）
+  ctx.arena?.setMarqueeAlert?.(keyPointVisualOn(game, !!s.tutorial));
   // 候補池卷P3-1 表現層：發球計時 8 秒起警示一次（AI 永不觸發＝天然只提醒玩家）
   if (game.phase === 'serve' && (game.serveClockTicks ?? 0) > 0) {
     if (game.tick > game.serveReadyTick + 480 && !s.serveClockWarned) {
@@ -4113,7 +4131,8 @@ function frameStep(s, now) {
   // W7 A6：主角 HUD 體力條（受控者本人；stamina 未啟用傳 null 短路隱藏）
   stage.heroStamina?.update(game.stamina ? (game.stamina[s.localId] ?? 1) : null);
   stage.scoreboard.update(game, myBall, s.localId,
-    stage.commentary ? stage.commentary.line(game, s.aiState, s.localId, now) : undefined);
+    stage.commentary ? stage.commentary.line(game, s.aiState, s.localId, now) : undefined,
+    { tutorial: !!s.tutorial }); // J2①：徽章呼吸判定要知道教學局，教學局恆不呼吸
   if (stage.actionButtons) stage.actionButtons.update(stage.controls.currentContext());
   stage.touchUi.update(stage.controls.uiState());
   const aimAt = s.config.simpleMode ? null : stage.controls.currentAimPoint(game);

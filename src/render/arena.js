@@ -74,6 +74,7 @@ export const VENUES = {
 export function createArena(scene, venueKey = 'regular') {
   let group = null;
   let currentSig = null;
+  let marqueeAlert = false; // J2：賽點警示色開關（換館重建會回到常態，見 setVenue）
 
   const api = {
     setVenue(key, opts = {}) {
@@ -92,6 +93,7 @@ export function createArena(scene, venueKey = 'regular') {
       group.traverse((o) => { if (o.isMesh) o.matrixAutoUpdate = false; });
       scene.add(group);
       currentSig = sig;
+      marqueeAlert = false; // 新館剛畫好的跑馬燈本來就是常態色，把手狀態跟著歸零
       return spec;
     },
     venueLabel() {
@@ -106,6 +108,27 @@ export function createArena(scene, venueKey = 'regular') {
       const list = group?.userData?.marquees;
       if (!list) return;
       for (const t of list) t.offset.x = (t.offset.x + dt * 0.03) % 1; // 【試玩必調】捲速
+    },
+    // J2②：LED 跑馬燈警示色把手——賽點期間切紅、死球後不再是賽點要還原常態色。
+    // 只在狀態真的變動時重繪 canvas（呼叫端每幀都會問，不能每幀都重畫）。
+    setMarqueeAlert(alert) {
+      const on = !!alert;
+      if (on === marqueeAlert) return;
+      marqueeAlert = on;
+      const list = group?.userData?.marquees;
+      if (!list) return;
+      const bg = on ? MARQUEE_ALERT_BG : MARQUEE_NORMAL_BG;
+      const fg = on ? MARQUEE_ALERT_FG : MARQUEE_NORMAL_FG;
+      for (const tex of list) {
+        const { marqueeCanvas: canvas, marqueeCtx: ctx, marqueeLine: line } = tex.userData;
+        if (!canvas || !ctx || !line) continue;
+        paintMarqueeCanvas(canvas, ctx, line, bg, fg);
+        tex.needsUpdate = true;
+      }
+    },
+    // 測試/除錯用：目前是否處於警示色（結構測試判斷用，不做視覺判讀）
+    isMarqueeAlert() {
+      return marqueeAlert;
     },
   };
   api.setVenue(venueKey);
@@ -248,32 +271,48 @@ function buildAdBoards(group, spec, teamName) {
   group.userData.marquees = [mTex];
 }
 
+// J2②：跑馬燈色參數——常態金／賽點警示紅【試玩必調】
+export const MARQUEE_NORMAL_BG = '#0b1020';
+export const MARQUEE_NORMAL_FG = '#ffd166';
+export const MARQUEE_ALERT_BG = '#3a0a0a';
+export const MARQUEE_ALERT_FG = '#ff4d4d';
+
 // 跑馬燈紋理：把整組廣告詞串成一條長帶（repeat 捲動）；虛構品牌沿 VENUES 既有詞庫
 function makeMarqueeTexture(texts) {
   const canvas = document.createElement('canvas');
   canvas.width = 4096;
   canvas.height = 128;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#0b1020';
-  ctx.fillRect(0, 0, 4096, 128);
+  const line = `${texts.join('　★　')}　★　`;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.set(0.28, 1); // 一面板只露帶子的一段
+  // J2②：把 canvas/ctx/line 存在 texture 上——setMarqueeAlert 換色時要重畫同一張
+  // 畫布（不重建 texture／不重建幾何），只是換 fillStyle 再畫一次
+  tex.userData.marqueeCanvas = canvas;
+  tex.userData.marqueeCtx = ctx;
+  tex.userData.marqueeLine = line;
+  paintMarqueeCanvas(canvas, ctx, line, MARQUEE_NORMAL_BG, MARQUEE_NORMAL_FG);
+  return tex;
+}
+
+// 跑馬燈畫布繪製（首繪／setMarqueeAlert 換色重繪共用）：底色鋪滿＋文字帶鋪滿捲軸長度
+function paintMarqueeCanvas(canvas, ctx, line, bg, fg) {
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.font = 'bold 72px system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffd166';
-  const line = `${texts.join('　★　')}　★　`;
+  ctx.fillStyle = fg;
   // measureText 韌性回退：治具 DOM stub 的 2d ctx 沒有這個方法（kit-batch3 withDomStub）——
   // 用字數估寬即可（跑馬燈重複鋪滿，精度無所謂）
   const lineW = typeof ctx.measureText === 'function'
     ? ctx.measureText(line).width : line.length * 40;
   let x = 20;
-  while (x < 4096 + 800) {
+  while (x < canvas.width + 800) {
     ctx.fillText(line, x, 68);
     x += Math.max(200, lineW);
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.repeat.set(0.28, 1); // 一面板只露帶子的一段
-  return tex;
 }
 
 // 頂部桁架（關鍵戰館/冠軍館）：縱橫工字樑剪影——縣立競技場的鋼構氣質

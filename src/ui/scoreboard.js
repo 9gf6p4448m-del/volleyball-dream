@@ -8,6 +8,7 @@
 import { serverId } from '../sim/match.js';
 import { TUNING } from '../sim/game.js';
 import { COLORS, FONTS, goldAlpha } from './theme.js';
+import { keyPointVisualOn } from './presentation.js';
 
 const POP_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
 // 泡泡底色一律黑金匾（見下方 CSS #scoreboard .bubble）；team 只染左側色條
@@ -93,9 +94,9 @@ export function createScoreboard(playerId) {
   display:none;flex:none}
 #scoreboard .t.mine .serveDot{background:${COLORS.bg2}}
 #scoreboard .t.serving .serveDot{display:inline-block}
-/* 局點徽章 */
-#scoreboard .setpt{font-size:13px;font-weight:800;letter-spacing:3px;
-  animation:vd-pulse 0.9s ease-in-out infinite;font-family:${FONTS.zh}}
+/* 局點徽章：J2①改判——只有「賽點」（.breathe）才呼吸，普通局點靜止顯示 */
+#scoreboard .setpt{font-size:13px;font-weight:800;letter-spacing:3px;font-family:${FONTS.zh}}
+#scoreboard .setpt.breathe{animation:vd-pulse 0.9s ease-in-out infinite}
 /* 黑匾金框字卡（播報/提示泡泡）：輕微斜切，文字米金，強調字金色 */
 #scoreboard .bubble{position:relative;max-width:min(84vw,460px);padding:10px 22px;
   background:rgba(14,11,6,0.94);border:1px solid ${COLORS.gold};
@@ -135,7 +136,7 @@ export function createScoreboard(playerId) {
 @keyframes vd-mheat{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.25)}}
 #scoreboard .mHeat{background:radial-gradient(circle,currentColor 0%,transparent 70%);
   animation:vd-mheat 0.9s ease-in-out infinite}
-@media (prefers-reduced-motion: reduce){#scoreboard .mHeat{animation:none}}
+@media (prefers-reduced-motion: reduce){#scoreboard .mHeat{animation:none}#scoreboard .setpt.breathe{animation:none}}
 @media (prefers-reduced-motion: reduce) {
   #scoreboard .mFill.glow{animation:none;filter:brightness(1.3)}
   #scoreboard .mFlash.flash{animation:vd-mflash-reduced 0.6s ease-out}
@@ -213,7 +214,8 @@ export function createScoreboard(playerId) {
   return {
     // controlledId：全隊輪控下當前受控球員（未傳則用建立時的預設）
     // hint：{ text, kind } 播報行（決策模式）；undefined＝classic 走內建舊提示
-    update(game, isMyBall = false, controlledId = playerId, hint = undefined) {
+    // opts.tutorial：J2③教學局恆不觸發賽點呼吸（見 setPointBadgeState）
+    update(game, isMyBall = false, controlledId = playerId, hint = undefined, opts = {}) {
       const { score } = game.match;
       const serve = game.match.servingTeam;
       // 左右順序固定＝teamA 在左、teamB 在右（跟改版前 `${score.A} : ${score.B}` 同序，
@@ -302,14 +304,18 @@ export function createScoreboard(playerId) {
         }
       }
 
-      // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）
-      const spTeam = setPointTeam(game);
-      if (spTeam && game.phase !== 'set_over') {
+      // 局點徽章：我方＝金色「局點」、對方＝紅色「對方局點」（deuce 規則內建於判定）；
+      // J2①：呼吸動畫只在「賽點」（keyPointOf，局點的會終場子集）才播，判定抽成純函式
+      // setPointBadgeState 供測試直測（不重寫判準，沿用既有 setPointTeam/keyPointOf）
+      const badge = setPointBadgeState(game, myTeam, !!opts.tutorial);
+      if (badge.show) {
         setPtEl.style.display = 'block';
-        setPtEl.textContent = spTeam === myTeam ? '🔥 局點' : '⚠ 對方局點';
-        setPtEl.style.color = spTeam === myTeam ? COLORS.gold : '#ff6b6b';
+        setPtEl.textContent = badge.text;
+        setPtEl.style.color = badge.mine ? COLORS.gold : '#ff6b6b';
+        setPtEl.classList.toggle('breathe', badge.breathe);
       } else {
         setPtEl.style.display = 'none';
+        setPtEl.classList.remove('breathe');
       }
     },
     // W7.1 #4③：氣勢變動 delta 指示——每次 MOMENTUM 事件呼叫一次（matchLoop 傳新值，
@@ -331,6 +337,22 @@ export function createScoreboard(playerId) {
     // 快速比賽換局重開（同一 scoreboard 實例沿用，見 matchLoop 換局處）：
     // 新局氣勢從 0 起算，flashMomentum 的 delta 基準要跟著歸零，否則首次事件會誤閃
     resetMomentum() { lastMomentumValue = 0; },
+  };
+}
+
+// J2①（純函式，供測試直測）：局點徽章顯示狀態——show/text/mine 沿用既有
+// setPointTeam 判定（不另立判準）；breathe 只有在「賽點」（keyPointOf，局點的
+// 會終場子集）且非教學局才為真——普通局點徽章照樣顯示，只是不呼吸
+export function setPointBadgeState(game, myTeam, tutorial = false) {
+  const spTeam = setPointTeam(game);
+  if (!spTeam || game.phase === 'set_over') {
+    return { show: false, text: '', mine: false, breathe: false };
+  }
+  return {
+    show: true,
+    text: spTeam === myTeam ? '🔥 局點' : '⚠ 對方局點',
+    mine: spTeam === myTeam,
+    breathe: keyPointVisualOn(game, tutorial),
   };
 }
 

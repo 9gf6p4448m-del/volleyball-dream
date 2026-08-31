@@ -114,3 +114,13 @@ export function keyPointOf(game) {
   if (!m) return false;
   return isSetPoint(m.score, m.target);
 }
+
+// 大作感四卷 批1（J2，純函式）：賽點視覺共用判準——scorebug 徽章呼吸與 LED 跑馬燈
+// 警示色都吃這一個值，不各自重判（沿用既有 keyPointOf，不另立判準）。
+// 教學局（tutorial=true）與局終（set_over）恆 false——死球後若已局終，兩處視覺都要
+// 一起還原成常態，不留在警示狀態。
+export function keyPointVisualOn(game, tutorial = false) {
+  if (tutorial) return false;
+  if (game?.phase === 'set_over') return false;
+  return keyPointOf(game);
+}
