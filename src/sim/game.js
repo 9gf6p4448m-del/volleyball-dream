@@ -247,11 +247,12 @@ export const TUNING = {
   // 變向折損的先例：同落點、球更慢、不被淨空下限吞掉）。半拍出手沒有全揮臂球速；
   // 散佈鈕（批2）實測只把快攻走廊 94-97%→87-89% 就報酬遞減——守方缺的是反應時間。
   QUICK_TIME_MUL: 1.15,          // 【試玩必調】
-  // 真實感卷 批3（R3-1~R3-3）：觸網犯規——攔網觸球後有機率判觸網（死球判給攻方）。
-  // 決定論 blownHash 零 rand 消耗；壓手倍率＝手伸過網、收手擦網風險更高
-  // （與「壓手的代價」同一設計軸：賭頂帶大賺、其餘要付錢）。頻率帶 0.3-1.5 次/局。
-  NET_FAULT_CHANCE: 0.035,       // 每次攔網觸球的觸網機率【試玩必調】
-  NET_FAULT_PRESS_MUL: 2.5,      // 壓手倍率【試玩必調】
+  // 真實感卷 批3（R3-1~R3-3）：觸網犯規——★只掛壓手★（08-31 Sawmah 裁定）。
+  // 起跳是自動的，基礎率＝玩家無法迴避的隨機失分，違反「代價掛決定」的自家憲法
+  // （攔網時序卷「不評時機」、壓手的代價卷同軸）；直臂（vertical）攔網零觸網。
+  // 觸網＝壓手賭注的代價之三（頂帶大賺／擦側×1.6／正面×0.7／觸網）。
+  // 決定論 blownHash 零 rand 消耗。
+  NET_FAULT_CHANCE: 0.12,        // 壓手觸球的觸網機率【試玩必調】
   // §十-4b 意圖層：tool 路線（打手出界的攻擊端）。被牆蓋住的強攻有機率改瞄
   // 「牆手頂帶＋出界深區」——擦到手＝攔網方失分，沒擦到＝自打出界（真實 tool 的賭局）
   TOOL_CHANCE: 0,           // ⚠ 出廠關閉（2026-07-31 Sawmah 裁定乙）：tool 意圖對現行
@@ -1358,8 +1359,9 @@ function stepRally(state, ev) {
 // 真實感卷 批3：攔網觸球的觸網判定——只立旗（rally.netFaultPid），結算由過網
 // 呼叫端與落地同層執行（不在攔網分支深處佈置下一球）。blownHash＝決定論零 rand 消耗。
 function rollNetFault(state, best) {
-  const mul = best.actor.blockHand === 'press' ? TUNING.NET_FAULT_PRESS_MUL : 1;
-  if (blownHash(state, `${best.p.id}:netf`) < TUNING.NET_FAULT_CHANCE * mul) {
+  // 只掛壓手（08-31 裁定）：手蓋過網才有收手擦網的風險；直臂攔網零觸網＝可歸因
+  if (best.actor.blockHand !== 'press') return;
+  if (blownHash(state, `${best.p.id}:netf`) < TUNING.NET_FAULT_CHANCE) {
     state.rally.netFaultPid = best.p.id;
   }
 }
