@@ -45,6 +45,7 @@ export function createPracticeHud() {
   ].join(';');
   inner.appendChild(coach);
   let coachTimer = null;
+  let coachVisible = false; // 喊話期間強制展開（讀字時刻）
   const title = document.createElement('div');
   title.textContent = '今天的科目';
   title.style.cssText = ['font-size:11px', 'color:#9fb0cc', 'letter-spacing:2px'].join(';');
@@ -63,8 +64,15 @@ export function createPracticeHud() {
   return {
     // rows＝[{ label, count, target, achieved }]（matchLoop 用 settlePractice 算出來的同一份）
     // 教學局多帶 phase（'done'|'passed'|'current'|'todo'）與 current 那列的 hints
-    update(rows, headline = null) {
+    // ★ 2026-09-01 呼吸式收合（Sawmah 回饋：全文常駐黑匾把左半場整塊擋住）★
+    // compact=true（rally 進行中）＝半透明單行「👉 label 0/1」；教練喊話中或死球窗
+    // （compact=false）＝完整黑匾。教學資訊不減，只在「玩家有空讀字」的時刻佔版面。
+    update(rows, headline = null, compact = false) {
       if (!rows?.length) { root.style.display = 'none'; return; }
+      const slim = compact && !coachVisible;
+      root.style.background = slim ? 'rgba(14,11,6,0.6)' : 'rgba(14,11,6,0.94)';
+      root.style.padding = slim ? '4px 12px' : '9px 16px';
+      title.style.display = slim ? 'none' : 'block';
       if (headline) title.textContent = headline;
       list.replaceChildren();
       // 教學局：只畫「現在練」那一列與它的操作提示，其餘收成一行計數（2026-08-13）。
@@ -75,7 +83,7 @@ export function createPracticeHud() {
       // 那邊科目只有 2–3 個、本來就不高，收了反而看不到全貌。
       const isTutorial = rows.some((r) => r.phase != null);
       const shown = isTutorial ? rows.filter((r) => r.phase === 'current') : rows;
-      const restCount = isTutorial ? rows.length - shown.length : 0;
+      const restCount = (isTutorial && !slim) ? rows.length - shown.length : 0;
       for (const r of shown) {
         const phase = r.phase ?? (r.achieved ? 'done' : 'todo');
         const line = document.createElement('div');
@@ -86,13 +94,16 @@ export function createPracticeHud() {
         // 只有當前步換行寫完整，其餘（紅白賽多列）維持單行省略不佔高
         line.style.cssText = [
           'line-height:1.45',
-          ...(phase === 'current'
+          ...(phase === 'current' && !slim
             ? ['font-size:14px', 'white-space:normal', 'font-weight:700']
-            : ['font-size:12px', 'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis']),
+            : phase === 'current'
+              ? ['font-size:13px', 'white-space:nowrap', 'overflow:hidden',
+                'text-overflow:ellipsis', 'font-weight:700']
+              : ['font-size:12px', 'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis']),
           `color:${COLOR[phase]}`,
         ].join(';');
         list.appendChild(line);
-        for (const h of (phase === 'current' ? r.hints ?? [] : [])) {
+        for (const h of (phase === 'current' && !slim ? r.hints ?? [] : [])) {
           const tip = document.createElement('div');
           tip.textContent = `　${h}`;
           tip.style.cssText = [
@@ -117,19 +128,22 @@ export function createPracticeHud() {
     // 教學局教練喊話（甲案）：ttl 到期淡出——不佔位、不必呼叫端清
     coach(text, ttl = 5200) {
       if (coachTimer) { clearTimeout(coachTimer); coachTimer = null; }
-      if (!text) { coach.style.display = 'none'; return; }
+      if (!text) { coach.style.display = 'none'; coachVisible = false; return; }
       coach.textContent = text;
       coach.style.opacity = '1';
       coach.style.display = 'block';
+      coachVisible = true;
       root.style.display = 'flex';
       coachTimer = setTimeout(() => {
         coach.style.opacity = '0';
+        coachVisible = false;
         coachTimer = setTimeout(() => { coach.style.display = 'none'; coachTimer = null; }, 400);
       }, ttl);
     },
     hide() {
       if (coachTimer) { clearTimeout(coachTimer); coachTimer = null; }
       coach.style.display = 'none';
+      coachVisible = false;
       root.style.display = 'none';
     },
   };

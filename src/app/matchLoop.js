@@ -984,7 +984,8 @@ export function refreshTutorialHud(s) {
     events: s.game.events, playerId: s.playerId, myTeam, obs: s.tutorialObs,
   });
   s.practiceRows = rows;
-  s.stage.practiceHud?.update(rows, '入隊測試・教練指導中');
+  // 呼吸式收合：rally 中縮成單行（教練喊話中 practiceHud 自己會撐開）
+  s.stage.practiceHud?.update(rows, '入隊測試・教練指導中', s.game.phase === 'rally');
 }
 
 // 輸入/導航事件绑定：局終點擊、回放（R/🎬）、魚躍（L/Space/鈕）、情蒐跳過
