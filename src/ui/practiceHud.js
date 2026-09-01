@@ -8,35 +8,50 @@
 // 比任何面板（27／39／40）低——結算面板蓋上來時它不會穿幫。
 //
 // 純表現層：不判定、不計數，只把 matchLoop 算好的清單畫出來。
+import { COLORS, FONTS, goldAlpha } from './theme.js';
+
 export function createPracticeHud() {
+  // ★ 2026-09-01 黑匾金框化（Sawmah 拍板：喜歡泡泡那種大匾顯示）★ 沿用 scoreboard
+  // .bubble 的同一套配方（theme 單一色票：不透明黑底、金框、微斜切＋內容反斜切）。
+  // 寬度上限 32vw＝停在置中記分板的左緣之外——泡泡時代 44vw 壓到記分板的教訓。
   const root = document.createElement('div');
   root.style.cssText = [
     'position:fixed',
-    'top:calc(env(safe-area-inset-top, 0px) + 62px)',
+    'top:calc(env(safe-area-inset-top, 0px) + 56px)',
     'left:calc(env(safe-area-inset-left, 0px) + 12px)',
-    'z-index:15', 'display:none', 'flex-direction:column', 'gap:2px',
-    'background:rgba(12,16,26,0.55)', 'border-radius:10px', 'padding:6px 10px',
-    'font-family:system-ui,sans-serif', 'pointer-events:none', 'user-select:none',
-    'max-width:min(240px, 60vw)',
+    'z-index:15', 'display:none', 'flex-direction:column',
+    `background:rgba(14,11,6,0.94)`, `border:1px solid ${COLORS.gold}`,
+    `box-shadow:0 6px 16px rgba(0,0,0,0.55), inset 0 0 18px ${goldAlpha(0.1)}`,
+    'transform:skewX(-6deg) rotate(-0.6deg)', 'transform-origin:left top',
+    'padding:9px 16px',
+    `font-family:${FONTS.zh}`, 'pointer-events:none', 'user-select:none',
+    'max-width:min(340px, 32vw)',
   ].join(';');
+  // 內容反斜切（匾斜字正——與 .bubble/.btext 同一手法）
+  const inner = document.createElement('div');
+  inner.style.cssText = [
+    'transform:skewX(6deg) rotate(0.6deg)', 'display:flex',
+    'flex-direction:column', 'gap:2px',
+  ].join(';');
+  root.appendChild(inner);
   // 統一教學框（2026-09-01 Sawmah 拍板甲案）：教練喊話併進框頂行——原本走 scoreboard
   // 泡泡，手機橫向時泡泡固定左上、疊在本框上，且台詞與框內容字面重複。
   // 喊話是事件語意（幾秒後淡出讓位給框身），框身是隨時可查的狀態——同一個家、兩種壽命。
   const coach = document.createElement('div');
   coach.style.cssText = [
-    'font-size:12px', 'font-weight:700', 'color:#ffd166', 'line-height:1.45',
-    'white-space:normal', 'display:none', 'margin-bottom:3px',
+    'font-size:15px', 'font-weight:700', `color:${COLORS.gold}`, 'line-height:1.45',
+    'letter-spacing:1px', 'white-space:normal', 'display:none', 'margin-bottom:4px',
     'transition:opacity 0.35s ease',
   ].join(';');
-  root.appendChild(coach);
+  inner.appendChild(coach);
   let coachTimer = null;
   const title = document.createElement('div');
   title.textContent = '今天的科目';
-  title.style.cssText = ['font-size:10px', 'color:#9fb0cc', 'letter-spacing:2px'].join(';');
-  root.appendChild(title);
+  title.style.cssText = ['font-size:11px', 'color:#9fb0cc', 'letter-spacing:2px'].join(';');
+  inner.appendChild(title);
   const list = document.createElement('div');
-  list.style.cssText = ['display:flex', 'flex-direction:column', 'gap:1px'].join(';');
-  root.appendChild(list);
+  list.style.cssText = ['display:flex', 'flex-direction:column', 'gap:2px'].join(';');
+  inner.appendChild(list);
   document.body.appendChild(root);
 
   // 教學局（2026-08-12）：一次只練一步 ⇒ 當前步要**看得出來是哪一步**。
@@ -70,10 +85,10 @@ export function createPracticeHud() {
         // 甲案順修：當前步是「玩家此刻唯一要讀的字」，截成「…」＝把重點吃掉；
         // 只有當前步換行寫完整，其餘（紅白賽多列）維持單行省略不佔高
         line.style.cssText = [
-          'font-size:11px', 'line-height:1.45',
+          'line-height:1.45',
           ...(phase === 'current'
-            ? ['white-space:normal', 'font-weight:700']
-            : ['white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis']),
+            ? ['font-size:14px', 'white-space:normal', 'font-weight:700']
+            : ['font-size:12px', 'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis']),
           `color:${COLOR[phase]}`,
         ].join(';');
         list.appendChild(line);
@@ -81,7 +96,7 @@ export function createPracticeHud() {
           const tip = document.createElement('div');
           tip.textContent = `　${h}`;
           tip.style.cssText = [
-            'font-size:10px', 'line-height:1.4', 'color:#9fb0cc', 'white-space:normal',
+            'font-size:12px', 'line-height:1.45', 'color:#cfd9ea', 'white-space:normal',
           ].join(';');
           list.appendChild(tip);
         }
@@ -93,7 +108,7 @@ export function createPracticeHud() {
         const rest = document.createElement('div');
         rest.textContent = `　（已完成 ${done}／共 ${rows.length} 步）`;
         rest.style.cssText = [
-          'font-size:10px', 'line-height:1.6', 'color:#8ea3c4', 'white-space:nowrap',
+          'font-size:11px', 'line-height:1.6', 'color:#8ea3c4', 'white-space:nowrap',
         ].join(';');
         list.appendChild(rest);
       }
