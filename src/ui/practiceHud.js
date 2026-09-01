@@ -65,14 +65,21 @@ export function createPracticeHud() {
     // rows＝[{ label, count, target, achieved }]（matchLoop 用 settlePractice 算出來的同一份）
     // 教學局多帶 phase（'done'|'passed'|'current'|'todo'）與 current 那列的 hints
     // ★ 2026-09-01 呼吸式收合（Sawmah 回饋：全文常駐黑匾把左半場整塊擋住）★
-    // compact=true（rally 進行中）＝半透明單行「👉 label 0/1」；教練喊話中或死球窗
-    // （compact=false）＝完整黑匾。教學資訊不減，只在「玩家有空讀字」的時刻佔版面。
+    // ★ 同日二修（Sawmah：要更早縮起來）★ 展開條件從「非 rally」改成
+    // 「教練有話講　且　不在打球」——話講完（ttl 到）立刻收回單行，不再開著等發球；
+    // rally 中就算教練開口也不展開，改在單行上方加一條金色小字（不擋場）。
     update(rows, headline = null, compact = false) {
       if (!rows?.length) { root.style.display = 'none'; return; }
-      const slim = compact && !coachVisible;
+      const expanded = coachVisible && !compact;
+      const slim = !expanded;
       root.style.background = slim ? 'rgba(14,11,6,0.6)' : 'rgba(14,11,6,0.94)';
       root.style.padding = slim ? '4px 12px' : '9px 16px';
       title.style.display = slim ? 'none' : 'block';
+      // 喊話行隨模式換裝：展開＝15px 換行；單行模式＝13px 一行省略（rally 中的金色小字）
+      coach.style.fontSize = slim ? '13px' : '15px';
+      coach.style.whiteSpace = slim ? 'nowrap' : 'normal';
+      coach.style.overflow = slim ? 'hidden' : 'visible';
+      coach.style.textOverflow = slim ? 'ellipsis' : 'clip';
       if (headline) title.textContent = headline;
       list.replaceChildren();
       // 教學局：只畫「現在練」那一列與它的操作提示，其餘收成一行計數（2026-08-13）。
