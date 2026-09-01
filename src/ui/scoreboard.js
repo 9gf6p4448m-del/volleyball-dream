@@ -246,7 +246,10 @@ export function createScoreboard(playerId) {
           scoreEl.style.transform = 'skewX(-12deg) scale(1)';
         }, 220);
       }
-      renderBubble(hint !== undefined
+      // 統一教學框（2026-09-01 Sawmah 拍板甲案）：教學局的引導只有一個家＝practiceHud，
+      // 泡泡整顆收起——手機橫向（max-height 520px）它固定在左上，會疊在教學框上，
+      // 且教練台詞與框內 label/提示字面重複（真人截圖實證）。
+      renderBubble(opts.tutorial ? '' : hint !== undefined
         ? hint
         : isMyBall
           ? '🟠 這球歸你！跑向藍色落點圈'

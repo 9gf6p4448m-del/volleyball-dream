@@ -191,15 +191,14 @@ test('★A4★ 做到了就推進，attempts 歸零（下一步的提示從第�
 // 五、教練提示逐次變詳細
 // ════════════════════════════════════════════════════════════
 
-test('提示三級：第一球／再來一次／全部攤開，三句真的不一樣', () => {
+test('提示三級：口氣遞進、三句真的不一樣（2026-09-01 甲案：內容歸框身、台詞只留口氣）', () => {
   const def = DRILL_DEFS['tut-handle'];
   const a = tutorialCoachLine(def, 0);
   const b = tutorialCoachLine(def, 1);
   const c = tutorialCoachLine(def, 2);
   assert.equal(new Set([a, b, c]).size, 3, '三級要分得出來');
   assert.ok(b.includes('再來一次'));
-  // 第三級要包含**所有**提示（不是只換一句）
-  for (const h of def.hints) assert.ok(c.includes(h), `第三級漏了：${h}`);
+  // 舊斷言「第三級含所有提示」已隨甲案退場：提示恆在框身，台詞不再攜帶
 });
 
 // ════════════════════════════════════════════════════════════
@@ -314,16 +313,16 @@ test('★同源★ blockLz 由呼叫端從 sim 的 AI.BLOCK_LZ 餵進來，不�
   assert.equal(p.z, 1.9, '沒吃呼叫端給的值＝這裡自己藏了一份常數');
 });
 
-test('★同源★ 三級台詞全部由 def.hints 組出來，不得憑空多出一份文案', () => {
+// ★ 2026-09-01 守衛反轉（Sawmah 拍板甲案）★ 舊守衛「台詞全由 hints 組出」守的是
+// 泡泡時代（泡泡＝唯一通道，內容必須全在台詞裡）；併進教學框後 label／hints 由框身
+// 呈現，台詞攜帶它們＝同一句話在同一個框裡念兩遍。新守衛：台詞不得含任何框身內容。
+test('★同源★ 三級台詞不得攜帶框身內容（label／hints 歸框身，台詞只留口氣）', () => {
   const def = DRILL_DEFS['tut-receive'];
   for (const n of [0, 1, 2, 7]) {
     const line = tutorialCoachLine(def, n);
-    const body = line.replace(/^教練：[^—]*——/, '');
-    const known = [def.label, ...def.hints];
-    // 去掉所有已知片段與標點後，不該剩下任何實質內容
-    let rest = body;
-    for (const k of known) rest = rest.split(k).join('');
-    assert.equal(rest.replace(/[。；、，\s]/g, ''), '', `attempts=${n} 出現了不在 hints 裡的句子：${rest}`);
+    assert.ok(line.startsWith('教練：'), `attempts=${n} 沒有教練口氣：${line}`);
+    assert.ok(!line.includes(def.label), `attempts=${n} 把 label 念兩遍：${line}`);
+    for (const h of def.hints) assert.ok(!line.includes(h), `attempts=${n} 把提示念兩遍：${line}`);
   }
 });
 

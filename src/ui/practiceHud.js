@@ -19,6 +19,17 @@ export function createPracticeHud() {
     'font-family:system-ui,sans-serif', 'pointer-events:none', 'user-select:none',
     'max-width:min(240px, 60vw)',
   ].join(';');
+  // 統一教學框（2026-09-01 Sawmah 拍板甲案）：教練喊話併進框頂行——原本走 scoreboard
+  // 泡泡，手機橫向時泡泡固定左上、疊在本框上，且台詞與框內容字面重複。
+  // 喊話是事件語意（幾秒後淡出讓位給框身），框身是隨時可查的狀態——同一個家、兩種壽命。
+  const coach = document.createElement('div');
+  coach.style.cssText = [
+    'font-size:12px', 'font-weight:700', 'color:#ffd166', 'line-height:1.45',
+    'white-space:normal', 'display:none', 'margin-bottom:3px',
+    'transition:opacity 0.35s ease',
+  ].join(';');
+  root.appendChild(coach);
+  let coachTimer = null;
   const title = document.createElement('div');
   title.textContent = '今天的科目';
   title.style.cssText = ['font-size:10px', 'color:#9fb0cc', 'letter-spacing:2px'].join(';');
@@ -56,11 +67,14 @@ export function createPracticeHud() {
         line.textContent = phase === 'current'
           ? `${PREFIX.current}${r.label}　${r.count}/${r.target}`
           : `${PREFIX[phase]} ${r.label}　${r.count}/${r.target}`;
+        // 甲案順修：當前步是「玩家此刻唯一要讀的字」，截成「…」＝把重點吃掉；
+        // 只有當前步換行寫完整，其餘（紅白賽多列）維持單行省略不佔高
         line.style.cssText = [
-          'font-size:11px', 'line-height:1.45', 'white-space:nowrap',
-          'overflow:hidden', 'text-overflow:ellipsis',
+          'font-size:11px', 'line-height:1.45',
+          ...(phase === 'current'
+            ? ['white-space:normal', 'font-weight:700']
+            : ['white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis']),
           `color:${COLOR[phase]}`,
-          ...(phase === 'current' ? ['font-weight:700'] : []),
         ].join(';');
         list.appendChild(line);
         for (const h of (phase === 'current' ? r.hints ?? [] : [])) {
@@ -85,7 +99,22 @@ export function createPracticeHud() {
       }
       root.style.display = 'flex';
     },
+    // 教學局教練喊話（甲案）：ttl 到期淡出——不佔位、不必呼叫端清
+    coach(text, ttl = 5200) {
+      if (coachTimer) { clearTimeout(coachTimer); coachTimer = null; }
+      if (!text) { coach.style.display = 'none'; return; }
+      coach.textContent = text;
+      coach.style.opacity = '1';
+      coach.style.display = 'block';
+      root.style.display = 'flex';
+      coachTimer = setTimeout(() => {
+        coach.style.opacity = '0';
+        coachTimer = setTimeout(() => { coach.style.display = 'none'; coachTimer = null; }, 400);
+      }, ttl);
+    },
     hide() {
+      if (coachTimer) { clearTimeout(coachTimer); coachTimer = null; }
+      coach.style.display = 'none';
       root.style.display = 'none';
     },
   };

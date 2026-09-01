@@ -112,16 +112,10 @@ export function createCommentary(opponentDef = null, revenge = []) {
     return `對面的 ${name} 動得慢了——朝他那邊打`; // 敵方恆 tier1（tier2 已在收集階段濾掉）
   };
 
-  // 教學局（2026-08-12）：教練的逐步喊話。
-  // ★ 為什麼是獨立一格、不走 setBeat ★ beat 是「剛剛發生了什麼」的播報通道，會被下一顆
-  // 球的播報蓋掉；教練喊的是「現在該做什麼」——那是 action 語意（`line()` 第 1 段），
-  // 而且在教學局裡它必須**壓過**內建的操作提示（那幾句假設玩家已經知道自己在幹嘛）。
-  let coachLine = null; // { text, until }
+  // 教學局的教練喊話（2026-08-12 起走本檔 coach()）已於 2026-09-01 併進教學框
+  // （practiceHud.coach，Sawmah 拍板甲案）；教學局期間泡泡整顆由 scoreboard 收起，
+  // 本檔不再需要「教練壓過內建提示」的那一格。
   return {
-    // 教學局逐步喊話：ttl 到期後自動讓位回內建提示（不必呼叫端清）
-    coach(text, now, ttl = 5200) {
-      coachLine = text ? { text, until: now + ttl } : null;
-    },
     // 每 frame 把 sim 事件餵進來（與 pointBanner 同一條事件流）
     onEvents(events, game, aiState, now, controlledId) {
       for (const e of events) {
@@ -274,9 +268,6 @@ export function createCommentary(opponentDef = null, revenge = []) {
     line(game, aiState, controlledId, now) {
       if (game.phase === 'set_over') return { text: '', kind: 'ambient' };
       const me = game.players[controlledId];
-      // 0) 教練喊話（教學局）：壓過下面所有內建提示——那幾句是寫給「已經知道怎麼玩」
-      // 的人看的，教學局裡玩家正在被教的就是這一步，蓋掉教練等於把課上到一半打斷
-      if (coachLine && now < coachLine.until) return { text: coachLine.text, kind: 'action' };
       // 1) 可操作提示（永遠壓過播報——玩家該做事的時刻不能被蓋台）
       if (game.phase === 'serve') {
         if (serverId(game.match) === controlledId) {

@@ -859,7 +859,8 @@ export function refreshPracticeHud(s, cards = null) {
 export function updateTutorial(s, now) {
   if (!s.tutorial || s.tutorial.done) return false;
   const myTeam = s.game.players[s.playerId]?.teamId ?? 'A';
-  const say = (text, ttl) => s.stage.commentary?.coach?.(text, now, ttl);
+  // 統一教學框（2026-09-01 甲案）：喊話進框頂行（practiceHud.coach），不再走泡泡
+  const say = (text, ttl) => s.stage.practiceHud?.coach?.(text, ttl);
   // 排隊中的下一句（放行那一句講完才接上）——泡泡只有一格，同一幀連喊兩句＝
   // 玩家只會看到後面那句，前面那句等於沒講
   if (s.tutorialNextLine && now >= s.tutorialNextLine.at) {

@@ -818,18 +818,14 @@ export function tutorialSettle(state) {
 export function tutorialCoachLine(drill, attempts = 0) {
   const def = drillDefOf(drill);
   if (!def) return '';
-  const hints = def.hints ?? [];
+  // ★ 2026-09-01 短句化（Sawmah 拍板甲案）★ 這句現在渲染在教學框頂行，而框的
+  // 「👉 現在練：label」與操作提示就在正下方——舊組法（label＋hints 全塞進台詞）
+  // 是泡泡時代的設計（泡泡是唯一通道），併框後等於同一句話念兩遍。
+  // 台詞只留教練的「口氣」（三級遞進），內容交給框身。全句【試玩必調】。
   const n = Math.max(0, attempts | 0);
-  if (n === 0) {
-    const hint = hints[0] ?? '';
-    return `教練：現在練——${def.label}${hint ? `。${hint}` : ''}`;
-  }
-  if (n === 1) {
-    const hint = hints[1] ?? hints[0] ?? '';
-    return `教練：再來一次——${def.label}${hint ? `。${hint}` : ''}`;
-  }
-  const all = hints.join('；');
-  return `教練：慢慢來，這次跟著我做——${def.label}${all ? `。${all}` : ''}`;
+  if (n === 0) return '教練：現在練這一步——照下面的提示做。';
+  if (n === 1) return '教練：再來一次——別急，照著提示做。';
+  return '教練：慢慢來，這次跟著我一步一步做。';
 }
 export const TUTORIAL_RELEASE_LINE = '教練：這個急不來，等等再說——先往下走。';
 export const TUTORIAL_FINISH_LINE = '教練：好，今天到這裡——收工！';

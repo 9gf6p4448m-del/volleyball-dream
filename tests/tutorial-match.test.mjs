@@ -216,13 +216,21 @@ test('未開始就結算（中途離開）：六列都在、完成 0（不得吐
 // 四、文案守衛（台詞是規格）
 // ════════════════════════════════════════════════════════════
 
-test('每一步都喊得出話，而且那句話含這一步的 label', () => {
+// ★ 2026-09-01 規格改版（Sawmah 拍板甲案）★ 喊話併進教學框頂行，label 與提示由
+// 框身呈現——舊守衛「喊話必含 label＋提示」守的是泡泡時代（泡泡＝唯一通道）；
+// 新守衛反過來：喊話不得把框身內容再念一遍（重複＝真人截圖實證的左上大亂源）。
+test('每一步都喊得出話，且不重複框身的 label／提示（甲案）', () => {
   for (const id of TUTORIAL_DRILL_IDS) {
     const def = DRILL_DEFS[id];
-    assert.ok(def.hints?.length, `${id} 沒有操作提示——教練喊了目標卻沒說怎麼做`);
-    const line = tutorialCoachLine(def);
-    assert.ok(line.includes(def.label), `${id} 的喊話沒有含 label：${line}`);
-    assert.ok(line.includes(def.hints[0]), `${id} 的喊話沒有帶上操作提示：${line}`);
+    assert.ok(def.hints?.length, `${id} 沒有操作提示——框身要有「怎麼做」`);
+    for (const n of [0, 1, 2]) {
+      const line = tutorialCoachLine(def, n);
+      assert.ok(line.startsWith('教練：'), `${id} 第${n}級喊話要有教練口氣：${line}`);
+      assert.ok(!line.includes(def.label), `${id} 第${n}級喊話把 label 念兩遍：${line}`);
+      for (const h of def.hints) {
+        assert.ok(!line.includes(h), `${id} 第${n}級喊話把提示念兩遍：${line}`);
+      }
+    }
   }
 });
 
@@ -317,8 +325,11 @@ function loopState(events) {
         phase: 'rally',
       },
       stage: {
-        practiceHud: { update: (rows, head) => hud.push({ rows, head }) },
-        commentary: { coach: (text) => said.push(text) },
+        // 2026-09-01 甲案：喊話改走 practiceHud.coach（泡泡在教學局整顆收起）
+        practiceHud: {
+          update: (rows, head) => hud.push({ rows, head }),
+          coach: (text) => said.push(text),
+        },
       },
     },
   };
@@ -328,13 +339,14 @@ test('★接線★ updateTutorial：開場先喊第一步、做到就喊下一�
   const ev = [];
   const { s, said, hud } = loopState(ev);
   assert.equal(updateTutorial(s, 0), false);
-  assert.ok(said[0].includes(DRILL_DEFS['tut-receive'].label), `開場沒喊第一步：${said[0]}`);
+  // 甲案：步驟身分由框身（HUD current 列）呈現，喊話只驗教練口氣有出聲
+  assert.ok(said[0]?.startsWith('教練：'), `開場沒喊話：${said[0]}`);
   assert.equal(hud.at(-1).rows.find((r) => r.phase === 'current').id, 'tut-receive');
 
   ev.push(receive());
   assert.equal(updateTutorial(s, 100), false);
-  assert.ok(said.at(-1).includes(DRILL_DEFS['tut-handle'].label),
-    `★核心★ 做到第一步之後要喊第二步：${said.at(-1)}`);
+  assert.ok(said.at(-1)?.startsWith('教練：'),
+    `★核心★ 做到第一步之後要有下一句喊話：${said.at(-1)}`);
   assert.equal(s.tutorial.index, 1);
   assert.equal(hud.at(-1).rows.find((r) => r.phase === 'current').id, 'tut-handle');
 });
