@@ -24,7 +24,8 @@ export function createPracticeHud() {
     `box-shadow:0 6px 16px rgba(0,0,0,0.55), inset 0 0 18px ${goldAlpha(0.1)}`,
     'transform:skewX(-6deg) rotate(-0.6deg)', 'transform-origin:left top',
     'padding:9px 16px',
-    `font-family:${FONTS.zh}`, 'pointer-events:none', 'user-select:none',
+    `font-family:${FONTS.zh}`, 'pointer-events:auto', 'cursor:pointer',
+    'user-select:none',
     'max-width:min(340px, 32vw)',
   ].join(';');
   // 內容反斜切（匾斜字正——與 .bubble/.btext 同一手法）
@@ -46,6 +47,27 @@ export function createPracticeHud() {
   inner.appendChild(coach);
   let coachTimer = null;
   let coachVisible = false; // 喊話期間強制展開（讀字時刻）
+  // ★ 2026-09-01 三修（Sawmah：看太慢想再展開）★ 點一下手動展開／收合。
+  // 單行點開＝釘住 8 秒（讀字夠、忘了收也不會一直擋）；展開中點一下＝立刻收
+  //（並提早熄掉喊話行）。pointerdown 就地攔截，不漏給球場的 window 監聽。
+  let pinnedUntil = 0;
+  const fadeCoachNow = () => {
+    if (coachTimer) { clearTimeout(coachTimer); coachTimer = null; }
+    coachVisible = false;
+    coach.style.opacity = '0';
+    coachTimer = setTimeout(() => { coach.style.display = 'none'; coachTimer = null; }, 400);
+  };
+  root.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const expandedNow = coachVisible || Date.now() < pinnedUntil;
+    if (expandedNow) {
+      pinnedUntil = 0;
+      if (coachVisible) fadeCoachNow();
+    } else {
+      pinnedUntil = Date.now() + 8000;
+    }
+  });
   const title = document.createElement('div');
   title.textContent = '今天的科目';
   title.style.cssText = ['font-size:11px', 'color:#9fb0cc', 'letter-spacing:2px'].join(';');
@@ -70,7 +92,7 @@ export function createPracticeHud() {
     // rally 中就算教練開口也不展開，改在單行上方加一條金色小字（不擋場）。
     update(rows, headline = null, compact = false) {
       if (!rows?.length) { root.style.display = 'none'; return; }
-      const expanded = coachVisible && !compact;
+      const expanded = (coachVisible && !compact) || Date.now() < pinnedUntil;
       const slim = !expanded;
       root.style.background = slim ? 'rgba(14,11,6,0.6)' : 'rgba(14,11,6,0.94)';
       root.style.padding = slim ? '4px 12px' : '9px 16px';
@@ -95,7 +117,7 @@ export function createPracticeHud() {
         const phase = r.phase ?? (r.achieved ? 'done' : 'todo');
         const line = document.createElement('div');
         line.textContent = phase === 'current'
-          ? `${PREFIX.current}${r.label}　${r.count}/${r.target}`
+          ? `${PREFIX.current}${r.label}　${r.count}/${r.target}${slim ? '　⌄' : ''}`
           : `${PREFIX[phase]} ${r.label}　${r.count}/${r.target}`;
         // 甲案順修：當前步是「玩家此刻唯一要讀的字」，截成「…」＝把重點吃掉；
         // 只有當前步換行寫完整，其餘（紅白賽多列）維持單行省略不佔高
@@ -151,6 +173,7 @@ export function createPracticeHud() {
       if (coachTimer) { clearTimeout(coachTimer); coachTimer = null; }
       coach.style.display = 'none';
       coachVisible = false;
+      pinnedUntil = 0;
       root.style.display = 'none';
     },
   };
