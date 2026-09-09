@@ -114,6 +114,9 @@ async function init() {
   const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, crowdAnim, officials, moppers, postFx };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
+  } else if (params.get('mode') === 'freeball') {
+    const { runFreeballSandbox } = await import('./app/freeballSandbox.js');
+    await runFreeballSandbox(ctx);
   } else if (params.get('devkit') === '1') {
     // 配色卷批 1 治具：?devkit=1 全隊球衣預覽（16 隊卡片＋3D 舞台）——
     // 題 3 色票裁定工具兼驗收 K6 量測工具；動態載入，不進正常路徑的 bundle 熱路
