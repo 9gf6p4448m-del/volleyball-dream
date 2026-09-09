@@ -7,6 +7,7 @@ import { createFreeballJuice } from '../render/freeballJuice.js';
 import { createFreeballControls } from '../input/freeballControls.js';
 import { createGeoPool, createGeoCharacter } from '../render/geoCharacter.js';
 import { createGeoAnimator } from '../render/geoAnimator.js';
+import { approachYaw, shortestArc } from '../render/facing.js';
 
 export async function runFreeballSandbox(ctx) {
   const { renderer, scene, camera, quality, ballView, loadingEl, postFx } = ctx;
@@ -236,13 +237,27 @@ export async function runFreeballSandbox(ctx) {
     player.x = THREE.MathUtils.clamp(player.x, -4.2, 4.2);
     player.z = THREE.MathUtils.clamp(player.z, 0.4, 8.2);
 
-    // 面向朝向更新
+    // 面向朝向更新（修正模型面向 +Z 的旋轉角對齊）
     const moveMag = Math.hypot(player.vx, player.vz);
-    if (moveMag > 0.3) {
-      player.facingAngle = Math.atan2(-player.vx, -player.vz);
+    let targetYaw = Math.PI; // 預設面向球網 (-Z 方向)
+
+    if (player.isAirborne) {
+      // 空中扣殺滯空：優先對齊拖曳瞄準方向，否則面向球網對面標靶
+      const aimDir = controls.getAimDirection();
+      if (aimDir) {
+        targetYaw = Math.atan2(aimDir.x, aimDir.z);
+      } else {
+        targetYaw = Math.atan2(0 - player.x, -2.5 - player.z);
+      }
+    } else if (moveMag > 0.25) {
+      // 地面移動：面向行進方向（atan2(vx, vz) 對齊 +Z 模型正面）
+      targetYaw = Math.atan2(player.vx, player.vz);
     } else {
-      player.facingAngle = THREE.MathUtils.lerp(player.facingAngle, Math.PI, 0.1);
+      // 站定待命：面向球網 (-Z)
+      targetYaw = Math.PI;
     }
+
+    player.facingAngle = approachYaw(player.facingAngle, targetYaw, dt);
 
     // B. 起跳滯空高度更新
     if (player.isAirborne) {
@@ -265,9 +280,9 @@ export async function runFreeballSandbox(ctx) {
     }
 
     // C. 程序化動畫驅動
-    // lateral: 移動方向相對朝向的橫向分量
+    // lateral: 移動方向相對朝向的橫向分量（由 shortestArc 算最短夾角）
     const lateral = moveMag > 0.25
-      ? Math.sin(Math.atan2(player.vx, player.vz) - player.facingAngle)
+      ? Math.sin(shortestArc(player.facingAngle, Math.atan2(player.vx, player.vz)))
       : 0;
     const bodyY = animator.update(dt, moveMag, lateral, 1.0);
 
