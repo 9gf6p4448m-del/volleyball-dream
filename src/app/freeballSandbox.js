@@ -191,9 +191,12 @@ export async function runFreeballSandbox(ctx) {
     rallyPhase = RALLY_PHASE.SERVE_INBOUND;
     ball.isSpiked = false;
 
-    // 二傳手回位待命
-    setter.x = 1.2;
-    setter.z = 1.5;
+    // 二傳手回網前待命位置（真實排球二傳站位：x ≈ 1.6, z ≈ 1.2）
+    setter.x = 1.6;
+    setter.y = 0;
+    setter.z = 1.2;
+    setter.vx = 0;
+    setter.vz = 0;
     setter.facingAngle = -Math.PI * 0.45;
     setter.hasSet = false;
 
@@ -229,10 +232,12 @@ export async function runFreeballSandbox(ctx) {
     const heightDelta = ball.y - 0.9;
 
     if (horizDist <= 1.8 && heightDelta >= -0.7 && heightDelta <= 1.2) {
+      // 一傳墊向網前二傳專屬戰術位 (x ≈ 1.1, z ≈ 1.6, y = 2.2)
+      const setterTargetPos = { x: 1.1, y: 2.2, z: 1.6 };
       const digResult = calculateDigVelocity(
         ball,
         player,
-        { x: setter.x, y: 2.2, z: setter.z },
+        setterTargetPos,
         horizDist <= 0.6 ? 1.0 : 0.75
       );
 
@@ -256,7 +261,12 @@ export async function runFreeballSandbox(ctx) {
     setterAnimator.trigger('overhead');
     juice.vibrate('dig');
 
-    // 開網高球目標點：網前攻擊區 (x 靠近玩家前方, z = 1.85, 摸高頂點 3.9m)
+    // ★ 排球從二傳手頭頂手掌位置發出 ★
+    ball.x = setter.x;
+    ball.y = 2.18;
+    ball.z = setter.z;
+
+    // 開網高球目標點：網前攻擊區 (4號位，x 靠近玩家前方, z = 1.85, 摸高頂點 3.9m)
     const attackX = THREE.MathUtils.clamp(player.x * 0.55, -1.8, 1.8);
     const tossTarget = { x: attackX, y: 1.0, z: 1.85 };
 
@@ -522,21 +532,60 @@ export async function runFreeballSandbox(ctx) {
     playerRig.root.position.set(player.x, player.y + groundOffset, player.z);
     playerRig.root.rotation.y = player.facingAngle;
 
-    // B. 二傳手 AI（跑位接球與頭頂高托）
+    // B. 二傳手 AI（主動奔跑追球、計算落點，手掌精確觸球瞬間托出）
     if (rallyPhase === RALLY_PHASE.SETTER_TOSS && !setter.hasSet) {
-      const dSetter = Math.hypot(ball.x - setter.x, ball.z - setter.z);
-      if (dSetter > 0.15) {
-        setter.x += (ball.x - setter.x) * 4.0 * simDt;
-        setter.z += (ball.z - setter.z) * 4.0 * simDt;
+      // 根據排球拋物線解出球下落至頭頂觸球高度 (y ≈ 2.15m) 時的精確攔截點
+      let interceptX = ball.x;
+      let interceptZ = ball.z;
+      const disc = ball.vy * ball.vy + 19.62 * (ball.y - 2.15);
+      if (disc >= 0) {
+        const tDescend = (ball.vy + Math.sqrt(disc)) / 9.81;
+        if (tDescend > 0) {
+          interceptX = THREE.MathUtils.clamp(ball.x + ball.vx * tDescend, -1.8, 3.2);
+          interceptZ = THREE.MathUtils.clamp(ball.z + ball.vz * tDescend, 0.8, 3.0);
+        }
       }
-      // 當球到達二傳手頭頂時觸發二傳托球
-      if (ball.y <= 2.35 && dSetter <= 1.4) {
+
+      const dx = interceptX - setter.x;
+      const dz = interceptZ - setter.z;
+      const distToTarget = Math.hypot(dx, dz);
+
+      let setterRunSpeed = 0;
+      if (distToTarget > 0.08) {
+        setterRunSpeed = Math.min(distToTarget / Math.max(simDt, 0.016), 5.5);
+        const dirX = dx / distToTarget;
+        const dirZ = dz / distToTarget;
+        setter.vx = THREE.MathUtils.lerp(setter.vx, dirX * setterRunSpeed, 0.35);
+        setter.vz = THREE.MathUtils.lerp(setter.vz, dirZ * setterRunSpeed, 0.35);
+        setter.x += setter.vx * simDt;
+        setter.z += setter.vz * simDt;
+        setter.facingAngle = approachYaw(setter.facingAngle, Math.atan2(setter.vx, setter.vz), simDt * 9.0);
+      } else {
+        setter.vx = 0;
+        setter.vz = 0;
+        // 站定位後面向 4 號位主攻手預備托球
+        setter.facingAngle = approachYaw(setter.facingAngle, -Math.PI * 0.45, simDt * 6.0);
+      }
+
+      // 驅動二傳手跑步步態（腿部真正邁步奔跑！）
+      const setterBodyY = setterAnimator.update(simDt, setterRunSpeed, 0, 1.0);
+      setterRig.root.position.set(setter.x, setter.y + setterBodyY, setter.z);
+      setterRig.root.rotation.y = setter.facingAngle;
+
+      // ★ 觸球判定關鍵修復：球必須下落到二傳手摸高頭頂、且二傳手真正接觸到球才托出！ ★
+      const horizDistToBall = Math.hypot(ball.x - setter.x, ball.z - setter.z);
+      const isDescending = ball.vy <= 0.6; // 球已過弧線頂點開始下落
+      const isAtHandHeight = ball.y <= 2.30 && ball.y >= 1.85; // 手掌頭頂高度
+      const isTouchingBall = horizDistToBall <= 0.45; // 真正觸球距離
+
+      if (isDescending && isAtHandHeight && isTouchingBall) {
         executeSetterToss();
       }
+    } else {
+      const setterBodyY = setterAnimator.update(simDt, 0, 0, 1.0);
+      setterRig.root.position.set(setter.x, setter.y + setterBodyY, setter.z);
+      setterRig.root.rotation.y = setter.facingAngle;
     }
-    const setterBodyY = setterAnimator.update(simDt, 0, 0, 1.0);
-    setterRig.root.position.set(setter.x, setter.y + setterBodyY, setter.z);
-    setterRig.root.rotation.y = setter.facingAngle;
 
     // C. 攔網手 AI（在慢動作下同步起跳封網）
     if (blocker.isAirborne) {
@@ -737,12 +786,10 @@ export async function runFreeballSandbox(ctx) {
     camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.08) + juiceResult.shakeOffset.z;
     camera.lookAt(player.x * 0.35, 1.8 + player.y * 0.2, player.z - 4.5);
 
-    // H. 更新 UI 狀態（手機搖桿、情境動作鈕群、手勢瞄準羅盤與戰術提示）
+    // H. 更新 UI 狀態（手機搖桿、情境動作鈕與戰術提示）
     const uiState = controls.getUiState();
-    const aimCompass = controls.getAimCompass();
     ui.update({
       uiState,
-      aimCompass,
       rallyPhase,
       inSpikeZone,
       isAirborne: player.isAirborne,
@@ -894,56 +941,7 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
   ].join(';');
   root.appendChild(joystickKnob);
 
-  // 7. 手勢瞄準羅盤（Aim Compass Widget：右手滑動時在手指處展開）
-  const compassRoot = document.createElement('div');
-  compassRoot.id = 'fb-aim-compass';
-  compassRoot.style.cssText = [
-    'position:absolute', 'width:140px', 'height:140px',
-    'transform:translate(-50%, -50%)', 'pointer-events:none', 'display:none',
-    'z-index:25',
-  ].join(';');
-
-  const compassRing = document.createElement('div');
-  compassRing.style.cssText = [
-    'position:absolute', 'inset:16px', 'border-radius:50%',
-    'border:2px dashed rgba(255,255,255,0.4)', 'background:rgba(18,28,45,0.65)',
-    'box-shadow:0 0 18px rgba(0,0,0,0.6)', 'backdrop-filter:blur(6px)',
-  ].join(';');
-  compassRoot.appendChild(compassRing);
-
-  function createBadge(text, posStyle, defaultColor) {
-    const el = document.createElement('div');
-    el.textContent = text;
-    el.style.cssText = [
-      'position:absolute', posStyle,
-      'padding:3px 9px', 'border-radius:12px', 'font-size:11px', 'font-weight:800',
-      'background:rgba(20,28,42,0.85)', `color:${defaultColor}`,
-      `border:1px solid ${defaultColor}`, 'white-space:nowrap',
-      'transform:translate(-50%, -50%)', 'transition:all 0.12s ease',
-    ].join(';');
-    return el;
-  }
-
-  const badgeTip = createBadge('🎯 輕吊', 'top:8px; left:50%;', '#38ef7d');
-  const badgeLine = createBadge('🔥 直線', 'bottom: -10px; left:50%;', '#ff416c');
-  const badgeCrossL = createBadge('◀ 左斜', 'bottom:18px; left:6px;', '#ffd166');
-  const badgeCrossR = createBadge('▶ 右斜', 'bottom:18px; right:-24px;', '#ffd166');
-  compassRoot.appendChild(badgeTip);
-  compassRoot.appendChild(badgeLine);
-  compassRoot.appendChild(badgeCrossL);
-  compassRoot.appendChild(badgeCrossR);
-
-  const compassPointer = document.createElement('div');
-  compassPointer.style.cssText = [
-    'position:absolute', 'width:26px', 'height:26px', 'border-radius:50%',
-    'background:#ffffff', 'box-shadow:0 0 14px #ffffff',
-    'transform:translate(-50%, -50%)', 'pointer-events:none',
-    'left:70px', 'top:70px',
-  ].join(';');
-  compassRoot.appendChild(compassPointer);
-  root.appendChild(compassRoot);
-
-  // 8. 打擊反饋 Banner
+  // 7. 打擊反饋 Banner
   const banner = document.createElement('div');
   banner.style.cssText = [
     'position:absolute', 'top:38%', 'left:50%', 'transform:translate(-50%, -50%) scale(0.9)',
@@ -953,96 +951,26 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
   ].join(';');
   root.appendChild(banner);
 
-  // 9. 右下角大拇指操作按鈕群（Arcade Button Cluster）
-  // A. 空中單手吊球按鈕（位於主按鈕上方）
-  const tipBtn = document.createElement('button');
-  tipBtn.textContent = '🎯 輕吊';
-  tipBtn.style.cssText = [
-    'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 26px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 138px)',
-    'width:clamp(74px, 18vw, 86px)', 'height:44px', 'border-radius:22px',
-    'background:linear-gradient(135deg, #11998e, #38ef7d)',
-    'color:#ffffff', 'font-size:13px', 'font-weight:800',
-    'display:none', 'align-items:center', 'justify-content:center',
-    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
-    'border:none', 'box-shadow:0 0 16px rgba(56,239,125,0.6)',
-    'transition:transform 0.1s ease', 'touch-action:none',
-  ].join(';');
-  tipBtn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    buttonSquish(tipBtn);
-    haptic(20);
-    onDirectAction('TIP');
-  });
-  root.appendChild(tipBtn);
-
-  // B. 空中左斜線重扣快捷鈕
-  const crossLBtn = document.createElement('button');
-  crossLBtn.textContent = '◀ 左斜';
-  crossLBtn.style.cssText = [
-    'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 120px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 94px)',
-    'width:clamp(68px, 16vw, 80px)', 'height:42px', 'border-radius:21px',
-    'background:linear-gradient(135deg, #f7971e, #ffd200)',
-    'color:#1c2230', 'font-size:12px', 'font-weight:800',
-    'display:none', 'align-items:center', 'justify-content:center',
-    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
-    'border:none', 'box-shadow:0 0 14px rgba(255,210,0,0.55)',
-    'transition:transform 0.1s ease', 'touch-action:none',
-  ].join(';');
-  crossLBtn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    buttonSquish(crossLBtn);
-    haptic(20);
-    onDirectAction('CROSS_LEFT');
-  });
-  root.appendChild(crossLBtn);
-
-  // C. 空中右斜線重扣快捷鈕
-  const crossRBtn = document.createElement('button');
-  crossRBtn.textContent = '▶ 右斜';
-  crossRBtn.style.cssText = [
-    'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 120px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 36px)',
-    'width:clamp(68px, 16vw, 80px)', 'height:42px', 'border-radius:21px',
-    'background:linear-gradient(135deg, #f7971e, #ffd200)',
-    'color:#1c2230', 'font-size:12px', 'font-weight:800',
-    'display:none', 'align-items:center', 'justify-content:center',
-    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
-    'border:none', 'box-shadow:0 0 14px rgba(255,210,0,0.55)',
-    'transition:transform 0.1s ease', 'touch-action:none',
-  ].join(';');
-  crossRBtn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    buttonSquish(crossRBtn);
-    haptic(20);
-    onDirectAction('CROSS_RIGHT');
-  });
-  root.appendChild(crossRBtn);
-
-  // D. 右下角情境大按鈕（地面：墊球/起跳；空中：直線重扣/手勢起點）
+  // 8. 右下角情境動作大按鈕（地面：墊球/起跳；空中：扣殺提示）
   const actionBtn = document.createElement('button');
   actionBtn.textContent = '助跑起跳';
   actionBtn.style.cssText = [
     'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 20px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 24px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 22px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 26px)',
     'width:clamp(88px, 21vw, 104px)', 'height:clamp(88px, 21vw, 104px)', 'border-radius:50%',
     'color:#ffffff', 'font-size:clamp(14px, 3.5vw, 16px)', 'font-weight:800',
     'display:flex', 'align-items:center', 'justify-content:center',
     'pointer-events:auto', 'user-select:none', 'cursor:pointer',
     'border:none', 'transition:background 0.15s ease, transform 0.1s ease',
-    'touch-action:none',
+    'touch-action:none', 'box-shadow:0 0 18px rgba(33,147,176,0.5)',
   ].join(';');
 
   actionBtn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     buttonSquish(actionBtn);
     haptic(20);
-    // 直接點擊按鈕：若在空中則默認為直線重扣，地面則執行情境動作
+    // 直接點擊按鈕：空中默認重扣，地面執行情境動作（墊球或起跳）
     onDirectAction(null);
   });
   root.appendChild(actionBtn);
@@ -1051,21 +979,17 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
     root,
     banner,
     actionBtn,
-    tipBtn,
-    crossLBtn,
-    crossRBtn,
     focusBadge,
     coachHint,
     joystickBase,
     joystickKnob,
-    compassRoot,
 
     updateScore: (score, combo) => {
       scoreEl.textContent = `SCORE: ${score}`;
       comboEl.textContent = combo > 1 ? `🔥 COMBO x${combo}` : '';
     },
 
-    update: ({ uiState, aimCompass, rallyPhase, inSpikeZone, isAirborne }) => {
+    update: ({ uiState, rallyPhase, inSpikeZone, isAirborne }) => {
       // 1. 搖桿更新
       if (uiState.joystick.active) {
         joystickBase.style.display = 'block';
@@ -1079,56 +1003,17 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
         joystickKnob.style.display = 'none';
       }
 
-      // 2. 手勢瞄準羅盤更新（空中拖曳時出現）
-      if (aimCompass.active) {
-        compassRoot.style.display = 'block';
-        compassRoot.style.left = `${aimCompass.startX}px`;
-        compassRoot.style.top = `${aimCompass.startY}px`;
-
-        const clampedDx = THREE.MathUtils.clamp(aimCompass.dx, -50, 50);
-        const clampedDy = THREE.MathUtils.clamp(aimCompass.dy, -50, 50);
-        compassPointer.style.left = `${70 + clampedDx}px`;
-        compassPointer.style.top = `${70 + clampedDy}px`;
-
-        // 方向高亮
-        const isTip = aimCompass.shotType === 'TIP';
-        const isLine = aimCompass.shotType === 'LINE';
-        const isCrossL = aimCompass.shotType === 'CROSS_LEFT';
-        const isCrossR = aimCompass.shotType === 'CROSS_RIGHT';
-
-        badgeTip.style.transform = isTip ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
-        badgeTip.style.boxShadow = isTip ? '0 0 16px #38ef7d' : 'none';
-
-        badgeLine.style.transform = isLine ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
-        badgeLine.style.boxShadow = isLine ? '0 0 16px #ff416c' : 'none';
-
-        badgeCrossL.style.transform = isCrossL ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
-        badgeCrossL.style.boxShadow = isCrossL ? '0 0 16px #ffd166' : 'none';
-
-        badgeCrossR.style.transform = isCrossR ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
-        badgeCrossR.style.boxShadow = isCrossR ? '0 0 16px #ffd166' : 'none';
-      } else {
-        compassRoot.style.display = 'none';
-      }
-
-      // 3. 按鈕外觀與衛星按鈕展開
+      // 2. 按鈕狀態切換
       if (isAirborne) {
-        actionBtn.textContent = '⚡ 直扣';
+        actionBtn.textContent = '⚡ 扣殺 (滑動)';
         actionBtn.style.background = 'linear-gradient(135deg, #ff416c, #ff4b2b)';
         actionBtn.style.boxShadow = '0 0 22px rgba(255, 75, 43, 0.75)';
-
-        tipBtn.style.display = 'flex';
-        crossLBtn.style.display = 'flex';
-        crossRBtn.style.display = 'flex';
         focusBadge.style.display = inSpikeZone ? 'block' : 'none';
       } else {
-        tipBtn.style.display = 'none';
-        crossLBtn.style.display = 'none';
-        crossRBtn.style.display = 'none';
         focusBadge.style.display = 'none';
 
         if (rallyPhase === 'SERVE_INBOUND') {
-          actionBtn.textContent = '🏐 墊球';
+          actionBtn.textContent = '🏐 墊球 (DIG)';
           actionBtn.style.background = 'linear-gradient(135deg, #11998e, #38ef7d)';
           actionBtn.style.boxShadow = '0 0 18px rgba(56, 239, 125, 0.6)';
         } else if (rallyPhase === 'SETTER_TOSS') {
@@ -1142,21 +1027,21 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
         }
       }
 
-      // 4. 戰術引導教練提示更新
+      // 3. 戰術引導教練提示更新
       if (rallyPhase === 'SERVE_INBOUND') {
-        coachHint.textContent = '🏐 左手搖桿走位迎球，點擊【墊球】送給二傳手';
+        coachHint.textContent = '🏐 走位迎球，按【墊球】送給舉球員';
         coachHint.style.color = '#6ee7ff';
         coachHint.style.borderColor = 'rgba(110,231,255,0.45)';
       } else if (rallyPhase === 'SETTER_TOSS') {
-        coachHint.textContent = '⭐ 二傳手高托到位！點擊【助跑起跳】起飛';
+        coachHint.textContent = '⭐ 舉球員積極跑位就位中！按【助跑起跳】';
         coachHint.style.color = '#ffd166';
         coachHint.style.borderColor = 'rgba(255,209,102,0.45)';
       } else if (inSpikeZone) {
-        coachHint.textContent = '⏳ 空中慢動作！滑動選擇路線，或直接按右側按鈕';
+        coachHint.textContent = '⏳ 空中慢動作：上滑吊球 ｜ 下滑直線 ｜ 斜滑斜線';
         coachHint.style.color = '#ff416c';
         coachHint.style.borderColor = 'rgba(255,65,108,0.5)';
       } else if (isAirborne) {
-        coachHint.textContent = '⚡ 滯空蓄力中...';
+        coachHint.textContent = '⚡ 滯空瞄準中...';
         coachHint.style.color = '#ffd166';
         coachHint.style.borderColor = 'rgba(255,209,102,0.45)';
       } else {

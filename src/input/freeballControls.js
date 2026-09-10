@@ -135,33 +135,30 @@ export function createFreeballControls(domElement, camera) {
   });
 
   /**
-   * 手機端精準手勢判定（利用角度分區，手感極度舒適順手）
+   * 手勢判定：上滑為單手吊球，下滑區分直線與左右斜線重扣
    */
   function resolveAirActionType(dx, dy) {
     const dist = Math.hypot(dx, dy);
-    // 輕點或極微小滑動（<14px）：預設為直線重扣
-    if (dist < 14) return 'LINE';
+    // 輕點或小於死區（<12px）：預設為重扣
+    if (dist < 12) return 'SMASH';
 
-    // 角度換算（0度為向右，90度為向下，-90度為向上，180/-180為向左）
-    const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-
-    // 向上劃動（-140° 到 -40°）：單手輕吊球
-    if (deg >= -140 && deg <= -40) {
+    // 1. 上滑（向上劃動）：單手輕吊球 (TIP)
+    if (dy < -16) {
       return 'TIP';
     }
 
-    // 正向下劃動（55° 到 125°）：筆直向底線重扣
-    if (deg >= 55 && deg <= 125) {
-      return 'LINE';
+    // 2. 下滑區分：直線重扣 vs 左右斜線重扣
+    if (dy > 12) {
+      if (dx < -16) return 'CROSS_LEFT';  // 左下劃動：銳利左斜線
+      if (dx > 16) return 'CROSS_RIGHT'; // 右下劃動：銳利右斜線
+      return 'LINE';                     // 正向垂直下滑：直線重扣
     }
 
-    // 向左或左下劃動（125° 到 180° 或 -180° 到 -140°）：銳利左斜線
-    if (deg > 125 || deg < -140) {
-      return 'CROSS_LEFT';
-    }
+    // 3. 水平甩擊（左右劃動）
+    if (dx < -20) return 'CROSS_LEFT';
+    if (dx > 20) return 'CROSS_RIGHT';
 
-    // 向右或右下劃動（-40° 到 55°）：銳利右斜線
-    return 'CROSS_RIGHT';
+    return 'LINE';
   }
 
   function finishAirAction() {
