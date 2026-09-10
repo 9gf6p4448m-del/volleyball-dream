@@ -9,6 +9,7 @@ import {
   calculateTipVelocity,
   checkBlockCollision,
   checkNetCrossingCollision,
+  checkMultiBlockerCrossingCollision,
   TIMING_GRADE,
 } from '../src/sim/physicsMath.js';
 
@@ -165,5 +166,39 @@ test('checkNetCrossingCollision：高速穿網連續射線檢測，避免穿隧�
   assert.ok(res.contactPoint, '應回傳穿網切點座標');
   assert.ok(res.contactPoint.z >= 0, '切點應落在球網攔阻面');
 });
+
+test('checkMultiBlockerCrossingCollision：雙人攔網壁壘正面攔死、打手出界與穿透判定', () => {
+  // 雙人攔網：MB 在 x=-1.8, OPP 在 x=-2.4 (並排封堵 4 號位攻擊)
+  const blockers = [
+    { id: 'B3', x: -1.8, y: 0.75, z: -0.15, reachY: 2.65, isAirborne: true, blockWidth: 0.8 },
+    { id: 'B4', x: -2.4, y: 0.75, z: -0.15, reachY: 2.60, isAirborne: true, blockWidth: 0.8 },
+    { id: 'B2', x: 2.0, y: 0, z: -0.2, reachY: 2.50, isAirborne: false, blockWidth: 0.75 }, // 未起跳
+  ];
+
+  // 1. 直撞 B4 手掌中心 (x=-2.38) -> ROOF
+  const prevPos1 = { x: -2.38, y: 2.62, z: 0.3 };
+  const currPos1 = { x: -2.38, y: 2.56, z: -0.2 };
+  const vel1 = { vx: 0, vy: -3, vz: -25 };
+  const res1 = checkMultiBlockerCrossingCollision(prevPos1, currPos1, vel1, blockers);
+  assert.equal(res1.hit, true);
+  assert.equal(res1.type, 'ROOF');
+  assert.equal(res1.blockerId, 'B4');
+
+  // 2. 擦過 B3 外側邊緣 (x=-1.35) -> TOOL
+  const prevPos2 = { x: -1.35, y: 2.62, z: 0.3 };
+  const currPos2 = { x: -1.35, y: 2.56, z: -0.2 };
+  const res2 = checkMultiBlockerCrossingCollision(prevPos2, currPos2, vel1, blockers);
+  assert.equal(res2.hit, true);
+  assert.equal(res2.type, 'TOOL');
+  assert.equal(res2.blockerId, 'B3');
+
+  // 3. 銳利大斜線避開攔網 (x=0.5) -> MISS (穿透得分)
+  const prevPos3 = { x: 0.5, y: 2.50, z: 0.3 };
+  const currPos3 = { x: 0.5, y: 2.45, z: -0.2 };
+  const res3 = checkMultiBlockerCrossingCollision(prevPos3, currPos3, vel1, blockers);
+  assert.equal(res3.hit, false);
+  assert.equal(res3.type, 'MISS');
+});
+
 
 

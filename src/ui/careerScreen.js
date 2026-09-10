@@ -1944,6 +1944,9 @@ export function createCareerScreen(store, {
     // W4(P4) 題2：生涯入口收斂為選檔頁（進生涯前一層）——繼續/新生涯/匯入都在槽卡片上
     inner.appendChild(button('▶ 生涯', true, renderSlots));
     inner.appendChild(button('快速比賽', false, showQuickRolePicker));
+    inner.appendChild(button('🏐 Free Ball 6v6', false, () => {
+      window.location.assign(`${window.location.pathname}?mode=freeball`);
+    }));
     // 多人連線卷批5 追修（2026-08-28 Sawmah：「不是從我們原本遊戲進去嗎」）：
     // 連線對戰入口上主選單——手遊玩家不打網址（拍板 8）。用整頁導航不用回呼：
     // lobby 與比賽的訊息路由都掛在 ?net=1 的載入路徑上（main.js），乾淨開頁最穩。

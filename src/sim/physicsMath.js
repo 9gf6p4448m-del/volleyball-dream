@@ -324,3 +324,57 @@ export function checkNetCrossingCollision(
   return result;
 }
 
+/**
+ * 多人攔網連續穿網碰撞檢測器（Multi-Blocker Wall Net-Crossing Raycast Collision）
+ * 支援 6v6 排球標準雙人 (2-Man) 或三人 (3-Man) 攔網牆的射線碰撞判定
+ *
+ * @param {{x: number, y: number, z: number}} prevPos 前一幀球位置
+ * @param {{x: number, y: number, z: number}} currPos 當前幀球位置
+ * @param {{vx: number, vy: number, vz: number}} ballVel 當前速度
+ * @param {Array<{x: number, y: number, z: number, reachY?: number, blockWidth?: number, isAirborne?: boolean, id?: string}>} blockers 攔網球員陣列
+ * @returns {{hit: boolean, type: 'ROOF'|'TOOL'|'MISS', reflectedVel?: {vx: number, vy: number, vz: number}, contactPoint?: {x: number, y: number, z: number}, blockerId?: string}}
+ */
+export function checkMultiBlockerCrossingCollision(
+  prevPos,
+  currPos,
+  ballVel,
+  blockers = []
+) {
+  if (ballVel.vz >= 0) return { hit: false, type: 'MISS' };
+
+  const isCrossing = (prevPos.z >= -0.05 && currPos.z <= 0.05) || (Math.abs(currPos.z) <= 0.28);
+  if (!isCrossing) return { hit: false, type: 'MISS' };
+
+  const dz = currPos.z - prevPos.z;
+  const t = Math.abs(dz) > 1e-4 ? Math.max(0, Math.min(1, (0 - prevPos.z) / dz)) : 0.5;
+
+  const contactX = prevPos.x + t * (currPos.x - prevPos.x);
+  const contactY = prevPos.y + t * (currPos.y - prevPos.y);
+  const contactPos = { x: contactX, y: contactY, z: 0 };
+
+  let closestHit = null;
+  let minDx = Infinity;
+
+  for (const b of blockers) {
+    if (!b || b.isAirborne === false) continue;
+    const blockerPos = { x: b.x, y: b.y ?? 0, z: b.z };
+    const reachY = b.reachY ?? (b.y + 2.55);
+    const width = b.blockWidth ?? 0.75;
+    const res = checkBlockCollision(contactPos, ballVel, blockerPos, reachY, width);
+    if (res.hit) {
+      const dx = Math.abs(contactX - b.x);
+      if (!closestHit || (res.type === 'ROOF' && closestHit.type !== 'ROOF') || dx < minDx) {
+        closestHit = {
+          ...res,
+          blockerId: b.id ?? null,
+          contactPoint: { x: contactX, y: contactY, z: 0.05 },
+        };
+        minDx = dx;
+      }
+    }
+  }
+
+  return closestHit ?? { hit: false, type: 'MISS' };
+}
+
+
