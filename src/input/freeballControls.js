@@ -39,10 +39,18 @@ export function createFreeballControls(domElement, camera) {
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.add('right');
 
     if ((e.code === 'Space' || e.code === 'KeyJ') && !e.repeat) {
-      handleActionButtonPress(!isAirborne ? 'JUMP' : 'SMASH');
+      if (!isAirborne) {
+        handleActionButtonPress('ACTION');
+      } else {
+        if (keys.has('left')) handleActionButtonPress('CROSS_LEFT');
+        else if (keys.has('right')) handleActionButtonPress('CROSS_RIGHT');
+        else if (keys.has('down')) handleActionButtonPress('LINE');
+        else if (keys.has('up')) handleActionButtonPress('TIP');
+        else handleActionButtonPress('SMASH');
+      }
     }
     if ((e.code === 'KeyK' || e.code === 'KeyT') && !e.repeat) {
-      handleActionButtonPress(!isAirborne ? 'JUMP' : 'TIP');
+      handleActionButtonPress(!isAirborne ? 'ACTION' : 'TIP');
     }
   });
 
@@ -73,7 +81,11 @@ export function createFreeballControls(domElement, camera) {
       actionPointerId = e.pointerId;
       actionDrag = { dx: 0, dy: 0, startX: e.clientX, startY: e.clientY };
       isDraggingAction = true;
-      handleActionButtonPress();
+
+      // 地面動作（起跳或墊球）：零延遲立即觸發！
+      if (!isAirborne) {
+        handleActionButtonPress('ACTION');
+      }
     }
   });
 
@@ -93,8 +105,36 @@ export function createFreeballControls(domElement, camera) {
     if (actionPointerId !== null && e.pointerId === actionPointerId) {
       actionDrag.dx = e.clientX - actionDrag.startX;
       actionDrag.dy = e.clientY - actionDrag.startY;
+
+      // 空中蓄力時：若手指劃動幅度達到閾值（快速 Flick 甩擊），可提前釋放！
+      if (isAirborne && Math.hypot(actionDrag.dx, actionDrag.dy) >= 55) {
+        finishAirAction();
+      }
     }
   });
+
+  function resolveAirActionType(dx, dy) {
+    if (dy < -20) return 'TIP'; // 向上撥動：單手輕吊球
+    if (dy > 16) {
+      if (Math.abs(dx) > 22) {
+        return dx < 0 ? 'CROSS_LEFT' : 'CROSS_RIGHT'; // 斜向下滑：大斜線扣球
+      }
+      return 'LINE'; // 正向垂直下滑：直線重扣
+    }
+    // 水平劃動
+    if (Math.abs(dx) > 28) {
+      return dx < 0 ? 'CROSS_LEFT' : 'CROSS_RIGHT';
+    }
+    return 'SMASH'; // 輕點或小幅度：預設直扣或跟隨搖桿
+  }
+
+  function finishAirAction() {
+    if (!actionPointerId) return;
+    const type = resolveAirActionType(actionDrag.dx, actionDrag.dy);
+    handleActionButtonPress(type);
+    actionPointerId = null;
+    isDraggingAction = false;
+  }
 
   const endPointer = (e) => {
     if (joystick && e.pointerId === joystick.pointerId) {
@@ -103,8 +143,12 @@ export function createFreeballControls(domElement, camera) {
       moveVector.z = 0;
     }
     if (actionPointerId !== null && e.pointerId === actionPointerId) {
-      actionPointerId = null;
-      isDraggingAction = false;
+      if (isAirborne) {
+        finishAirAction();
+      } else {
+        actionPointerId = null;
+        isDraggingAction = false;
+      }
     }
   };
 
@@ -118,9 +162,8 @@ export function createFreeballControls(domElement, camera) {
     if (onActionTriggerCallback) {
       let actionType = typeOverride;
       if (!actionType) {
-        if (!isAirborne) actionType = 'JUMP';
-        else if (actionDrag.dy < -24) actionType = 'TIP';
-        else actionType = 'SMASH';
+        if (!isAirborne) actionType = 'ACTION';
+        else actionType = resolveAirActionType(actionDrag.dx, actionDrag.dy);
       }
       onActionTriggerCallback({
         isAirborne,
@@ -193,6 +236,20 @@ export function createFreeballControls(domElement, camera) {
       return {
         x: actionDrag.dx / len,
         z: -actionDrag.dy / len, // 向上拖曳為向前（-z）
+      };
+    },
+
+    /**
+     * 獲取當前瞄準線路與手勢預測
+     */
+    getAimState() {
+      const isDragging = isDraggingAction && isAirborne;
+      const shotType = isDragging ? resolveAirActionType(actionDrag.dx, actionDrag.dy) : 'SMASH';
+      return {
+        isDragging,
+        dx: actionDrag.dx,
+        dy: actionDrag.dy,
+        shotType,
       };
     },
 

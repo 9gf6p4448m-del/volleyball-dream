@@ -141,6 +141,11 @@ const POSES = {
   blockLoad: { rSh: [-0.6, -0.15], lSh: [-0.6, 0.15], rEl: -0.9, lEl: -0.9, spine: 0.35, neck: -0.2, crouch: 0.3, spineUp: 0.12 },
   // 4.5B §8 助跑遲疑（低 trust 快攻的身體語言）：手臂只抬一半、低頭半拍
   windupHesitant: { rSh: [-1.55, -0.3], lSh: [-1.3, 0.12], rEl: -1.3, lEl: -0.4, spine: -0.06, neck: 0.12 },
+  // 真實排球空中單手輕吊球（Airborne Single-Hand Tip / Roll Shot）：
+  // 單臂高舉過網延伸、手腕指尖輕挑撥球、非慣用手自然下收平衡身形、上身微前傾非劇烈扣腹
+  tipReach: { rSh: [-2.85, -0.06], lSh: [-0.6, 0.2], rEl: 0, lEl: -0.3, spine: 0.06, neck: -0.1, spineUp: 0.1, pelvisY: 0.04, wrist: -0.25 },
+  tipHit: { rSh: [-2.72, -0.04], lSh: [-0.4, 0.15], rEl: -0.12, lEl: -0.2, spine: 0.16, neck: -0.05, spineUp: 0.15, pelvisY: 0.0, wrist: 0.35 },
+  tipFollow: { rSh: [-1.2, 0.14], lSh: [-0.3, 0.1], rEl: -0.3, lEl: -0.15, spine: 0.26, neck: 0.05, spineUp: 0.08, wrist: 0.1 },
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
@@ -216,6 +221,16 @@ const SEQUENCES = {
       { at: 0.27, p: 'spikeUnlock' },
       { at: 0.4, p: 'spikeHit' },
       { at: 1, p: 'spikeFollow' },
+    ],
+  },
+  // 真實排球空中單手吊球序列（Airborne Single-Hand Tip）：引臂偽裝 ➔ 單手高挑 ➔ 壓腕推球 ➔ 輕柔收臂
+  tip: {
+    dur: 0.42, jump: 0.55, airborne: true, land: true, hit: 0.38,
+    keys: [
+      { at: 0, p: 'spikeWind' },
+      { at: 0.18, p: 'tipReach' },
+      { at: 0.38, p: 'tipHit' },
+      { at: 1, p: 'tipFollow' },
     ],
   },
   serve: { dur: 0.72, jump: 0.3, land: false, keys: [{ at: 0, p: 'spikeWind' }, { at: 0.5, p: 'spikeHit' }, { at: 1, p: 'spikeFollow' }] },

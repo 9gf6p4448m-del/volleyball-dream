@@ -279,3 +279,48 @@ export function checkBlockCollision(ballPos, ballVel, blockerPos, blockerReachY 
   return { hit: false, type: 'MISS' };
 }
 
+/**
+ * 連續穿網攔網碰撞檢測器（Continuous Net-Crossing Raycast Block Collider）
+ * 解決高速排球單幀跨過球網時的「穿網穿隧效應（Tunneling）」，以時間插值求出穿網切點
+ * 
+ * @param {{x: number, y: number, z: number}} prevPos 前一幀球位置
+ * @param {{x: number, y: number, z: number}} currPos 當前幀球位置
+ * @param {{vx: number, vy: number, vz: number}} ballVel 當前速度
+ * @param {{x: number, y: number, z: number}} blockerPos 攔網手位置
+ * @param {number} blockerReachY 攔網摸高點
+ * @param {number} blockWidth 攔網雙手寬度
+ * @returns {{hit: boolean, type: 'ROOF'|'TOOL'|'MISS', reflectedVel?: {vx: number, vy: number, vz: number}, contactPoint?: {x: number, y: number, z: number}}}
+ */
+export function checkNetCrossingCollision(
+  prevPos,
+  currPos,
+  ballVel,
+  blockerPos,
+  blockerReachY = 2.55,
+  blockWidth = 0.75
+) {
+  // 只檢測向對手半場穿網的球（vz < 0）
+  if (ballVel.vz >= 0) return { hit: false, type: 'MISS' };
+
+  // 跨越 z = 0 窗格：prevPos.z >= -0.05 且 currPos.z <= 0.05，或當前落在網口附近
+  const isCrossing = (prevPos.z >= -0.05 && currPos.z <= 0.05) || (Math.abs(currPos.z) <= 0.28);
+  if (!isCrossing) return { hit: false, type: 'MISS' };
+
+  // 線段與 z = 0 平面求交
+  const dz = currPos.z - prevPos.z;
+  const t = Math.abs(dz) > 1e-4 ? Math.max(0, Math.min(1, (0 - prevPos.z) / dz)) : 0.5;
+
+  const contactX = prevPos.x + t * (currPos.x - prevPos.x);
+  const contactY = prevPos.y + t * (currPos.y - prevPos.y);
+  const contactPos = { x: contactX, y: contactY, z: 0 };
+
+  const result = checkBlockCollision(contactPos, ballVel, blockerPos, blockerReachY, blockWidth);
+  if (result.hit) {
+    return {
+      ...result,
+      contactPoint: { x: contactX, y: contactY, z: 0.05 },
+    };
+  }
+  return result;
+}
+

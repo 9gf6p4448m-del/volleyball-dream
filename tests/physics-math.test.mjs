@@ -8,6 +8,7 @@ import {
   calculateDigVelocity,
   calculateTipVelocity,
   checkBlockCollision,
+  checkNetCrossingCollision,
   TIMING_GRADE,
 } from '../src/sim/physicsMath.js';
 
@@ -148,4 +149,21 @@ test('checkBlockCollision：攔網正面攔死與邊緣擦手判定', () => {
   assert.equal(miss.hit, false);
   assert.equal(miss.type, 'MISS');
 });
+
+test('checkNetCrossingCollision：高速穿網連續射線檢測，避免穿隧穿透手掌', () => {
+  const blockerPos = { x: 0, y: 0, z: 0 };
+  const blockerReachY = 2.55;
+
+  // 球在前一幀 z=0.35, 當前幀 z=-0.25 (跨過球網且在手掌高度)
+  const prevPos = { x: 0.05, y: 2.58, z: 0.35 };
+  const currPos = { x: 0.05, y: 2.52, z: -0.25 };
+  const vel = { vx: 0, vy: -2, vz: -24 };
+
+  const res = checkNetCrossingCollision(prevPos, currPos, vel, blockerPos, blockerReachY);
+  assert.equal(res.hit, true);
+  assert.equal(res.type, 'ROOF');
+  assert.ok(res.contactPoint, '應回傳穿網切點座標');
+  assert.ok(res.contactPoint.z >= 0, '切點應落在球網攔阻面');
+});
+
 
