@@ -13,8 +13,9 @@ export function createFreeballControls(domElement, camera) {
 
   // 動作按鈕狀態
   let actionPointerId = null;
-  let actionDrag = { dx: 0, dy: 0 };
+  let actionDrag = { dx: 0, dy: 0, startX: 0, startY: 0 };
   let isDraggingAction = false;
+  let lastSnappedShotType = null;
 
   // 玩家當前狀態
   let isAirborne = false;
@@ -30,6 +31,17 @@ export function createFreeballControls(domElement, camera) {
     speed: 18,
     time: 0,
   };
+
+  // 輕微觸覺震動（方向切換卡榫感）
+  function triggerSnapHaptic() {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(8);
+      }
+    } catch {
+      // 靜默處理
+    }
+  }
 
   // 監聽鍵盤
   window.addEventListener('keydown', (e) => {
@@ -61,7 +73,7 @@ export function createFreeballControls(domElement, camera) {
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.delete('right');
   });
 
-  // 監聽指標（觸控/滑鼠）
+  // 監聽指標（手機觸控與滑鼠）
   domElement.addEventListener('pointerdown', (e) => {
     const isLeftHalf = e.clientX < window.innerWidth * 0.45;
     if (isLeftHalf && !joystick) {
@@ -81,6 +93,7 @@ export function createFreeballControls(domElement, camera) {
       actionPointerId = e.pointerId;
       actionDrag = { dx: 0, dy: 0, startX: e.clientX, startY: e.clientY };
       isDraggingAction = true;
+      lastSnappedShotType = isAirborne ? 'LINE' : null;
 
       // 地面動作（起跳或墊球）：零延遲立即觸發！
       if (!isAirborne) {
@@ -106,26 +119,49 @@ export function createFreeballControls(domElement, camera) {
       actionDrag.dx = e.clientX - actionDrag.startX;
       actionDrag.dy = e.clientY - actionDrag.startY;
 
-      // 空中蓄力時：若手指劃動幅度達到閾值（快速 Flick 甩擊），可提前釋放！
-      if (isAirborne && Math.hypot(actionDrag.dx, actionDrag.dy) >= 55) {
-        finishAirAction();
+      if (isAirborne) {
+        const currentShot = resolveAirActionType(actionDrag.dx, actionDrag.dy);
+        if (currentShot !== lastSnappedShotType) {
+          lastSnappedShotType = currentShot;
+          triggerSnapHaptic();
+        }
+
+        // 空中蓄力時：若手指劃動幅度達到快速甩擊閾值（Flick），可提前釋放！
+        if (Math.hypot(actionDrag.dx, actionDrag.dy) >= 68) {
+          finishAirAction();
+        }
       }
     }
   });
 
+  /**
+   * 手機端精準手勢判定（利用角度分區，手感極度舒適順手）
+   */
   function resolveAirActionType(dx, dy) {
-    if (dy < -20) return 'TIP'; // 向上撥動：單手輕吊球
-    if (dy > 16) {
-      if (Math.abs(dx) > 22) {
-        return dx < 0 ? 'CROSS_LEFT' : 'CROSS_RIGHT'; // 斜向下滑：大斜線扣球
-      }
-      return 'LINE'; // 正向垂直下滑：直線重扣
+    const dist = Math.hypot(dx, dy);
+    // 輕點或極微小滑動（<14px）：預設為直線重扣
+    if (dist < 14) return 'LINE';
+
+    // 角度換算（0度為向右，90度為向下，-90度為向上，180/-180為向左）
+    const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+    // 向上劃動（-140° 到 -40°）：單手輕吊球
+    if (deg >= -140 && deg <= -40) {
+      return 'TIP';
     }
-    // 水平劃動
-    if (Math.abs(dx) > 28) {
-      return dx < 0 ? 'CROSS_LEFT' : 'CROSS_RIGHT';
+
+    // 正向下劃動（55° 到 125°）：筆直向底線重扣
+    if (deg >= 55 && deg <= 125) {
+      return 'LINE';
     }
-    return 'SMASH'; // 輕點或小幅度：預設直扣或跟隨搖桿
+
+    // 向左或左下劃動（125° 到 180° 或 -180° 到 -140°）：銳利左斜線
+    if (deg > 125 || deg < -140) {
+      return 'CROSS_LEFT';
+    }
+
+    // 向右或右下劃動（-40° 到 55°）：銳利右斜線
+    return 'CROSS_RIGHT';
   }
 
   function finishAirAction() {
@@ -134,6 +170,7 @@ export function createFreeballControls(domElement, camera) {
     handleActionButtonPress(type);
     actionPointerId = null;
     isDraggingAction = false;
+    lastSnappedShotType = null;
   }
 
   const endPointer = (e) => {
@@ -148,6 +185,7 @@ export function createFreeballControls(domElement, camera) {
       } else {
         actionPointerId = null;
         isDraggingAction = false;
+        lastSnappedShotType = null;
       }
     }
   };
@@ -240,15 +278,35 @@ export function createFreeballControls(domElement, camera) {
     },
 
     /**
-     * 獲取當前瞄準線路與手勢預測
+     * 獲取當前瞄準線路與手勢預測（供 HUD 與指示圈使用）
      */
     getAimState() {
       const isDragging = isDraggingAction && isAirborne;
-      const shotType = isDragging ? resolveAirActionType(actionDrag.dx, actionDrag.dy) : 'SMASH';
+      const shotType = isDragging ? resolveAirActionType(actionDrag.dx, actionDrag.dy) : 'LINE';
       return {
         isDragging,
         dx: actionDrag.dx,
         dy: actionDrag.dy,
+        shotType,
+      };
+    },
+
+    /**
+     * 獲取手機端手勢輪盤（Aim Compass）狀態
+     */
+    getAimCompass() {
+      const isDragging = isDraggingAction && isAirborne;
+      const dist = Math.hypot(actionDrag.dx, actionDrag.dy);
+      const shotType = resolveAirActionType(actionDrag.dx, actionDrag.dy);
+      return {
+        active: isDragging,
+        startX: actionDrag.startX || 0,
+        startY: actionDrag.startY || 0,
+        currX: (actionDrag.startX || 0) + actionDrag.dx,
+        currY: (actionDrag.startY || 0) + actionDrag.dy,
+        dx: actionDrag.dx,
+        dy: actionDrag.dy,
+        dist,
         shotType,
       };
     },

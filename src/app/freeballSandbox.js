@@ -33,6 +33,17 @@ export async function runFreeballSandbox(ctx) {
   if (renderer && renderer.domElement) {
     renderer.domElement.style.touchAction = 'none';
   }
+  document.body.style.touchAction = 'none';
+  window.addEventListener(
+    'touchmove',
+    (e) => {
+      // 避免手機瀏覽器下拉重新整理 (pull-to-refresh) 與邊緣滑動切頁
+      if (e.touches && e.touches.length <= 1) {
+        e.preventDefault();
+      }
+    },
+    { passive: false }
+  );
 
   // 1. 特效、打擊感與指示圈
   const juice = createFreeballJuice();
@@ -401,10 +412,10 @@ export async function runFreeballSandbox(ctx) {
     ui.updateScore(totalScore, comboCount);
   }
 
-  // 8. 建立沙盒 UI 疊層
+  // 8. 建立沙盒 UI 疊層（手機端專屬：大拇指情境快捷鈕＋手勢瞄準羅盤＋戰術引導）
   const ui = buildSandboxUi({
     onResetBall: serveInbound,
-    onTipClick: () => controls.triggerAction('TIP'),
+    onDirectAction: (type) => controls.triggerAction(type),
     onExit: () => {
       window.location.href = window.location.pathname;
     },
@@ -715,53 +726,27 @@ export async function runFreeballSandbox(ctx) {
     // F. 特效更新（不受慢動作影響，保持流暢）
     vfx.update(dt);
 
-    // G. 第三人稱動態相機
+    // G. 第三人稱動態相機（手機直向/橫向自適應）
+    const isPortrait = window.innerWidth < window.innerHeight;
     const targetCamX = player.x * 0.65;
-    const targetCamY = 3.6 + player.y * 0.35;
-    const targetCamZ = player.z + 5.2;
+    const targetCamY = 3.6 + player.y * 0.35 + (isPortrait ? 1.4 : 0);
+    const targetCamZ = player.z + 5.2 + (isPortrait ? 2.8 : 0);
 
     camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, 0.08) + juiceResult.shakeOffset.x;
     camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCamY, 0.08) + juiceResult.shakeOffset.y;
     camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.08) + juiceResult.shakeOffset.z;
     camera.lookAt(player.x * 0.35, 1.8 + player.y * 0.2, player.z - 4.5);
 
-    // H. 更新 UI 狀態
+    // H. 更新 UI 狀態（手機搖桿、情境動作鈕群、手勢瞄準羅盤與戰術提示）
     const uiState = controls.getUiState();
-    if (uiState.actionState === 'SPIKE') {
-      ui.actionBtn.textContent = '⚡ 扣殺 (滑動)';
-      ui.actionBtn.style.background = 'linear-gradient(135deg, #ff416c, #ff4b2b)';
-      ui.actionBtn.style.boxShadow = '0 0 20px rgba(255, 75, 43, 0.7)';
-      ui.tipBtn.style.display = 'flex';
-      ui.focusBadge.style.display = inSpikeZone ? 'block' : 'none';
-    } else {
-      if (rallyPhase === RALLY_PHASE.SERVE_INBOUND) {
-        ui.actionBtn.textContent = '走位墊球 (DIG)';
-        ui.actionBtn.style.background = 'linear-gradient(135deg, #11998e, #38ef7d)';
-        ui.actionBtn.style.boxShadow = '0 0 16px rgba(56, 239, 125, 0.5)';
-      } else if (rallyPhase === RALLY_PHASE.SETTER_TOSS) {
-        ui.actionBtn.textContent = '助跑準備';
-        ui.actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
-        ui.actionBtn.style.boxShadow = '0 0 14px rgba(33, 147, 176, 0.4)';
-      } else {
-        ui.actionBtn.textContent = '助跑起跳 (JUMP)';
-        ui.actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
-        ui.actionBtn.style.boxShadow = '0 0 14px rgba(33, 147, 176, 0.4)';
-      }
-      ui.tipBtn.style.display = 'none';
-      ui.focusBadge.style.display = 'none';
-    }
-
-    if (uiState.joystick.active) {
-      ui.joystickBase.style.display = 'block';
-      ui.joystickBase.style.left = `${uiState.joystick.ox}px`;
-      ui.joystickBase.style.top = `${uiState.joystick.oy}px`;
-      ui.joystickKnob.style.display = 'block';
-      ui.joystickKnob.style.left = `${uiState.joystick.x}px`;
-      ui.joystickKnob.style.top = `${uiState.joystick.y}px`;
-    } else {
-      ui.joystickBase.style.display = 'none';
-      ui.joystickKnob.style.display = 'none';
-    }
+    const aimCompass = controls.getAimCompass();
+    ui.update({
+      uiState,
+      aimCompass,
+      rallyPhase,
+      inSpikeZone,
+      isAirborne: player.isAirborne,
+    });
 
     // 渲染畫面
     if (postFx) postFx.render(scene, camera);
@@ -771,133 +756,295 @@ export async function runFreeballSandbox(ctx) {
   requestAnimationFrame(frame);
 }
 
-// 構建沙盒專屬 UI
-function buildSandboxUi({ onResetBall, onTipClick, onExit }) {
+// 構建手機原生手感專屬 UI（Mobile-First Touch & Arcade Cluster）
+function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
   const root = document.createElement('div');
   root.id = 'freeball-sandbox-ui';
-  root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:20;font-family:system-ui,sans-serif;';
+  root.style.cssText = [
+    'position:fixed', 'inset:0', 'pointer-events:none', 'z-index:20',
+    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+    'touch-action:none', 'user-select:none', '-webkit-user-select:none',
+  ].join(';');
   document.body.appendChild(root);
 
-  // 頂部狀態列
+  // 輕微觸覺回饋
+  function haptic(ms = 18) {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(ms);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 按鈕點擊彈性縮放回饋
+  function buttonSquish(el) {
+    el.style.transform = `${el.dataset.baseTransform || ''} scale(0.91)`;
+    setTimeout(() => {
+      el.style.transform = `${el.dataset.baseTransform || ''} scale(1)`;
+    }, 120);
+  }
+
+  // 1. 頂部安全區狀態列
   const topBar = document.createElement('div');
   topBar.style.cssText = [
-    'position:absolute', 'top:16px', 'left:50%', 'transform:translateX(-50%)',
-    'background:rgba(18,24,38,0.85)', 'border:1px solid rgba(110,231,255,0.4)',
-    'padding:8px 18px', 'border-radius:24px', 'color:#eef2fa',
-    'display:flex', 'align-items:center', 'gap:14px', 'font-size:13px', 'font-weight:700',
-    'backdrop-filter:blur(8px)', 'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
+    'position:absolute', 'top:calc(env(safe-area-inset-top, 0px) + 12px)',
+    'left:50%', 'transform:translateX(-50%)',
+    'background:rgba(18,24,38,0.88)', 'border:1px solid rgba(110,231,255,0.4)',
+    'padding:6px 16px', 'border-radius:24px', 'color:#eef2fa',
+    'display:flex', 'align-items:center', 'gap:12px', 'font-size:clamp(11px, 2.8vw, 13px)', 'font-weight:700',
+    'backdrop-filter:blur(8px)', '-webkit-backdrop-filter:blur(8px)',
+    'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
     'pointer-events:none', 'white-space:nowrap', 'max-width:92vw', 'overflow:hidden',
   ].join(';');
   topBar.innerHTML = `
-    <span style="color:#6ee7ff;">🏐 Free Ball 攻防閉環</span>
+    <span style="color:#6ee7ff;">🏐 FREE BALL</span>
     <span style="color:#8b9bb4;">|</span>
     <span id="fb-score" style="color:#ffd166;">SCORE: 0</span>
-    <span id="fb-combo" style="color:#ff416c;font-size:14px;">COMBO x0</span>
+    <span id="fb-combo" style="color:#ff416c;font-size:13px;">COMBO x0</span>
   `;
   root.appendChild(topBar);
 
   const scoreEl = topBar.querySelector('#fb-score');
   const comboEl = topBar.querySelector('#fb-combo');
 
-  // 子彈時間慢動作提示徽章
+  // 2. 戰術引導教練提示條（手機端即時戰術語音/文字引導）
+  const coachHint = document.createElement('div');
+  coachHint.id = 'fb-coach-hint';
+  coachHint.style.cssText = [
+    'position:absolute', 'top:calc(env(safe-area-inset-top, 0px) + 48px)',
+    'left:50%', 'transform:translateX(-50%)',
+    'background:rgba(14,20,32,0.85)', 'border:1px solid rgba(110,231,255,0.3)',
+    'padding:5px 14px', 'border-radius:18px', 'color:#eef2fa',
+    'font-size:clamp(11px, 2.9vw, 13px)', 'font-weight:700',
+    'backdrop-filter:blur(6px)', '-webkit-backdrop-filter:blur(6px)',
+    'box-shadow:0 4px 14px rgba(0,0,0,0.4)', 'pointer-events:none',
+    'white-space:nowrap', 'max-width:90vw', 'overflow:hidden', 'text-overflow:ellipsis',
+    'transition:opacity 0.2s ease, transform 0.2s ease',
+  ].join(';');
+  coachHint.textContent = '🏐 準備接球';
+  root.appendChild(coachHint);
+
+  // 3. 子彈時間慢動作徽章
   const focusBadge = document.createElement('div');
-  focusBadge.textContent = '⏳ FOCUS SLOW-MO';
+  focusBadge.textContent = '⏳ FOCUS SLOW-MO (滑動選線路)';
   focusBadge.style.cssText = [
-    'position:absolute', 'top:72px', 'left:50%', 'transform:translateX(-50%)',
-    'background:rgba(255,209,102,0.9)', 'color:#121826', 'font-size:12px', 'font-weight:900',
-    'padding:4px 14px', 'border-radius:12px', 'box-shadow:0 0 16px rgba(255,209,102,0.8)',
-    'display:none', 'letter-spacing:1px',
+    'position:absolute', 'top:calc(env(safe-area-inset-top, 0px) + 82px)',
+    'left:50%', 'transform:translateX(-50%)',
+    'background:rgba(255,209,102,0.92)', 'color:#121826',
+    'font-size:clamp(11px, 2.8vw, 12px)', 'font-weight:900',
+    'padding:4px 14px', 'border-radius:12px',
+    'box-shadow:0 0 16px rgba(255,209,102,0.8)',
+    'display:none', 'letter-spacing:1px', 'pointer-events:none',
   ].join(';');
   root.appendChild(focusBadge);
 
-  // 返回按鈕
+  // 4. 返回按鈕
   const exitBtn = document.createElement('button');
   exitBtn.textContent = '✕ 返回';
   exitBtn.style.cssText = [
-    'position:absolute', 'top:16px', 'left:16px',
+    'position:absolute', 'top:calc(env(safe-area-inset-top, 0px) + 12px)',
+    'left:calc(env(safe-area-inset-left, 0px) + 12px)',
     'background:#1e2738', 'color:#eef2fa', 'border:1px solid #4a5c7a',
     'padding:6px 14px', 'border-radius:16px', 'font-weight:700', 'cursor:pointer',
     'pointer-events:auto', 'font-size:12px', 'backdrop-filter:blur(6px)',
+    'touch-action:none',
   ].join(';');
-  exitBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
-  exitBtn.onclick = onExit;
+  exitBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    haptic(15);
+    onExit();
+  });
   root.appendChild(exitBtn);
 
-  // 重新發球按鈕
+  // 5. 重新發球按鈕
   const resetBtn = document.createElement('button');
-  resetBtn.textContent = '↺ 重新發球';
+  resetBtn.textContent = '↺ 發球';
   resetBtn.style.cssText = [
-    'position:absolute', 'top:16px', 'right:16px',
+    'position:absolute', 'top:calc(env(safe-area-inset-top, 0px) + 12px)',
+    'right:calc(env(safe-area-inset-right, 0px) + 12px)',
     'background:#2a364f', 'color:#ffd166', 'border:1px solid #ffd166',
     'padding:6px 14px', 'border-radius:16px', 'font-weight:700', 'cursor:pointer',
     'pointer-events:auto', 'font-size:12px', 'backdrop-filter:blur(6px)',
+    'touch-action:none',
   ].join(';');
-  resetBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
-  resetBtn.onclick = onResetBall;
+  resetBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    haptic(15);
+    onResetBall();
+  });
   root.appendChild(resetBtn);
 
-  // 浮動搖桿視覺
+  // 6. 左手浮動虛擬搖桿（現代手遊玻璃擬態風格）
   const joystickBase = document.createElement('div');
   joystickBase.style.cssText = [
-    'position:absolute', 'width:110px', 'height:110px', 'border-radius:50%',
-    'border:2px solid rgba(110,231,255,0.45)', 'background:rgba(18,28,45,0.45)',
+    'position:absolute', 'width:116px', 'height:116px', 'border-radius:50%',
+    'border:2px solid rgba(110,231,255,0.5)', 'background:radial-gradient(circle, rgba(110,231,255,0.12) 0%, rgba(18,28,45,0.6) 75%)',
     'transform:translate(-50%, -50%)', 'pointer-events:none', 'display:none',
-    'box-shadow:0 0 16px rgba(110,231,255,0.25)',
+    'box-shadow:0 0 20px rgba(110,231,255,0.3)', 'backdrop-filter:blur(4px)',
   ].join(';');
   root.appendChild(joystickBase);
 
   const joystickKnob = document.createElement('div');
   joystickKnob.style.cssText = [
-    'position:absolute', 'width:46px', 'height:46px', 'border-radius:50%',
-    'background:linear-gradient(135deg, #6ee7ff, #0099ff)', 'transform:translate(-50%, -50%)',
-    'pointer-events:none', 'display:none', 'box-shadow:0 0 12px rgba(110,231,255,0.7)',
+    'position:absolute', 'width:48px', 'height:48px', 'border-radius:50%',
+    'background:linear-gradient(135deg, #6ee7ff, #0077ff)', 'transform:translate(-50%, -50%)',
+    'pointer-events:none', 'display:none', 'box-shadow:0 0 16px rgba(110,231,255,0.85)',
   ].join(';');
   root.appendChild(joystickKnob);
 
-  // 打擊反饋 Banner
+  // 7. 手勢瞄準羅盤（Aim Compass Widget：右手滑動時在手指處展開）
+  const compassRoot = document.createElement('div');
+  compassRoot.id = 'fb-aim-compass';
+  compassRoot.style.cssText = [
+    'position:absolute', 'width:140px', 'height:140px',
+    'transform:translate(-50%, -50%)', 'pointer-events:none', 'display:none',
+    'z-index:25',
+  ].join(';');
+
+  const compassRing = document.createElement('div');
+  compassRing.style.cssText = [
+    'position:absolute', 'inset:16px', 'border-radius:50%',
+    'border:2px dashed rgba(255,255,255,0.4)', 'background:rgba(18,28,45,0.65)',
+    'box-shadow:0 0 18px rgba(0,0,0,0.6)', 'backdrop-filter:blur(6px)',
+  ].join(';');
+  compassRoot.appendChild(compassRing);
+
+  function createBadge(text, posStyle, defaultColor) {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = [
+      'position:absolute', posStyle,
+      'padding:3px 9px', 'border-radius:12px', 'font-size:11px', 'font-weight:800',
+      'background:rgba(20,28,42,0.85)', `color:${defaultColor}`,
+      `border:1px solid ${defaultColor}`, 'white-space:nowrap',
+      'transform:translate(-50%, -50%)', 'transition:all 0.12s ease',
+    ].join(';');
+    return el;
+  }
+
+  const badgeTip = createBadge('🎯 輕吊', 'top:8px; left:50%;', '#38ef7d');
+  const badgeLine = createBadge('🔥 直線', 'bottom: -10px; left:50%;', '#ff416c');
+  const badgeCrossL = createBadge('◀ 左斜', 'bottom:18px; left:6px;', '#ffd166');
+  const badgeCrossR = createBadge('▶ 右斜', 'bottom:18px; right:-24px;', '#ffd166');
+  compassRoot.appendChild(badgeTip);
+  compassRoot.appendChild(badgeLine);
+  compassRoot.appendChild(badgeCrossL);
+  compassRoot.appendChild(badgeCrossR);
+
+  const compassPointer = document.createElement('div');
+  compassPointer.style.cssText = [
+    'position:absolute', 'width:26px', 'height:26px', 'border-radius:50%',
+    'background:#ffffff', 'box-shadow:0 0 14px #ffffff',
+    'transform:translate(-50%, -50%)', 'pointer-events:none',
+    'left:70px', 'top:70px',
+  ].join(';');
+  compassRoot.appendChild(compassPointer);
+  root.appendChild(compassRoot);
+
+  // 8. 打擊反饋 Banner
   const banner = document.createElement('div');
   banner.style.cssText = [
     'position:absolute', 'top:38%', 'left:50%', 'transform:translate(-50%, -50%) scale(0.9)',
-    'font-size:30px', 'font-weight:900', 'text-shadow:0 3px 14px rgba(0,0,0,0.9)',
+    'font-size:clamp(24px, 6vw, 32px)', 'font-weight:900', 'text-shadow:0 3px 14px rgba(0,0,0,0.9)',
     'letter-spacing:1px', 'opacity:0', 'transition:all 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-    'pointer-events:none',
+    'pointer-events:none', 'white-space:nowrap',
   ].join(';');
   root.appendChild(banner);
 
-  // 空中輕吊球副按鈕（位於主按鈕上方）
-  const tipBtn = document.createElement('div');
-  tipBtn.textContent = '🎯 單手吊球';
+  // 9. 右下角大拇指操作按鈕群（Arcade Button Cluster）
+  // A. 空中單手吊球按鈕（位於主按鈕上方）
+  const tipBtn = document.createElement('button');
+  tipBtn.textContent = '🎯 輕吊';
   tipBtn.style.cssText = [
     'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 32px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 152px)',
-    'width:88px', 'height:44px', 'border-radius:22px',
+    'right:calc(env(safe-area-inset-right, 0px) + 26px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 138px)',
+    'width:clamp(74px, 18vw, 86px)', 'height:44px', 'border-radius:22px',
     'background:linear-gradient(135deg, #11998e, #38ef7d)',
     'color:#ffffff', 'font-size:13px', 'font-weight:800',
     'display:none', 'align-items:center', 'justify-content:center',
     'pointer-events:auto', 'user-select:none', 'cursor:pointer',
-    'box-shadow:0 0 14px rgba(56,239,125,0.5)',
-    'transition:transform 0.1s ease',
+    'border:none', 'box-shadow:0 0 16px rgba(56,239,125,0.6)',
+    'transition:transform 0.1s ease', 'touch-action:none',
   ].join(';');
   tipBtn.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
-    onTipClick();
+    buttonSquish(tipBtn);
+    haptic(20);
+    onDirectAction('TIP');
   });
   root.appendChild(tipBtn);
 
-  // 右下角情境動作大按鈕
-  const actionBtn = document.createElement('div');
+  // B. 空中左斜線重扣快捷鈕
+  const crossLBtn = document.createElement('button');
+  crossLBtn.textContent = '◀ 左斜';
+  crossLBtn.style.cssText = [
+    'position:absolute',
+    'right:calc(env(safe-area-inset-right, 0px) + 120px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 94px)',
+    'width:clamp(68px, 16vw, 80px)', 'height:42px', 'border-radius:21px',
+    'background:linear-gradient(135deg, #f7971e, #ffd200)',
+    'color:#1c2230', 'font-size:12px', 'font-weight:800',
+    'display:none', 'align-items:center', 'justify-content:center',
+    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
+    'border:none', 'box-shadow:0 0 14px rgba(255,210,0,0.55)',
+    'transition:transform 0.1s ease', 'touch-action:none',
+  ].join(';');
+  crossLBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    buttonSquish(crossLBtn);
+    haptic(20);
+    onDirectAction('CROSS_LEFT');
+  });
+  root.appendChild(crossLBtn);
+
+  // C. 空中右斜線重扣快捷鈕
+  const crossRBtn = document.createElement('button');
+  crossRBtn.textContent = '▶ 右斜';
+  crossRBtn.style.cssText = [
+    'position:absolute',
+    'right:calc(env(safe-area-inset-right, 0px) + 120px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 36px)',
+    'width:clamp(68px, 16vw, 80px)', 'height:42px', 'border-radius:21px',
+    'background:linear-gradient(135deg, #f7971e, #ffd200)',
+    'color:#1c2230', 'font-size:12px', 'font-weight:800',
+    'display:none', 'align-items:center', 'justify-content:center',
+    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
+    'border:none', 'box-shadow:0 0 14px rgba(255,210,0,0.55)',
+    'transition:transform 0.1s ease', 'touch-action:none',
+  ].join(';');
+  crossRBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    buttonSquish(crossRBtn);
+    haptic(20);
+    onDirectAction('CROSS_RIGHT');
+  });
+  root.appendChild(crossRBtn);
+
+  // D. 右下角情境大按鈕（地面：墊球/起跳；空中：直線重扣/手勢起點）
+  const actionBtn = document.createElement('button');
   actionBtn.textContent = '助跑起跳';
   actionBtn.style.cssText = [
     'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 24px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 36px)',
-    'width:104px', 'height:104px', 'border-radius:50%',
-    'color:#ffffff', 'font-size:16px', 'font-weight:800',
+    'right:calc(env(safe-area-inset-right, 0px) + 20px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 24px)',
+    'width:clamp(88px, 21vw, 104px)', 'height:clamp(88px, 21vw, 104px)', 'border-radius:50%',
+    'color:#ffffff', 'font-size:clamp(14px, 3.5vw, 16px)', 'font-weight:800',
     'display:flex', 'align-items:center', 'justify-content:center',
-    'pointer-events:none', 'user-select:none',
-    'transition:background 0.15s ease, transform 0.1s ease',
+    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
+    'border:none', 'transition:background 0.15s ease, transform 0.1s ease',
+    'touch-action:none',
   ].join(';');
+
+  actionBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    buttonSquish(actionBtn);
+    haptic(20);
+    // 直接點擊按鈕：若在空中則默認為直線重扣，地面則執行情境動作
+    onDirectAction(null);
+  });
   root.appendChild(actionBtn);
 
   return {
@@ -905,12 +1052,118 @@ function buildSandboxUi({ onResetBall, onTipClick, onExit }) {
     banner,
     actionBtn,
     tipBtn,
+    crossLBtn,
+    crossRBtn,
     focusBadge,
+    coachHint,
     joystickBase,
     joystickKnob,
+    compassRoot,
+
     updateScore: (score, combo) => {
       scoreEl.textContent = `SCORE: ${score}`;
       comboEl.textContent = combo > 1 ? `🔥 COMBO x${combo}` : '';
+    },
+
+    update: ({ uiState, aimCompass, rallyPhase, inSpikeZone, isAirborne }) => {
+      // 1. 搖桿更新
+      if (uiState.joystick.active) {
+        joystickBase.style.display = 'block';
+        joystickBase.style.left = `${uiState.joystick.ox}px`;
+        joystickBase.style.top = `${uiState.joystick.oy}px`;
+        joystickKnob.style.display = 'block';
+        joystickKnob.style.left = `${uiState.joystick.x}px`;
+        joystickKnob.style.top = `${uiState.joystick.y}px`;
+      } else {
+        joystickBase.style.display = 'none';
+        joystickKnob.style.display = 'none';
+      }
+
+      // 2. 手勢瞄準羅盤更新（空中拖曳時出現）
+      if (aimCompass.active) {
+        compassRoot.style.display = 'block';
+        compassRoot.style.left = `${aimCompass.startX}px`;
+        compassRoot.style.top = `${aimCompass.startY}px`;
+
+        const clampedDx = THREE.MathUtils.clamp(aimCompass.dx, -50, 50);
+        const clampedDy = THREE.MathUtils.clamp(aimCompass.dy, -50, 50);
+        compassPointer.style.left = `${70 + clampedDx}px`;
+        compassPointer.style.top = `${70 + clampedDy}px`;
+
+        // 方向高亮
+        const isTip = aimCompass.shotType === 'TIP';
+        const isLine = aimCompass.shotType === 'LINE';
+        const isCrossL = aimCompass.shotType === 'CROSS_LEFT';
+        const isCrossR = aimCompass.shotType === 'CROSS_RIGHT';
+
+        badgeTip.style.transform = isTip ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
+        badgeTip.style.boxShadow = isTip ? '0 0 16px #38ef7d' : 'none';
+
+        badgeLine.style.transform = isLine ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
+        badgeLine.style.boxShadow = isLine ? '0 0 16px #ff416c' : 'none';
+
+        badgeCrossL.style.transform = isCrossL ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
+        badgeCrossL.style.boxShadow = isCrossL ? '0 0 16px #ffd166' : 'none';
+
+        badgeCrossR.style.transform = isCrossR ? 'translate(-50%, -50%) scale(1.22)' : 'translate(-50%, -50%) scale(1)';
+        badgeCrossR.style.boxShadow = isCrossR ? '0 0 16px #ffd166' : 'none';
+      } else {
+        compassRoot.style.display = 'none';
+      }
+
+      // 3. 按鈕外觀與衛星按鈕展開
+      if (isAirborne) {
+        actionBtn.textContent = '⚡ 直扣';
+        actionBtn.style.background = 'linear-gradient(135deg, #ff416c, #ff4b2b)';
+        actionBtn.style.boxShadow = '0 0 22px rgba(255, 75, 43, 0.75)';
+
+        tipBtn.style.display = 'flex';
+        crossLBtn.style.display = 'flex';
+        crossRBtn.style.display = 'flex';
+        focusBadge.style.display = inSpikeZone ? 'block' : 'none';
+      } else {
+        tipBtn.style.display = 'none';
+        crossLBtn.style.display = 'none';
+        crossRBtn.style.display = 'none';
+        focusBadge.style.display = 'none';
+
+        if (rallyPhase === 'SERVE_INBOUND') {
+          actionBtn.textContent = '🏐 墊球';
+          actionBtn.style.background = 'linear-gradient(135deg, #11998e, #38ef7d)';
+          actionBtn.style.boxShadow = '0 0 18px rgba(56, 239, 125, 0.6)';
+        } else if (rallyPhase === 'SETTER_TOSS') {
+          actionBtn.textContent = '助跑準備';
+          actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
+          actionBtn.style.boxShadow = '0 0 16px rgba(33, 147, 176, 0.5)';
+        } else {
+          actionBtn.textContent = '🏃 助跑起跳';
+          actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
+          actionBtn.style.boxShadow = '0 0 16px rgba(33, 147, 176, 0.5)';
+        }
+      }
+
+      // 4. 戰術引導教練提示更新
+      if (rallyPhase === 'SERVE_INBOUND') {
+        coachHint.textContent = '🏐 左手搖桿走位迎球，點擊【墊球】送給二傳手';
+        coachHint.style.color = '#6ee7ff';
+        coachHint.style.borderColor = 'rgba(110,231,255,0.45)';
+      } else if (rallyPhase === 'SETTER_TOSS') {
+        coachHint.textContent = '⭐ 二傳手高托到位！點擊【助跑起跳】起飛';
+        coachHint.style.color = '#ffd166';
+        coachHint.style.borderColor = 'rgba(255,209,102,0.45)';
+      } else if (inSpikeZone) {
+        coachHint.textContent = '⏳ 空中慢動作！滑動選擇路線，或直接按右側按鈕';
+        coachHint.style.color = '#ff416c';
+        coachHint.style.borderColor = 'rgba(255,65,108,0.5)';
+      } else if (isAirborne) {
+        coachHint.textContent = '⚡ 滯空蓄力中...';
+        coachHint.style.color = '#ffd166';
+        coachHint.style.borderColor = 'rgba(255,209,102,0.45)';
+      } else {
+        coachHint.textContent = '🏐 準備下一波進攻';
+        coachHint.style.color = '#eef2fa';
+        coachHint.style.borderColor = 'rgba(110,231,255,0.3)';
+      }
     },
   };
 }
