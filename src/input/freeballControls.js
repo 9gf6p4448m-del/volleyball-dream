@@ -16,6 +16,7 @@ export function createFreeballControls(domElement, camera) {
   let actionDrag = { dx: 0, dy: 0, startX: 0, startY: 0 };
   let isDraggingAction = false;
   let lastSnappedShotType = null;
+  let startedGrounded = false; // 記錄本次觸碰是否從地面發起
 
   // 玩家當前狀態
   let isAirborne = false;
@@ -58,7 +59,7 @@ export function createFreeballControls(domElement, camera) {
         else if (keys.has('right')) handleActionButtonPress('CROSS_RIGHT');
         else if (keys.has('down')) handleActionButtonPress('LINE');
         else if (keys.has('up')) handleActionButtonPress('TIP');
-        else handleActionButtonPress('SMASH');
+        else handleActionButtonPress('LINE');
       }
     }
     if ((e.code === 'KeyK' || e.code === 'KeyT') && !e.repeat) {
@@ -94,6 +95,7 @@ export function createFreeballControls(domElement, camera) {
       actionDrag = { dx: 0, dy: 0, startX: e.clientX, startY: e.clientY };
       isDraggingAction = true;
       lastSnappedShotType = isAirborne ? 'LINE' : null;
+      startedGrounded = !isAirborne;
 
       // 地面動作（起跳或墊球）：零延遲立即觸發！
       if (!isAirborne) {
@@ -126,8 +128,8 @@ export function createFreeballControls(domElement, camera) {
           triggerSnapHaptic();
         }
 
-        // 空中蓄力時：若手指劃動幅度達到快速甩擊閾值（Flick），可提前釋放！
-        if (Math.hypot(actionDrag.dx, actionDrag.dy) >= 68) {
+        // 空中蓄力時：若手指劃動幅度達到快速甩擊閾值（Flick >= 55px），可提前釋放！
+        if (Math.hypot(actionDrag.dx, actionDrag.dy) >= 55) {
           finishAirAction();
         }
       }
@@ -139,24 +141,24 @@ export function createFreeballControls(domElement, camera) {
    */
   function resolveAirActionType(dx, dy) {
     const dist = Math.hypot(dx, dy);
-    // 輕點或小於死區（<12px）：預設為重扣
-    if (dist < 12) return 'SMASH';
+    // 輕點或小於死區（< 10px）：預設為正向直線重扣
+    if (dist < 10) return 'LINE';
 
     // 1. 上滑（向上劃動）：單手輕吊球 (TIP)
-    if (dy < -16) {
+    if (dy < -14 && Math.abs(dx) <= Math.abs(dy) * 1.6) {
       return 'TIP';
     }
 
     // 2. 下滑區分：直線重扣 vs 左右斜線重扣
-    if (dy > 12) {
-      if (dx < -16) return 'CROSS_LEFT';  // 左下劃動：銳利左斜線
-      if (dx > 16) return 'CROSS_RIGHT'; // 右下劃動：銳利右斜線
+    if (dy > 10) {
+      if (dx < -10) return 'CROSS_LEFT';  // 左下劃動：銳利左斜線
+      if (dx > 10) return 'CROSS_RIGHT'; // 右下劃動：銳利右斜線
       return 'LINE';                     // 正向垂直下滑：直線重扣
     }
 
     // 3. 水平甩擊（左右劃動）
-    if (dx < -20) return 'CROSS_LEFT';
-    if (dx > 20) return 'CROSS_RIGHT';
+    if (dx < -12) return 'CROSS_LEFT';
+    if (dx > 12) return 'CROSS_RIGHT';
 
     return 'LINE';
   }
@@ -178,7 +180,16 @@ export function createFreeballControls(domElement, camera) {
     }
     if (actionPointerId !== null && e.pointerId === actionPointerId) {
       if (isAirborne) {
-        finishAirAction();
+        const dragDist = Math.hypot(actionDrag.dx, actionDrag.dy);
+        // 如果本次觸控是從地面點擊起跳發起，且未劃動（dragDist < 18px）：
+        // 代表玩家純粹「點擊起跳」，保留空中滯空慢動作狀態，等待空中劃動揮臂或二度觸碰！
+        if (startedGrounded && dragDist < 18) {
+          actionPointerId = null;
+          isDraggingAction = false;
+          lastSnappedShotType = null;
+        } else {
+          finishAirAction();
+        }
       } else {
         actionPointerId = null;
         isDraggingAction = false;
