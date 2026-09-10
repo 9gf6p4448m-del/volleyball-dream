@@ -39,7 +39,10 @@ export function createFreeballControls(domElement, camera) {
     if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.add('right');
 
     if ((e.code === 'Space' || e.code === 'KeyJ') && !e.repeat) {
-      handleActionButtonPress();
+      handleActionButtonPress(!isAirborne ? 'JUMP' : 'SMASH');
+    }
+    if ((e.code === 'KeyK' || e.code === 'KeyT') && !e.repeat) {
+      handleActionButtonPress(!isAirborne ? 'JUMP' : 'TIP');
     }
   });
 
@@ -111,11 +114,18 @@ export function createFreeballControls(domElement, camera) {
   // 動作按鈕觸發核心
   let onActionTriggerCallback = null;
 
-  function handleActionButtonPress() {
+  function handleActionButtonPress(typeOverride = null) {
     if (onActionTriggerCallback) {
+      let actionType = typeOverride;
+      if (!actionType) {
+        if (!isAirborne) actionType = 'JUMP';
+        else if (actionDrag.dy < -24) actionType = 'TIP';
+        else actionType = 'SMASH';
+      }
       onActionTriggerCallback({
         isAirborne,
         dragAim: { ...actionDrag },
+        actionType,
       });
     }
   }
@@ -123,6 +133,10 @@ export function createFreeballControls(domElement, camera) {
   return {
     onAction(cb) {
       onActionTriggerCallback = cb;
+    },
+
+    triggerAction(type) {
+      handleActionButtonPress(type);
     },
 
     setAirborne(airborne, height = 0) {

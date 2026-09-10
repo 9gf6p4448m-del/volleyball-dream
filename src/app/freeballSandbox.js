@@ -1,13 +1,28 @@
-// Free Ball 物理沙盒模式（Free Ball Arcade Physics Sandbox）
-// 提供自主跑位、助跑動能起跳、雙環時機收斂、空中下釘扣殺與對打牆循環
+// Free Ball 街機排球全攻防閉環系統（Full 3-Touch Rally Loop）
+// 涵蓋：發球進場 ➔ 自主走位墊球 (Dig) ➔ 二傳高球 (Set) ➔ 動能助跑起跳 ➔ 扣殺/吊球攻防 (Spike/Tip vs AI Blocker)
 import * as THREE from 'three';
-import { calculateLaunchVelocity, calculateSpikeVelocity, evaluateTiming, TIMING_GRADE } from '../sim/physicsMath.js';
+import {
+  calculateLaunchVelocity,
+  calculateSpikeVelocity,
+  calculateDigVelocity,
+  calculateTipVelocity,
+  checkBlockCollision,
+  TIMING_GRADE,
+} from '../sim/physicsMath.js';
 import { createBallIndicator } from '../render/ballIndicator.js';
 import { createFreeballJuice } from '../render/freeballJuice.js';
+import { createFreeballVfx } from '../render/freeballVfx.js';
 import { createFreeballControls } from '../input/freeballControls.js';
 import { createGeoPool, createGeoCharacter } from '../render/geoCharacter.js';
 import { createGeoAnimator } from '../render/geoAnimator.js';
 import { approachYaw, shortestArc } from '../render/facing.js';
+
+const RALLY_PHASE = {
+  INBOUND_SERVE: 'INBOUND_SERVE', // 發球向後場飛來
+  SETTER_TOSS: 'SETTER_TOSS',     // 玩家接起，球飛向二傳手
+  APPROACH_SPIKE: 'APPROACH_SPIKE', // 二傳高托，玩家助跑準備擊球
+  BALL_DEAD: 'BALL_DEAD',         // 死球結算
+};
 
 export async function runFreeballSandbox(ctx) {
   const { renderer, scene, camera, quality, ballView, loadingEl, postFx } = ctx;
@@ -18,50 +33,79 @@ export async function runFreeballSandbox(ctx) {
     renderer.domElement.style.touchAction = 'none';
   }
 
-  // 1. 初始化 Juice 與指示圈
+  // 1. 特效、打擊感與指示圈
   const juice = createFreeballJuice();
+  const vfx = createFreeballVfx(scene);
   const indicator = createBallIndicator(scene);
 
-  // 2. 初始化訓練彈力牆（Training Wall）
-  // 置於球網對面 z = -2.5 處，作為反彈對打牆
+  // 2. 訓練場地邊界與對打裝飾
   const wallGeo = new THREE.BoxGeometry(10, 4.5, 0.3);
   const wallMat = new THREE.MeshStandardMaterial({
-    color: 0x1f293d,
-    roughness: 0.4,
+    color: 0x1a2336,
+    roughness: 0.5,
     metalness: 0.2,
   });
   const trainingWall = new THREE.Mesh(wallGeo, wallMat);
-  trainingWall.position.set(0, 2.25, -2.5);
+  trainingWall.position.set(0, 2.25, -4.5);
   scene.add(trainingWall);
 
-  // 牆面裝飾條紋與標靶
-  const targetGeo = new THREE.RingGeometry(0.8, 1.0, 32);
+  const targetGeo = new THREE.RingGeometry(0.8, 1.05, 32);
   const targetMat = new THREE.MeshBasicMaterial({ color: 0xffd166, side: THREE.DoubleSide });
   const wallTarget = new THREE.Mesh(targetGeo, targetMat);
-  wallTarget.position.set(0, 2.2, -2.34);
+  wallTarget.position.set(0, 2.2, -4.34);
   scene.add(wallTarget);
 
-  // 3. 建立幾何球員模型與動畫器
-  const pool = createGeoPool(scene, quality?.shadowSize > 0, 1);
+  // 3. 建立 3 位 3D 幾何角色（主角、隊友二傳手、對手攔網手）
+  const pool = createGeoPool(scene, quality?.shadowSize > 0, 3);
   const playerRig = createGeoCharacter(pool, 'A2', 'A', 1.88, false, '主角');
+  const setterRig = createGeoCharacter(pool, 'A1', 'A', 1.82, false, '二傳手');
+  const blockerRig = createGeoCharacter(pool, 'B1', 'B', 1.96, false, '攔網手');
   playerRig.root.rotation.order = 'YXZ';
+  setterRig.root.rotation.order = 'YXZ';
+  blockerRig.root.rotation.order = 'YXZ';
   pool.finishColors();
 
-  const animator = createGeoAnimator(playerRig);
+  const playerAnimator = createGeoAnimator(playerRig);
+  const setterAnimator = createGeoAnimator(setterRig);
+  const blockerAnimator = createGeoAnimator(blockerRig);
 
   // 4. 球員物理與運動狀態
   const player = {
     x: 0,
     y: 0,
-    z: 4.5,
+    z: 4.8,
     vx: 0,
     vz: 0,
-    facingAngle: Math.PI, // 面向球網 (-z)
+    facingAngle: Math.PI,
     isAirborne: false,
     jumpTime: 0,
     jumpDuration: 0.72,
     jumpApex: 1.1,
-    baseReach: 1.88 * 1.31, // 站立摸高 ≈ 2.46m
+    baseReach: 1.88 * 1.31,
+  };
+
+  const setter = {
+    x: 1.4,
+    y: 0,
+    z: 1.4,
+    vx: 0,
+    vz: 0,
+    facingAngle: -Math.PI * 0.45,
+    hasSet: false,
+  };
+
+  const blocker = {
+    x: 0,
+    y: 0,
+    z: -0.4,
+    vx: 0,
+    vz: 0,
+    facingAngle: 0, // 面向己方半場 (+Z)
+    isAirborne: false,
+    jumpTime: 0,
+    jumpDuration: 0.65,
+    jumpApex: 0.72,
+    reachY: 2.58,
   };
 
   // 5. 排球物理狀態
@@ -70,62 +114,179 @@ export async function runFreeballSandbox(ctx) {
     y: 3.5,
     z: 2.0,
     vx: 0,
-    vy: 2.0,
+    vy: 0,
     vz: 0,
     radius: 0.105,
     isSpiked: false,
   };
 
-  let isTossPending = false;
+  // 回合狀態機
+  let rallyPhase = RALLY_PHASE.INBOUND_SERVE;
+  let comboCount = 0;
+  let totalScore = 0;
+  let isPhaseResetting = false;
 
   // 6. 控制器初始化
   const controls = createFreeballControls(renderer.domElement, camera);
 
-  // 動作按鈕點擊處理
-  controls.onAction(({ isAirborne, dragAim }) => {
+  // 7. 動作按鈕處理
+  controls.onAction(({ isAirborne, dragAim, actionType }) => {
     if (!isAirborne) {
-      // 地面按下：觸發助跑起跳（Approach Jump）
+      // 地面動作：
+      // 若當前處於發球進場階段且球在接球範圍，優先嘗試主動接球
+      if (rallyPhase === RALLY_PHASE.INBOUND_SERVE && ball.y <= 2.2 && Math.hypot(ball.x - player.x, ball.z - player.z) <= 1.8) {
+        attemptPlayerDig();
+        return;
+      }
+
+      // 否則為助跑起跳（Approach Jump）
       const runSpeed = Math.hypot(player.vx, player.vz);
-      // 助跑動能轉換：跑得越快，起跳摸高越高
       player.jumpApex = 1.05 + Math.min(runSpeed, 5.0) * 0.12;
       player.isAirborne = true;
       player.jumpTime = 0;
       controls.setAirborne(true, player.jumpApex);
-      animator.trigger('windup');
+      playerAnimator.trigger('windup');
+      vfx.spawnJumpDust(player.x, player.z);
+
+      // AI 攔網手預判起跳！
+      triggerBlockerJump();
     } else {
-      // 空中按下：觸發扣殺揮臂（Spike Hit）
-      handleSpikeAttempt(dragAim);
+      // 空中動作：扣殺 (SMASH) 或 輕吊 (TIP)
+      if (actionType === 'TIP') {
+        attemptSoftTip();
+      } else {
+        attemptHardSmash(dragAim);
+      }
     }
   });
 
-  // 發球/給球函式：發出一記舒服的二傳高球至進攻區域
-  function feedToss() {
-    isTossPending = false;
-    ball.x = (Math.random() * 2 - 1) * 1.5;
-    ball.y = 1.2;
-    ball.z = 1.0;
+  // 發出開局發球（飛往玩家半場後方）
+  function serveInbound() {
+    isPhaseResetting = false;
+    rallyPhase = RALLY_PHASE.INBOUND_SERVE;
+    setter.hasSet = false;
+
+    // 發球起點：對側後方
+    ball.x = (Math.random() * 2 - 1) * 2.0;
+    ball.y = 2.4;
+    ball.z = -4.0;
     ball.isSpiked = false;
 
-    // 解出飛向玩家助跑點的高弧 (apex ≈ 4.0m)
-    const target = { x: player.x * 0.5, y: 1.0, z: 2.8 };
+    // 落點：玩家後排區域 (z: 4.2 ~ 5.6)
+    const target = {
+      x: (Math.random() * 2 - 1) * 2.2,
+      y: 0.8,
+      z: 4.4 + Math.random() * 1.2,
+    };
+
     const launch = calculateLaunchVelocity(ball, target, 3.8);
     ball.vx = launch.vx;
     ball.vy = launch.vy;
     ball.vz = launch.vz;
+
+    showHitBanner('🏐 INCOMING SERVE!', '#6ee7ff');
   }
 
-  // 扣殺判定邏輯
-  function handleSpikeAttempt(dragAim) {
-    const currentReachY = player.baseReach + player.y;
+  // 玩家自主接球判定
+  function attemptPlayerDig() {
     const horizDist = Math.hypot(ball.x - player.x, ball.z - player.z);
+    if (horizDist > 2.2 || ball.y > 2.4) return;
+
+    const digResult = calculateDigVelocity(
+      ball,
+      player,
+      { x: setter.x, y: 2.2, z: setter.z },
+      1.0,
+      { x: Math.random() * 2 - 1, z: Math.random() * 2 - 1 }
+    );
+
+    ball.vx = digResult.vx;
+    ball.vy = digResult.vy;
+    ball.vz = digResult.vz;
+    ball.isSpiked = false;
+
+    playerAnimator.trigger('bump');
+    juice.impactDig();
+    vfx.spawnShockwave(new THREE.Vector3(player.x, 0.9, player.z), new THREE.Vector3(0, 1, 0), 0x6ee7ff, 2.5);
+
+    if (digResult.grade === TIMING_GRADE.PERFECT) {
+      showHitBanner('🔥 PERFECT DIG!', '#38ef7d');
+      addCombo(100);
+    } else {
+      showHitBanner('⚡ NICE DIG', '#ffd166');
+      addCombo(50);
+    }
+
+    rallyPhase = RALLY_PHASE.SETTER_TOSS;
+  }
+
+  // 二傳手托球執行
+  function executeSetterToss() {
+    setter.hasSet = true;
+    setterAnimator.trigger('overhead');
+    juice.vibrate('dig');
+
+    // 托球落點：三米線網前高弧 (z ≈ 1.8, apex ≈ 4.0m)
+    const tossTarget = {
+      x: THREE.MathUtils.clamp(player.x * 0.6, -1.8, 1.8),
+      y: 1.0,
+      z: 1.9,
+    };
+
+    const toss = calculateLaunchVelocity(ball, tossTarget, 4.0);
+    ball.vx = toss.vx;
+    ball.vy = toss.vy;
+    ball.vz = toss.vz;
+    ball.isSpiked = false;
+
+    vfx.spawnShockwave(new THREE.Vector3(setter.x, 2.2, setter.z), new THREE.Vector3(0, 1, 0), 0xffd166, 2.2);
+    showHitBanner('── OPEN TOSS! ──', '#ffd166');
+    rallyPhase = RALLY_PHASE.APPROACH_SPIKE;
+  }
+
+  // AI 攔網手起跳封網
+  function triggerBlockerJump() {
+    if (blocker.isAirborne) return;
+    blocker.isAirborne = true;
+    blocker.jumpTime = 0;
+    // 攔網手滑步向扣球點平移
+    const targetX = THREE.MathUtils.clamp(player.x * 0.75, -2.5, 2.5);
+    blocker.vx = (targetX - blocker.x) * 4.0;
+    blockerAnimator.trigger('blockJump');
+  }
+
+  // 輕吊球（Soft Tip）
+  function attemptSoftTip() {
+    playerAnimator.trigger('overhead');
+    const currentReachY = player.baseReach + player.y;
     const deltaY = Math.abs(ball.y - currentReachY);
+    const horizDist = Math.hypot(ball.x - player.x, ball.z - player.z);
 
-    // 觸發扣球動畫（引臂→解鎖→擊球壓腕→收臂）
-    animator.trigger('spike');
+    if (horizDist <= 2.2 && deltaY <= 0.85) {
+      const tipVel = calculateTipVelocity(ball, { x: player.x * 0.3, z: -1.8 });
+      ball.vx = tipVel.vx;
+      ball.vy = tipVel.vy;
+      ball.vz = tipVel.vz;
+      ball.isSpiked = true;
 
-    // 擊球範圍判定（水平 2.0m，垂直 0.75m 內）
-    if (horizDist <= 2.0 && deltaY <= 0.75) {
-      // 評估時機窗口（以高度差換算時機評分）
+      juice.shake(0.04, 0.12);
+      vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 1, 0), 0x38ef7d, 2.2);
+      showHitBanner('🎯 DOUGHNUT TIP!', '#38ef7d');
+      addCombo(150);
+      rallyPhase = RALLY_PHASE.BALL_DEAD;
+    } else {
+      showHitBanner('MISS!', '#ff6b6b');
+    }
+  }
+
+  // 爆裂下釘扣殺（Power Smash）
+  function attemptHardSmash(dragAim) {
+    playerAnimator.trigger('spike');
+    const currentReachY = player.baseReach + player.y;
+    const deltaY = Math.abs(ball.y - currentReachY);
+    const horizDist = Math.hypot(ball.x - player.x, ball.z - player.z);
+
+    if (horizDist <= 2.2 && deltaY <= 0.85) {
       let grade = TIMING_GRADE.GOOD;
       let score = 0.8;
       if (deltaY <= 0.22) {
@@ -139,55 +300,88 @@ export async function runFreeballSandbox(ctx) {
         score = 0.4;
       }
 
-      // 瞄準點：若有拖曳瞄準依瞄準方向，否則預設砸向對面靶心
+      // 瞄準點計算
       let targetX = 0;
-      let targetZ = -2.5;
+      let targetZ = -3.5;
       const aimDir = controls.getAimDirection();
       if (aimDir) {
-        targetX = player.x + aimDir.x * 6;
-        targetZ = player.z + aimDir.z * 6;
+        targetX = player.x + aimDir.x * 6.5;
+        targetZ = player.z + aimDir.z * 6.5;
       }
 
-      // 計算下釘速度向量
-      const spikeVel = calculateSpikeVelocity(
-        ball,
-        { x: targetX, z: targetZ },
-        22, // 基礎球速
-        score,
-        grade,
-      );
+      const spikeVel = calculateSpikeVelocity(ball, { x: targetX, z: targetZ }, 23, score, grade);
 
       ball.vx = spikeVel.vx;
       ball.vy = spikeVel.vy;
       ball.vz = spikeVel.vz;
       ball.isSpiked = true;
 
-      // 打擊感反饋
-      if (grade === TIMING_GRADE.PERFECT) {
-        juice.impactPerfect();
-        showHitBanner('🔥 PERFECT SMASH!', '#38ef7d');
-      } else if (grade === TIMING_GRADE.GOOD) {
-        juice.shake(0.06, 0.12);
-        juice.vibrate('spike');
-        showHitBanner('⚡ GOOD SPIKE', '#ffd166');
+      // 攔網碰撞判定
+      const blockCollision = checkBlockCollision(
+        ball,
+        spikeVel,
+        blocker,
+        blocker.reachY + blocker.y,
+        0.85
+      );
+
+      if (blocker.isAirborne && blockCollision.hit) {
+        if (blockCollision.type === 'ROOF') {
+          // 被攔死回彈
+          ball.vx = blockCollision.reflectedVel.vx;
+          ball.vy = blockCollision.reflectedVel.vy;
+          ball.vz = blockCollision.reflectedVel.vz;
+          juice.impactRoofBlock();
+          vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 0, 1), 0xff4b4b, 3.5);
+          showHitBanner('🚫 ROOF BLOCKED!', '#ff4b4b');
+          resetCombo();
+        } else {
+          // 擦手出界得分
+          ball.vx = blockCollision.reflectedVel.vx;
+          ball.vy = blockCollision.reflectedVel.vy;
+          ball.vz = blockCollision.reflectedVel.vz;
+          juice.impactTool();
+          vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(1, 0, 0), 0xffd166, 3.2);
+          showHitBanner('⚡ TOOL OFF BLOCK!', '#ffd166');
+          addCombo(200);
+        }
       } else {
-        showHitBanner('LATE / WEAK', '#ff6b6b');
+        // 清脆得分
+        if (grade === TIMING_GRADE.PERFECT) {
+          juice.impactPerfect();
+          vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, -0.4, 0.9), 0x38ef7d, 4.5);
+          showHitBanner('🔥 PERFECT SMASH!', '#38ef7d');
+          addCombo(250);
+        } else {
+          juice.shake(0.08, 0.15);
+          juice.vibrate('spike');
+          vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, -0.4, 0.9), 0xffd166, 3.0);
+          showHitBanner('⚡ GOOD SPIKE', '#ffd166');
+          addCombo(120);
+        }
       }
 
-      controls.setLastHitResult({
-        grade,
-        score,
-        speed: spikeVel.speed,
-        time: performance.now(),
-      });
+      rallyPhase = RALLY_PHASE.BALL_DEAD;
     } else {
       showHitBanner('MISS!', '#ff6b6b');
     }
   }
 
-  // 7. 建立 UI 疊層
+  function addCombo(pts) {
+    comboCount += 1;
+    totalScore += pts * Math.min(comboCount, 5);
+    ui.updateScore(totalScore, comboCount);
+  }
+
+  function resetCombo() {
+    comboCount = 0;
+    ui.updateScore(totalScore, comboCount);
+  }
+
+  // 8. 建立沙盒 UI 疊層
   const ui = buildSandboxUi({
-    onResetBall: feedToss,
+    onResetBall: serveInbound,
+    onTipClick: () => controls.triggerAction('TIP'),
     onExit: () => {
       window.location.href = window.location.pathname;
     },
@@ -201,13 +395,13 @@ export async function runFreeballSandbox(ctx) {
     setTimeout(() => {
       ui.banner.style.opacity = '0';
       ui.banner.style.transform = 'translate(-50%, -50%) scale(0.9)';
-    }, 800);
+    }, 850);
   }
 
-  // 開局給第一顆球
-  feedToss();
+  // 開局發第一球
+  serveInbound();
 
-  // 8. 主渲染與模擬迴圈
+  // 9. 主模擬與渲染迴圈
   let lastTime = performance.now();
 
   function frame(now) {
@@ -215,130 +409,169 @@ export async function runFreeballSandbox(ctx) {
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
 
-    // 結算打擊頓幀（Hitstop）
-    const { isFrozen, shakeOffset } = juice.update(dt);
-    if (isFrozen) {
+    // 結算打擊頓幀與動態 FOV
+    const juiceResult = juice.update(dt);
+    if (juiceResult.isFrozen) {
       if (postFx) postFx.render(scene, camera);
       else renderer.render(scene, camera);
       return;
     }
 
-    // A. 球員跑位更新
+    // 動態 FOV 更新
+    if (camera.isPerspectiveCamera) {
+      camera.fov = juiceResult.fov;
+      camera.updateProjectionMatrix();
+    }
+
+    // A. 玩家跑位與面向
     const moveInput = controls.getMoveInput();
-    const speed = 4.8;
-    // 順滑加速度
+    const speed = 5.0;
     player.vx = THREE.MathUtils.lerp(player.vx, moveInput.x * speed, 0.22);
     player.vz = THREE.MathUtils.lerp(player.vz, moveInput.z * speed, 0.22);
 
     player.x += player.vx * dt;
     player.z += player.vz * dt;
 
-    // 場地邊界限制（己方半場）
     player.x = THREE.MathUtils.clamp(player.x, -4.2, 4.2);
-    player.z = THREE.MathUtils.clamp(player.z, 0.4, 8.2);
+    player.z = THREE.MathUtils.clamp(player.z, 0.4, 7.8);
 
-    // 面向朝向更新（修正模型面向 +Z 的旋轉角對齊）
     const moveMag = Math.hypot(player.vx, player.vz);
-    let targetYaw = Math.PI; // 預設面向球網 (-Z 方向)
+    let targetYaw = Math.PI;
 
     if (player.isAirborne) {
-      // 空中扣殺滯空：優先對齊拖曳瞄準方向，否則面向球網對面標靶
       const aimDir = controls.getAimDirection();
-      if (aimDir) {
-        targetYaw = Math.atan2(aimDir.x, aimDir.z);
-      } else {
-        targetYaw = Math.atan2(0 - player.x, -2.5 - player.z);
-      }
+      if (aimDir) targetYaw = Math.atan2(aimDir.x, aimDir.z);
+      else targetYaw = Math.atan2(0 - player.x, -2.5 - player.z);
     } else if (moveMag > 0.25) {
-      // 地面移動：面向行進方向（atan2(vx, vz) 對齊 +Z 模型正面）
       targetYaw = Math.atan2(player.vx, player.vz);
     } else {
-      // 站定待命：面向球網 (-Z)
       targetYaw = Math.PI;
     }
 
     player.facingAngle = approachYaw(player.facingAngle, targetYaw, dt);
 
-    // B. 起跳滯空高度更新
+    // 玩家起跳滯空
     if (player.isAirborne) {
       player.jumpTime += dt;
-      const progress = player.jumpTime / player.jumpDuration;
-      if (progress < 1.0) {
-        // 半正弦跳躍弧度
-        player.y = player.jumpApex * Math.sin(progress * Math.PI);
+      const prog = player.jumpTime / player.jumpDuration;
+      if (prog < 1.0) {
+        player.y = player.jumpApex * Math.sin(prog * Math.PI);
       } else {
-        // 落地
         player.y = 0;
         player.isAirborne = false;
         controls.setAirborne(false, 0);
-        if (!animator.isIdle()) {
-          animator.trigger('landSoft');
-        }
+        playerAnimator.trigger('landSoft');
       }
     } else {
       player.y = 0;
     }
 
-    // C. 程序化動畫驅動
-    // lateral: 移動方向相對朝向的橫向分量（由 shortestArc 算最短夾角）
     const lateral = moveMag > 0.25
       ? Math.sin(shortestArc(player.facingAngle, Math.atan2(player.vx, player.vz)))
       : 0;
-    const bodyY = animator.update(dt, moveMag, lateral, 1.0);
+    const bodyY = playerAnimator.update(dt, moveMag, lateral, 1.0);
 
-    // 同步球員模型 Transform（地面呼吸起伏由 bodyY 提供，空中由跳躍物理提供）
     const groundOffset = player.isAirborne ? 0 : bodyY;
     playerRig.root.position.set(player.x, player.y + groundOffset, player.z);
     playerRig.root.rotation.y = player.facingAngle;
 
-    // 更新幾何部件 InstancedMesh 矩陣
-    playerRig.root.updateMatrixWorld(true);
-    for (const part of playerRig.parts) {
-      pool.writeMatrix(part, part.node.matrixWorld);
+    // B. 二傳手 AI
+    if (rallyPhase === RALLY_PHASE.SETTER_TOSS && !setter.hasSet) {
+      const dSetter = Math.hypot(ball.x - setter.x, ball.z - setter.z);
+      if (dSetter > 0.2) {
+        setter.x += (ball.x - setter.x) * 3.5 * dt;
+        setter.z += (ball.z - setter.z) * 3.5 * dt;
+      }
+      if (ball.y <= 2.35 && dSetter <= 1.4) {
+        executeSetterToss();
+      }
     }
+    const setterBodyY = setterAnimator.update(dt, 0, 0, 1.0);
+    setterRig.root.position.set(setter.x, setter.y + setterBodyY, setter.z);
+    setterRig.root.rotation.y = setter.facingAngle;
+
+    // C. 攔網手 AI
+    if (blocker.isAirborne) {
+      blocker.jumpTime += dt;
+      const prog = blocker.jumpTime / blocker.jumpDuration;
+      if (prog < 1.0) {
+        blocker.y = blocker.jumpApex * Math.sin(prog * Math.PI);
+      } else {
+        blocker.y = 0;
+        blocker.isAirborne = false;
+        blocker.vx = 0;
+      }
+      blocker.x += blocker.vx * dt;
+    } else {
+      // 橫向跟隨球的 X 座標
+      blocker.x = THREE.MathUtils.lerp(blocker.x, THREE.MathUtils.clamp(ball.x * 0.75, -2.2, 2.2), 0.12);
+    }
+    const blockerBodyY = blockerAnimator.update(dt, Math.abs(blocker.vx), 0, 1.0);
+    blockerRig.root.position.set(blocker.x, blocker.y + blockerBodyY, blocker.z);
+    blockerRig.root.rotation.y = blocker.facingAngle;
+
+    // 更新幾何球員 InstancedMesh 池矩陣
+    playerRig.root.updateMatrixWorld(true);
+    setterRig.root.updateMatrixWorld(true);
+    blockerRig.root.updateMatrixWorld(true);
+
+    for (const part of playerRig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+    for (const part of setterRig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+    for (const part of blockerRig.parts) pool.writeMatrix(part, part.node.matrixWorld);
     pool.markDirty();
 
-    // D. 球體物理模擬
+    // D. 排球物理模擬
     ball.vy -= 9.81 * dt;
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
     ball.z += ball.vz * dt;
 
-    // 牆面反彈判定（在 z = -2.25 彈回）
-    if (ball.z <= -2.25 && ball.vz < 0) {
-      ball.z = -2.25;
-      ball.vz = -ball.vz * 0.75;
-      ball.vy = Math.max(ball.vy * 0.6, 2.5); // 反彈帶有微拋
-      ball.vx *= 0.8;
-      juice.shake(0.08, 0.14);
+    // 自主防守接球（走位碰撞自動墊球兜底）
+    if (rallyPhase === RALLY_PHASE.INBOUND_SERVE && ball.y <= 1.2 && ball.vz > 0) {
+      const d = Math.hypot(ball.x - player.x, ball.z - player.z);
+      if (d <= 0.85) {
+        attemptPlayerDig();
+      }
     }
 
-    // 地面碰撞判定
+    // 牆面反彈判定
+    if (ball.z <= -4.25 && ball.vz < 0) {
+      ball.z = -4.25;
+      ball.vz = -ball.vz * 0.7;
+      ball.vy = Math.max(ball.vy * 0.6, 3.2);
+      ball.vx *= 0.8;
+      juice.shake(0.08, 0.14);
+      vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 0, 1), 0xffd166, 3.0);
+    }
+
+    // 地面著地判定
     if (ball.y <= ball.radius) {
       ball.y = ball.radius;
+      vfx.spawnFloorImpact(ball.x, ball.z, ball.isSpiked ? 0xff416c : 0xffd166);
+
       if (ball.isSpiked) {
-        // 扣殺落地後自動彈起循環
         ball.vy = Math.abs(ball.vy) * 0.55;
-        if (ball.vy < 1.0 && !isTossPending) {
-          isTossPending = true;
-          setTimeout(feedToss, 600);
+        if (ball.vy < 1.0 && !isPhaseResetting) {
+          isPhaseResetting = true;
+          setTimeout(serveInbound, 650);
         }
-      } else if (!isTossPending) {
-        // 未扣殺自然著地：重新發球
-        isTossPending = true;
-        setTimeout(feedToss, 600);
+      } else if (!isPhaseResetting) {
+        isPhaseResetting = true;
+        resetCombo();
+        setTimeout(serveInbound, 650);
       }
       ball.vx *= 0.85;
       ball.vz *= 0.85;
     }
 
-    // 出界兜底保護
-    if ((ball.z > 10 || ball.z < -6 || Math.abs(ball.x) > 8 || ball.y < -1) && !isTossPending) {
-      isTossPending = true;
-      setTimeout(feedToss, 400);
+    // 出界保護
+    if ((ball.z > 11 || ball.z < -8 || Math.abs(ball.x) > 9 || ball.y < -1) && !isPhaseResetting) {
+      isPhaseResetting = true;
+      resetCombo();
+      setTimeout(serveInbound, 450);
     }
 
-    // 同步球體視覺（帶旋轉、陰影與金色火花）
+    // 同步排球視覺
     if (ballView && typeof ballView.sync === 'function') {
       const ballSim = {
         x: ball.x,
@@ -351,39 +584,45 @@ export async function runFreeballSandbox(ctx) {
         vy: ball.vy,
         vz: ball.vz,
       };
-      ballView.sync(ballSim, 1.0, dt, false, ball.isSpiked ? 0.8 : 0);
+      ballView.sync(ballSim, 1.0, dt, false, ball.isSpiked ? 0.85 : 0);
     }
 
-    // E. 更新動態收斂指示光圈
-    // 目標擊球高度：扣球時為摸高點，平時為前臂墊球點 (0.9m)
+    // E. 雙環指示圈更新
     const targetHitHeight = player.isAirborne ? (player.baseReach + player.jumpApex * 0.85) : 0.9;
     indicator.update(ball, targetHitHeight, ball.vy);
 
-    // F. 第三人稱追尾相機更新（Smooth Chase Camera）
-    // 永遠在球員後上方，平滑看向球員前方與球網
+    // F. 特效更新
+    vfx.update(dt);
+
+    // G. 第三人稱動態相機
     const targetCamX = player.x * 0.65;
-    const targetCamY = 3.6 + player.y * 0.3;
+    const targetCamY = 3.6 + player.y * 0.35;
     const targetCamZ = player.z + 5.2;
 
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, 0.08) + shakeOffset.x;
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCamY, 0.08) + shakeOffset.y;
-    camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.08) + shakeOffset.z;
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, 0.08) + juiceResult.shakeOffset.x;
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCamY, 0.08) + juiceResult.shakeOffset.y;
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.08) + juiceResult.shakeOffset.z;
+    camera.lookAt(player.x * 0.35, 1.8 + player.y * 0.2, player.z - 4.5);
 
-    camera.lookAt(player.x * 0.4, 1.8, player.z - 4.5);
-
-    // G. 更新 UI 狀態
+    // H. 更新 UI 狀態
     const uiState = controls.getUiState();
     if (uiState.actionState === 'SPIKE') {
-      ui.actionBtn.textContent = '⚡ 扣殺';
+      ui.actionBtn.textContent = '⚡ 扣殺 (下劃)';
       ui.actionBtn.style.background = 'linear-gradient(135deg, #ff416c, #ff4b2b)';
-      ui.actionBtn.style.boxShadow = '0 0 18px rgba(255, 75, 43, 0.6)';
+      ui.actionBtn.style.boxShadow = '0 0 20px rgba(255, 75, 43, 0.7)';
+      ui.tipBtn.style.display = 'flex';
     } else {
-      ui.actionBtn.textContent = '助跑起跳';
-      ui.actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
+      if (rallyPhase === RALLY_PHASE.INBOUND_SERVE) {
+        ui.actionBtn.textContent = '走位接球 / 起跳';
+        ui.actionBtn.style.background = 'linear-gradient(135deg, #11998e, #38ef7d)';
+      } else {
+        ui.actionBtn.textContent = '助跑起跳 (JUMP)';
+        ui.actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
+      }
       ui.actionBtn.style.boxShadow = '0 0 14px rgba(33, 147, 176, 0.4)';
+      ui.tipBtn.style.display = 'none';
     }
 
-    // 浮動搖桿視覺反饋
     if (uiState.joystick.active) {
       ui.joystickBase.style.display = 'block';
       ui.joystickBase.style.left = `${uiState.joystick.ox}px`;
@@ -397,18 +636,15 @@ export async function runFreeballSandbox(ctx) {
     }
 
     // 渲染畫面
-    if (postFx) {
-      postFx.render(scene, camera);
-    } else {
-      renderer.render(scene, camera);
-    }
+    if (postFx) postFx.render(scene, camera);
+    else renderer.render(scene, camera);
   }
 
   requestAnimationFrame(frame);
 }
 
-// 構建沙盒專屬 UI
-function buildSandboxUi({ onResetBall, onExit }) {
+// 構建沙盒專屬 UI（支援 Combo 計數與吊球副按鈕）
+function buildSandboxUi({ onResetBall, onTipClick, onExit }) {
   const root = document.createElement('div');
   root.id = 'freeball-sandbox-ui';
   root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:20;font-family:system-ui,sans-serif;';
@@ -419,34 +655,38 @@ function buildSandboxUi({ onResetBall, onExit }) {
   topBar.style.cssText = [
     'position:absolute', 'top:16px', 'left:50%', 'transform:translateX(-50%)',
     'background:rgba(18,24,38,0.85)', 'border:1px solid rgba(110,231,255,0.4)',
-    'padding:8px 16px', 'border-radius:24px', 'color:#eef2fa',
-    'display:flex', 'align-items:center', 'gap:12px', 'font-size:13px', 'font-weight:600',
+    'padding:8px 18px', 'border-radius:24px', 'color:#eef2fa',
+    'display:flex', 'align-items:center', 'gap:14px', 'font-size:13px', 'font-weight:700',
     'backdrop-filter:blur(8px)', 'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
-    'pointer-events:none', 'white-space:nowrap', 'max-width:90vw', 'overflow:hidden',
+    'pointer-events:none', 'white-space:nowrap', 'max-width:92vw', 'overflow:hidden',
   ].join(';');
   topBar.innerHTML = `
-    <span style="color:#6ee7ff;">🏐 Free Ball 物理沙盒</span>
+    <span style="color:#6ee7ff;">🏐 Free Ball 攻防閉環</span>
     <span style="color:#8b9bb4;">|</span>
-    <span>左側搖桿走位 ｜ 右側 [助跑起跳 ➔ 空中扣殺]</span>
+    <span id="fb-score" style="color:#ffd166;">SCORE: 0</span>
+    <span id="fb-combo" style="color:#ff416c;font-size:14px;">COMBO x0</span>
   `;
   root.appendChild(topBar);
 
-  // 左上角返回按鈕
+  const scoreEl = topBar.querySelector('#fb-score');
+  const comboEl = topBar.querySelector('#fb-combo');
+
+  // 返回按鈕
   const exitBtn = document.createElement('button');
   exitBtn.textContent = '✕ 返回';
   exitBtn.style.cssText = [
     'position:absolute', 'top:16px', 'left:16px',
     'background:#1e2738', 'color:#eef2fa', 'border:1px solid #4a5c7a',
-    'padding:6px 12px', 'border-radius:16px', 'font-weight:700', 'cursor:pointer',
+    'padding:6px 14px', 'border-radius:16px', 'font-weight:700', 'cursor:pointer',
     'pointer-events:auto', 'font-size:12px', 'backdrop-filter:blur(6px)',
   ].join(';');
   exitBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
   exitBtn.onclick = onExit;
   root.appendChild(exitBtn);
 
-  // 右上角重新發球按鈕
+  // 重新發球按鈕
   const resetBtn = document.createElement('button');
-  resetBtn.textContent = '↺ 重發高球';
+  resetBtn.textContent = '↺ 重發球';
   resetBtn.style.cssText = [
     'position:absolute', 'top:16px', 'right:16px',
     'background:#2a364f', 'color:#ffd166', 'border:1px solid #ffd166',
@@ -457,7 +697,7 @@ function buildSandboxUi({ onResetBall, onExit }) {
   resetBtn.onclick = onResetBall;
   root.appendChild(resetBtn);
 
-  // 浮動搖桿底座與操縱點
+  // 浮動搖桿視覺
   const joystickBase = document.createElement('div');
   joystickBase.style.cssText = [
     'position:absolute', 'width:110px', 'height:110px', 'border-radius:50%',
@@ -475,15 +715,36 @@ function buildSandboxUi({ onResetBall, onExit }) {
   ].join(';');
   root.appendChild(joystickKnob);
 
-  // 扣球打擊反饋橫幅 (Banner)
+  // 打擊反饋 Banner
   const banner = document.createElement('div');
   banner.style.cssText = [
     'position:absolute', 'top:38%', 'left:50%', 'transform:translate(-50%, -50%) scale(0.9)',
-    'font-size:28px', 'font-weight:900', 'text-shadow:0 3px 12px rgba(0,0,0,0.85)',
+    'font-size:30px', 'font-weight:900', 'text-shadow:0 3px 14px rgba(0,0,0,0.9)',
     'letter-spacing:1px', 'opacity:0', 'transition:all 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
     'pointer-events:none',
   ].join(';');
   root.appendChild(banner);
+
+  // 空中輕吊球副按鈕（位於主按鈕上方）
+  const tipBtn = document.createElement('div');
+  tipBtn.textContent = '🎯 輕吊 (上劃)';
+  tipBtn.style.cssText = [
+    'position:absolute',
+    'right:calc(env(safe-area-inset-right, 0px) + 32px)',
+    'bottom:calc(env(safe-area-inset-bottom, 0px) + 152px)',
+    'width:88px', 'height:44px', 'border-radius:22px',
+    'background:linear-gradient(135deg, #11998e, #38ef7d)',
+    'color:#ffffff', 'font-size:13px', 'font-weight:800',
+    'display:none', 'align-items:center', 'justify-content:center',
+    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
+    'box-shadow:0 0 14px rgba(56,239,125,0.5)',
+    'transition:transform 0.1s ease',
+  ].join(';');
+  tipBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    onTipClick();
+  });
+  root.appendChild(tipBtn);
 
   // 右下角情境動作大按鈕
   const actionBtn = document.createElement('div');
@@ -493,12 +754,23 @@ function buildSandboxUi({ onResetBall, onExit }) {
     'right:calc(env(safe-area-inset-right, 0px) + 24px)',
     'bottom:calc(env(safe-area-inset-bottom, 0px) + 36px)',
     'width:104px', 'height:104px', 'border-radius:50%',
-    'color:#ffffff', 'font-size:18px', 'font-weight:800',
+    'color:#ffffff', 'font-size:16px', 'font-weight:800',
     'display:flex', 'align-items:center', 'justify-content:center',
     'pointer-events:none', 'user-select:none',
     'transition:background 0.15s ease, transform 0.1s ease',
   ].join(';');
   root.appendChild(actionBtn);
 
-  return { root, banner, actionBtn, joystickBase, joystickKnob };
+  return {
+    root,
+    banner,
+    actionBtn,
+    tipBtn,
+    joystickBase,
+    joystickKnob,
+    updateScore: (score, combo) => {
+      scoreEl.textContent = `SCORE: ${score}`;
+      comboEl.textContent = combo > 1 ? `🔥 COMBO x${combo}` : '';
+    },
+  };
 }

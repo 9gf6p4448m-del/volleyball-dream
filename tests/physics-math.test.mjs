@@ -5,6 +5,9 @@ import {
   predictLandingAnalytical,
   evaluateTiming,
   calculateSpikeVelocity,
+  calculateDigVelocity,
+  calculateTipVelocity,
+  checkBlockCollision,
   TIMING_GRADE,
 } from '../src/sim/physicsMath.js';
 
@@ -81,3 +84,68 @@ test('calculateSpikeVelocity：Perfect 下釘獲得超速與向下推進角', ()
   assert.ok(spikePerf.speed > spikeLate.speed, 'Perfect扣殺速度應高於Late扣殺');
   assert.ok(spikePerf.vy < 0, '扣殺初始垂直速度應具有向下分量');
 });
+
+test('calculateDigVelocity：自主防守站位良好時墊出高品質二傳球', () => {
+  const ballPos = { x: 0, y: 0.9, z: 4.0 };
+  const goodPlayerPos = { x: 0, y: 0, z: 4.25 }; // 站在球正後方 0.25m
+  const farPlayerPos = { x: 2.0, y: 0, z: 4.0 }; // 遠離球
+
+  const digGood = calculateDigVelocity(ballPos, goodPlayerPos);
+  const digFar = calculateDigVelocity(ballPos, farPlayerPos);
+
+  assert.equal(digGood.grade, TIMING_GRADE.PERFECT);
+  assert.equal(digGood.quality, 1.0);
+  assert.ok(digGood.vy > 0, '墊球初速應向上拋起');
+
+  assert.equal(digFar.grade, TIMING_GRADE.MISS);
+  assert.ok(digFar.quality < 0.5);
+});
+
+test('calculateTipVelocity：輕吊球弧線越過球網', () => {
+  const from = { x: 0, y: 2.8, z: 1.0 };
+  const target = { x: 0, z: -1.2 };
+
+  const tip = calculateTipVelocity(from, target);
+  assert.ok(tip.vy > 0, '輕吊球需有向上微托仰角');
+  assert.ok(tip.vz < 0, '需飛向對方半場');
+  assert.ok(tip.speed < 15, '輕吊球速度應溫和軟綿');
+});
+
+test('checkBlockCollision：攔網正面攔死與邊緣擦手判定', () => {
+  const blockerPos = { x: 0, y: 0, z: 0 };
+  const blockerReachY = 2.55;
+
+  // 正面撞中手掌中心 (x=0.05, y=2.55, z=0.05, vz=-20)
+  const roof = checkBlockCollision(
+    { x: 0.05, y: 2.55, z: 0.05 },
+    { vx: 0, vy: -2, vz: -20 },
+    blockerPos,
+    blockerReachY
+  );
+  assert.equal(roof.hit, true);
+  assert.equal(roof.type, 'ROOF');
+  assert.ok(roof.reflectedVel.vz > 0, '攔死球應反彈回進攻方半場');
+  assert.ok(roof.reflectedVel.vy < 0, '攔死球向下猛扣');
+
+  // 擦手邊緣 (x=0.42, y=2.55, z=0.05)
+  const tool = checkBlockCollision(
+    { x: 0.42, y: 2.55, z: 0.05 },
+    { vx: 0, vy: -2, vz: -20 },
+    blockerPos,
+    blockerReachY
+  );
+  assert.equal(tool.hit, true);
+  assert.equal(tool.type, 'TOOL');
+  assert.ok(tool.reflectedVel.vx > 0, '向外側邊緣偏折');
+
+  // 未碰到手掌 (x=1.8, 太遠)
+  const miss = checkBlockCollision(
+    { x: 1.8, y: 2.55, z: 0.05 },
+    { vx: 0, vy: -2, vz: -20 },
+    blockerPos,
+    blockerReachY
+  );
+  assert.equal(miss.hit, false);
+  assert.equal(miss.type, 'MISS');
+});
+
