@@ -210,15 +210,22 @@ export async function runFreeballSandbox(ctx) {
     player.isAirborne = true;
     player.jumpTime = 0;
     player.jumpApex = 1.05;
+    player.jumpDuration = 0.76;
     controls.setAirborne(true, player.jumpApex);
     player.animator.trigger('blockJump');
     juice.vibrate('dig');
 
+    // 主角就位網前
+    player.z = THREE.MathUtils.clamp(player.z, 0.75, 1.15);
+
     // 我方副攻手 mbA 快速橫移靠攏形成雙人攔網壁壘！
     mbA.isAirborne = true;
     mbA.jumpTime = 0;
+    mbA.jumpApex = 0.95;
+    mbA.jumpDuration = 0.76;
     mbA.animator.trigger('blockJump');
-    mbA.x = THREE.MathUtils.clamp(player.x + (player.x > -1.0 ? -0.65 : 0.65), -2.4, 0.6);
+    mbA.z = 0.95;
+    mbA.x = THREE.MathUtils.clamp(player.x + (player.x > -1.5 ? -0.75 : 0.75), -2.6, 0.8);
     vfx.spawnJumpDust(player.x, player.z);
     showHitBanner('🛡️ BLOCK! 雙人起跳攔網', '#6ee7ff');
   }
@@ -231,14 +238,14 @@ export async function runFreeballSandbox(ctx) {
     if (isPhasePending || rallyPhase === RALLY_PHASE.BALL_DEAD) return;
 
     if (!isAirborne) {
-      // 1. 若處於對手 4 號位扣殺前夕 (DEF_BLOCK_DUEL) 且主角在網前 (z <= 2.2)，點擊觸發【雙人起跳攔網】！
-      if (rallyPhase === RALLY_PHASE.DEF_BLOCK_DUEL && player.z <= 2.2 && !ball.isSpiked) {
+      // 1. 若處於防守模式，對手托球或扣殺前夕 (DEF_BLOCK_DUEL 或 DEF_SET) 且主角在網前區域 (z <= 2.8)，點擊觸發【雙人起跳攔網】！
+      if ((rallyPhase === RALLY_PHASE.DEF_BLOCK_DUEL || rallyPhase === RALLY_PHASE.DEF_SET) && player.z <= 2.8 && !ball.isSpiked) {
         attemptPlayerBlock();
         return;
       }
 
-      // 2. 若處於接發球或後排救球窗口 (SERVE_INBOUND 或 DEF_DIG_CHANCE)，點擊觸發【主動魚躍救球】！
-      if (rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE) {
+      // 2. 若處於接發球、救球窗口或球正向我方半場飛來，點擊觸發【主動魚躍救球】！
+      if (rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE || (rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_A && ball.z > -0.5)) {
         attemptPlayerDig();
         return;
       }
@@ -247,6 +254,7 @@ export async function runFreeballSandbox(ctx) {
       if (rallyPhase === RALLY_PHASE.APPROACH_SPIKE || (rallyPhase === RALLY_PHASE.SETTER_TOSS && setter.hasSet)) {
         const runSpeed = Math.hypot(player.vx, player.vz);
         player.jumpApex = 1.15 + Math.min(runSpeed, 5.0) * 0.12;
+        player.jumpDuration = 0.76;
         player.isAirborne = true;
         player.jumpTime = 0;
         controls.setAirborne(true, player.jumpApex);
@@ -262,6 +270,7 @@ export async function runFreeballSandbox(ctx) {
       } else {
         const runSpeed = Math.hypot(player.vx, player.vz);
         player.jumpApex = 1.15 + Math.min(runSpeed, 5.0) * 0.12;
+        player.jumpDuration = 0.76;
         player.isAirborne = true;
         player.jumpTime = 0;
         controls.setAirborne(true, player.jumpApex);
@@ -269,6 +278,12 @@ export async function runFreeballSandbox(ctx) {
         vfx.spawnJumpDust(player.x, player.z);
       }
     } else {
+      // 若處於防守或球落向我方半場時點擊（即使主角此前滯空中），由自由人協防起球
+      if (rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE || rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_A) {
+        executeTeammateDig(liberoA);
+        return;
+      }
+
       // 空中動作：單手真實輕吊 (TIP) 或 直線/斜線扣殺 (LINE / CROSS / SMASH)
       if (actionType === 'TIP') {
         attemptSoftTip();
@@ -421,7 +436,14 @@ export async function runFreeballSandbox(ctx) {
   // ── 階段二 A：玩家主動墊球（Receive / Dig）──
   function attemptPlayerDig() {
     if (isPhasePending || rallyPhase === RALLY_PHASE.BALL_DEAD) return;
-    if (rallyPhase !== RALLY_PHASE.SERVE_INBOUND && rallyPhase !== RALLY_PHASE.DEF_DIG_CHANCE) return;
+    if (rallyPhase !== RALLY_PHASE.SERVE_INBOUND && rallyPhase !== RALLY_PHASE.DEF_DIG_CHANCE && rallyPhase !== RALLY_PHASE.BALL_CROSSING_TO_A) return;
+
+    const distToBall = Math.hypot(ball.x - player.x, ball.z - player.z);
+    // 若主角離球過遠（例如在網前攔網）或處於滯空中，交由後排自由人魚躍撲救！
+    if (distToBall > 2.8 || player.isAirborne) {
+      executeTeammateDig(liberoA);
+      return;
+    }
 
     // 立即切換為舉球階段，徹底阻斷同一球的重複觸發
     rallyPhase = RALLY_PHASE.SETTER_TOSS;
@@ -449,13 +471,13 @@ export async function runFreeballSandbox(ctx) {
     ball.isSpiked = false;
 
     vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 1, 0), 0x38ef7d, 2.6);
-    showHitBanner('🏐 CLEAN DIG! 主角救球起球到位', '#38ef7d');
+    showHitBanner(rallyExchangeCount > 1 ? `🛡️ 救起第 ${rallyExchangeCount} 拍！換我方反擊！` : '🏐 CLEAN DIG! 主角救球起球到位', '#38ef7d');
   }
 
   // ── 階段二 B：隊友（自由人）協防起球──
   function executeTeammateDig(mate) {
     if (isPhasePending || rallyPhase === RALLY_PHASE.BALL_DEAD) return;
-    if (rallyPhase !== RALLY_PHASE.SERVE_INBOUND && rallyPhase !== RALLY_PHASE.DEF_DIG_CHANCE) return;
+    if (rallyPhase !== RALLY_PHASE.SERVE_INBOUND && rallyPhase !== RALLY_PHASE.DEF_DIG_CHANCE && rallyPhase !== RALLY_PHASE.BALL_CROSSING_TO_A) return;
 
     // 立即切換為舉球階段，徹底阻斷同一球的重複觸發
     rallyPhase = RALLY_PHASE.SETTER_TOSS;
@@ -479,7 +501,7 @@ export async function runFreeballSandbox(ctx) {
     ball.isSpiked = false;
 
     vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 1, 0), 0x6ee7ff, 2.5);
-    showHitBanner(`🏐 ${mate.name} 極限魚躍救起！換我方反擊`, '#6ee7ff');
+    showHitBanner(rallyExchangeCount > 1 ? `🏐 ${mate.name} 魚躍起球！第 ${rallyExchangeCount} 拍攻防反擊！` : `🏐 ${mate.name} 極限魚躍救起！換我方反擊`, '#6ee7ff');
   }
 
   // ── 階段三：二傳手頭頂托球（Setter Overhead Toss）──
@@ -520,16 +542,26 @@ export async function runFreeballSandbox(ctx) {
   function triggerDoubleBlockJump() {
     mbB.isAirborne = true;
     mbB.jumpTime = 0;
+    mbB.jumpApex = 0.84;
+    mbB.jumpDuration = 0.75;
     mbB.animator.trigger('blockJump');
 
     oppB.isAirborne = true;
     oppB.jumpTime = 0;
+    oppB.jumpApex = 0.84;
+    oppB.jumpDuration = 0.75;
     oppB.animator.trigger('blockJump');
 
-    // 雙人攔網精準收攏封死主要進攻角度
+    // 雙人攔網封堵策略：50% 封直線（放開斜線），50% 封斜線（放開直線）
     const attackX = THREE.MathUtils.clamp(player.x * 0.75, -2.4, -0.6);
-    oppB.x = attackX - 0.38; // 外側攔網手（封直線）
-    mbB.x = attackX + 0.42;  // 內側攔網手（封斜線）
+    const sealCross = Math.random() < 0.5;
+    if (sealCross) {
+      oppB.x = attackX + 0.15; // 封斜線
+      mbB.x = attackX + 0.72;
+    } else {
+      oppB.x = attackX - 0.55; // 封直線
+      mbB.x = attackX - 0.05;
+    }
   }
 
   // ── 階段四 A：真實排球單手高舉輕吊球（Airborne Single-Hand Tip）──
@@ -725,7 +757,7 @@ export async function runFreeballSandbox(ctx) {
     const inDefBlockZone = oh1B.isAirborne && !oh1B.hasSpiked && (rallyPhase === RALLY_PHASE.DEF_BLOCK_DUEL || rallyPhase === RALLY_PHASE.DEF_SET);
 
     // 防守接球：球在空中飛入我方半場且未被托起時，進入 0.36x 救球子彈時間，給予充裕反應時間點擊救球！
-    const inDefDigZone = ball.z >= 0.2 && ball.z <= 7.8 && ball.vz > 0 && !isPhasePending && !player.isAirborne && (rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE || rallyPhase === RALLY_PHASE.SERVE_INBOUND);
+    const inDefDigZone = ball.z >= -0.2 && ball.z <= 7.8 && ball.vz > 0 && !isPhasePending && (rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE || rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_A);
 
     if (inSpikeZone) {
       targetTimeScale = 0.28;
@@ -829,6 +861,24 @@ export async function runFreeballSandbox(ctx) {
     player.rig.root.position.set(player.x, player.y + (player.isAirborne ? 0 : bodyY), player.z);
     player.rig.root.rotation.y = player.facingAngle;
 
+    // ★ 全體隊友與對手 AI 物理跳躍滯空更新（獨立於攻防狀態機，所有起跳者保證落地，絕不浮空卡網）★
+    for (const p of allPlayerList) {
+      if (p.id === 'A2') continue; // 主角由上方專屬控制器更新
+      if (p.isAirborne) {
+        p.jumpTime += simDt;
+        const prog = p.jumpTime / p.jumpDuration;
+        if (prog < 1.0) {
+          p.y = p.jumpApex * Math.sin(prog * Math.PI);
+        } else {
+          p.y = 0;
+          p.isAirborne = false;
+          p.jumpTime = 0;
+        }
+      } else {
+        p.y = 0;
+      }
+    }
+
     // B. A 隊隊友 AI 更新
     if (currentRoundMode === ROUND_MODE.OFFENSE || rallyPhase === RALLY_PHASE.SETTER_TOSS || rallyPhase === RALLY_PHASE.APPROACH_SPIKE) {
       // 1. 二傳手主動跑位托球
@@ -862,84 +912,51 @@ export async function runFreeballSandbox(ctx) {
           setter.facingAngle = approachYaw(setter.facingAngle, -Math.PI * 0.45, simDt * 6.0);
         }
 
-        const setterBodyY = setter.animator.update(simDt, setterRunSpeed, 0, 1.0);
-        setter.rig.root.position.set(setter.x, setter.y + setterBodyY, setter.z);
-        setter.rig.root.rotation.y = setter.facingAngle;
-
         const horizDistToBall = Math.hypot(ball.x - setter.x, ball.z - setter.z);
-        const isDescending = ball.vy <= 0.8;
-        const isAtHandHeight = ball.y <= 2.55 && ball.y >= 1.6;
-        const isNearSetter = horizDistToBall <= 1.5;
+        const isDescending = ball.vy <= 0.2;
+        const isAtHandHeight = ball.y <= 2.7 && ball.y >= 1.6;
+        const isNearSetter = horizDistToBall <= 1.8;
 
-        if ((isDescending && isAtHandHeight && isNearSetter) || (ball.y <= 2.1 && ball.z <= 2.8 && ball.z >= 0.5)) {
+        if (isDescending && ((isAtHandHeight && isNearSetter) || (ball.y <= 2.1 && horizDistToBall <= 2.2))) {
           executeSetterToss();
         }
       } else {
-        const setterBodyY = setter.animator.update(simDt, 0, 0, 1.0);
-        setter.rig.root.position.set(setter.x, setter.y + setterBodyY, setter.z);
-        setter.rig.root.rotation.y = setter.facingAngle;
+        setter.vx = 0;
+        setter.vz = 0;
       }
 
       // 2. 接發球與防守時隊友自由人協防（僅在接發球與防守救球窗口觸發）
       if ((rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE) && !isPhasePending) {
-        if (ball.z > 2.0) {
-          liberoA.x = THREE.MathUtils.lerp(liberoA.x, THREE.MathUtils.clamp(ball.x, -3.5, 3.5), 0.15);
-          liberoA.z = THREE.MathUtils.lerp(liberoA.z, THREE.MathUtils.clamp(ball.z + 0.4, 3.5, 7.5), 0.15);
+        if (ball.z > 1.2) {
+          liberoA.x = THREE.MathUtils.lerp(liberoA.x, THREE.MathUtils.clamp(ball.x, -3.5, 3.5), 0.28);
+          liberoA.z = THREE.MathUtils.lerp(liberoA.z, THREE.MathUtils.clamp(ball.z + 0.35, 3.2, 7.5), 0.28);
         }
         const distBallToPlayer = Math.hypot(ball.x - player.x, ball.z - player.z);
-        if (distBallToPlayer <= 2.2 && ball.y <= 2.4) {
+        if (distBallToPlayer <= 2.2 && ball.y <= 2.5) {
           attemptPlayerDig();
-        } else if (ball.y <= 1.6 && ball.z >= 1.5) {
+        } else if (ball.y <= 2.2 && ball.z >= 1.2) {
           executeTeammateDig(liberoA);
         }
       }
-
-      // 更新 A 隊其餘隊友視覺
-      for (const mate of [liberoA, mbA, oppA, oh2A]) {
-        const mateBodyY = mate.animator.update(simDt, 0, 0, 1.0);
-        mate.rig.root.position.set(mate.x, mate.y + mateBodyY, mate.z);
-        mate.rig.root.rotation.y = mate.facingAngle;
-      }
     } else {
-      // 🛡️ 防守回合：我方副攻手 mbA 在網前橫移並網＋雙人起跳
-      if (mbA.isAirborne) {
-        mbA.jumpTime += simDt;
-        const prog = mbA.jumpTime / mbA.jumpDuration;
-        if (prog < 1.0) {
-          mbA.y = mbA.jumpApex * Math.sin(prog * Math.PI);
-        } else {
-          mbA.y = 0;
-          mbA.isAirborne = false;
-        }
-      } else {
-        // 在地面跟隨主角橫移靠攏，準備雙人起跳並網！
-        const targetMbX = THREE.MathUtils.clamp(player.x + (player.x > -1.0 ? -0.65 : 0.65), -2.4, 0.6);
-        mbA.x = THREE.MathUtils.lerp(mbA.x, targetMbX, 0.18);
-        mbA.z = 1.1;
-        mbA.facingAngle = Math.PI;
-      }
-      const mbBodyY = mbA.animator.update(simDt, 0, 0, 1.0);
-      mbA.rig.root.position.set(mbA.x, mbA.y + mbBodyY, mbA.z);
-      mbA.rig.root.rotation.y = mbA.facingAngle;
+      // 🛡️ 防守回合：我方副攻手 mbA 在網前橫移靠攏主角，準備雙人起跳並網！
+      const targetMbX = THREE.MathUtils.clamp(player.x + (player.x > -1.0 ? -0.65 : 0.65), -2.4, 0.6);
+      mbA.x = THREE.MathUtils.lerp(mbA.x, targetMbX, 0.18);
+      mbA.z = 1.1;
+      mbA.facingAngle = Math.PI;
 
       // 當球穿過攔網落入我方半場，後排自由人隨時準備極限起球！
       if ((rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE) && !isPhasePending) {
-        if (ball.z > 2.0) {
-          liberoA.x = THREE.MathUtils.lerp(liberoA.x, THREE.MathUtils.clamp(ball.x, -3.5, 3.5), 0.15);
-          liberoA.z = THREE.MathUtils.lerp(liberoA.z, THREE.MathUtils.clamp(ball.z + 0.4, 3.5, 7.5), 0.15);
+        if (ball.z > 1.2) {
+          liberoA.x = THREE.MathUtils.lerp(liberoA.x, THREE.MathUtils.clamp(ball.x, -3.5, 3.5), 0.28);
+          liberoA.z = THREE.MathUtils.lerp(liberoA.z, THREE.MathUtils.clamp(ball.z + 0.35, 3.2, 7.5), 0.28);
         }
         const distBallToPlayer = Math.hypot(ball.x - player.x, ball.z - player.z);
-        if (distBallToPlayer <= 2.2 && ball.y <= 2.4) {
+        if (distBallToPlayer <= 2.2 && ball.y <= 2.5) {
           attemptPlayerDig();
-        } else if (ball.y <= 1.6 && ball.z >= 1.5) {
+        } else if (ball.y <= 2.2 && ball.z >= 1.2) {
           executeTeammateDig(liberoA);
         }
-      }
-
-      for (const mate of [setter, liberoA, oppA, oh2A]) {
-        const mateBodyY = mate.animator.update(simDt, 0, 0, 1.0);
-        mate.rig.root.position.set(mate.x, mate.y + mateBodyY, mate.z);
-        mate.rig.root.rotation.y = mate.facingAngle;
       }
     }
 
@@ -947,44 +964,24 @@ export async function runFreeballSandbox(ctx) {
     if (currentRoundMode === ROUND_MODE.OFFENSE && (rallyPhase === RALLY_PHASE.APPROACH_SPIKE || rallyPhase === RALLY_PHASE.SETTER_TOSS)) {
       // 1. 我方進攻時：B 隊雙人攔網封堵 4 號位
       for (const b of [mbB, oppB]) {
-        if (b.isAirborne) {
-          b.jumpTime += simDt;
-          const prog = b.jumpTime / b.jumpDuration;
-          if (prog < 1.0) {
-            b.y = b.jumpApex * Math.sin(prog * Math.PI);
-          } else {
-            b.y = 0;
-            b.isAirborne = false;
-          }
-        } else if (rallyPhase === RALLY_PHASE.APPROACH_SPIKE) {
+        if (!b.isAirborne && rallyPhase === RALLY_PHASE.APPROACH_SPIKE) {
           const targetX = THREE.MathUtils.clamp(player.x * 0.75, -2.4, -0.6);
           if (b.id === 'B4') b.x = THREE.MathUtils.lerp(b.x, targetX - 0.38, 0.12);
           if (b.id === 'B3') b.x = THREE.MathUtils.lerp(b.x, targetX + 0.42, 0.12);
         }
-        const bBodyY = b.animator.update(simDt, 0, 0, 1.0);
-        b.rig.root.position.set(b.x, b.y + bBodyY, b.z);
-        b.rig.root.rotation.y = b.facingAngle;
-      }
-
-      // B 隊後排球員待命
-      for (const mate of [serverB, oh1B, oh2B, liberoB]) {
-        const mBodyY = mate.animator.update(simDt, 0, 0, 1.0);
-        mate.rig.root.position.set(mate.x, mate.y + mBodyY, mate.z);
-        mate.rig.root.rotation.y = mate.facingAngle;
       }
     } else {
       // 2. 對手進攻鏈或多拍防守起球：一傳 ➔ 二傳 ➔ 扣殺！
       if (rallyPhase === RALLY_PHASE.DEF_SERVE || rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_B) {
         // ★ B 隊後排自由人 liberoB 接球起球 ★
-        // 自由人向球落點靠攏
-        if (ball.z < -1.0) {
-          liberoB.x = THREE.MathUtils.lerp(liberoB.x, THREE.MathUtils.clamp(ball.x, -3.8, 3.8), 0.22);
-          liberoB.z = THREE.MathUtils.lerp(liberoB.z, THREE.MathUtils.clamp(ball.z - 0.35, -7.8, -3.5), 0.22);
+        if (ball.z < -0.5) {
+          liberoB.x = THREE.MathUtils.lerp(liberoB.x, THREE.MathUtils.clamp(ball.x, -3.8, 3.8), 0.35);
+          liberoB.z = THREE.MathUtils.lerp(liberoB.z, THREE.MathUtils.clamp(ball.z - 0.35, -7.8, -3.5), 0.35);
         }
 
-        if ((ball.z <= -3.2 && ball.vz < 0 && ball.y <= 2.2) || (ball.y <= 1.85 && ball.z < -1.6)) {
-          // 判定對手救球成功率（85% 救起，保留 15% 直接下釘得分空間）
-          const digSuccess = ball.isSpiked ? Math.random() < 0.85 : true;
+        if ((ball.z <= -1.2 && ball.vz < 0 && ball.y <= 2.6) || (ball.y <= 2.0 && ball.z < -0.8)) {
+          // 前 3 拍保證 100% 起球，第 4 拍起保留重扣下釘得分空間
+          const digSuccess = rallyExchangeCount <= 3 ? true : (ball.isSpiked ? Math.random() < 0.82 : true);
           if (digSuccess) {
             liberoB.animator.trigger('bump');
             juice.vibrate('dig');
@@ -1019,10 +1016,14 @@ export async function runFreeballSandbox(ctx) {
           serverB.x += serverB.vx * simDt;
           serverB.z += serverB.vz * simDt;
           serverB.facingAngle = approachYaw(serverB.facingAngle, Math.atan2(serverB.vx, serverB.vz), simDt * 8.0);
+        } else {
+          serverB.vx = 0;
+          serverB.vz = 0;
         }
 
         const horizDistToSetterB = Math.hypot(ball.x - serverB.x, ball.z - serverB.z);
-        if (!serverB.hasSet && ((ball.vy <= 0.8 && ball.y <= 2.55 && ball.y >= 1.6 && horizDistToSetterB <= 1.8) || (ball.y <= 2.1 && ball.z >= -2.8 && ball.z <= -0.5))) {
+        const isDescendingB = ball.vy <= 0.2;
+        if (!serverB.hasSet && isDescendingB && ((ball.y <= 2.7 && ball.y >= 1.6 && horizDistToSetterB <= 1.8) || (ball.y <= 2.1 && horizDistToSetterB <= 2.2))) {
           serverB.hasSet = true;
           serverB.animator.trigger('overhead');
           juice.vibrate('dig');
@@ -1057,6 +1058,9 @@ export async function runFreeballSandbox(ctx) {
           oh1B.x += oh1B.vx * simDt;
           oh1B.z += oh1B.vz * simDt;
           oh1B.facingAngle = approachYaw(oh1B.facingAngle, 0, simDt * 8.0);
+        } else if (oh1B.isAirborne) {
+          oh1B.vx = 0;
+          oh1B.vz = 0;
         }
 
         // 當球下落至擊球窗口，對手主攻手起跳
@@ -1064,21 +1068,13 @@ export async function runFreeballSandbox(ctx) {
           oh1B.isAirborne = true;
           oh1B.jumpTime = 0;
           oh1B.jumpApex = 1.15;
+          oh1B.jumpDuration = 0.75;
           oh1B.animator.trigger('spike');
           vfx.spawnJumpDust(oh1B.x, oh1B.z);
         }
 
         if (oh1B.isAirborne) {
-          oh1B.jumpTime += simDt;
           const prog = oh1B.jumpTime / oh1B.jumpDuration;
-          if (prog < 1.0) {
-            oh1B.y = oh1B.jumpApex * Math.sin(prog * Math.PI);
-          } else {
-            oh1B.y = 0;
-            oh1B.isAirborne = false;
-          }
-
-          // 在起跳最高點（揮臂蓄力完成）重扣！
           if (prog >= 0.42 && !oh1B.hasSpiked) {
             oh1B.hasSpiked = true;
             ball.isSpiked = true;
@@ -1086,7 +1082,7 @@ export async function runFreeballSandbox(ctx) {
             // ★ 瞄準 4 號位主攻走廊（x ∈ [-2.0, -1.4]），直面我方主角 A2 與副攻 A3 的雙人攔網壁壘！★
             const targetX = -1.75 + (Math.random() - 0.5) * 0.45;
             const targetZ = 5.2 + Math.random() * 1.5;
-            const spikeVel = calculateSpikeVelocity(ball, { x: targetX, z: targetZ }, 22.5, 0.88, TIMING_GRADE.GOOD);
+            const spikeVel = calculateSpikeVelocity(ball, { x: targetX, z: targetZ }, 21.0, 0.88, TIMING_GRADE.GOOD);
             ball.vx = spikeVel.vx;
             ball.vy = spikeVel.vy;
             ball.vz = spikeVel.vz; // vz > 0, 飛向我方半場！
@@ -1099,17 +1095,15 @@ export async function runFreeballSandbox(ctx) {
           }
         }
       }
-
-      // 更新 B 隊所有球員姿態視覺
-      for (const mate of [serverB, oh1B, mbB, oppB, oh2B, liberoB]) {
-        const mBodyY = mate.animator.update(simDt, 0, 0, 1.0);
-        mate.rig.root.position.set(mate.x, mate.y + mBodyY, mate.z);
-        mate.rig.root.rotation.y = mate.facingAngle;
-      }
     }
 
-    // 更新 12 位球員的 InstancedMesh 池矩陣
+    // 更新全部 12 位球員的姿態視覺與幾何池矩陣
     for (const p of allPlayerList) {
+      if (p.id !== 'A2') {
+        const bodyY = p.animator.update(simDt, Math.hypot(p.vx || 0, p.vz || 0), 0, 1.0);
+        p.rig.root.position.set(p.x, p.y + (p.isAirborne ? 0 : bodyY), p.z);
+        p.rig.root.rotation.y = p.facingAngle;
+      }
       p.rig.root.updateMatrixWorld(true);
       for (const part of p.rig.parts) pool.writeMatrix(part, part.node.matrixWorld);
     }
@@ -1146,10 +1140,14 @@ export async function runFreeballSandbox(ctx) {
         ball.vz = blockCol.reflectedVel.vz;
 
         if (blockCol.type === 'ROOF') {
-          // 雙人正面攔死，球彈回我方半場
+          // 雙人正面攔截反彈！球高高彈回我方半場，後排自由人保護起球（Block Cover）！
           juice.impactRoofBlock();
           vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 0, 1), 0xff4b4b, 4.2);
-          showHitBanner('🚫 ROOF BLOCKED! 雙人攔死', '#ff4b4b');
+          showHitBanner('🛡️ BLOCK TOUCH! 攔網反彈，後排保護起球！', '#ff4b4b');
+          ball.vx = THREE.MathUtils.clamp(ball.vx * 0.35, -2.0, 2.0);
+          ball.vy = 4.8; // 高弧度上浮，提供 1.0~1.2 秒反應時間
+          ball.vz = 3.8; // 彈向我方後場 (z > 0)
+          ball.isSpiked = false;
           rallyPhase = RALLY_PHASE.DEF_DIG_CHANCE;
         } else {
           // 打手出界得分
@@ -1200,6 +1198,35 @@ export async function runFreeballSandbox(ctx) {
     // 若對手扣球穿網且未被正面攔死 (ball.z > 0.4 且為 BALL_CROSSING_TO_A)，進入我方救球防守窗口！
     if (rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_A && ball.z > 0.4 && ball.vz > 0) {
       rallyPhase = RALLY_PHASE.DEF_DIG_CHANCE;
+    }
+
+    // ★ 落地前極限救球 / Pancake 自由人魚躍撲救（保證前 3 拍多拍來回流暢進行）★
+    if (ball.y <= 0.65 && ball.y > ball.radius && !isPhasePending) {
+      if (ball.z > 0.3 && ball.z < 8.8 && (rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE || rallyPhase === RALLY_PHASE.SERVE_INBOUND || rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_A)) {
+        // 我方半場瀕臨落地：自由人極限起球
+        executeTeammateDig(liberoA);
+      } else if (ball.z < -0.3 && ball.z > -8.8 && (rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_B || rallyPhase === RALLY_PHASE.DEF_SERVE)) {
+        // 對手半場瀕臨落地：前 3 拍 100% 撲救起球，保持多拍來回連續性
+        if (rallyExchangeCount <= 3) {
+          liberoB.animator.trigger('bump');
+          juice.vibrate('dig');
+          liberoB.x = THREE.MathUtils.clamp(ball.x, -3.8, 3.8);
+          liberoB.z = THREE.MathUtils.clamp(ball.z - 0.35, -8.2, -1.2);
+
+          const setterTargetB = { x: 1.2, y: 2.2, z: -1.6 };
+          const launch = calculateLaunchVelocity(ball, setterTargetB, 4.0);
+          ball.vx = launch.vx;
+          ball.vy = launch.vy;
+          ball.vz = launch.vz;
+          ball.isSpiked = false;
+
+          vfx.spawnShockwave(new THREE.Vector3(ball.x, ball.y, ball.z), new THREE.Vector3(0, 1, 0), 0x6ee7ff, 2.5);
+          showHitBanner(`🛡️ B 隊魚躍撲救！第 ${rallyExchangeCount} 拍多拍來回！`, '#6ee7ff');
+          rallyPhase = RALLY_PHASE.DEF_SET;
+          serverB.hasSet = false;
+          currentRoundMode = ROUND_MODE.DEFENSE;
+        }
+      }
     }
 
     // 地面著地與得分結算
@@ -1302,7 +1329,7 @@ export async function runFreeballSandbox(ctx) {
     let targetCamX, targetCamY, targetCamZ, lookAtX, lookAtY, lookAtZ;
 
     if (currentRoundMode === ROUND_MODE.DEFENSE) {
-      if (rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE) {
+      if (rallyPhase === RALLY_PHASE.DEF_DIG_CHANCE || (rallyPhase === RALLY_PHASE.BALL_CROSSING_TO_A && ball.z > 0.4)) {
         // 🛡️ 防守後排救球視角：適度拉高俯瞰我方半場
         targetCamX = THREE.MathUtils.clamp(ball.x * 0.45, -2.2, 2.2);
         targetCamY = 3.7 + (isPortrait ? 1.0 : 0);
