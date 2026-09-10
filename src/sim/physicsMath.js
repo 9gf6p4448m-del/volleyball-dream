@@ -241,10 +241,11 @@ export function checkBlockCollision(ballPos, ballVel, blockerPos, blockerReachY 
   if (!atNet) return { hit: false, type: 'MISS' };
 
   const dx = Math.abs(ballPos.x - blockerPos.x);
-  const dy = ballPos.y - blockerReachY;
 
-  // 垂直高度在手掌範圍內（手掌高約 0.35m）
-  const inHeight = dy >= -0.25 && dy <= 0.22;
+  // 攔網手臂與手掌覆蓋高度：從球網白帶上緣 (2.18m) 一路覆蓋至起跳摸高頂點 (blockerReachY + 0.22m)
+  const minBlockY = Math.min(blockerReachY - 0.95, 2.18);
+  const maxBlockY = blockerReachY + 0.22;
+  const inHeight = ballPos.y >= minBlockY && ballPos.y <= maxBlockY;
   if (!inHeight) return { hit: false, type: 'MISS' };
 
   const halfWidth = blockWidth / 2;
