@@ -422,10 +422,9 @@ export async function runFreeballSandbox(ctx) {
     ui.updateScore(totalScore, comboCount);
   }
 
-  // 8. 建立沙盒 UI 疊層（手機端專屬：大拇指情境快捷鈕＋手勢瞄準羅盤＋戰術引導）
+  // 8. 建立沙盒 UI 疊層（純手勢全螢幕沉浸介面）
   const ui = buildSandboxUi({
     onResetBall: serveInbound,
-    onDirectAction: (type) => controls.triggerAction(type),
     onExit: () => {
       window.location.href = window.location.pathname;
     },
@@ -803,8 +802,8 @@ export async function runFreeballSandbox(ctx) {
   requestAnimationFrame(frame);
 }
 
-// 構建手機原生手感專屬 UI（Mobile-First Touch & Arcade Cluster）
-function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
+// 構建手機原生手感專屬 UI（純手勢全螢幕沉浸介面）
+function buildSandboxUi({ onResetBall, onExit }) {
   const root = document.createElement('div');
   root.id = 'freeball-sandbox-ui';
   root.style.cssText = [
@@ -823,14 +822,6 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
     } catch {
       // ignore
     }
-  }
-
-  // 按鈕點擊彈性縮放回饋
-  function buttonSquish(el) {
-    el.style.transform = `${el.dataset.baseTransform || ''} scale(0.91)`;
-    setTimeout(() => {
-      el.style.transform = `${el.dataset.baseTransform || ''} scale(1)`;
-    }, 120);
   }
 
   // 1. 頂部安全區狀態列
@@ -951,34 +942,9 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
   ].join(';');
   root.appendChild(banner);
 
-  // 8. 右下角情境動作大按鈕（地面：墊球/起跳；空中：扣殺提示）
-  const actionBtn = document.createElement('button');
-  actionBtn.textContent = '助跑起跳';
-  actionBtn.style.cssText = [
-    'position:absolute',
-    'right:calc(env(safe-area-inset-right, 0px) + 22px)',
-    'bottom:calc(env(safe-area-inset-bottom, 0px) + 26px)',
-    'width:clamp(88px, 21vw, 104px)', 'height:clamp(88px, 21vw, 104px)', 'border-radius:50%',
-    'color:#ffffff', 'font-size:clamp(14px, 3.5vw, 16px)', 'font-weight:800',
-    'display:flex', 'align-items:center', 'justify-content:center',
-    'pointer-events:auto', 'user-select:none', 'cursor:pointer',
-    'border:none', 'transition:background 0.15s ease, transform 0.1s ease',
-    'touch-action:none', 'box-shadow:0 0 18px rgba(33,147,176,0.5)',
-  ].join(';');
-
-  actionBtn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    buttonSquish(actionBtn);
-    haptic(20);
-    // 直接點擊按鈕：空中默認重扣，地面執行情境動作（墊球或起跳）
-    onDirectAction(null);
-  });
-  root.appendChild(actionBtn);
-
   return {
     root,
     banner,
-    actionBtn,
     focusBadge,
     coachHint,
     joystickBase,
@@ -1003,37 +969,16 @@ function buildSandboxUi({ onResetBall, onDirectAction, onExit }) {
         joystickKnob.style.display = 'none';
       }
 
-      // 2. 按鈕狀態切換
-      if (isAirborne) {
-        actionBtn.textContent = '⚡ 扣殺 (滑動)';
-        actionBtn.style.background = 'linear-gradient(135deg, #ff416c, #ff4b2b)';
-        actionBtn.style.boxShadow = '0 0 22px rgba(255, 75, 43, 0.75)';
-        focusBadge.style.display = inSpikeZone ? 'block' : 'none';
-      } else {
-        focusBadge.style.display = 'none';
-
-        if (rallyPhase === 'SERVE_INBOUND') {
-          actionBtn.textContent = '🏐 墊球 (DIG)';
-          actionBtn.style.background = 'linear-gradient(135deg, #11998e, #38ef7d)';
-          actionBtn.style.boxShadow = '0 0 18px rgba(56, 239, 125, 0.6)';
-        } else if (rallyPhase === 'SETTER_TOSS') {
-          actionBtn.textContent = '助跑準備';
-          actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
-          actionBtn.style.boxShadow = '0 0 16px rgba(33, 147, 176, 0.5)';
-        } else {
-          actionBtn.textContent = '🏃 助跑起跳';
-          actionBtn.style.background = 'linear-gradient(135deg, #2193b0, #6dd5ed)';
-          actionBtn.style.boxShadow = '0 0 16px rgba(33, 147, 176, 0.5)';
-        }
-      }
+      // 2. 慢動作焦點徽章更新
+      focusBadge.style.display = inSpikeZone ? 'block' : 'none';
 
       // 3. 戰術引導教練提示更新
       if (rallyPhase === 'SERVE_INBOUND') {
-        coachHint.textContent = '🏐 走位迎球，按【墊球】送給舉球員';
+        coachHint.textContent = '🏐 走位迎球，右側點擊【墊球】';
         coachHint.style.color = '#6ee7ff';
         coachHint.style.borderColor = 'rgba(110,231,255,0.45)';
       } else if (rallyPhase === 'SETTER_TOSS') {
-        coachHint.textContent = '⭐ 舉球員積極跑位就位中！按【助跑起跳】';
+        coachHint.textContent = '⭐ 舉球員積極跑位就位中！右側點擊【助跑起跳】';
         coachHint.style.color = '#ffd166';
         coachHint.style.borderColor = 'rgba(255,209,102,0.45)';
       } else if (inSpikeZone) {
