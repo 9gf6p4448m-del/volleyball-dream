@@ -234,9 +234,10 @@ export function calculateTipVelocity(from, targetZone = { x: 0, z: -1.2 }) {
  * @param {number} blockWidth 攔網雙手寬度（預設 0.75m）
  * @returns {{hit: boolean, type: 'ROOF'|'TOOL'|'MISS', reflectedVel?: {vx: number, vy: number, vz: number}}}
  */
-export function checkBlockCollision(ballPos, ballVel, blockerPos, blockerReachY = 2.55, blockWidth = 0.75) {
-  // 攔網平面位於球網 Z ≈ -0.1 ~ 0.1 處，且球必須正向穿網（vz < 0）
-  const atNet = Math.abs(ballPos.z) <= 0.28 && ballVel.vz < 0;
+export function checkBlockCollision(ballPos, ballVel, blockerPos, blockerReachY = 2.55, blockWidth = 0.75, attackDirZ = -1) {
+  // 攔網平面位於球網 Z ≈ -0.28 ~ 0.28 處，且球必須正向穿網
+  const isCorrectDir = attackDirZ < 0 ? ballVel.vz < 0 : ballVel.vz > 0;
+  const atNet = Math.abs(ballPos.z) <= 0.28 && isCorrectDir;
   if (!atNet) return { hit: false, type: 'MISS' };
 
   const dx = Math.abs(ballPos.x - blockerPos.x);
@@ -250,14 +251,15 @@ export function checkBlockCollision(ballPos, ballVel, blockerPos, blockerReachY 
 
   // 1. 正面攔死（Solid Roof Block）：打在手掌中心區域
   if (dx <= halfWidth * 0.68) {
-    // 反彈法向量帶有向下扣壓角
+    // 反彈法向量帶有向下扣壓角，反彈回進攻方半場（-attackDirZ）
+    const reboundZ = -attackDirZ * Math.abs(ballVel.vz) * 0.65;
     return {
       hit: true,
       type: 'ROOF',
       reflectedVel: {
         vx: ballVel.vx * -0.35,
         vy: -Math.abs(ballVel.vy) * 0.75 - 4.5, // 強力下扎
-        vz: Math.abs(ballVel.vz) * 0.65,        // 反彈回進攻方半場
+        vz: reboundZ,
       },
     };
   }
@@ -297,16 +299,18 @@ export function checkNetCrossingCollision(
   ballVel,
   blockerPos,
   blockerReachY = 2.55,
-  blockWidth = 0.75
+  blockWidth = 0.75,
+  attackDirZ = -1
 ) {
-  // 只檢測向對手半場穿網的球（vz < 0）
-  if (ballVel.vz >= 0) return { hit: false, type: 'MISS' };
+  const isCorrectDir = attackDirZ < 0 ? ballVel.vz < 0 : ballVel.vz > 0;
+  if (!isCorrectDir) return { hit: false, type: 'MISS' };
 
-  // 跨越 z = 0 窗格：prevPos.z >= -0.05 且 currPos.z <= 0.05，或當前落在網口附近
-  const isCrossing = (prevPos.z >= -0.05 && currPos.z <= 0.05) || (Math.abs(currPos.z) <= 0.28);
+  const isCrossing = (attackDirZ < 0
+    ? (prevPos.z >= -0.05 && currPos.z <= 0.05)
+    : (prevPos.z <= 0.05 && currPos.z >= -0.05))
+    || (Math.abs(currPos.z) <= 0.28);
   if (!isCrossing) return { hit: false, type: 'MISS' };
 
-  // 線段與 z = 0 平面求交
   const dz = currPos.z - prevPos.z;
   const t = Math.abs(dz) > 1e-4 ? Math.max(0, Math.min(1, (0 - prevPos.z) / dz)) : 0.5;
 
@@ -314,11 +318,11 @@ export function checkNetCrossingCollision(
   const contactY = prevPos.y + t * (currPos.y - prevPos.y);
   const contactPos = { x: contactX, y: contactY, z: 0 };
 
-  const result = checkBlockCollision(contactPos, ballVel, blockerPos, blockerReachY, blockWidth);
+  const result = checkBlockCollision(contactPos, ballVel, blockerPos, blockerReachY, blockWidth, attackDirZ);
   if (result.hit) {
     return {
       ...result,
-      contactPoint: { x: contactX, y: contactY, z: 0.05 },
+      contactPoint: { x: contactX, y: contactY, z: attackDirZ < 0 ? 0.05 : -0.05 },
     };
   }
   return result;
@@ -332,17 +336,23 @@ export function checkNetCrossingCollision(
  * @param {{x: number, y: number, z: number}} currPos 當前幀球位置
  * @param {{vx: number, vy: number, vz: number}} ballVel 當前速度
  * @param {Array<{x: number, y: number, z: number, reachY?: number, blockWidth?: number, isAirborne?: boolean, id?: string}>} blockers 攔網球員陣列
+ * @param {number} [attackDirZ=-1] 扣球穿網方向（-1 為 A 隊扣向 B 隊，1 為 B 隊扣向 A 隊）
  * @returns {{hit: boolean, type: 'ROOF'|'TOOL'|'MISS', reflectedVel?: {vx: number, vy: number, vz: number}, contactPoint?: {x: number, y: number, z: number}, blockerId?: string}}
  */
 export function checkMultiBlockerCrossingCollision(
   prevPos,
   currPos,
   ballVel,
-  blockers = []
+  blockers = [],
+  attackDirZ = -1
 ) {
-  if (ballVel.vz >= 0) return { hit: false, type: 'MISS' };
+  const isCorrectDir = attackDirZ < 0 ? ballVel.vz < 0 : ballVel.vz > 0;
+  if (!isCorrectDir) return { hit: false, type: 'MISS' };
 
-  const isCrossing = (prevPos.z >= -0.05 && currPos.z <= 0.05) || (Math.abs(currPos.z) <= 0.28);
+  const isCrossing = (attackDirZ < 0
+    ? (prevPos.z >= -0.05 && currPos.z <= 0.05)
+    : (prevPos.z <= 0.05 && currPos.z >= -0.05))
+    || (Math.abs(currPos.z) <= 0.28);
   if (!isCrossing) return { hit: false, type: 'MISS' };
 
   const dz = currPos.z - prevPos.z;
@@ -360,14 +370,14 @@ export function checkMultiBlockerCrossingCollision(
     const blockerPos = { x: b.x, y: b.y ?? 0, z: b.z };
     const reachY = b.reachY ?? (b.y + 2.55);
     const width = b.blockWidth ?? 0.75;
-    const res = checkBlockCollision(contactPos, ballVel, blockerPos, reachY, width);
+    const res = checkBlockCollision(contactPos, ballVel, blockerPos, reachY, width, attackDirZ);
     if (res.hit) {
       const dx = Math.abs(contactX - b.x);
       if (!closestHit || (res.type === 'ROOF' && closestHit.type !== 'ROOF') || dx < minDx) {
         closestHit = {
           ...res,
           blockerId: b.id ?? null,
-          contactPoint: { x: contactX, y: contactY, z: 0.05 },
+          contactPoint: { x: contactX, y: contactY, z: attackDirZ < 0 ? 0.05 : -0.05 },
         };
         minDx = dx;
       }

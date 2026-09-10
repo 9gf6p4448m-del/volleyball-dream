@@ -200,5 +200,24 @@ test('checkMultiBlockerCrossingCollision：雙人攔網壁壘正面攔死、打�
   assert.equal(res3.type, 'MISS');
 });
 
+test('checkMultiBlockerCrossingCollision：我方雙人攔網對手攻球（attackDirZ = 1）正面攔死', () => {
+  // 我方前排攔網：主角 A2 在 x=-1.6, 副攻 A3 在 x=-1.0
+  const ourBlockers = [
+    { id: 'A2', x: -1.6, y: 0.75, z: 0.15, reachY: 2.65, isAirborne: true, blockWidth: 0.8 },
+    { id: 'A3', x: -1.0, y: 0.75, z: 0.15, reachY: 2.65, isAirborne: true, blockWidth: 0.8 },
+  ];
+
+  // 對手從 -Z 扣向 +Z (vz = 24)
+  const prevPos = { x: -1.58, y: 2.62, z: -0.3 };
+  const currPos = { x: -1.58, y: 2.56, z: 0.2 };
+  const vel = { vx: 0, vy: -3, vz: 24 };
+
+  const res = checkMultiBlockerCrossingCollision(prevPos, currPos, vel, ourBlockers, 1);
+  assert.equal(res.hit, true);
+  assert.equal(res.type, 'ROOF');
+  assert.equal(res.blockerId, 'A2');
+  assert.ok(res.reflectedVel.vz < 0, '攔死球應反彈回對手半場 (vz < 0)');
+});
+
 
 
