@@ -16,6 +16,14 @@ function bindingCodes(value) {
   return bindingCodes(value.codes ?? value.keys ?? value.code ?? value.key);
 }
 
+function isTextOrNativeControl(target) {
+  if (!target || typeof target !== 'object') return false;
+  if (target.isContentEditable) return true;
+  const tag = String(target.tagName ?? target.nodeName ?? '').toUpperCase();
+  if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(tag)) return true;
+  return Boolean(target.closest?.('input,select,textarea,button,[contenteditable="true"],[contenteditable=""]'));
+}
+
 export function createDirectControls({
   moveZone, aimZone, jumpButton, hitButton, actionSelect, feedButton, feedSelect,
   onActivity = null, keyBindings = DEFAULT_KEYS,
@@ -38,6 +46,8 @@ export function createDirectControls({
   let disposed = false;
   let movePointer = null;
   let aimPointer = null;
+  let hitPointer = null;
+  let aimHeading = 0;
 
   function listen(target, type, handler, options) {
     if (!target) return;
@@ -56,8 +66,11 @@ export function createDirectControls({
   function clearPointers() {
     if (movePointer) release(moveZone, movePointer.id);
     if (aimPointer) release(aimZone, aimPointer.id);
+    if (hitPointer) release(hitButton, hitPointer.id);
     movePointer = null;
     aimPointer = null;
+    hitPointer = null;
+    aimHeading = 0;
     css(moveZone, '--stick-active', 0);
     css(moveZone, '--stick-x', '0px');
     css(moveZone, '--stick-y', '0px');
@@ -104,7 +117,7 @@ export function createDirectControls({
 
   listen(aimZone, 'pointerdown', (e) => {
     if (aimPointer) return;
-    aimPointer = { id: e.pointerId, x: e.clientX };
+    aimPointer = { id: e.pointerId, x: e.clientX, heading: aimHeading };
     capture(aimZone, e);
     css(aimZone, '--aim-active', 1);
     activity('aim');
@@ -113,7 +126,8 @@ export function createDirectControls({
   listen(aimZone, 'pointermove', (e) => {
     if (!aimPointer || aimPointer.id !== e.pointerId) return;
     const dx = e.clientX - aimPointer.x;
-    const heading = Math.max(-Math.PI, Math.min(Math.PI, dx / STICK_RADIUS * (Math.PI / 2)));
+    const heading = Math.max(-Math.PI, Math.min(Math.PI, aimPointer.heading + dx / STICK_RADIUS * (Math.PI / 2)));
+    aimHeading = heading;
     input.queueAim({ x: Math.sin(heading), z: -Math.cos(heading) }, stamp(e));
     css(aimZone, '--aim-heading', `${heading}rad`);
     activity('aim');
@@ -128,14 +142,35 @@ export function createDirectControls({
   listen(aimZone, 'pointerup', endAim);
   listen(aimZone, 'pointercancel', () => reset());
 
-  function bindAction(button, resolve) {
+  function bindAction(button, resolve, { aimGesture = false } = {}) {
     if (!button) return;
     listen(button, 'pointerdown', (e) => {
+      if (aimGesture && hitPointer) return;
       const value = resolve();
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
+      if (aimGesture && !hitPointer) {
+        hitPointer = { id: e.pointerId, x: e.clientX, heading: aimHeading };
+        capture(button, e);
+      }
       activity(value.action);
       e.preventDefault?.();
     });
+    if (aimGesture) {
+      listen(button, 'pointermove', (e) => {
+        if (!hitPointer || hitPointer.id !== e.pointerId) return;
+        const dx = e.clientX - hitPointer.x;
+        aimHeading = Math.max(-Math.PI, Math.min(Math.PI, hitPointer.heading + dx / STICK_RADIUS * (Math.PI / 2)));
+        input.queueAim({ x: Math.sin(aimHeading), z: -Math.cos(aimHeading) }, stamp(e));
+        css(aimZone, '--aim-heading', `${aimHeading}rad`);
+        activity('aim');
+        e.preventDefault?.();
+      });
+      listen(button, 'pointerup', (e) => {
+        if (!hitPointer || hitPointer.id !== e.pointerId) return;
+        release(button, hitPointer.id);
+        hitPointer = null;
+      });
+    }
     listen(button, 'click', (e) => {
       // Pointer activation already fires on pointerdown. Browsers report a
       // positive click detail for mouse/touch and zero for keyboard activation.
@@ -147,11 +182,12 @@ export function createDirectControls({
     listen(button, 'pointercancel', reset);
   }
   bindAction(jumpButton, () => ({ action: 'jump' }));
-  bindAction(hitButton, () => ({ action: ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive' }));
+  bindAction(hitButton, () => ({ action: ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive' }), { aimGesture: true });
   bindAction(feedButton, () => ({ action: 'feed', feedKind: feedSelect?.value ?? null }));
 
   const directionFor = (code) => ['up', 'down', 'left', 'right'].find(name => bindings[name].includes(code));
   listen(win, 'keydown', (e) => {
+    if (isTextOrNativeControl(e.target)) return;
     const direction = directionFor(e.code);
     if (direction) {
       if (!e.repeat) input.queueMoveKey(direction, true, stamp(e), e.code);
@@ -186,7 +222,10 @@ export function createDirectControls({
       while (removers.length) removers.pop()();
     },
     getState() {
-      return { ...input.getState(), movePointer: movePointer?.id ?? null, aimPointer: aimPointer?.id ?? null, disposed };
+      return {
+        ...input.getState(), movePointer: movePointer?.id ?? null,
+        aimPointer: aimPointer?.id ?? null, hitPointer: hitPointer?.id ?? null, disposed,
+      };
     },
   };
 }

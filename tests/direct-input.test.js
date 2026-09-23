@@ -21,6 +21,12 @@ function event(type, props = {}) {
   return e;
 }
 
+function keyEvent(type, target, props = {}) {
+  const e = event(type, props);
+  Object.defineProperty(e, 'target', { value: target });
+  return e;
+}
+
 function fixture() {
   const win = new FixtureEventTarget();
   const doc = new FixtureEventTarget();
@@ -168,5 +174,55 @@ test('rebind 接受 forward/backward/hit 物件格式', () => {
   const commands = controls.sample(0);
   assert.deepEqual(commands[0].move, { x: 0, z: -1 });
   assert.equal(commands[1].action, 'receive');
+  controls.dispose();
+});
+
+test('全域鍵盤忽略編輯欄位與原生按鈕，Space 交給按鈕 click', () => {
+  const f = fixture();
+  const controls = createDirectControls(f);
+  const input = { tagName: 'INPUT' };
+  const editable = { tagName: 'DIV', isContentEditable: true };
+  const button = { tagName: 'BUTTON' };
+  f.win.dispatchEvent(keyEvent('keydown', input, { code: 'KeyW', repeat: false }));
+  f.win.dispatchEvent(keyEvent('keydown', editable, { code: 'KeyJ', repeat: false }));
+  f.win.dispatchEvent(keyEvent('keydown', button, { code: 'Space', repeat: false }));
+  f.jumpButton.dispatchEvent(event('click', { detail: 0 }));
+  const commands = controls.sample(0);
+  assert.deepEqual(commands[0].move, { x: 0, z: 0 });
+  assert.deepEqual(commands.map(c => c.action), [null, 'jump']);
+  controls.dispose();
+});
+
+test('hit 按下只送一次鎖定動作，短滑修正 aim 且連續手勢從既有方向累積', () => {
+  const f = fixture();
+  const controls = createDirectControls(f);
+  f.actionSelect.value = 'spike';
+  f.hitButton.dispatchEvent(event('pointerdown', { pointerId: 4, clientX: 100 }));
+  f.hitButton.dispatchEvent(event('pointerdown', { pointerId: 99, clientX: 20 }));
+  f.actionSelect.value = 'tip';
+  f.hitButton.dispatchEvent(event('pointermove', { pointerId: 4, clientX: 132 }));
+  f.hitButton.dispatchEvent(event('pointerup', { pointerId: 4, clientX: 132 }));
+  const first = controls.sample(0);
+  assert.deepEqual(first.map(c => c.action), [null, 'spike']);
+  assert.ok(first[0].aim.x > 0.7 && first[0].aim.z < -0.7);
+
+  f.hitButton.dispatchEvent(event('pointerdown', { pointerId: 5, clientX: 200 }));
+  f.hitButton.dispatchEvent(event('pointermove', { pointerId: 5, clientX: 232 }));
+  f.hitButton.dispatchEvent(event('pointerup', { pointerId: 5, clientX: 232 }));
+  const second = controls.sample(1);
+  assert.equal(second.filter(c => c.action === 'tip').length, 1);
+  assert.ok(second[0].aim.x > 0.99, '第二次短滑應從前次 45° 累積到 90°');
+  assert.ok(Math.abs(second[0].aim.z) < 0.01);
+  assert.equal(controls.getState().hitPointer, null);
+  controls.dispose();
+});
+
+test('hit pointercancel 清除手勢與尚未取樣動作', () => {
+  const f = fixture();
+  const controls = createDirectControls(f);
+  f.hitButton.dispatchEvent(event('pointerdown', { pointerId: 9, clientX: 10 }));
+  f.hitButton.dispatchEvent(event('pointercancel', { pointerId: 9, clientX: 20 }));
+  assert.equal(controls.getState().hitPointer, null);
+  assert.deepEqual(controls.sample(0).map(c => c.action), [null]);
   controls.dispose();
 });
