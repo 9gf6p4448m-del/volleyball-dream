@@ -2,7 +2,7 @@
 
 ## 接手順序
 
-先讀 `docs/DIRECT_PLAY_BLUEPRINT.md`，再看本檔與 `docs/experiments/direct-play-evidence/motion-v2-verification.md`、`motion-browser.json`、`browser-report.json`。前一個可玩版是 `bfc867c`，回退分支 `checkpoint/direct-play-before-motion-bfc867c`。`docs/handoffs/direct-play-stage1.md` 記錄前版 direct-v1，測試數字與「膠囊造型尚非正式動作」敘述是當時狀態。
+先讀 `docs/DIRECT_PLAY_BLUEPRINT.md`，再看本檔與 `docs/experiments/direct-play-evidence/motion-v2-verification.md`、`motion-browser.json`、`browser-report.json`、`delivery.md`（公開 PWA 送達證明）。前一個可玩版是 `bfc867c`，回退分支 `checkpoint/direct-play-before-motion-bfc867c`。`docs/handoffs/direct-play-stage1.md` 記錄前版 direct-v1，測試數字與「膠囊造型尚非正式動作」敘述是當時狀態。
 
 ## 這輪可玩的改動
 

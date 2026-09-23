@@ -17,15 +17,11 @@ npm run build    # 正式建置（含 PWA service worker）
 npm run preview  # 本機預覽正式建置
 ```
 
-## 真機測試步驟（舊比賽 HUD）
+## 直接操作真機測試
 
-1. `npm run build && npm run preview -- --host`，手機連同一 Wi-Fi 開 `http://<電腦IP>:4173/?mode=direct` 測直接操作；不加查詢參數會進既有生涯。
-   （或部署到任何 HTTPS 靜態主機；**加到主畫面需要 HTTPS**，本機 IP 測 FPS 不受影響）
-2. 看左上角 HUD：
-   - **大數字 = FPS**（不鎖幀；120Hz 裝置會顯示 >60 的真實數值）
-   - `render X ms/幀`＝畫面每幀耗時；`sim 60 Hz（固定60）`＝模擬固定步長，恆為 60
-   - `三角形/draw calls`＝目前場景負載
-3. 驗收標準（ROADMAP）：**穩定 60 FPS 為硬底線**；120Hz 裝置另記錄不鎖幀數值。
+1. 在 iPhone 14 Pro 的 Safari 或主畫面 PWA 開啟[公開直接操作訓練](https://9gf6p4448m-del.github.io/volleyball-dream/?mode=direct)，確認主選單 build 時間與[送達紀錄](docs/experiments/direct-play-evidence/delivery.md)一致。
+2. 左手走位、右手瞄準並起跳，按住出手再往上／下／左／右滑動；觀察觸球部位、方向、落地與魚躍。訓練底欄顯示 FPS、frame p95、sim p95、backlog 與 draw calls；在訓練設定匯出回放，保留裝置與模擬版本資訊。
+3. 驗收目標是實機持續 60 FPS、碰撞與畫面一致、雙手觸控不互相中斷；目前仍待真機驗證。若 PWA 保留舊版，完全關閉重開並比對 build；不要清除網站資料，以免影響本機生涯存檔。
 
 ## 逐項降規找上限（Phase 0 基準場 URL 參數）
 
