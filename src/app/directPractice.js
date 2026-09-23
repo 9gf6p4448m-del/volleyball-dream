@@ -243,7 +243,7 @@ export function runDirectPractice(ctx) {
       $('[data-hint]').textContent = action
         ? `${ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
         : '左手移動 · 右側滑動瞄準 · 起跳與出手分開操作';
-      $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n桌機/瀏覽器量測，非手機真機驗收`;
+      $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
     }
     if (schedule) raf = requestAnimationFrame(frame);
