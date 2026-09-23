@@ -1944,6 +1944,9 @@ export function createCareerScreen(store, {
     // W4(P4) 題2：生涯入口收斂為選檔頁（進生涯前一層）——繼續/新生涯/匯入都在槽卡片上
     inner.appendChild(button('▶ 生涯', true, renderSlots));
     inner.appendChild(button('快速比賽', false, showQuickRolePicker));
+    inner.appendChild(button('直接操作訓練 · 一人一球', false, () => {
+      window.location.assign(`${window.location.pathname}?mode=direct`);
+    }));
     inner.appendChild(button('🏐 Free Ball 6v6', false, () => {
       window.location.assign(`${window.location.pathname}?mode=freeball`);
     }));

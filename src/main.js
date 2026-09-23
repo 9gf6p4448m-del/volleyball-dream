@@ -114,6 +114,9 @@ async function init() {
   const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, crowdAnim, officials, moppers, postFx };
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
+  } else if (params.get('mode') === 'direct') {
+    const { runDirectPractice } = await import('./app/directPractice.js');
+    runDirectPractice(ctx);
   } else if (params.get('mode') === 'freeball') {
     const { runFreeballSandbox } = await import('./app/freeballSandbox.js');
     await runFreeballSandbox(ctx);

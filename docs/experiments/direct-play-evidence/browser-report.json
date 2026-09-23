@@ -1,0 +1,283 @@
+{
+  "createdAt": "2026-09-23T18:15:52.585Z",
+  "base": "http://127.0.0.1:4175",
+  "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "layout": [
+        {
+          "label": "餵一球 ↗",
+          "x": 904,
+          "y": 18,
+          "width": 96,
+          "height": 44
+        },
+        {
+          "label": "繼續",
+          "x": 1008,
+          "y": 18,
+          "width": 60,
+          "height": 44
+        },
+        {
+          "label": "移動搖桿",
+          "x": 26,
+          "y": 500,
+          "width": 170,
+          "height": 170
+        },
+        {
+          "label": "拖曳調整朝向",
+          "x": 824.8125,
+          "y": 230.390625,
+          "width": 435.1875,
+          "height": 284.609375
+        },
+        {
+          "label": "選擇觸球動作",
+          "x": 1056,
+          "y": 508,
+          "width": 198,
+          "height": 44
+        },
+        {
+          "label": "起跳SPACE",
+          "x": 1056,
+          "y": 592,
+          "width": 76,
+          "height": 76
+        },
+        {
+          "label": "出手J · 按下開始動作",
+          "x": 1142,
+          "y": 562,
+          "width": 112,
+          "height": 106
+        }
+      ],
+      "initialPerformance": {
+        "frames": 54,
+        "fps": 10.855144132192345,
+        "frameP95": 83.40000000000009,
+        "simP95": 0.10000000055879354,
+        "backlogMs": 7.933333332959001,
+        "maxBacklogMs": 858.1999999996272,
+        "drawCalls": 99
+      },
+      "syntheticPlaybackMetrics": {
+        "frames": 123,
+        "fps": 53.870185990828844,
+        "frameP95": 83.19999999999709,
+        "simP95": 0.39999999944120646,
+        "backlogMs": 0,
+        "maxBacklogMs": 16.66666666666424,
+        "drawCalls": 100
+      },
+      "feed": 1,
+      "jumpHeight": 0.6521187500000005,
+      "receiveRepeats": 5,
+      "receiveVelocity": {
+        "y": 4.26383864849045,
+        "z": -4.438966001427085
+      },
+      "spikeVelocity": {
+        "y": -3.4157555660576104,
+        "z": -14.04930035480373
+      },
+      "replayRates": [
+        30,
+        60,
+        120
+      ],
+      "replay": true,
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "layout": [
+        {
+          "label": "餵一球 ↗",
+          "x": 537,
+          "y": 10,
+          "width": 73,
+          "height": 44
+        },
+        {
+          "label": "繼續",
+          "x": 618,
+          "y": 10,
+          "width": 46,
+          "height": 44
+        },
+        {
+          "label": "移動搖桿",
+          "x": 24,
+          "y": 230,
+          "width": 125,
+          "height": 125
+        },
+        {
+          "label": "拖曳調整朝向",
+          "x": 537.046875,
+          "y": 124.796875,
+          "width": 286.953125,
+          "height": 99.203125
+        },
+        {
+          "label": "選擇觸球動作",
+          "x": 663,
+          "y": 232,
+          "width": 155,
+          "height": 38
+        },
+        {
+          "label": "起跳SPACE",
+          "x": 663,
+          "y": 294,
+          "width": 64,
+          "height": 64
+        },
+        {
+          "label": "出手J · 按下開始動作",
+          "x": 733,
+          "y": 276,
+          "width": 85,
+          "height": 82
+        }
+      ],
+      "initialPerformance": {
+        "frames": 91,
+        "fps": 18.763660357128128,
+        "frameP95": 50.100000000000364,
+        "simP95": 0.10000000055879354,
+        "backlogMs": 16.46666666666607,
+        "maxBacklogMs": 783.2999999999994,
+        "drawCalls": 99
+      },
+      "syntheticPlaybackMetrics": {
+        "frames": 117,
+        "fps": 63.51331789230086,
+        "frameP95": 50,
+        "simP95": 0.39999999944120646,
+        "backlogMs": 0,
+        "maxBacklogMs": 16.666666666665453,
+        "drawCalls": 102
+      },
+      "feed": 1,
+      "jumpHeight": 0.6521187500000005,
+      "receiveRepeats": 5,
+      "receiveVelocity": {
+        "y": 4.26383864849045,
+        "z": -4.438966001427085
+      },
+      "spikeVelocity": {
+        "y": -3.4157555660576104,
+        "z": -14.04930035480373
+      },
+      "replayRates": [
+        30,
+        60,
+        120
+      ],
+      "replay": true,
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "layout": [
+        {
+          "label": "餵一球 ↗",
+          "x": 264.25,
+          "y": 12,
+          "width": 66.75,
+          "height": 44
+        },
+        {
+          "label": "繼續",
+          "x": 336,
+          "y": 12,
+          "width": 42,
+          "height": 44
+        },
+        {
+          "label": "移動搖桿",
+          "x": 14,
+          "y": 649,
+          "width": 135,
+          "height": 135
+        },
+        {
+          "label": "拖曳調整朝向",
+          "x": 229.8125,
+          "y": 303.828125,
+          "width": 148.1875,
+          "height": 300.171875
+        },
+        {
+          "label": "選擇觸球動作",
+          "x": 226,
+          "y": 650,
+          "width": 150,
+          "height": 44
+        },
+        {
+          "label": "起跳SPACE",
+          "x": 226,
+          "y": 724,
+          "width": 60,
+          "height": 60
+        },
+        {
+          "label": "出手J · 按下開始動作",
+          "x": 292,
+          "y": 700,
+          "width": 84,
+          "height": 84
+        }
+      ],
+      "initialPerformance": {
+        "frames": 95,
+        "fps": 20.6405075392178,
+        "frameP95": 50.09999999999991,
+        "simP95": 0.10000000055879354,
+        "backlogMs": 2.5999999998126895,
+        "maxBacklogMs": 619.399999999813,
+        "drawCalls": 70
+      },
+      "syntheticPlaybackMetrics": {
+        "frames": 118,
+        "fps": 64.07123852962137,
+        "frameP95": 50,
+        "simP95": 0.40000000037252903,
+        "backlogMs": 0,
+        "maxBacklogMs": 16.666666666665453,
+        "drawCalls": 73
+      },
+      "feed": 1,
+      "jumpHeight": 0.6521187500000005,
+      "receiveRepeats": 5,
+      "receiveVelocity": {
+        "y": 4.26383864849045,
+        "z": -4.438966001427085
+      },
+      "spikeVelocity": {
+        "y": -3.4157555660576104,
+        "z": -14.04930035480373
+      },
+      "replayRates": [
+        30,
+        60,
+        120
+      ],
+      "replay": true,
+      "errors": []
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import {
   DIRECT_ACTIONS,
 } from "./directConstants.js";
 import { getDirectPose } from "./directPose.js";
-import { collideBody, bodySeparated } from "./directPhysics.js";
+import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
 export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
   if (!Number.isFinite(height) || height < 1 || height > 2.5)
@@ -169,23 +169,17 @@ export function stepDirectGame(s, commands = []) {
     const nextPose = getDirectPose(s, (i + 1) / C.substeps);
     if (!b.active) continue;
     b.vy -= C.gravity * dt;
-    const prevZ = b.z;
-    collideBody(s, oldPose, nextPose, dt);
-    if (b.y <= b.radius) {
-      b.y = b.radius;
-      dead(s, "ground");
-    } else if (
-      Math.abs(b.x) > C.courtHalfWidth + b.radius ||
-      Math.abs(b.z) > C.courtHalfLength + b.radius
-    )
-      dead(s, "out");
-    else if (
-      b.y - b.radius < C.netHeight &&
-      Math.abs(b.x) < C.courtHalfWidth + b.radius &&
-      Math.min(prevZ, b.z) <= C.netHalfThickness + b.radius &&
-      Math.max(prevZ, b.z) >= -C.netHalfThickness - b.radius
-    )
-      dead(s, "net");
+    const predicted = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
+    let terminal = firstEnvironmentHit(b, predicted, b.radius);
+    const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity);
+    // A valid earlier body hit changes the rest of the trajectory. Check that
+    // new segment too, rather than retaining the pre-contact floor/net decision.
+    if (contact) terminal = firstEnvironmentHit(contact.position, b, b.radius);
+    if (terminal) {
+      Object.assign(b, terminal.position);
+      if (terminal.type === 'ground') b.y = b.radius;
+      dead(s, terminal.type);
+    }
   }
   if (s.contactEpisode) {
     s.separationTicks = bodySeparated(b, getDirectPose(s, 1))

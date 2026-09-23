@@ -5,6 +5,10 @@
 
 ## 快速開始
 
+直接操作實驗入口：`?mode=direct`（一人一球，尚未接入生涯）。手機左手走位、右側瞄準，起跳與出手分開；鍵盤 WASD／Space／J／R。訓練設定可選固定餵球、資訊輔助、身高、回放及鍵位。
+
+新方向與驗收見 [直接操作藍圖](docs/DIRECT_PLAY_BLUEPRINT.md)，實作狀態與接手事項見 [階段 1 交接](docs/handoffs/direct-play-stage1.md)。舊 Free Ball 沙盒規格是歷史提案。
+
 ```bash
 npm install
 npm run dev      # 開發伺服器（手機同網段可用 --host 開放）

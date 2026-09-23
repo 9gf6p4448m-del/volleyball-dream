@@ -26,6 +26,12 @@ export function sweepCapsule(start, end, old, next, radius) {
   const bound =
     distance(start, end) +
     Math.max(distance(old.a, next.a), distance(old.b, next.b));
+  const sample = (t) => {
+    const center = lerp(start, end, t);
+    const q = closestPoint(center, lerp(old.a, next.a, t), lerp(old.b, next.b, t));
+    const d = distance(center, q);
+    return { t, center, q, d, gap: d - radius - next.radius };
+  };
   let t = 0;
   for (let i = 0; i < 80; i++) {
     const center = lerp(start, end, t),
@@ -39,9 +45,20 @@ export function sweepCapsule(start, end, old, next, radius) {
     t += Math.max(0.0000001, (gap / bound) * 0.95);
     if (t > 1) return null;
   }
-  return null;
+  // Grazing trajectories converge slowly. Exhausting advancement is not proof
+  // of separation. Search the remaining interval using the same Lipschitz bound,
+  // in chronological order, until its spatial uncertainty is at most 10 microns.
+  function refine(lo, hi, depth = 0) {
+    const middle = sample((lo + hi) / 2);
+    const uncertainty = bound * (hi - lo) / 2;
+    if (middle.gap > uncertainty + 0.00001) return null;
+    if (uncertainty <= 0.000005) return middle.gap <= 0.00001 ? middle : null;
+    if (depth >= 32) throw new RangeError('Direct CCD interval exceeds supported displacement');
+    return refine(lo, middle.t, depth + 1) || refine(middle.t, hi, depth + 1);
+  }
+  return refine(t, 1);
 }
-export function collideBody(state, oldPose, nextPose, dt) {
+export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity) {
   const b = state.ball,
     start = { x: b.x, y: b.y, z: b.z },
     end = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
@@ -51,7 +68,7 @@ export function collideBody(state, oldPose, nextPose, dt) {
     if (hit && (!earliest || hit.t < earliest.hit.t))
       earliest = { hit, old: oldPose[i], next: nextPose[i] };
   }
-  if (!earliest) {
+  if (!earliest || earliest.hit.t >= stopAt) {
     Object.assign(b, end);
     return false;
   }
@@ -102,10 +119,44 @@ export function collideBody(state, oldPose, nextPose, dt) {
     }
   }
   const radius = b.radius + next.radius + 0.00002;
-  b.x = hit.q.x + nx * radius + b.vx * dt * (1 - hit.t);
-  b.y = hit.q.y + ny * radius + b.vy * dt * (1 - hit.t);
-  b.z = hit.q.z + nz * radius + b.vz * dt * (1 - hit.t);
-  return true;
+  const position = { x: hit.q.x + nx * radius, y: hit.q.y + ny * radius, z: hit.q.z + nz * radius };
+  b.x = position.x + b.vx * dt * (1 - hit.t);
+  b.y = position.y + b.vy * dt * (1 - hit.t);
+  b.z = position.z + b.vz * dt * (1 - hit.t);
+  return { time: hit.t, position };
+}
+
+// Earliest training terminal on a linear motion segment. The body solver uses
+// this time as a cut-off so a floor/net crossing cannot become a later "save".
+export function firstEnvironmentHit(start, end, radius) {
+  let first = null;
+  const record = (t, type) => {
+    if (t >= 0 && t <= 1 && (!first || t < first.t)) first = { t, type, position: lerp(start, end, t) };
+  };
+  if (start.y <= radius) record(0, 'ground');
+  else if (end.y <= radius) record((radius - start.y) / (end.y - start.y), 'ground');
+  for (const [axis, limit] of [['x', C.courtHalfWidth + radius], ['z', C.courtHalfLength + radius]]) {
+    if (Math.abs(start[axis]) > limit) record(0, 'out');
+    else if (end[axis] > limit) record((limit - start[axis]) / (end[axis] - start[axis]), 'out');
+    else if (end[axis] < -limit) record((-limit - start[axis]) / (end[axis] - start[axis]), 'out');
+  }
+  // Slab intersection against the ball-radius-expanded net, including its top.
+  let near = 0, far = 1;
+  for (const [axis, min, max] of [
+    ['x', -C.courtHalfWidth - radius, C.courtHalfWidth + radius],
+    ['y', -radius, C.netHeight + radius],
+    ['z', -C.netHalfThickness - radius, C.netHalfThickness + radius],
+  ]) {
+    const velocity = end[axis] - start[axis];
+    if (Math.abs(velocity) < 1e-12) {
+      if (start[axis] < min || start[axis] > max) { near = Infinity; break; }
+    } else {
+      const a = (min - start[axis]) / velocity, b = (max - start[axis]) / velocity;
+      near = Math.max(near, Math.min(a, b)); far = Math.min(far, Math.max(a, b));
+    }
+  }
+  if (near <= far) record(near, 'net');
+  return first;
 }
 export function bodySeparated(ball, pose) {
   return pose.every(

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { closestPoint } from "../src/sim/directPhysics.js";
+import { closestPoint, sweepCapsule } from "../src/sim/directPhysics.js";
 import {
   createDirectGame,
   stepDirectGame,
@@ -21,6 +21,25 @@ const command = (s, action, extra = {}) => ({
   aim: { x: 0, z: -1 },
   action,
   ...extra,
+});
+test("shallow grazing contact is not lost when conservative advancement converges slowly", () => {
+  const s = createDirectGame();
+  ball(s, { x: 0.2624, y: 1.5925, z: 4.96875, vz: 60 });
+  stepDirectGame(s);
+  assert.equal(s.stats.contacts, 1);
+  const capsule = { a: { x: 0, y: -0.2, z: 0 }, b: { x: 0, y: 0.2, z: 0 }, radius: 0.1575 };
+  for (const [offset, expected] of [[0.2624, true], [0.2626, false]]) {
+    const hit = sweepCapsule({ x: offset, y: 0, z: -0.125 }, { x: offset, y: 0, z: 0.125 }, capsule, capsule, 0.105);
+    assert.equal(Boolean(hit), expected, 'A real 0.1mm graze hits; a 0.1mm clear gap does not');
+  }
+});
+test("ground wins over a later shin contact within the same physics substep", () => {
+  const s = createDirectGame();
+  ball(s, { x: 0.35, y: 0.106, z: 4.93, vx: -20, vy: -5, vz: 0 });
+  stepDirectGame(s);
+  assert.equal(s.stats.contacts, 0, 'A ball that already touched the floor cannot be saved by a later contact');
+  assert.equal(s.events[0].type, 'ground');
+  assert.equal(s.ball.y, s.ball.radius);
 });
 test("air swing cannot change a remote ball trajectory", () => {
   const a = createDirectGame(),
