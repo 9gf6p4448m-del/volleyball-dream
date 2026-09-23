@@ -1,13 +1,13 @@
-# 排球夢 — Phase 0 基準測試
+# 排球夢
 
 玩法擬真、畫面寫實比例風格化的 3D 排球生涯遊戲（PC＋手機 PWA，Three.js）。
-本階段目的：**在真機上判斷「寫實比例美術」是否可行**。設計背景見 `docs/design-brief.md`，路線圖見 `docs/ROADMAP.md`。
+既有六對六比賽與生涯內容已上線；`?mode=direct` 是正在驗證的一人一球直接操作訓練，尚未接入正式生涯比賽。設計背景見 `docs/design-brief.md`，新方向見 `docs/DIRECT_PLAY_BLUEPRINT.md`。
 
 ## 快速開始
 
-直接操作實驗入口：`?mode=direct`（一人一球，尚未接入生涯）。手機左手走位、右側瞄準，起跳與出手分開；鍵盤 WASD／Space／J／R。訓練設定可選固定餵球、資訊輔助、身高、回放及鍵位。
+直接操作實驗入口：`?mode=direct`（一人一球，尚未接入生涯）。手機左手走位、右側瞄準，起跳與出手分開；扣球上滑吊球、下滑直線、左右滑斜線，球仍須碰到身體才會改變路徑。鍵盤 WASD／Space／J／R。訓練設定可選固定餵球、資訊輔助、身高、回放及鍵位。
 
-新方向與驗收見 [直接操作藍圖](docs/DIRECT_PLAY_BLUEPRINT.md)，實作狀態與接手事項見 [階段 1 交接](docs/handoffs/direct-play-stage1.md)。舊 Free Ball 沙盒規格是歷史提案。
+新方向與驗收見 [直接操作藍圖](docs/DIRECT_PLAY_BLUEPRINT.md)，目前實作與接手事項見 [動作與四向扣球交接](docs/handoffs/direct-play-motion-v2.md)，原 [階段 1 交接](docs/handoffs/direct-play-stage1.md) 保留當時紀錄。舊 Free Ball 沙盒規格是歷史提案。
 
 ```bash
 npm install
@@ -17,9 +17,9 @@ npm run build    # 正式建置（含 PWA service worker）
 npm run preview  # 本機預覽正式建置
 ```
 
-## 真機測試步驟
+## 真機測試步驟（舊比賽 HUD）
 
-1. `npm run build && npm run preview -- --host`，手機連同一 Wi-Fi 開 `http://<電腦IP>:4173/`。
+1. `npm run build && npm run preview -- --host`，手機連同一 Wi-Fi 開 `http://<電腦IP>:4173/?mode=direct` 測直接操作；不加查詢參數會進既有生涯。
    （或部署到任何 HTTPS 靜態主機；**加到主畫面需要 HTTPS**，本機 IP 測 FPS 不受影響）
 2. 看左上角 HUD：
    - **大數字 = FPS**（不鎖幀；120Hz 裝置會顯示 >60 的真實數值）
@@ -27,7 +27,7 @@ npm run preview  # 本機預覽正式建置
    - `三角形/draw calls`＝目前場景負載
 3. 驗收標準（ROADMAP）：**穩定 60 FPS 為硬底線**；120Hz 裝置另記錄不鎖幀數值。
 
-## 逐項降規找上限（URL 參數）
+## 逐項降規找上限（Phase 0 基準場 URL 參數）
 
 預設就是最高規格（**禁止程式自我降級**，數字是真實的）。降規全部用網址參數手動控制：
 
@@ -42,22 +42,24 @@ npm run preview  # 本機預覽正式建置
 
 範例：`?quality=med&players=12`、`?shadows=off&dpr=1`、`?players=24`。
 
-### 換模型面數/材質等級
+### Phase 0 基準場換模型面數/材質等級
 
 把新的 GLB（需含蒙皮動畫，Mixamo 匯出即可）丟進 `public/models/`，用 `?model=檔名.glb` 載入。
 程式會自動依 12 名球員的身高表（1.70–2.02m）縮放模型、循環指派 Idle/Walk/Run 動畫。
-現用模型：three.js 官方範例 `Soldier.glb`（Mixamo 動捕，約 13.8 萬三角形 ×12 人）。
+此基準場使用 three.js 官方範例 `Soldier.glb`；正式比賽與直接操作訓練已改用程式幾何球員。
 
-## 專案分層（架構鐵律，Phase 1 以後不得破壞）
+## 專案分層
 
 ```
 src/
 ├── sim/      模擬核心：純 JS、零 three.js 依賴、固定步長 60Hz
-│             （constants.js 場地/物理常數 · ball.js 球物理 · world.js 世界狀態）
-├── render/   畫面層：three.js 場景、球場、球員、球的插值呈現、畫質設定
-├── input/    輸入層：鏡頭操作（OrbitControls，滑鼠＋觸控共用）
-├── ui/       HUD（FPS/效能面板）
-└── main.js   組裝：rAF 不鎖幀 + 固定步長累積器，模擬與畫面完全脫鉤
+│             legacy 比賽及 direct-v2 訓練各有自己的入口與版本
+├── render/   three.js 球場、幾何球員、共享姿勢的訓練角色
+├── input/    比賽操作、手機雙指直接操作與鍵盤指令
+├── app/      正式比賽與一人一球訓練的運行迴圈
+├── career/   生涯、隊伍與進度
+├── ui/       畫面與 HUD
+└── main.js   依模式載入對應入口
 ```
 
 - **模擬核心與畫面/輸入分離**:`src/sim/` 只吃固定 `SIM_DT`，任何幀率下逐位元一致
@@ -72,7 +74,6 @@ src/
 npm run deploy:pages   # 建置並推 dist/ 到 gh-pages 分支（需先設好 git remote）
 ```
 
-## Phase 0 邊界
+## Phase 0 歷史基準
 
-只有基準測試場景：球場、12 名動畫球員、物理排球（重力/彈跳/觸網）、FPS 顯示、PWA。
-**沒有**操作、規則、AI、劇情——那些是 Phase 1 以後的事。真機 FPS 測完才繼續。
+Phase 0 當時只有球場、12 名動畫球員、物理排球與 FPS/PWA。這段是舊基準歷史；現有正式比賽、生涯、AI 和直接操作訓練的範圍以上方交接與藍圖為準。

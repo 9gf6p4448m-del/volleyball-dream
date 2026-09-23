@@ -7,6 +7,7 @@ import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
 import './directPractice.css';
 
 const ACTION_LABELS = { receive: '墊球', spike: '扣球', tip: '吊球', set: '舉球', block: '攔網', dive: '魚躍' };
+const SHOT_LABELS = { LINE: '直線重扣', CROSS_LEFT: '左斜線', CROSS_RIGHT: '右斜線', TIP: '單手吊球' };
 const MAX_TAPE_TICKS = 36000;
 const PART_LABELS = { head: '頭部', hand: '手掌', forearm: '前臂', arm: '上臂', torso: '軀幹', leg: '腿部' };
 
@@ -40,14 +41,14 @@ export function runDirectPractice(ctx) {
         <a href="?">返回生涯</a>
       </nav>
     </header>
-    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>左手移動 · 右側滑動瞄準 · 起跳與出手分開操作</p></div>
+    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>左手移動 · 右側滑動瞄準 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
-    <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 按下開始動作</small></button></div>
+    <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
     <div class="dp-footer" data-status>60 Hz 固定模擬 · 身體接觸才算觸球</div>`;
   document.body.appendChild(root);
   const $ = selector => root.querySelector(selector);
-  $('[data-build]').textContent = `direct-v1 · ${typeof __BUILD_ID__ === 'undefined' ? 'dev' : __BUILD_ID__}`;
+  $('[data-build]').textContent = `${SIMULATION_VERSION} · ${typeof __BUILD_ID__ === 'undefined' ? 'dev' : __BUILD_ID__}`;
   const view = createDirectPlayerView(ctx.scene);
   const landing = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.29, 40),
     new THREE.MeshBasicMaterial({ color: 0x9ae5df, transparent: true, opacity: 0.65, side: THREE.DoubleSide, depthWrite: false }));
@@ -241,8 +242,8 @@ export function runDirectPractice(ctx) {
       $('[data-status]').textContent = `${playback ? '回放' : paused ? '暫停' : '訓練'} · 觸球 ${state.stats.contacts} · 餵球 ${state.stats.feeds} · ${m.fps.toFixed(0)} FPS`;
       const action = DIRECT_ACTIONS[state.player.action];
       $('[data-hint]').textContent = action
-        ? `${ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
-        : '左手移動 · 右側滑動瞄準 · 起跳與出手分開操作';
+        ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
+        : '左手移動 · 右側滑動瞄準 · 扣球上吊/下直/左右斜';
       $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
     }

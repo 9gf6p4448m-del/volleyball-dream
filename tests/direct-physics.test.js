@@ -22,6 +22,72 @@ const command = (s, action, extra = {}) => ({
   action,
   ...extra,
 });
+test("physical gait alternates feet and settles after braking", () => {
+  const s = createDirectGame();
+  const offsets = [];
+  for (let i = 0; i < 48; i++) {
+    stepDirectGame(s, [command(s, null, { move: { x: 0, z: -1 } })]);
+    const pose = getDirectPose(s);
+    const left = pose.find(p => p.id === 'left-shin').b;
+    const right = pose.find(p => p.id === 'right-shin').b;
+    offsets.push(left.z - right.z);
+    assert.ok(left.y >= 0.045 * s.player.height && right.y >= 0.045 * s.player.height);
+  }
+  assert.ok(Math.min(...offsets) < -0.2 && Math.max(...offsets) > 0.2, 'Left and right feet must take turns leading');
+  for (let i = 0; i < 60; i++) stepDirectGame(s);
+  const settled = getDirectPose(s);
+  for (let i = 0; i < 15; i++) stepDirectGame(s);
+  assert.deepEqual(getDirectPose(s), settled, 'Stopped player has no treadmill motion');
+});
+test("takeoff tucks knees and landing absorbs impact before returning to standing", () => {
+  const s = createDirectGame();
+  const relativeFoot = () => getDirectPose(s).find(p => p.id === 'left-shin').b.y - s.player.y;
+  const standingFoot = relativeFoot();
+  stepDirectGame(s, [command(s, 'jump')]);
+  for (let i = 0; i < 12; i++) stepDirectGame(s);
+  assert.ok(relativeFoot() > standingFoot + 0.04, 'Airborne leg folds instead of remaining rigid');
+  while (!s.player.grounded) stepDirectGame(s);
+  for (let i = 0; i < 5; i++) stepDirectGame(s);
+  const compressed = getDirectPose(s).find(p => p.id === 'torso').a.y;
+  for (let i = 0; i < 30; i++) stepDirectGame(s);
+  assert.ok(getDirectPose(s).find(p => p.id === 'torso').a.y > compressed + 0.08, 'Landing lowers pelvis then recovers');
+});
+test("set, block and dive have distinct collision-bearing silhouettes", () => {
+  const poseAt = action => {
+    const s = createDirectGame();
+    s.player.action = action; s.player.actionTick = 12;
+    return getDirectPose(s);
+  };
+  const set = poseAt('set'), block = poseAt('block'), dive = poseAt('dive');
+  const hand = pose => pose.find(p => p.id === 'right-hand').a;
+  assert.ok(hand(block).x > hand(set).x + 0.05, 'Block spreads hands across the net; set makes a narrow overhead window');
+  const torso = dive.find(p => p.id === 'torso');
+  assert.ok(Math.abs(torso.b.z - torso.a.z) > Math.abs(torso.b.y - torso.a.y), 'Dive torso becomes horizontal');
+  assert.ok(hand(dive).y < 0.65, 'Dive reaches low rather than bending an upright receive pose');
+});
+test("dive bends above the floor without changing leg bone lengths", () => {
+  const s = createDirectGame();
+  s.player.action = 'dive';
+  for (let tick = 0; tick < 46; tick += 0.25) {
+    s.player.actionTick = tick;
+    for (const capsule of getDirectPose(s)) {
+      assert.ok(Math.min(capsule.a.y, capsule.b.y) - capsule.radius >= -1e-9, `${capsule.id} penetrates floor at ${tick}`);
+      if (/thigh|shin/.test(capsule.id))
+        assert.ok(Math.abs(Math.hypot(capsule.a.x - capsule.b.x, capsule.a.y - capsule.b.y, capsule.a.z - capsule.b.z) / s.player.height - 0.245) < 1e-9);
+    }
+  }
+});
+
+test("landing while diving keeps every collision capsule above the floor", () => {
+  const s = createDirectGame();
+  for (let tick = 0; tick < 75; tick++) {
+    stepDirectGame(s, [command(s, tick === 0 ? 'jump' : tick === 47 ? 'dive' : null)]);
+    if (!s.player.grounded || s.player.action !== 'dive') continue;
+    for (const capsule of getDirectPose(s))
+      assert.ok(Math.min(capsule.a.y, capsule.b.y) - capsule.radius >= -1e-9,
+        `${capsule.id} penetrates floor at tick ${tick}`);
+  }
+});
 test("shallow grazing contact is not lost when conservative advancement converges slowly", () => {
   const s = createDirectGame();
   ball(s, { x: 0.2624, y: 1.5925, z: 4.96875, vz: 60 });
@@ -289,7 +355,7 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
     serializeDirectState(s),
     serializeDirectState(
       replayDirectTape({
-        simulationVersion: "direct-v1",
+        simulationVersion: "direct-v2",
         initial,
         commands,
         endTick: 100,
@@ -302,6 +368,9 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
   assert.equal(serializeDirectState(s), serializeDirectState(r));
   assert.throws(() =>
     restoreDirectGame({ ...initial, simulationVersion: "bad" }),
+  );
+  assert.throws(() =>
+    restoreDirectGame({ ...initial, simulationVersion: "direct-v1" }),
   );
   assert.throws(() =>
     replayDirectTape({

@@ -24,7 +24,13 @@ export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
       height,
       action: null,
       actionTick: 0,
+      shotType: null,
+      shotBlend: 0,
       grounded: true,
+      gaitPhase: 0,
+      gaitVx: 0,
+      gaitVz: 0,
+      landingAge: 1,
       aim: { x: 0, z: -1 },
     },
     ball: {
@@ -88,6 +94,7 @@ export function stepDirectGame(s, commands = []) {
   s.poseAimStart = { ...p.aim };
   let move = { x: 0, z: 0 };
   let startDive = false;
+  const shotTypes = ['LINE', 'CROSS_LEFT', 'CROSS_RIGHT', 'TIP'];
   for (const c of commands
     .filter((c) => c.tick === s.tick)
     .slice()
@@ -103,6 +110,9 @@ export function stepDirectGame(s, commands = []) {
       const n = Math.hypot(c.aim.x, c.aim.z);
       p.aim = { x: c.aim.x / n, z: c.aim.z / n };
     }
+    if (shotTypes.includes(c.shotType) &&
+        ((p.action === 'spike' && p.actionTick < DIRECT_ACTIONS.spike.windup) ||
+         (!p.action && c.action === 'spike'))) p.shotType = c.shotType;
     if (c.action === "feed") feed(s, c.feedKind);
     else if (c.action === "jump" && p.grounded) {
       p.vy =
@@ -113,6 +123,7 @@ export function stepDirectGame(s, commands = []) {
     } else if (DIRECT_ACTIONS[c.action] && !p.action) {
       p.action = c.action;
       p.actionTick = 0;
+      p.shotType = c.action === 'spike' ? (shotTypes.includes(c.shotType) ? c.shotType : 'LINE') : null;
       if (c.action === "dive" && p.grounded) {
         startDive = true;
       }
@@ -155,8 +166,21 @@ export function stepDirectGame(s, commands = []) {
   const dt = DIRECT_DT / C.substeps;
   for (let i = 0; i < C.substeps; i++) {
     const oldPose = getDirectPose(s, i / C.substeps);
+    const oldX = p.x, oldZ = p.z;
     p.x = Math.max(-4.25, Math.min(4.25, p.x + p.vx * dt));
     p.z = Math.max(0.3, Math.min(8.75, p.z + p.vz * dt));
+    // Distance, not wall-clock animation time, drives the collision-bearing gait.
+    // Smooth the actual displacement so a player against the boundary stops stepping.
+    p.gaitVx = approach(p.gaitVx ?? 0, (p.x - oldX) / dt, 35 * dt);
+    p.gaitVz = approach(p.gaitVz ?? 0, (p.z - oldZ) / dt, 35 * dt);
+    if (Math.abs(p.gaitVx) < 1e-8) p.gaitVx = 0;
+    if (Math.abs(p.gaitVz) < 1e-8) p.gaitVz = 0;
+    if (p.grounded && p.action !== 'dive')
+      p.gaitPhase = ((p.gaitPhase ?? 0) + Math.hypot(p.x - oldX, p.z - oldZ) * 5 / p.height) % (Math.PI * 2);
+    // Shot intent may switch during windup, but the contact arm must traverse
+    // the intermediate poses through the same swept-collision substeps.
+    p.shotBlend = approach(p.shotBlend ?? 0, p.shotType === 'TIP' ? 1 : 0, dt * 12);
+    p.landingAge = Math.min(1, (p.landingAge ?? 1) + dt);
     if (!p.grounded) {
       p.vy -= C.gravity * dt;
       p.y += p.vy * dt;
@@ -164,6 +188,7 @@ export function stepDirectGame(s, commands = []) {
         p.y = 0;
         p.vy = 0;
         p.grounded = true;
+        p.landingAge = 0;
       }
     }
     const nextPose = getDirectPose(s, (i + 1) / C.substeps);
@@ -196,6 +221,7 @@ export function stepDirectGame(s, commands = []) {
     if (p.actionTick >= d.windup + d.active + d.recovery) {
       p.action = null;
       p.actionTick = 0;
+      p.shotType = null;
     }
   }
   delete s.poseAimStart;

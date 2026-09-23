@@ -9,6 +9,21 @@ const DEFAULT_KEYS = {
 };
 const STICK_RADIUS = 64;
 
+// Keep the sandbox's four gesture meanings. A swipe selects the intended shot;
+// contact still has to occur at the actual hand surface to affect the ball.
+function spikeShotType(dx, dy) {
+  if (Math.hypot(dx, dy) < 10) return 'LINE';
+  if (dy < -14 && Math.abs(dx) <= Math.abs(dy) * 1.6) return 'TIP';
+  if (dy > 10) {
+    if (dx < -10) return 'CROSS_LEFT';
+    if (dx > 10) return 'CROSS_RIGHT';
+    return 'LINE';
+  }
+  if (dx < -12) return 'CROSS_LEFT';
+  if (dx > 12) return 'CROSS_RIGHT';
+  return 'LINE';
+}
+
 function bindingCodes(value) {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) return value;
@@ -147,9 +162,10 @@ export function createDirectControls({
     listen(button, 'pointerdown', (e) => {
       if (aimGesture && hitPointer) return;
       const value = resolve();
+      if (aimGesture && value.action === 'spike') input.queueShotType('LINE', stamp(e));
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
       if (aimGesture && !hitPointer) {
-        hitPointer = { id: e.pointerId, x: e.clientX, heading: aimHeading };
+        hitPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, heading: aimHeading, action: value.action, shotType: 'LINE' };
         capture(button, e);
       }
       activity(value.action);
@@ -159,6 +175,13 @@ export function createDirectControls({
       listen(button, 'pointermove', (e) => {
         if (!hitPointer || hitPointer.id !== e.pointerId) return;
         const dx = e.clientX - hitPointer.x;
+        if (hitPointer.action === 'spike') {
+          const type = spikeShotType(dx, e.clientY - hitPointer.y);
+          if (type !== hitPointer.shotType) {
+            hitPointer.shotType = type;
+            input.queueShotType(type, stamp(e));
+          }
+        }
         aimHeading = Math.max(-Math.PI, Math.min(Math.PI, hitPointer.heading + dx / STICK_RADIUS * (Math.PI / 2)));
         input.queueAim({ x: Math.sin(aimHeading), z: -Math.cos(aimHeading) }, stamp(e));
         css(aimZone, '--aim-heading', `${aimHeading}rad`);
@@ -176,6 +199,7 @@ export function createDirectControls({
       // positive click detail for mouse/touch and zero for keyboard activation.
       if (e.detail > 0) return;
       const value = resolve();
+      if (aimGesture && value.action === 'spike') input.queueShotType('LINE', stamp(e));
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
       activity(value.action);
     });
@@ -200,7 +224,11 @@ export function createDirectControls({
     }
     if (e.repeat) return;
     if (bindings.jump.includes(e.code)) input.queueAction('jump', stamp(e), { dedupeKey: e.code });
-    else if (bindings.action.includes(e.code)) input.queueAction(ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive', stamp(e), { dedupeKey: e.code });
+    else if (bindings.action.includes(e.code)) {
+      const action = ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive';
+      if (action === 'spike') input.queueShotType('LINE', stamp(e));
+      input.queueAction(action, stamp(e), { dedupeKey: e.code });
+    }
     else if (bindings.feed.includes(e.code)) input.queueAction('feed', stamp(e), { feedKind: feedSelect?.value ?? null, dedupeKey: e.code });
     else return;
     e.preventDefault?.(); activity('action');

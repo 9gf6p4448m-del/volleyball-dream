@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-23T18:15:52.585Z",
+  "createdAt": "2026-09-23T18:48:33.774Z",
   "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -51,7 +51,7 @@
           "height": 76
         },
         {
-          "label": "出手J · 按下開始動作",
+          "label": "出手J · 滑動選線",
           "x": 1142,
           "y": 562,
           "width": 112,
@@ -60,21 +60,21 @@
       ],
       "initialPerformance": {
         "frames": 54,
-        "fps": 10.855144132192345,
-        "frameP95": 83.40000000000009,
-        "simP95": 0.10000000055879354,
-        "backlogMs": 7.933333332959001,
-        "maxBacklogMs": 858.1999999996272,
-        "drawCalls": 99
+        "fps": 10.728761026782166,
+        "frameP95": 83.40000000000055,
+        "simP95": 0.20000000018626451,
+        "backlogMs": 16.53333333333169,
+        "maxBacklogMs": 950.1000000000003,
+        "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
         "frames": 123,
-        "fps": 53.870185990828844,
-        "frameP95": 83.19999999999709,
-        "simP95": 0.39999999944120646,
+        "fps": 55.486218666824705,
+        "frameP95": 66.70000000000437,
+        "simP95": 0.40000000037252903,
         "backlogMs": 0,
-        "maxBacklogMs": 16.66666666666424,
-        "drawCalls": 100
+        "maxBacklogMs": 16.666666666665453,
+        "drawCalls": 118
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
@@ -143,7 +143,7 @@
           "height": 64
         },
         {
-          "label": "出手J · 按下開始動作",
+          "label": "出手J · 滑動選線",
           "x": 733,
           "y": 276,
           "width": 85,
@@ -151,22 +151,22 @@
         }
       ],
       "initialPerformance": {
-        "frames": 91,
-        "fps": 18.763660357128128,
-        "frameP95": 50.100000000000364,
-        "simP95": 0.10000000055879354,
-        "backlogMs": 16.46666666666607,
-        "maxBacklogMs": 783.2999999999994,
-        "drawCalls": 99
+        "frames": 2,
+        "fps": 1.4634860237084737,
+        "frameP95": 0,
+        "simP95": 1,
+        "backlogMs": 0,
+        "maxBacklogMs": 1166.6000000000006,
+        "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 117,
-        "fps": 63.51331789230086,
+        "frames": 116,
+        "fps": 61.86886644858673,
         "frameP95": 50,
-        "simP95": 0.39999999944120646,
+        "simP95": 0.5,
         "backlogMs": 0,
         "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 102
+        "drawCalls": 120
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
@@ -235,7 +235,7 @@
           "height": 60
         },
         {
-          "label": "出手J · 按下開始動作",
+          "label": "出手J · 滑動選線",
           "x": 292,
           "y": 700,
           "width": 84,
@@ -243,22 +243,22 @@
         }
       ],
       "initialPerformance": {
-        "frames": 95,
-        "fps": 20.6405075392178,
+        "frames": 96,
+        "fps": 19.010653887282665,
         "frameP95": 50.09999999999991,
-        "simP95": 0.10000000055879354,
-        "backlogMs": 2.5999999998126895,
-        "maxBacklogMs": 619.399999999813,
-        "drawCalls": 70
+        "simP95": 0.2999999998137355,
+        "backlogMs": 16.466666666665724,
+        "maxBacklogMs": 949.9000000000002,
+        "drawCalls": 88
       },
       "syntheticPlaybackMetrics": {
-        "frames": 118,
-        "fps": 64.07123852962137,
-        "frameP95": 50,
+        "frames": 119,
+        "fps": 64.61304568160632,
+        "frameP95": 33.400000000001455,
         "simP95": 0.40000000037252903,
         "backlogMs": 0,
         "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 73
+        "drawCalls": 91
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,

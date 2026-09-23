@@ -13,7 +13,72 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--ignore-gpu-blocklist'] });
 const report = { createdAt: new Date().toISOString(), base, device: 'Desktop Chromium, emulated viewports; NOT a physical phone', scenes: [] };
 const deliveryOnly = process.argv.includes('--delivery');
+const motionOnly = process.argv.includes('--motion');
 try {
+  if (motionOnly) {
+    for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
+      const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(String(error)));
+      await page.goto(`${base}/?mode=direct&seed=17&quality=high&dpr=1`);
+      await page.waitForFunction(() => Boolean(window.__directPractice));
+      await page.evaluate(() => window.__directPractice.pause());
+      await page.locator('canvas').first().click({ position: { x: 5, y: height / 2 } });
+      await page.keyboard.down('d');
+      for (const tick of [12, 18, 24, 30]) {
+        await page.evaluate(steps => window.__directPractice.step(steps), tick === 12 ? 12 : 6);
+        await page.screenshot({ path: resolve(output, `${name}-motion-run-${tick}.png`) });
+      }
+      await page.keyboard.up('d');
+      await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
+      await page.locator('[data-jump]').click();
+      await page.evaluate(() => window.__directPractice.step(8));
+      await page.screenshot({ path: resolve(output, `${name}-motion-jump.png`) });
+      await page.evaluate(() => {
+        for (let i = 0; i < 90 && !window.__directPractice.snapshot().player.grounded; i++) window.__directPractice.step(1);
+        window.__directPractice.step(5);
+      });
+      assert.equal((await page.evaluate(() => window.__directPractice.snapshot())).player.grounded, true);
+      await page.screenshot({ path: resolve(output, `${name}-motion-land.png`) });
+      for (const action of ['set', 'block', 'dive']) {
+        await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
+        await page.locator('.dp-settings > summary').click();
+        await page.locator('[data-action]').selectOption(action);
+        await page.locator('.dp-settings > summary').click();
+        await page.locator('[data-hit]').click();
+        await page.evaluate(() => window.__directPractice.step(10));
+        await page.screenshot({ path: resolve(output, `${name}-motion-${action}.png`) });
+        assert.equal((await page.evaluate(() => window.__directPractice.snapshot())).player.action, action);
+      }
+      const gestures = [
+        ['tip', 0, -40, 'TIP'],
+        ['cross-left', -30, 25, 'CROSS_LEFT'],
+        ['cross-right', 30, 25, 'CROSS_RIGHT'],
+      ];
+      const cdp = await context.newCDPSession(page);
+      for (const [gesture, dx, dy, shotType] of gestures) {
+        await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
+        await page.locator('.dp-settings > summary').click();
+        await page.locator('[data-action]').selectOption('spike');
+        await page.locator('.dp-settings > summary').click();
+        const hit = await page.locator('[data-hit]').boundingBox();
+        const start = { id: 19, x: hit.x + hit.width / 2, y: hit.y + hit.height / 2 };
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+        await page.evaluate(() => window.__directPractice.step(1));
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...start, x: start.x + dx, y: start.y + dy }] });
+        await page.evaluate(() => window.__directPractice.step(14));
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        const selected = await page.evaluate(() => window.__directPractice.snapshot().player.shotType);
+        assert.equal(selected, shotType, `${gesture} selects shot type through a native touch gesture`);
+        await page.screenshot({ path: resolve(output, `${name}-motion-${gesture}.png`) });
+      }
+      await cdp.detach();
+      assert.deepEqual(errors, [], 'No browser errors during motion capture');
+      report.scenes.push({ name, width, height, actions: ['run', 'jump', 'land', 'set', 'block', 'dive', ...gestures.map(item => item[0])], metrics: await page.evaluate(() => window.__directPractice.metrics()), errors });
+      await context.close();
+    }
+  }
   if (deliveryOnly) {
     const context = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true });
     const page = await context.newPage();
@@ -33,7 +98,7 @@ try {
     await page.locator('[data-export]').click();
     const file = await downloaded;
     const exported = JSON.parse(await readFile(await file.path(), 'utf8'));
-    assert.equal(exported.simulationVersion, 'direct-v1');
+    assert.equal(exported.simulationVersion, 'direct-v2');
     assert.ok(exported.environment.userAgent && exported.environment.quality && exported.environment.build);
     assert.equal(typeof exported.environment.standalone, 'boolean');
     assert.ok(exported.performance.sampleWindow.includes('not a full 10-minute match'));
@@ -47,7 +112,7 @@ try {
     report.delivery = { url: page.url(), build, exportMetadata: true, menuNavigation: true, errors };
     await context.close();
   }
-  for (const [name, width, height] of (deliveryOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
+  for (const [name, width, height] of (deliveryOnly || motionOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors = [];
@@ -150,8 +215,8 @@ try {
     assert.equal(await page.locator('.dp-root').count(), 0, 'Disposal removes UI');
     await context.close();
   }
-  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
+  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
 } finally {
-  await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
+  await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
   await browser.close();
 }

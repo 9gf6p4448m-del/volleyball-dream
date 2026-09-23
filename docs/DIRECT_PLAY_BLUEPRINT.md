@@ -19,9 +19,15 @@ Free Ball: Volleyball 官方可證實的是單人角色、第三人稱及位置�
 - 五位置依序：主攻（接發轉攻/讀攔網）、舉球（分配/節奏）、自由人（預判/平台角度/魚躍）、攔中（讀攻/封網）、接應（右翼/後排/困難球）。先完整主攻閉環，再逐一驗收其餘位置。
 - 身高/臂展影響實際碰撞範圍，彈跳/疲勞影響動作，信任影響隊友分配，技術解鎖動作而非必中。AI與人遵守同一物理；AI不讀私人瞄準輸入，只讀已呈現的身體與球路。
 
+### 2026-09-24 操作補充：滑動選扣球
+
+使用者確認舊沙盒的四向手勢是新模式必備操作：扣球準備時上滑選單手吊球、下滑選直線重扣、左／右滑選斜線。這項新決策擴充下方原階段1的指令契約：`shotType?` 為 `LINE`、`CROSS_LEFT`、`CROSS_RIGHT`、`TIP`。按下開始準備，觸球窗口前可選線，窗口開始後鎖定；無論選何種球路，球仍須碰到可見的手臂或手掌。斜線由滑動改變身體朝向與接觸法線產生，吊球由同一隻手較小的推送弧產生；不依選項直接把球傳送到預設落點。舊 `freeballControls.js` 的手勢分類可作操作參照，沙盒的保底救球與指定落點公式不可移入新解算。
+
+本次真實動作參照：[USA Volleyball 接球平台](https://usavolleyball.org/resource/5-keys-to-better-passing/)、[USA Volleyball 攔網步法](https://usavolleyball.org/resource/10-keys-to-middle-blocking/)、[USA Volleyball 安全落地](https://usavolleyball.org/resource/six-keys-to-lowering-your-risk-of-a-knee-injury/)、[Volleyball World 舉球教學](https://en.volleyballworld.com/blogs/how-to-set-in-volleyball-like-a-pro)及[FIVB 教練手冊](https://www.fivb.com/wp-content/uploads/2024/03/FIVB_Coach_Manual_EN.pdf)。具體畫面檢查為：接球前降低重心並定住平台；起跳收腿、落地屈髖膝；攔網雙手展開；吊球單手小幅推送。完整三／四步助跑、扣球肩髖分離、側向交叉步、魚躍翻滾與回位仍需逐項擴充及實機試玩，不能只憑目前剪影宣稱動作全真。
+
 ## 技術與相容性
 
-`src/sim/` 零 Three.js、固定 60Hz、種子亂數。新增 direct-v1，legacy 解算、存檔和 VCR 不改語意。直接操作目前獨立單機入口 `?mode=direct`，不得進既有連線房間，也不切換生涯預設。
+`src/sim/` 零 Three.js、固定 60Hz、種子亂數。階段1原版為 direct-v1；滑動球種與碰撞步態改變回放結果後升為 direct-v2，舊版匯出明確拒絕，不能套新解算假裝重播一致。legacy 解算、存檔和 VCR 不改語意。直接操作目前獨立單機入口 `?mode=direct`，不得進既有連線房間，也不切換生涯預設。
 
 碰撞採全身球體/膠囊體，手掌與前臂可施加主動擊球效果；不做逐指/三角網格物理。共享程序姿勢同時供模擬與畫面使用。球與移動肢段的相對連續碰撞必須涵蓋旋轉中途，不能只比較tick終點。碰到後依相對速度/法線反彈，不把球保送至指定落點；揮空不改球，被動身體仍可碰球。同人多部位/跨tick接觸合併episode，觸球規則與物理解算分離。
 

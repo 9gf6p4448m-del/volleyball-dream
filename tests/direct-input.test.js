@@ -226,3 +226,41 @@ test('hit pointercancel 清除手勢與尚未取樣動作', () => {
   assert.deepEqual(controls.sample(0).map(c => c.action), [null]);
   controls.dispose();
 });
+
+test('扣球滑動選線：上滑吊球、下滑直線、左右滑斜線，按下仍只開始一次動作', () => {
+  for (const [dx, dy, expected] of [[0, -30, 'TIP'], [0, 30, 'LINE'], [-30, 25, 'CROSS_LEFT'], [30, 25, 'CROSS_RIGHT']]) {
+    const f = fixture();
+    const controls = createDirectControls(f);
+    f.actionSelect.value = 'spike';
+    f.hitButton.dispatchEvent(event('pointerdown', { pointerId: 7, clientX: 100, clientY: 100 }));
+    const initial = controls.sample(0);
+    assert.deepEqual(initial.map(c => c.action), [null, 'spike']);
+    f.hitButton.dispatchEvent(event('pointermove', { pointerId: 7, clientX: 100 + dx, clientY: 100 + dy }));
+    const changed = controls.sample(1);
+    assert.equal(changed[0].shotType, expected);
+    if (expected === 'CROSS_LEFT') assert.ok(changed[0].aim.x < 0, '左斜線滑動須轉向左側');
+    if (expected === 'CROSS_RIGHT') assert.ok(changed[0].aim.x > 0, '右斜線滑動須轉向右側');
+    assert.deepEqual(changed.map(c => c.action), [null]);
+    f.hitButton.dispatchEvent(event('pointerup', { pointerId: 7, clientX: 100 + dx, clientY: 100 + dy }));
+    assert.deepEqual(controls.sample(2).map(c => c.action), [null]);
+    controls.dispose();
+  }
+});
+
+test('一次上滑吊球後，鍵盤 J 與鍵盤按鈕點擊的下一球重設為直線', () => {
+  for (const keyboardClick of [false, true]) {
+    const f = fixture();
+    const controls = createDirectControls(f);
+    f.actionSelect.value = 'spike';
+    f.hitButton.dispatchEvent(event('pointerdown', { pointerId: 8, clientX: 100, clientY: 100 }));
+    controls.sample(0);
+    f.hitButton.dispatchEvent(event('pointermove', { pointerId: 8, clientX: 100, clientY: 60 }));
+    assert.equal(controls.sample(1)[0].shotType, 'TIP');
+    f.hitButton.dispatchEvent(event('pointerup', { pointerId: 8, clientX: 100, clientY: 60 }));
+    if (keyboardClick) f.hitButton.dispatchEvent(event('click', { detail: 0 }));
+    else f.win.dispatchEvent(event('keydown', { code: 'KeyJ', repeat: false }));
+    const next = controls.sample(2);
+    assert.equal(next.find(c => c.action === 'spike').shotType, 'LINE');
+    controls.dispose();
+  }
+});

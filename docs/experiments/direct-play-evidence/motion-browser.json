@@ -1,0 +1,85 @@
+{
+  "createdAt": "2026-09-23T18:50:40.453Z",
+  "base": "http://127.0.0.1:4175",
+  "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "actions": [
+        "run",
+        "jump",
+        "land",
+        "set",
+        "block",
+        "dive",
+        "tip",
+        "cross-left",
+        "cross-right"
+      ],
+      "metrics": {
+        "frames": 0,
+        "fps": 0,
+        "frameP95": 0,
+        "simP95": 0.10000000055879354,
+        "backlogMs": 0,
+        "maxBacklogMs": 0,
+        "drawCalls": 117
+      },
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "actions": [
+        "run",
+        "jump",
+        "land",
+        "set",
+        "block",
+        "dive",
+        "tip",
+        "cross-left",
+        "cross-right"
+      ],
+      "metrics": {
+        "frames": 0,
+        "fps": 0,
+        "frameP95": 0,
+        "simP95": 0.20000000018626451,
+        "backlogMs": 0,
+        "maxBacklogMs": 0,
+        "drawCalls": 117
+      },
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        "run",
+        "jump",
+        "land",
+        "set",
+        "block",
+        "dive",
+        "tip",
+        "cross-left",
+        "cross-right"
+      ],
+      "metrics": {
+        "frames": 0,
+        "fps": 0,
+        "frameP95": 0,
+        "simP95": 0.20000000018626451,
+        "backlogMs": 0,
+        "maxBacklogMs": 0,
+        "drawCalls": 88
+      },
+      "errors": []
+    }
+  ]
+}
