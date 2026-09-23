@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { closestPoint } from "../src/sim/directPhysics.js";
 import {
   createDirectGame,
   stepDirectGame,
@@ -105,6 +106,40 @@ test("half-turn commands cannot rotate contact surfaces instantaneously", () => 
   stepDirectGame(s, [command(s, null, { aim: { x: 0, z: 1 } })]);
   assert.ok(Math.abs(Math.atan2(s.player.aim.x, -s.player.aim.z)) <= 0.1500001);
   assert.ok(s.player.aim.z < -0.98);
+});
+test("CCD catches a curved hand path with both tick endpoint poses separated", () => {
+  const s = createDirectGame();
+  s.player.action = "receive";
+  s.player.actionTick = 12;
+  const middle = snapshotDirectGame(s);
+  middle.player.aim = { x: Math.sin(0.075), z: -Math.cos(0.075) };
+  const hand = getDirectPose(middle, 0.5).find((p) => p.id === "right-hand");
+  const dx = hand.a.x,
+    dz = hand.a.z - s.player.z;
+  const length = Math.hypot(dx, dz);
+  const offset = hand.radius + s.ball.radius - 0.00015;
+  ball(s, {
+    x: hand.a.x + (dx / length) * offset,
+    y: hand.a.y,
+    z: hand.a.z + (dz / length) * offset,
+  });
+  const end = snapshotDirectGame(s);
+  end.player.aim = { x: Math.sin(0.15), z: -Math.cos(0.15) };
+  end.player.actionTick = 13;
+  for (const endpoint of [s, end]) {
+    for (const capsule of getDirectPose(endpoint)) {
+      const q = closestPoint(s.ball, capsule.a, capsule.b);
+      assert.ok(
+        Math.hypot(s.ball.x - q.x, s.ball.y - q.y, s.ball.z - q.z) -
+          capsule.radius -
+          s.ball.radius >
+          0.01,
+      );
+    }
+  }
+  stepDirectGame(s, [command(s, null, { aim: { x: 0, z: 1 } })]);
+  assert.equal(s.stats.contacts, 1);
+  assert.equal(s.events.find((e) => e.type === "contact").id, "right-hand");
 });
 test("timing and orientation change contact outcome without a target solver", () => {
   const make = (tick, aim) => {
