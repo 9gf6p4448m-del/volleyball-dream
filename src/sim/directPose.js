@@ -55,7 +55,8 @@ export function getDirectPose(state, fraction = 0) {
   const a0 = Math.atan2(start.x, -start.z),
     a1 = Math.atan2(p.aim.x, -p.aim.z);
   const delta = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0));
-  const angle = a0 + delta * (state.poseAimStart ? fraction : 1);
+  const angle = a0 + delta * (state.poseAimStart ? fraction : 1) +
+    (p.action === 'receive' ? p.receiveTurn ?? 0 : 0);
   const fx = Math.sin(angle),
     fz = -Math.cos(angle);
   const weight = raise * recover;

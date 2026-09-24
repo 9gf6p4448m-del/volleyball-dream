@@ -7,7 +7,7 @@
 
 直接操作實驗入口：`?mode=direct`（一人一球，尚未接入生涯）。手機左手走位、右側瞄準，起跳與出手分開；扣球上滑吊球、下滑直線、左右滑斜線，球仍須碰到身體才會改變路徑。鍵盤 WASD／Space／J／R。訓練設定可選固定餵球、資訊輔助、身高、回放及鍵位。
 
-新方向與驗收見 [直接操作藍圖](docs/DIRECT_PLAY_BLUEPRINT.md)，目前實作與接手事項見 [動作與四向扣球交接](docs/handoffs/direct-play-motion-v2.md)，原 [階段 1 交接](docs/handoffs/direct-play-stage1.md) 保留當時紀錄。舊 Free Ball 沙盒規格是歷史提案。
+新方向與驗收見 [直接操作藍圖](docs/DIRECT_PLAY_BLUEPRINT.md)，目前實作與接手事項見 [接球迎球容錯交接](docs/handoffs/direct-play-receive-assist-v3.md)（前版 [動作與四向扣球交接](docs/handoffs/direct-play-motion-v2.md)），原 [階段 1 交接](docs/handoffs/direct-play-stage1.md) 保留當時紀錄。舊 Free Ball 沙盒規格是歷史提案。
 
 ```bash
 npm install
@@ -49,7 +49,7 @@ npm run preview  # 本機預覽正式建置
 ```
 src/
 ├── sim/      模擬核心：純 JS、零 three.js 依賴、固定步長 60Hz
-│             legacy 比賽及 direct-v2 訓練各有自己的入口與版本
+│             legacy 比賽及 direct-v3 訓練各有自己的入口與版本
 ├── render/   three.js 球場、幾何球員、共享姿勢的訓練角色
 ├── input/    比賽操作、手機雙指直接操作與鍵盤指令
 ├── app/      正式比賽與一人一球訓練的運行迴圈

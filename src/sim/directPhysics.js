@@ -58,7 +58,9 @@ export function sweepCapsule(start, end, old, next, radius) {
   }
   return refine(t, 1);
 }
-export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity) {
+// surfacePose (same capsules as nextPose) supplies only the contact-surface
+// velocity, so motion that must not add impulse can be excluded from it.
+export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, surfacePose = nextPose) {
   const b = state.ball,
     start = { x: b.x, y: b.y, z: b.z },
     end = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
@@ -66,13 +68,13 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity) {
   for (let i = 0; i < nextPose.length; i++) {
     const hit = sweepCapsule(start, end, oldPose[i], nextPose[i], b.radius);
     if (hit && (!earliest || hit.t < earliest.hit.t))
-      earliest = { hit, old: oldPose[i], next: nextPose[i] };
+      earliest = { hit, old: oldPose[i], next: nextPose[i], surface: surfacePose[i] };
   }
   if (!earliest || earliest.hit.t >= stopAt) {
     Object.assign(b, end);
     return false;
   }
-  const { hit, old, next } = earliest;
+  const { hit, old, next, surface: moved } = earliest;
   let nx = (hit.center.x - hit.q.x) / (hit.d || 1),
     ny = (hit.center.y - hit.q.y) / (hit.d || 1),
     nz = (hit.center.z - hit.q.z) / (hit.d || 1);
@@ -82,7 +84,7 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity) {
     nz = 0;
   }
   const q0 = lerp(old.a, old.b, hit.q.t),
-    q1 = lerp(next.a, next.b, hit.q.t);
+    q1 = lerp(moved.a, moved.b, hit.q.t);
   const surface = {
     x: (q1.x - q0.x) / dt,
     y: (q1.y - q0.y) / dt,

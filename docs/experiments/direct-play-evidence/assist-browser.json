@@ -1,0 +1,34 @@
+{
+  "createdAt": "2026-09-24T03:46:38.944Z",
+  "base": "http://127.0.0.1:4175",
+  "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "incomingTurn": -0.5999999999999991,
+      "contact": 1,
+      "replay": true,
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "incomingTurn": -0.5999999999999991,
+      "contact": 1,
+      "replay": true,
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "incomingTurn": -0.5999999999999991,
+      "contact": 1,
+      "replay": true,
+      "errors": []
+    }
+  ]
+}

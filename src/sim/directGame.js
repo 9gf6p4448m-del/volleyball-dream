@@ -26,6 +26,7 @@ export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
       actionTick: 0,
       shotType: null,
       shotBlend: 0,
+      receiveTurn: 0,
       grounded: true,
       gaitPhase: 0,
       gaitVx: 0,
@@ -85,6 +86,25 @@ function dead(s, type) {
 }
 const approach = (x, target, max) =>
   x + Math.max(-max, Math.min(max, target - x));
+function receiveTurnTarget(s) {
+  const p = s.player, b = s.ball;
+  const action = DIRECT_ACTIONS.receive;
+  if (p.action !== 'receive' || p.actionTick >= action.windup + action.active) return 0;
+  const current = p.receiveTurn ?? 0;
+  // After contact, hold the platform through follow-through. Recovery then
+  // returns to manual aim; an outgoing or passed ball never steers the body.
+  if (!b.active || b.y <= b.radius || s.contactEpisode) return current;
+  const dx = b.x - p.x, dz = b.z - p.z;
+  const forward = dx * p.aim.x + dz * p.aim.z;
+  const closing = dx * (b.vx - p.vx) + dz * (b.vz - p.vz);
+  if (forward <= 0.2 * p.height || Math.hypot(dx, dz) > C.receiveTrackReach * p.height ||
+      Math.abs(b.y - p.y - 0.65 * p.height) > 0.65 * p.height ||
+      !(closing < -1e-6 || (Math.abs(closing) <= 1e-6 && b.vy < 0))) return current;
+  const difference = Math.atan2(Math.sin(Math.atan2(dx, -dz) - Math.atan2(p.aim.x, -p.aim.z)),
+    Math.cos(Math.atan2(dx, -dz) - Math.atan2(p.aim.x, -p.aim.z)));
+  if (Math.abs(difference) > C.receiveTrackCone) return current;
+  return Math.max(-C.receiveTurnLimit, Math.min(C.receiveTurnLimit, difference));
+}
 export function stepDirectGame(s, commands = []) {
   if (s.simulationVersion !== SIMULATION_VERSION)
     throw new Error("Unknown simulation version");
@@ -163,9 +183,14 @@ export function stepDirectGame(s, commands = []) {
   b.px = b.x;
   b.py = b.y;
   b.pz = b.z;
+  const receiveTarget = receiveTurnTarget(s);
   const dt = DIRECT_DT / C.substeps;
   for (let i = 0; i < C.substeps; i++) {
     const oldPose = getDirectPose(s, i / C.substeps);
+    // Move the same body pose used by rendering and swept collision. There is
+    // no ball impulse, target landing point, or extra reach in this assistance.
+    const turnBefore = p.receiveTurn ?? 0;
+    p.receiveTurn = approach(turnBefore, receiveTarget, C.receiveTurnSpeed * dt);
     const oldX = p.x, oldZ = p.z;
     p.x = Math.max(-4.25, Math.min(4.25, p.x + p.vx * dt));
     p.z = Math.max(0.3, Math.min(8.75, p.z + p.vz * dt));
@@ -196,7 +221,16 @@ export function stepDirectGame(s, commands = []) {
     b.vy -= C.gravity * dt;
     const predicted = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
     let terminal = firstEnvironmentHit(b, predicted, b.radius);
-    const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity);
+    // The sweep follows the turning body, but the contact-surface velocity
+    // excludes the assist rotation so the turn never swings the ball like a bat.
+    let surfacePose = nextPose;
+    if (p.receiveTurn !== turnBefore) {
+      const turnAfter = p.receiveTurn;
+      p.receiveTurn = turnBefore;
+      surfacePose = getDirectPose(s, (i + 1) / C.substeps);
+      p.receiveTurn = turnAfter;
+    }
+    const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity, surfacePose);
     // A valid earlier body hit changes the rest of the trajectory. Check that
     // new segment too, rather than retaining the pre-contact floor/net decision.
     if (contact) terminal = firstEnvironmentHit(contact.position, b, b.radius);

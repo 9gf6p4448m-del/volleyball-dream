@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { closestPoint, sweepCapsule } from "../src/sim/directPhysics.js";
+import { closestPoint, sweepCapsule, collideBody } from "../src/sim/directPhysics.js";
+import { DIRECT_PHYSICS } from "../src/sim/directConstants.js";
 import {
   createDirectGame,
   stepDirectGame,
@@ -21,6 +22,156 @@ const command = (s, action, extra = {}) => ({
   aim: { x: 0, z: -1 },
   action,
   ...extra,
+});
+const receiveFeed = ({ degrees = 35, x = 0, receiveTick = 29 } = {}) => {
+  const s = createDirectGame();
+  const angle = degrees * Math.PI / 180;
+  const aim = { x: Math.sin(angle), z: -Math.cos(angle) };
+  s.player.x = x;
+  s.player.aim = aim;
+  const initial = snapshotDirectGame(s), commands = [], contacts = [], states = [];
+  for (let tick = 0; tick < 70; tick++) {
+    const c = command(s, tick === 0 ? 'feed' : tick === receiveTick ? 'receive' : null, { aim });
+    commands.push(c);
+    stepDirectGame(s, [c]);
+    contacts.push(...s.events.filter(e => e.type === 'contact'));
+    states.push(snapshotDirectGame(s));
+  }
+  return { s, initial, commands, contacts, states };
+};
+test('receive turns a nearby incoming feed onto the visible platform despite a 35 degree aim error', () => {
+  for (const degrees of [-35, 35]) {
+    const { contacts } = receiveFeed({ degrees });
+    assert.equal(contacts.length, 1);
+    assert.equal(contacts[0].active, true, 'A near-facing receive must contact the active platform before the legs');
+    assert.ok(['hand', 'forearm'].includes(contacts[0].part));
+  }
+});
+test('receive assistance cannot compensate for distant position, late timing, or facing away', () => {
+  for (const options of [{ x: 2 }, { receiveTick: 49 }, { degrees: 90 }]) {
+    const { contacts } = receiveFeed(options);
+    assert.equal(contacts.filter(e => e.active).length, 0);
+    if (options.x) assert.equal(contacts.length, 0, 'No remote contact of any kind');
+  }
+});
+test('receive assistance preserves manual aim and cannot affect other action poses', () => {
+  const { states } = receiveFeed();
+  const angle = 35 * Math.PI / 180;
+  for (const s of states) {
+    assert.ok(Math.abs(s.player.aim.x - Math.sin(angle)) < 1e-12);
+    assert.ok(Math.abs(s.player.aim.z + Math.cos(angle)) < 1e-12);
+    if (s.player.action !== 'receive') assert.equal(s.player.receiveTurn, 0);
+  }
+  for (const action of ['spike', 'tip', 'set', 'block', 'dive', null]) {
+    const s = createDirectGame();
+    s.player.action = action; s.player.actionTick = 12;
+    const plain = getDirectPose(s);
+    s.player.receiveTurn = angle;
+    assert.deepEqual(getDirectPose(s), plain, `${action} ignores receive-only turn`);
+  }
+});
+test('receive assistance uses the same unchanged capsule sizes and bounded visible body turn', () => {
+  const { states } = receiveFeed();
+  assert.ok(states.some(s => Math.abs(s.player.receiveTurn ?? 0) > 0.2), 'The body visibly turns toward the incoming ball');
+  let last = 0;
+  for (const s of states) {
+    const turn = s.player.receiveTurn ?? 0;
+    assert.ok(Math.abs(turn) <= 35 * Math.PI / 180 + 1e-12);
+    assert.ok(Math.abs(turn - last) <= 4 * DIRECT_DT + 1e-12, 'No instantaneous contact-surface rotation');
+    last = turn;
+    const baseline = snapshotDirectGame(s);
+    baseline.player.receiveTurn = 0;
+    const plain = getDirectPose(baseline), assisted = getDirectPose(s);
+    assert.equal(assisted.length, plain.length, 'No invisible extra contact surfaces');
+    for (let i = 0; i < plain.length; i++) {
+      assert.equal(assisted[i].radius, plain[i].radius);
+      assert.equal(assisted[i].active, plain[i].active);
+      for (const endpoint of ['a', 'b']) {
+        const a = plain[i][endpoint], b = assisted[i][endpoint];
+        const dx = a.x - s.player.x, dz = a.z - s.player.z;
+        assert.ok(Math.abs(b.x - (s.player.x + dx * Math.cos(turn) - dz * Math.sin(turn))) < 1e-12);
+        assert.ok(Math.abs(b.z - (s.player.z + dx * Math.sin(turn) + dz * Math.cos(turn))) < 1e-12);
+        assert.equal(b.y, a.y);
+      }
+    }
+  }
+});
+test('receive does not chase a passed ball or rescue one already on the floor', () => {
+  for (const initial of [
+    { x: 0.5, y: 1.1, z: 5.6, vz: 5 },
+    { x: 0.5, y: 0.105, z: 4.2, vy: -1, vz: 5 },
+    { x: 0.5, y: 1.1, z: 4.2, vz: -5 },
+  ]) {
+    const s = createDirectGame();
+    s.player.action = 'receive'; s.player.actionTick = 8;
+    ball(s, initial);
+    stepDirectGame(s);
+    assert.equal(s.stats.contacts, 0);
+    assert.equal(s.player.receiveTurn ?? 0, 0);
+    if (initial.y === s.ball.radius) {
+      assert.equal(s.ball.active, false);
+      assert.equal(s.events[0].type, 'ground');
+    }
+  }
+});
+test('receive-assisted feed replays and restores every tick byte-identically', () => {
+  const { s, initial, commands, states } = receiveFeed();
+  const restored = restoreDirectGame(states[34]);
+  for (let tick = restored.tick; tick < s.tick; tick++) {
+    stepDirectGame(restored, [commands[tick]]);
+    assert.equal(serializeDirectState(restored), serializeDirectState(states[tick]));
+  }
+  assert.equal(serializeDirectState(s), serializeDirectState(replayDirectTape({
+    simulationVersion: initial.simulationVersion, initial, commands, endTick: s.tick,
+  })));
+});
+const oneTickReceiveTurn = ({ degrees, reach, startTurn = 0 }) => {
+  const s = createDirectGame();
+  const angle = degrees * Math.PI / 180, r = reach * s.player.height;
+  const dx = r * Math.sin(angle), dz = -r * Math.cos(angle);
+  s.player.action = 'receive'; s.player.actionTick = 2; s.player.receiveTurn = startTurn;
+  ball(s, { x: dx, y: 0.65 * s.player.height, z: s.player.z + dz, vx: -dx / r * 3, vz: -dz / r * 3 });
+  stepDirectGame(s);
+  return s.player.receiveTurn;
+};
+test('receive assistance stops at the 35 degree limit for a 50 degree incoming ball', () => {
+  const limit = 35 * Math.PI / 180;
+  assert.equal(oneTickReceiveTurn({ degrees: 50, reach: 0.8, startTurn: limit - 0.01 }), limit);
+  assert.equal(oneTickReceiveTurn({ degrees: -50, reach: 0.8, startTurn: -limit + 0.01 }), -limit);
+});
+test('receive assistance ignores balls outside the 60 degree cone or beyond 1.1 body heights', () => {
+  assert.ok(oneTickReceiveTurn({ degrees: 50, reach: 0.9 }) > 0, 'control: inside the cone turns');
+  assert.equal(oneTickReceiveTurn({ degrees: 70, reach: 0.9 }), 0, 'outside the cone never turns');
+  assert.ok(oneTickReceiveTurn({ degrees: 20, reach: 1.0 }) > 0, 'control: within reach turns');
+  assert.equal(oneTickReceiveTurn({ degrees: 20, reach: 1.15 }), 0, 'beyond reach never turns');
+});
+test('receive assistance rotation adds no ball impulse, even when a late receive is still turning at contact', () => {
+  const s = createDirectGame();
+  const angle = -17.5 * Math.PI / 180, aim = { x: Math.sin(angle), z: -Math.cos(angle) };
+  s.player.x = -0.45; s.player.aim = aim;
+  let checked = false;
+  for (let tick = 0; tick < 70 && !checked; tick++) {
+    const pre = { ...s.ball }, turn = s.player.receiveTurn;
+    stepDirectGame(s, [command(s, tick === 0 ? 'feed' : tick === 34 ? 'receive' : null, { aim })]);
+    const contact = s.events.find(e => e.type === 'contact');
+    if (!contact) continue;
+    checked = true;
+    assert.equal(contact.active, true);
+    assert.notEqual(s.player.receiveTurn, turn, 'scenario must still be turning at contact');
+    const dv = Math.hypot(s.ball.vx - pre.vx, s.ball.vy - pre.vy + 9.81 * DIRECT_DT, s.ball.vz - pre.vz);
+    assert.ok(dv < 1, `assist turn must not bat the ball (|dv|=${dv.toFixed(3)} m/s)`);
+  }
+  assert.ok(checked, 'scenario must produce a contact');
+  // Unit level: a rotating capsule whose surface pose is static rebounds like a static surface.
+  const capsule = (a, b) => [{ a, b, radius: 0.05, active: true, part: 'forearm', id: 'L' }];
+  const oldPose = capsule({ x: -0.3, y: 1, z: 0 }, { x: 0.3, y: 1, z: 0 });
+  const nextPose = capsule({ x: -0.3, y: 1, z: 0.02 }, { x: 0.3, y: 1, z: -0.02 });
+  const t = createDirectGame();
+  ball(t, { x: 0.2, y: 1 + 0.105 + 0.05 + 0.001, z: 0, vy: -3 });
+  collideBody(t, oldPose, nextPose, DIRECT_DT / 4, Infinity, oldPose);
+  const d = { x: t.ball.vx, y: t.ball.vy + 3, z: t.ball.vz };
+  const mag = Math.hypot(d.x, d.y, d.z), n = { x: d.x / mag, y: d.y / mag, z: d.z / mag };
+  assert.ok(Math.abs(mag - (1 + DIRECT_PHYSICS.activeRestitution) * 3 * n.y) < 1e-9);
 });
 test("physical gait alternates feet and settles after braking", () => {
   const s = createDirectGame();
@@ -355,7 +506,7 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
     serializeDirectState(s),
     serializeDirectState(
       replayDirectTape({
-        simulationVersion: "direct-v2",
+        simulationVersion: "direct-v3",
         initial,
         commands,
         endTick: 100,
@@ -371,6 +522,9 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
   );
   assert.throws(() =>
     restoreDirectGame({ ...initial, simulationVersion: "direct-v1" }),
+  );
+  assert.throws(() =>
+    restoreDirectGame({ ...initial, simulationVersion: "direct-v2" }),
   );
   assert.throws(() =>
     replayDirectTape({

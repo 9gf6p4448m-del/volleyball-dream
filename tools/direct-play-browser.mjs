@@ -14,7 +14,52 @@ const browser = await chromium.launch({ headless: true, args: ['--enable-webgl',
 const report = { createdAt: new Date().toISOString(), base, device: 'Desktop Chromium, emulated viewports; NOT a physical phone', scenes: [] };
 const deliveryOnly = process.argv.includes('--delivery');
 const motionOnly = process.argv.includes('--motion');
+const assistOnly = process.argv.includes('--assist');
 try {
+  if (assistOnly) {
+    const aim = { x: Math.sin(35 * Math.PI / 180), z: -Math.cos(35 * Math.PI / 180) };
+    for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
+      const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(String(error)));
+      await page.goto(`${base}/?mode=direct&seed=17&quality=high&dpr=1`);
+      await page.waitForFunction(() => Boolean(window.__directPractice));
+      await page.evaluate(() => window.__directPractice.pause());
+      await page.evaluate(direction => {
+        const practice = window.__directPractice;
+        for (let tick = 0; tick < 29; tick++) {
+          practice.command({ aim: direction, action: tick === 0 ? 'feed' : null, feedKind: 'receive' });
+          practice.step(1);
+        }
+        practice.command({ aim: direction, action: 'receive' });
+        practice.step(1);
+        for (let tick = 30; tick < 38; tick++) {
+          practice.command({ aim: direction });
+          practice.step(1);
+        }
+      }, aim);
+      const incoming = await page.evaluate(() => window.__directPractice.snapshot());
+      assert.equal(incoming.stats.contacts, 0, 'Incoming ball has not contacted before the visible receive');
+      assert.ok(Math.abs(incoming.player.receiveTurn) > 0.3, 'The receive visibly turns toward the incoming ball');
+      await page.screenshot({ path: resolve(output, `${name}-receive-assist-approach.png`) });
+      await page.evaluate(direction => {
+        const practice = window.__directPractice;
+        for (let tick = 38; tick < 42; tick++) {
+          practice.command({ aim: direction });
+          practice.step(1);
+        }
+      }, aim);
+      const received = await page.evaluate(() => window.__directPractice.snapshot());
+      assert.equal(received.stats.contacts, 1, 'A 35-degree offset receive reaches the visible athlete');
+      assert.equal(await page.evaluate(() => window.__directPractice.verifyReplay()), true, 'Receive assist replays identically');
+      assert.deepEqual(errors, [], 'No browser errors during assisted receive');
+      await page.screenshot({ path: resolve(output, `${name}-receive-assist-contact.png`) });
+      report.scenes.push({ name, width, height, incomingTurn: incoming.player.receiveTurn,
+        contact: received.stats.contacts, replay: true, errors });
+      await context.close();
+    }
+  }
   if (motionOnly) {
     for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
       const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
@@ -98,7 +143,7 @@ try {
     await page.locator('[data-export]').click();
     const file = await downloaded;
     const exported = JSON.parse(await readFile(await file.path(), 'utf8'));
-    assert.equal(exported.simulationVersion, 'direct-v2');
+    assert.equal(exported.simulationVersion, 'direct-v3');
     assert.ok(exported.environment.userAgent && exported.environment.quality && exported.environment.build);
     assert.equal(typeof exported.environment.standalone, 'boolean');
     assert.ok(exported.performance.sampleWindow.includes('not a full 10-minute match'));
@@ -112,7 +157,7 @@ try {
     report.delivery = { url: page.url(), build, exportMetadata: true, menuNavigation: true, errors };
     await context.close();
   }
-  for (const [name, width, height] of (deliveryOnly || motionOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
+  for (const [name, width, height] of (deliveryOnly || motionOnly || assistOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors = [];
@@ -215,8 +260,8 @@ try {
     assert.equal(await page.locator('.dp-root').count(), 0, 'Disposal removes UI');
     await context.close();
   }
-  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
+  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
 } finally {
-  await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
+  await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : assistOnly ? 'assist-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
   await browser.close();
 }

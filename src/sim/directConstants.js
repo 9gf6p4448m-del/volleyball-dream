@@ -1,6 +1,6 @@
 // SI units: metres, seconds, metres/second. Action durations are 60 Hz ticks.
 export const DIRECT_DT = 1 / 60;
-export const SIMULATION_VERSION = "direct-v2";
+export const SIMULATION_VERSION = "direct-v3";
 export const DIRECT_PHYSICS = Object.freeze({
   gravity: 9.81,
   radius: 0.105,
@@ -10,6 +10,10 @@ export const DIRECT_PHYSICS = Object.freeze({
   jumpSpeed: 4.9,
   approachJumpBoost: 0.65,
   turnSpeed: 9, // radians/second; bounds moving contact-surface velocity
+  receiveTurnSpeed: 4, // visible receive-only adjustment, radians/second
+  receiveTurnLimit: 35 * Math.PI / 180,
+  receiveTrackCone: 60 * Math.PI / 180,
+  receiveTrackReach: 1.1, // body heights; tracking never enlarges the actual capsules
   diveSpeed: 6.5,
   diveFriction: 7,
   courtHalfWidth: 4.5,

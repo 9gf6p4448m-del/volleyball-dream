@@ -29,7 +29,7 @@ export function runDirectPractice(ctx) {
           <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option></select></label>
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
-          <p>更改身高會開始新一輪訓練。輔助不改變碰撞判定。</p>
+          <p>更改身高會開始新一輪訓練。資訊提示不改變碰撞判定；接球的小幅迎球轉身是基本操作。</p>
           <button data-replay>回放本輪</button><button data-export>匯出回放</button><button data-restart>重新開始</button>
           <details><summary>鍵盤設定</summary><div class="dp-keygrid">
             <label>前進<input data-key="forward" value="KeyW" aria-label="前進鍵"></label><label>後退<input data-key="backward" value="KeyS" aria-label="後退鍵"></label>
@@ -41,7 +41,7 @@ export function runDirectPractice(ctx) {
         <a href="?">返回生涯</a>
       </nav>
     </header>
-    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>左手移動 · 右側滑動瞄準 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
+    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，提早按墊球；角色會小幅迎球 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
     <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
@@ -90,7 +90,7 @@ export function runDirectPractice(ctx) {
       hitButton: $('[data-hit]'), actionSelect: $('[data-action]'), feedButton: $('[data-feed]'), feedSelect: $('[data-feed-kind]'),
       ...(keyBindings ? { keyBindings } : {}),
       onActivity(kind) {
-        if (kind === 'feed') message('來球了。移到球後方，提早抬臂；按鍵後仍需要完成動作。');
+        if (kind === 'feed') message('來球了。移到球路上，提早抬臂；角色會小幅迎球轉身。');
       },
     });
   }
@@ -243,7 +243,7 @@ export function runDirectPractice(ctx) {
       const action = DIRECT_ACTIONS[state.player.action];
       $('[data-hint]').textContent = action
         ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
-        : '左手移動 · 右側滑動瞄準 · 扣球上吊/下直/左右斜';
+        : '走到球路上，提早按墊球；角色會小幅迎球 · 扣球時上滑吊球、下滑直線、左右滑斜線';
       $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
     }
