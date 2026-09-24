@@ -200,7 +200,7 @@ try {
     await page.locator('[data-export]').click();
     const file = await downloaded;
     const exported = JSON.parse(await readFile(await file.path(), 'utf8'));
-    assert.equal(exported.simulationVersion, 'direct-v3');
+    assert.equal(exported.simulationVersion, 'direct-v4');
     assert.ok(exported.environment.userAgent && exported.environment.quality && exported.environment.build);
     assert.equal(typeof exported.environment.standalone, 'boolean');
     assert.ok(exported.performance.sampleWindow.includes('not a full 10-minute match'));
