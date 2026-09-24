@@ -27,6 +27,8 @@ Free Ball: Volleyball 官方可證實的是單人角色、第三人稱及位置�
 
 使用者裁定：接球拆成兩層。「接到球」靠走位與 direct-v3 的小幅迎球轉身（±35°，不放大碰撞體、不加衝量）；「接到哪」靠墊球準備期在出手鈕上滑動，選擇平台角度——上滑高球到位、下滑低平安全球、左／右滑平台偏左／右，不滑則平台正對身體。四向離散，和扣球同一套手勢；觸球窗口開始即鎖定。平台角度寫進共享姿勢，球仍依前臂實際法線反彈，不傳送到指定落點、不保底。入門與標準模式顯示平台朝向線與接球時機提示（出手鈕外圈收縮），進階不顯示，提示不改判定。訓練新增「接球方向練習」：地上標目標區，只顯示結果。指令契約新增 `passType?`：`HIGH`、`LOW`、`LEFT`、`RIGHT`、`NEUTRAL`。競品參照：Free Ball: Volleyball 用鏡頭瞄準＋抓時機，玩家普遍反映缺乏時機與落點提示（Steam 討論區），本作以觸控手勢與資訊提示補足。驗收條件見 `docs/kickoffs/direct-v4-receive-swipe-acceptance.md`。
 
+**2026-09-24 對抗審查後補充**：墊球反彈改用兩臂併攏的平台面法線（球打到前臂上側時），中性平台調成到位球；自動迎球改為面向來球路線（球的世界速度），並以「平台側伸」（最多 0.2 倍身高，速度受限，膠囊不變）保留接偏球的容錯；平台角度、轉身與側伸都不計入觸球衝量。出手鈕上的墊球滑動只選平台、不轉身。**上滑／下滑暫停用**：中性平台已接近弧頂上限，高低球的手感待真機試玩後重新設計。
+
 本次真實動作參照：[USA Volleyball 接球平台](https://usavolleyball.org/resource/5-keys-to-better-passing/)、[USA Volleyball 攔網步法](https://usavolleyball.org/resource/10-keys-to-middle-blocking/)、[USA Volleyball 安全落地](https://usavolleyball.org/resource/six-keys-to-lowering-your-risk-of-a-knee-injury/)、[Volleyball World 舉球教學](https://en.volleyballworld.com/blogs/how-to-set-in-volleyball-like-a-pro)及[FIVB 教練手冊](https://www.fivb.com/wp-content/uploads/2024/03/FIVB_Coach_Manual_EN.pdf)。具體畫面檢查為：接球前降低重心並定住平台；起跳收腿、落地屈髖膝；攔網雙手展開；吊球單手小幅推送。完整三／四步助跑、扣球肩髖分離、側向交叉步、魚躍翻滾與回位仍需逐項擴充及實機試玩，不能只憑目前剪影宣稱動作全真。
 
 ## 技術與相容性

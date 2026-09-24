@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-24T08:00:39.889Z",
+  "createdAt": "2026-09-24T09:12:35.111Z",
   "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -9,22 +9,25 @@
       "height": 720,
       "beginner": {
         "timing": true,
+        "now": true,
         "platform": true
       },
       "standard": {
         "timing": true,
+        "now": true,
         "platform": true
       },
       "advanced": {
         "timing": false,
+        "now": false,
         "platform": false
       },
       "result": {
         "type": "ground",
-        "hit": false,
-        "dx": 0.00031417553654145057,
-        "dz": 3.9165614855438924,
-        "text": "落點：偏短 3.9 m（距目標 3.9 m）。"
+        "hit": true,
+        "dx": 0.000006526946298698877,
+        "dz": -0.9316126892221201,
+        "text": "命中目標區！距中心 0.9 m。"
       },
       "errors": []
     },
@@ -34,22 +37,25 @@
       "height": 390,
       "beginner": {
         "timing": true,
+        "now": true,
         "platform": true
       },
       "standard": {
         "timing": true,
+        "now": true,
         "platform": true
       },
       "advanced": {
         "timing": false,
+        "now": false,
         "platform": false
       },
       "result": {
         "type": "ground",
-        "hit": false,
-        "dx": 0.00031417553654145057,
-        "dz": 3.9165614855438924,
-        "text": "落點：偏短 3.9 m（距目標 3.9 m）。"
+        "hit": true,
+        "dx": 0.000006526946298698877,
+        "dz": -0.9316126892221201,
+        "text": "命中目標區！距中心 0.9 m。"
       },
       "errors": []
     },
@@ -59,22 +65,25 @@
       "height": 844,
       "beginner": {
         "timing": true,
+        "now": true,
         "platform": true
       },
       "standard": {
         "timing": true,
+        "now": true,
         "platform": true
       },
       "advanced": {
         "timing": false,
+        "now": false,
         "platform": false
       },
       "result": {
         "type": "ground",
-        "hit": false,
-        "dx": 0.00031417553654145057,
-        "dz": 3.9165614855438924,
-        "text": "落點：偏短 3.9 m（距目標 3.9 m）。"
+        "hit": true,
+        "dx": 0.000006526946298698877,
+        "dz": -0.9316126892221201,
+        "text": "命中目標區！距中心 0.9 m。"
       },
       "errors": []
     }

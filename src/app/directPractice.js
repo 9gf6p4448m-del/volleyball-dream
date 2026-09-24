@@ -46,7 +46,7 @@ export function runDirectPractice(ctx) {
         <a href="?">返回生涯</a>
       </nav>
     </header>
-    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，提早按墊球；角色會小幅迎球 · 墊球時上滑高球、下滑低球、左右滑偏向 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
+    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，提早按墊球；角色會迎向來球 · 墊球時左右滑改平台方向 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
     <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
@@ -229,7 +229,7 @@ export function runDirectPractice(ctx) {
   }
   function drillResult(type) {
     if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按墊球。' };
-    if (type === 'net') return { type, hit: false, text: '球碰網了：平台太平或太低，試試上滑高球。' };
+    if (type === 'net') return { type, hit: false, text: '球碰網了：早一點按墊球，讓球落在前臂上。' };
     const dx = state.ball.x - drill.target.x, dz = state.ball.z - drill.target.z;
     const distance = Math.hypot(dx, dz);
     if (type === 'ground' && distance <= DRILL_RADIUS) return { type, hit: true, dx, dz, text: `命中目標區！距中心 ${distance.toFixed(1)} m。` };
@@ -241,6 +241,24 @@ export function runDirectPractice(ctx) {
   // Seconds until the falling ball reaches platform height (~0.6 body heights),
   // if it is then within reach of the platform (about 0.4 body heights in front,
   // plus the side reach). Display only.
+  // Exact cue for "press now": rehearse a receive on a copy of the current state
+  // and report whether it would meet the ball with the active platform. Runs once
+  // per simulated tick; the live state and inputs are never touched.
+  let rehearsal = { tick: -1, key: null, value: false };
+  function pressNowReaches() {
+    const key = `${state.tick}:${playback ? 'p' : 'l'}`;
+    if (rehearsal.key === key) return rehearsal.value;
+    const copy = snapshotDirectGame(state);
+    const aim = { ...copy.player.aim };
+    let value = false;
+    for (let i = 0; i < 45 && copy.ball.active; i++) {
+      stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? 'receive' : null }]);
+      const contact = copy.events.find(e => e.type === 'contact');
+      if (contact) { value = contact.active && (contact.part === 'forearm' || contact.part === 'hand'); break; }
+    }
+    rehearsal = { tick: state.tick, key, value };
+    return value;
+  }
   function receiveEta() {
     const { player: p, ball: b } = state;
     if (!b.active) return null;
@@ -289,10 +307,11 @@ export function runDirectPractice(ctx) {
     }
     // Timing cue: the hit button ring shrinks as a receivable ball approaches.
     const eta = hints && !player.action ? receiveEta() : null;
-    timingActive = eta != null;
+    const now = hints && !player.action && ball.active ? pressNowReaches() : false;
+    timingActive = eta != null || now;
     const hit = $('[data-hit]');
     hit.classList.toggle('dp-timing', timingActive);
-    hit.classList.toggle('dp-timing-now', timingActive && eta <= 0.35);
+    hit.classList.toggle('dp-timing-now', now);
     hit.style.setProperty('--timing-scale', timingActive ? (1 + Math.min(1, eta / 1.2) * 0.45).toFixed(3) : '1');
     landing.visible = $('[data-assist]').value === 'beginner' && ball.active;
     if (landing.visible) {
@@ -323,7 +342,7 @@ export function runDirectPractice(ctx) {
       const action = DIRECT_ACTIONS[state.player.action];
       $('[data-hint]').textContent = action
         ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : state.player.action === 'receive' ? `墊球 · ${PASS_LABELS[state.player.passType] ?? PASS_LABELS.NEUTRAL}` : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
-        : '走到球路上，提早按墊球；角色會小幅迎球 · 墊球時上滑高球、下滑低球、左右滑偏向 · 扣球時上滑吊球、下滑直線、左右滑斜線';
+        : '走到球路上，提早按墊球；角色會迎向來球 · 墊球時左右滑改平台方向 · 扣球時上滑吊球、下滑直線、左右滑斜線';
       $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
     }

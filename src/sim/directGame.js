@@ -108,8 +108,8 @@ function receiveTurnTarget(s) {
   // Square up to the incoming path (direction the ball comes from), so an
   // off-centre stance does not aim the platform sideways. A near-vertical ball
   // has no path direction; its bearing is used instead.
-  const rvx = b.vx - p.vx, rvz = b.vz - p.vz;
-  const path = Math.hypot(rvx, rvz) > 0.5 ? Math.atan2(-rvx, rvz) : Math.atan2(dx, -dz);
+  // The ball's own (world) velocity: the athlete's movement must not change the path.
+  const path = Math.hypot(b.vx, b.vz) > 0.5 ? Math.atan2(-b.vx, b.vz) : Math.atan2(dx, -dz);
   const aimAngle = Math.atan2(p.aim.x, -p.aim.z);
   const difference = Math.atan2(Math.sin(path - aimAngle), Math.cos(path - aimAngle));
   if (Math.abs(difference) > C.receiveTrackCone) return current;

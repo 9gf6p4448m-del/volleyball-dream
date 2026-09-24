@@ -7,6 +7,7 @@ import {
 } from '../src/sim/directGame.js';
 import { DIRECT_ACTIONS, DIRECT_PHYSICS } from '../src/sim/directConstants.js';
 import { createDirectControls } from '../src/input/directControls.js';
+import { collideBody } from '../src/sim/directPhysics.js';
 
 const TYPES = ['NEUTRAL', 'HIGH', 'LOW', 'LEFT', 'RIGHT'];
 const cmd = (s, action = null, extra = {}) => ({
@@ -129,23 +130,27 @@ test('A4 平台選擇不增減膠囊、不改半徑；沒碰到身體的球軌�
 });
 
 test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，direct-v3 拒絕', () => {
-  const s = createDirectGame(); s.player.x = -0.3;
-  const initial = snapshotDirectGame(s), commands = [], states = [];
-  for (let t = 0; t < 90; t++) {
-    const c = cmd(s, t === 0 ? 'feed' : t === 29 ? 'receive' : null, { passType: 'LEFT' });
-    commands.push(c); stepDirectGame(s, [c]); states.push(snapshotDirectGame(s));
-  }
-  assert.equal(s.stats.contacts > 0, true);
-  for (let from = 0; from < states.length - 1; from += 7) {
-    const restored = restoreDirectGame(states[from]);
-    for (let t = restored.tick; t < s.tick; t++) {
-      stepDirectGame(restored, [commands[t]]);
-      assert.equal(serializeDirectState(restored), serializeDirectState(states[t]));
+  // Two tapes: the original mid-windup change (LEFT then HIGH) and LEFT held
+  // throughout, so a dropped passLateral is visible at the restore points.
+  for (const choose of [t => (t < 31 ? 'LEFT' : 'HIGH'), () => 'LEFT']) {
+    const s = createDirectGame(); s.player.x = -0.3;
+    const initial = snapshotDirectGame(s), commands = [], states = [];
+    for (let t = 0; t < 90; t++) {
+      const c = cmd(s, t === 0 ? 'feed' : t === 29 ? 'receive' : null, { passType: choose(t) });
+      commands.push(c); stepDirectGame(s, [c]); states.push(snapshotDirectGame(s));
     }
+    assert.equal(s.stats.contacts > 0, true);
+    for (let from = 0; from < states.length - 1; from += 7) {
+      const restored = restoreDirectGame(states[from]);
+      for (let t = restored.tick; t < s.tick; t++) {
+        stepDirectGame(restored, [commands[t]]);
+        assert.equal(serializeDirectState(restored), serializeDirectState(states[t]));
+      }
+    }
+    assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v4', initial, commands, endTick: s.tick })), serializeDirectState(s));
+    assert.throws(() => restoreDirectGame({ ...initial, simulationVersion: 'direct-v3' }));
+    assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v3', initial, commands, endTick: 10 }));
   }
-  assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v4', initial, commands, endTick: s.tick })), serializeDirectState(s));
-  assert.throws(() => restoreDirectGame({ ...initial, simulationVersion: 'direct-v3' }));
-  assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v3', initial, commands, endTick: 10 }));
 });
 
 test('A6 準備期最後一刻才選的平台只到部分角度，之後結果只由鎖定角度決定', () => {
@@ -186,8 +191,9 @@ function controlsFixture() {
   const f = { win, doc, moveZone: make(), aimZone: make(), jumpButton: make(), hitButton: make(), actionSelect, feedButton: make(), feedSelect };
   return { f, controls: createDirectControls(f) };
 }
-test('A7 墊球時在出手鈕滑動只送出平台選擇、不改朝向；鍵盤墊球為 NEUTRAL', () => {
-  for (const [dx, dy, expected] of [[0, 0, 'NEUTRAL'], [0, -30, 'HIGH'], [0, 30, 'LOW'], [-30, 5, 'LEFT'], [30, -5, 'RIGHT']]) {
+test('A7 墊球時在出手鈕左右滑只送出平台選擇、不改朝向，上下滑暫停用；鍵盤墊球為 NEUTRAL', () => {
+  // Up/down swipes are disabled (user decision 2026-09-24) and stay neutral.
+  for (const [dx, dy, expected] of [[0, 0, 'NEUTRAL'], [0, -30, 'NEUTRAL'], [0, 30, 'NEUTRAL'], [-30, 5, 'LEFT'], [30, -5, 'RIGHT']]) {
     const { f, controls } = controlsFixture();
     f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
     const first = controls.sample(0);
@@ -308,4 +314,24 @@ test('A15 方向練習：不滑打中央，左右滑打得到對應側邊目標'
   const r = rate(right, inTarget(2)), nr = rate(n, inTarget(2));
   assert.ok(l >= 0.25 && l >= 3 * nl, `A15b left ${l.toFixed(2)} vs neutral ${nl.toFixed(2)}`);
   assert.ok(r >= 0.25 && r >= 3 * nr, `A15c right ${r.toFixed(2)} vs neutral ${nr.toFixed(2)}`);
+});
+
+test('L1 平台面反彈後，球不會沿著被碰到的前臂繼續往內', () => {
+  // Two level forearms along the forward axis form an upward platform. The ball
+  // strikes the outer upper edge of the right forearm while moving inward.
+  const forearm = (id, x) => ({ id, part: 'forearm', active: true, radius: 0.05,
+    a: { x, y: 1, z: 0 }, b: { x, y: 1, z: -0.3 } });
+  const pose = [forearm('left-forearm', -0.08), forearm('right-forearm', 0.08)];
+  const s = createDirectGame();
+  s.player.action = 'receive';
+  const c = Math.cos(0.7), n = { x: Math.sin(0.7), y: c, z: 0 };
+  const gap = 0.05 + 0.105 + 0.0005;
+  Object.assign(s.ball, { active: true, x: 0.08 + n.x * gap, y: 1 + n.y * gap, z: -0.15, vx: -5, vy: -1, vz: 0 });
+  const hit = collideBody(s, pose, pose, DIRECT_DT / 16);
+  assert.ok(hit, '須觸球');
+  // Actual capsule normal at the contact: from the forearm axis to the resolved ball centre.
+  const ax = hit.position.x - 0.08, ay = hit.position.y - 1, len = Math.hypot(ax, ay);
+  const inward = (s.ball.vx * ax + s.ball.vy * ay) / len;
+  assert.ok(inward >= -1e-9, `沿膠囊法線不得往內（${inward.toFixed(3)} m/s）`);
+  assert.ok(s.ball.vy > 0, '平台面仍把球往上送');
 });

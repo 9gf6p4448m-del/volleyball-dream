@@ -11,15 +11,15 @@ const STICK_RADIUS = 64;
 
 // Keep the sandbox's four gesture meanings. A swipe selects the intended shot;
 // contact still has to occur at the actual hand surface to affect the ball.
-// Receive platform: the spike's four-direction judgement, read as platform
-// choices (up = high, down = low, sides = platform yaw, small = neutral).
+// Receive platform: the spike's direction judgement, read as platform choices.
+// Sides yaw the platform. Up/down (HIGH/LOW) are disabled for now by user
+// decision (2026-09-24) until their feel is redesigned; they stay neutral.
 function receivePassType(dx, dy) {
   if (Math.hypot(dx, dy) < 10) return 'NEUTRAL';
   const type = spikeShotType(dx, dy);
-  if (type === 'TIP') return 'HIGH';
   if (type === 'CROSS_LEFT') return 'LEFT';
   if (type === 'CROSS_RIGHT') return 'RIGHT';
-  return dy > 10 ? 'LOW' : 'NEUTRAL';
+  return 'NEUTRAL';
 }
 function spikeShotType(dx, dy) {
   if (Math.hypot(dx, dy) < 10) return 'LINE';

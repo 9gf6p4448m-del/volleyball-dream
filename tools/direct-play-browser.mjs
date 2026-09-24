@@ -29,11 +29,12 @@ try {
       await page.waitForFunction(() => Boolean(window.__directPractice));
       await page.evaluate(() => window.__directPractice.pause());
       const run = passType => page.evaluate(type => {
-        const practice = window.__directPractice, seen = { timing: false, platform: false };
+        const practice = window.__directPractice, seen = { timing: false, now: false, platform: false };
         for (let tick = 0; tick < 29; tick++) {
           practice.command({ action: tick === 0 ? 'feed' : null, feedKind: 'pass-drill' });
           practice.step(1);
           seen.timing ||= practice.assistState().timingActive;
+          seen.now ||= practice.assistState().timingNow;
         }
         practice.command({ action: 'receive', passType: type });
         practice.step(1);
@@ -41,9 +42,10 @@ try {
         return seen;
       }, passType);
       await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'beginner');
-      const beginner = await run('HIGH');
+      const beginner = await run('NEUTRAL');
       assert.equal(beginner.timing, true, 'Beginner shows the receive timing cue');
       assert.equal(beginner.platform, true, 'Beginner shows the platform facing line');
+      assert.equal(beginner.now, true, 'Beginner shows the exact press-now cue before the receive');
       const during = await page.evaluate(() => window.__directPractice.assistState());
       assert.equal(during.targetVisible, true, 'Drill target is visible');
       await page.screenshot({ path: resolve(output, `${name}-pass-platform.png`) });
@@ -62,8 +64,9 @@ try {
       await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'advanced');
       await page.evaluate(() => window.__directPractice.restart());
       await page.evaluate(() => window.__directPractice.pause());
-      const advanced = await run('LOW');
+      const advanced = await run('RIGHT');
       assert.equal(advanced.timing, false, 'Advanced hides the timing cue');
+      assert.equal(advanced.now, false, 'Advanced hides the press-now cue');
       assert.equal(advanced.platform, false, 'Advanced hides the platform facing line');
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
       report.scenes.push({ name, width, height, beginner, standard, advanced, result: result.drill.result, errors });
