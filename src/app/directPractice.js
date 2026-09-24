@@ -126,6 +126,7 @@ export function runDirectPractice(ctx) {
     liveState = null;
     accumulator = 0;
     lastContactTick = -1000;
+    rehearsal = { tick: -1, key: null, value: false };
     drill = null;
     drillTarget.visible = false;
     frameTimes = [];
@@ -251,7 +252,9 @@ export function runDirectPractice(ctx) {
     const copy = snapshotDirectGame(state);
     const aim = { ...copy.player.aim };
     let value = false;
-    for (let i = 0; i < 45 && copy.ball.active; i++) {
+    // An active platform contact can only happen within windup + active ticks.
+    const window = DIRECT_ACTIONS.receive.windup + DIRECT_ACTIONS.receive.active;
+    for (let i = 0; i < window && copy.ball.active; i++) {
       stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? 'receive' : null }]);
       const contact = copy.events.find(e => e.type === 'contact');
       if (contact) { value = contact.active && (contact.part === 'forearm' || contact.part === 'hand'); break; }
@@ -306,8 +309,10 @@ export function runDirectPractice(ctx) {
       platformArrow.setDirection(direction.set(face.x, face.y, face.z));
     }
     // Timing cue: the hit button ring shrinks as a receivable ball approaches.
-    const eta = hints && !player.action ? receiveEta() : null;
-    const now = hints && !player.action && ball.active ? pressNowReaches() : false;
+    // Receive cues only when the hit button would actually receive.
+    const receiving = hints && !player.action && $('[data-action]').value === 'receive';
+    const eta = receiving ? receiveEta() : null;
+    const now = receiving && ball.active && eta != null && eta <= 0.4 ? pressNowReaches() : false;
     timingActive = eta != null || now;
     const hit = $('[data-hit]');
     hit.classList.toggle('dp-timing', timingActive);

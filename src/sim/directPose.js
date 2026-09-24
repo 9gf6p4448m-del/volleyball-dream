@@ -74,7 +74,10 @@ export function getDirectPose(state, fraction = 0) {
       ? 0.1 * raise * recover
       : p.action === "dive"
         ? 0.28 * raise * recover
-        : 0) + landing + 0.022 * run * (1 + Math.cos(gait * 2));
+        : 0) + landing +
+    // A passer settles the platform: the running bob fades out with the receive
+    // weight, so residual movement at contact cannot drop the platform (direct-v4).
+    0.022 * run * (1 + Math.cos(gait * 2)) * (p.action === "receive" ? 1 - raise * recover : 1);
   const point = (x, y, f) => ({
     x: p.x + (x * -fz + f * fx) * h,
     y: p.y + (y - crouch) * h,

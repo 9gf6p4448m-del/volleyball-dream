@@ -149,7 +149,7 @@ test('receive assistance rotation adds no ball impulse, even when a late receive
   // direct-v4 (user-approved 2026-09-24): every active contact made while the assist is
   // still turning or side-reaching is compared with the same pre-contact state whose turn
   // and reach are already complete. Excluding both keeps every case under 0.3 m/s (max
-  // 0.068); leaving them in the surface velocity reaches 1.246 m/s.
+  // 0.000 after the neutral retune); leaving them in the surface velocity reaches 0.943 m/s.
   const diffs = [];
   for (let deg = -40; deg <= 40; deg += 5) for (const x of [-0.45, -0.2, 0, 0.2, 0.45]) for (let rt = 26; rt <= 36; rt++) {
     const s = createDirectGame();
