@@ -1,0 +1,82 @@
+{
+  "createdAt": "2026-09-24T06:15:06.988Z",
+  "base": "http://127.0.0.1:4175",
+  "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "beginner": {
+        "timing": true,
+        "platform": true
+      },
+      "standard": {
+        "timing": true,
+        "platform": true
+      },
+      "advanced": {
+        "timing": false,
+        "platform": false
+      },
+      "result": {
+        "type": "ground",
+        "hit": true,
+        "dx": 0.000005637145941983501,
+        "dz": -0.46752129231916983,
+        "text": "命中目標區！距中心 0.5 m。"
+      },
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "beginner": {
+        "timing": true,
+        "platform": true
+      },
+      "standard": {
+        "timing": true,
+        "platform": true
+      },
+      "advanced": {
+        "timing": false,
+        "platform": false
+      },
+      "result": {
+        "type": "ground",
+        "hit": true,
+        "dx": 0.000005637145941983501,
+        "dz": -0.46752129231916983,
+        "text": "命中目標區！距中心 0.5 m。"
+      },
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "beginner": {
+        "timing": true,
+        "platform": true
+      },
+      "standard": {
+        "timing": true,
+        "platform": true
+      },
+      "advanced": {
+        "timing": false,
+        "platform": false
+      },
+      "result": {
+        "type": "ground",
+        "hit": true,
+        "dx": 0.000005637145941983501,
+        "dz": -0.46752129231916983,
+        "text": "命中目標區！距中心 0.5 m。"
+      },
+      "errors": []
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { DIRECT_ACTIONS } from "./directConstants.js";
+import { DIRECT_ACTIONS, DIRECT_PHYSICS } from "./directConstants.js";
 
 const blend = (a, b, q) => ({
   x: a.x + (b.x - a.x) * q,
@@ -120,14 +120,19 @@ export function getDirectPose(state, fraction = 0) {
       hand = blend(hand, bodyPoint(sign * 0.20, 0.94, 0.12), Math.min(1, tuck * 12));
     }
     if (p.action === "receive") {
+      // Platform choice: yaw the forearms about the shoulder line and raise or
+      // lower the hands. Same capsules; the ball still rebounds off the real arm.
+      const yaw = (p.passLateral ?? 0) * DIRECT_PHYSICS.passYaw;
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const platform = (x, y, f) => point(x * cy + f * sy, y, -x * sy + f * cy);
       elbow = blend(
         elbow,
-        point(sign * 0.11, 0.69 + phase * 0.11, 0.21),
+        platform(sign * 0.11, 0.69 + phase * 0.11, 0.21),
         raise * recover,
       );
       hand = blend(
         hand,
-        point(sign * 0.045, 0.66 + phase * 0.24, 0.41),
+        platform(sign * 0.045, 0.52 + phase * 0.11 + (p.passPitch ?? 0) * DIRECT_PHYSICS.passPitch, 0.41),
         raise * recover,
       );
     } else if (p.action === 'dive') {

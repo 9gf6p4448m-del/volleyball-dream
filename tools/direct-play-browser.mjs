@@ -15,7 +15,61 @@ const report = { createdAt: new Date().toISOString(), base, device: 'Desktop Chr
 const deliveryOnly = process.argv.includes('--delivery');
 const motionOnly = process.argv.includes('--motion');
 const assistOnly = process.argv.includes('--assist');
+const passOnly = process.argv.includes('--pass');
 try {
+  if (passOnly) {
+    // direct-v4 acceptance A8-A10: platform line, timing cue, pass-direction drill.
+    for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
+      const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(String(error)));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      await page.goto(`${base}/?mode=direct&seed=17&quality=high&dpr=1`);
+      await page.waitForFunction(() => Boolean(window.__directPractice));
+      await page.evaluate(() => window.__directPractice.pause());
+      const run = passType => page.evaluate(type => {
+        const practice = window.__directPractice, seen = { timing: false, platform: false };
+        for (let tick = 0; tick < 29; tick++) {
+          practice.command({ action: tick === 0 ? 'feed' : null, feedKind: 'pass-drill' });
+          practice.step(1);
+          seen.timing ||= practice.assistState().timingActive;
+        }
+        practice.command({ action: 'receive', passType: type });
+        practice.step(1);
+        for (let tick = 0; tick < 12; tick++) { practice.command({ passType: type }); practice.step(1); seen.platform ||= practice.assistState().platformVisible; }
+        return seen;
+      }, passType);
+      await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'beginner');
+      const beginner = await run('HIGH');
+      assert.equal(beginner.timing, true, 'Beginner shows the receive timing cue');
+      assert.equal(beginner.platform, true, 'Beginner shows the platform facing line');
+      const during = await page.evaluate(() => window.__directPractice.assistState());
+      assert.equal(during.targetVisible, true, 'Drill target is visible');
+      await page.screenshot({ path: resolve(output, `${name}-pass-platform.png`) });
+      await page.evaluate(() => { const p = window.__directPractice; for (let i = 0; i < 200 && !p.assistState().drill?.result; i++) { p.command({}); p.step(1); } });
+      const result = await page.evaluate(() => window.__directPractice.assistState());
+      assert.ok(result.drill?.result, 'Drill reports a result after the ball ends');
+      assert.equal(result.drill.touched, true, 'The drill receive physically touched the ball');
+      assert.equal(result.message, result.drill.result.text, 'Result text is shown to the player');
+      assert.equal(await page.evaluate(() => window.__directPractice.verifyReplay()), true, 'Drill with platform choice replays identically');
+      await page.screenshot({ path: resolve(output, `${name}-pass-result.png`) });
+      await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'standard');
+      await page.evaluate(() => window.__directPractice.restart());
+      await page.evaluate(() => window.__directPractice.pause());
+      const standard = await run('LEFT');
+      assert.equal(standard.timing && standard.platform, true, 'Standard also shows platform line and timing cue');
+      await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'advanced');
+      await page.evaluate(() => window.__directPractice.restart());
+      await page.evaluate(() => window.__directPractice.pause());
+      const advanced = await run('LOW');
+      assert.equal(advanced.timing, false, 'Advanced hides the timing cue');
+      assert.equal(advanced.platform, false, 'Advanced hides the platform facing line');
+      assert.deepEqual(errors, [], 'No browser errors during the pass drill');
+      report.scenes.push({ name, width, height, beginner, standard, advanced, result: result.drill.result, errors });
+      await context.close();
+    }
+  }
   if (assistOnly) {
     const aim = { x: Math.sin(35 * Math.PI / 180), z: -Math.cos(35 * Math.PI / 180) };
     for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
@@ -45,7 +99,7 @@ try {
       await page.screenshot({ path: resolve(output, `${name}-receive-assist-approach.png`) });
       await page.evaluate(direction => {
         const practice = window.__directPractice;
-        for (let tick = 38; tick < 42; tick++) {
+        for (let tick = 38; tick < 43; tick++) { // direct-v4 contact lands on tick 42 (user-approved)
           practice.command({ aim: direction });
           practice.step(1);
         }
@@ -157,7 +211,7 @@ try {
     report.delivery = { url: page.url(), build, exportMetadata: true, menuNavigation: true, errors };
     await context.close();
   }
-  for (const [name, width, height] of (deliveryOnly || motionOnly || assistOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
+  for (const [name, width, height] of (deliveryOnly || motionOnly || assistOnly || passOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors = [];
@@ -223,7 +277,7 @@ try {
       await page.locator('[data-feed]').click();
       await page.evaluate(() => window.__directPractice.step(29));
       await page.locator('[data-hit]').click();
-      await page.evaluate(() => window.__directPractice.step(12));
+      await page.evaluate(() => window.__directPractice.step(14)); // direct-v4 platform contact lands two ticks later (user-approved)
       received = await page.evaluate(() => window.__directPractice.snapshot());
       assert.equal(received.stats.contacts, 1, 'Fixed receive feed reaches a real body contact');
       assert.ok(received.ball.vy > 0 && received.ball.vz < 0, `Timed receive sends the ball forward and up: ${JSON.stringify({ name, attempt, tick: received.tick, player: received.player, ball: received.ball })}`);
@@ -260,8 +314,8 @@ try {
     assert.equal(await page.locator('.dp-root').count(), 0, 'Disposal removes UI');
     await context.close();
   }
-  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
+  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : passOnly ? `PASS pass: ${report.scenes.length} viewports with platform line, timing cue, drill result, replay; advanced hides hints` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
 } finally {
-  await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : assistOnly ? 'assist-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
+  await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : assistOnly ? 'assist-browser.json' : passOnly ? 'pass-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
   await browser.close();
 }

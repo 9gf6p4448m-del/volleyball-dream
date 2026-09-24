@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-24T03:46:57.124Z",
+  "createdAt": "2026-09-24T06:12:04.481Z",
   "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -59,29 +59,29 @@
         }
       ],
       "initialPerformance": {
-        "frames": 52,
-        "fps": 10.365792883484502,
-        "frameP95": 83.40000000000009,
-        "simP95": 0.19999999552965164,
-        "backlogMs": 16.49999999999879,
-        "maxBacklogMs": 950.0000000000003,
+        "frames": 2,
+        "fps": 1.2766500702157537,
+        "frameP95": 0,
+        "simP95": 1.1000000014901161,
+        "backlogMs": 0,
+        "maxBacklogMs": 1366.6000000000008,
         "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 123,
-        "fps": 55.07380486858175,
-        "frameP95": 66.70000000000073,
-        "simP95": 0.5,
+        "frames": 131,
+        "fps": 49.748724635110044,
+        "frameP95": 100,
+        "simP95": 0.6000000014901161,
         "backlogMs": 0,
-        "maxBacklogMs": 16.666666666665453,
+        "maxBacklogMs": 16.66666666666424,
         "drawCalls": 118
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
       "receiveRepeats": 5,
       "receiveVelocity": {
-        "y": 4.26383864849045,
-        "z": -4.438966001427085
+        "y": 5.834086357039172,
+        "z": -5.084898403483258
       },
       "spikeVelocity": {
         "y": -3.4157555660576104,
@@ -151,29 +151,29 @@
         }
       ],
       "initialPerformance": {
-        "frames": 93,
-        "fps": 18.98036654557329,
-        "frameP95": 50.09999999999991,
-        "simP95": 0.29999999701976776,
-        "backlogMs": 16.466666666665184,
-        "maxBacklogMs": 816.5999999999993,
+        "frames": 2,
+        "fps": 1.5000375009375233,
+        "frameP95": 0,
+        "simP95": 0.6999999955296516,
+        "backlogMs": 0,
+        "maxBacklogMs": 1133.3000000000009,
         "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 110,
-        "fps": 61.402203036619774,
-        "frameP95": 49.900000000001455,
-        "simP95": 0.30000000447034836,
+        "frames": 117,
+        "fps": 55.712517062947505,
+        "frameP95": 66.69999999999709,
+        "simP95": 0.7999999970197678,
         "backlogMs": 0,
-        "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 120
+        "maxBacklogMs": 16.66666666666424,
+        "drawCalls": 118
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
       "receiveRepeats": 5,
       "receiveVelocity": {
-        "y": 4.26383864849045,
-        "z": -4.438966001427085
+        "y": 5.834086357039172,
+        "z": -5.084898403483258
       },
       "spikeVelocity": {
         "y": -3.4157555660576104,
@@ -243,29 +243,29 @@
         }
       ],
       "initialPerformance": {
-        "frames": 98,
-        "fps": 20.766231564678534,
-        "frameP95": 50,
-        "simP95": 0.20000000298023224,
-        "backlogMs": 2.5333333318422953,
-        "maxBacklogMs": 669.3999999985093,
+        "frames": 2,
+        "fps": 1.5000375009375235,
+        "frameP95": 0,
+        "simP95": 0.8999999985098839,
+        "backlogMs": 0,
+        "maxBacklogMs": 1133.3000000000006,
         "drawCalls": 88
       },
       "syntheticPlaybackMetrics": {
-        "frames": 119,
-        "fps": 63.46892333949845,
-        "frameP95": 49.900000000001455,
-        "simP95": 0.30000000447034836,
+        "frames": 117,
+        "fps": 57.54664393218506,
+        "frameP95": 50.099999999998545,
+        "simP95": 0.6999999955296516,
         "backlogMs": 0,
         "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 91
+        "drawCalls": 89
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
       "receiveRepeats": 5,
       "receiveVelocity": {
-        "y": 4.26383864849045,
-        "z": -4.438966001427085
+        "y": 5.834086357039172,
+        "z": -5.084898403483258
       },
       "spikeVelocity": {
         "y": -3.4157555660576104,

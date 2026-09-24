@@ -4,10 +4,15 @@ import { createDirectGame, stepDirectGame, getDirectPose, snapshotDirectGame,
 import { createDirectControls } from '../input/directControls.js';
 import { createDirectPlayerView } from '../render/directPlayerView.js';
 import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
+import { platformNormal } from '../sim/directPhysics.js';
 import './directPractice.css';
 
 const ACTION_LABELS = { receive: '墊球', spike: '扣球', tip: '吊球', set: '舉球', block: '攔網', dive: '魚躍' };
 const SHOT_LABELS = { LINE: '直線重扣', CROSS_LEFT: '左斜線', CROSS_RIGHT: '右斜線', TIP: '單手吊球' };
+const PASS_LABELS = { NEUTRAL: '平台正對', HIGH: '高球到位', LOW: '低平安全球', LEFT: '平台偏左', RIGHT: '平台偏右' };
+// Pass-direction drill targets near the net (x, z in metres); display only.
+const DRILL_TARGETS = [{ x: 0, z: 1.6 }, { x: -2, z: 1.6 }, { x: 2, z: 1.6 }];
+const DRILL_RADIUS = 1;
 const MAX_TAPE_TICKS = 36000;
 const PART_LABELS = { head: '頭部', hand: '手掌', forearm: '前臂', arm: '上臂', torso: '軀幹', leg: '腿部' };
 
@@ -26,7 +31,7 @@ export function runDirectPractice(ctx) {
         <button data-feed>餵一球 <span aria-hidden="true">↗</span></button>
         <button data-pause>暫停</button>
         <details class="dp-settings"><summary>訓練設定</summary><div class="dp-settings-box">
-          <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option></select></label>
+          <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option><option value="pass-drill">接球方向練習</option></select></label>
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
           <p>更改身高會開始新一輪訓練。資訊提示不改變碰撞判定；接球的小幅迎球轉身是基本操作。</p>
@@ -41,7 +46,7 @@ export function runDirectPractice(ctx) {
         <a href="?">返回生涯</a>
       </nav>
     </header>
-    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，提早按墊球；角色會小幅迎球 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
+    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，提早按墊球；角色會小幅迎球 · 墊球時上滑高球、下滑低球、左右滑偏向 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
     <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
@@ -57,6 +62,20 @@ export function runDirectPractice(ctx) {
   ctx.scene.add(landing);
   const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(), 0.8, 0x9ae5df, 0.2, 0.12);
   ctx.scene.add(arrow);
+  // Platform facing line: drawn from the shared pose, a prediction and never a guarantee.
+  const platformArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.9, 0xffc861, 0.2, 0.12);
+  platformArrow.visible = false;
+  ctx.scene.add(platformArrow);
+  const drillTarget = new THREE.Mesh(new THREE.RingGeometry(DRILL_RADIUS - 0.08, DRILL_RADIUS, 48),
+    new THREE.MeshBasicMaterial({ color: 0xffa24c, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+  drillTarget.rotation.x = -Math.PI / 2;
+  drillTarget.position.y = 0.027;
+  drillTarget.visible = false;
+  ctx.scene.add(drillTarget);
+  // Drill bookkeeping lives in the app layer only; the feed itself is the normal receive feed.
+  let drill = null;
+  let drillCount = 0;
+  let timingActive = false;
   const seed = Number(ctx.params.get('seed')) || 1;
   let state = createDirectGame({ seed });
   let initial = snapshotDirectGame(state);
@@ -107,6 +126,8 @@ export function runDirectPractice(ctx) {
     liveState = null;
     accumulator = 0;
     lastContactTick = -1000;
+    drill = null;
+    drillTarget.visible = false;
     frameTimes = [];
     simTimes = [];
     maxBacklog = 0;
@@ -182,6 +203,17 @@ export function runDirectPractice(ctx) {
     simTimes.push(performance.now() - before);
     if (simTimes.length > 3600) simTimes.shift();
     for (const event of state.events) {
+      if (event.type === 'feed') {
+        drill = event.kind === 'pass-drill' ? { target: DRILL_TARGETS[drillCount++ % DRILL_TARGETS.length], touched: false, result: null } : null;
+        drillTarget.visible = !!drill;
+        if (drill) drillTarget.position.set(drill.target.x, 0.027, drill.target.z);
+        if (drill && !playback) message('接球方向練習：把球墊向橘色目標區。滑動選平台角度，落點只看物理結果。');
+      }
+      if (drill && event.type === 'contact') drill.touched = true;
+      if (drill && !drill.result && ['ground', 'net', 'out'].includes(event.type)) {
+        drill.result = drillResult(event.type);
+        if (!playback) { message(drill.result.text); continue; }
+      }
       if (event.type === 'contact') {
         lastContactTick = state.tick;
         if (!playback) message(`實際接觸 · ${PART_LABELS[event.part] ?? '身體'} · 試著改變出手時機與方向。`);
@@ -190,6 +222,30 @@ export function runDirectPractice(ctx) {
       }
     }
     if (playback && state.tick >= playback.endTick) { setPaused(true); message('回放結束。按「退出回放」返回訓練。'); }
+  }
+  function drillResult(type) {
+    if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按墊球。' };
+    if (type === 'net') return { type, hit: false, text: '球碰網了：平台太平或太低，試試上滑高球。' };
+    const dx = state.ball.x - drill.target.x, dz = state.ball.z - drill.target.z;
+    const distance = Math.hypot(dx, dz);
+    if (type === 'ground' && distance <= DRILL_RADIUS) return { type, hit: true, dx, dz, text: `命中目標區！距中心 ${distance.toFixed(1)} m。` };
+    const parts = [];
+    if (Math.abs(dx) >= 0.1) parts.push(`${dx < 0 ? '偏左' : '偏右'} ${Math.abs(dx).toFixed(1)} m`);
+    if (Math.abs(dz) >= 0.1) parts.push(`${dz < 0 ? '偏網前' : '偏短'} ${Math.abs(dz).toFixed(1)} m`);
+    return { type, hit: false, dx, dz, text: `${type === 'out' ? '出界' : '落點'}：${parts.join('、') || '接近目標'}（距目標 ${distance.toFixed(1)} m）。` };
+  }
+  // Seconds until the falling ball reaches platform height (~0.6 body heights),
+  // if it is then within reach of the athlete. Display only.
+  function receiveEta() {
+    const { player: p, ball: b } = state;
+    if (!b.active) return null;
+    const g = DIRECT_PHYSICS.gravity, drop = b.y - (p.y + 0.6 * p.height);
+    const disc = b.vy * b.vy + 2 * g * drop;
+    if (disc < 0) return null;
+    const t = (b.vy + Math.sqrt(disc)) / g;
+    if (t <= 0 || t > 1.5) return null;
+    const miss = Math.hypot(b.x + b.vx * t - p.x, b.z + b.vz * t - p.z);
+    return miss <= DIRECT_PHYSICS.receiveTrackReach * p.height ? t : null;
   }
   function metrics() {
     const percentile = values => { if (!values.length) return 0; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor((sorted.length - 1) * 0.95)]; };
@@ -214,6 +270,24 @@ export function runDirectPractice(ctx) {
     direction.set(player.aim?.x ?? 0, 0, player.aim?.z ?? -1).normalize();
     arrow.setDirection(direction);
     arrow.visible = $('[data-assist]').value !== 'advanced';
+    const hints = $('[data-assist]').value !== 'advanced';
+    const receive = DIRECT_ACTIONS.receive;
+    const pose = getDirectPose(state);
+    const face = hints && player.action === 'receive' && player.actionTick < receive.windup + receive.active
+      ? platformNormal(pose, { requireActive: false }) : null;
+    platformArrow.visible = !!face;
+    if (face) {
+      const left = pose.find(part => part.id === 'left-forearm'), right = pose.find(part => part.id === 'right-forearm');
+      platformArrow.position.set((left.a.x + left.b.x + right.a.x + right.b.x) / 4, (left.a.y + left.b.y + right.a.y + right.b.y) / 4, (left.a.z + left.b.z + right.a.z + right.b.z) / 4);
+      platformArrow.setDirection(direction.set(face.x, face.y, face.z));
+    }
+    // Timing cue: the hit button ring shrinks as a receivable ball approaches.
+    const eta = hints && !player.action ? receiveEta() : null;
+    timingActive = eta != null;
+    const hit = $('[data-hit]');
+    hit.classList.toggle('dp-timing', timingActive);
+    hit.classList.toggle('dp-timing-now', timingActive && eta <= 0.35);
+    hit.style.setProperty('--timing-scale', timingActive ? (1 + Math.min(1, eta / 1.2) * 0.45).toFixed(3) : '1');
     landing.visible = $('[data-assist]').value === 'beginner' && ball.active;
     if (landing.visible) {
       const g = DIRECT_PHYSICS.gravity;
@@ -242,8 +316,8 @@ export function runDirectPractice(ctx) {
       $('[data-status]').textContent = `${playback ? '回放' : paused ? '暫停' : '訓練'} · 觸球 ${state.stats.contacts} · 餵球 ${state.stats.feeds} · ${m.fps.toFixed(0)} FPS`;
       const action = DIRECT_ACTIONS[state.player.action];
       $('[data-hint]').textContent = action
-        ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
-        : '走到球路上，提早按墊球；角色會小幅迎球 · 扣球時上滑吊球、下滑直線、左右滑斜線';
+        ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : state.player.action === 'receive' ? `墊球 · ${PASS_LABELS[state.player.passType] ?? PASS_LABELS.NEUTRAL}` : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
+        : '走到球路上，提早按墊球；角色會小幅迎球 · 墊球時上滑高球、下滑低球、左右滑偏向 · 扣球時上滑吊球、下滑直線、左右滑斜線';
       $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
     }
@@ -251,7 +325,9 @@ export function runDirectPractice(ctx) {
   }
   const debug = {
     snapshot: () => snapshotDirectGame(state), pose: () => structuredClone(getDirectPose(state)),
-    metrics, tape: () => structuredClone(tape()), pause: () => setPaused(true), resume: () => setPaused(false),
+    metrics, tape: () => structuredClone(tape()),
+    assistState: () => ({ platformVisible: platformArrow.visible, timingActive, timingNow: $('[data-hit]').classList.contains('dp-timing-now'),
+      targetVisible: drillTarget.visible, drill: structuredClone(drill), message: $('[data-message]').textContent }), pause: () => setPaused(true), resume: () => setPaused(false),
     command: command => injected.push(structuredClone(command)),
     step(count = 1) {
       // Single-step consumes actual queued input; unlike a user pause, it must not erase it.
@@ -275,7 +351,8 @@ export function runDirectPractice(ctx) {
       if (disposed) return;
       disposed = true; cancelAnimationFrame(raf); controls.dispose(); listeners.forEach(remove => remove());
       view.dispose(); ctx.scene.remove(landing); landing.geometry.dispose(); landing.material.dispose();
-      ctx.scene.remove(arrow); arrow.dispose(); root.remove(); oldHud.hidden = false;
+      ctx.scene.remove(arrow); arrow.dispose(); ctx.scene.remove(platformArrow); platformArrow.dispose();
+      ctx.scene.remove(drillTarget); drillTarget.geometry.dispose(); drillTarget.material.dispose(); root.remove(); oldHud.hidden = false;
       if (window.__directPractice === debug) delete window.__directPractice;
     },
   };

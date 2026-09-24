@@ -60,6 +60,32 @@ export function sweepCapsule(start, end, old, next, radius) {
 }
 // surfacePose (same capsules as nextPose) supplies only the contact-surface
 // velocity, so motion that must not add impulse can be excluded from it.
+// Receive platform (direct-v4): both active forearms form one flat surface.
+// A ball arriving on that face rebounds off the plane normal instead of the
+// side of a single cylinder. Detection still uses the unchanged capsules.
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const unit = (v) => {
+  const l = Math.hypot(v.x, v.y, v.z);
+  return l > 1e-9 ? { x: v.x / l, y: v.y / l, z: v.z / l } : null;
+};
+export function platformNormal(pose, { requireActive = true } = {}) {
+  const left = pose.find((s) => s.id === "left-forearm"),
+    right = pose.find((s) => s.id === "right-forearm");
+  if (!left || !right || (requireActive && (!left.active || !right.active))) return null;
+  const axis = unit({
+    x: left.b.x - left.a.x + right.b.x - right.a.x,
+    y: left.b.y - left.a.y + right.b.y - right.a.y,
+    z: left.b.z - left.a.z + right.b.z - right.a.z,
+  });
+  if (!axis) return null;
+  const across = sub(lerp(right.a, right.b, 0.5), lerp(left.a, left.b, 0.5));
+  const w = unit(sub(across, { x: axis.x * dot(across, axis), y: axis.y * dot(across, axis), z: axis.z * dot(across, axis) }));
+  if (!w) return null;
+  // axis x across, oriented to the upper (ball-receiving) face.
+  const n = unit({ x: axis.y * w.z - axis.z * w.y, y: axis.z * w.x - axis.x * w.z, z: axis.x * w.y - axis.y * w.x });
+  return n && n.y < 0 ? { x: -n.x, y: -n.y, z: -n.z } : n;
+}
 export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, surfacePose = nextPose) {
   const b = state.ball,
     start = { x: b.x, y: b.y, z: b.z },
@@ -83,6 +109,15 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, sur
     ny = 1;
     nz = 0;
   }
+  // Impulse normal: the platform face when the ball meets the top of the
+  // forearms/hands of an active receive; otherwise the capsule normal.
+  let rx = nx, ry = ny, rz = nz;
+  if (state.player.action === "receive" && next.active && (next.part === "forearm" || next.part === "hand")) {
+    const face = platformNormal(nextPose);
+    if (face && nx * face.x + ny * face.y + nz * face.z > C.platformFaceCos) {
+      rx = face.x; ry = face.y; rz = face.z;
+    }
+  }
   const q0 = lerp(old.a, old.b, hit.q.t),
     q1 = lerp(moved.a, moved.b, hit.q.t);
   const surface = {
@@ -91,7 +126,7 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, sur
     z: (q1.z - q0.z) / dt,
   };
   const speed =
-    (b.vx - surface.x) * nx + (b.vy - surface.y) * ny + (b.vz - surface.z) * nz;
+    (b.vx - surface.x) * rx + (b.vy - surface.y) * ry + (b.vz - surface.z) * rz;
   if (!state.contactEpisode) {
     state.contactEpisode = true;
     state.stats.contacts++;
@@ -107,9 +142,9 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, sur
       const impulse =
         -(1 + (next.active ? C.activeRestitution : C.passiveRestitution)) *
         speed;
-      b.vx += impulse * nx;
-      b.vy += impulse * ny;
-      b.vz += impulse * nz;
+      b.vx += impulse * rx;
+      b.vy += impulse * ry;
+      b.vz += impulse * rz;
     }
   } else {
     // Persistent contact only removes inward ball motion; no repeated moving-arm boost.

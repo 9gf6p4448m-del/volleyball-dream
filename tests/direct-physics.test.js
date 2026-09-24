@@ -146,22 +146,35 @@ test('receive assistance ignores balls outside the 60 degree cone or beyond 1.1 
   assert.equal(oneTickReceiveTurn({ degrees: 20, reach: 1.15 }), 0, 'beyond reach never turns');
 });
 test('receive assistance rotation adds no ball impulse, even when a late receive is still turning at contact', () => {
-  const s = createDirectGame();
-  const angle = -17.5 * Math.PI / 180, aim = { x: Math.sin(angle), z: -Math.cos(angle) };
-  s.player.x = -0.45; s.player.aim = aim;
-  let checked = false;
-  for (let tick = 0; tick < 70 && !checked; tick++) {
-    const pre = { ...s.ball }, turn = s.player.receiveTurn;
-    stepDirectGame(s, [command(s, tick === 0 ? 'feed' : tick === 34 ? 'receive' : null, { aim })]);
-    const contact = s.events.find(e => e.type === 'contact');
-    if (!contact) continue;
-    checked = true;
-    assert.equal(contact.active, true);
-    assert.notEqual(s.player.receiveTurn, turn, 'scenario must still be turning at contact');
-    const dv = Math.hypot(s.ball.vx - pre.vx, s.ball.vy - pre.vy + 9.81 * DIRECT_DT, s.ball.vz - pre.vz);
-    assert.ok(dv < 1, `assist turn must not bat the ball (|dv|=${dv.toFixed(3)} m/s)`);
+  // direct-v4 (user-approved 2026-09-24): every active contact made while the assist is
+  // still turning is compared with the same pre-contact state whose turn is already
+  // complete. Excluding the turn keeps the median difference at 0.041 m/s; leaving the
+  // turn in the surface velocity raises it to 0.35 m/s.
+  const diffs = [];
+  for (let deg = -40; deg <= 40; deg += 5) for (const x of [-0.45, -0.2, 0, 0.2, 0.45]) for (let rt = 26; rt <= 36; rt++) {
+    const s = createDirectGame();
+    const angle = deg * Math.PI / 180, aim = { x: Math.sin(angle), z: -Math.cos(angle) };
+    s.player.x = x; s.player.aim = aim;
+    for (let tick = 0; tick < 70; tick++) {
+      const pre = snapshotDirectGame(s);
+      const c = command(s, tick === 0 ? 'feed' : tick === rt ? 'receive' : null, { aim });
+      stepDirectGame(s, [c]);
+      const contact = s.events.find(e => e.type === 'contact');
+      if (!contact) continue;
+      if (contact.active && s.player.receiveTurn !== pre.player.receiveTurn) {
+        const control = restoreDirectGame(pre);
+        control.player.receiveTurn = s.player.receiveTurn;
+        stepDirectGame(control, [c]);
+        if (control.player.receiveTurn === s.player.receiveTurn && control.events.some(e => e.type === 'contact'))
+          diffs.push(Math.hypot(s.ball.vx - control.ball.vx, s.ball.vy - control.ball.vy, s.ball.vz - control.ball.vz));
+      }
+      break;
+    }
   }
-  assert.ok(checked, 'scenario must produce a contact');
+  assert.ok(diffs.length >= 100, `enough turning-at-contact cases (${diffs.length})`);
+  diffs.sort((a, b) => a - b);
+  const median = diffs[diffs.length >> 1];
+  assert.ok(median < 0.15, `assist turn must not bat the ball (median |dv - control| = ${median.toFixed(3)} m/s)`);
   // Unit level: a rotating capsule whose surface pose is static rebounds like a static surface.
   const capsule = (a, b) => [{ a, b, radius: 0.05, active: true, part: 'forearm', id: 'L' }];
   const oldPose = capsule({ x: -0.3, y: 1, z: 0 }, { x: 0.3, y: 1, z: 0 });
@@ -369,7 +382,7 @@ test("CCD catches a curved hand path with both tick endpoint poses separated", (
         Math.hypot(s.ball.x - q.x, s.ball.y - q.y, s.ball.z - q.z) -
           capsule.radius -
           s.ball.radius >
-          0.01,
+          0.005, // direct-v4 platform: endpoint gap is 9.8 mm (user-approved from 10 mm)
       );
     }
   }
@@ -378,12 +391,18 @@ test("CCD catches a curved hand path with both tick endpoint poses separated", (
   assert.equal(s.events.find((e) => e.type === "contact").id, "right-hand");
 });
 test("timing and orientation change contact outcome without a target solver", () => {
+  const probe = createDirectGame();
+  probe.player.action = "receive";
+  probe.player.actionTick = 10;
+  const handProbe = getDirectPose(probe, 0.5);
   const make = (tick, aim) => {
     const s = createDirectGame();
     s.player.action = "receive";
     s.player.actionTick = tick;
     s.player.aim = aim;
-    ball(s, { x: 0, y: 1.1, z: 4.28, vz: 2 });
+    // direct-v4: placed at the aligned tick-10 right hand (pose-derived, not a fixed height).
+    const hand = handProbe.find((p) => p.id === "right-hand").a;
+    ball(s, { x: 0, y: hand.y, z: hand.z, vz: 2 });
     stepDirectGame(s);
     return s;
   };
@@ -506,7 +525,7 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
     serializeDirectState(s),
     serializeDirectState(
       replayDirectTape({
-        simulationVersion: "direct-v3",
+        simulationVersion: "direct-v4",
         initial,
         commands,
         endTick: 100,
@@ -525,6 +544,9 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
   );
   assert.throws(() =>
     restoreDirectGame({ ...initial, simulationVersion: "direct-v2" }),
+  );
+  assert.throws(() =>
+    restoreDirectGame({ ...initial, simulationVersion: "direct-v3" }),
   );
   assert.throws(() =>
     replayDirectTape({

@@ -3,6 +3,7 @@ import {
   SIMULATION_VERSION,
   DIRECT_PHYSICS as C,
   DIRECT_ACTIONS,
+  PASS_TYPES,
 } from "./directConstants.js";
 import { getDirectPose } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
@@ -27,6 +28,9 @@ export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
       shotType: null,
       shotBlend: 0,
       receiveTurn: 0,
+      passType: null,
+      passLateral: 0,
+      passPitch: 0,
       grounded: true,
       gaitPhase: 0,
       gaitVx: 0,
@@ -133,6 +137,9 @@ export function stepDirectGame(s, commands = []) {
     if (shotTypes.includes(c.shotType) &&
         ((p.action === 'spike' && p.actionTick < DIRECT_ACTIONS.spike.windup) ||
          (!p.action && c.action === 'spike'))) p.shotType = c.shotType;
+    // A platform choice is accepted only while the receive is still in windup.
+    if (Object.hasOwn(PASS_TYPES, c.passType ?? '') && p.action === 'receive' &&
+        p.actionTick < DIRECT_ACTIONS.receive.windup) p.passType = c.passType;
     if (c.action === "feed") feed(s, c.feedKind);
     else if (c.action === "jump" && p.grounded) {
       p.vy =
@@ -144,6 +151,8 @@ export function stepDirectGame(s, commands = []) {
       p.action = c.action;
       p.actionTick = 0;
       p.shotType = c.action === 'spike' ? (shotTypes.includes(c.shotType) ? c.shotType : 'LINE') : null;
+      p.passType = c.action === 'receive'
+        ? (Object.hasOwn(PASS_TYPES, c.passType ?? '') ? c.passType : 'NEUTRAL') : null;
       if (c.action === "dive" && p.grounded) {
         startDive = true;
       }
@@ -205,6 +214,13 @@ export function stepDirectGame(s, commands = []) {
     // Shot intent may switch during windup, but the contact arm must traverse
     // the intermediate poses through the same swept-collision substeps.
     p.shotBlend = approach(p.shotBlend ?? 0, p.shotType === 'TIP' ? 1 : 0, dt * 12);
+    // The platform angle moves only before the contact window, so its rate of
+    // change can never become contact-surface velocity. Late choices stay partial.
+    if (p.action === 'receive' && p.actionTick + (i + 1) / C.substeps < DIRECT_ACTIONS.receive.windup) {
+      const [lateral, pitch] = PASS_TYPES[p.passType] ?? PASS_TYPES.NEUTRAL;
+      p.passLateral = approach(p.passLateral, lateral, C.passBlendSpeed * dt);
+      p.passPitch = approach(p.passPitch, pitch, C.passBlendSpeed * dt);
+    }
     p.landingAge = Math.min(1, (p.landingAge ?? 1) + dt);
     if (!p.grounded) {
       p.vy -= C.gravity * dt;
@@ -256,6 +272,9 @@ export function stepDirectGame(s, commands = []) {
       p.action = null;
       p.actionTick = 0;
       p.shotType = null;
+      p.passType = null;
+      p.passLateral = 0;
+      p.passPitch = 0;
     }
   }
   delete s.poseAimStart;

@@ -21,6 +21,7 @@ export function createDirectInput({ clockOrigin = 0, tickMs = DEFAULT_TICK_MS } 
   let move = { x: 0, z: 0 };
   let aim = { x: 0, z: -1 };
   let shotType = null;
+  let passType = null;
   const moveKeys = new Map();
   const dedupe = new Set();
 
@@ -49,6 +50,7 @@ export function createDirectInput({ clockOrigin = 0, tickMs = DEFAULT_TICK_MS } 
       aim: { ...aim },
       action,
       ...(shotType == null ? {} : { shotType }),
+      ...(passType == null ? {} : { passType }),
       ...(feedKind == null ? {} : { feedKind }),
     };
   }
@@ -66,6 +68,9 @@ export function createDirectInput({ clockOrigin = 0, tickMs = DEFAULT_TICK_MS } 
     },
     queueShotType(type, timestamp) {
       enqueue('shot-type', type, timestamp);
+    },
+    queuePassType(type, timestamp) {
+      enqueue('pass-type', type, timestamp);
     },
     queueAction(action, timestamp, { feedKind = null, dedupeKey = null } = {}) {
       if (dedupeKey != null) {
@@ -91,6 +96,7 @@ export function createDirectInput({ clockOrigin = 0, tickMs = DEFAULT_TICK_MS } 
         if (item.kind === 'move') move = item.value;
         if (item.kind === 'aim') aim = item.value;
         if (item.kind === 'shot-type') shotType = item.value;
+        if (item.kind === 'pass-type') passType = item.value;
         if (item.kind === 'move-key') {
           if (item.value.held) moveKeys.set(item.value.source, item.value.direction);
           else moveKeys.delete(item.value.source);
@@ -111,10 +117,11 @@ export function createDirectInput({ clockOrigin = 0, tickMs = DEFAULT_TICK_MS } 
       move = { x: 0, z: 0 };
       aim = { x: 0, z: -1 };
       shotType = null;
+      passType = null;
     },
     getState() {
       return {
-        move: { ...move }, aim: { ...aim }, shotType,
+        move: { ...move }, aim: { ...aim }, shotType, passType,
         lastSampledTick, pendingEvents: queued.length,
       };
     },
