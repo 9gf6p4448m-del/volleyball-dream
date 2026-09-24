@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createDirectGame, stepDirectGame, getDirectPose, snapshotDirectGame, restoreDirectGame,
-  serializeDirectState, replayDirectTape, DIRECT_DT,
+  serializeDirectState, replayDirectTape, restingSurfacePose, DIRECT_DT,
 } from '../src/sim/directGame.js';
 import { DIRECT_ACTIONS, DIRECT_PHYSICS } from '../src/sim/directConstants.js';
 import { createDirectControls } from '../src/input/directControls.js';
@@ -132,7 +132,7 @@ test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，d
   const s = createDirectGame(); s.player.x = -0.3;
   const initial = snapshotDirectGame(s), commands = [], states = [];
   for (let t = 0; t < 90; t++) {
-    const c = cmd(s, t === 0 ? 'feed' : t === 29 ? 'receive' : null, { passType: t < 31 ? 'LEFT' : 'HIGH' });
+    const c = cmd(s, t === 0 ? 'feed' : t === 29 ? 'receive' : null, { passType: 'LEFT' });
     commands.push(c); stepDirectGame(s, [c]); states.push(snapshotDirectGame(s));
   }
   assert.equal(s.stats.contacts > 0, true);
@@ -186,7 +186,7 @@ function controlsFixture() {
   const f = { win, doc, moveZone: make(), aimZone: make(), jumpButton: make(), hitButton: make(), actionSelect, feedButton: make(), feedSelect };
   return { f, controls: createDirectControls(f) };
 }
-test('A7 墊球時在出手鈕滑動送出平台選擇；鍵盤墊球為 NEUTRAL', () => {
+test('A7 墊球時在出手鈕滑動只送出平台選擇、不改朝向；鍵盤墊球為 NEUTRAL', () => {
   for (const [dx, dy, expected] of [[0, 0, 'NEUTRAL'], [0, -30, 'HIGH'], [0, 30, 'LOW'], [-30, 5, 'LEFT'], [30, -5, 'RIGHT']]) {
     const { f, controls } = controlsFixture();
     f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
@@ -197,7 +197,7 @@ test('A7 墊球時在出手鈕滑動送出平台選擇；鍵盤墊球為 NEUTRAL
     const moved = controls.sample(1);
     assert.equal(moved[0].passType, expected);
     assert.deepEqual(moved.map(c => c.action), [null], '滑動不重新觸發動作');
-    if (expected === 'LEFT') assert.ok(moved[0].aim.x < 0, '左滑保留原本的改朝向行為');
+    assert.deepEqual(moved[0].aim, first[0].aim, '墊球滑動不改朝向（2026-09-24 使用者裁定 H2-A）');
     controls.dispose();
   }
   const { f, controls } = controlsFixture();
@@ -209,4 +209,103 @@ test('A7 墊球時在出手鈕滑動送出平台選擇；鍵盤墊球為 NEUTRAL
   const keyboard = controls.sample(1);
   assert.equal(keyboard.find(c => c.action === 'receive').passType, 'NEUTRAL');
   controls.dispose();
+});
+
+test('A6b 表面速度用的姿勢把轉身、側伸與平台選擇都還原成子步開頭的值', () => {
+  const s = createDirectGame();
+  s.player.action = 'receive'; s.player.actionTick = 5;
+  const before = { receiveTurn: 0.1, receiveReach: 0.05, passLateral: -0.25, passPitch: 0.5 };
+  const reference = snapshotDirectGame(s);
+  Object.assign(reference.player, before);
+  const expected = getDirectPose(reference, 0.5);
+  Object.assign(s.player, { receiveTurn: 0.16, receiveReach: 0.08, passLateral: -0.5, passPitch: 0.75 });
+  const moving = getDirectPose(s, 0.5);
+  const resting = restingSurfacePose(s, 0.5, moving, before);
+  assert.deepEqual(resting, expected, '每個值都回到子步開頭');
+  assert.deepEqual(s.player, { ...s.player, receiveTurn: 0.16, receiveReach: 0.08, passLateral: -0.5, passPitch: 0.75 }, '狀態不被改動');
+  for (const key of Object.keys(before)) {
+    const partial = { ...before, [key]: s.player[key] };
+    assert.notDeepEqual(restingSurfacePose(s, 0.5, moving, partial), expected, `${key} 必須被還原`);
+  }
+  assert.equal(restingSurfacePose(s, 0.5, moving, { receiveTurn: 0.16, receiveReach: 0.08, passLateral: -0.5, passPitch: 0.75 }), moving);
+});
+
+test('A3b 真實觸控指令鏈：出手鈕上左右滑改變墊球橫向出球，且不轉身', () => {
+  const run = dx => {
+    const { f, controls } = controlsFixture();
+    const s = createDirectGame();
+    for (let t = 0; t < 120; t++) {
+      if (t === 29) {
+        f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
+        if (dx) f.hitButton.dispatchEvent(ev('pointermove', { pointerId: 3, clientX: 100 + dx, clientY: 105 }));
+      }
+      const commands = controls.sample(t);
+      if (t === 0) commands.push({ ...cmd(s, 'feed'), sequence: 1000 });
+      stepDirectGame(s, commands);
+      const hit = s.events.find(e => e.type === 'contact');
+      if (hit) { controls.dispose(); return { hit, vx: s.ball.vx, aim: s.player.aim }; }
+    }
+    controls.dispose();
+    return null;
+  };
+  const neutral = run(0), left = run(-30), right = run(30);
+  for (const r of [neutral, left, right]) {
+    assert.ok(r?.hit.active && ['forearm', 'hand'].includes(r.hit.part), '主動前臂或手觸球');
+    assert.deepEqual(r.aim, { x: 0, z: -1 }, '滑動不轉身');
+  }
+  assert.ok(left.vx <= neutral.vx - 0.5, `left ${left.vx} vs ${neutral.vx}`);
+  assert.ok(right.vx >= neutral.vx + 0.5, `right ${right.vx} vs ${neutral.vx}`);
+});
+
+// A14/A15 (frozen 2026-09-24): playability grid on the real receive feed.
+function outcome(x, z, rt, passType) {
+  const s = createDirectGame(); s.player.x = x; s.player.z = z;
+  let hit = null, apex = -Infinity;
+  for (let t = 0; t < 240; t++) {
+    stepDirectGame(s, [cmd(s, t === 0 ? 'feed' : t === rt ? 'receive' : null, { passType })]);
+    for (const e of s.events) {
+      if (e.type === 'contact' && !hit) hit = e;
+      if (['ground', 'net', 'out'].includes(e.type))
+        return hit ? { active: hit.active && ['forearm', 'hand'].includes(hit.part), end: e.type, x: s.ball.x, z: s.ball.z, apex } : null;
+    }
+    if (hit) apex = Math.max(apex, s.ball.y);
+  }
+  return null;
+}
+const gridCache = new Map();
+function grid(passType) {
+  if (!gridCache.has(passType)) {
+    const rows = [];
+    for (const x of [-0.2, -0.1, 0, 0.1, 0.2]) for (const z of [4.8, 5.0, 5.2]) for (let rt = 18; rt <= 40; rt++) {
+      const r = outcome(x, z, rt, passType);
+      if (r?.active) rows.push(r);
+    }
+    gridCache.set(passType, rows);
+  }
+  return gridCache.get(passType);
+}
+const rate = (rows, f) => rows.filter(f).length / rows.length;
+const inTarget = tx => r => r.end === 'ground' && Math.hypot(r.x - tx, r.z - 1.6) <= 1;
+
+test('A14 不滑是到位球：少碰網、落在舉球區、弧頂夠高；低球不以碰網為主', () => {
+  const n = grid('NEUTRAL');
+  assert.ok(n.length >= 100, `enough active receives (${n.length})`);
+  const net = rate(n, r => r.end === 'net');
+  const zone = rate(n, r => r.end === 'ground' && r.z >= 0.5 && r.z <= 3 && Math.abs(r.x) <= 3);
+  const apexes = n.map(r => r.apex).sort((a, b) => a - b), median = apexes[apexes.length >> 1];
+  assert.ok(net <= 0.10, `A14a neutral net ${net.toFixed(2)}`);
+  assert.ok(zone >= 0.50, `A14b neutral set zone ${zone.toFixed(2)}`);
+  assert.ok(median >= 3.0, `A14c neutral apex median ${median.toFixed(2)}`);
+  const low = grid('LOW');
+  assert.ok(rate(low, r => r.end === 'net') <= 0.25, `A14d low net ${rate(low, r => r.end === 'net').toFixed(2)}`);
+});
+
+test('A15 方向練習：不滑打中央，左右滑打得到對應側邊目標', () => {
+  const n = grid('NEUTRAL'), left = grid('LEFT'), right = grid('RIGHT');
+  const center = rate(n, inTarget(0));
+  assert.ok(center >= 0.40, `A15a neutral centre ${center.toFixed(2)}`);
+  const l = rate(left, inTarget(-2)), nl = rate(n, inTarget(-2));
+  const r = rate(right, inTarget(2)), nr = rate(n, inTarget(2));
+  assert.ok(l >= 0.25 && l >= 3 * nl, `A15b left ${l.toFixed(2)} vs neutral ${nl.toFixed(2)}`);
+  assert.ok(r >= 0.25 && r >= 3 * nr, `A15c right ${r.toFixed(2)} vs neutral ${nr.toFixed(2)}`);
 });

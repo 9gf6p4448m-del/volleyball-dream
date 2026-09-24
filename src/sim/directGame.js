@@ -28,6 +28,7 @@ export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
       shotType: null,
       shotBlend: 0,
       receiveTurn: 0,
+      receiveReach: 0,
       passType: null,
       passLateral: 0,
       passPitch: 0,
@@ -93,8 +94,8 @@ const approach = (x, target, max) =>
 function receiveTurnTarget(s) {
   const p = s.player, b = s.ball;
   const action = DIRECT_ACTIONS.receive;
-  if (p.action !== 'receive' || p.actionTick >= action.windup + action.active) return 0;
-  const current = p.receiveTurn ?? 0;
+  if (p.action !== 'receive' || p.actionTick >= action.windup + action.active) return { turn: 0, reach: 0 };
+  const current = { turn: p.receiveTurn ?? 0, reach: p.receiveReach ?? 0 };
   // After contact, hold the platform through follow-through. Recovery then
   // returns to manual aim; an outgoing or passed ball never steers the body.
   if (!b.active || b.y <= b.radius || s.contactEpisode) return current;
@@ -104,10 +105,31 @@ function receiveTurnTarget(s) {
   if (forward <= 0.2 * p.height || Math.hypot(dx, dz) > C.receiveTrackReach * p.height ||
       Math.abs(b.y - p.y - 0.65 * p.height) > 0.65 * p.height ||
       !(closing < -1e-6 || (Math.abs(closing) <= 1e-6 && b.vy < 0))) return current;
-  const difference = Math.atan2(Math.sin(Math.atan2(dx, -dz) - Math.atan2(p.aim.x, -p.aim.z)),
-    Math.cos(Math.atan2(dx, -dz) - Math.atan2(p.aim.x, -p.aim.z)));
+  // Square up to the incoming path (direction the ball comes from), so an
+  // off-centre stance does not aim the platform sideways. A near-vertical ball
+  // has no path direction; its bearing is used instead.
+  const rvx = b.vx - p.vx, rvz = b.vz - p.vz;
+  const path = Math.hypot(rvx, rvz) > 0.5 ? Math.atan2(-rvx, rvz) : Math.atan2(dx, -dz);
+  const aimAngle = Math.atan2(p.aim.x, -p.aim.z);
+  const difference = Math.atan2(Math.sin(path - aimAngle), Math.cos(path - aimAngle));
   if (Math.abs(difference) > C.receiveTrackCone) return current;
-  return Math.max(-C.receiveTurnLimit, Math.min(C.receiveTurnLimit, difference));
+  const turn = Math.max(-C.receiveTurnLimit, Math.min(C.receiveTurnLimit, difference));
+  // Lateral offset of the ball in the squared-up body frame (right is positive).
+  const facing = aimAngle + turn;
+  const lateral = (dx * Math.cos(facing) + dz * Math.sin(facing)) / p.height;
+  return { turn, reach: Math.max(-C.receiveReachLimit, Math.min(C.receiveReachLimit, lateral)) };
+}
+// Pose used only for contact-surface velocity: the assist turn, side reach and
+// platform choice held at their substep-start values, so none of them adds impulse.
+export function restingSurfacePose(s, fraction, nextPose, before) {
+  const p = s.player;
+  const keys = ['receiveTurn', 'receiveReach', 'passLateral', 'passPitch'];
+  if (keys.every((k) => (p[k] ?? 0) === before[k])) return nextPose;
+  const after = keys.map((k) => p[k]);
+  keys.forEach((k) => { p[k] = before[k]; });
+  const pose = getDirectPose(s, fraction);
+  keys.forEach((k, i) => { p[k] = after[i]; });
+  return pose;
 }
 export function stepDirectGame(s, commands = []) {
   if (s.simulationVersion !== SIMULATION_VERSION)
@@ -138,7 +160,7 @@ export function stepDirectGame(s, commands = []) {
         ((p.action === 'spike' && p.actionTick < DIRECT_ACTIONS.spike.windup) ||
          (!p.action && c.action === 'spike'))) p.shotType = c.shotType;
     // A platform choice is accepted only while the receive is still in windup.
-    if (Object.hasOwn(PASS_TYPES, c.passType ?? '') && p.action === 'receive' &&
+    if (typeof c.passType === 'string' && Object.hasOwn(PASS_TYPES, c.passType) && p.action === 'receive' &&
         p.actionTick < DIRECT_ACTIONS.receive.windup) p.passType = c.passType;
     if (c.action === "feed") feed(s, c.feedKind);
     else if (c.action === "jump" && p.grounded) {
@@ -152,7 +174,7 @@ export function stepDirectGame(s, commands = []) {
       p.actionTick = 0;
       p.shotType = c.action === 'spike' ? (shotTypes.includes(c.shotType) ? c.shotType : 'LINE') : null;
       p.passType = c.action === 'receive'
-        ? (Object.hasOwn(PASS_TYPES, c.passType ?? '') ? c.passType : 'NEUTRAL') : null;
+        ? (typeof c.passType === 'string' && Object.hasOwn(PASS_TYPES, c.passType) ? c.passType : 'NEUTRAL') : null;
       if (c.action === "dive" && p.grounded) {
         startDive = true;
       }
@@ -198,8 +220,10 @@ export function stepDirectGame(s, commands = []) {
     const oldPose = getDirectPose(s, i / C.substeps);
     // Move the same body pose used by rendering and swept collision. There is
     // no ball impulse, target landing point, or extra reach in this assistance.
-    const turnBefore = p.receiveTurn ?? 0;
-    p.receiveTurn = approach(turnBefore, receiveTarget, C.receiveTurnSpeed * dt);
+    const turnBefore = p.receiveTurn ?? 0, reachBefore = p.receiveReach ?? 0;
+    const lateralBefore = p.passLateral ?? 0, pitchBefore = p.passPitch ?? 0;
+    p.receiveTurn = approach(turnBefore, receiveTarget.turn, C.receiveTurnSpeed * dt);
+    p.receiveReach = approach(reachBefore, receiveTarget.reach, C.receiveReachSpeed * dt);
     const oldX = p.x, oldZ = p.z;
     p.x = Math.max(-4.25, Math.min(4.25, p.x + p.vx * dt));
     p.z = Math.max(0.3, Math.min(8.75, p.z + p.vz * dt));
@@ -237,15 +261,12 @@ export function stepDirectGame(s, commands = []) {
     b.vy -= C.gravity * dt;
     const predicted = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
     let terminal = firstEnvironmentHit(b, predicted, b.radius);
-    // The sweep follows the turning body, but the contact-surface velocity
-    // excludes the assist rotation so the turn never swings the ball like a bat.
-    let surfacePose = nextPose;
-    if (p.receiveTurn !== turnBefore) {
-      const turnAfter = p.receiveTurn;
-      p.receiveTurn = turnBefore;
-      surfacePose = getDirectPose(s, (i + 1) / C.substeps);
-      p.receiveTurn = turnAfter;
-    }
+    // The sweep follows the turning body and the blending platform, but the
+    // contact-surface velocity excludes both, so neither the assist turn nor the
+    // platform choice ever swings the ball like a bat.
+    const surfacePose = restingSurfacePose(s, (i + 1) / C.substeps, nextPose, {
+      receiveTurn: turnBefore, receiveReach: reachBefore, passLateral: lateralBefore, passPitch: pitchBefore,
+    });
     const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity, surfacePose);
     // A valid earlier body hit changes the rest of the trajectory. Check that
     // new segment too, rather than retaining the pre-contact floor/net decision.

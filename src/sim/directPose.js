@@ -124,7 +124,8 @@ export function getDirectPose(state, fraction = 0) {
       // lower the hands. Same capsules; the ball still rebounds off the real arm.
       const yaw = (p.passLateral ?? 0) * DIRECT_PHYSICS.passYaw;
       const cy = Math.cos(yaw), sy = Math.sin(yaw);
-      const platform = (x, y, f) => point(x * cy + f * sy, y, -x * sy + f * cy);
+      const reach = p.receiveReach ?? 0;
+      const platform = (x, y, f) => point((x + reach) * cy + f * sy, y, -(x + reach) * sy + f * cy);
       elbow = blend(
         elbow,
         platform(sign * 0.11, 0.69 + phase * 0.11, 0.21),
@@ -132,7 +133,7 @@ export function getDirectPose(state, fraction = 0) {
       );
       hand = blend(
         hand,
-        platform(sign * 0.045, 0.52 + phase * 0.11 + (p.passPitch ?? 0) * DIRECT_PHYSICS.passPitch, 0.41),
+        platform(sign * 0.045, 0.585 + phase * 0.11 + (p.passPitch ?? 0) * DIRECT_PHYSICS.passPitch, 0.41),
         raise * recover,
       );
     } else if (p.action === 'dive') {

@@ -11,11 +11,15 @@ const STICK_RADIUS = 64;
 
 // Keep the sandbox's four gesture meanings. A swipe selects the intended shot;
 // contact still has to occur at the actual hand surface to affect the ball.
-// Receive platform: four directions on the same button, dominant axis wins.
+// Receive platform: the spike's four-direction judgement, read as platform
+// choices (up = high, down = low, sides = platform yaw, small = neutral).
 function receivePassType(dx, dy) {
-  if (Math.hypot(dx, dy) < 12) return 'NEUTRAL';
-  if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? 'LEFT' : 'RIGHT';
-  return dy < 0 ? 'HIGH' : 'LOW';
+  if (Math.hypot(dx, dy) < 10) return 'NEUTRAL';
+  const type = spikeShotType(dx, dy);
+  if (type === 'TIP') return 'HIGH';
+  if (type === 'CROSS_LEFT') return 'LEFT';
+  if (type === 'CROSS_RIGHT') return 'RIGHT';
+  return dy > 10 ? 'LOW' : 'NEUTRAL';
 }
 function spikeShotType(dx, dy) {
   if (Math.hypot(dx, dy) < 10) return 'LINE';
@@ -195,10 +199,14 @@ export function createDirectControls({
             input.queuePassType(type, stamp(e));
           }
         }
-        aimHeading = Math.max(-Math.PI, Math.min(Math.PI, hitPointer.heading + dx / STICK_RADIUS * (Math.PI / 2)));
-        input.queueAim({ x: Math.sin(aimHeading), z: -Math.cos(aimHeading) }, stamp(e));
-        css(aimZone, '--aim-heading', `${aimHeading}rad`);
-        activity('aim');
+        // A receive swipe chooses the platform only; turning stays on the aim zone
+        // and the assist, so the two cannot cancel each other out.
+        if (hitPointer.action !== 'receive') {
+          aimHeading = Math.max(-Math.PI, Math.min(Math.PI, hitPointer.heading + dx / STICK_RADIUS * (Math.PI / 2)));
+          input.queueAim({ x: Math.sin(aimHeading), z: -Math.cos(aimHeading) }, stamp(e));
+          css(aimZone, '--aim-heading', `${aimHeading}rad`);
+          activity('aim');
+        }
         e.preventDefault?.();
       });
       listen(button, 'pointerup', (e) => {

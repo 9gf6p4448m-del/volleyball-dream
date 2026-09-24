@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-24T06:16:19.173Z",
+  "createdAt": "2026-09-24T08:03:54.239Z",
   "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -22,7 +22,7 @@
         "frames": 0,
         "fps": 0,
         "frameP95": 0,
-        "simP95": 0.20000000298023224,
+        "simP95": 0.29999999701976776,
         "backlogMs": 0,
         "maxBacklogMs": 0,
         "drawCalls": 117

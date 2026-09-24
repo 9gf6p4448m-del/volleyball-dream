@@ -14,10 +14,14 @@ export const DIRECT_PHYSICS = Object.freeze({
   receiveTurnLimit: 35 * Math.PI / 180,
   receiveTrackCone: 60 * Math.PI / 180,
   receiveTrackReach: 1.1, // body heights; tracking never enlarges the actual capsules
+  // Side reach (direct-v4): the platform slides toward an off-centre ball while
+  // the body squares up to the path. Visible, rate-limited, same capsules.
+  receiveReachLimit: 0.2, // body heights
+  receiveReachSpeed: 1.5, // body heights per second
   // Receive platform choice (direct-v4). Blends only during windup, then locks.
   passBlendSpeed: 15, // full blend units per second
-  passYaw: 20 * Math.PI / 180, // LEFT/RIGHT platform yaw about the shoulder line
-  passPitch: 0.07, // HIGH raises / LOW lowers the hands, body-height units
+  passYaw: 8 * Math.PI / 180, // LEFT/RIGHT platform yaw about the shoulder line
+  passPitch: 0.04, // HIGH raises / LOW lowers the hands, body-height units
   platformFaceCos: 0.5, // capsule normal within 60 degrees of the platform face uses the face normal
   diveSpeed: 6.5,
   diveFriction: 7,

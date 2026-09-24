@@ -147,9 +147,9 @@ test('receive assistance ignores balls outside the 60 degree cone or beyond 1.1 
 });
 test('receive assistance rotation adds no ball impulse, even when a late receive is still turning at contact', () => {
   // direct-v4 (user-approved 2026-09-24): every active contact made while the assist is
-  // still turning is compared with the same pre-contact state whose turn is already
-  // complete. Excluding the turn keeps the median difference at 0.041 m/s; leaving the
-  // turn in the surface velocity raises it to 0.35 m/s.
+  // still turning or side-reaching is compared with the same pre-contact state whose turn
+  // and reach are already complete. Excluding both keeps every case under 0.3 m/s (max
+  // 0.068); leaving them in the surface velocity reaches 1.246 m/s.
   const diffs = [];
   for (let deg = -40; deg <= 40; deg += 5) for (const x of [-0.45, -0.2, 0, 0.2, 0.45]) for (let rt = 26; rt <= 36; rt++) {
     const s = createDirectGame();
@@ -161,20 +161,22 @@ test('receive assistance rotation adds no ball impulse, even when a late receive
       stepDirectGame(s, [c]);
       const contact = s.events.find(e => e.type === 'contact');
       if (!contact) continue;
-      if (contact.active && s.player.receiveTurn !== pre.player.receiveTurn) {
+      const moving = s.player.receiveTurn !== pre.player.receiveTurn || s.player.receiveReach !== pre.player.receiveReach;
+      if (contact.active && moving) {
         const control = restoreDirectGame(pre);
         control.player.receiveTurn = s.player.receiveTurn;
+        control.player.receiveReach = s.player.receiveReach;
         stepDirectGame(control, [c]);
-        if (control.player.receiveTurn === s.player.receiveTurn && control.events.some(e => e.type === 'contact'))
+        if (control.player.receiveTurn === s.player.receiveTurn && control.player.receiveReach === s.player.receiveReach &&
+            control.events.some(e => e.type === 'contact'))
           diffs.push(Math.hypot(s.ball.vx - control.ball.vx, s.ball.vy - control.ball.vy, s.ball.vz - control.ball.vz));
       }
       break;
     }
   }
-  assert.ok(diffs.length >= 100, `enough turning-at-contact cases (${diffs.length})`);
-  diffs.sort((a, b) => a - b);
-  const median = diffs[diffs.length >> 1];
-  assert.ok(median < 0.15, `assist turn must not bat the ball (median |dv - control| = ${median.toFixed(3)} m/s)`);
+  assert.ok(diffs.length >= 100, `enough moving-at-contact cases (${diffs.length})`);
+  const worst = Math.max(...diffs);
+  assert.ok(worst < 0.3, `assist turn/reach must not bat the ball (max |dv - control| = ${worst.toFixed(3)} m/s)`);
   // Unit level: a rotating capsule whose surface pose is static rebounds like a static surface.
   const capsule = (a, b) => [{ a, b, radius: 0.05, active: true, part: 'forearm', id: 'L' }];
   const oldPose = capsule({ x: -0.3, y: 1, z: 0 }, { x: 0.3, y: 1, z: 0 });

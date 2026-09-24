@@ -146,6 +146,12 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, sur
       b.vy += impulse * ry;
       b.vz += impulse * rz;
     }
+    const inward = b.vx * nx + b.vy * ny + b.vz * nz;
+    if (inward < 0 && (rx !== nx || ry !== ny || rz !== nz)) {
+      b.vx -= inward * nx;
+      b.vy -= inward * ny;
+      b.vz -= inward * nz;
+    }
   } else {
     // Persistent contact only removes inward ball motion; no repeated moving-arm boost.
     const inward = b.vx * nx + b.vy * ny + b.vz * nz;

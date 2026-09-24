@@ -74,7 +74,7 @@ export function runDirectPractice(ctx) {
   ctx.scene.add(drillTarget);
   // Drill bookkeeping lives in the app layer only; the feed itself is the normal receive feed.
   let drill = null;
-  let drillCount = 0;
+  let liveDrill = null;
   let timingActive = false;
   const seed = Number(ctx.params.get('seed')) || 1;
   let state = createDirectGame({ seed });
@@ -157,6 +157,9 @@ export function runDirectPractice(ctx) {
   on($('[data-replay]'), 'click', () => {
     if (playback) {
       state = restoreDirectGame(liveState); liveState = null; playback = null;
+      drill = liveDrill; liveDrill = null;
+      drillTarget.visible = !!drill;
+      if (drill) drillTarget.position.set(drill.target.x, 0.027, drill.target.z);
       $('[data-replay]').textContent = '回放本輪'; setPaused(false); message('已返回原訓練狀態。'); return;
     }
     if (state.tick === 0) { message('先試打一球，再回放。'); return; }
@@ -164,6 +167,7 @@ export function runDirectPractice(ctx) {
     const end = replayDirectTape(record);
     if (serializeDirectState(end) !== serializeDirectState(state)) throw new Error('直接操作回放與即時狀態不一致');
     liveState = snapshotDirectGame(state);
+    liveDrill = structuredClone(drill);
     state = restoreDirectGame(initial);
     playback = { ...record, index: 0 };
     $('[data-replay]').textContent = '退出回放'; setPaused(false);
@@ -204,7 +208,7 @@ export function runDirectPractice(ctx) {
     if (simTimes.length > 3600) simTimes.shift();
     for (const event of state.events) {
       if (event.type === 'feed') {
-        drill = event.kind === 'pass-drill' ? { target: DRILL_TARGETS[drillCount++ % DRILL_TARGETS.length], touched: false, result: null } : null;
+        drill = event.kind === 'pass-drill' ? { target: DRILL_TARGETS[(state.stats.feeds - 1) % DRILL_TARGETS.length], touched: false, result: null } : null;
         drillTarget.visible = !!drill;
         if (drill) drillTarget.position.set(drill.target.x, 0.027, drill.target.z);
         if (drill && !playback) message('接球方向練習：把球墊向橘色目標區。滑動選平台角度，落點只看物理結果。');
@@ -235,7 +239,8 @@ export function runDirectPractice(ctx) {
     return { type, hit: false, dx, dz, text: `${type === 'out' ? '出界' : '落點'}：${parts.join('、') || '接近目標'}（距目標 ${distance.toFixed(1)} m）。` };
   }
   // Seconds until the falling ball reaches platform height (~0.6 body heights),
-  // if it is then within reach of the athlete. Display only.
+  // if it is then within reach of the platform (about 0.4 body heights in front,
+  // plus the side reach). Display only.
   function receiveEta() {
     const { player: p, ball: b } = state;
     if (!b.active) return null;
@@ -244,8 +249,9 @@ export function runDirectPractice(ctx) {
     if (disc < 0) return null;
     const t = (b.vy + Math.sqrt(disc)) / g;
     if (t <= 0 || t > 1.5) return null;
-    const miss = Math.hypot(b.x + b.vx * t - p.x, b.z + b.vz * t - p.z);
-    return miss <= DIRECT_PHYSICS.receiveTrackReach * p.height ? t : null;
+    const fx = p.x + p.aim.x * 0.4 * p.height, fz = p.z + p.aim.z * 0.4 * p.height;
+    const miss = Math.hypot(b.x + b.vx * t - fx, b.z + b.vz * t - fz);
+    return miss <= (0.1 + DIRECT_PHYSICS.receiveReachLimit) * p.height ? t : null;
   }
   function metrics() {
     const percentile = values => { if (!values.length) return 0; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor((sorted.length - 1) * 0.95)]; };
