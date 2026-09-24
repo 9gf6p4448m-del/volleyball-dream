@@ -262,14 +262,20 @@ export function runDirectPractice(ctx) {
     rehearsal = { tick: state.tick, key, value };
     return value;
   }
-  function receiveEta() {
+  // Seconds until the falling ball reaches platform height, or null.
+  function platformArrival() {
     const { player: p, ball: b } = state;
     if (!b.active) return null;
     const g = DIRECT_PHYSICS.gravity, drop = b.y - (p.y + 0.6 * p.height);
     const disc = b.vy * b.vy + 2 * g * drop;
     if (disc < 0) return null;
     const t = (b.vy + Math.sqrt(disc)) / g;
-    if (t <= 0 || t > 1.5) return null;
+    return t > 0 && t <= 1.5 ? t : null;
+  }
+  function receiveEta() {
+    const { player: p, ball: b } = state;
+    const t = platformArrival();
+    if (t == null) return null;
     const fx = p.x + p.aim.x * 0.4 * p.height, fz = p.z + p.aim.z * 0.4 * p.height;
     const miss = Math.hypot(b.x + b.vx * t - fx, b.z + b.vz * t - fz);
     return miss <= (0.1 + DIRECT_PHYSICS.receiveReachLimit) * p.height ? t : null;
@@ -312,7 +318,10 @@ export function runDirectPractice(ctx) {
     // Receive cues only when the hit button would actually receive.
     const receiving = hints && !player.action && $('[data-action]').value === 'receive';
     const eta = receiving ? receiveEta() : null;
-    const now = receiving && ball.active && eta != null && eta <= 0.4 ? pressNowReaches() : false;
+    // Gate the rehearsal on arrival time only: the distance check in receiveEta is
+    // narrower than the real platform reach (side reach), so it must not hide the cue.
+    const arrival = receiving ? platformArrival() : null;
+    const now = arrival != null && arrival <= 0.4 ? pressNowReaches() : false;
     timingActive = eta != null || now;
     const hit = $('[data-hit]');
     hit.classList.toggle('dp-timing', timingActive);
