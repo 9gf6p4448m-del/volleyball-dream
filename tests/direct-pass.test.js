@@ -335,3 +335,69 @@ test('L1 平台面反彈後，球不會沿著被碰到的前臂繼續往內', ()
   assert.ok(inward >= -1e-9, `沿膠囊法線不得往內（${inward.toFixed(3)} m/s）`);
   assert.ok(s.ball.vy > 0, '平台面仍把球往上送');
 });
+
+test('A16 邊移動邊接：觸球時仍在移動，不滑墊球也不以碰網為主', () => {
+  const rows = [];
+  for (const x0 of [-0.6, -0.3, 0.3, 0.6]) for (const m of [0.1, 0.2, 0.3]) for (let rt = 18; rt <= 40; rt++) {
+    const s = createDirectGame(); s.player.x = x0; s.player.z = 5.0;
+    const move = { x: -Math.sign(x0) * m, z: 0 };
+    let hit = null, vx = 0;
+    for (let t = 0; t < 240; t++) {
+      stepDirectGame(s, [{ ...cmd(s, t === 0 ? 'feed' : t === rt ? 'receive' : null), move: t >= 20 ? move : { x: 0, z: 0 } }]);
+      let end = null;
+      for (const e of s.events) {
+        if (e.type === 'contact' && !hit) { hit = e; vx = s.player.vx; }
+        if (['ground', 'net', 'out'].includes(e.type)) end = e.type;
+      }
+      if (end) {
+        if (hit?.active && ['forearm', 'hand'].includes(hit.part) && Math.abs(vx) >= 0.05) rows.push({ end, x: s.ball.x, z: s.ball.z });
+        break;
+      }
+    }
+  }
+  assert.ok(rows.length >= 40, `enough moving contacts (${rows.length})`);
+  const net = rows.filter(r => r.end === 'net').length / rows.length;
+  const zone = rows.filter(r => r.end === 'ground' && r.z >= 0.5 && r.z <= 3 && Math.abs(r.x) <= 3).length / rows.length;
+  assert.ok(net <= 0.10, `A16 moving net ${net.toFixed(2)} (n=${rows.length})`);
+  assert.ok(zone >= 0.50, `A16 moving set zone ${zone.toFixed(2)} (n=${rows.length})`);
+});
+
+test('A17 迎球只看球的世界速度，玩家橫移不改變迎球方向', () => {
+  const turnAfterOneTick = playerVx => {
+    const s = createDirectGame();
+    s.player.action = 'receive'; s.player.actionTick = 2; s.player.vx = playerVx;
+    Object.assign(s.ball, { active: true, x: 0, y: 0.65 * s.player.height, z: s.player.z - 1.2, vx: 0, vy: 0, vz: 5 });
+    stepDirectGame(s, [{ ...cmd(s), move: { x: Math.sign(playerVx), z: 0 } }]);
+    return s.player.receiveTurn;
+  };
+  assert.equal(turnAfterOneTick(0), 0);
+  assert.equal(turnAfterOneTick(2), 0, '往右移動不轉身');
+  assert.equal(turnAfterOneTick(-2), 0, '往左移動不轉身');
+});
+
+test('A16b 邊移動邊接（放開搖桿減速中觸球）：碰網 ≤ 10%，舉球區 ≥ 50%', () => {
+  // The third review's scenario verbatim: run toward the path at half stick from
+  // tick 10 and release at various ticks, so contact often happens while braking.
+  const rows = [];
+  for (const dir of [-1, 1]) for (const x0 of [0.3, 0.6, 0.9, 1.2, 1.5]) for (const stop of [26, 30, 34, 38, 99]) for (let rt = 18; rt <= 40; rt++) {
+    const s = createDirectGame(); s.player.x = -dir * x0;
+    let hit = null, vx = 0;
+    for (let t = 0; t < 240; t++) {
+      stepDirectGame(s, [{ ...cmd(s, t === 0 ? 'feed' : t === rt ? 'receive' : null), move: { x: t >= 10 && t < stop ? dir * 0.5 : 0, z: 0 } }]);
+      let end = null;
+      for (const e of s.events) {
+        if (e.type === 'contact' && !hit) { hit = e; vx = s.player.vx; }
+        if (['ground', 'net', 'out'].includes(e.type)) end = e.type;
+      }
+      if (end) {
+        if (hit?.active && ['forearm', 'hand'].includes(hit.part) && Math.abs(vx) >= 0.05) rows.push({ end, x: s.ball.x, z: s.ball.z });
+        break;
+      }
+    }
+  }
+  assert.ok(rows.length >= 40, `enough moving contacts (${rows.length})`);
+  const net = rows.filter(r => r.end === 'net').length / rows.length;
+  const zone = rows.filter(r => r.end === 'ground' && r.z >= 0.5 && r.z <= 3 && Math.abs(r.x) <= 3).length / rows.length;
+  assert.ok(net <= 0.10, `A16b moving net ${net.toFixed(2)} (n=${rows.length})`);
+  assert.ok(zone >= 0.50, `A16b moving set zone ${zone.toFixed(2)} (n=${rows.length})`);
+});
