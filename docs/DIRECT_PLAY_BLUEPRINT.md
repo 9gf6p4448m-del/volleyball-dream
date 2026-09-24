@@ -23,6 +23,10 @@ Free Ball: Volleyball 官方可證實的是單人角色、第三人稱及位置�
 
 使用者確認舊沙盒的四向手勢是新模式必備操作：扣球準備時上滑選單手吊球、下滑選直線重扣、左／右滑選斜線。這項新決策擴充下方原階段1的指令契約：`shotType?` 為 `LINE`、`CROSS_LEFT`、`CROSS_RIGHT`、`TIP`。按下開始準備，觸球窗口前可選線，窗口開始後鎖定；無論選何種球路，球仍須碰到可見的手臂或手掌。斜線由滑動改變身體朝向與接觸法線產生，吊球由同一隻手較小的推送弧產生；不依選項直接把球傳送到預設落點。舊 `freeballControls.js` 的手勢分類可作操作參照，沙盒的保底救球與指定落點公式不可移入新解算。
 
+### 2026-09-24 操作補充：滑動調整接球平台（direct-v4）
+
+使用者裁定：接球拆成兩層。「接到球」靠走位與 direct-v3 的小幅迎球轉身（±35°，不放大碰撞體、不加衝量）；「接到哪」靠墊球準備期在出手鈕上滑動，選擇平台角度——上滑高球到位、下滑低平安全球、左／右滑平台偏左／右，不滑則平台正對身體。四向離散，和扣球同一套手勢；觸球窗口開始即鎖定。平台角度寫進共享姿勢，球仍依前臂實際法線反彈，不傳送到指定落點、不保底。入門與標準模式顯示平台朝向線與接球時機提示（出手鈕外圈收縮），進階不顯示，提示不改判定。訓練新增「接球方向練習」：地上標目標區，只顯示結果。指令契約新增 `passType?`：`HIGH`、`LOW`、`LEFT`、`RIGHT`、`NEUTRAL`。競品參照：Free Ball: Volleyball 用鏡頭瞄準＋抓時機，玩家普遍反映缺乏時機與落點提示（Steam 討論區），本作以觸控手勢與資訊提示補足。驗收條件見 `docs/kickoffs/direct-v4-receive-swipe-acceptance.md`。
+
 本次真實動作參照：[USA Volleyball 接球平台](https://usavolleyball.org/resource/5-keys-to-better-passing/)、[USA Volleyball 攔網步法](https://usavolleyball.org/resource/10-keys-to-middle-blocking/)、[USA Volleyball 安全落地](https://usavolleyball.org/resource/six-keys-to-lowering-your-risk-of-a-knee-injury/)、[Volleyball World 舉球教學](https://en.volleyballworld.com/blogs/how-to-set-in-volleyball-like-a-pro)及[FIVB 教練手冊](https://www.fivb.com/wp-content/uploads/2024/03/FIVB_Coach_Manual_EN.pdf)。具體畫面檢查為：接球前降低重心並定住平台；起跳收腿、落地屈髖膝；攔網雙手展開；吊球單手小幅推送。完整三／四步助跑、扣球肩髖分離、側向交叉步、魚躍翻滾與回位仍需逐項擴充及實機試玩，不能只憑目前剪影宣稱動作全真。
 
 ## 技術與相容性
