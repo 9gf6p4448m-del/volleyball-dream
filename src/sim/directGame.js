@@ -8,6 +8,11 @@ import {
 import { getDirectPose } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
+// The receive platform is locked once the windup is over; the input layer
+// uses the same check so the hit button label never disagrees with the sim.
+export function receivePlatformLocked(p) {
+  return p.action === 'receive' && p.actionTick >= DIRECT_ACTIONS.receive.windup;
+}
 export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
   if (!Number.isFinite(height) || height < 1 || height > 2.5)
     throw new RangeError("height must be metres between 1 and 2.5");
@@ -161,7 +166,7 @@ export function stepDirectGame(s, commands = []) {
          (!p.action && c.action === 'spike'))) p.shotType = c.shotType;
     // A platform choice is accepted only while the receive is still in windup.
     if (typeof c.passType === 'string' && Object.hasOwn(PASS_TYPES, c.passType) && p.action === 'receive' &&
-        p.actionTick < DIRECT_ACTIONS.receive.windup) p.passType = c.passType;
+        !receivePlatformLocked(p)) p.passType = c.passType;
     if (c.action === "feed") feed(s, c.feedKind);
     else if (c.action === "jump" && p.grounded) {
       p.vy =

@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDirectControls } from '../src/input/directControls.js';
-import { createDirectGame, stepDirectGame } from '../src/sim/directGame.js';
+import { createDirectGame, stepDirectGame, receivePlatformLocked } from '../src/sim/directGame.js';
 import { DIRECT_ACTIONS } from '../src/sim/directConstants.js';
 
 class Target extends EventTarget {
@@ -35,7 +35,7 @@ function run(swipeTick) {
   const state = createDirectGame();
   const controls = createDirectControls({
     ...f,
-    isPassLocked: () => state.player.action === 'receive' && state.player.actionTick >= DIRECT_ACTIONS.receive.windup,
+    isPassLocked: () => receivePlatformLocked(state.player),
   });
   const rows = [];
   f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
@@ -50,7 +50,6 @@ function run(swipeTick) {
 }
 
 test('A21c 覆審 H1：平台鎖定後滑動不改標籤；每個 tick 標籤都等於模擬實際的平台方向', () => {
-  let changed = 0;
   for (let swipe = 1; swipe <= 14; swipe++) {
     const rows = run(swipe);
     assert.ok(rows.length >= 10, `swipe=${swipe} 墊球動作須持續（${rows.length} tick）`);
@@ -58,8 +57,8 @@ test('A21c 覆審 H1：平台鎖定後滑動不改標籤；每個 tick 標籤都
       assert.equal(r.label, r.sim, `swipe=${swipe} tick=${r.t} 標籤 ${r.label}、模擬 ${r.sim}`);
       assert.equal(r.held, r.sim, `swipe=${swipe} tick=${r.t} 對外的按住方向 ${r.held}、模擬 ${r.sim}`);
     }
-    if (rows.at(-1).sim === 'LEFT') changed++;
+    // Liveness: every swipe inside the windup chooses the platform; none after.
+    const expected = swipe < DIRECT_ACTIONS.receive.windup ? 'LEFT' : 'NEUTRAL';
+    assert.equal(rows.at(-1).sim, expected, `swipe=${swipe} 模擬最後的平台方向`);
   }
-  // Liveness: early swipes still choose the platform, late ones do not.
-  assert.ok(changed >= 3 && changed <= DIRECT_ACTIONS.receive.windup, `準備期內的滑動改到平台（${changed}/14）`);
 });

@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-25T10:50:29.880Z",
+  "createdAt": "2026-09-25T11:34:13.920Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -60,17 +60,17 @@
       ],
       "initialPerformance": {
         "frames": 2,
-        "fps": 1.333422228148543,
+        "fps": 1.3483449066271154,
         "frameP95": 0,
-        "simP95": 1.0999999940395355,
+        "simP95": 0.9000000059604645,
         "backlogMs": 0,
-        "maxBacklogMs": 1299.9000000000008,
+        "maxBacklogMs": 1283.3000000000004,
         "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 125,
-        "fps": 53.95916370490527,
-        "frameP95": 83.29999999999563,
+        "frames": 130,
+        "fps": 50.321931329915735,
+        "frameP95": 100,
         "simP95": 0.5,
         "backlogMs": 0,
         "maxBacklogMs": 16.66666666666424,
@@ -151,22 +151,22 @@
         }
       ],
       "initialPerformance": {
-        "frames": 84,
-        "fps": 17.06034080053481,
-        "frameP95": 50.09999999999991,
-        "simP95": 0.20000001788139343,
-        "backlogMs": 7.033333357173661,
-        "maxBacklogMs": 773.900000023841,
+        "frames": 2,
+        "fps": 1.5384615384615385,
+        "frameP95": 0,
+        "simP95": 0.699999988079071,
+        "backlogMs": 0,
+        "maxBacklogMs": 1100.0000000000007,
         "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 121,
-        "fps": 61.27099333277254,
-        "frameP95": 50,
+        "frames": 116,
+        "fps": 54.370752284974394,
+        "frameP95": 66.70000000000437,
         "simP95": 0.5,
         "backlogMs": 0,
-        "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 120
+        "maxBacklogMs": 16.66666666666424,
+        "drawCalls": 118
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
@@ -243,22 +243,22 @@
         }
       ],
       "initialPerformance": {
-        "frames": 92,
-        "fps": 18.941733580329686,
-        "frameP95": 50.099999999999454,
-        "simP95": 0.30000001192092896,
-        "backlogMs": 7.000000017880141,
-        "maxBacklogMs": 740.5000000178807,
+        "frames": 2,
+        "fps": 1.643925694558606,
+        "frameP95": 0,
+        "simP95": 0.5999999940395355,
+        "backlogMs": 0,
+        "maxBacklogMs": 1016.6000000000006,
         "drawCalls": 88
       },
       "syntheticPlaybackMetrics": {
-        "frames": 112,
-        "fps": 61.368742123433506,
-        "frameP95": 50,
+        "frames": 115,
+        "fps": 57.97832114947825,
+        "frameP95": 66.69999999999709,
         "simP95": 0.5999999940395355,
         "backlogMs": 0,
         "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 91
+        "drawCalls": 89
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,

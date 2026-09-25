@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createDirectGame, stepDirectGame, getDirectPose, snapshotDirectGame,
+import { createDirectGame, stepDirectGame, receivePlatformLocked, getDirectPose, snapshotDirectGame,
   restoreDirectGame, replayDirectTape, serializeDirectState, DIRECT_DT, SIMULATION_VERSION } from '../sim/directGame.js';
 import { createDirectControls } from '../input/directControls.js';
 import { autoFaceAim } from '../input/directAutoFace.js';
@@ -109,7 +109,7 @@ export function runDirectPractice(ctx) {
       moveZone: $('[data-move]'), aimZone: $('[data-aim]'), jumpButton: $('[data-jump]'),
       hitButton: $('[data-hit]'), actionSelect: $('[data-action]'), feedButton: $('[data-feed]'), feedSelect: $('[data-feed-kind]'),
       ...(keyBindings ? { keyBindings } : {}),
-      isPassLocked: () => state.player.action === 'receive' && state.player.actionTick >= DIRECT_ACTIONS.receive.windup,
+      isPassLocked: () => receivePlatformLocked(state.player),
       onActivity(kind) {
         if (kind === 'feed') message('來球了。移到球路上，提早抬臂；角色會小幅迎球轉身。');
       },
