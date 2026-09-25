@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createDirectGame, stepDirectGame, getDirectPose, snapshotDirectGame,
   restoreDirectGame, replayDirectTape, serializeDirectState, DIRECT_DT, SIMULATION_VERSION } from '../sim/directGame.js';
 import { createDirectControls } from '../input/directControls.js';
+import { autoFaceAim } from '../input/directAutoFace.js';
 import { createDirectPlayerView } from '../render/directPlayerView.js';
 import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
 import { platformNormal } from '../sim/directPhysics.js';
@@ -33,6 +34,7 @@ export function runDirectPractice(ctx) {
         <details class="dp-settings"><summary>訓練設定</summary><div class="dp-settings-box">
           <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option><option value="pass-drill">接球方向練習</option></select></label>
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
+          <label>接球轉身<select data-face><option value="manual">手動 · 只迎球</option><option value="half">半自動 · 最多 45°</option><option value="full">全自動 · 對準舉球區</option></select></label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
           <p>更改身高會開始新一輪訓練。資訊提示不改變碰撞判定；接球的小幅迎球轉身是基本操作。</p>
           <button data-replay>回放本輪</button><button data-export>匯出回放</button><button data-restart>重新開始</button>
@@ -199,6 +201,10 @@ export function runDirectPractice(ctx) {
       while (playback.index < playback.commands.length && playback.commands[playback.index].tick === state.tick) commands.push(playback.commands[playback.index++]);
     } else {
       commands = controls.sample(state.tick);
+      // Receive auto-face trial: the heading turns toward the setter zone while
+      // the receive action is selected and the ball is live (commands only).
+      const faceAim = $('[data-action]').value === 'receive' ? autoFaceAim($('[data-face]').value, state.player, state.ball) : null;
+      if (faceAim) commands = commands.map(command => ({ ...command, aim: faceAim }));
       while (injected.length) commands.push({ ...injected.shift(), tick: state.tick, sequence: 100000 + commands.length });
       if (state.tick >= MAX_TAPE_TICKS) { setPaused(true); message('本輪已達 10 分鐘，請匯出回放後重新開始。'); return; }
       recorded.push(...commands.map(command => structuredClone(command)));
@@ -249,7 +255,9 @@ export function runDirectPractice(ctx) {
   function pressNowReaches() {
     // A held touch receive passes with its chosen platform when released.
     const passType = (!playback && controls.getState().heldPassType) || 'NEUTRAL';
-    const key = `${state.tick}:${playback ? 'p' : 'l'}:${passType}`;
+    // Auto-face turns the body before contact; rehearse with the same headings.
+    const face = !playback && $('[data-action]').value === 'receive' ? $('[data-face]').value : 'manual';
+    const key = `${state.tick}:${playback ? 'p' : 'l'}:${passType}:${face}`;
     if (rehearsal.key === key) return rehearsal.value;
     const copy = snapshotDirectGame(state);
     const aim = { ...copy.player.aim };
@@ -257,7 +265,8 @@ export function runDirectPractice(ctx) {
     // An active platform contact can only happen within windup + active ticks.
     const window = DIRECT_ACTIONS.receive.windup + DIRECT_ACTIONS.receive.active;
     for (let i = 0; i < window && copy.ball.active; i++) {
-      stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? 'receive' : null, passType }]);
+      const heading = autoFaceAim(face, copy.player, copy.ball) ?? aim;
+      stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim: heading, action: i === 0 ? 'receive' : null, passType }]);
       const contact = copy.events.find(e => e.type === 'contact');
       if (contact) { value = contact.active && (contact.part === 'forearm' || contact.part === 'hand'); break; }
     }

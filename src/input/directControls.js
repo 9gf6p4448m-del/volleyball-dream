@@ -227,7 +227,8 @@ export function createDirectControls({
       });
       // Capture lost without a pointerup: drop the hold instead of sticking.
       listen(button, 'lostpointercapture', (e) => {
-        if (!hitPointer || hitPointer.id !== e.pointerId) return;
+        // Only the button's own capture; a child's implicit capture may bubble here.
+        if (e.target !== button || !hitPointer || hitPointer.id !== e.pointerId) return;
         hitPointer = null;
         showPassChoice(null);
       });

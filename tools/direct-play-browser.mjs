@@ -104,6 +104,28 @@ try {
       assert.equal(released.player.passType, 'LEFT', 'The receive uses the held platform choice');
       assert.equal(released.choice, null, 'The choice label clears on release');
       await cdp.detach();
+      // A20e: receive auto-face trial modes. Walk off-centre with a live ball and
+      // compare the heading with the direction to the setter zone (0, 1.6).
+      const faceAfterWalk = (face, action) => page.evaluate(([face, action]) => {
+        const practice = window.__directPractice;
+        practice.restart(); practice.pause();
+        document.querySelector('[data-face]').value = face;
+        document.querySelector('[data-action]').value = action;
+        practice.command({ action: 'feed', feedKind: 'receive' }); practice.step(1);
+        for (let i = 0; i < 30; i++) { practice.command({ move: { x: 1, z: 0 } }); practice.step(1); }
+        const { player, ball } = practice.snapshot();
+        const want = Math.atan2(0 - player.x, -(1.6 - player.z)), got = Math.atan2(player.aim.x, -player.aim.z);
+        return { x: player.x, ballActive: ball.active, off: Math.abs(Math.atan2(Math.sin(got - want), Math.cos(got - want))) * 180 / Math.PI, aim: player.aim };
+      }, [face, action]);
+      assert.equal(await page.locator('[data-face] option').count(), 3, 'Receive auto-face setting offers three modes');
+      const full = await faceAfterWalk('full', 'receive');
+      assert.ok(full.ballActive && full.x > 1, `Walked off-centre with a live ball (x ${full.x.toFixed(2)})`);
+      assert.ok(full.off < 10, `Full auto-face turns toward the setter zone (${full.off.toFixed(1)}° off)`);
+      const manual = await faceAfterWalk('manual', 'receive');
+      assert.deepEqual(manual.aim, { x: 0, z: -1 }, 'Manual keeps the heading');
+      const spike = await faceAfterWalk('full', 'spike');
+      assert.deepEqual(spike.aim, { x: 0, z: -1 }, 'Auto-face only applies while receive is selected');
+      await page.evaluate(() => { document.querySelector('[data-face]').value = 'manual'; document.querySelector('[data-action]').value = 'receive'; });
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
       report.scenes.push({ name, width, height, beginner, standard, advanced, holdRelease: { holding: holding.choice, released: released.player.passType }, result: result.drill.result, errors });
       await context.close();
