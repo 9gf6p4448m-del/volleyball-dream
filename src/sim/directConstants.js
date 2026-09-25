@@ -1,6 +1,6 @@
 // SI units: metres, seconds, metres/second. Action durations are 60 Hz ticks.
 export const DIRECT_DT = 1 / 60;
-export const SIMULATION_VERSION = "direct-v4";
+export const SIMULATION_VERSION = "direct-v5";
 export const DIRECT_PHYSICS = Object.freeze({
   gravity: 9.81,
   radius: 0.105,
