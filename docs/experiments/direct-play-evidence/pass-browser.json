@@ -1,6 +1,6 @@
 {
-  "createdAt": "2026-09-24T11:06:55.589Z",
-  "base": "https://9gf6p4448m-del.github.io/volleyball-dream",
+  "createdAt": "2026-09-25T01:07:14.939Z",
+  "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
     {
@@ -21,6 +21,10 @@
         "timing": false,
         "now": false,
         "platform": false
+      },
+      "holdRelease": {
+        "holding": "LEFT",
+        "released": "LEFT"
       },
       "result": {
         "type": "ground",
@@ -50,6 +54,10 @@
         "now": false,
         "platform": false
       },
+      "holdRelease": {
+        "holding": "LEFT",
+        "released": "LEFT"
+      },
       "result": {
         "type": "ground",
         "hit": true,
@@ -77,6 +85,10 @@
         "timing": false,
         "now": false,
         "platform": false
+      },
+      "holdRelease": {
+        "holding": "LEFT",
+        "released": "LEFT"
       },
       "result": {
         "type": "ground",
