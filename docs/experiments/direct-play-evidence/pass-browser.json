@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-25T03:40:36.307Z",
+  "createdAt": "2026-09-25T05:50:32.176Z",
   "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -22,9 +22,15 @@
         "now": false,
         "platform": false
       },
-      "holdRelease": {
-        "holding": "LEFT",
-        "released": "LEFT"
+      "pressReceive": {
+        "choice": "LEFT",
+        "passType": "LEFT",
+        "tapResults": {
+          "0": "11/11",
+          "3": "11/11",
+          "6": "11/11",
+          "9": "10/11"
+        }
       },
       "result": {
         "type": "ground",
@@ -54,9 +60,15 @@
         "now": false,
         "platform": false
       },
-      "holdRelease": {
-        "holding": "LEFT",
-        "released": "LEFT"
+      "pressReceive": {
+        "choice": "LEFT",
+        "passType": "LEFT",
+        "tapResults": {
+          "0": "11/11",
+          "3": "11/11",
+          "6": "11/11",
+          "9": "10/11"
+        }
       },
       "result": {
         "type": "ground",
@@ -86,9 +98,15 @@
         "now": false,
         "platform": false
       },
-      "holdRelease": {
-        "holding": "LEFT",
-        "released": "LEFT"
+      "pressReceive": {
+        "choice": "LEFT",
+        "passType": "LEFT",
+        "tapResults": {
+          "0": "11/11",
+          "3": "11/11",
+          "6": "11/11",
+          "9": "10/11"
+        }
       },
       "result": {
         "type": "ground",

@@ -179,21 +179,14 @@ export function createDirectControls({
     listen(button, 'pointerdown', (e) => {
       if (aimGesture && hitPointer) return;
       const value = resolve();
-      // Touch receive: hold to choose the platform, release to pass.
-      if (aimGesture && value.action === 'receive') {
-        hitPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, heading: aimHeading, action: 'receive', passType: 'NEUTRAL' };
-        capture(button, e);
-        showPassChoice('NEUTRAL');
-        activity('receive');
-        e.preventDefault?.();
-        return;
-      }
       if (aimGesture && value.action === 'spike') input.queueShotType('LINE', stamp(e));
       if (aimGesture && value.action === 'receive') input.queuePassType('NEUTRAL', stamp(e));
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
       if (aimGesture && !hitPointer) {
         hitPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, heading: aimHeading, action: value.action, shotType: 'LINE', passType: 'NEUTRAL' };
         capture(button, e);
+        // The receive passes on press; show the platform chosen by the swipe.
+        if (value.action === 'receive') showPassChoice('NEUTRAL');
       }
       activity(value.action);
       e.preventDefault?.();
@@ -212,6 +205,7 @@ export function createDirectControls({
           const type = receivePassType(dx, e.clientY - hitPointer.y);
           if (type !== hitPointer.passType) {
             hitPointer.passType = type;
+            input.queuePassType(type, stamp(e));
             showPassChoice(type);
           }
         }
@@ -234,15 +228,9 @@ export function createDirectControls({
       });
       listen(button, 'pointerup', (e) => {
         if (!hitPointer || hitPointer.id !== e.pointerId) return;
-        const held = hitPointer;
-        release(button, held.id);
+        release(button, hitPointer.id);
         hitPointer = null;
         showPassChoice(null);
-        if (held.action === 'receive') {
-          input.queuePassType(held.passType, stamp(e));
-          input.queueAction('receive', stamp(e));
-          activity('receive');
-        }
       });
     }
     listen(button, 'click', (e) => {

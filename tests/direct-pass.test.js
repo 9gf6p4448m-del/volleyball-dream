@@ -195,16 +195,14 @@ test('A7 墊球時在出手鈕左右滑只送出平台選擇、不改朝向，�
   // Up/down swipes are disabled (user decision 2026-09-24) and stay neutral.
   for (const [dx, dy, expected] of [[0, 0, 'NEUTRAL'], [0, -30, 'NEUTRAL'], [0, 30, 'NEUTRAL'], [-30, 5, 'LEFT'], [30, -5, 'RIGHT']]) {
     const { f, controls } = controlsFixture();
-    // Hold-to-aim, release-to-pass (2026-09-25 user decision; A19 revision log).
     f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
     const first = controls.sample(0);
-    assert.deepEqual(first.map(c => c.action), [null], '按下不出手');
+    assert.deepEqual(first.map(c => c.action), [null, 'receive']);
+    assert.equal(first[1].passType, 'NEUTRAL');
     f.hitButton.dispatchEvent(ev('pointermove', { pointerId: 3, clientX: 100 + dx, clientY: 100 + dy }));
-    assert.deepEqual(controls.sample(1).map(c => c.action), [null], '滑動不出手');
-    f.hitButton.dispatchEvent(ev('pointerup', { pointerId: 3, clientX: 100 + dx, clientY: 100 + dy }));
-    const moved = controls.sample(2);
-    assert.deepEqual(moved.map(c => c.action), [null, 'receive'], '放開送出一次墊球');
-    assert.equal(moved[1].passType, expected);
+    const moved = controls.sample(1);
+    assert.equal(moved[0].passType, expected);
+    assert.deepEqual(moved.map(c => c.action), [null], '滑動不重新觸發動作');
     assert.deepEqual(moved[0].aim, first[0].aim, '墊球滑動不改朝向（2026-09-24 使用者裁定 H2-A）');
     controls.dispose();
   }
@@ -246,8 +244,6 @@ test('A3b 真實觸控指令鏈：出手鈕上左右滑改變墊球橫向出球�
       if (t === 29) {
         f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
         if (dx) f.hitButton.dispatchEvent(ev('pointermove', { pointerId: 3, clientX: 100 + dx, clientY: 105 }));
-        // Release to pass (A19f): same tick as the original press.
-        f.hitButton.dispatchEvent(ev('pointerup', { pointerId: 3, clientX: 100 + dx, clientY: 105 }));
       }
       const commands = controls.sample(t);
       if (t === 0) commands.push({ ...cmd(s, 'feed'), sequence: 1000 });

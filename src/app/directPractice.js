@@ -48,10 +48,10 @@ export function runDirectPractice(ctx) {
         <a href="?">返回生涯</a>
       </nav>
     </header>
-    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，按住出手鈕、左右滑選方向，放開＝墊球（外圈變金色就放開）；角色會迎向來球 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
+    <div class="dp-coach"><strong data-message>先餵一球，讓球真正碰到你的雙臂。</strong><p data-hint>走到球路上，提早按墊球（外圈變金色就按）；角色會迎向來球 · 墊球時左右滑改平台方向 · 扣球時上滑吊球、下滑直線、左右滑斜線</p></div>
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
-    <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 墊球按住放開</small></button></div>
+    <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
     <div class="dp-footer" data-status>60 Hz 固定模擬 · 身體接觸才算觸球</div>`;
   document.body.appendChild(root);
   const $ = selector => root.querySelector(selector);
@@ -218,7 +218,7 @@ export function runDirectPractice(ctx) {
         drill = event.kind === 'pass-drill' ? { target: DRILL_TARGETS[(state.stats.feeds - 1) % DRILL_TARGETS.length], touched: false, result: null } : null;
         drillTarget.visible = !!drill;
         if (drill) drillTarget.position.set(drill.target.x, 0.027, drill.target.z);
-        if (drill && !playback) message('接球方向練習：把球墊向橘色目標區。按住出手鈕左右滑選平台角度、放開墊球，落點只看物理結果。');
+        if (drill && !playback) message('接球方向練習：把球墊向橘色目標區。滑動選平台角度，落點只看物理結果。');
       }
       if (drill && event.type === 'contact') drill.touched = true;
       if (drill && !drill.result && ['ground', 'net', 'out'].includes(event.type)) {
@@ -235,8 +235,8 @@ export function runDirectPractice(ctx) {
     if (playback && state.tick >= playback.endTick) { setPaused(true); message('回放結束。按「退出回放」返回訓練。'); }
   }
   function drillResult(type) {
-    if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按住出手鈕、在球到之前放開。' };
-    if (type === 'net') return { type, hit: false, text: '球碰網了：早一點放開出手鈕，讓球落在前臂上。' };
+    if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按墊球。' };
+    if (type === 'net') return { type, hit: false, text: '球碰網了：早一點按墊球，讓球落在前臂上。' };
     const dx = state.ball.x - drill.target.x, dz = state.ball.z - drill.target.z;
     const distance = Math.hypot(dx, dz);
     if (type === 'ground' && distance <= DRILL_RADIUS) return { type, hit: true, dx, dz, text: `命中目標區！距中心 ${distance.toFixed(1)} m。` };
@@ -367,7 +367,7 @@ export function runDirectPractice(ctx) {
       const action = DIRECT_ACTIONS[state.player.action];
       $('[data-hint]').textContent = action
         ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : state.player.action === 'receive' ? `墊球 · ${PASS_LABELS[state.player.passType] ?? PASS_LABELS.NEUTRAL}` : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中 · 金色部位可主動觸球' : '收招中'} · 球仍須真正碰到身體`
-        : '走到球路上，按住出手鈕、左右滑選方向，放開＝墊球（外圈變金色就放開）；角色會迎向來球 · 扣球時上滑吊球、下滑直線、左右滑斜線';
+        : '走到球路上，提早按墊球（外圈變金色就按）；角色會迎向來球 · 墊球時左右滑改平台方向 · 扣球時上滑吊球、下滑直線、左右滑斜線';
       $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
     }
