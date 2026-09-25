@@ -2,6 +2,13 @@
 
 最新接手入口。驗收：`docs/kickoffs/direct-v7-receive-assist-acceptance.md`（A23，含修訂紀錄）。
 
+## 第三輪：高手幾乎都是差（2026-09-26 01:40）
+- 成因：練習頁的按鍵提示只算球到手臂平台高度；高手在額頭高度觸球，照提示按一定晚。跑位中的玩家，提示還會把高手球當低手算。
+- 修法：`predictOverhand`／`receiveContactEta`（`src/sim/directReceiveAssist.js`）由模擬與提示共用；高手計時到額頭高度，並外推目前跑動 0.2 秒（`cueRunAhead`）。
+- 重現與驗收：`tools/receive-cue-probe.mjs` 的 `leadRun`（在提示剩 L 秒時按）。L*＝0.25 秒：高手非差 12.3%→97.3%（73 次）、低手非差 90.4%（門檻 90%，餘裕小，參數是試 3 組挑出的）。
+- 試過不採用：來不及舉手改低手——那些球改打到頭／身體變成沒接到，比差更糟，已撤回。
+- main `eaed66e`；gh-pages `4df1980` 公開站 `direct-v7 · 2026-09-26 01:38`（--delivery PASS）。`npm test` 2598 全綠；四個瀏覽器治具 PASS（full 第一次跑沒有輸出、原因未查明，之後連三次 PASS）。
+
 ## 結案（2026-09-26）
 - 使用者簽准 A23a 門檻 40%→34%；`npm test` 2597 全綠；已快轉併入 main `87730eb`。公開站 `direct-v7 · 2026-09-25 23:35` 與 main 的 src 相同，未重新部署。
 - 下一步：使用者試玩第二輪（倒數長度、高手舉手是否自然）。
