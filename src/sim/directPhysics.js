@@ -114,7 +114,16 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, sur
   let rx = nx, ry = ny, rz = nz;
   if (state.player.action === "receive" && next.active && (next.part === "forearm" || next.part === "hand")) {
     const face = platformNormal(nextPose);
-    if (face && nx * face.x + ny * face.y + nz * face.z > C.platformFaceCos) {
+    const facing = face ? nx * face.x + ny * face.y + nz * face.z : 0;
+    // direct-v6: the elbow gap is wider than the ball, so a ball dropping
+    // between the forearms meets the inner side of one of them. On the upper
+    // (face) side that still counts as the platform.
+    const other = next.part === "forearm" && nextPose.find((s) => s.part === "forearm" && s.id !== next.id);
+    const inner = other && facing > 0 &&
+      (other.a.x + other.b.x - next.a.x - next.b.x) * nx +
+      (other.a.y + other.b.y - next.a.y - next.b.y) * ny +
+      (other.a.z + other.b.z - next.a.z - next.b.z) * nz > 0;
+    if (face && (inner || facing > C.platformFaceCos)) {
       rx = face.x; ry = face.y; rz = face.z;
     }
   }
