@@ -129,7 +129,7 @@ test('A4 平台選擇不增減膠囊、不改半徑；沒碰到身體的球軌�
   for (const type of TYPES.slice(1)) assert.equal(trace(type), neutral, `${type} 不得改變未觸球的球`);
 });
 
-test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，direct-v5 拒絕', () => {
+test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，direct-v6 拒絕', () => {
   // Two tapes: the original mid-windup change (LEFT then HIGH) and LEFT held
   // throughout, so a dropped passLateral is visible at the restore points.
   for (const choose of [t => (t < 31 ? 'LEFT' : 'HIGH'), () => 'LEFT']) {
@@ -147,9 +147,9 @@ test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，d
         assert.equal(serializeDirectState(restored), serializeDirectState(states[t]));
       }
     }
-    assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v6', initial, commands, endTick: s.tick })), serializeDirectState(s));
-    assert.throws(() => restoreDirectGame({ ...initial, simulationVersion: 'direct-v5' }));
-    assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v5', initial, commands, endTick: 10 }));
+    assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v7', initial, commands, endTick: s.tick })), serializeDirectState(s));
+    assert.throws(() => restoreDirectGame({ ...initial, simulationVersion: 'direct-v6' }));
+    assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v6', initial, commands, endTick: 10 }));
   }
 });
 

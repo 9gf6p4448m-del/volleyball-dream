@@ -42,19 +42,6 @@ function launch(s, pose, start, v) {
 }
 const forearms = (pose) => [pose.find((q) => q.id === 'left-forearm'), pose.find((q) => q.id === 'right-forearm')];
 
-// Real-path forearm contacts, classified by where the ball centre sits across
-// the two forearm axes at the contact tick (facing is fixed toward the net, so
-// "across" is world x). Between the axes = inner side; outside = outer side.
-function forearmSide(s, pos) {
-  const pose = getDirectPose(s, 1);
-  const xs = pose.filter((q) => q.part === 'forearm').map((q) => {
-    const t = Math.max(0, Math.min(1, (pos.z - q.a.z) / ((q.b.z - q.a.z) || 1e-9)));
-    return q.a.x + (q.b.x - q.a.x) * t;
-  });
-  const [lo, hi] = [Math.min(...xs), Math.max(...xs)];
-  if (pos.x > lo && pos.x < hi) return { side: 'inner' };
-  return { side: 'outer', dir: pos.x <= lo ? -1 : 1 };
-}
 test('A22c 球從下方進到兩臂之間：結果與拿掉另一條前臂時的膠囊反彈相同', () => {
   for (const h of HEIGHTS) for (const t of ALONG) {
     const { s, pose } = raisedPlatform(h);
@@ -72,64 +59,6 @@ test('A22c 球從下方進到兩臂之間：結果與拿掉另一條前臂時的
   }
 });
 
-// Every scenario counts, whether or not the ball is touched.
-function allReceives(sticks) {
-  const c = { n: 0, zone: 0, net: 0, inner: [], outer: [] };
-  for (const [sx, sz] of sticks) for (const z0 of [5.4, 5.8, 6.2]) for (const x0 of [-0.3, 0, 0.3])
-    for (const m of [0.2, 0.35, 0.5, 0.8, 1.0]) for (let rt = 18; rt <= 40; rt++) {
-      const s = createDirectGame(); s.player.x = x0; s.player.z = z0;
-      let first = null;
-      for (let t = 0; t < 240; t++) {
-        stepDirectGame(s, [cmd(s, t === 0 ? 'feed' : t === rt ? 'receive' : null,
-          t >= 10 ? { x: sx * m, z: sz * m } : { x: 0, z: 0 })]);
-        const hit = s.events.find((e) => e.type === 'contact');
-        if (hit && !first) {
-          first = hit;
-          if (hit.active && hit.part === 'forearm') {
-            const k = forearmSide(s, hit.position);
-            c[k.side].push({ ...k, tag: `stick=${sx},${sz} x0=${x0} z0=${z0} m=${m} rt=${rt}`, v: { x: s.ball.vx, y: s.ball.vy } });
-          }
-        }
-        const end = s.events.find((e) => ['ground', 'net', 'out'].includes(e.type));
-        if (end) {
-          c.n++;
-          if (end.type === 'net') c.net++;
-          else if (end.type === 'ground' && s.ball.z >= 0.5 && s.ball.z <= 3 && Math.abs(s.ball.x) <= 3) c.zone++;
-          break;
-        }
-      }
-    }
-  return c;
-}
-
-const FWD = allReceives([[0, -1]]);
-const DIAG = allReceives([[0.7, -0.7], [-0.7, -0.7]]);
-
-test('A22a 真實路徑：第一次主動觸球打到前臂內側時照平台正面反彈（vy > 0、|vx| < 0.05）', () => {
-  const rows = [...FWD.inner, ...DIAG.inner];
-  assert.ok(rows.length >= 10, `內側觸球案例 ${rows.length}`);
-  for (const r of rows) {
-    assert.ok(r.v.y > 0, `${r.tag} 觸球後往上（vy ${r.v.y.toFixed(2)}）`);
-    assert.ok(Math.abs(r.v.x) < 0.05, `${r.tag} 不往側面彈（vx ${r.v.x.toFixed(2)}）`);
-  }
-});
-
-test('A22b 真實路徑：第一次主動觸球打到前臂外側且沒套平台時照舊往外彈', () => {
-  const rows = [...FWD.outer, ...DIAG.outer].filter((r) => r.v.y < 0);
-  assert.ok(rows.length >= 20, `外側擦邊案例 ${rows.length}`);
-  for (const r of rows) assert.ok(r.dir * r.v.x >= 0.3, `${r.tag} 往外彈（vx ${r.v.x.toFixed(2)}）`);
-});
-
-test('A22d 真實路徑、全部案例當分母：正前舉球區 ≥ 275、碰網 ≤ 124', () => {
-  const c = FWD;
-  assert.equal(c.n, 1035);
-  assert.ok(c.zone >= 275, `正前舉球區 ${c.zone}/${c.n}`);
-  assert.ok(c.net <= 124, `正前碰網 ${c.net}/${c.n}`);
-});
-
-test('A22d 真實路徑、全部案例當分母：斜前舉球區 ≥ 108、碰網 ≤ 3', () => {
-  const c = DIAG;
-  assert.equal(c.n, 2070);
-  assert.ok(c.zone >= 108, `斜前舉球區 ${c.zone}/${c.n}`);
-  assert.ok(c.net <= 3, `斜前碰網 ${c.net}/${c.n}`);
-});
+// A22a／A22b／A22d（真實路徑的內外側反彈與舉球區計數）退場：direct-v7 接球輔助
+// 在接球時窗內改由時機決定出球，見 docs/kickoffs/direct-v7-receive-assist-acceptance.md
+// 使用者裁定第 6 題。A22c（直接呼叫 collideBody 的平台幾何）照舊。

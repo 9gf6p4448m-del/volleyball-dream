@@ -1,6 +1,6 @@
 // SI units: metres, seconds, metres/second. Action durations are 60 Hz ticks.
 export const DIRECT_DT = 1 / 60;
-export const SIMULATION_VERSION = "direct-v6";
+export const SIMULATION_VERSION = "direct-v7";
 export const DIRECT_PHYSICS = Object.freeze({
   gravity: 9.81,
   radius: 0.105,
@@ -33,6 +33,30 @@ export const DIRECT_PHYSICS = Object.freeze({
   separation: 0.035,
   passiveRestitution: 0.45,
   activeRestitution: 0.8,
+});
+// direct-v7 receive assist (docs/kickoffs/direct-v7-receive-assist-acceptance.md):
+// a ball reaching the platform (underhand) or the forehead (overhand) within a
+// radius during the receive window is passed; press timing sets the quality.
+export const RECEIVE_ASSIST = Object.freeze({
+  underRadius: 0.5, // metres, horizontal, around the forearm platform
+  overRadius: 0.35, // metres, horizontal, around the forehead
+  band: 0.25, // metres, vertical tolerance around either reference point
+  overHeight: 1.02, // body heights: forehead contact point
+  overForward: 0.12, // body heights in front of the body
+  shoulder: 0.82, // body heights: above this the pass is overhand
+  windowPre: 2, // ticks before the receive windup ends
+  windowPost: 2, // ticks after the active window ends
+  perfectTicks: 2, // |offset from window centre| for PERFECT
+  goodTicks: 4.5, // ... for GOOD; beyond is POOR
+  edgeRatio: 0.7, // contact beyond this share of the radius drops one tier
+  target: Object.freeze({ x: 0, z: 1.6 }), // setter zone centre (own side)
+  netClearance: 0.4, // metres: lowest target z (own side of the net)
+  lateral: 1.2, // metres of target shift for a LEFT/RIGHT swipe
+  apex: Object.freeze({ NEUTRAL: 4.2, HIGH: 5, LOW: 3.4, LEFT: 4.2, RIGHT: 4.2 }),
+  error: Object.freeze({ PERFECT: 0.35, GOOD: 1.2, POOR: 2.6 }), // metres, max landing error
+  // Overhand is sharper than a forearm pass on slow balls and loses control on fast ones.
+  overSlow: 7, overFast: 13, // ball speed m/s
+  overSlowMultiplier: 0.6, overFastMultiplier: 2.2,
 });
 export const DIRECT_ACTIONS = Object.freeze({
   receive: { windup: 8, active: 10, recovery: 14 },

@@ -8,6 +8,12 @@ import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
 import { platformNormal } from '../sim/directPhysics.js';
 import './directPractice.css';
 
+const GRADE_LABELS = { PERFECT: '完美', GOOD: '普通', POOR: '差' };
+const GRADE_TIPS = {
+  PERFECT: '時機完美！球直送舉球區。',
+  GOOD: '接到了，時機差一點，球偏了一些。',
+  POOR: '時機太早或太晚，球噴掉了。外圈變金色時再按。',
+};
 const ACTION_LABELS = { receive: '墊球', spike: '扣球', tip: '吊球', set: '舉球', block: '攔網', dive: '魚躍' };
 const SHOT_LABELS = { LINE: '直線重扣', CROSS_LEFT: '左斜線', CROSS_RIGHT: '右斜線', TIP: '單手吊球' };
 const PASS_LABELS = { NEUTRAL: '平台正對', HIGH: '高球到位', LOW: '低平安全球', LEFT: '平台偏左', RIGHT: '平台偏右' };
@@ -35,7 +41,9 @@ export function runDirectPractice(ctx) {
           <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option><option value="pass-drill">接球方向練習</option></select></label>
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
-          <p>更改身高會開始新一輪訓練。資訊提示不改變碰撞判定；接球的小幅迎球轉身是基本操作。</p>
+          <label>低手接球範圍 <output data-under-label>50 cm</output><input data-under type="range" min="20" max="90" value="50" step="5"></label>
+          <label>高手接球範圍 <output data-over-label>35 cm</output><input data-over type="range" min="15" max="70" value="35" step="5"></label>
+          <p>更改身高或接球範圍會開始新一輪訓練。球進入範圍內、按墊球時機對了就接得到；按得越準，球越接近舉球區。</p>
           <button data-replay>回放本輪</button><button data-export>匯出回放</button><button data-restart>重新開始</button>
           <details><summary>鍵盤設定</summary><div class="dp-keygrid">
             <label>前進<input data-key="forward" value="KeyW" aria-label="前進鍵"></label><label>後退<input data-key="backward" value="KeyS" aria-label="後退鍵"></label>
@@ -51,7 +59,8 @@ export function runDirectPractice(ctx) {
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
     <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
-    <div class="dp-footer" data-status>60 Hz 固定模擬 · 身體接觸才算觸球</div>`;
+    <div class="dp-grade" data-grade aria-live="polite"></div>
+    <div class="dp-footer" data-status>60 Hz 固定模擬 · 接球範圍內按對時機就接得到</div>`;
   document.body.appendChild(root);
   const $ = selector => root.querySelector(selector);
   $('[data-build]').textContent = `${SIMULATION_VERSION} · ${typeof __BUILD_ID__ === 'undefined' ? 'dev' : __BUILD_ID__}`;
@@ -78,7 +87,8 @@ export function runDirectPractice(ctx) {
   let liveDrill = null;
   let timingActive = false;
   const seed = Number(ctx.params.get('seed')) || 1;
-  let state = createDirectGame({ seed });
+  const assistRadii = () => ({ underRadius: Number($('[data-under]').value) / 100, overRadius: Number($('[data-over]').value) / 100 });
+  let state = createDirectGame({ seed, assist: assistRadii() });
   let initial = snapshotDirectGame(state);
   let recorded = [];
   let controls;
@@ -120,7 +130,7 @@ export function runDirectPractice(ctx) {
   function tape() { return { simulationVersion: SIMULATION_VERSION, initial, commands: recorded, endTick: playback ? liveState.tick : state.tick }; }
   function restart() {
     bindControls(activeBindings); // A new recording starts a new input tick timeline.
-    state = createDirectGame({ seed, height: Number($('[data-height]').value) / 100 });
+    state = createDirectGame({ seed, height: Number($('[data-height]').value) / 100, assist: assistRadii() });
     initial = snapshotDirectGame(state);
     recorded = [];
     injected.length = 0;
@@ -149,6 +159,10 @@ export function runDirectPractice(ctx) {
   on($('[data-restart]'), 'click', restart);
   on($('[data-height]'), 'input', () => { $('[data-height-label]').textContent = `${$('[data-height]').value} cm`; });
   on($('[data-height]'), 'change', restart);
+  for (const key of ['under', 'over']) {
+    on($(`[data-${key}]`), 'input', () => { $(`[data-${key}-label]`).textContent = `${$(`[data-${key}]`).value} cm`; });
+    on($(`[data-${key}]`), 'change', restart);
+  }
   on($('[data-bind]'), 'click', () => {
     const bindings = Object.fromEntries([...root.querySelectorAll('[data-key]')].map(el => [el.dataset.key, el.value.trim()]));
     if (Object.values(bindings).some(value => !/^(Key[A-Z]|Digit[0-9]|Space|Arrow(Up|Down|Left|Right))$/.test(value)) || new Set(Object.values(bindings)).size !== 6) {
@@ -227,12 +241,23 @@ export function runDirectPractice(ctx) {
       }
       if (event.type === 'contact') {
         lastContactTick = state.tick;
-        if (!playback) message(`實際接觸 · ${PART_LABELS[event.part] ?? '身體'} · 試著改變出手時機與方向。`);
+        if (event.tier) showGrade(event);
+        else if (!playback) message(`實際接觸 · ${PART_LABELS[event.part] ?? '身體'} · 試著改變出手時機與方向。`);
       } else if (!playback && ['ground', 'net', 'out'].includes(event.type)) {
         message(event.type === 'net' ? '球碰網了。調整站位、出手時機，再餵一球。' : '這一球結束。回想接觸的位置，再試一次。');
       }
     }
     if (playback && state.tick >= playback.endTick) { setPaused(true); message('回放結束。按「退出回放」返回訓練。'); }
+  }
+  // direct-v7: timed pass feedback (PERFECT / GOOD / POOR, overhand / underhand).
+  function showGrade(event) {
+    const grade = $('[data-grade]');
+    grade.textContent = `${GRADE_LABELS[event.tier]} · ${event.technique === 'overhand' ? '高手' : '低手'}`;
+    grade.dataset.tier = event.tier;
+    grade.classList.remove('dp-grade-show');
+    void grade.offsetWidth; // restart the fade animation
+    grade.classList.add('dp-grade-show');
+    if (!playback) message(GRADE_TIPS[event.tier]);
   }
   function drillResult(type) {
     if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按墊球。' };

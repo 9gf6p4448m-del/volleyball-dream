@@ -7,13 +7,15 @@ import {
 } from "./directConstants.js";
 import { getDirectPose } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
+import { receiveWindowOffset, timingTier, assistReach, passOutcome } from "./directReceiveAssist.js";
+import { RECEIVE_ASSIST } from "./directConstants.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
 // The receive platform is locked once the windup is over; the input layer
 // uses the same check so the hit button label never disagrees with the sim.
 export function receivePlatformLocked(p) {
   return p.action === 'receive' && p.actionTick >= DIRECT_ACTIONS.receive.windup;
 }
-export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
+export function createDirectGame({ seed = 1, height = 1.75, assist = null } = {}) {
   if (!Number.isFinite(height) || height < 1 || height > 2.5)
     throw new RangeError("height must be metres between 1 and 2.5");
   return {
@@ -61,7 +63,20 @@ export function createDirectGame({ seed = 1, height = 1.75 } = {}) {
     stats: { contacts: 0, feeds: 0, misses: 0 },
     contactEpisode: false,
     separationTicks: 0,
+    // direct-v7: optional receive-assist radii override (practice sliders).
+    assist: assist ? { underRadius: assist.underRadius, overRadius: assist.overRadius } : null,
+    assistGhost: false,
   };
+}
+// direct-v7: replace the ball velocity with a timed pass and mark the contact.
+function applyPass(s, event, { technique, tier, speed }) {
+  const b = s.ball;
+  const out = passOutcome({ from: b, ballSpeed: speed, technique, tier, passType: s.player.passType ?? 'NEUTRAL',
+    seed: s.seed, tick: s.tick, salt: s.stats.contacts });
+  b.vx = out.vx; b.vy = out.vy; b.vz = out.vz;
+  Object.assign(event, { assisted: true, technique, tier, target: out.target, ballSpeed: speed });
+  // The pass leaves from inside the magnet radius; body capsules must not re-catch it.
+  s.assistGhost = true;
 }
 function feed(s, kind = "receive") {
   // Fixed world-space training feeds. Never teleports or follows the player.
@@ -79,6 +94,7 @@ function feed(s, kind = "receive") {
   });
   s.contactEpisode = false;
   s.separationTicks = 0;
+  s.assistGhost = false;
   s.stats.feeds++;
   s.events.push({ type: "feed", tick: s.tick, kind });
 }
@@ -268,6 +284,18 @@ export function stepDirectGame(s, commands = []) {
     b.vy -= C.gravity * dt;
     const predicted = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
     let terminal = firstEnvironmentHit(b, predicted, b.radius);
+    const offset = s.contactEpisode ? null : receiveWindowOffset(p, (i + 1) / C.substeps);
+    if (s.assistGhost && s.contactEpisode) {
+      Object.assign(b, predicted);
+      if (terminal) {
+        Object.assign(b, terminal.position);
+        if (terminal.type === 'ground') b.y = b.radius;
+        dead(s, terminal.type);
+      }
+      continue;
+    }
+    const speedBefore = Math.hypot(b.vx, b.vy, b.vz);
+    const eventsBefore = s.events.length;
     // The sweep follows the turning body and the blending platform, but the
     // contact-surface velocity excludes both, so neither the assist turn nor the
     // platform choice ever swings the ball like a bat.
@@ -275,6 +303,12 @@ export function stepDirectGame(s, commands = []) {
       receiveTurn: turnBefore, receiveReach: reachBefore, passLateral: lateralBefore, passPitch: pitchBefore,
     });
     const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity, surfacePose);
+    // direct-v7: a real forearm/hand hit inside the receive window is a timed pass too.
+    const hitEvent = contact && s.events.slice(eventsBefore).find((e) => e.type === 'contact');
+    if (hitEvent && offset !== null && hitEvent.active && (hitEvent.part === 'forearm' || hitEvent.part === 'hand')) {
+      const technique = hitEvent.position.y - p.y >= RECEIVE_ASSIST.shoulder * p.height ? 'overhand' : 'underhand';
+      applyPass(s, hitEvent, { technique, tier: timingTier(offset, 0), speed: speedBefore });
+    }
     // A valid earlier body hit changes the rest of the trajectory. Check that
     // new segment too, rather than retaining the pre-contact floor/net decision.
     if (contact) terminal = firstEnvironmentHit(contact.position, b, b.radius);
@@ -284,6 +318,20 @@ export function stepDirectGame(s, commands = []) {
       dead(s, terminal.type);
     }
   }
+  // A near miss inside the magnet radius is passed at the end of the tick, so
+  // any real touch during the tick's substeps always goes first.
+  const offset = s.contactEpisode || !b.active ? null : receiveWindowOffset(p, 1);
+  if (offset !== null && b.vy < 0) {
+    const reach = assistReach(s, getDirectPose(s, 1), b);
+    if (reach) {
+      s.contactEpisode = true;
+      s.stats.contacts++;
+      const event = { type: 'contact', tick: s.tick, part: reach.technique === 'overhand' ? 'hand' : 'forearm',
+        id: 'assist', active: true, position: { x: b.x, y: b.y, z: b.z } };
+      s.events.push(event);
+      applyPass(s, event, { technique: reach.technique, tier: timingTier(offset, reach.ratio), speed: Math.hypot(b.vx, b.vy, b.vz) });
+    }
+  }
   if (s.contactEpisode) {
     s.separationTicks = bodySeparated(b, getDirectPose(s, 1))
       ? s.separationTicks + 1
@@ -291,6 +339,7 @@ export function stepDirectGame(s, commands = []) {
     if (s.separationTicks >= 3) {
       s.contactEpisode = false;
       s.separationTicks = 0;
+      s.assistGhost = false;
     }
   }
   if (p.action) {

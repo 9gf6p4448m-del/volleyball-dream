@@ -48,3 +48,10 @@
 .dp-hit[data-pass-choice=NEUTRAL]::before{content:'正前'}
 .dp-hit[data-pass-choice=LEFT]::before{content:'◀ 偏左'}
 .dp-hit[data-pass-choice=RIGHT]::before{content:'偏右 ▶'}
+
+/* direct-v7 timed pass grade */
+.dp-grade{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:700;letter-spacing:4px;pointer-events:none;opacity:0;text-shadow:0 3px 14px #000c}
+.dp-grade[data-tier=PERFECT]{color:#38ef7d}.dp-grade[data-tier=GOOD]{color:#ffd166}.dp-grade[data-tier=POOR]{color:#ff4b4b}
+.dp-grade-show{animation:dp-grade 1.3s ease-out forwards}
+@keyframes dp-grade{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}30%{transform:translate(-50%,-50%) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-70%)}}
+@media(max-width:550px){.dp-grade{font-size:28px;top:46%}}
