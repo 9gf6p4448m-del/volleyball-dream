@@ -1,6 +1,20 @@
 // direct-v7 receive-assist probe: every scenario is counted (touched or not).
 // Usage: node tools/receive-assist-probe.mjs
-import { createDirectGame, stepDirectGame } from '../src/sim/directGame.js';
+import { createDirectGame, stepDirectGame, getDirectPose } from '../src/sim/directGame.js';
+import { closestPoint } from '../src/sim/directPhysics.js';
+
+// Gap (m) between the ball surface and the nearest forearm/hand surface, and
+// the lower hand height in body heights, from the pose at the end of the tick.
+export function armGap(s) {
+  const pose = getDirectPose(s, 1), b = s.ball;
+  let gap = Infinity;
+  for (const q of pose) if (q.part === 'forearm' || q.part === 'hand') {
+    const c = closestPoint(b, q.a, q.b);
+    gap = Math.min(gap, Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z) - q.radius - b.radius);
+  }
+  const hands = pose.filter((q) => q.part === 'hand').map((q) => (q.a.y - s.player.y) / s.player.height);
+  return { gap: Math.max(0, gap), handY: Math.min(...hands) };
+}
 
 const cmd = (s, action, move) => ({ tick: s.tick, sequence: 0, move, aim: { x: 0, z: -1 }, action });
 const rot = ([x, z], deg) => { const a = deg * Math.PI / 180; return [x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)]; };
@@ -73,14 +87,14 @@ export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3 } = {
       stepDirectGame(s, [cmd(s, t === Math.max(0, press) ? 'receive' : null, move)]);
       const hit = s.events.find((e) => e.type === 'contact');
       if (hit && !touched) {
-        touched = hit;
+        touched = { ...hit, ...armGap(s) };
         if (hit.tier) c.tiers[hit.tier] = (c.tiers[hit.tier] ?? 0) + 1;
         if (hit.technique) c.tech[hit.technique] = (c.tech[hit.technique] ?? 0) + 1;
       }
       const end = s.events.find((e) => ['ground', 'net', 'out'].includes(e.type));
       if (end) {
         c.n++;
-        if (touched?.tier) c.rows.push({ tier: touched.tier, technique: touched.technique, end: end.type, x: s.ball.x, z: s.ball.z });
+        if (touched?.tier) c.rows.push({ tier: touched.tier, technique: touched.technique, assist: touched.id === 'assist', gap: touched.gap, handY: touched.handY, end: end.type, x: s.ball.x, z: s.ball.z });
         if (!touched) c.whiff++;
         else if (end.type === 'net') c.net++;
         else if (end.type === 'out') c.out++;
