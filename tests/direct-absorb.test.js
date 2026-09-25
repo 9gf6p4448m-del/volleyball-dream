@@ -76,12 +76,16 @@ const ROLLED = [
   ['right-forearm', { x: 0.08, y: 1.08, z: 0 }, { x: 0.08, y: 1.08, z: -0.3 }],
 ];
 // Ball velocity after one contact with the platform moving at (vx, vz) m/s.
-function bounce(shape, vx, vz) {
+// opts: action (default receive), active arms (default true), player speed
+// that differs from the platform's travel (a pinned or non-receiving body).
+function bounce(shape, vx, vz, opts = {}) {
   const dt = DIRECT_DT / 16;
   const s = createDirectGame();
-  s.player.action = 'receive';
-  s.player.vx = vx; s.player.vz = vz;
+  s.player.action = opts.action ?? 'receive';
+  s.player.vx = opts.playerVx ?? vx; s.player.vz = opts.playerVz ?? vz;
+  if ('moveVz' in opts) s.player.moveVz = opts.moveVz;
   const next = platform(shape), old = platform(shape, { x: -vx * dt, z: -vz * dt });
+  if (opts.active === false) for (const seg of [...next, ...old]) seg.active = false;
   const l = next[0], r = next[1];
   const centre = { x: (l.a.x + l.b.x + r.a.x + r.b.x) / 4, y: (l.a.y + l.b.y + r.a.y + r.b.y) / 4, z: (l.a.z + l.b.z + r.a.z + r.b.z) / 4 };
   // Start clear above the platform and let the ball fall onto it; every call
@@ -102,4 +106,22 @@ test('A18c 只吸收往網子方向的身體速度；後退與橫移照舊傳到
   assert.ok(backward >= 0.3, `後退平移仍傳到球上（差 ${backward.toFixed(3)} m/s）`);
   const lateral = diff(bounce(ROLLED, 1.5, 0), bounce(ROLLED, 0, 0));
   assert.ok(lateral >= 0.3, `橫向平移仍傳到球上（差 ${lateral.toFixed(3)} m/s）`);
+});
+
+// Review round 1 (2026-09-25) regressions: absorption uses actual travel, and
+// only active receive contacts absorb.
+test('A18c+ 貼著前場邊界仍推搖桿時不吸收（用實際位移，不是意圖速度）', () => {
+  const still = bounce(TILTED, 0, 0);
+  const pinned = diff(bounce(TILTED, 0, 0, { playerVz: -5.5, moveVz: 0 }), still);
+  assert.ok(pinned < 0.05, `邊界上沒有移動，出球須與靜止相同（差 ${pinned.toFixed(3)} m/s）`);
+});
+
+test('A18c+ 只有主動墊球吸收：扣球與被動觸球照舊帶入往前的身體速度', () => {
+  for (const opts of [{ action: 'spike' }, { active: false }]) {
+    const moving = bounce(TILTED, 0, -1.5, opts);
+    const reference = bounce(TILTED, 0, -1.5, { ...opts, playerVz: 0, moveVz: 0 });
+    const d = diff(moving, reference);
+    assert.ok(d < 1e-9, `${JSON.stringify(opts)} 出球不得因吸收而改變（差 ${d.toFixed(3)} m/s）`);
+    assert.ok(diff(moving, bounce(TILTED, 0, 0, opts)) >= 0.3, `${JSON.stringify(opts)} 往前平移仍傳到球上`);
+  }
 });

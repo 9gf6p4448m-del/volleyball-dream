@@ -227,6 +227,8 @@ export function stepDirectGame(s, commands = []) {
     const oldX = p.x, oldZ = p.z;
     p.x = Math.max(-4.25, Math.min(4.25, p.x + p.vx * dt));
     p.z = Math.max(0.3, Math.min(8.75, p.z + p.vz * dt));
+    // Actual forward travel this substep (zero against the court boundary).
+    p.moveVz = (p.z - oldZ) / dt;
     // Distance, not wall-clock animation time, drives the collision-bearing gait.
     // Smooth the actual displacement so a player against the boundary stops stepping.
     p.gaitVx = approach(p.gaitVx ?? 0, (p.x - oldX) / dt, 35 * dt);

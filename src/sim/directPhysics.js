@@ -128,8 +128,10 @@ export function collideBody(state, oldPose, nextPose, dt, stopAt = Infinity, sur
   // direct-v5: an active receive absorbs the body's run toward the net (-z),
   // so running in to pass does not drive the ball into it. Sideways and
   // backward body speed still reach the ball.
+  // Uses the body's actual travel (moveVz), so a player pinned at the boundary
+  // while still pushing forward gets nothing subtracted.
   if (state.player.action === "receive" && next.active)
-    surface.z -= Math.min(0, state.player.vz ?? 0);
+    surface.z -= Math.min(0, state.player.moveVz ?? state.player.vz ?? 0);
   const speed =
     (b.vx - surface.x) * rx + (b.vy - surface.y) * ry + (b.vz - surface.z) * rz;
   if (!state.contactEpisode) {
