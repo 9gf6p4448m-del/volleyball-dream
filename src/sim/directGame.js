@@ -7,7 +7,7 @@ import {
 } from "./directConstants.js";
 import { getDirectPose } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
-import { receiveWindowOffset, timingTier, assistReach, passOutcome } from "./directReceiveAssist.js";
+import { receiveWindowOffset, timingTier, assistReach, passOutcome, predictOverhand } from "./directReceiveAssist.js";
 import { RECEIVE_ASSIST } from "./directConstants.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
 // The receive platform is locked once the windup is over; the input layer
@@ -146,19 +146,11 @@ function receiveTurnTarget(s) {
 // the shoulders is near the forehead point. Once chosen it is kept for this
 // receive (p.receiveOverhandChosen), so the hands never drop back mid-pass.
 function overhandTarget(s) {
-  const p = s.player, b = s.ball, A = RECEIVE_ASSIST;
+  const p = s.player, b = s.ball;
   if (p.action !== 'receive') return 0;
   if (p.receiveOverhandChosen) return 1;
   if (!b.active || s.contactEpisode) return 0;
-  const angle = Math.atan2(p.aim.x, -p.aim.z) + (p.receiveTurn ?? 0);
-  const hx = p.x + Math.sin(angle) * A.overForward * p.height, hz = p.z - Math.cos(angle) * A.overForward * p.height;
-  // Predict where the ball passes closest to the forehead point (horizontally)
-  // and how high it is then: overhand only if that contact point is above the shoulders.
-  const vh = b.vx * b.vx + b.vz * b.vz;
-  const t = vh > 1e-9 ? Math.max(0, ((hx - b.x) * b.vx + (hz - b.z) * b.vz) / vh) : 0;
-  const d = Math.hypot(b.x + b.vx * t - hx, b.z + b.vz * t - hz);
-  const y = b.y + b.vy * t - C.gravity * t * t / 2;
-  p.receiveOverhandChosen = y - p.y >= A.shoulder * p.height && d <= A.overPoseReach;
+  p.receiveOverhandChosen = predictOverhand(p, b);
   return p.receiveOverhandChosen ? 1 : 0;
 }
 // Pose used only for contact-surface velocity: the assist turn, side reach and

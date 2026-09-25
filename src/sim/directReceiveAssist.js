@@ -81,3 +81,38 @@ export function passOutcome({ from, ballSpeed, technique, tier, passType = 'NEUT
   const time = vy / C.gravity + Math.sqrt(2 * (apex - C.radius) / C.gravity);
   return { vx: (target.x - from.x) / time, vy, vz: (target.z - from.z) / time, target };
 }
+
+// Forehead contact point (overhand), from the body and its receive heading.
+function foreheadPoint(p) {
+  const f = facing(p);
+  return { x: p.x + f.x * A.overForward * p.height, y: p.y + A.overHeight * p.height, z: p.z + f.z * A.overForward * p.height };
+}
+// Would this ball be taken overhand? Predict where it passes closest to the
+// forehead point (horizontally) and how high it is then.
+// `moving`: follow the player's current run (the timing cue), so a player still
+// running in under a high ball already sees the overhand timing.
+export function predictOverhand(p, b, reach = A.overPoseReach, moving = false) {
+  // `moving` (timing cue only): the forehead point follows the current run for
+  // a short time, so a player running in under a high ball sees overhand timing.
+  const run = moving ? A.cueRunAhead : 0;
+  const head = foreheadPoint(p), hx = head.x + p.vx * run, hz = head.z + p.vz * run;
+  const vh = b.vx * b.vx + b.vz * b.vz;
+  const t = vh > 1e-9 ? Math.max(0, ((hx - b.x) * b.vx + (hz - b.z) * b.vz) / vh) : 0;
+  const d = Math.hypot(b.x + b.vx * t - hx, b.z + b.vz * t - hz);
+  const y = b.y + b.vy * t - C.gravity * t * t / 2;
+  return y - p.y >= A.shoulder * p.height && d <= reach;
+}
+// Timing cue: seconds until the falling ball reaches the contact height of the
+// technique it will be taken with (forehead for overhand, forearms otherwise).
+export function receiveContactEta(s) {
+  const { player: p, ball: b } = s;
+  if (!b.active) return null;
+  const technique = p.receiveOverhandChosen || predictOverhand(p, b, A.cueOverReach, true) ? 'overhand' : 'underhand';
+  const height = technique === 'overhand' ? A.overHeight : A.platformCueHeight;
+  const drop = b.y - (p.y + height * p.height), disc = b.vy * b.vy + 2 * C.gravity * drop;
+  if (disc < 0) return null;
+  const t = (b.vy + Math.sqrt(disc)) / C.gravity;
+  const f = facing(p), ahead = technique === 'overhand' ? A.overForward : 0.4;
+  const point = { x: p.x + f.x * ahead * p.height, z: p.z + f.z * ahead * p.height };
+  return { t, technique, miss: Math.hypot(b.x + b.vx * t - point.x, b.z + b.vz * t - point.z) };
+}

@@ -59,6 +59,9 @@ export const RECEIVE_ASSIST = Object.freeze({
   overSlowMultiplier: 0.6, overFastMultiplier: 2.2,
   // Overhand pose: hands go up when a descending ball above the shoulders is
   // within this horizontal distance of the forehead point; blend per second.
+  platformCueHeight: 0.6, // body heights: forearm contact height used by the timing cue
+  cueOverReach: 0.75, // metres: the timing cue treats a ball passing this close overhead as overhand
+  cueRunAhead: 0.2, // seconds of the current run the timing cue extrapolates
   overPoseReach: 0.75, overPoseSpeed: 60,
 });
 export const DIRECT_ACTIONS = Object.freeze({

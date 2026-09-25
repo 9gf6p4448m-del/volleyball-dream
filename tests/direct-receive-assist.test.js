@@ -85,3 +85,21 @@ test('A24d 高手觸球兩手高於肩 ≥ 90%；低手觸球手低於肩 ≥ 95
   assert.ok(up >= 0.90, `高手舉手 ${(up * 100).toFixed(1)}%`);
   assert.ok(down >= 0.95, `低手手低於肩 ${(down * 100).toFixed(1)}%`);
 });
+
+// Round 3: the timing cue follows the technique (overhand = forehead height).
+import { leadRun, nonPoor } from '../tools/receive-cue-probe.mjs';
+import { receiveContactEta } from '../src/sim/directReceiveAssist.js';
+
+test('A25a／A25b 同一按鍵節奏：高手非差 ≥ 70%（≥ 50 次）、低手非差 ≥ 90%', () => {
+  const eta = (s) => receiveContactEta(s)?.t ?? null;
+  const runs = [0.15, 0.2, 0.25, 0.3].map((lead) => ({
+    lead,
+    low: leadRun({ contactHeight: 0.59, forward: 0.31, lead, eta }),
+    high: leadRun({ contactHeight: 1.02, forward: 0.12, lead, eta }),
+  }));
+  const best = runs.reduce((a, r) => ((r.low.tiers['underhand:PERFECT'] ?? 0) > (a.low.tiers['underhand:PERFECT'] ?? 0) ? r : a));
+  const over = nonPoor(best.high, 'overhand'), under = nonPoor(best.low, 'underhand');
+  assert.ok(over.all >= 50, `L*=${best.lead} 高手觸球 ${over.all}`);
+  assert.ok(over.ok >= 0.70, `L*=${best.lead} 高手非差 ${(over.ok * 100).toFixed(1)}%`);
+  assert.ok(under.ok >= 0.90, `L*=${best.lead} 低手非差 ${(under.ok * 100).toFixed(1)}%`);
+});

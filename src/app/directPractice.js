@@ -6,6 +6,7 @@ import { autoFaceAim } from '../input/directAutoFace.js';
 import { createDirectPlayerView } from '../render/directPlayerView.js';
 import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
 import { platformNormal } from '../sim/directPhysics.js';
+import { receiveContactEta } from '../sim/directReceiveAssist.js';
 import './directPractice.css';
 
 const FEED_DELAY = 90; // ticks (1.5 s) from pressing feed to the ball
@@ -321,23 +322,17 @@ export function runDirectPractice(ctx) {
     rehearsal = { tick: state.tick, key, value };
     return value;
   }
-  // Seconds until the falling ball reaches platform height, or null.
+  // Seconds until the falling ball reaches the contact height of the technique
+  // it will be taken with (direct-v7: forehead for overhand), or null.
   function platformArrival() {
-    const { player: p, ball: b } = state;
-    if (!b.active) return null;
-    const g = DIRECT_PHYSICS.gravity, drop = b.y - (p.y + 0.6 * p.height);
-    const disc = b.vy * b.vy + 2 * g * drop;
-    if (disc < 0) return null;
-    const t = (b.vy + Math.sqrt(disc)) / g;
+    const t = receiveContactEta(state)?.t;
     return t > 0 && t <= 1.5 ? t : null;
   }
+
   function receiveEta() {
-    const { player: p, ball: b } = state;
-    const t = platformArrival();
-    if (t == null) return null;
-    const fx = p.x + p.aim.x * 0.4 * p.height, fz = p.z + p.aim.z * 0.4 * p.height;
-    const miss = Math.hypot(b.x + b.vx * t - fx, b.z + b.vz * t - fz);
-    return miss <= (0.1 + DIRECT_PHYSICS.receiveReachLimit) * p.height ? t : null;
+    const cue = receiveContactEta(state);
+    if (!cue || !(cue.t > 0 && cue.t <= 1.5)) return null;
+    return cue.miss <= (0.1 + DIRECT_PHYSICS.receiveReachLimit) * state.player.height ? cue.t : null;
   }
   function metrics() {
     const percentile = values => { if (!values.length) return 0; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor((sorted.length - 1) * 0.95)]; };

@@ -76,10 +76,11 @@ export function leadRun({ contactHeight, forward, lead, eta }) {
       const press = e != null && e <= lead;
       if (press) pressed = true;
       stepDirectGame(s, [cmd(s, press ? 'receive' : null, t < 12 || d < 0.08 ? { x: 0, z: 0 } : { x: dx / Math.max(d, 0.4), z: dz / Math.max(d, 0.4) })]);
-      hit ??= s.events.find((x) => x.type === 'contact' && x.tier) ?? null;
+      const found = s.events.find((x) => x.type === 'contact' && x.tier);
+      if (found && !hit) hit = { ...found, actionTick: s.player.actionTick };
     }
     out.n++; if (pressed) out.pressed++;
-    if (hit) { out.touched++; const k = `${hit.technique}:${hit.tier}`; out.tiers[k] = (out.tiers[k] ?? 0) + 1; }
+    if (hit) { out.touched++; const k = `${hit.technique}:${hit.tier}`; out.tiers[k] = (out.tiers[k] ?? 0) + 1; (out.hits ??= []).push(hit); }
   }
   return out;
 }
