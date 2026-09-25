@@ -68,8 +68,32 @@ try {
       assert.equal(advanced.timing, false, 'Advanced hides the timing cue');
       assert.equal(advanced.now, false, 'Advanced hides the press-now cue');
       assert.equal(advanced.platform, false, 'Advanced hides the platform facing line');
+      // A19g: hold to choose the platform, release to pass, through native touch.
+      await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
+      await page.locator('.dp-settings > summary').click();
+      await page.locator('[data-action]').selectOption('receive');
+      await page.locator('.dp-settings > summary').click();
+      const box = await page.locator('[data-hit]').boundingBox();
+      const touch = { id: 23, x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const cdp = await context.newCDPSession(page);
+      const read = () => page.evaluate(() => ({ player: window.__directPractice.snapshot().player, choice: document.querySelector('[data-hit]').dataset.passChoice ?? null }));
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
+      await page.evaluate(() => window.__directPractice.step(1));
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...touch, x: touch.x - 30, y: touch.y + 3 }] });
+      await page.evaluate(() => window.__directPractice.step(4));
+      const holding = await read();
+      assert.equal(holding.player.action, null, 'Holding the hit button does not start the receive');
+      assert.equal(holding.choice, 'LEFT', 'The held swipe shows the chosen platform on the button');
+      await page.screenshot({ path: resolve(output, `${name}-pass-hold.png`) });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.evaluate(() => window.__directPractice.step(1));
+      const released = await read();
+      assert.equal(released.player.action, 'receive', 'Releasing starts the receive');
+      assert.equal(released.player.passType, 'LEFT', 'The receive uses the held platform choice');
+      assert.equal(released.choice, null, 'The choice label clears on release');
+      await cdp.detach();
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
-      report.scenes.push({ name, width, height, beginner, standard, advanced, result: result.drill.result, errors });
+      report.scenes.push({ name, width, height, beginner, standard, advanced, holdRelease: { holding: holding.choice, released: released.player.passType }, result: result.drill.result, errors });
       await context.close();
     }
   }

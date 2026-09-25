@@ -87,6 +87,12 @@ export function createDirectControls({
   function capture(target, e) { try { target.setPointerCapture?.(e.pointerId); } catch {} }
   function release(target, id) { try { target.releasePointerCapture?.(id); } catch {} }
   function css(target, key, value) { target?.style?.setProperty?.(key, String(value)); }
+  // The receive platform chosen while the hit button is held (shown on the button).
+  function showPassChoice(type) {
+    if (!hitButton?.dataset) return;
+    if (type) hitButton.dataset.passChoice = type;
+    else delete hitButton.dataset.passChoice;
+  }
 
   function clearPointers() {
     if (movePointer) release(moveZone, movePointer.id);
@@ -95,6 +101,7 @@ export function createDirectControls({
     movePointer = null;
     aimPointer = null;
     hitPointer = null;
+    showPassChoice(null);
     aimHeading = 0;
     css(moveZone, '--stick-active', 0);
     css(moveZone, '--stick-x', '0px');
@@ -172,6 +179,15 @@ export function createDirectControls({
     listen(button, 'pointerdown', (e) => {
       if (aimGesture && hitPointer) return;
       const value = resolve();
+      // Touch receive: hold to choose the platform, release to pass.
+      if (aimGesture && value.action === 'receive') {
+        hitPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, heading: aimHeading, action: 'receive', passType: 'NEUTRAL' };
+        capture(button, e);
+        showPassChoice('NEUTRAL');
+        activity('receive');
+        e.preventDefault?.();
+        return;
+      }
       if (aimGesture && value.action === 'spike') input.queueShotType('LINE', stamp(e));
       if (aimGesture && value.action === 'receive') input.queuePassType('NEUTRAL', stamp(e));
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
@@ -196,7 +212,7 @@ export function createDirectControls({
           const type = receivePassType(dx, e.clientY - hitPointer.y);
           if (type !== hitPointer.passType) {
             hitPointer.passType = type;
-            input.queuePassType(type, stamp(e));
+            showPassChoice(type);
           }
         }
         // A receive swipe chooses the platform only; turning stays on the aim zone
@@ -211,8 +227,15 @@ export function createDirectControls({
       });
       listen(button, 'pointerup', (e) => {
         if (!hitPointer || hitPointer.id !== e.pointerId) return;
-        release(button, hitPointer.id);
+        const held = hitPointer;
+        release(button, held.id);
         hitPointer = null;
+        showPassChoice(null);
+        if (held.action === 'receive') {
+          input.queuePassType(held.passType, stamp(e));
+          input.queueAction('receive', stamp(e));
+          activity('receive');
+        }
       });
     }
     listen(button, 'click', (e) => {
