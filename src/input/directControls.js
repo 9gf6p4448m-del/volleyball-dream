@@ -51,7 +51,7 @@ function isTextOrNativeControl(target) {
 
 export function createDirectControls({
   moveZone, aimZone, jumpButton, hitButton, actionSelect, feedButton, feedSelect,
-  onActivity = null, keyBindings = DEFAULT_KEYS,
+  onActivity = null, keyBindings = DEFAULT_KEYS, isPassLocked = null,
 }) {
   const input = createDirectInput();
   const supplied = keyBindings ?? {};
@@ -201,7 +201,8 @@ export function createDirectControls({
             hitPointer.shotType = type;
             input.queueShotType(type, stamp(e));
           }
-        } else if (hitPointer.action === 'receive') {
+        } else if (hitPointer.action === 'receive' && !isPassLocked?.()) {
+          // After the windup the simulation keeps the platform; so does the label.
           const type = receivePassType(dx, e.clientY - hitPointer.y);
           if (type !== hitPointer.passType) {
             hitPointer.passType = type;

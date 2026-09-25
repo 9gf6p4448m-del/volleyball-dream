@@ -109,6 +109,7 @@ export function runDirectPractice(ctx) {
       moveZone: $('[data-move]'), aimZone: $('[data-aim]'), jumpButton: $('[data-jump]'),
       hitButton: $('[data-hit]'), actionSelect: $('[data-action]'), feedButton: $('[data-feed]'), feedSelect: $('[data-feed-kind]'),
       ...(keyBindings ? { keyBindings } : {}),
+      isPassLocked: () => state.player.action === 'receive' && state.player.actionTick >= DIRECT_ACTIONS.receive.windup,
       onActivity(kind) {
         if (kind === 'feed') message('來球了。移到球路上，提早抬臂；角色會小幅迎球轉身。');
       },
