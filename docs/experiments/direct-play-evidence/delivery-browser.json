@@ -1,11 +1,11 @@
 {
-  "createdAt": "2026-09-25T06:26:48.460Z",
+  "createdAt": "2026-09-25T09:25:45.759Z",
   "base": "https://9gf6p4448m-del.github.io/volleyball-dream",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [],
   "delivery": {
     "url": "https://9gf6p4448m-del.github.io/volleyball-dream/?mode=direct",
-    "build": "direct-v5 · 2026-09-25 14:19",
+    "build": "direct-v6 · 2026-09-25 17:24",
     "exportMetadata": true,
     "menuNavigation": true,
     "errors": []
