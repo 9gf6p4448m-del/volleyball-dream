@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-25T06:13:00.665Z",
+  "createdAt": "2026-09-25T06:58:30.498Z",
   "base": "http://127.0.0.1:4175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -60,18 +60,18 @@
       ],
       "initialPerformance": {
         "frames": 2,
-        "fps": 1.2371644191513052,
+        "fps": 1.3187392852433073,
         "frameP95": 0,
-        "simP95": 1,
+        "simP95": 0.4000000059604645,
         "backlogMs": 0,
-        "maxBacklogMs": 1416.6000000000008,
+        "maxBacklogMs": 1316.6000000000008,
         "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 123,
-        "fps": 46.70767828662317,
-        "frameP95": 116.60000000000582,
-        "simP95": 0.7000000178813934,
+        "frames": 127,
+        "fps": 49.48180472219794,
+        "frameP95": 100,
+        "simP95": 0.699999988079071,
         "backlogMs": 0,
         "maxBacklogMs": 16.66666666666424,
         "drawCalls": 118
@@ -154,16 +154,16 @@
         "frames": 2,
         "fps": 1.4285714285714286,
         "frameP95": 0,
-        "simP95": 0.699999988079071,
+        "simP95": 1.199999988079071,
         "backlogMs": 0,
         "maxBacklogMs": 1200.0000000000007,
         "drawCalls": 117
       },
       "syntheticPlaybackMetrics": {
-        "frames": 120,
-        "fps": 51.79856115107643,
-        "frameP95": 83.30000000000291,
-        "simP95": 0.699999988079071,
+        "frames": 117,
+        "fps": 55.712517062947505,
+        "frameP95": 66.69999999999709,
+        "simP95": 0.5999999940395355,
         "backlogMs": 0,
         "maxBacklogMs": 16.66666666666424,
         "drawCalls": 118
@@ -244,20 +244,20 @@
       ],
       "initialPerformance": {
         "frames": 2,
-        "fps": 1.621665450417579,
+        "fps": 1.5386982612709645,
         "frameP95": 0,
-        "simP95": 0.699999988079071,
+        "simP95": 1,
         "backlogMs": 0,
-        "maxBacklogMs": 1033.3000000000009,
+        "maxBacklogMs": 1099.800000000001,
         "drawCalls": 88
       },
       "syntheticPlaybackMetrics": {
-        "frames": 118,
-        "fps": 59.00590059005442,
-        "frameP95": 50,
-        "simP95": 0.5999999940395355,
+        "frames": 124,
+        "fps": 58.58083209977145,
+        "frameP95": 66.59999999999854,
+        "simP95": 0.699999988079071,
         "backlogMs": 0,
-        "maxBacklogMs": 16.666666666666664,
+        "maxBacklogMs": 16.666666666665453,
         "drawCalls": 89
       },
       "feed": 1,
