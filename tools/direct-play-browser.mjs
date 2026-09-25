@@ -84,6 +84,18 @@ try {
       const holding = await read();
       assert.equal(holding.player.action, null, 'Holding the hit button does not start the receive');
       assert.equal(holding.choice, 'LEFT', 'The held swipe shows the chosen platform on the button');
+      // Review r2 H1: the choice label and the timing ring must not share a pseudo-element.
+      const layers = await page.evaluate(() => {
+        const hit = document.querySelector('[data-hit]');
+        hit.classList.add('dp-timing');
+        const ring = getComputedStyle(hit, '::after'), label = getComputedStyle(hit, '::before');
+        const out = { ringBorder: ring.borderTopWidth, ringContent: ring.content, label: label.content, labelHeight: label.height };
+        hit.classList.remove('dp-timing');
+        return out;
+      });
+      assert.equal(layers.ringBorder, '3px', 'Timing ring stays drawn while the hit button is held');
+      assert.ok(layers.label.includes('偏左'), `Held choice label is shown (${layers.label})`);
+      assert.ok(parseFloat(layers.labelHeight) > 10, `Held choice label has height (${layers.labelHeight})`);
       await page.screenshot({ path: resolve(output, `${name}-pass-hold.png`) });
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await page.evaluate(() => window.__directPractice.step(1));

@@ -225,6 +225,12 @@ export function createDirectControls({
         }
         e.preventDefault?.();
       });
+      // Capture lost without a pointerup: drop the hold instead of sticking.
+      listen(button, 'lostpointercapture', (e) => {
+        if (!hitPointer || hitPointer.id !== e.pointerId) return;
+        hitPointer = null;
+        showPassChoice(null);
+      });
       listen(button, 'pointerup', (e) => {
         if (!hitPointer || hitPointer.id !== e.pointerId) return;
         const held = hitPointer;
@@ -299,6 +305,8 @@ export function createDirectControls({
       return {
         ...input.getState(), movePointer: movePointer?.id ?? null,
         aimPointer: aimPointer?.id ?? null, hitPointer: hitPointer?.id ?? null, disposed,
+        // Platform choice of a touch receive that is held but not yet released.
+        heldPassType: hitPointer?.action === 'receive' ? hitPointer.passType : null,
       };
     },
   };

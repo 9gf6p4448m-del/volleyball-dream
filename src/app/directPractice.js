@@ -247,7 +247,9 @@ export function runDirectPractice(ctx) {
   // per simulated tick; the live state and inputs are never touched.
   let rehearsal = { tick: -1, key: null, value: false };
   function pressNowReaches() {
-    const key = `${state.tick}:${playback ? 'p' : 'l'}`;
+    // A held touch receive passes with its chosen platform when released.
+    const passType = (!playback && controls.getState().heldPassType) || 'NEUTRAL';
+    const key = `${state.tick}:${playback ? 'p' : 'l'}:${passType}`;
     if (rehearsal.key === key) return rehearsal.value;
     const copy = snapshotDirectGame(state);
     const aim = { ...copy.player.aim };
@@ -255,7 +257,7 @@ export function runDirectPractice(ctx) {
     // An active platform contact can only happen within windup + active ticks.
     const window = DIRECT_ACTIONS.receive.windup + DIRECT_ACTIONS.receive.active;
     for (let i = 0; i < window && copy.ball.active; i++) {
-      stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? 'receive' : null }]);
+      stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? 'receive' : null, passType }]);
       const contact = copy.events.find(e => e.type === 'contact');
       if (contact) { value = contact.active && (contact.part === 'forearm' || contact.part === 'hand'); break; }
     }

@@ -125,3 +125,18 @@ test('A18c+ 只有主動墊球吸收：扣球與被動觸球照舊帶入往前�
     assert.ok(diff(moving, bounce(TILTED, 0, 0, opts)) >= 0.3, `${JSON.stringify(opts)} 往前平移仍傳到球上`);
   }
 });
+
+// Review round 2: the pinned-boundary case through the real step loop, so the
+// absorbed speed must come from the body's actual travel.
+test('A18c+ 真實路徑：頂在前場邊界推搖桿時實際位移為 0，自由移動時等於身體速度', () => {
+  const push = (z0) => {
+    const s = createDirectGame(); s.player.z = z0;
+    for (let t = 0; t < 30; t++) stepDirectGame(s, [cmd(s, null, { x: 0, z: -1 })]);
+    return s.player;
+  };
+  const pinned = push(0.3);
+  assert.ok(pinned.vz < -1, `仍在推搖桿（vz ${pinned.vz.toFixed(2)}）`);
+  assert.equal(pinned.moveVz, 0, '頂在邊界時實際位移為 0');
+  const free = push(6);
+  assert.ok(Math.abs(free.moveVz - free.vz) < 1e-9, `自由移動時實際位移速度等於 vz（${free.moveVz} vs ${free.vz}）`);
+});

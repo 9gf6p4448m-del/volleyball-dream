@@ -41,9 +41,10 @@
 .dp-actions .dp-hit{position:relative}
 .dp-hit.dp-timing::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid #9ae5df;transform:scale(var(--timing-scale,1));opacity:.85;pointer-events:none}
 .dp-hit.dp-timing-now::after{border-color:#ffc861;box-shadow:0 0 18px #ffc861}
-/* Touch receive held: show the chosen platform above the button; release passes. */
+/* Touch receive held: show the chosen platform above the button; release passes.
+   ::before, because ::after is the timing ring. */
 .dp-actions .dp-hit[data-pass-choice]{position:relative;background:#ffda96;transform:scale(.95)}
-.dp-hit[data-pass-choice]::after{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);white-space:nowrap;padding:4px 10px;border-radius:12px;background:#162536e6;color:#ffefd1;font-size:13px;font-weight:700;pointer-events:none}
-.dp-hit[data-pass-choice=NEUTRAL]::after{content:'放開 · 正前'}
-.dp-hit[data-pass-choice=LEFT]::after{content:'◀ 放開 · 偏左'}
-.dp-hit[data-pass-choice=RIGHT]::after{content:'放開 · 偏右 ▶'}
+.dp-hit[data-pass-choice]::before{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);white-space:nowrap;padding:4px 10px;border-radius:12px;background:#162536e6;color:#ffefd1;font-size:13px;font-weight:700;pointer-events:none}
+.dp-hit[data-pass-choice=NEUTRAL]::before{content:'放開 · 正前'}
+.dp-hit[data-pass-choice=LEFT]::before{content:'◀ 放開 · 偏左'}
+.dp-hit[data-pass-choice=RIGHT]::before{content:'放開 · 偏右 ▶'}

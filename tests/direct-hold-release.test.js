@@ -130,3 +130,23 @@ test('A19f 提早按住選方向、晚點放開，和「放開當下按」的出
     assert.equal(early.vx, now.vx, `出球相同 (${dx})`);
   }
 });
+
+// Review round 2 (2026-09-25): the timing cue rehearses with the held choice,
+// and a lost capture without pointerup must not leave the button stuck.
+test('A19 覆審：按住中的平台選擇對外可讀；失去捕捉即解除按住且不出手', () => {
+  const { f, controls } = setup();
+  assert.equal(controls.getState().heldPassType, null);
+  f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }));
+  assert.equal(controls.getState().heldPassType, 'NEUTRAL');
+  f.hitButton.dispatchEvent(ev('pointermove', { pointerId: 3, clientX: 70, clientY: 100 }));
+  assert.equal(controls.getState().heldPassType, 'LEFT');
+  f.hitButton.dispatchEvent(ev('lostpointercapture', { pointerId: 3 }));
+  assert.equal(controls.getState().hitPointer, null, '失去捕捉後不再按住');
+  assert.equal(controls.getState().heldPassType, null);
+  assert.equal(f.hitButton.dataset.passChoice, undefined);
+  assert.deepEqual(actions(controls.sample(0)), [null], '失去捕捉不出手');
+  f.hitButton.dispatchEvent(ev('pointerdown', { pointerId: 4, clientX: 100, clientY: 100 }));
+  f.hitButton.dispatchEvent(ev('pointerup', { pointerId: 4, clientX: 100, clientY: 100 }));
+  assert.deepEqual(actions(controls.sample(1)), [null, 'receive'], '之後還能正常按住放開');
+  controls.dispose();
+});
