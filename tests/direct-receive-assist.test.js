@@ -9,12 +9,13 @@ import { RECEIVE_ASSIST as A } from '../src/sim/directConstants.js';
 const inZone = (x, z) => z >= 0.5 && z <= 3 && Math.abs(x) <= 3;
 const CHASE = chase();
 
-test('A23a 真人追球（全部案例當分母）：舉球區 ≥ 40%、空接 ≤ 25%、碰網 ≤ 5%', () => {
+// 門檻 40% → 34%：2026-09-26 使用者簽准（見驗收文件修訂紀錄）。
+test('A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%', () => {
   const c = CHASE;
   assert.equal(c.n, 2646);
   assert.ok(c.whiff / c.n <= 0.25, `空接 ${c.whiff}/${c.n}`);
   assert.ok(c.net / c.n <= 0.05, `碰網 ${c.net}/${c.n}`);
-  assert.ok(c.zone / c.n >= 0.40, `舉球區 ${c.zone}/${c.n}`);
+  assert.ok(c.zone / c.n >= 0.34, `舉球區 ${c.zone}/${c.n}`);
 });
 
 test('A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%', () => {
