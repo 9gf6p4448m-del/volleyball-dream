@@ -57,6 +57,9 @@ export const RECEIVE_ASSIST = Object.freeze({
   // Overhand is sharper than a forearm pass on slow balls and loses control on fast ones.
   overSlow: 7, overFast: 13, // ball speed m/s
   overSlowMultiplier: 0.6, overFastMultiplier: 2.2,
+  // Overhand pose: hands go up when a descending ball above the shoulders is
+  // within this horizontal distance of the forehead point; blend per second.
+  overPoseReach: 0.75, overPoseSpeed: 60,
 });
 export const DIRECT_ACTIONS = Object.freeze({
   receive: { windup: 8, active: 10, recovery: 14 },

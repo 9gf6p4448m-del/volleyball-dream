@@ -36,6 +36,8 @@ export function createDirectGame({ seed = 1, height = 1.75, assist = null } = {}
       shotBlend: 0,
       receiveTurn: 0,
       receiveReach: 0,
+      receiveOverhand: 0,
+      receiveOverhandChosen: false,
       passType: null,
       passLateral: 0,
       passPitch: 0,
@@ -140,14 +142,34 @@ function receiveTurnTarget(s) {
   const lateral = (dx * Math.cos(facing) + dz * Math.sin(facing)) / p.height;
   return { turn, reach: Math.max(-C.receiveReachLimit, Math.min(C.receiveReachLimit, lateral)) };
 }
+// direct-v7: raise the hands for an overhand pass when a descending ball above
+// the shoulders is near the forehead point. Once chosen it is kept for this
+// receive (p.receiveOverhandChosen), so the hands never drop back mid-pass.
+function overhandTarget(s) {
+  const p = s.player, b = s.ball, A = RECEIVE_ASSIST;
+  if (p.action !== 'receive') return 0;
+  if (p.receiveOverhandChosen) return 1;
+  if (!b.active || s.contactEpisode) return 0;
+  const angle = Math.atan2(p.aim.x, -p.aim.z) + (p.receiveTurn ?? 0);
+  const hx = p.x + Math.sin(angle) * A.overForward * p.height, hz = p.z - Math.cos(angle) * A.overForward * p.height;
+  // Predict where the ball passes closest to the forehead point (horizontally)
+  // and how high it is then: overhand only if that contact point is above the shoulders.
+  const vh = b.vx * b.vx + b.vz * b.vz;
+  const t = vh > 1e-9 ? Math.max(0, ((hx - b.x) * b.vx + (hz - b.z) * b.vz) / vh) : 0;
+  const d = Math.hypot(b.x + b.vx * t - hx, b.z + b.vz * t - hz);
+  const y = b.y + b.vy * t - C.gravity * t * t / 2;
+  p.receiveOverhandChosen = y - p.y >= A.shoulder * p.height && d <= A.overPoseReach;
+  return p.receiveOverhandChosen ? 1 : 0;
+}
 // Pose used only for contact-surface velocity: the assist turn, side reach and
 // platform choice held at their substep-start values, so none of them adds impulse.
 export function restingSurfacePose(s, fraction, nextPose, before) {
   const p = s.player;
-  const keys = ['receiveTurn', 'receiveReach', 'passLateral', 'passPitch'];
-  if (keys.every((k) => (p[k] ?? 0) === before[k])) return nextPose;
+  const keys = ['receiveTurn', 'receiveReach', 'receiveOverhand', 'passLateral', 'passPitch'];
+  // A key missing from `before` means its resting value, 0.
+  if (keys.every((k) => (p[k] ?? 0) === (before[k] ?? 0))) return nextPose;
   const after = keys.map((k) => p[k]);
-  keys.forEach((k) => { p[k] = before[k]; });
+  keys.forEach((k) => { p[k] = before[k] ?? 0; });
   const pose = getDirectPose(s, fraction);
   keys.forEach((k, i) => { p[k] = after[i]; });
   return pose;
@@ -236,15 +258,17 @@ export function stepDirectGame(s, commands = []) {
   b.py = b.y;
   b.pz = b.z;
   const receiveTarget = receiveTurnTarget(s);
+  const overTarget = overhandTarget(s);
   const dt = DIRECT_DT / C.substeps;
   for (let i = 0; i < C.substeps; i++) {
     const oldPose = getDirectPose(s, i / C.substeps);
     // Move the same body pose used by rendering and swept collision. There is
     // no ball impulse, target landing point, or extra reach in this assistance.
-    const turnBefore = p.receiveTurn ?? 0, reachBefore = p.receiveReach ?? 0;
+    const turnBefore = p.receiveTurn ?? 0, reachBefore = p.receiveReach ?? 0, overBefore = p.receiveOverhand ?? 0;
     const lateralBefore = p.passLateral ?? 0, pitchBefore = p.passPitch ?? 0;
     p.receiveTurn = approach(turnBefore, receiveTarget.turn, C.receiveTurnSpeed * dt);
     p.receiveReach = approach(reachBefore, receiveTarget.reach, C.receiveReachSpeed * dt);
+    p.receiveOverhand = approach(overBefore, overTarget, RECEIVE_ASSIST.overPoseSpeed * dt);
     const oldX = p.x, oldZ = p.z;
     p.x = Math.max(-4.25, Math.min(4.25, p.x + p.vx * dt));
     p.z = Math.max(0.3, Math.min(8.75, p.z + p.vz * dt));
@@ -300,13 +324,13 @@ export function stepDirectGame(s, commands = []) {
     // contact-surface velocity excludes both, so neither the assist turn nor the
     // platform choice ever swings the ball like a bat.
     const surfacePose = restingSurfacePose(s, (i + 1) / C.substeps, nextPose, {
-      receiveTurn: turnBefore, receiveReach: reachBefore, passLateral: lateralBefore, passPitch: pitchBefore,
+      receiveTurn: turnBefore, receiveReach: reachBefore, receiveOverhand: overBefore, passLateral: lateralBefore, passPitch: pitchBefore,
     });
     const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity, surfacePose);
     // direct-v7: a real forearm/hand hit inside the receive window is a timed pass too.
     const hitEvent = contact && s.events.slice(eventsBefore).find((e) => e.type === 'contact');
     if (hitEvent && offset !== null && hitEvent.active && (hitEvent.part === 'forearm' || hitEvent.part === 'hand')) {
-      const technique = hitEvent.position.y - p.y >= RECEIVE_ASSIST.shoulder * p.height ? 'overhand' : 'underhand';
+      const technique = p.receiveOverhandChosen ? 'overhand' : 'underhand';
       applyPass(s, hitEvent, { technique, tier: timingTier(offset, 0), speed: speedBefore });
     }
     // A valid earlier body hit changes the rest of the trajectory. Check that
@@ -352,6 +376,8 @@ export function stepDirectGame(s, commands = []) {
       p.passType = null;
       p.passLateral = 0;
       p.passPitch = 0;
+      p.receiveOverhand = 0;
+      p.receiveOverhandChosen = false;
     }
   }
   delete s.poseAimStart;

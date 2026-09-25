@@ -62,3 +62,25 @@ test('A23e 技術差異：快球高手失誤率 ≥ 低手 2 倍；慢球高手�
   const n = low.n + high.n;
   assert.ok(under / n >= 0.03 && over / n >= 0.03, `低手 ${under}/${n} 高手 ${over}/${n}`);
 });
+
+// Round 2 (after the first phone test): no pass from thin air, visible overhand.
+const HIGH = chase({ contactHeight: 1.02, forward: 0.12 });
+const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor((a.length - 1) / 2)];
+
+test('A24c 不隔空：磁吸觸球時球面到前臂／手部表面距離中位數 ≤ 0.10 m、≥ 90% ≤ 0.20 m', () => {
+  const gaps = [...CHASE.rows, ...HIGH.rows].filter((r) => r.assist).map((r) => r.gap);
+  assert.ok(gaps.length >= 200, `磁吸觸球 ${gaps.length}`);
+  assert.ok(median(gaps) <= 0.10, `中位數 ${median(gaps).toFixed(3)} m`);
+  const near = gaps.filter((g) => g <= 0.2).length / gaps.length;
+  assert.ok(near >= 0.90, `≤ 0.20 m 比例 ${(near * 100).toFixed(1)}%`);
+});
+
+test('A24d 高手觸球兩手高於肩 ≥ 90%；低手觸球手低於肩 ≥ 95%', () => {
+  const rows = [...CHASE.rows, ...HIGH.rows];
+  const over = rows.filter((r) => r.technique === 'overhand'), under = rows.filter((r) => r.technique === 'underhand');
+  assert.ok(over.length >= 50 && under.length >= 50, `高手 ${over.length} 低手 ${under.length}`);
+  const up = over.filter((r) => r.handY >= 0.82).length / over.length;
+  const down = under.filter((r) => r.handY < 0.82).length / under.length;
+  assert.ok(up >= 0.90, `高手舉手 ${(up * 100).toFixed(1)}%`);
+  assert.ok(down >= 0.95, `低手手低於肩 ${(down * 100).toFixed(1)}%`);
+});

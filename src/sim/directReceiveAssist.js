@@ -38,7 +38,8 @@ export function assistReach(s, pose, ball, radii = s.assist ?? {}) {
   const inFront = (ball.x - p.x) * f.x + (ball.z - p.z) * f.z >= -0.15;
   if (!inFront) return null;
   const head = { x: p.x + f.x * A.overForward * h, y: p.y + A.overHeight * h, z: p.z + f.z * A.overForward * h };
-  if (ball.y - p.y >= A.shoulder * h) {
+  // The overhand choice (made while the ball is still above the shoulders) decides the technique.
+  if (p.receiveOverhandChosen) {
     const d = Math.hypot(ball.x - head.x, ball.z - head.z);
     if (d <= over && atHeight(ball, head.y)) return { technique: 'overhand', ratio: d / over };
     return null;

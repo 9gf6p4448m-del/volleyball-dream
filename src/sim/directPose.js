@@ -139,6 +139,12 @@ export function getDirectPose(state, fraction = 0) {
         platform(sign * 0.045, 0.585 + phase * 0.11 + (p.passPitch ?? 0) * DIRECT_PHYSICS.passPitch, 0.41),
         raise * recover,
       );
+      // direct-v7 overhand pass: hands in front of the forehead (the set pose).
+      const over = (p.receiveOverhand ?? 0) * raise * recover;
+      if (over > 0) {
+        elbow = blend(elbow, point(sign * 0.17, 0.87, 0.08), over);
+        hand = blend(hand, point(sign * 0.11, 1.02, 0.15), over);
+      }
     } else if (p.action === 'dive') {
       elbow = blend(elbow, point(sign * 0.12, 0.47, 0.56), weight);
       hand = blend(hand, point(sign * 0.045, 0.42, 0.77), weight);

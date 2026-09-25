@@ -8,6 +8,8 @@ import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
 import { platformNormal } from '../sim/directPhysics.js';
 import './directPractice.css';
 
+const FEED_DELAY = 90; // ticks (1.5 s) from pressing feed to the ball
+const AUTO_FEED_PAUSE = 60; // ticks after a dead ball before the next countdown
 const GRADE_LABELS = { PERFECT: '完美', GOOD: '普通', POOR: '差' };
 const GRADE_TIPS = {
   PERFECT: '時機完美！球直送舉球區。',
@@ -40,6 +42,7 @@ export function runDirectPractice(ctx) {
         <details class="dp-settings"><summary>訓練設定</summary><div class="dp-settings-box">
           <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option><option value="pass-drill">接球方向練習</option></select></label>
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
+          <label class="dp-check"><input data-auto-feed type="checkbox"> 連續餵球（球落地後自動再餵）</label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
           <label>低手接球範圍 <output data-under-label>50 cm</output><input data-under type="range" min="20" max="90" value="50" step="5"></label>
           <label>高手接球範圍 <output data-over-label>35 cm</output><input data-over type="range" min="15" max="70" value="35" step="5"></label>
@@ -60,6 +63,7 @@ export function runDirectPractice(ctx) {
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
     <div class="dp-actions"><select data-action aria-label="選擇觸球動作">${Object.entries(ACTION_LABELS).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit>出手<small>J · 滑動選線</small></button></div>
     <div class="dp-grade" data-grade aria-live="polite"></div>
+    <div class="dp-countdown" data-countdown hidden></div>
     <div class="dp-footer" data-status>60 Hz 固定模擬 · 接球範圍內按對時機就接得到</div>`;
   document.body.appendChild(root);
   const $ = selector => root.querySelector(selector);
@@ -106,6 +110,9 @@ export function runDirectPractice(ctx) {
   let simTimes = [];
   let maxBacklog = 0;
   const injected = [];
+  // direct-v7 round 2: a feed from the button/key starts after a countdown, so
+  // the player has time to move; continuous mode re-feeds after each dead ball.
+  let pendingFeed = null;
   const cameraTarget = new THREE.Vector3();
   const cameraPosition = new THREE.Vector3();
   const look = new THREE.Vector3();
@@ -121,7 +128,7 @@ export function runDirectPractice(ctx) {
       ...(keyBindings ? { keyBindings } : {}),
       isPassLocked: () => receivePlatformLocked(state.player),
       onActivity(kind) {
-        if (kind === 'feed') message('來球了。移到球路上，提早抬臂；角色會小幅迎球轉身。');
+        if (kind === 'feed') message('準備接球：倒數結束就發球，先站到球路上。');
       },
     });
   }
@@ -134,6 +141,7 @@ export function runDirectPractice(ctx) {
     initial = snapshotDirectGame(state);
     recorded = [];
     injected.length = 0;
+    pendingFeed = null;
     playback = null;
     liveState = null;
     accumulator = 0;
@@ -159,6 +167,10 @@ export function runDirectPractice(ctx) {
   on($('[data-restart]'), 'click', restart);
   on($('[data-height]'), 'input', () => { $('[data-height-label]').textContent = `${$('[data-height]').value} cm`; });
   on($('[data-height]'), 'change', restart);
+  on($('[data-auto-feed]'), 'change', () => {
+    if ($('[data-auto-feed]').checked && !state.ball.active && !pendingFeed && !playback)
+      pendingFeed = { tick: state.tick + FEED_DELAY, feedKind: $('[data-feed-kind]').value };
+  });
   for (const key of ['under', 'over']) {
     on($(`[data-${key}]`), 'input', () => { $(`[data-${key}-label]`).textContent = `${$(`[data-${key}]`).value} cm`; });
     on($(`[data-${key}]`), 'change', restart);
@@ -219,6 +231,15 @@ export function runDirectPractice(ctx) {
       // while the receive action is selected and the ball is live (commands only).
       const faceAim = $('[data-action]').value === 'receive' ? autoFaceAim(state.player, state.ball) : null;
       if (faceAim) commands = commands.map(command => ({ ...command, aim: faceAim }));
+      commands = commands.map(command => {
+        if (command.action !== 'feed') return command;
+        pendingFeed = { tick: state.tick + FEED_DELAY, feedKind: command.feedKind ?? null };
+        return { ...command, action: null };
+      });
+      if (pendingFeed && state.tick >= pendingFeed.tick) {
+        commands.push({ tick: state.tick, sequence: 200000, action: 'feed', feedKind: pendingFeed.feedKind });
+        pendingFeed = null;
+      }
       while (injected.length) commands.push({ ...injected.shift(), tick: state.tick, sequence: 100000 + commands.length });
       if (state.tick >= MAX_TAPE_TICKS) { setPaused(true); message('本輪已達 10 分鐘，請匯出回放後重新開始。'); return; }
       recorded.push(...commands.map(command => structuredClone(command)));
@@ -234,6 +255,8 @@ export function runDirectPractice(ctx) {
         if (drill) drillTarget.position.set(drill.target.x, 0.027, drill.target.z);
         if (drill && !playback) message('接球方向練習：把球墊向橘色目標區。滑動選平台角度，落點只看物理結果。');
       }
+      if (!playback && ['ground', 'net', 'out'].includes(event.type) && $('[data-auto-feed]').checked && !pendingFeed)
+        pendingFeed = { tick: state.tick + AUTO_FEED_PAUSE + FEED_DELAY, feedKind: $('[data-feed-kind]').value };
       if (drill && event.type === 'contact') drill.touched = true;
       if (drill && !drill.result && ['ground', 'net', 'out'].includes(event.type)) {
         drill.result = drillResult(event.type);
@@ -363,6 +386,9 @@ export function runDirectPractice(ctx) {
     hit.classList.toggle('dp-timing', timingActive);
     hit.classList.toggle('dp-timing-now', now);
     hit.style.setProperty('--timing-scale', timingActive ? (1 + Math.min(1, eta / 1.2) * 0.45).toFixed(3) : '1');
+    const countdown = $('[data-countdown]');
+    countdown.hidden = !pendingFeed;
+    if (pendingFeed) countdown.textContent = String(Math.max(1, Math.ceil((pendingFeed.tick - state.tick) / 30)));
     landing.visible = $('[data-assist]').value === 'beginner' && ball.active;
     if (landing.visible) {
       const g = DIRECT_PHYSICS.gravity;

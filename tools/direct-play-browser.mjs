@@ -16,6 +16,7 @@ const deliveryOnly = process.argv.includes('--delivery');
 const motionOnly = process.argv.includes('--motion');
 const assistOnly = process.argv.includes('--assist');
 const passOnly = process.argv.includes('--pass');
+const FEED_DELAY = 90; // direct-v7 A24a countdown, ticks
 try {
   if (passOnly) {
     // direct-v4 acceptance A8-A10: platform line, timing cue, pass-direction drill.
@@ -317,7 +318,8 @@ try {
     }
     // Real keyboard event path -> input adapter -> simulation -> recorded replay.
     await page.locator('[data-feed]').click();
-    await page.evaluate(() => window.__directPractice.step(1));
+    // direct-v7 A24a: a button feed launches after the countdown (FEED_DELAY ticks).
+    await page.evaluate(n => window.__directPractice.step(n), 1 + FEED_DELAY);
     assert.equal((await page.evaluate(() => window.__directPractice.snapshot())).stats.feeds, 1);
     await page.locator('canvas').first().click({ position: { x: 5, y: height / 2 } });
     await page.keyboard.down('d');
@@ -359,7 +361,7 @@ try {
     for (let attempt = 0; attempt < 5; attempt++) {
       await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
       await page.locator('[data-feed]').click();
-      await page.evaluate(() => window.__directPractice.step(29));
+      await page.evaluate(n => window.__directPractice.step(n), 29 + FEED_DELAY);
       await page.locator('[data-hit]').click();
       await page.evaluate(() => window.__directPractice.step(14)); // direct-v4 platform contact lands two ticks later (user-approved)
       received = await page.evaluate(() => window.__directPractice.snapshot());
@@ -374,7 +376,7 @@ try {
     await page.locator('.dp-settings > summary').click();
     await page.locator('[data-action]').selectOption('spike');
     await page.locator('[data-feed]').click();
-    await page.evaluate(() => window.__directPractice.step(6));
+    await page.evaluate(n => window.__directPractice.step(n), 6 + FEED_DELAY);
     await page.locator('[data-jump]').click();
     await page.evaluate(() => window.__directPractice.step(2));
     await page.locator('[data-hit]').click();

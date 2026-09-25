@@ -13,7 +13,7 @@ export function armGap(s) {
     gap = Math.min(gap, Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z) - q.radius - b.radius);
   }
   const hands = pose.filter((q) => q.part === 'hand').map((q) => (q.a.y - s.player.y) / s.player.height);
-  return { gap: Math.max(0, gap), handY: Math.min(...hands) };
+  return { gap: Math.max(0, gap), handY: Math.min(...hands), over: s.player.receiveOverhand, actionTick: s.player.actionTick };
 }
 
 const cmd = (s, action, move) => ({ tick: s.tick, sequence: 0, move, aim: { x: 0, z: -1 }, action });
@@ -94,7 +94,7 @@ export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3 } = {
       const end = s.events.find((e) => ['ground', 'net', 'out'].includes(e.type));
       if (end) {
         c.n++;
-        if (touched?.tier) c.rows.push({ tier: touched.tier, technique: touched.technique, assist: touched.id === 'assist', gap: touched.gap, handY: touched.handY, end: end.type, x: s.ball.x, z: s.ball.z });
+        if (touched?.tier) c.rows.push({ tier: touched.tier, technique: touched.technique, assist: touched.id === 'assist', gap: touched.gap, handY: touched.handY, over: touched.over, actionTick: touched.actionTick, end: end.type, x: s.ball.x, z: s.ball.z });
         if (!touched) c.whiff++;
         else if (end.type === 'net') c.net++;
         else if (end.type === 'out') c.out++;

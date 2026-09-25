@@ -1,0 +1,18 @@
+{
+  "A24a": {
+    "t0": 0,
+    "firstFeedStep": 91,
+    "countdownSeen": [
+      "3",
+      "2",
+      "1",
+      null
+    ],
+    "ballBefore": false
+  },
+  "A24b": {
+    "feeds": 6,
+    "replay": true
+  },
+  "errors": []
+}
