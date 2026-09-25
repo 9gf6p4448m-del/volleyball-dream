@@ -68,41 +68,66 @@ try {
       assert.equal(advanced.timing, false, 'Advanced hides the timing cue');
       assert.equal(advanced.now, false, 'Advanced hides the press-now cue');
       assert.equal(advanced.platform, false, 'Advanced hides the platform facing line');
-      // A19g: hold to choose the platform, release to pass, through native touch.
-      await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
-      await page.locator('.dp-settings > summary').click();
-      await page.locator('[data-action]').selectOption('receive');
-      await page.locator('.dp-settings > summary').click();
+      // A21: press to pass; the swipe during the windup picks the platform.
+      const feedReceive = () => page.evaluate(() => {
+        const p = window.__directPractice; p.restart(); p.pause();
+        document.querySelector('[data-assist]').value = 'beginner';
+        document.querySelector('[data-face]').value = 'manual';
+        document.querySelector('[data-action]').value = 'receive';
+        p.command({ action: 'feed', feedKind: 'receive' }); p.step(1);
+      });
       const box = await page.locator('[data-hit]').boundingBox();
       const touch = { id: 23, x: box.x + box.width / 2, y: box.y + box.height / 2 };
       const cdp = await context.newCDPSession(page);
       const read = () => page.evaluate(() => ({ player: window.__directPractice.snapshot().player, choice: document.querySelector('[data-hit]').dataset.passChoice ?? null }));
+      await feedReceive();
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
       await page.evaluate(() => window.__directPractice.step(1));
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...touch, x: touch.x - 30, y: touch.y + 3 }] });
-      await page.evaluate(() => window.__directPractice.step(4));
+      await page.evaluate(() => window.__directPractice.step(2));
       const holding = await read();
-      assert.equal(holding.player.action, null, 'Holding the hit button does not start the receive');
-      assert.equal(holding.choice, 'LEFT', 'The held swipe shows the chosen platform on the button');
+      assert.equal(holding.player.action, 'receive', 'Pressing starts the receive (A21a)');
+      assert.equal(holding.player.passType, 'LEFT', 'The swipe during the windup picks the platform');
+      assert.equal(holding.choice, 'LEFT', 'The held swipe shows the chosen platform on the button (A21c)');
       // Review r2 H1: the choice label and the timing ring must not share a pseudo-element.
       const layers = await page.evaluate(() => {
         const hit = document.querySelector('[data-hit]');
         hit.classList.add('dp-timing');
         const ring = getComputedStyle(hit, '::after'), label = getComputedStyle(hit, '::before');
-        const out = { ringBorder: ring.borderTopWidth, ringContent: ring.content, label: label.content, labelHeight: label.height };
+        const out = { ringBorder: ring.borderTopWidth, label: label.content, labelHeight: label.height };
         hit.classList.remove('dp-timing');
         return out;
       });
       assert.equal(layers.ringBorder, '3px', 'Timing ring stays drawn while the hit button is held');
-      assert.ok(layers.label.includes('偏左'), `Held choice label is shown (${layers.label})`);
+      assert.ok(layers.label.includes('偏左') && !layers.label.includes('放開'), `Held choice label is shown without "release" (${layers.label})`);
       assert.ok(parseFloat(layers.labelHeight) > 10, `Held choice label has height (${layers.labelHeight})`);
       await page.screenshot({ path: resolve(output, `${name}-pass-hold.png`) });
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      await page.evaluate(() => window.__directPractice.step(1));
-      const released = await read();
-      assert.equal(released.player.action, 'receive', 'Releasing starts the receive');
-      assert.equal(released.player.passType, 'LEFT', 'The receive uses the held platform choice');
-      assert.equal(released.choice, null, 'The choice label clears on release');
+      assert.equal((await read()).choice, null, 'The choice label clears on release');
+      // A21b: a human tap rests on the glass. Press at every gold tick and lift
+      // after 0/3/6/9 ticks; the pass must still come up.
+      await feedReceive();
+      const golds = await page.evaluate(() => { const p = window.__directPractice, g = []; for (let i = 0; i < 150; i++) { p.step(1); if (p.assistState().timingNow) g.push(p.snapshot().tick); } return g; });
+      assert.ok(golds.length >= 5, `Gold cue shows for a receive feed (${golds.length} ticks)`);
+      const tapResults = {};
+      for (const rest of [0, 3, 6, 9]) {
+        let up = 0;
+        for (const g of golds) {
+          await feedReceive();
+          await page.evaluate(n => window.__directPractice.step(n), g - 1);
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
+          if (rest) await page.evaluate(n => window.__directPractice.step(n), rest);
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          const r = await page.evaluate(() => {
+            const p = window.__directPractice; let top = 0, contact = null;
+            for (let i = 0; i < 150; i++) { p.step(1); const s = p.snapshot(); contact ??= (s.events || []).find(e => e.type === 'contact') ?? null; if (contact) top = Math.max(top, s.ball.y); if (!s.ball.active) break; }
+            return Boolean(contact?.active && ['forearm', 'hand'].includes(contact.part) && top > 2);
+          });
+          if (r) up++;
+        }
+        tapResults[rest] = `${up}/${golds.length}`;
+        assert.ok(up / golds.length >= 10 / 11, `Tap resting ${rest} ticks at gold: pass comes up ${up}/${golds.length}`);
+      }
       await cdp.detach();
       // A20e: receive auto-face trial modes. Walk off-centre with a live ball and
       // compare the heading with the direction to the setter zone (0, 1.6).
@@ -127,7 +152,7 @@ try {
       assert.deepEqual(spike.aim, { x: 0, z: -1 }, 'Auto-face only applies while receive is selected');
       await page.evaluate(() => { document.querySelector('[data-face]').value = 'manual'; document.querySelector('[data-action]').value = 'receive'; });
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
-      report.scenes.push({ name, width, height, beginner, standard, advanced, holdRelease: { holding: holding.choice, released: released.player.passType }, result: result.drill.result, errors });
+      report.scenes.push({ name, width, height, beginner, standard, advanced, pressReceive: { choice: holding.choice, passType: holding.player.passType, tapResults }, result: result.drill.result, errors });
       await context.close();
     }
   }
