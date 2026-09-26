@@ -1,8 +1,12 @@
 {
-  "createdAt": "2026-09-26T19:53:45.061Z",
+  "createdAt": "2026-09-26T18:14:13.636Z",
   "base": "http://127.0.0.1:5176",
-  "head": "d6961ae5899f9c1b745406a38b4fc1ceacc942c9",
-  "dirty": [],
+  "head": "3220c0d5975ac8f6da85aa3cdef2694c1221550d",
+  "dirty": [
+    "M src/app/realPreview.js",
+    " M src/render/realPlayer.js",
+    " M tools/real-player-browser.mjs"
+  ],
   "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
   "variants": {
     "20k": {
@@ -12,13 +16,13 @@
         "variant": "20k",
         "bridgeTris": 0
       },
-      "hud": "FPS 4.4\n面數 20,000／人（20k）\n14 人",
-      "hudFps": 4.4,
+      "hud": "FPS 34\n面數 20,000／人（20k）\n14 人",
+      "hudFps": 34,
       "errors": [],
       "ikStats": {
-        "ikFrames": 10560,
-        "liftFrames": 0,
-        "maxLift": 0
+        "ikFrames": 10554,
+        "liftFrames": 6,
+        "maxLift": 0.003645626992740049
       },
       "teamCounts": {
         "A": 6,
@@ -143,9 +147,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.2183780912715725,
-            "maxDev": 0.0004456486792880632,
-            "maxMove": 0.06947305929918658
+            "restCJ": 0.2180486346571308,
+            "maxDev": 0.0007526765628667331,
+            "maxMove": 0.06638740980021966
           }
         },
         {
@@ -176,9 +180,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.2183780912715725,
-            "maxDev": 0.0005538364721009714,
-            "maxMove": 0.50171813585161
+            "restCJ": 0.2180486346571308,
+            "maxDev": 0.0008795875852925239,
+            "maxMove": 0.502799238423334
           }
         },
         {
@@ -209,9 +213,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.2183780912715725,
-            "maxDev": 0.0013142366334154276,
-            "maxMove": 0.34342682475395037
+            "restCJ": 0.2180486346571308,
+            "maxDev": 0.0016536427568465684,
+            "maxMove": 0.34460299482198453
           }
         },
         {
@@ -242,9 +246,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.21837809134301112,
-            "maxDev": 0.00044564867914187456,
-            "maxMove": 0.06947305929918658
+            "restCJ": 0.21804863449532366,
+            "maxDev": 0.0007526768803877981,
+            "maxMove": 0.06638740980022251
           }
         },
         {
@@ -275,9 +279,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.21837809134301112,
-            "maxDev": 0.0005538364719192002,
-            "maxMove": 0.5017181358516097
+            "restCJ": 0.21804863449532366,
+            "maxDev": 0.0008795879402664908,
+            "maxMove": 0.5027992384233335
           }
         },
         {
@@ -308,9 +312,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.21837809134301112,
-            "maxDev": 0.0013142366329828847,
-            "maxMove": 0.3434268247539503
+            "restCJ": 0.21804863449532366,
+            "maxDev": 0.001653643314429687,
+            "maxMove": 0.3446029948219834
           }
         },
         {
@@ -341,9 +345,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.20017991632257992,
-            "maxDev": 0.0004085117470221111,
-            "maxMove": 0.06368363769092249
+            "restCJ": 0.199877914560793,
+            "maxDev": 0.0006899538048752707,
+            "maxMove": 0.060855125650202034
           }
         },
         {
@@ -374,9 +378,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.20017991632257992,
-            "maxDev": 0.000507683940888598,
-            "maxMove": 0.4599082911973085
+            "restCJ": 0.199877914560793,
+            "maxDev": 0.0008062889401409812,
+            "maxMove": 0.460899301888055
           }
         },
         {
@@ -407,13 +411,13 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.20017991632257992,
-            "maxDev": 0.0012047176808648585,
-            "maxMove": 0.314807922691121
+            "restCJ": 0.199877914560793,
+            "maxDev": 0.0015158396678729702,
+            "maxMove": 0.31588607858681816
           }
         }
       ],
-      "a2MaxDev": 0.0013142366334154276,
+      "a2MaxDev": 0.001653643314429687,
       "a2MinWristMove": 0.48641708257391875,
       "a2c": [
         {
@@ -421,98 +425,98 @@
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A2",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "A3",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A4",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192682
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A5",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A6",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192682
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "AL",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.906695095196184
         },
         {
           "id": "B1",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "B2",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192845
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "B3",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192845
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "B4",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "B5",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.90669509519609
         },
         {
           "id": "B6",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.90669509519609
         },
         {
           "id": "BL",
           "maxErr": 5.798315711110801e-8,
           "minY": 0,
           "height": 1.8499999046325684,
-          "footAngleBefore": 27.607901498192845
+          "footAngleBefore": 32.906695095196135
         }
       ],
       "a2cMaxErr": 5.798315711110801e-8,
@@ -526,9 +530,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420241
+            "lHip>lKnee@post": 7.7223560755870855
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -536,9 +540,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 11.935561538362991,
+            "rHip>rKnee@post": 17.67240369844397,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 11.912586678787871
+            "lHip>lKnee@post": 17.652373616807548
           },
           "calls": {
             "trigger": [
@@ -548,8 +552,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 11.935561538362991,
-          "kneeLateralMax": 0,
+          "legPostMax": 17.67240369844397,
+          "kneeLateralMax": 0.13899254221047697,
           "lateralFrames": 37
         },
         {
@@ -561,9 +565,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420241
+            "lHip>lKnee@post": 7.7223560755870855
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -571,9 +575,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 18.681091998995782,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.202806429573457
+            "lHip>lKnee@post": 18.662605991086416
           },
           "calls": {
             "trigger": [
@@ -584,8 +588,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
-          "kneeLateralMax": 0.011029330109152484,
+          "legPostMax": 18.681091998995782,
+          "kneeLateralMax": 0.18445436463398177,
           "lateralFrames": 73
         },
         {
@@ -597,9 +601,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420241
+            "lHip>lKnee@post": 7.7223560755870855
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -607,9 +611,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.248506319239109,
+            "rHip>rKnee@post": 23.885751133975443,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.232474094851169
+            "lHip>lKnee@post": 23.87360208770866
           },
           "calls": {
             "trigger": [
@@ -619,8 +623,8 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.248506319239109,
-          "kneeLateralMax": 0,
+          "legPostMax": 23.885751133975443,
+          "kneeLateralMax": 0.18445436463398177,
           "lateralFrames": 61
         },
         {
@@ -632,9 +636,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420241
+            "lHip>lKnee@post": 7.7223560755870855
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -642,9 +646,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 11.935561538362991,
+            "rHip>rKnee@post": 17.67240369844397,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 11.912586678787871
+            "lHip>lKnee@post": 17.652373616807548
           },
           "calls": {
             "trigger": [
@@ -654,8 +658,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 11.935561538362991,
-          "kneeLateralMax": 2.6500304019868727e-17,
+          "legPostMax": 17.67240369844397,
+          "kneeLateralMax": 0.13899254221047694,
           "lateralFrames": 37
         },
         {
@@ -667,9 +671,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420241
+            "lHip>lKnee@post": 7.7223560755870855
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -677,9 +681,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 18.681091998995782,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.202806429573457
+            "lHip>lKnee@post": 18.662605991086416
           },
           "calls": {
             "trigger": [
@@ -690,8 +694,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
-          "kneeLateralMax": 0.01102933010915249,
+          "legPostMax": 18.681091998995782,
+          "kneeLateralMax": 0.18445436463398174,
           "lateralFrames": 73
         },
         {
@@ -703,9 +707,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420241
+            "lHip>lKnee@post": 7.7223560755870855
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -713,9 +717,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.248506319239109,
+            "rHip>rKnee@post": 23.885751133975457,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.232474094851169
+            "lHip>lKnee@post": 23.87360208770866
           },
           "calls": {
             "trigger": [
@@ -725,8 +729,8 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.248506319239109,
-          "kneeLateralMax": 3.5180643337289114e-17,
+          "legPostMax": 23.885751133975457,
+          "kneeLateralMax": 0.18445436463398174,
           "lateralFrames": 61
         },
         {
@@ -738,9 +742,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.72386177372704,
+            "rHip>rKnee@post": 7.771330884067813,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420305
+            "lHip>lKnee@post": 7.722356075587038
           },
           "segMax": {
             "rShoulder>rElbow": 8.537736462515939e-7,
@@ -748,9 +752,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 11.93556153836293,
+            "rHip>rKnee@post": 17.67240369844399,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 11.912586678787934
+            "lHip>lKnee@post": 17.65237361680757
           },
           "calls": {
             "trigger": [
@@ -760,8 +764,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 11.93556153836293,
-          "kneeLateralMax": 2.4291945351546353e-17,
+          "legPostMax": 17.67240369844399,
+          "kneeLateralMax": 0.12740983035960424,
           "lateralFrames": 37
         },
         {
@@ -773,9 +777,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.72386177372704,
+            "rHip>rKnee@post": 7.771330884067813,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420305
+            "lHip>lKnee@post": 7.722356075587038
           },
           "segMax": {
             "rShoulder>rElbow": 8.537736462515939e-7,
@@ -783,9 +787,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554968,
+            "rHip>rKnee@post": 18.6810919989958,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.202806429573336
+            "lHip>lKnee@post": 18.662605991086338
           },
           "calls": {
             "trigger": [
@@ -796,8 +800,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554968,
-          "kneeLateralMax": 0.010110219266722967,
+          "legPostMax": 18.6810919989958,
+          "kneeLateralMax": 0.1690831675811501,
           "lateralFrames": 73
         },
         {
@@ -809,9 +813,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.72386177372704,
+            "rHip>rKnee@post": 7.771330884067813,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.669602741420305
+            "lHip>lKnee@post": 7.722356075587038
           },
           "segMax": {
             "rShoulder>rElbow": 0.0000012074182697257333,
@@ -819,9 +823,9 @@
             "lShoulder>lElbow": 0.0000012074182697257333,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.248506319239079,
+            "rHip>rKnee@post": 23.885751133975504,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.23247409485126
+            "lHip>lKnee@post": 23.87360208770868
           },
           "calls": {
             "trigger": [
@@ -831,15 +835,15 @@
           },
           "armMax": 0.0000012074182697257333,
           "legPreMax": 0,
-          "legPostMax": 12.248506319239079,
-          "kneeLateralMax": 3.224892305918166e-17,
+          "legPostMax": 23.885751133975504,
+          "kneeLateralMax": 0.1690831675811501,
           "lateralFrames": 61
         }
       ],
       "a2dArmMax": 0.0000012074182697257333,
       "a2dLegPreMax": 0,
-      "a2dLegPostMax": 12.248506319239109,
-      "a2dKneeLateralMax": 0.01102933010915249,
+      "a2dLegPostMax": 23.885751133975504,
+      "a2dKneeLateralMax": 0.18445436463398177,
       "footAir": {
         "frames": 531,
         "maxAngle": 0
@@ -850,13 +854,13 @@
         "maxJump": 0.04839371101871101,
         "at": {
           "player": "A3",
-          "frame": 113,
+          "frame": 74,
           "from": -0.12865369022869025,
           "to": -0.17704740124740126
         },
-        "minTriggersPerPlayer": 34
+        "minTriggersPerPlayer": 37
       },
-      "a2dIdleMaxAngle": 5.72386177372704,
+      "a2dIdleMaxAngle": 7.7713308840678605,
       "a2e": [
         {
           "seq": "bump",
@@ -1000,10 +1004,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234932472,
-            "l": 0.0755755075322915
+            "r": 0.05554513037509746,
+            "l": 0.0555836413077035
           },
-          "min": 0.0755755075322915,
+          "min": 0.05554513037509746,
           "frames": 37
         },
         {
@@ -1014,8 +1018,8 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234932472,
-            "l": 0.0755755075322915
+            "r": 0.05554513037509746,
+            "l": 0.0555836413077035
           },
           "min": 0.027288642322524294,
           "frames": 73
@@ -1028,8 +1032,8 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234932472,
-            "l": 0.0755755075322915
+            "r": 0.05554513037509746,
+            "l": 0.0555836413077035
           },
           "min": 0.030109974696186502,
           "frames": 61
@@ -1042,10 +1046,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234988584,
-            "l": 0.07557550752391809
+            "r": 0.055545130395821395,
+            "l": 0.05558364132525166
           },
-          "min": 0.07557550752391809,
+          "min": 0.055545130395821395,
           "frames": 37
         },
         {
@@ -1056,8 +1060,8 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234988584,
-            "l": 0.07557550752391809
+            "r": 0.055545130395821395,
+            "l": 0.05558364132525166
           },
           "min": 0.02728864231102446,
           "frames": 73
@@ -1070,8 +1074,8 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234988584,
-            "l": 0.07557550752391809
+            "r": 0.055545130395821395,
+            "l": 0.05558364132525166
           },
           "min": 0.03010997469593789,
           "frames": 61
@@ -1084,10 +1088,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.06959933560940709,
-            "l": 0.06927754333620911
+            "r": 0.05091636546544679,
+            "l": 0.050951665956484225
           },
-          "min": 0.06927754333620911,
+          "min": 0.05091636546544679,
           "frames": 37
         },
         {
@@ -1098,8 +1102,8 @@
             "l": 172
           },
           "idle": {
-            "r": 0.06959933560940709,
-            "l": 0.06927754333620911
+            "r": 0.05091636546544679,
+            "l": 0.050951665956484225
           },
           "min": 0.025014583576190273,
           "frames": 73
@@ -1112,8 +1116,8 @@
             "l": 172
           },
           "idle": {
-            "r": 0.06959933560940709,
-            "l": 0.06927754333620911
+            "r": 0.05091636546544679,
+            "l": 0.050951665956484225
           },
           "min": 0.027600806111381646,
           "frames": 61
@@ -1468,94 +1472,94 @@
           "seq": "bump",
           "player": 0,
           "soleVerts": 388,
-          "idleMin": -2.2676088437534325e-16,
+          "idleMin": -1.7520707107365752e-16,
           "frames": 36,
           "backToIdle": true,
-          "minY": -4.1235115380117624e-16,
+          "minY": -5.154564329629045e-16,
           "minFrame": 23
         },
         {
           "seq": "spike",
           "player": 0,
           "soleVerts": 388,
-          "idleMin": -2.2676088437534325e-16,
+          "idleMin": -1.7520707107365752e-16,
           "frames": 72,
           "backToIdle": true,
-          "minY": -2.846572803860692e-16,
-          "minFrame": 65
+          "minY": -3.384061743392933e-16,
+          "minFrame": 56
         },
         {
           "seq": "block",
           "player": 0,
           "soleVerts": 388,
-          "idleMin": -2.2676088437534325e-16,
+          "idleMin": -1.7520707107365752e-16,
           "frames": 60,
           "backToIdle": true,
-          "minY": -2.846572803860692e-16,
-          "minFrame": 52
+          "minY": -3.384061743392933e-16,
+          "minFrame": 43
         },
         {
           "seq": "bump",
           "player": 7,
           "soleVerts": 388,
-          "idleMin": -2.3570555229834866e-16,
+          "idleMin": -1.825525407922468e-16,
           "frames": 36,
           "backToIdle": true,
-          "minY": -3.8962720172976656e-16,
-          "minFrame": 23
+          "minY": -2.806050128894174e-16,
+          "minFrame": 17
         },
         {
           "seq": "spike",
           "player": 7,
           "soleVerts": 388,
-          "idleMin": -2.3570555229834866e-16,
+          "idleMin": -1.825525407922468e-16,
           "frames": 72,
           "backToIdle": true,
-          "minY": -3.8223470105155695e-16,
-          "minFrame": 65
+          "minY": -2.77925490939457e-16,
+          "minFrame": 56
         },
         {
           "seq": "block",
           "player": 7,
           "soleVerts": 388,
-          "idleMin": -2.3570555229834866e-16,
+          "idleMin": -1.825525407922468e-16,
           "frames": 60,
           "backToIdle": true,
-          "minY": -3.8223470105155695e-16,
-          "minFrame": 52
+          "minY": -2.77925490939457e-16,
+          "minFrame": 43
         },
         {
           "seq": "bump",
           "player": 13,
           "soleVerts": 388,
-          "idleMin": -2.0025214125807267e-16,
+          "idleMin": -9.459663954936026e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -7.959941299845452e-16,
-          "minFrame": 24
+          "minY": -4.801931421938299e-16,
+          "minFrame": 3
         },
         {
           "seq": "spike",
           "player": 13,
           "soleVerts": 388,
-          "idleMin": -2.0025214125807267e-16,
+          "idleMin": -9.459663954936026e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -7.062968919679936e-16,
-          "minFrame": 62
+          "minY": -3.9489353627353285e-16,
+          "minFrame": 64
         },
         {
           "seq": "block",
           "player": 13,
           "soleVerts": 388,
-          "idleMin": -2.0025214125807267e-16,
+          "idleMin": -9.459663954936026e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -7.062968919679936e-16,
-          "minFrame": 49
+          "minY": -3.9489353627353285e-16,
+          "minFrame": 51
         }
       ],
-      "a9MinY": -7.959941299845452e-16,
+      "a9MinY": -5.154564329629045e-16,
       "a10": [
         {
           "seq": "bump",
@@ -1623,15 +1627,15 @@
       ],
       "a10MinRatio": 1,
       "a9IdleRange": [
-        -2.3570555229834866e-16,
-        -2.0025214125807267e-16
+        -1.825525407922468e-16,
+        -9.459663954936026e-17
       ],
       "pass": {
         "A1": true,
-        "A2": true,
+        "A2": false,
         "A2ab": true,
         "A2c": true,
-        "A2d": true,
+        "A2d": false,
         "A2e": true,
         "A2f": true,
         "A2g": true,
@@ -1653,13 +1657,13 @@
         "variant": "5k",
         "bridgeTris": 0
       },
-      "hud": "FPS 18\n面數 5,000／人（5k）\n14 人",
-      "hudFps": 18,
+      "hud": "FPS 5.7\n面數 5,000／人（5k）\n14 人",
+      "hudFps": 5.7,
       "errors": [],
       "ikStats": {
-        "ikFrames": 10560,
-        "liftFrames": 0,
-        "maxLift": 0
+        "ikFrames": 10554,
+        "liftFrames": 6,
+        "maxLift": 0.0036613545393010885
       },
       "teamCounts": {
         "A": 6,
@@ -1784,9 +1788,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991404970343,
-            "maxDev": 0.00021432512452182473,
-            "maxMove": 0.07036020154470354
+            "restCJ": 0.21543320364889804,
+            "maxDev": 0.0004747457036356484,
+            "maxMove": 0.06751711176230774
           }
         },
         {
@@ -1817,9 +1821,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991404970343,
-            "maxDev": 0.0003513608675929092,
-            "maxMove": 0.5019097106590188
+            "restCJ": 0.21543320364889804,
+            "maxDev": 0.0005775012995135886,
+            "maxMove": 0.5028052452269554
           }
         },
         {
@@ -1850,9 +1854,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991404970343,
-            "maxDev": 0.0009996472881731722,
-            "maxMove": 0.3436428513537666
+            "restCJ": 0.21543320364889804,
+            "maxDev": 0.0012643569963535217,
+            "maxMove": 0.3446565998753569
           }
         },
         {
@@ -1883,9 +1887,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991408226974,
-            "maxDev": 0.00021432512448937846,
-            "maxMove": 0.07036020154470357
+            "restCJ": 0.21543320354501463,
+            "maxDev": 0.00047474588866350254,
+            "maxMove": 0.06751711176230771
           }
         },
         {
@@ -1916,9 +1920,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991408226974,
-            "maxDev": 0.00035136082250650236,
-            "maxMove": 0.5019097106590187
+            "restCJ": 0.21543320354501463,
+            "maxDev": 0.0005775015063126665,
+            "maxMove": 0.5028052452269554
           }
         },
         {
@@ -1949,9 +1953,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991408226974,
-            "maxDev": 0.0009996472880213214,
-            "maxMove": 0.34364285135376643
+            "restCJ": 0.21543320354501463,
+            "maxDev": 0.0012643573207483105,
+            "maxMove": 0.3446565998753571
           }
         },
         {
@@ -1982,9 +1986,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.19775242081601838,
-            "maxDev": 0.0001964649646615524,
-            "maxMove": 0.06449685141597838
+            "restCJ": 0.19748043636121965,
+            "maxDev": 0.0004351837288615046,
+            "maxMove": 0.06189068578210633
           }
         },
         {
@@ -2015,9 +2019,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.19775242081601838,
-            "maxDev": 0.0003220806833020562,
-            "maxMove": 0.46008390143743444
+            "restCJ": 0.19748043636121965,
+            "maxDev": 0.000529376376472046,
+            "maxMove": 0.4609048081247101
           }
         },
         {
@@ -2048,13 +2052,13 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.19775242081601838,
-            "maxDev": 0.000916343795102581,
-            "maxMove": 0.3150059470742865
+            "restCJ": 0.19748043636121965,
+            "maxDev": 0.0011589941868598852,
+            "maxMove": 0.3159352165524118
           }
         }
       ],
-      "a2MaxDev": 0.0009996472881731722,
+      "a2MaxDev": 0.0012643573207483105,
       "a2MinWristMove": 0.4867790349549413,
       "a2c": [
         {
@@ -2062,98 +2066,98 @@
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A2",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "A3",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A4",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192682
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A5",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "A6",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192682
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "AL",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192792
+          "footAngleBefore": 32.906695095196184
         },
         {
           "id": "B1",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.90669509519605
         },
         {
           "id": "B2",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192845
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "B3",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192845
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "B4",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.906695095196135
         },
         {
           "id": "B5",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.90669509519609
         },
         {
           "id": "B6",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192735
+          "footAngleBefore": 32.90669509519609
         },
         {
           "id": "BL",
           "maxErr": 6.094685557525087e-8,
           "minY": 0,
           "height": 1.850000023841858,
-          "footAngleBefore": 27.607901498192845
+          "footAngleBefore": 32.906695095196135
         }
       ],
       "a2cMaxErr": 6.094685557525087e-8,
@@ -2167,9 +2171,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.551724768878519
+            "lHip>lKnee@post": 7.616219009266056
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -2177,9 +2181,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 11.935561538362991,
+            "rHip>rKnee@post": 17.67240369844397,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 11.862999292250041
+            "lHip>lKnee@post": 17.609169263303418
           },
           "calls": {
             "trigger": [
@@ -2189,8 +2193,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 11.935561538362991,
-          "kneeLateralMax": 0,
+          "legPostMax": 17.67240369844397,
+          "kneeLateralMax": 0.13899254221047697,
           "lateralFrames": 37
         },
         {
@@ -2202,9 +2206,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.551724768878519
+            "lHip>lKnee@post": 7.616219009266056
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -2212,9 +2216,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 18.681091998995782,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.15635164266392
+            "lHip>lKnee@post": 18.622738646090813
           },
           "calls": {
             "trigger": [
@@ -2225,8 +2229,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
-          "kneeLateralMax": 0.011029330109152484,
+          "legPostMax": 18.681091998995782,
+          "kneeLateralMax": 0.18445436463398177,
           "lateralFrames": 73
         },
         {
@@ -2238,9 +2242,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.551724768878519
+            "lHip>lKnee@post": 7.616219009266056
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -2248,9 +2252,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.248506319239109,
+            "rHip>rKnee@post": 23.885751133975443,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.197896181408352
+            "lHip>lKnee@post": 23.847416328116275
           },
           "calls": {
             "trigger": [
@@ -2260,8 +2264,8 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.248506319239109,
-          "kneeLateralMax": 0,
+          "legPostMax": 23.885751133975443,
+          "kneeLateralMax": 0.18445436463398177,
           "lateralFrames": 61
         },
         {
@@ -2273,9 +2277,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.551724768878519
+            "lHip>lKnee@post": 7.616219009266056
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -2283,9 +2287,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 11.935561538362991,
+            "rHip>rKnee@post": 17.67240369844397,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 11.862999292250041
+            "lHip>lKnee@post": 17.609169263303418
           },
           "calls": {
             "trigger": [
@@ -2295,8 +2299,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 11.935561538362991,
-          "kneeLateralMax": 2.6500304019868727e-17,
+          "legPostMax": 17.67240369844397,
+          "kneeLateralMax": 0.13899254221047694,
           "lateralFrames": 37
         },
         {
@@ -2308,9 +2312,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.551724768878519
+            "lHip>lKnee@post": 7.616219009266056
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -2318,9 +2322,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 18.681091998995782,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.15635164266392
+            "lHip>lKnee@post": 18.622738646090813
           },
           "calls": {
             "trigger": [
@@ -2331,8 +2335,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
-          "kneeLateralMax": 0.01102933010915249,
+          "legPostMax": 18.681091998995782,
+          "kneeLateralMax": 0.18445436463398174,
           "lateralFrames": 73
         },
         {
@@ -2344,9 +2348,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.723861773726976,
+            "rHip>rKnee@post": 7.7713308840678605,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.551724768878519
+            "lHip>lKnee@post": 7.616219009266056
           },
           "segMax": {
             "rShoulder>rElbow": 0,
@@ -2354,9 +2358,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.248506319239109,
+            "rHip>rKnee@post": 23.885751133975457,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.197896181408352
+            "lHip>lKnee@post": 23.847416328116275
           },
           "calls": {
             "trigger": [
@@ -2366,8 +2370,8 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.248506319239109,
-          "kneeLateralMax": 3.5180643337289114e-17,
+          "legPostMax": 23.885751133975457,
+          "kneeLateralMax": 0.18445436463398174,
           "lateralFrames": 61
         },
         {
@@ -2379,9 +2383,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.72386177372704,
+            "rHip>rKnee@post": 7.771330884067813,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.5517247688784535
+            "lHip>lKnee@post": 7.616219009266199
           },
           "segMax": {
             "rShoulder>rElbow": 8.537736462515939e-7,
@@ -2389,9 +2393,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 11.93556153836293,
+            "rHip>rKnee@post": 17.67240369844399,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 11.86299929224998
+            "lHip>lKnee@post": 17.609169263303333
           },
           "calls": {
             "trigger": [
@@ -2401,8 +2405,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 11.93556153836293,
-          "kneeLateralMax": 2.4291945351546353e-17,
+          "legPostMax": 17.67240369844399,
+          "kneeLateralMax": 0.12740983035960424,
           "lateralFrames": 37
         },
         {
@@ -2414,9 +2418,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.72386177372704,
+            "rHip>rKnee@post": 7.771330884067813,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.5517247688784535
+            "lHip>lKnee@post": 7.616219009266199
           },
           "segMax": {
             "rShoulder>rElbow": 8.537736462515939e-7,
@@ -2424,9 +2428,9 @@
             "lShoulder>lElbow": 8.537736462515939e-7,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554968,
+            "rHip>rKnee@post": 18.6810919989958,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.15635164266389
+            "lHip>lKnee@post": 18.622738646090813
           },
           "calls": {
             "trigger": [
@@ -2437,8 +2441,8 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554968,
-          "kneeLateralMax": 0.010110219266722967,
+          "legPostMax": 18.6810919989958,
+          "kneeLateralMax": 0.1690831675811501,
           "lateralFrames": 73
         },
         {
@@ -2450,9 +2454,9 @@
             "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 5.72386177372704,
+            "rHip>rKnee@post": 7.771330884067813,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 5.5517247688784535
+            "lHip>lKnee@post": 7.616219009266199
           },
           "segMax": {
             "rShoulder>rElbow": 0.0000012074182697257333,
@@ -2460,9 +2464,9 @@
             "lShoulder>lElbow": 0.0000012074182697257333,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.248506319239079,
+            "rHip>rKnee@post": 23.885751133975504,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.197896181408291
+            "lHip>lKnee@post": 23.847416328116307
           },
           "calls": {
             "trigger": [
@@ -2472,15 +2476,15 @@
           },
           "armMax": 0.0000012074182697257333,
           "legPreMax": 0,
-          "legPostMax": 12.248506319239079,
-          "kneeLateralMax": 3.224892305918166e-17,
+          "legPostMax": 23.885751133975504,
+          "kneeLateralMax": 0.1690831675811501,
           "lateralFrames": 61
         }
       ],
       "a2dArmMax": 0.0000012074182697257333,
       "a2dLegPreMax": 0,
-      "a2dLegPostMax": 12.248506319239109,
-      "a2dKneeLateralMax": 0.01102933010915249,
+      "a2dLegPostMax": 23.885751133975504,
+      "a2dKneeLateralMax": 0.18445436463398177,
       "footAir": {
         "frames": 531,
         "maxAngle": 0
@@ -2491,13 +2495,13 @@
         "maxJump": 0.04839371101871101,
         "at": {
           "player": "A3",
-          "frame": 135,
+          "frame": 82,
           "from": -0.12865369022869025,
           "to": -0.17704740124740126
         },
-        "minTriggersPerPlayer": 34
+        "minTriggersPerPlayer": 37
       },
-      "a2dIdleMaxAngle": 5.72386177372704,
+      "a2dIdleMaxAngle": 7.7713308840678605,
       "a2e": [
         {
           "seq": "bump",
@@ -2641,10 +2645,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07682849887603786,
-            "l": 0.07473589150764674
+            "r": 0.05650081796632892,
+            "l": 0.05499433216695609
           },
-          "min": 0.07473589150764674,
+          "min": 0.05499433216695609,
           "frames": 37
         },
         {
@@ -2655,8 +2659,8 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07682849887603786,
-            "l": 0.07473589150764674
+            "r": 0.05650081796632892,
+            "l": 0.05499433216695609
           },
           "min": 0.027826651237176526,
           "frames": 73
@@ -2669,8 +2673,8 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07682849887603786,
-            "l": 0.07473589150764674
+            "r": 0.05650081796632892,
+            "l": 0.05499433216695609
           },
           "min": 0.03056295257564024,
           "frames": 61
@@ -2683,10 +2687,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.0768284988757269,
-            "l": 0.07473589149799637
+            "r": 0.056500817969357235,
+            "l": 0.05499433219112496
           },
-          "min": 0.07473589149799637,
+          "min": 0.05499433219112496,
           "frames": 37
         },
         {
@@ -2697,8 +2701,8 @@
             "l": 41
           },
           "idle": {
-            "r": 0.0768284988757269,
-            "l": 0.07473589149799637
+            "r": 0.056500817969357235,
+            "l": 0.05499433219112496
           },
           "min": 0.027826651222669883,
           "frames": 73
@@ -2711,8 +2715,8 @@
             "l": 41
           },
           "idle": {
-            "r": 0.0768284988757269,
-            "l": 0.07473589149799637
+            "r": 0.056500817969357235,
+            "l": 0.05499433219112496
           },
           "min": 0.030562952567221635,
           "frames": 61
@@ -2725,10 +2729,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07042612332985393,
-            "l": 0.06850789363603171
+            "r": 0.0517924158287758,
+            "l": 0.05041146423098525
           },
-          "min": 0.06850789363603171,
+          "min": 0.05041146423098525,
           "frames": 37
         },
         {
@@ -2739,8 +2743,8 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07042612332985393,
-            "l": 0.06850789363603171
+            "r": 0.0517924158287758,
+            "l": 0.05041146423098525
           },
           "min": 0.025507756740090714,
           "frames": 73
@@ -2753,8 +2757,8 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07042612332985393,
-            "l": 0.06850789363603171
+            "r": 0.0517924158287758,
+            "l": 0.05041146423098525
           },
           "min": 0.02801603296705266,
           "frames": 61
@@ -3109,94 +3113,94 @@
           "seq": "bump",
           "player": 0,
           "soleVerts": 89,
-          "idleMin": -5.735429492448318e-17,
+          "idleMin": -6.10405823109339e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -4.1194039735105485e-16,
+          "minY": -5.156135282549449e-16,
           "minFrame": 23
         },
         {
           "seq": "spike",
           "player": 0,
           "soleVerts": 89,
-          "idleMin": -5.735429492448318e-17,
+          "idleMin": -6.10405823109339e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -3.7643499428696714e-16,
+          "minY": -3.458604930228759e-16,
           "minFrame": 59
         },
         {
           "seq": "block",
           "player": 0,
           "soleVerts": 89,
-          "idleMin": -5.735429492448318e-17,
+          "idleMin": -6.10405823109339e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -3.7643499428696714e-16,
+          "minY": -3.458604930228759e-16,
           "minFrame": 46
         },
         {
           "seq": "bump",
           "player": 7,
           "soleVerts": 89,
-          "idleMin": -6.006480035569695e-17,
+          "idleMin": -6.331740687315346e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -3.900606218753091e-16,
-          "minFrame": 23
+          "minY": -2.9392720896082025e-16,
+          "minFrame": 9
         },
         {
           "seq": "spike",
           "player": 7,
           "soleVerts": 89,
-          "idleMin": -6.006480035569695e-17,
+          "idleMin": -6.331740687315346e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -5.033950686850197e-16,
+          "minY": -3.266701145698825e-16,
           "minFrame": 59
         },
         {
           "seq": "block",
           "player": 7,
           "soleVerts": 89,
-          "idleMin": -6.006480035569695e-17,
+          "idleMin": -6.331740687315346e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -5.033950686850197e-16,
+          "minY": -3.266701145698825e-16,
           "minFrame": 46
         },
         {
           "seq": "bump",
           "player": 13,
           "soleVerts": 89,
-          "idleMin": -1.3118846287074604e-16,
+          "idleMin": 2.2835928435046826e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -6.453793209154143e-16,
-          "minFrame": 17
+          "minY": -5.357042934250877e-16,
+          "minFrame": 12
         },
         {
           "seq": "spike",
           "player": 13,
           "soleVerts": 89,
-          "idleMin": -1.3118846287074604e-16,
+          "idleMin": 2.2835928435046826e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -7.077545474607763e-16,
-          "minFrame": 62
+          "minY": -5.917575457425883e-16,
+          "minFrame": 68
         },
         {
           "seq": "block",
           "player": 13,
           "soleVerts": 89,
-          "idleMin": -1.3118846287074604e-16,
+          "idleMin": 2.2835928435046826e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -7.077545474607763e-16,
-          "minFrame": 49
+          "minY": -5.917575457425883e-16,
+          "minFrame": 55
         }
       ],
-      "a9MinY": -7.077545474607763e-16,
+      "a9MinY": -5.917575457425883e-16,
       "a10": [
         {
           "seq": "bump",
@@ -3264,15 +3268,15 @@
       ],
       "a10MinRatio": 1,
       "a9IdleRange": [
-        -1.3118846287074604e-16,
-        -5.735429492448318e-17
+        -6.331740687315346e-17,
+        2.2835928435046826e-17
       ],
       "pass": {
         "A1": true,
-        "A2": true,
+        "A2": false,
         "A2ab": true,
         "A2c": true,
-        "A2d": true,
+        "A2d": false,
         "A2e": true,
         "A2f": true,
         "A2g": true,
@@ -3314,83 +3318,31 @@
       "+    }));"
     ],
     "careerScreenOk": true,
-    "testLogSource": {
-      "provided": "C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\7ce2827b-1b01-47b8-b2f5-f5f9905259bd\\scratchpad\\npm-test-rerun6.log",
-      "mtime": "2026-09-26T19:52:40.066Z"
-    },
-    "npmTest": {
-      "tests": 2603,
-      "pass": 2601,
-      "fail": 2,
-      "failing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "baselinePath": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\npm-test-baseline-e0dd285.log",
-      "baselinePass": 2601,
-      "baselineFailing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "newFailures": [],
-      "sameFailingAsBaseline": true
-    },
-    "npmTestOk": true,
-    "buildOk": true,
-    "pass": true
+    "npmTest": "not run（A7_SKIP_TESTS=1）",
+    "npmTestOk": null,
+    "buildOk": null,
+    "pass": false
   },
   "a8": {
-    "screenshots": [
-      {
-        "viewport": "1280x720",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-spike-hit.png",
-        "spikeHitT": 0.65,
-        "logoCovered": false
-      },
-      {
-        "viewport": "390x844",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-spike-hit.png",
-        "spikeHitT": 0.65,
-        "logoCovered": false
-      }
-    ],
-    "extra": [
-      {
-        "name": "side-bump-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-bump-deepest.png",
-        "frame": 5,
-        "knee": 0.9629268335214102,
-        "phase": "bump",
-        "kneeDeg": 55.17164354067325
-      },
-      {
-        "name": "side-spike-land-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-spike-land-deepest.png",
-        "frame": 60,
-        "knee": 1.3236070624573433,
-        "phase": "landSoft",
-        "kneeDeg": 75.83709841251452
-      }
-    ],
-    "pass": true
+    "screenshots": [],
+    "extra": [],
+    "pass": null
   },
   "pass": {
     "A1": true,
-    "A2": true,
+    "A2": false,
     "A2ab": true,
     "A2c": true,
-    "A2d": true,
+    "A2d": false,
     "A2e": true,
     "A2f": true,
     "A2g": true,
     "A3": true,
     "A4": true,
     "A5": true,
-    "A6": true,
-    "A7": true,
-    "A8": true,
+    "A6": false,
+    "A7": false,
+    "A8": null,
     "A9": true,
     "A9footAir": true,
     "A10": true,
@@ -3412,6 +3364,5 @@
     "menuBack": true,
     "pass": true
   },
-  "aliasPlayerCount": 14,
   "allErrors": []
 }

@@ -1,8 +1,10 @@
 {
-  "createdAt": "2026-09-26T19:53:45.061Z",
+  "createdAt": "2026-09-26T17:36:53.826Z",
   "base": "http://127.0.0.1:5176",
-  "head": "d6961ae5899f9c1b745406a38b4fc1ceacc942c9",
-  "dirty": [],
+  "head": "3220c0d5975ac8f6da85aa3cdef2694c1221550d",
+  "dirty": [
+    "M tools/real-player-browser.mjs"
+  ],
   "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
   "variants": {
     "20k": {
@@ -12,11 +14,11 @@
         "variant": "20k",
         "bridgeTris": 0
       },
-      "hud": "FPS 4.4\n面數 20,000／人（20k）\n14 人",
-      "hudFps": 4.4,
+      "hud": "FPS 8.1\n面數 20,000／人（20k）\n14 人",
+      "hudFps": 8.1,
       "errors": [],
       "ikStats": {
-        "ikFrames": 10560,
+        "ikFrames": 10578,
         "liftFrames": 0,
         "maxLift": 0
       },
@@ -165,20 +167,20 @@
           "rWrist": {
             "groupSize": 397,
             "restCJ": 0.1211668942989472,
-            "maxDev": 0.00048273544476780395,
-            "maxMove": 1.5465144373827566
+            "maxDev": 0.0006115481676119278,
+            "maxMove": 1.7424360460763322
           },
           "lWrist": {
             "groupSize": 392,
             "restCJ": 0.11991789755215439,
-            "maxDev": 1.0533465072404269e-9,
-            "maxMove": 1.851979586407053
+            "maxDev": 1.0303017466961606e-9,
+            "maxMove": 1.7601007611312416
           },
           "rKnee": {
             "groupSize": 656,
             "restCJ": 0.2183780912715725,
-            "maxDev": 0.0005538364721009714,
-            "maxMove": 0.50171813585161
+            "maxDev": 0.0007373830122504588,
+            "maxMove": 0.5018817140389915
           }
         },
         {
@@ -211,7 +213,7 @@
             "groupSize": 656,
             "restCJ": 0.2183780912715725,
             "maxDev": 0.0013142366334154276,
-            "maxMove": 0.34342682475395037
+            "maxMove": 0.34334465261838665
           }
         },
         {
@@ -264,20 +266,20 @@
           "rWrist": {
             "groupSize": 397,
             "restCJ": 0.12116689283845512,
-            "maxDev": 0.0004827347320039699,
-            "maxMove": 1.5465144373827573
+            "maxDev": 0.0006115470611224999,
+            "maxMove": 1.7424360460763326
           },
           "lWrist": {
             "groupSize": 392,
             "restCJ": 0.11991789715015654,
-            "maxDev": 1.1210616601697865e-9,
-            "maxMove": 1.851979586407053
+            "maxDev": 1.098016913503308e-9,
+            "maxMove": 1.7601007611312416
           },
           "rKnee": {
             "groupSize": 656,
             "restCJ": 0.21837809134301112,
-            "maxDev": 0.0005538364719192002,
-            "maxMove": 0.5017181358516097
+            "maxDev": 0.0007373830120083191,
+            "maxMove": 0.5018817140389914
           }
         },
         {
@@ -310,7 +312,7 @@
             "groupSize": 656,
             "restCJ": 0.21837809134301112,
             "maxDev": 0.0013142366329828847,
-            "maxMove": 0.3434268247539503
+            "maxMove": 0.3433446526183866
           }
         },
         {
@@ -363,20 +365,20 @@
           "rWrist": {
             "groupSize": 397,
             "restCJ": 0.11106965531775402,
-            "maxDev": 0.00044251465192762796,
-            "maxMove": 1.4176382342675262
+            "maxDev": 0.000560593080436822,
+            "maxMove": 1.5972330422366376
           },
           "lWrist": {
             "groupSize": 392,
             "restCJ": 0.10992473897219804,
-            "maxDev": 1.7673522229033622e-9,
-            "maxMove": 1.6976479542064626
+            "maxDev": 1.746230063326415e-9,
+            "maxMove": 1.6134256977036383
           },
           "rKnee": {
             "groupSize": 656,
             "restCJ": 0.20017991632257992,
-            "maxDev": 0.000507683940888598,
-            "maxMove": 0.4599082911973085
+            "maxDev": 0.0006759350107990725,
+            "maxMove": 0.46005823786907624
           }
         },
         {
@@ -409,7 +411,7 @@
             "groupSize": 656,
             "restCJ": 0.20017991632257992,
             "maxDev": 0.0012047176808648585,
-            "maxMove": 0.314807922691121
+            "maxMove": 0.3147325982335212
           }
         }
       ],
@@ -567,13 +569,13 @@
           },
           "segMax": {
             "rShoulder>rElbow": 0,
-            "rElbow>rWrist": 0,
-            "lShoulder>lElbow": 8.537736462515939e-7,
-            "lElbow>lWrist": 0,
+            "rElbow>rWrist": 8.537736462515939e-7,
+            "lShoulder>lElbow": 0,
+            "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 12.49166473788951,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.202806429573457
+            "lHip>lKnee@post": 12.472010207993984
           },
           "calls": {
             "trigger": [
@@ -584,7 +586,7 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
+          "legPostMax": 12.49166473788951,
           "kneeLateralMax": 0.011029330109152484,
           "lateralFrames": 73
         },
@@ -673,13 +675,13 @@
           },
           "segMax": {
             "rShoulder>rElbow": 0,
-            "rElbow>rWrist": 0,
-            "lShoulder>lElbow": 8.537736462515939e-7,
+            "rElbow>rWrist": 8.537736462515939e-7,
+            "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 12.49166473788951,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.202806429573457
+            "lHip>lKnee@post": 12.472010207993984
           },
           "calls": {
             "trigger": [
@@ -690,7 +692,7 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
+          "legPostMax": 12.49166473788951,
           "kneeLateralMax": 0.01102933010915249,
           "lateralFrames": 73
         },
@@ -778,14 +780,14 @@
             "lHip>lKnee@post": 5.669602741420305
           },
           "segMax": {
-            "rShoulder>rElbow": 8.537736462515939e-7,
+            "rShoulder>rElbow": 0,
             "rElbow>rWrist": 8.537736462515939e-7,
-            "lShoulder>lElbow": 8.537736462515939e-7,
+            "lShoulder>lElbow": 0,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554968,
+            "rHip>rKnee@post": 12.49166473788948,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.202806429573336
+            "lHip>lKnee@post": 12.472010207994042
           },
           "calls": {
             "trigger": [
@@ -796,7 +798,7 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554968,
+          "legPostMax": 12.49166473788948,
           "kneeLateralMax": 0.010110219266722967,
           "lateralFrames": 73
         },
@@ -838,21 +840,21 @@
       ],
       "a2dArmMax": 0.0000012074182697257333,
       "a2dLegPreMax": 0,
-      "a2dLegPostMax": 12.248506319239109,
+      "a2dLegPostMax": 12.49166473788951,
       "a2dKneeLateralMax": 0.01102933010915249,
       "footAir": {
-        "frames": 531,
-        "maxAngle": 0
+        "frames": 510,
+        "maxAngle": 16.925631121448948
       },
       "continuity": {
         "seconds": 21,
         "frames": 1260,
-        "maxJump": 0.04839371101871101,
+        "maxJump": 0.2744117130636141,
         "at": {
-          "player": "A3",
-          "frame": 113,
-          "from": -0.12865369022869025,
-          "to": -0.17704740124740126
+          "player": "B3",
+          "frame": 250,
+          "from": 0.228395236972138,
+          "to": -0.046016476091476084
         },
         "minTriggersPerPlayer": 34
       },
@@ -882,7 +884,7 @@
             "r": 0.1157141521584081,
             "l": 0.11161843704179761
           },
-          "max": 0.1158343026811643
+          "max": 0.11584739357632849
         },
         {
           "seq": "block",
@@ -921,7 +923,7 @@
             "r": 0.11571415114967043,
             "l": 0.11161843695052741
           },
-          "max": 0.11583430227697862
+          "max": 0.11584739294788464
         },
         {
           "seq": "block",
@@ -960,7 +962,7 @@
             "r": 0.10607130775259925,
             "l": 0.10231690051147542
           },
-          "max": 0.10618144830336783
+          "max": 0.10619344830888963
         },
         {
           "seq": "block",
@@ -976,7 +978,7 @@
           "max": 0.10607130790633088
         }
       ],
-      "a2eMax": 0.1158343026811643,
+      "a2eMax": 0.11584739357632849,
       "a2f": {
         "r": {
           "hipY": 0.9730000000000001,
@@ -1017,7 +1019,7 @@
             "r": 0.07592655234932472,
             "l": 0.0755755075322915
           },
-          "min": 0.027288642322524294,
+          "min": 0.028473725929081217,
           "frames": 73
         },
         {
@@ -1031,7 +1033,7 @@
             "r": 0.07592655234932472,
             "l": 0.0755755075322915
           },
-          "min": 0.030109974696186502,
+          "min": 0.030833443806019392,
           "frames": 61
         },
         {
@@ -1059,7 +1061,7 @@
             "r": 0.07592655234988584,
             "l": 0.07557550752391809
           },
-          "min": 0.02728864231102446,
+          "min": 0.02847372591364304,
           "frames": 73
         },
         {
@@ -1073,7 +1075,7 @@
             "r": 0.07592655234988584,
             "l": 0.07557550752391809
           },
-          "min": 0.03010997469593789,
+          "min": 0.030833443806599598,
           "frames": 61
         },
         {
@@ -1101,7 +1103,7 @@
             "r": 0.06959933560940709,
             "l": 0.06927754333620911
           },
-          "min": 0.025014583576190273,
+          "min": 0.026100910218453104,
           "frames": 73
         },
         {
@@ -1115,11 +1117,11 @@
             "r": 0.06959933560940709,
             "l": 0.06927754333620911
           },
-          "min": 0.027600806111381646,
+          "min": 0.0282639861234298,
           "frames": 61
         }
       ],
-      "a2gMin": 0.025014583576190273,
+      "a2gMin": 0.026100910218453104,
       "a3": [
         {
           "id": "A1",
@@ -1482,7 +1484,7 @@
           "frames": 72,
           "backToIdle": true,
           "minY": -2.846572803860692e-16,
-          "minFrame": 65
+          "minFrame": 55
         },
         {
           "seq": "block",
@@ -1512,7 +1514,7 @@
           "frames": 72,
           "backToIdle": true,
           "minY": -3.8223470105155695e-16,
-          "minFrame": 65
+          "minFrame": 55
         },
         {
           "seq": "block",
@@ -1542,7 +1544,7 @@
           "frames": 72,
           "backToIdle": true,
           "minY": -7.062968919679936e-16,
-          "minFrame": 62
+          "minFrame": 52
         },
         {
           "seq": "block",
@@ -1641,9 +1643,9 @@
         "A6faces": true,
         "A6hud": true,
         "A9": true,
-        "A9footAir": true,
+        "A9footAir": false,
         "A10": true,
-        "A12": true
+        "A12": false
       }
     },
     "5k": {
@@ -1653,11 +1655,11 @@
         "variant": "5k",
         "bridgeTris": 0
       },
-      "hud": "FPS 18\n面數 5,000／人（5k）\n14 人",
-      "hudFps": 18,
+      "hud": "FPS 6.5\n面數 5,000／人（5k）\n14 人",
+      "hudFps": 6.5,
       "errors": [],
       "ikStats": {
-        "ikFrames": 10560,
+        "ikFrames": 10578,
         "liftFrames": 0,
         "maxLift": 0
       },
@@ -1806,20 +1808,20 @@
           "rWrist": {
             "groupSize": 98,
             "restCJ": 0.12172724668744853,
-            "maxDev": 0.0006064603931308643,
-            "maxMove": 1.546803419272785
+            "maxDev": 0.0005236380405829189,
+            "maxMove": 1.7431044741785628
           },
           "lWrist": {
             "groupSize": 105,
             "restCJ": 0.1204070548087391,
-            "maxDev": 2.8834973991864743e-9,
-            "maxMove": 1.8526392500842928
+            "maxDev": 2.8196854573447894e-9,
+            "maxMove": 1.760727485710386
           },
           "rKnee": {
             "groupSize": 172,
             "restCJ": 0.21572991404970343,
-            "maxDev": 0.0003513608675929092,
-            "maxMove": 0.5019097106590188
+            "maxDev": 0.000462253938392887,
+            "maxMove": 0.5020714043708983
           }
         },
         {
@@ -1852,7 +1854,7 @@
             "groupSize": 172,
             "restCJ": 0.21572991404970343,
             "maxDev": 0.0009996472881731722,
-            "maxMove": 0.3436428513537666
+            "maxMove": 0.343540395502593
           }
         },
         {
@@ -1905,20 +1907,20 @@
           "rWrist": {
             "groupSize": 98,
             "restCJ": 0.1217272480055693,
-            "maxDev": 0.0006064610897326544,
-            "maxMove": 1.546803419272785
+            "maxDev": 0.0005236384767401681,
+            "maxMove": 1.7431044741785628
           },
           "lWrist": {
             "groupSize": 105,
             "restCJ": 0.12040705594920052,
-            "maxDev": 3.0838295667079407e-9,
-            "maxMove": 1.8526392500842928
+            "maxDev": 3.0200176526218314e-9,
+            "maxMove": 1.760727485710386
           },
           "rKnee": {
             "groupSize": 172,
             "restCJ": 0.21572991408226974,
-            "maxDev": 0.00035136082250650236,
-            "maxMove": 0.5019097106590187
+            "maxDev": 0.00046225393832280415,
+            "maxMove": 0.5020714043708981
           }
         },
         {
@@ -1951,7 +1953,7 @@
             "groupSize": 172,
             "restCJ": 0.21572991408226974,
             "maxDev": 0.0009996472880213214,
-            "maxMove": 0.34364285135376643
+            "maxMove": 0.34354039550259285
           }
         },
         {
@@ -2004,20 +2006,20 @@
           "rWrist": {
             "groupSize": 98,
             "restCJ": 0.11158330744668457,
-            "maxDev": 0.0005559249464698879,
-            "maxMove": 1.4179031343333854
+            "maxDev": 0.00048000449311126625,
+            "maxMove": 1.5978457679970153
           },
           "lWrist": {
             "groupSize": 105,
             "restCJ": 0.11037313477673684,
-            "maxDev": 4.7750968734661114e-9,
-            "maxMove": 1.6982526459106042
+            "maxDev": 4.716603566046196e-9,
+            "maxMove": 1.6140001952345224
           },
           "rKnee": {
             "groupSize": 172,
             "restCJ": 0.19775242081601838,
-            "maxDev": 0.0003220806833020562,
-            "maxMove": 0.46008390143743444
+            "maxDev": 0.00042373311710192096,
+            "maxMove": 0.46023212067332386
           }
         },
         {
@@ -2050,7 +2052,7 @@
             "groupSize": 172,
             "restCJ": 0.19775242081601838,
             "maxDev": 0.000916343795102581,
-            "maxMove": 0.3150059470742865
+            "maxMove": 0.31491202921071076
           }
         }
       ],
@@ -2208,13 +2210,13 @@
           },
           "segMax": {
             "rShoulder>rElbow": 0,
-            "rElbow>rWrist": 0,
-            "lShoulder>lElbow": 8.537736462515939e-7,
-            "lElbow>lWrist": 0,
+            "rElbow>rWrist": 8.537736462515939e-7,
+            "lShoulder>lElbow": 0,
+            "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 12.49166473788951,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.15635164266392
+            "lHip>lKnee@post": 12.429605352253725
           },
           "calls": {
             "trigger": [
@@ -2225,7 +2227,7 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
+          "legPostMax": 12.49166473788951,
           "kneeLateralMax": 0.011029330109152484,
           "lateralFrames": 73
         },
@@ -2314,13 +2316,13 @@
           },
           "segMax": {
             "rShoulder>rElbow": 0,
-            "rElbow>rWrist": 0,
-            "lShoulder>lElbow": 8.537736462515939e-7,
+            "rElbow>rWrist": 8.537736462515939e-7,
+            "lShoulder>lElbow": 0,
             "lElbow>lWrist": 0,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554938,
+            "rHip>rKnee@post": 12.49166473788951,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.15635164266392
+            "lHip>lKnee@post": 12.429605352253725
           },
           "calls": {
             "trigger": [
@@ -2331,7 +2333,7 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554938,
+          "legPostMax": 12.49166473788951,
           "kneeLateralMax": 0.01102933010915249,
           "lateralFrames": 73
         },
@@ -2419,14 +2421,14 @@
             "lHip>lKnee@post": 5.5517247688784535
           },
           "segMax": {
-            "rShoulder>rElbow": 8.537736462515939e-7,
+            "rShoulder>rElbow": 0,
             "rElbow>rWrist": 8.537736462515939e-7,
-            "lShoulder>lElbow": 8.537736462515939e-7,
+            "lShoulder>lElbow": 0,
             "lElbow>lWrist": 8.537736462515939e-7,
             "rHip>rKnee": 0,
-            "rHip>rKnee@post": 12.224333631554968,
+            "rHip>rKnee@post": 12.49166473788948,
             "lHip>lKnee": 0,
-            "lHip>lKnee@post": 12.15635164266389
+            "lHip>lKnee@post": 12.429605352253695
           },
           "calls": {
             "trigger": [
@@ -2437,7 +2439,7 @@
           },
           "armMax": 8.537736462515939e-7,
           "legPreMax": 0,
-          "legPostMax": 12.224333631554968,
+          "legPostMax": 12.49166473788948,
           "kneeLateralMax": 0.010110219266722967,
           "lateralFrames": 73
         },
@@ -2479,21 +2481,21 @@
       ],
       "a2dArmMax": 0.0000012074182697257333,
       "a2dLegPreMax": 0,
-      "a2dLegPostMax": 12.248506319239109,
+      "a2dLegPostMax": 12.49166473788951,
       "a2dKneeLateralMax": 0.01102933010915249,
       "footAir": {
-        "frames": 531,
-        "maxAngle": 0
+        "frames": 510,
+        "maxAngle": 16.925631121448948
       },
       "continuity": {
         "seconds": 21,
         "frames": 1260,
-        "maxJump": 0.04839371101871101,
+        "maxJump": 0.2744117130636141,
         "at": {
-          "player": "A3",
-          "frame": 135,
-          "from": -0.12865369022869025,
-          "to": -0.17704740124740126
+          "player": "B3",
+          "frame": 237,
+          "from": 0.228395236972138,
+          "to": -0.046016476091476084
         },
         "minTriggersPerPlayer": 34
       },
@@ -2523,7 +2525,7 @@
             "r": 0.11450032334232112,
             "l": 0.11425441172092131
           },
-          "max": 0.11471211208866702
+          "max": 0.11471651951612728
         },
         {
           "seq": "block",
@@ -2562,7 +2564,7 @@
             "r": 0.11450032259572406,
             "l": 0.1142544141650396
           },
-          "max": 0.11471211181052761
+          "max": 0.11471651906437308
         },
         {
           "seq": "block",
@@ -2601,7 +2603,7 @@
             "r": 0.10495863094438614,
             "l": 0.10473321350670999
           },
-          "max": 0.10515277263434
+          "max": 0.10515681278789159
         },
         {
           "seq": "block",
@@ -2617,7 +2619,7 @@
           "max": 0.10495863106345635
         }
       ],
-      "a2eMax": 0.11471211208866702,
+      "a2eMax": 0.11471651951612728,
       "a2f": {
         "r": {
           "hipY": 0.9730000000000001,
@@ -2658,7 +2660,7 @@
             "r": 0.07682849887603786,
             "l": 0.07473589150764674
           },
-          "min": 0.027826651237176526,
+          "min": 0.02893308416095656,
           "frames": 73
         },
         {
@@ -2672,7 +2674,7 @@
             "r": 0.07682849887603786,
             "l": 0.07473589150764674
           },
-          "min": 0.03056295257564024,
+          "min": 0.03123749993895307,
           "frames": 61
         },
         {
@@ -2700,7 +2702,7 @@
             "r": 0.0768284988757269,
             "l": 0.07473589149799637
           },
-          "min": 0.027826651222669883,
+          "min": 0.02893308414172636,
           "frames": 73
         },
         {
@@ -2714,7 +2716,7 @@
             "r": 0.0768284988757269,
             "l": 0.07473589149799637
           },
-          "min": 0.030562952567221635,
+          "min": 0.031237499928863707,
           "frames": 61
         },
         {
@@ -2742,7 +2744,7 @@
             "r": 0.07042612332985393,
             "l": 0.06850789363603171
           },
-          "min": 0.025507756740090714,
+          "min": 0.02652198692388987,
           "frames": 73
         },
         {
@@ -2756,11 +2758,11 @@
             "r": 0.07042612332985393,
             "l": 0.06850789363603171
           },
-          "min": 0.02801603296705266,
+          "min": 0.028634368049765994,
           "frames": 61
         }
       ],
-      "a2gMin": 0.025507756740090714,
+      "a2gMin": 0.02652198692388987,
       "a3": [
         {
           "id": "A1",
@@ -3123,7 +3125,7 @@
           "frames": 72,
           "backToIdle": true,
           "minY": -3.7643499428696714e-16,
-          "minFrame": 59
+          "minFrame": 49
         },
         {
           "seq": "block",
@@ -3153,7 +3155,7 @@
           "frames": 72,
           "backToIdle": true,
           "minY": -5.033950686850197e-16,
-          "minFrame": 59
+          "minFrame": 49
         },
         {
           "seq": "block",
@@ -3183,7 +3185,7 @@
           "frames": 72,
           "backToIdle": true,
           "minY": -7.077545474607763e-16,
-          "minFrame": 62
+          "minFrame": 52
         },
         {
           "seq": "block",
@@ -3282,9 +3284,9 @@
         "A6faces": true,
         "A6hud": true,
         "A9": true,
-        "A9footAir": true,
+        "A9footAir": false,
         "A10": true,
-        "A12": true
+        "A12": false
       }
     }
   },
@@ -3314,67 +3316,15 @@
       "+    }));"
     ],
     "careerScreenOk": true,
-    "testLogSource": {
-      "provided": "C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\7ce2827b-1b01-47b8-b2f5-f5f9905259bd\\scratchpad\\npm-test-rerun6.log",
-      "mtime": "2026-09-26T19:52:40.066Z"
-    },
-    "npmTest": {
-      "tests": 2603,
-      "pass": 2601,
-      "fail": 2,
-      "failing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "baselinePath": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\npm-test-baseline-e0dd285.log",
-      "baselinePass": 2601,
-      "baselineFailing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "newFailures": [],
-      "sameFailingAsBaseline": true
-    },
-    "npmTestOk": true,
-    "buildOk": true,
-    "pass": true
+    "npmTest": "not run（A7_SKIP_TESTS=1）",
+    "npmTestOk": null,
+    "buildOk": null,
+    "pass": false
   },
   "a8": {
-    "screenshots": [
-      {
-        "viewport": "1280x720",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-spike-hit.png",
-        "spikeHitT": 0.65,
-        "logoCovered": false
-      },
-      {
-        "viewport": "390x844",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-spike-hit.png",
-        "spikeHitT": 0.65,
-        "logoCovered": false
-      }
-    ],
-    "extra": [
-      {
-        "name": "side-bump-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-bump-deepest.png",
-        "frame": 5,
-        "knee": 0.9629268335214102,
-        "phase": "bump",
-        "kneeDeg": 55.17164354067325
-      },
-      {
-        "name": "side-spike-land-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-spike-land-deepest.png",
-        "frame": 60,
-        "knee": 1.3236070624573433,
-        "phase": "landSoft",
-        "kneeDeg": 75.83709841251452
-      }
-    ],
-    "pass": true
+    "screenshots": [],
+    "extra": [],
+    "pass": null
   },
   "pass": {
     "A1": true,
@@ -3389,19 +3339,18 @@
     "A4": true,
     "A5": true,
     "A6": true,
-    "A7": true,
-    "A8": true,
+    "A7": false,
+    "A8": null,
     "A9": true,
-    "A9footAir": true,
+    "A9footAir": false,
     "A10": true,
-    "A12": true,
-    "A11": true
+    "A12": false,
+    "A11": false
   },
   "a11": {
     "steps": [
       "menu entry visible",
-      "preview loaded",
-      "back to menu"
+      "preview loaded"
     ],
     "errors": [],
     "entryInView": true,
@@ -3409,9 +3358,8 @@
     "playerCount": 14,
     "backInView": true,
     "backOverlapsHud": false,
-    "menuBack": true,
-    "pass": true
+    "failure": "TimeoutError: locator.click: Timeout 10000ms exceeded.",
+    "pass": false
   },
-  "aliasPlayerCount": 14,
   "allErrors": []
 }
