@@ -1,8 +1,11 @@
 {
-  "createdAt": "2026-09-26T21:54:07.995Z",
+  "createdAt": "2026-09-26T21:46:44.369Z",
   "base": "http://127.0.0.1:5176",
-  "head": "9bbf9f735c030fa7437d6f8b2d572146c6a4f9da",
-  "dirty": [],
+  "head": "d9213855676a96e19397acdb09516a64df96aafe",
+  "dirty": [
+    "M tools/real-player-browser.mjs",
+    "?? tools/npm-test-with-provenance.mjs"
+  ],
   "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
   "variants": {
     "20k": {
@@ -12,13 +15,13 @@
         "variant": "20k",
         "bridgeTris": 0
       },
-      "hud": "FPS 4.0\n面數 20,000／人（20k）\n14 人",
-      "hudFps": 4,
+      "hud": "FPS 45\n面數 20,000／人（20k）\n14 人",
+      "hudFps": 45,
       "errors": [],
       "ikStats": {
-        "ikFrames": 10554,
-        "liftFrames": 6,
-        "maxLift": 0.003645626992740049
+        "ikFrames": 10560,
+        "liftFrames": 0,
+        "maxLift": 0
       },
       "teamCounts": {
         "A": 6,
@@ -625,10 +628,10 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.53467164367173,
+          "legPostMax": 15.016624212338256,
           "legPostSampleMax": 12.248506319239109,
-          "legPostFrameMax": 12.53467164367173,
-          "legPostFrameAt": 49,
+          "legPostFrameMax": 15.016624212338256,
+          "legPostFrameAt": 1,
           "kneeLateralMax": 0,
           "lateralFrames": 61
         },
@@ -740,10 +743,10 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.53467164367173,
+          "legPostMax": 15.016624212338233,
           "legPostSampleMax": 12.248506319239109,
-          "legPostFrameMax": 12.53467164367173,
-          "legPostFrameAt": 49,
+          "legPostFrameMax": 15.016624212338233,
+          "legPostFrameAt": 1,
           "kneeLateralMax": 3.5180643337289114e-17,
           "lateralFrames": 61
         },
@@ -855,17 +858,17 @@
           },
           "armMax": 0.0000012074182697257333,
           "legPreMax": 0,
-          "legPostMax": 12.534671643671611,
+          "legPostMax": 15.016624212338156,
           "legPostSampleMax": 12.248506319239079,
-          "legPostFrameMax": 12.534671643671611,
-          "legPostFrameAt": 49,
+          "legPostFrameMax": 15.016624212338156,
+          "legPostFrameAt": 1,
           "kneeLateralMax": 3.224892305918166e-17,
           "lateralFrames": 61
         }
       ],
       "a2dArmMax": 0.0000012074182697257333,
       "a2dLegPreMax": 0,
-      "a2dLegPostMax": 12.53467164367173,
+      "a2dLegPostMax": 15.016624212338256,
       "a2dKneeLateralMax": 0.01102933010915249,
       "footAir": {
         "frames": 531,
@@ -877,7 +880,7 @@
         "maxJump": 0.04839371101871101,
         "at": {
           "player": "A3",
-          "frame": 77,
+          "frame": 56,
           "from": -0.12865369022869025,
           "to": -0.17704740124740126
         },
@@ -1655,10 +1658,10 @@
       ],
       "pass": {
         "A1": true,
-        "A2": true,
+        "A2": false,
         "A2ab": true,
         "A2c": true,
-        "A2d": true,
+        "A2d": false,
         "A2e": true,
         "A2f": true,
         "A2g": true,
@@ -1680,13 +1683,13 @@
         "variant": "5k",
         "bridgeTris": 0
       },
-      "hud": "FPS 4.3\n面數 5,000／人（5k）\n14 人",
-      "hudFps": 4.3,
+      "hud": "FPS 3.7\n面數 5,000／人（5k）\n14 人",
+      "hudFps": 3.7,
       "errors": [],
       "ikStats": {
-        "ikFrames": 10554,
-        "liftFrames": 6,
-        "maxLift": 0.0036613545393010885
+        "ikFrames": 10560,
+        "liftFrames": 0,
+        "maxLift": 0
       },
       "teamCounts": {
         "A": 6,
@@ -2293,10 +2296,10 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.53467164367173,
+          "legPostMax": 13.962509079239368,
           "legPostSampleMax": 12.248506319239109,
-          "legPostFrameMax": 12.53467164367173,
-          "legPostFrameAt": 49,
+          "legPostFrameMax": 13.962509079239368,
+          "legPostFrameAt": 1,
           "kneeLateralMax": 0,
           "lateralFrames": 61
         },
@@ -2408,10 +2411,10 @@
           },
           "armMax": 0,
           "legPreMax": 0,
-          "legPostMax": 12.53467164367173,
+          "legPostMax": 13.962509079238842,
           "legPostSampleMax": 12.248506319239109,
-          "legPostFrameMax": 12.53467164367173,
-          "legPostFrameAt": 49,
+          "legPostFrameMax": 13.962509079238842,
+          "legPostFrameAt": 1,
           "kneeLateralMax": 3.5180643337289114e-17,
           "lateralFrames": 61
         },
@@ -2523,17 +2526,17 @@
           },
           "armMax": 0.0000012074182697257333,
           "legPreMax": 0,
-          "legPostMax": 12.534671643671611,
+          "legPostMax": 13.962509079239922,
           "legPostSampleMax": 12.248506319239079,
-          "legPostFrameMax": 12.534671643671611,
-          "legPostFrameAt": 49,
+          "legPostFrameMax": 13.962509079239922,
+          "legPostFrameAt": 1,
           "kneeLateralMax": 3.224892305918166e-17,
           "lateralFrames": 61
         }
       ],
       "a2dArmMax": 0.0000012074182697257333,
       "a2dLegPreMax": 0,
-      "a2dLegPostMax": 12.53467164367173,
+      "a2dLegPostMax": 13.962509079239922,
       "a2dKneeLateralMax": 0.01102933010915249,
       "footAir": {
         "frames": 531,
@@ -2545,11 +2548,11 @@
         "maxJump": 0.04839371101871101,
         "at": {
           "player": "A3",
-          "frame": 87,
+          "frame": 92,
           "from": -0.12865369022869025,
           "to": -0.17704740124740126
         },
-        "minTriggersPerPlayer": 35
+        "minTriggersPerPlayer": 34
       },
       "a2dIdleMaxAngle": 5.72386177372704,
       "a2e": [
@@ -3368,94 +3371,32 @@
       "+    }));"
     ],
     "careerScreenOk": true,
-    "testLogSource": {
-      "provided": "C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\7ce2827b-1b01-47b8-b2f5-f5f9905259bd\\scratchpad\\hold7\\npm-test-after.log",
-      "mtime": "2026-09-26T21:53:12.158Z",
-      "provenance": {
-        "head": "9bbf9f735c030fa7437d6f8b2d572146c6a4f9da",
-        "clean": true,
-        "dirty": [],
-        "headAfter": "9bbf9f735c030fa7437d6f8b2d572146c6a4f9da",
-        "startedAt": "2026-09-26T21:48:35.894Z",
-        "finishedAt": "2026-09-26T21:53:12.156Z",
-        "seconds": 276,
-        "exitCode": 1
-      }
-    },
-    "testLogProvenanceOk": true,
-    "npmTest": {
-      "tests": 2603,
-      "pass": 2601,
-      "fail": 2,
-      "failing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "baselinePath": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\npm-test-baseline-e0dd285.log",
-      "baselinePass": 2601,
-      "baselineFailing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "newFailures": [],
-      "sameFailingAsBaseline": true
-    },
-    "npmTestOk": true,
-    "buildOk": true,
-    "pass": true
+    "testLogProvenanceOk": false,
+    "npmTest": "not run（A7_SKIP_TESTS=1）",
+    "npmTestOk": null,
+    "buildOk": null,
+    "pass": false
   },
   "a8": {
-    "screenshots": [
-      {
-        "viewport": "1280x720",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-spike-hit.png",
-        "spikeHitT": 0.65,
-        "logoCovered": false
-      },
-      {
-        "viewport": "390x844",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-spike-hit.png",
-        "spikeHitT": 0.65,
-        "logoCovered": false
-      }
-    ],
-    "extra": [
-      {
-        "name": "side-bump-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-bump-deepest.png",
-        "frame": 5,
-        "knee": 0.9629268335214102,
-        "phase": "bump",
-        "kneeDeg": 55.17164354067325
-      },
-      {
-        "name": "side-spike-land-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-spike-land-deepest.png",
-        "frame": 60,
-        "knee": 1.3236070624573433,
-        "phase": "landSoft",
-        "kneeDeg": 75.83709841251452
-      }
-    ],
-    "pass": true
+    "screenshots": [],
+    "extra": [],
+    "pass": null
   },
   "pass": {
     "A1": true,
-    "A2": true,
+    "A2": false,
     "A2ab": true,
     "A2c": true,
-    "A2d": true,
+    "A2d": false,
     "A2e": true,
     "A2f": true,
     "A2g": true,
     "A3": true,
     "A4": true,
     "A5": true,
-    "A6": true,
-    "A7": true,
-    "A8": true,
+    "A6": false,
+    "A7": false,
+    "A8": null,
     "A9": true,
     "A9footAir": true,
     "A10": true,
@@ -3477,6 +3418,5 @@
     "menuBack": true,
     "pass": true
   },
-  "aliasPlayerCount": 14,
   "allErrors": []
 }
