@@ -41,7 +41,7 @@
 .dp-hit.dp-timing::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid #9ae5df;transform:scale(var(--timing-scale,1));opacity:.85;pointer-events:none}
 .dp-hit.dp-timing-now::after{border-color:#ffc861;box-shadow:0 0 18px #ffc861}
 /* direct-v8: the hit button names the action it will do (receive / dive / assignment). */
-.dp-hit[data-action=dive]{background:#ffb27a}
+.dp-hit[data-does=dive]{background:#ffb27a}
 
 /* direct-v7 timed pass grade */
 .dp-grade{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%);font-size:34px;font-weight:700;letter-spacing:4px;pointer-events:none;opacity:0;text-shadow:0 3px 14px #000c}

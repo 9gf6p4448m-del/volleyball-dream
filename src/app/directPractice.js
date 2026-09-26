@@ -56,7 +56,7 @@ export function runDirectPractice(ctx) {
     <div class="dp-coach"><strong data-message>先餵一球，走到球路上接住它。</strong><p data-hint>${HINT_IDLE}</p></div>
     <div class="dp-move" data-move aria-label="移動搖桿"><span>走位 / WASD</span></div>
     <div class="dp-aim" data-aim aria-label="拖曳調整朝向">滑動瞄準</div>
-    <div class="dp-actions"><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit data-action="receive">出手<small data-hit-label>接球 · J</small></button></div>
+    <div class="dp-actions"><button class="dp-jump" data-jump>起跳<small>SPACE</small></button><button class="dp-hit" data-hit data-does="receive">出手<small data-hit-label>接球 · J</small></button></div>
     <div class="dp-grade" data-grade aria-live="polite"></div>
     <div class="dp-countdown" data-countdown hidden></div>
     <div class="dp-footer" data-status>60 Hz 固定模擬 · 接球圈內按對時機就接得到</div>`;
@@ -219,7 +219,7 @@ export function runDirectPractice(ctx) {
   function updateHitLabel() {
     const action = hitActionNow();
     const hit = $('[data-hit]');
-    hit.dataset.action = action;
+    hit.dataset.does = action;
     $('[data-hit-label]').textContent = `${ACTION_LABELS[action] ?? action} · J`;
   }
   function step() {
@@ -406,7 +406,7 @@ export function runDirectPractice(ctx) {
     snapshot: () => snapshotDirectGame(state), pose: () => structuredClone(getDirectPose(state)),
     metrics, tape: () => structuredClone(tape()),
     assistState: () => ({ platformVisible: platformArrow.visible, timingActive, timingNow: $('[data-hit]').classList.contains('dp-timing-now'),
-      reachVisible: reachRing.visible, touchVisible: touchRing.visible, hitAction: $('[data-hit]').dataset.action, hitLabel: $('[data-hit-label]').textContent,
+      reachVisible: reachRing.visible, touchVisible: touchRing.visible, hitAction: $('[data-hit]').dataset.does, hitLabel: $('[data-hit-label]').textContent,
       slowMotion: slowMotion(), message: $('[data-message]').textContent }), pause: () => setPaused(true), resume: () => setPaused(false),
     command: command => injected.push(structuredClone(command)),
     step(count = 1) {

@@ -138,20 +138,23 @@ try {
       const golds = await page.evaluate(() => { const p = window.__directPractice, g = []; for (let i = 0; i < 150; i++) { p.step(1); if (p.assistState().timingNow) g.push(p.snapshot().tick); } return g; });
       assert.ok(golds.length >= 5, `Gold cue shows for a receive feed (${golds.length} ticks)`);
       const tapResults = {};
+      // Track the judged touch and the pass apex while the finger rests and after it lifts.
+      const track = n => page.evaluate(n => {
+        const p = window.__directPractice; let top = 0, contact = null;
+        for (let i = 0; i < n; i++) { p.step(1); const s = p.snapshot(); contact ??= (s.events || []).find(e => e.type === 'contact') ?? null; if (contact) top = Math.max(top, s.ball.y); if (!s.ball.active) break; }
+        return { tier: contact?.tier ?? null, touched: Boolean(contact), top };
+      }, n);
       for (const rest of [0, 3, 6, 9]) {
         let up = 0;
         for (const g of golds) {
           await feedReceive();
           await page.evaluate(n => window.__directPractice.step(n), g - 1);
           await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
-          if (rest) await page.evaluate(n => window.__directPractice.step(n), rest);
+          const held = rest ? await track(rest) : { tier: null, touched: false, top: 0 };
           await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-          const r = await page.evaluate(() => {
-            const p = window.__directPractice; let top = 0, contact = null;
-            for (let i = 0; i < 150; i++) { p.step(1); const s = p.snapshot(); contact ??= (s.events || []).find(e => e.type === 'contact') ?? null; if (contact) top = Math.max(top, s.ball.y); if (!s.ball.active) break; }
-            return Boolean(contact?.tier && top > 2);
-          });
-          if (r) up++;
+          const lifted = await track(150);
+          const tier = held.tier ?? (held.touched ? null : lifted.tier);
+          if (tier && Math.max(held.top, lifted.top) > 2) up++;
         }
         tapResults[rest] = `${up}/${golds.length}`;
         assert.ok(up / golds.length >= 10 / 11, `Tap resting ${rest} ticks at gold: pass comes up ${up}/${golds.length}`);
