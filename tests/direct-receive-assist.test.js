@@ -103,3 +103,31 @@ test('A25a／A25b 同一按鍵節奏：高手非差 ≥ 70%（≥ 50 次）、�
   assert.ok(over.ok >= 0.70, `L*=${best.lead} 高手非差 ${(over.ok * 100).toFixed(1)}%`);
   assert.ok(under.ok >= 0.90, `L*=${best.lead} 低手非差 ${(under.ok * 100).toFixed(1)}%`);
 });
+
+// Round 4: a set stance passes better; a fast ball leaves a narrower window.
+import { stanceSplit, perfectWidth, BALLS } from '../tools/receive-realism-probe.mjs';
+import { createDirectGame, stepDirectGame } from '../src/sim/directGame.js';
+
+test('A26a 站穩有差：跑動（≥ 2 m/s）平均落點偏差 ÷ 站穩（< 0.5 m/s）≥ 1.5', () => {
+  const r = stanceSplit();
+  assert.ok(r.still >= 50 && r.moving >= 50, JSON.stringify(r));
+  assert.ok(r.movingMean / r.stillMean >= 1.5, `比值 ${(r.movingMean / r.stillMean).toFixed(2)} ${JSON.stringify(r)}`);
+});
+
+test('A27a／A27b 完美時間窗：強力發球 < 一般餵球 ≤ 慢球；強力發球 ≥ 13 m/s 仍抓得到完美', () => {
+  const slow = perfectWidth(BALLS.slow), receive = perfectWidth(BALLS.receive), serve = perfectWidth(BALLS.serve);
+  assert.ok(serve.perfect < receive.perfect && receive.perfect <= slow.perfect, JSON.stringify({ slow, receive, serve }));
+  assert.ok(serve.ballSpeed >= 13 && serve.perfect >= 1, JSON.stringify(serve));
+});
+
+test('A27b 強力發球餵球：從對面過網、不碰網', () => {
+  const s = createDirectGame(); s.player.x = 3; // stand aside: the ball must fly untouched
+  const seen = [];
+  for (let t = 0; t < 240; t++) {
+    stepDirectGame(s, [{ tick: s.tick, sequence: 0, move: { x: 0, z: 0 }, aim: { x: 0, z: -1 }, action: t === 0 ? 'feed' : null, feedKind: 'serve' }]);
+    seen.push(...s.events.map((e) => e.type));
+    if (!s.ball.active && t > 0) break;
+  }
+  assert.ok(seen.includes('feed') && !seen.includes('net'), seen.join(','));
+  assert.ok(s.ball.z > 0, `落在我方場地 z=${s.ball.z.toFixed(2)}`);
+});

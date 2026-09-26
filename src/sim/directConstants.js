@@ -59,6 +59,13 @@ export const RECEIVE_ASSIST = Object.freeze({
   overSlowMultiplier: 0.6, overFastMultiplier: 2.2,
   // Overhand pose: hands go up when a descending ball above the shoulders is
   // within this horizontal distance of the forehead point; blend per second.
+  // Round 4 (realism): a set stance passes more accurately than a running one,
+  // and a fast ball leaves a narrower timing window than a soft one.
+  stanceStill: 0.5, stanceRun: 5.5, // body speed m/s at contact
+  stanceStillMultiplier: 0.7, stanceRunMultiplier: 1.6, // pass error
+  unsetSpeed: 2, // body speed m/s from which the feedback says 「沒站穩」
+  windowSlow: 6, windowFast: 14, // ball speed m/s
+  windowSlowScale: 1.3, windowFastScale: 0.6, // PERFECT/GOOD width multiplier
   platformCueHeight: 0.6, // body heights: forearm contact height used by the timing cue
   cueOverReach: 0.75, // metres: the timing cue treats a ball passing this close overhead as overhand
   cueRunAhead: 0.2, // seconds of the current run the timing cue extrapolates

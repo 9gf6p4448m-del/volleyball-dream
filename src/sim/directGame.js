@@ -71,12 +71,13 @@ export function createDirectGame({ seed = 1, height = 1.75, assist = null } = {}
   };
 }
 // direct-v7: replace the ball velocity with a timed pass and mark the contact.
-function applyPass(s, event, { technique, tier, speed }) {
-  const b = s.ball;
+function applyPass(s, event, { technique, offset, ratio = 0, speed }) {
+  const b = s.ball, bodySpeed = Math.hypot(s.player.vx, s.player.vz);
+  const tier = timingTier(offset, ratio, speed);
   const out = passOutcome({ from: b, ballSpeed: speed, technique, tier, passType: s.player.passType ?? 'NEUTRAL',
-    seed: s.seed, tick: s.tick, salt: s.stats.contacts });
+    seed: s.seed, tick: s.tick, salt: s.stats.contacts, bodySpeed });
   b.vx = out.vx; b.vy = out.vy; b.vz = out.vz;
-  Object.assign(event, { assisted: true, technique, tier, target: out.target, ballSpeed: speed });
+  Object.assign(event, { assisted: true, technique, tier, target: out.target, ballSpeed: speed, bodySpeed });
   // The pass leaves from inside the magnet radius; body capsules must not re-catch it.
   s.assistGhost = true;
 }
@@ -87,7 +88,10 @@ function feed(s, kind = "receive") {
       ? { x: 0.24, y: 4, z: 4.4, vx: 0, vy: 0, vz: 0 }
       : kind === "block"
         ? { x: 0, y: 3.3, z: -2, vx: 0, vy: 1, vz: 6 }
-        : { x: 0, y: 2.8, z: 0.8, vx: 0, vy: 1, vz: 5 };
+        : kind === "serve"
+          // direct-v7: a hard serve from the far side (~14 m/s at the passer).
+          ? { x: 0, y: 2.8, z: -8, vx: 0, vy: 3, vz: 14 }
+          : { x: 0, y: 2.8, z: 0.8, vx: 0, vy: 1, vz: 5 };
   Object.assign(s.ball, values, {
     px: values.x,
     py: values.y,
@@ -323,7 +327,7 @@ export function stepDirectGame(s, commands = []) {
     const hitEvent = contact && s.events.slice(eventsBefore).find((e) => e.type === 'contact');
     if (hitEvent && offset !== null && hitEvent.active && (hitEvent.part === 'forearm' || hitEvent.part === 'hand')) {
       const technique = p.receiveOverhandChosen ? 'overhand' : 'underhand';
-      applyPass(s, hitEvent, { technique, tier: timingTier(offset, 0), speed: speedBefore });
+      applyPass(s, hitEvent, { technique, offset, speed: speedBefore });
     }
     // A valid earlier body hit changes the rest of the trajectory. Check that
     // new segment too, rather than retaining the pre-contact floor/net decision.
@@ -345,7 +349,7 @@ export function stepDirectGame(s, commands = []) {
       const event = { type: 'contact', tick: s.tick, part: reach.technique === 'overhand' ? 'hand' : 'forearm',
         id: 'assist', active: true, position: { x: b.x, y: b.y, z: b.z } };
       s.events.push(event);
-      applyPass(s, event, { technique: reach.technique, tier: timingTier(offset, reach.ratio), speed: Math.hypot(b.vx, b.vy, b.vz) });
+      applyPass(s, event, { technique: reach.technique, offset, ratio: reach.ratio, speed: Math.hypot(b.vx, b.vy, b.vz) });
     }
   }
   if (s.contactEpisode) {

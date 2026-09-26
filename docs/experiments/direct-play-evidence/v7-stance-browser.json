@@ -1,0 +1,56 @@
+{
+  "still": [
+    {
+      "press": 24,
+      "text": "普通 · 低手",
+      "speed": 0
+    },
+    {
+      "press": 25,
+      "text": "普通 · 低手",
+      "speed": 0
+    },
+    {
+      "press": 26,
+      "text": "普通 · 低手",
+      "speed": 0
+    },
+    {
+      "press": 27,
+      "text": "完美 · 低手",
+      "speed": 0
+    }
+  ],
+  "stillUnset": 0,
+  "stillN": 12,
+  "moving": [
+    {
+      "press": 16,
+      "text": "普通 · 高手 · 沒站穩",
+      "speed": 2.75
+    },
+    {
+      "press": 17,
+      "text": "普通 · 高手 · 沒站穩",
+      "speed": 2.75
+    },
+    {
+      "press": 18,
+      "text": "普通 · 高手 · 沒站穩",
+      "speed": 2.75
+    },
+    {
+      "press": 19,
+      "text": "完美 · 高手 · 沒站穩",
+      "speed": 2.75
+    }
+  ],
+  "movingUnsetFast": 27,
+  "movingFast": 27,
+  "serve": {
+    "feeds": 1,
+    "z": -7.53,
+    "vz": 14
+  },
+  "errors": []
+}

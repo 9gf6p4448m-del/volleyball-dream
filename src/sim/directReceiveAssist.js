@@ -13,8 +13,18 @@ export function receiveWindowOffset(p, fraction = 0) {
   if (t < 0 || t >= length) return null;
   return t - length / 2;
 }
-export function timingTier(offset, distanceRatio = 0) {
-  let i = Math.abs(offset) <= A.perfectTicks ? 0 : Math.abs(offset) <= A.goodTicks ? 1 : 2;
+const lerpClamp = (v, v0, v1, a, b) => a + (b - a) * Math.max(0, Math.min(1, (v - v0) / (v1 - v0)));
+// Timing window width multiplier for a ball arriving at this speed.
+export function windowScale(ballSpeed = A.windowSlow) {
+  return lerpClamp(ballSpeed, A.windowSlow, A.windowFast, A.windowSlowScale, A.windowFastScale);
+}
+// Pass error multiplier for the body speed at contact.
+export function stanceMultiplier(bodySpeed = 0) {
+  return lerpClamp(bodySpeed, A.stanceStill, A.stanceRun, A.stanceStillMultiplier, A.stanceRunMultiplier);
+}
+export function timingTier(offset, distanceRatio = 0, ballSpeed) {
+  const k = ballSpeed === undefined ? 1 : windowScale(ballSpeed);
+  let i = Math.abs(offset) <= A.perfectTicks * k ? 0 : Math.abs(offset) <= A.goodTicks * k ? 1 : 2;
   if (distanceRatio > A.edgeRatio) i = Math.min(2, i + 1);
   return TIERS[i];
 }
@@ -66,10 +76,10 @@ export function techniqueMultiplier(technique, ballSpeed) {
 }
 // Outgoing velocity of an assisted pass: a lob to the setter zone, off by an
 // error that grows with worse timing and with an overhand on a fast ball.
-export function passOutcome({ from, ballSpeed, technique, tier, passType = 'NEUTRAL', seed = 1, tick = 0, salt = 0 }) {
+export function passOutcome({ from, ballSpeed, technique, tier, passType = 'NEUTRAL', seed = 1, tick = 0, salt = 0, bodySpeed = 0 }) {
   const random = rng(seed >>> 0, tick, salt);
   const lateral = passType === 'LEFT' ? -A.lateral : passType === 'RIGHT' ? A.lateral : 0;
-  const radius = A.error[tier] * techniqueMultiplier(technique, ballSpeed) * Math.sqrt(random());
+  const radius = A.error[tier] * techniqueMultiplier(technique, ballSpeed) * stanceMultiplier(bodySpeed) * Math.sqrt(random());
   const angle = random() * Math.PI * 2;
   // A bad pass may fly wide or long but is never aimed over the net.
   const target = { x: A.target.x + lateral + Math.cos(angle) * radius,

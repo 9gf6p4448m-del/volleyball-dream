@@ -4,7 +4,7 @@ import { createDirectGame, stepDirectGame, receivePlatformLocked, getDirectPose,
 import { createDirectControls } from '../input/directControls.js';
 import { autoFaceAim } from '../input/directAutoFace.js';
 import { createDirectPlayerView } from '../render/directPlayerView.js';
-import { DIRECT_PHYSICS, DIRECT_ACTIONS } from '../sim/directConstants.js';
+import { DIRECT_PHYSICS, DIRECT_ACTIONS, RECEIVE_ASSIST } from '../sim/directConstants.js';
 import { platformNormal } from '../sim/directPhysics.js';
 import { receiveContactEta } from '../sim/directReceiveAssist.js';
 import './directPractice.css';
@@ -41,7 +41,7 @@ export function runDirectPractice(ctx) {
         <button data-feed>餵一球 <span aria-hidden="true">↗</span></button>
         <button data-pause>暫停</button>
         <details class="dp-settings"><summary>訓練設定</summary><div class="dp-settings-box">
-          <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="spike">高球進攻</option><option value="block">網前攔網</option><option value="pass-drill">接球方向練習</option></select></label>
+          <label>餵球種類<select data-feed-kind><option value="receive">接球練習</option><option value="serve">強力發球</option><option value="spike">高球進攻</option><option value="block">網前攔網</option><option value="pass-drill">接球方向練習</option></select></label>
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
           <label class="dp-check"><input data-auto-feed type="checkbox"> 連續餵球（球落地後自動再餵）</label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
@@ -276,12 +276,13 @@ export function runDirectPractice(ctx) {
   // direct-v7: timed pass feedback (PERFECT / GOOD / POOR, overhand / underhand).
   function showGrade(event) {
     const grade = $('[data-grade]');
-    grade.textContent = `${GRADE_LABELS[event.tier]} · ${event.technique === 'overhand' ? '高手' : '低手'}`;
+    const unset = (event.bodySpeed ?? 0) >= RECEIVE_ASSIST.unsetSpeed;
+    grade.textContent = `${GRADE_LABELS[event.tier]} · ${event.technique === 'overhand' ? '高手' : '低手'}${unset ? ' · 沒站穩' : ''}`;
     grade.dataset.tier = event.tier;
     grade.classList.remove('dp-grade-show');
     void grade.offsetWidth; // restart the fade animation
     grade.classList.add('dp-grade-show');
-    if (!playback) message(GRADE_TIPS[event.tier]);
+    if (!playback) message(unset ? `${GRADE_TIPS[event.tier]}跑動中接球比較不準，先到位再接。` : GRADE_TIPS[event.tier]);
   }
   function drillResult(type) {
     if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按墊球。' };
