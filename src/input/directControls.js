@@ -9,18 +9,8 @@ const DEFAULT_KEYS = {
 };
 const STICK_RADIUS = 64;
 
-// Keep the sandbox's four gesture meanings. A swipe selects the intended shot;
-// contact still has to occur at the actual hand surface to affect the ball.
-// Receive platform: the spike's direction judgement, read as platform choices.
-// Sides yaw the platform. Up/down (HIGH/LOW) are disabled for now by user
-// decision (2026-09-24) until their feel is redesigned; they stay neutral.
-function receivePassType(dx, dy) {
-  if (Math.hypot(dx, dy) < 10) return 'NEUTRAL';
-  const type = spikeShotType(dx, dy);
-  if (type === 'CROSS_LEFT') return 'LEFT';
-  if (type === 'CROSS_RIGHT') return 'RIGHT';
-  return 'NEUTRAL';
-}
+// Keep the sandbox's four gesture meanings for the spike: a swipe selects the
+// intended shot. The receive has no swipe (direct-v8, P1).
 function spikeShotType(dx, dy) {
   if (Math.hypot(dx, dy) < 10) return 'LINE';
   if (dy < -14 && Math.abs(dx) <= Math.abs(dy) * 1.6) return 'TIP';
@@ -49,9 +39,12 @@ function isTextOrNativeControl(target) {
   return Boolean(target.closest?.('input,select,textarea,button,[contenteditable="true"],[contenteditable=""]'));
 }
 
+// resolveAction (direct-v8, R10): the action the hit button does right now
+// (the app resolves it from the practice assignment and the game state). Without
+// it the action select decides, as before.
 export function createDirectControls({
   moveZone, aimZone, jumpButton, hitButton, actionSelect, feedButton, feedSelect,
-  onActivity = null, keyBindings = DEFAULT_KEYS, isPassLocked = null,
+  onActivity = null, keyBindings = DEFAULT_KEYS, resolveAction = null,
 }) {
   const input = createDirectInput();
   const supplied = keyBindings ?? {};
@@ -87,11 +80,10 @@ export function createDirectControls({
   function capture(target, e) { try { target.setPointerCapture?.(e.pointerId); } catch {} }
   function release(target, id) { try { target.releasePointerCapture?.(id); } catch {} }
   function css(target, key, value) { target?.style?.setProperty?.(key, String(value)); }
-  // The receive platform chosen while the hit button is held (shown on the button).
-  function showPassChoice(type) {
-    if (!hitButton?.dataset) return;
-    if (type) hitButton.dataset.passChoice = type;
-    else delete hitButton.dataset.passChoice;
+  function hitAction() {
+    const resolved = resolveAction?.();
+    if (ACTIONS.includes(resolved)) return resolved;
+    return ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive';
   }
 
   function clearPointers() {
@@ -101,7 +93,6 @@ export function createDirectControls({
     movePointer = null;
     aimPointer = null;
     hitPointer = null;
-    showPassChoice(null);
     aimHeading = 0;
     css(moveZone, '--stick-active', 0);
     css(moveZone, '--stick-x', '0px');
@@ -180,13 +171,10 @@ export function createDirectControls({
       if (aimGesture && hitPointer) return;
       const value = resolve();
       if (aimGesture && value.action === 'spike') input.queueShotType('LINE', stamp(e));
-      if (aimGesture && value.action === 'receive') input.queuePassType('NEUTRAL', stamp(e));
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
       if (aimGesture && !hitPointer) {
-        hitPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, heading: aimHeading, action: value.action, shotType: 'LINE', passType: 'NEUTRAL' };
+        hitPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, heading: aimHeading, action: value.action, shotType: 'LINE' };
         capture(button, e);
-        // The receive passes on press; show the platform chosen by the swipe.
-        if (value.action === 'receive') showPassChoice('NEUTRAL');
       }
       activity(value.action);
       e.preventDefault?.();
@@ -201,18 +189,10 @@ export function createDirectControls({
             hitPointer.shotType = type;
             input.queueShotType(type, stamp(e));
           }
-        } else if (hitPointer.action === 'receive' && !isPassLocked?.()) {
-          // After the windup the simulation keeps the platform; so does the label.
-          const type = receivePassType(dx, e.clientY - hitPointer.y);
-          if (type !== hitPointer.passType) {
-            hitPointer.passType = type;
-            input.queuePassType(type, stamp(e));
-            showPassChoice(type);
-          }
         }
-        // A receive swipe chooses the platform only; turning stays on the aim zone
-        // and the assist, so the two cannot cancel each other out.
-        if (hitPointer.action !== 'receive') {
+        // A receive or dive press has no swipe: turning stays on the aim zone,
+        // so the two cannot cancel each other out. Other actions steer as before.
+        if (hitPointer.action !== 'receive' && hitPointer.action !== 'dive') {
           aimHeading = Math.max(-Math.PI, Math.min(Math.PI, hitPointer.heading + dx / STICK_RADIUS * (Math.PI / 2)));
           input.queueAim({ x: Math.sin(aimHeading), z: -Math.cos(aimHeading) }, stamp(e));
           css(aimZone, '--aim-heading', `${aimHeading}rad`);
@@ -225,13 +205,11 @@ export function createDirectControls({
         // Only the button's own capture; a child's implicit capture may bubble here.
         if (e.target !== button || !hitPointer || hitPointer.id !== e.pointerId) return;
         hitPointer = null;
-        showPassChoice(null);
       });
       listen(button, 'pointerup', (e) => {
         if (!hitPointer || hitPointer.id !== e.pointerId) return;
         release(button, hitPointer.id);
         hitPointer = null;
-        showPassChoice(null);
       });
     }
     listen(button, 'click', (e) => {
@@ -240,14 +218,13 @@ export function createDirectControls({
       if (e.detail > 0) return;
       const value = resolve();
       if (aimGesture && value.action === 'spike') input.queueShotType('LINE', stamp(e));
-      if (aimGesture && value.action === 'receive') input.queuePassType('NEUTRAL', stamp(e));
       input.queueAction(value.action, stamp(e), { feedKind: value.feedKind });
       activity(value.action);
     });
     listen(button, 'pointercancel', reset);
   }
   bindAction(jumpButton, () => ({ action: 'jump' }));
-  bindAction(hitButton, () => ({ action: ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive' }), { aimGesture: true });
+  bindAction(hitButton, () => ({ action: hitAction() }), { aimGesture: true });
   bindAction(feedButton, () => ({ action: 'feed', feedKind: feedSelect?.value ?? null }));
 
   const directionFor = (code) => ['up', 'down', 'left', 'right'].find(name => bindings[name].includes(code));
@@ -266,9 +243,8 @@ export function createDirectControls({
     if (e.repeat) return;
     if (bindings.jump.includes(e.code)) input.queueAction('jump', stamp(e), { dedupeKey: e.code });
     else if (bindings.action.includes(e.code)) {
-      const action = ACTIONS.includes(actionSelect?.value) ? actionSelect.value : 'receive';
+      const action = hitAction();
       if (action === 'spike') input.queueShotType('LINE', stamp(e));
-      if (action === 'receive') input.queuePassType('NEUTRAL', stamp(e));
       input.queueAction(action, stamp(e), { dedupeKey: e.code });
     }
     else if (bindings.feed.includes(e.code)) input.queueAction('feed', stamp(e), { feedKind: feedSelect?.value ?? null, dedupeKey: e.code });
@@ -295,9 +271,9 @@ export function createDirectControls({
       return {
         ...input.getState(), movePointer: movePointer?.id ?? null,
         aimPointer: aimPointer?.id ?? null, hitPointer: hitPointer?.id ?? null, disposed,
-        // Platform choice of a touch receive that is held but not yet released.
-        heldPassType: hitPointer?.action === 'receive' ? hitPointer.passType : null,
       };
     },
+    // The action a press would do right now (same resolution as the buttons).
+    hitAction,
   };
 }

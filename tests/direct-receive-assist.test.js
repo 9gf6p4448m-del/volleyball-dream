@@ -1,16 +1,18 @@
-// direct-v7 receive assist: magnet radius, timed pass quality, over/underhand.
-// Acceptance: docs/kickoffs/direct-v7-receive-assist-acceptance.md
+// Receive quality on the real chase probe. direct-v7 acceptance
+// (docs/kickoffs/direct-v7-receive-assist-acceptance.md), rerun under the
+// direct-v8 rule judgement with the same thresholds (stage 1 acceptance,
+// section 4 B): A23a -> R8, A23d -> R2, A23e, A24d, A25, A26a, A27, A28g/h.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chase, sweep, SETS } from '../tools/receive-assist-probe.mjs';
+import { chase } from '../tools/receive-assist-probe.mjs';
 import { passOutcome } from '../src/sim/directReceiveAssist.js';
 import { RECEIVE_ASSIST as A } from '../src/sim/directConstants.js';
 
 const inZone = (x, z) => z >= 0.5 && z <= 3 && Math.abs(x) <= 3;
+// One run of the fixed grid (n=2646, no randomness) feeds R2, R6 and R8.
 const CHASE = chase();
 
-// 門檻 40% → 34%：2026-09-26 使用者簽准（見驗收文件修訂紀錄）。
-test('A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%', () => {
+test('R8 難度不退步（A23a，門檻沿用）：真人追球 2646 全部案例當分母，舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%', () => {
   const c = CHASE;
   assert.equal(c.n, 2646);
   assert.ok(c.whiff / c.n <= 0.25, `空接 ${c.whiff}/${c.n}`);
@@ -18,23 +20,9 @@ test('A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 
   assert.ok(c.zone / c.n >= 0.34, `舉球區 ${c.zone}/${c.n}`);
 });
 
-test('A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%', () => {
-  const c = sweep(SETS.forward);
-  assert.equal(c.n, 1035);
-  assert.ok(c.whiff / c.n <= 0.268, `空接 ${c.whiff}/${c.n}`);
-  assert.ok(c.zone / c.n >= 0.38, `舉球區 ${c.zone}/${c.n}`);
-});
-
-test('A23c 斜前兩組不退步：舉球區 ≥ 108／277、碰網 ≤ 3%', () => {
-  const d = sweep(SETS.diagonal), n = sweep(SETS.diagonalNoisy);
-  assert.ok(d.zone >= 108, `diagonal 舉球區 ${d.zone}/${d.n}`);
-  assert.ok(n.zone >= 277, `diagonalNoisy 舉球區 ${n.zone}/${n.n}`);
-  assert.ok(d.net / d.n <= 0.03, `diagonal 碰網 ${d.net}/${d.n}`);
-  assert.ok(n.net / n.n <= 0.03, `diagonalNoisy 碰網 ${n.net}/${n.n}`);
-});
-
-test('A23d 時機分級單調：三級各 ≥ 5%，落點到舉球目標平均距離 完美 < 普通 < 差', () => {
-  const rows = CHASE.rows, total = rows.length, mean = {};
+test('R2 分級單調（A23d）：三級各 ≥ 5% 的觸球，落點到舉球目標平均距離 完美 < 普通 < 差', () => {
+  const rows = CHASE.rows.filter((x) => x.tier), total = rows.length, mean = {};
+  assert.ok(total >= 200, `有等級的觸球 ${total}`);
   for (const tier of ['PERFECT', 'GOOD', 'POOR']) {
     const r = rows.filter((x) => x.tier === tier);
     assert.ok(r.length / total >= 0.05, `${tier} ${r.length}/${total}`);
@@ -64,20 +52,12 @@ test('A23e 技術差異：快球高手失誤率 ≥ 低手 2 倍；慢球高手�
   assert.ok(under / n >= 0.03 && over / n >= 0.03, `低手 ${under}/${n} 高手 ${over}/${n}`);
 });
 
-// Round 2 (after the first phone test): no pass from thin air, visible overhand.
+// Round 2: visible overhand. From direct-v8 this is a pure pose check (the
+// touch itself is decided by the rules; A24c is replaced by R6).
 const HIGH = chase({ contactHeight: 1.02, forward: 0.12 });
-const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor((a.length - 1) / 2)];
 
-test('A24c 不隔空：磁吸觸球時球面到前臂／手部表面距離中位數 ≤ 0.10 m、≥ 90% ≤ 0.20 m', () => {
-  const gaps = [...CHASE.rows, ...HIGH.rows].filter((r) => r.assist).map((r) => r.gap);
-  assert.ok(gaps.length >= 200, `磁吸觸球 ${gaps.length}`);
-  assert.ok(median(gaps) <= 0.10, `中位數 ${median(gaps).toFixed(3)} m`);
-  const near = gaps.filter((g) => g <= 0.2).length / gaps.length;
-  assert.ok(near >= 0.90, `≤ 0.20 m 比例 ${(near * 100).toFixed(1)}%`);
-});
-
-test('A24d 高手觸球兩手高於肩 ≥ 90%；低手觸球手低於肩 ≥ 95%', () => {
-  const rows = [...CHASE.rows, ...HIGH.rows];
+test('A24d 畫面姿勢：高手觸球兩手高於肩 ≥ 90%；低手觸球手低於肩 ≥ 95%', () => {
+  const rows = [...CHASE.rows, ...HIGH.rows].filter((r) => r.tier);
   const over = rows.filter((r) => r.technique === 'overhand'), under = rows.filter((r) => r.technique === 'underhand');
   assert.ok(over.length >= 50 && under.length >= 50, `高手 ${over.length} 低手 ${under.length}`);
   const up = over.filter((r) => r.handY >= 0.82).length / over.length;
@@ -88,7 +68,7 @@ test('A24d 高手觸球兩手高於肩 ≥ 90%；低手觸球手低於肩 ≥ 95
 
 // Round 3: the timing cue follows the technique (overhand = forehead height).
 import { leadRun, nonPoor } from '../tools/receive-cue-probe.mjs';
-import { receiveContactEta } from '../src/sim/directReceiveAssist.js';
+import { receiveContactEta } from '../src/sim/directReceiveRules.js';
 
 test('A25a／A25b 同一按鍵節奏：高手非差 ≥ 70%（≥ 50 次）、低手非差 ≥ 90%', () => {
   const eta = (s) => receiveContactEta(s)?.t ?? null;
@@ -132,7 +112,7 @@ test('A27b 強力發球餵球：從對面過網、不碰網', () => {
   assert.ok(s.ball.z > 0, `落在我方場地 z=${s.ball.z.toFixed(2)}`);
 });
 
-// Round 5 bugs found by the miss-reason feedback (stationary player at (0, 5), receive feed).
+// Round 5 regressions, asserted on the rule judgement path (stationary player at (0, 5), receive feed).
 function receiveRun(press) {
   const s = createDirectGame({ seed: 17 }), graded = [], contacts = [];
   let passedAt = null, handsUpAfterPass = false, underhandPass = false;

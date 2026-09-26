@@ -1,4 +1,4 @@
-// direct-v7 round 4 (stance + ball speed). Usage: node tools/receive-realism-probe.mjs
+// direct-v7 round 4 (stance + ball speed), direct-v8 rules edition. Usage: node tools/receive-realism-probe.mjs
 import { createDirectGame, stepDirectGame } from '../src/sim/directGame.js';
 import { RECEIVE_ASSIST as A } from '../src/sim/directConstants.js';
 import { chase } from './receive-assist-probe.mjs';
@@ -6,8 +6,9 @@ import { chase } from './receive-assist-probe.mjs';
 const aim = { x: 0, z: -1 };
 // Stance: landing distance from the setter target, still vs moving at contact.
 export function stanceSplit() {
-  const c = chase({ recordSpeed: true });
-  const rows = c.rows.filter((r) => r.tier !== 'POOR');
+  const c = chase();
+  // Graded receives only: sprays have no tier and a dive's error is not a stance matter.
+  const rows = c.rows.filter((r) => r.tier && r.tier !== 'POOR' && r.technique !== 'dive');
   const mean = (rs) => rs.reduce((v, r) => v + Math.hypot(r.x - A.target.x, r.z - A.target.z), 0) / (rs.length || 1);
   const still = rows.filter((r) => r.bodySpeed < 0.5), moving = rows.filter((r) => r.bodySpeed >= 2);
   return { still: still.length, moving: moving.length, stillMean: mean(still), movingMean: mean(moving) };

@@ -1,8 +1,10 @@
 // direct-v7: press on the practice page's gold "press now" cue (same rehearsal
 // logic as directPractice.pressNowReaches) and record the pass tier per technique.
+// direct-v8: the press is the contextual hit button; a pass is a rule-judged touch.
 // Usage: node tools/receive-cue-probe.mjs
 import { createDirectGame, stepDirectGame, snapshotDirectGame } from '../src/sim/directGame.js';
 import { DIRECT_ACTIONS, DIRECT_PHYSICS } from '../src/sim/directConstants.js';
+import { resolveHitAction } from '../src/sim/directReceiveRules.js';
 import { CHASE } from './receive-assist-probe.mjs';
 
 const G = 9.81, aim = { x: 0, z: -1 };
@@ -17,9 +19,9 @@ function pressNowReaches(s) {
   const copy = snapshotDirectGame(s);
   const window = DIRECT_ACTIONS.receive.windup + DIRECT_ACTIONS.receive.active;
   for (let i = 0; i < window && copy.ball.active; i++) {
-    stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? 'receive' : null }]);
+    stepDirectGame(copy, [{ tick: copy.tick, sequence: 0, move: { x: 0, z: 0 }, aim, action: i === 0 ? resolveHitAction(copy) : null }]);
     const c = copy.events.find((e) => e.type === 'contact');
-    if (c) return c.active && (c.part === 'forearm' || c.part === 'hand');
+    if (c) return Boolean(c.tier);
   }
   return false;
 }
@@ -43,7 +45,7 @@ export function cueRun({ contactHeight, forward, delay }) {
       const arr = platformArrival(s);
       if (cueTick === null && !s.player.action && arr != null && arr <= 0.4 && pressNowReaches(s)) cueTick = t;
       const press = cueTick !== null && t === cueTick + delay;
-      stepDirectGame(s, [cmd(s, press ? 'receive' : null, t < 12 || d < 0.08 ? { x: 0, z: 0 } : { x: dx / Math.max(d, 0.4), z: dz / Math.max(d, 0.4) })]);
+      stepDirectGame(s, [cmd(s, press ? resolveHitAction(s) : null, t < 12 || d < 0.08 ? { x: 0, z: 0 } : { x: dx / Math.max(d, 0.4), z: dz / Math.max(d, 0.4) })]);
       hit ??= s.events.find((e) => e.type === 'contact' && e.tier) ? { ...s.events.find((e) => e.type === 'contact'), actionTick: s.player.actionTick } : null;
     }
     out.n++;
@@ -75,7 +77,7 @@ export function leadRun({ contactHeight, forward, lead, eta }) {
       const e = t >= 12 && !pressed ? eta(s) : null;
       const press = e != null && e <= lead;
       if (press) pressed = true;
-      stepDirectGame(s, [cmd(s, press ? 'receive' : null, t < 12 || d < 0.08 ? { x: 0, z: 0 } : { x: dx / Math.max(d, 0.4), z: dz / Math.max(d, 0.4) })]);
+      stepDirectGame(s, [cmd(s, press ? resolveHitAction(s) : null, t < 12 || d < 0.08 ? { x: 0, z: 0 } : { x: dx / Math.max(d, 0.4), z: dz / Math.max(d, 0.4) })]);
       const found = s.events.find((x) => x.type === 'contact' && x.tier);
       if (found && !hit) hit = { ...found, actionTick: s.player.actionTick };
     }

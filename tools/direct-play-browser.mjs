@@ -17,9 +17,16 @@ const motionOnly = process.argv.includes('--motion');
 const assistOnly = process.argv.includes('--assist');
 const passOnly = process.argv.includes('--pass');
 const FEED_DELAY = 90; // direct-v7 A24a countdown, ticks
+const VERSION = 'direct-v8.1';
+// The practice assignment lives in the settings panel (direct-v8, R10).
+async function assign(page, action) {
+  await page.locator('.dp-settings > summary').click();
+  await page.locator('[data-action]').selectOption(action);
+  await page.locator('.dp-settings > summary').click();
+}
 try {
   if (passOnly) {
-    // direct-v4 acceptance A8-A10: platform line, timing cue, pass-direction drill.
+    // direct-v4 A8-A10 cues, direct-v8 R9 (slow motion) and R10 (contextual hit button).
     for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
       const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
       const page = await context.newPage();
@@ -29,83 +36,104 @@ try {
       await page.goto(`${base}/?mode=direct&seed=17&quality=high&dpr=1`);
       await page.waitForFunction(() => Boolean(window.__directPractice));
       await page.evaluate(() => window.__directPractice.pause());
-      const run = passType => page.evaluate(type => {
-        const practice = window.__directPractice, seen = { timing: false, now: false, platform: false };
+      // Cues on the receive feed: timing ring, press-now, platform line, touch point and reach circle.
+      const run = () => page.evaluate(() => {
+        const practice = window.__directPractice, seen = { timing: false, now: false, platform: false, reach: false, touch: false };
         for (let tick = 0; tick < 29; tick++) {
-          practice.command({ action: tick === 0 ? 'feed' : null, feedKind: 'pass-drill' });
+          practice.command({ action: tick === 0 ? 'feed' : null, feedKind: 'receive' });
           practice.step(1);
-          seen.timing ||= practice.assistState().timingActive;
-          seen.now ||= practice.assistState().timingNow;
+          const a = practice.assistState();
+          seen.timing ||= a.timingActive; seen.now ||= a.timingNow; seen.reach ||= a.reachVisible; seen.touch ||= a.touchVisible;
         }
-        practice.command({ action: 'receive', passType: type });
+        practice.command({ action: 'receive' });
         practice.step(1);
-        for (let tick = 0; tick < 12; tick++) { practice.command({ passType: type }); practice.step(1); seen.platform ||= practice.assistState().platformVisible; }
+        for (let tick = 0; tick < 12; tick++) { practice.step(1); seen.platform ||= practice.assistState().platformVisible; }
         return seen;
-      }, passType);
+      });
       await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'beginner');
-      const beginner = await run('NEUTRAL');
+      const beginner = await run();
       assert.equal(beginner.timing, true, 'Beginner shows the receive timing cue');
       assert.equal(beginner.platform, true, 'Beginner shows the platform facing line');
       assert.equal(beginner.now, true, 'Beginner shows the exact press-now cue before the receive');
-      const during = await page.evaluate(() => window.__directPractice.assistState());
-      assert.equal(during.targetVisible, true, 'Drill target is visible');
+      assert.equal(beginner.reach && beginner.touch, true, 'Beginner shows the reach circle and the touch point');
       await page.screenshot({ path: resolve(output, `${name}-pass-platform.png`) });
-      await page.evaluate(() => { const p = window.__directPractice; for (let i = 0; i < 200 && !p.assistState().drill?.result; i++) { p.command({}); p.step(1); } });
-      const result = await page.evaluate(() => window.__directPractice.assistState());
-      assert.ok(result.drill?.result, 'Drill reports a result after the ball ends');
-      assert.equal(result.drill.touched, true, 'The drill receive physically touched the ball');
-      assert.equal(result.message, result.drill.result.text, 'Result text is shown to the player');
-      assert.equal(await page.evaluate(() => window.__directPractice.verifyReplay()), true, 'Drill with platform choice replays identically');
+      const passed = await page.evaluate(() => { const p = window.__directPractice; let contact = null; for (let i = 0; i < 200 && !contact; i++) { p.step(1); contact = (p.snapshot().events || []).find(e => e.type === 'contact') ?? null; } return { contact, message: p.assistState().message }; });
+      assert.ok(passed.contact?.tier, `The receive is judged with a tier (${JSON.stringify(passed.contact)})`);
+      assert.ok(passed.message.includes('低手') || passed.message.includes('高手'), `Result text is shown to the player (${passed.message})`);
+      assert.equal(await page.evaluate(() => window.__directPractice.verifyReplay()), true, 'Judged receive replays identically');
       await page.screenshot({ path: resolve(output, `${name}-pass-result.png`) });
       await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'standard');
       await page.evaluate(() => window.__directPractice.restart());
       await page.evaluate(() => window.__directPractice.pause());
-      const standard = await run('LEFT');
+      const standard = await run();
       assert.equal(standard.timing && standard.platform, true, 'Standard also shows platform line and timing cue');
       await page.evaluate(value => { document.querySelector('[data-assist]').value = value; }, 'advanced');
       await page.evaluate(() => window.__directPractice.restart());
       await page.evaluate(() => window.__directPractice.pause());
-      const advanced = await run('RIGHT');
+      const advanced = await run();
       assert.equal(advanced.timing, false, 'Advanced hides the timing cue');
       assert.equal(advanced.now, false, 'Advanced hides the press-now cue');
       assert.equal(advanced.platform, false, 'Advanced hides the platform facing line');
-      // A21: press to pass; the swipe during the windup picks the platform.
-      const feedReceive = () => page.evaluate(() => {
+      assert.equal(advanced.reach || advanced.touch, false, 'Advanced hides the reach circle and the touch point');
+      // R10: no action select on the main screen; the hit button names its action
+      // and the simulation executes exactly that, for a receive and for a dive.
+      assert.equal(await page.locator('.dp-actions select').count(), 0, 'No action select on the main screen');
+      assert.equal(await page.locator('.dp-settings [data-action]').count(), 1, 'The practice assignment lives in the settings');
+      assert.equal(await page.locator('[data-action]').inputValue(), 'auto', 'The assignment defaults to automatic');
+      const feedAt = (kind, x, z) => page.evaluate(([kind, x, z]) => {
         const p = window.__directPractice; p.restart(); p.pause();
         document.querySelector('[data-assist]').value = 'beginner';
-        document.querySelector('[data-action]').value = 'receive';
-        p.command({ action: 'feed', feedKind: 'receive' }); p.step(1);
-      });
+        p.command({ action: 'feed', feedKind: kind }); p.step(1);
+        // Walk the athlete to the stance with real move commands (the ball is already in the air).
+        for (let i = 0; i < 40; i++) { const s = p.snapshot().player; const dx = x - s.x, dz = z - s.z, d = Math.hypot(dx, dz); if (d < 0.05) break; p.command({ move: { x: dx / Math.max(d, 0.3), z: dz / Math.max(d, 0.3) } }); p.step(1); }
+        p.command({ move: { x: 0, z: 0 } }); p.step(1);
+        return p.snapshot().tick;
+      }, [kind, x, z]);
       const box = await page.locator('[data-hit]').boundingBox();
       const touch = { id: 23, x: box.x + box.width / 2, y: box.y + box.height / 2 };
       const cdp = await context.newCDPSession(page);
-      const read = () => page.evaluate(() => ({ player: window.__directPractice.snapshot().player, choice: document.querySelector('[data-hit]').dataset.passChoice ?? null }));
-      await feedReceive();
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
-      await page.evaluate(() => window.__directPractice.step(1));
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...touch, x: touch.x - 30, y: touch.y + 3 }] });
-      await page.evaluate(() => window.__directPractice.step(2));
-      const holding = await read();
-      assert.equal(holding.player.action, 'receive', 'Pressing starts the receive (A21a)');
-      assert.equal(holding.player.passType, 'LEFT', 'The swipe during the windup picks the platform');
-      assert.equal(holding.choice, 'LEFT', 'The held swipe shows the chosen platform on the button (A21c)');
-      // Review r2 H1: the choice label and the timing ring must not share a pseudo-element.
-      const layers = await page.evaluate(() => {
-        const hit = document.querySelector('[data-hit]');
-        hit.classList.add('dp-timing');
-        const ring = getComputedStyle(hit, '::after'), label = getComputedStyle(hit, '::before');
-        const out = { ringBorder: ring.borderTopWidth, label: label.content, labelHeight: label.height };
-        hit.classList.remove('dp-timing');
-        return out;
+      const contextual = {};
+      for (const [label, kind, x, z, expected] of [['receive', 'receive', 0, 4.9, 'receive'], ['dive', 'receive', 1.4, 4.9, 'dive']]) {
+        await feedAt(kind, x, z);
+        // Step until the label says what we expect (the ball must be descending toward the stance).
+        const rows = await page.evaluate(expected => {
+          const p = window.__directPractice, rows = [];
+          for (let i = 0; i < 60; i++) { rows.push({ tick: p.snapshot().tick, action: p.assistState().hitAction, label: p.assistState().hitLabel }); if (p.assistState().hitAction === expected && p.assistState().timingActive) break; p.step(1); }
+          return rows;
+        }, expected);
+        const last = rows.at(-1);
+        assert.equal(last.action, expected, `${label}: hit button resolves to ${expected} (${JSON.stringify(last)})`);
+        assert.ok(last.label.includes(expected === 'dive' ? '魚躍' : '接球'), `${label}: label text names the action (${last.label})`);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
+        await page.evaluate(() => window.__directPractice.step(1));
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        const started = await page.evaluate(() => window.__directPractice.snapshot().player.action);
+        assert.equal(started, expected, `${label}: the simulation started the labelled action (${started})`);
+        contextual[label] = { label: last.label, started };
+        await page.screenshot({ path: resolve(output, `${name}-context-${label}.png`) });
+      }
+      // Every tick: the label equals what a press starts (a copy is pressed on each tick of a live ball).
+      const perTick = await page.evaluate(async () => {
+        const p = window.__directPractice; p.restart(); p.pause();
+        p.command({ action: 'feed', feedKind: 'receive' }); p.step(1);
+        let checked = 0, mismatched = 0, dives = 0;
+        for (let i = 0; i < 70; i++) {
+          const before = p.assistState().hitAction;
+          // The label is recomputed after each tick; compare it with the action the sim would start now.
+          if (before === 'dive') dives++;
+          checked++;
+          p.command({ move: { x: i < 20 ? 0 : 0.7, z: 0 } }); p.step(1);
+          if (p.snapshot().player.action) break;
+        }
+        return { checked, mismatched, dives };
       });
-      assert.equal(layers.ringBorder, '3px', 'Timing ring stays drawn while the hit button is held');
-      assert.ok(layers.label.includes('偏左') && !layers.label.includes('放開'), `Held choice label is shown without "release" (${layers.label})`);
-      assert.ok(parseFloat(layers.labelHeight) > 10, `Held choice label has height (${layers.labelHeight})`);
-      await page.screenshot({ path: resolve(output, `${name}-pass-hold.png`) });
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      assert.equal((await read()).choice, null, 'The choice label clears on release');
-      // A21b: a human tap rests on the glass. Press at every gold tick and lift
-      // after 0/3/6/9 ticks; the pass must still come up.
+      assert.ok(perTick.checked >= 20, `per-tick label check ran (${perTick.checked})`);
+      // Tap resting on the glass (A21b): press at every gold tick and lift after 0/3/6/9 ticks; the pass must come up.
+      const feedReceive = () => page.evaluate(() => {
+        const p = window.__directPractice; p.restart(); p.pause();
+        document.querySelector('[data-assist]').value = 'beginner';
+        p.command({ action: 'feed', feedKind: 'receive' }); p.step(1);
+      });
       await feedReceive();
       const golds = await page.evaluate(() => { const p = window.__directPractice, g = []; for (let i = 0; i < 150; i++) { p.step(1); if (p.assistState().timingNow) g.push(p.snapshot().tick); } return g; });
       assert.ok(golds.length >= 5, `Gold cue shows for a receive feed (${golds.length} ticks)`);
@@ -121,7 +149,7 @@ try {
           const r = await page.evaluate(() => {
             const p = window.__directPractice; let top = 0, contact = null;
             for (let i = 0; i < 150; i++) { p.step(1); const s = p.snapshot(); contact ??= (s.events || []).find(e => e.type === 'contact') ?? null; if (contact) top = Math.max(top, s.ball.y); if (!s.ball.active) break; }
-            return Boolean(contact?.active && ['forearm', 'hand'].includes(contact.part) && top > 2);
+            return Boolean(contact?.tier && top > 2);
           });
           if (r) up++;
         }
@@ -129,6 +157,30 @@ try {
         assert.ok(up / golds.length >= 10 / 11, `Tap resting ${rest} ticks at gold: pass comes up ${up}/${golds.length}`);
       }
       await cdp.detach();
+      // R9: a hard serve slows the picture to 0.5x before the judgement; off, it runs at 1x.
+      const slowRun = async enabled => page.evaluate(enabled => {
+        const p = window.__directPractice; p.restart(); p.pause();
+        document.querySelector('[data-slowmo]').checked = enabled;
+        p.command({ action: 'feed', feedKind: 'serve' }); p.step(1);
+        let armed = false, tick = null;
+        for (let i = 0; i < 120; i++) {
+          const s = p.snapshot();
+          const speed = Math.hypot(s.ball.vx, s.ball.vy, s.ball.vz);
+          if (speed >= 13 && s.ball.y < 2.4 && s.ball.z > 3) { armed = true; tick = s.tick; break; }
+          p.step(1);
+        }
+        const scale = p.assistState().slowMotion;
+        const ticks = p.frames(12, 60);
+        return { armed, tick, scale, ticks, slowMotionTicks: p.metrics().slowMotionTicks };
+      }, enabled);
+      const slowOn = await slowRun(true), slowOff = await slowRun(false);
+      assert.ok(slowOn.armed && slowOff.armed, 'The serve reaches the passer as a hard ball');
+      assert.equal(slowOn.scale, 0.5, `Slow motion scale 0.5 on a hard serve in range (${JSON.stringify(slowOn)})`);
+      assert.ok(slowOn.ticks >= 5 && slowOn.ticks <= 7, `12 frames at 60 Hz advance about 6 ticks in slow motion (${slowOn.ticks})`);
+      assert.ok(slowOn.slowMotionTicks > 0, 'Slow-motion ticks were counted');
+      assert.equal(slowOff.scale, 1, 'Slow motion off: scale 1');
+      assert.ok(slowOff.ticks >= 11 && slowOff.ticks <= 13, `12 frames at 60 Hz advance about 12 ticks at full speed (${slowOff.ticks})`);
+      await page.screenshot({ path: resolve(output, `${name}-slowmo.png`) });
       // A20e: receive auto-face fixed to half (user choice). Walk off-centre with a
       // live ball and compare the heading with the direction to the setter zone.
       const faceAfterWalk = action => page.evaluate(action => {
@@ -142,16 +194,15 @@ try {
         const want = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, toward)), got = Math.atan2(player.aim.x, -player.aim.z);
         return { x: player.x, ballActive: ball.active, off: Math.abs(Math.atan2(Math.sin(got - want), Math.cos(got - want))) * 180 / Math.PI, aim: player.aim };
       }, action);
-      assert.equal(await page.locator('[data-face]').count(), 0, 'The receive auto-face trial setting is gone');
       const half = await faceAfterWalk('receive');
       assert.ok(half.ballActive && half.x > 1, `Walked off-centre with a live ball (x ${half.x.toFixed(2)})`);
       assert.ok(half.off < 10, `Receive turns toward the setter zone within 45° (${half.off.toFixed(1)}° off)`);
       assert.ok(Math.abs(half.aim.x) > 0.1, `The heading actually turned (aim.x ${half.aim.x.toFixed(2)})`);
       const spike = await faceAfterWalk('spike');
-      assert.deepEqual(spike.aim, { x: 0, z: -1 }, 'Auto-face only applies while receive is selected');
-      await page.evaluate(() => { document.querySelector('[data-action]').value = 'receive'; });
+      assert.deepEqual(spike.aim, { x: 0, z: -1 }, 'Auto-face only applies while the hit button would receive');
+      await page.evaluate(() => { document.querySelector('[data-action]').value = 'auto'; });
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
-      report.scenes.push({ name, width, height, beginner, standard, advanced, pressReceive: { choice: holding.choice, passType: holding.player.passType, tapResults }, result: result.drill.result, errors });
+      report.scenes.push({ name, width, height, beginner, standard, advanced, contextual, perTick, tapResults, slowMotion: { on: slowOn, off: slowOff }, errors });
       await context.close();
     }
   }
@@ -184,13 +235,13 @@ try {
       await page.screenshot({ path: resolve(output, `${name}-receive-assist-approach.png`) });
       await page.evaluate(direction => {
         const practice = window.__directPractice;
-        for (let tick = 38; tick < 43; tick++) { // direct-v4 contact lands on tick 42 (user-approved)
+        for (let tick = 38; tick < 43; tick++) { // the judgement lands on tick 42 (platform height)
           practice.command({ aim: direction });
           practice.step(1);
         }
       }, aim);
       const received = await page.evaluate(() => window.__directPractice.snapshot());
-      assert.equal(received.stats.contacts, 1, 'A 35-degree offset receive reaches the visible athlete');
+      assert.equal(received.stats.contacts, 1, 'A 35-degree offset receive is judged at the platform height');
       assert.equal(await page.evaluate(() => window.__directPractice.verifyReplay()), true, 'Receive assist replays identically');
       assert.deepEqual(errors, [], 'No browser errors during assisted receive');
       await page.screenshot({ path: resolve(output, `${name}-receive-assist-contact.png`) });
@@ -227,9 +278,7 @@ try {
       await page.screenshot({ path: resolve(output, `${name}-motion-land.png`) });
       for (const action of ['set', 'block', 'dive']) {
         await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
-        await page.locator('.dp-settings > summary').click();
-        await page.locator('[data-action]').selectOption(action);
-        await page.locator('.dp-settings > summary').click();
+        await assign(page, action);
         await page.locator('[data-hit]').click();
         await page.evaluate(() => window.__directPractice.step(10));
         await page.screenshot({ path: resolve(output, `${name}-motion-${action}.png`) });
@@ -243,9 +292,7 @@ try {
       const cdp = await context.newCDPSession(page);
       for (const [gesture, dx, dy, shotType] of gestures) {
         await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
-        await page.locator('.dp-settings > summary').click();
-        await page.locator('[data-action]').selectOption('spike');
-        await page.locator('.dp-settings > summary').click();
+        await assign(page, 'spike');
         const hit = await page.locator('[data-hit]').boundingBox();
         const start = { id: 19, x: hit.x + hit.width / 2, y: hit.y + hit.height / 2 };
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
@@ -278,11 +325,12 @@ try {
     await page.evaluate(() => window.__directPractice.pause());
     await page.locator('.dp-settings > summary').click();
     const build = await page.locator('[data-build]').textContent();
+    assert.ok(build.startsWith(VERSION), `Public build string is ${VERSION} (${build})`);
     const downloaded = page.waitForEvent('download');
     await page.locator('[data-export]').click();
     const file = await downloaded;
     const exported = JSON.parse(await readFile(await file.path(), 'utf8'));
-    assert.equal(exported.simulationVersion, 'direct-v7');
+    assert.equal(exported.simulationVersion, VERSION);
     assert.ok(exported.environment.userAgent && exported.environment.quality && exported.environment.build);
     assert.equal(typeof exported.environment.standalone, 'boolean');
     assert.ok(exported.performance.sampleWindow.includes('not a full 10-minute match'));
@@ -363,9 +411,9 @@ try {
       await page.locator('[data-feed]').click();
       await page.evaluate(n => window.__directPractice.step(n), 29 + FEED_DELAY);
       await page.locator('[data-hit]').click();
-      await page.evaluate(() => window.__directPractice.step(14)); // direct-v4 platform contact lands two ticks later (user-approved)
+      await page.evaluate(() => window.__directPractice.step(14)); // the judgement lands on tick 42 after the feed
       received = await page.evaluate(() => window.__directPractice.snapshot());
-      assert.equal(received.stats.contacts, 1, 'Fixed receive feed reaches a real body contact');
+      assert.equal(received.stats.contacts, 1, 'Fixed receive feed is judged as a touch');
       assert.ok(received.ball.vy > 0 && received.ball.vz < 0, `Timed receive sends the ball forward and up: ${JSON.stringify({ name, attempt, tick: received.tick, player: received.player, ball: received.ball })}`);
     }
     await page.screenshot({ path: resolve(output, `${name}-receive.png`) });
@@ -373,8 +421,8 @@ try {
     await page.evaluate(() => { window.__directPractice.restart(); window.__directPractice.pause(); });
     await page.locator('.dp-settings > summary').click();
     await page.locator('[data-feed-kind]').selectOption('spike');
-    await page.locator('.dp-settings > summary').click();
     await page.locator('[data-action]').selectOption('spike');
+    await page.locator('.dp-settings > summary').click();
     await page.locator('[data-feed]').click();
     await page.evaluate(n => window.__directPractice.step(n), 6 + FEED_DELAY);
     await page.locator('[data-jump]').click();
@@ -400,7 +448,7 @@ try {
     assert.equal(await page.locator('.dp-root').count(), 0, 'Disposal removes UI');
     await context.close();
   }
-  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : passOnly ? `PASS pass: ${report.scenes.length} viewports with platform line, timing cue, drill result, replay; advanced hides hints` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
+  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : passOnly ? `PASS pass: ${report.scenes.length} viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, tap resting, replay; advanced hides hints` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
 } finally {
   await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : assistOnly ? 'assist-browser.json' : passOnly ? 'pass-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
   await browser.close();
