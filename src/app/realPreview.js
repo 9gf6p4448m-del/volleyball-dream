@@ -41,7 +41,7 @@ export async function runRealPreview(ctx) {
     const row = Math.floor(slot / 3);
     const x = slot === 6 ? 3.6 : (col - 1) * 2.6;
     const z = side * (slot === 6 ? 6.8 : 1.6 + row * 3.2);
-    p.rig.root.position.set(x, p.groundOffset * p.rootScale, z);
+    p.rig.root.position.set(x, 0, z);
     p.rig.root.rotation.y = side < 0 ? 0 : Math.PI;
     p.home = { x, z, ry: p.rig.root.rotation.y };
     p.mesh.castShadow = castShadow;
@@ -81,7 +81,11 @@ export async function runRealPreview(ctx) {
       }
     }
     const bodyY = p.anim.update(dt, 0, 0, 1);
-    p.rig.root.position.y = (bodyY + p.groundOffset) * p.rig.root.scale.y;
+    p.rig.root.position.y = bodyY * p.rig.root.scale.y;
+    // 接地（A9）：geoAnimator 的下蹲／落地緩衝只把 root 往下壓，沒有腳鎖；鞋底入地時才把
+    // root 往上補到剛好貼地——只補不壓，騰空（跳躍弧）時鞋底在地面上，完全不動
+    const low = p.soleMinY();
+    if (low < 0) p.rig.root.position.y -= low;
   }
   function stepAll(dt) { for (const p of players) stepPlayer(p, dt); }
 
@@ -92,8 +96,9 @@ export async function runRealPreview(ctx) {
     + 'z-index:20;padding:8px 12px;border-radius:10px;background:rgba(12,16,26,.7);color:#eef2fa;'
     + 'font:600 14px/1.4 ui-monospace,Consolas,monospace;pointer-events:none;white-space:pre';
   document.body.appendChild(hudEl);
-  let fps = 0;
-  const fmtHud = () => `FPS ${fps}\n面數 ${asset.faces.toLocaleString()}／人（${variant}）\n${players.length} 人`;
+  let fps = null; // 第一個量測窗（0.5 秒）前不顯示數字
+  const fmtFps = () => (fps == null ? '—' : (fps < 10 ? fps.toFixed(1) : String(Math.round(fps))));
+  const fmtHud = () => `FPS ${fmtFps()}\n面數 ${asset.faces.toLocaleString()}／人（${variant}）\n${players.length} 人`;
   hudEl.textContent = fmtHud();
 
   let paused = false;
@@ -110,7 +115,7 @@ export async function runRealPreview(ctx) {
     ctx.hud?.frame?.(now, dt, 0);
     frames += 1;
     if (now - fpsT >= 500) {
-      fps = Math.round((frames * 1000) / (now - fpsT));
+      fps = (frames * 1000) / (now - fpsT);
       frames = 0;
       fpsT = now;
       hudEl.textContent = fmtHud();
@@ -123,7 +128,7 @@ export async function runRealPreview(ctx) {
     variant,
     faces: asset.faces,
     bridgeTris: asset.bridgeTris, // 接縫拆分處理的三角形數（見 realPlayer.js splitBridges）
-    groundOffset: asset.groundOffset, // 零姿勢腳貼地的 root 補高（m，BASE_H 比例）
+    soleVerts: asset.sole.n, // 逐幀接地補償用的鞋底頂點數
     playerCount: players.length,
     baseH: BASE_H,
     boneNames: BONES.slice(),
@@ -146,7 +151,7 @@ export async function runRealPreview(ctx) {
         p.resetPose();
         p.anim = createGeoAnimator(p.rig);
         p.action = null;
-        p.rig.root.position.set(p.home.x, p.groundOffset * p.rootScale, p.home.z);
+        p.rig.root.position.set(p.home.x, 0, p.home.z);
         p.rig.root.rotation.set(0, p.home.ry, 0);
         p.rig.root.scale.setScalar(p.rootScale);
       }

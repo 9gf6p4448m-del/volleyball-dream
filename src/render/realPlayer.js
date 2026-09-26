@@ -23,18 +23,21 @@ import {
 
 // 解剖地標（公尺，BASE_H=1.85 縮放、腳底 y=0 之後的白模空間；左側 = 右側 x 取反）。
 // 量自 public/models/real/player_20k.glb（Modly 1790418894_189a5d87_opt20000.glb，雙臂 A-pose
-// 約 38°，2026-09-26 換檔）；量法與重量指令：node tools/real-player-landmarks.mjs
-// （5k 檔同指令量得差 ≤0.012m，取 20k 值；左右兩側鏡像平均）。
+// 約 38°）；量法與重量指令：node tools/real-player-landmarks.mjs（左右兩側鏡像平均；
+// 5k 檔同指令量得腿部差 ≤0.01m、手臂差 ≤0.012m，取 20k 值）。
+// 2026-09-26 第三輪：腿部改以小腿肚截面＋人體比例定膝、大腿≈小腿定髖（第二輪把寬鬆短褲的
+// 褲管口當胯下，髖 0.714／膝 0.403 都偏低）；軀幹關節隨髖重算；shortsHem＝褲管口高（上色用）。
 export const LANDMARKS = {
-  pelvis: [0, 0.764, -0.014],
-  spine: [0, 0.92, -0.023],
-  spineUpper: [0, 1.31, -0.033],
+  pelvis: [0, 1.013, -0.021],
+  spine: [0, 1.121, -0.021],
+  spineUpper: [0, 1.39, -0.037],
   neck: [0, 1.57, -0.048],
   headTop: [0, 1.85, -0.015],
-  crotch: [0, 0.65, -0.007],
-  rHip: [-0.114, 0.714, 0.016],
-  rKnee: [-0.15, 0.403, -0.041],
-  rAnkle: [-0.185, 0.093, -0.098],
+  crotch: [0, 0.893, -0.02],
+  shortsHem: [0, 0.65, 0],
+  rHip: [-0.084, 0.973, -0.023],
+  rKnee: [-0.136, 0.528, -0.012],
+  rAnkle: [-0.187, 0.083, -0.052],
   rToe: [-0.203, 0.02, 0.171],
   rShoulder: [-0.178, 1.47, -0.075],
   rElbow: [-0.363, 1.227, -0.049],
@@ -67,8 +70,9 @@ const SEGMENTS = {
   neck: { segs: [[L.neck, [0, L.headTop[1] - 0.07, L.headTop[2]]]], r: 0.085 },
 };
 for (const s of ['r', 'l']) {
-  SEGMENTS[`${s}Hip`] = { segs: [[L[`${s}Hip`], L[`${s}Knee`]]], r: 0.07 };
-  SEGMENTS[`${s}Knee`] = { segs: [[L[`${s}Knee`], L[`${s}Ankle`]], [L[`${s}Ankle`], L[`${s}Toe`]]], r: 0.05 };
+  // 大腿／小腿同半徑：半徑不同會把「到骨段表面距離」的分界推向細的一側，膝處分界要落在膝關節
+  SEGMENTS[`${s}Hip`] = { segs: [[L[`${s}Hip`], L[`${s}Knee`]]], r: 0.075 };
+  SEGMENTS[`${s}Knee`] = { segs: [[L[`${s}Knee`], L[`${s}Ankle`]], [L[`${s}Ankle`], L[`${s}Toe`]]], r: 0.075 };
   SEGMENTS[`${s}Shoulder`] = { segs: [[L[`${s}Shoulder`], L[`${s}Elbow`]]], r: 0.05 };
   SEGMENTS[`${s}Elbow`] = { segs: [[L[`${s}Elbow`], L[`${s}Wrist`]]], r: 0.042 };
   SEGMENTS[`${s}Wrist`] = { segs: [[L[`${s}Wrist`], L[`${s}HandTip`]]], r: 0.04 };
@@ -175,11 +179,12 @@ export function computeSkinWeights(positions, normals) {
 }
 
 // 部位標籤（上色用）：依主骨＋綁定姿勢位置（全部相對地標，換白模重量地標即跟著走）
-export const PART = { SKIN: 0, HAIR: 1, JERSEY: 2, SHORTS: 3, SHOE: 4 };
-const WAIST_Y = L.spine[1] - 0.02;
+export const PART = { SKIN: 0, HAIR: 1, JERSEY: 2, SHORTS: 3, SHOE: 4, PAD: 5 };
+export const PAD_COLOR = 0x1c1d22; // 護膝（原圖黑色）
+const WAIST_Y = L.rHip[1] - 0.045; // 球衣下擺（原圖量得 0.92m；髖 0.973 下方約 4.5cm）
 const SLEEVE_T = 0.6; // 短袖蓋住上臂（肩→肘）的前 60%
-const SHORTS_T = 0.6; // 短褲蓋住大腿（髖→膝）的前 60%
-const SHOE_TOP_Y = 0.12;
+const SHOE_TOP_Y = 0.13 * BASE_H; // 白鞋＋白襪到小腿下段（原圖襪口約 0.24m）
+const PAD_HALF = 0.04 * BASE_H; // 護膝以膝關節為中心上下各 0.074m（原圖 0.44～0.60m）
 const HAIR_TOP_Y = L.headTop[1] - 0.105;
 const HAIR_BACK_Z = L.headTop[2] - 0.02;
 const HAIR_BACK_Y = L.neck[1] + 0.06;
@@ -210,10 +215,11 @@ export function computePartLabels(positions, primary) {
       part = segT(p, L[`${side}Shoulder`], L[`${side}Elbow`]) < SLEEVE_T ? PART.JERSEY : PART.SKIN;
     } else if (bone.endsWith('Elbow') || bone.endsWith('Wrist')) {
       part = PART.SKIN;
-    } else if (bone.endsWith('Hip')) {
-      part = segT(p, L[`${side}Hip`], L[`${side}Knee`]) < SHORTS_T ? PART.SHORTS : PART.SKIN;
-    } else { // Knee（小腿＋腳）
-      part = y < SHOE_TOP_Y ? PART.SHOE : PART.SKIN;
+    } else if (bone.endsWith('Hip') || bone.endsWith('Knee')) { // 大腿／小腿＋腳
+      if (y >= L.shortsHem[1]) part = PART.SHORTS;
+      else if (Math.abs(y - L[`${side}Knee`][1]) <= PAD_HALF) part = PART.PAD;
+      else if (y < SHOE_TOP_Y) part = PART.SHOE;
+      else part = PART.SKIN;
     }
     out[i] = part;
   }
@@ -254,7 +260,27 @@ export async function loadRealPlayerAsset(url) {
   const faces = split.index.length / 3;
   return {
     geometry: out, faces, primary: split.primary, parts: split.parts, url, bridgeTris: split.bridgeTris,
+    sole: collectSole(split),
   };
+}
+
+// 鞋底頂點（綁定姿勢 y ≤ SOLE_Y）：逐幀接地補償只算這些點的蒙皮 y（見 createRealPlayer soleMinY）
+const SOLE_Y = 0.03;
+function collectSole(split) {
+  const ids = [];
+  for (let i = 0; i < split.pos.length / 3; i += 1) if (split.pos[i * 3 + 1] <= SOLE_Y) ids.push(i);
+  const n = ids.length;
+  const pos = new Float32Array(n * 3); const si = new Uint16Array(n * 4); const sw = new Float32Array(n * 4);
+  const bones = new Set();
+  ids.forEach((v, k) => {
+    for (let c = 0; c < 3; c += 1) pos[k * 3 + c] = split.pos[v * 3 + c];
+    for (let c = 0; c < 4; c += 1) {
+      si[k * 4 + c] = split.skinIndex[v * 4 + c];
+      sw[k * 4 + c] = split.skinWeight[v * 4 + c];
+      if (sw[k * 4 + c] > 0) bones.add(si[k * 4 + c]);
+    }
+  });
+  return { n, pos, si, sw, bones: [...bones] };
 }
 
 // 骨頭在關節樹上的距離（邊數）
@@ -390,7 +416,7 @@ export function createRealPlayer(asset, {
   geometry.setIndex(asset.geometry.index);
   geometry.boundingBox = asset.geometry.boundingBox;
   geometry.boundingSphere = asset.geometry.boundingSphere;
-  const palette = [skin, hair, kit.jersey, kit.shorts, SHOE].map((hex) => new THREE.Color().setHex(hex));
+  const palette = [skin, hair, kit.jersey, kit.shorts, SHOE, PAD_COLOR].map((hex) => new THREE.Color().setHex(hex));
   const n = asset.parts.length;
   const col = new Float32Array(n * 3);
   for (let i = 0; i < n; i += 1) {
@@ -404,25 +430,32 @@ export function createRealPlayer(asset, {
   mesh.bind(skeleton, new THREE.Matrix4());
   const bindQuats = BONES.map((b) => joints[b].quaternion.clone());
   for (const b of BONES) joints[b].rotation.set(0, 0, 0); // 交給 geoAnimator 的零姿勢
-  // 腳貼地：零姿勢（四肢下垂）時，白模 A-pose 斜腿拉直會讓腳底略低於地面——量一次
-  // 零姿勢下小腿＋腳頂點的蒙皮最低點，root 高度補回（呼叫端每幀加在 bodyY 上）
-  if (asset.groundOffset === undefined) {
-    root.updateMatrixWorld(true);
-    mesh.updateMatrixWorld(true);
-    const v = new THREE.Vector3();
-    let minY = Infinity;
-    for (let i = 0; i < asset.primary.length; i += 1) {
-      if (!/Knee$/.test(BONES[asset.primary[i]])) continue;
-      mesh.getVertexPosition(i, v);
-      minY = Math.min(minY, v.y);
-    }
-    asset.groundOffset = -minY;
-  }
+  const { sole } = asset;
+  const soleMats = BONES.map(() => new THREE.Matrix4());
   root.scale.setScalar(rootScale);
 
   return {
     rig, mesh, skeleton, kit, skin, hair, playerId, teamId, isLibero, height, rootScale,
-    groundOffset: asset.groundOffset,
+    // 目前姿勢下鞋底頂點的蒙皮最低 y（世界座標）。只算會影響鞋底的幾根骨，
+    // 每骨一次矩陣乘法＋每點一列內積（14 人逐幀也便宜）；呼叫前 root 位置須已寫好
+    soleMinY() {
+      joints.rKnee.updateWorldMatrix(true, false);
+      joints.lKnee.updateWorldMatrix(true, false);
+      for (const b of sole.bones) soleMats[b].multiplyMatrices(bones[b].matrixWorld, skeleton.boneInverses[b]);
+      let min = Infinity;
+      for (let i = 0; i < sole.n; i += 1) {
+        const x = sole.pos[i * 3]; const y = sole.pos[i * 3 + 1]; const z = sole.pos[i * 3 + 2];
+        let wy = 0;
+        for (let k = 0; k < 4; k += 1) {
+          const w = sole.sw[i * 4 + k];
+          if (w === 0) continue;
+          const e = soleMats[sole.si[i * 4 + k]].elements;
+          wy += w * (e[1] * x + e[5] * y + e[9] * z + e[13]);
+        }
+        if (wy < min) min = wy;
+      }
+      return min;
+    },
     // 動畫零姿勢：全部關節旋轉歸 0（geoAnimator 接手前的狀態，與 geo 人相同）
     resetPose() {
       for (const b of BONES) joints[b].rotation.set(0, 0, 0);
