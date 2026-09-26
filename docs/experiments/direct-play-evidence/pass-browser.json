@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-26T02:22:02.311Z",
+  "createdAt": "2026-09-26T05:51:52.880Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -111,9 +111,9 @@
       "result": {
         "type": "ground",
         "hit": true,
-        "dx": 0.049391404828677724,
-        "dz": -0.11462639963408061,
-        "text": "命中目標區！距中心 0.1 m。"
+        "dx": -0.010776229683257048,
+        "dz": 0.18339286643569674,
+        "text": "命中目標區！距中心 0.2 m。"
       },
       "errors": []
     }
