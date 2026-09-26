@@ -1,4 +1,4 @@
-// 寫實球員卷 第一階段驗收治具（docs/real-player-stage1-acceptance.md A1–A8）。
+// 寫實球員卷 第一階段驗收治具（docs/real-player-stage1-acceptance.md A1–A8，含加嚴紀錄 A2(c)／A2(d)）。
 // 用法：先起 dev server（npm run dev -- --host 127.0.0.1 --port 5176 --strictPort），再
 //   node tools/real-player-browser.mjs
 // 環境變數：REAL_BASE_URL（預設 http://127.0.0.1:5176）、PLAYWRIGHT_MODULE（既有 Playwright 安裝路徑）、
@@ -122,9 +122,11 @@ async function measureStatic(page) {
 }
 
 async function measureMotion(page, playerIndex, seq, samples) {
-  return page.evaluate(({ playerIndex, seq, samples }) => {
+  return page.evaluate(async ({ playerIndex, seq, samples }) => {
     const rp = window.__realPreview;
     const { THREE } = rp;
+    const gc = await import('/src/render/geoCharacter.js');
+    const ga = await import('/src/render/geoAnimator.js');
     rp.resetAll();
     const pl = rp.players[playerIndex];
     const mesh = pl.mesh;
@@ -141,6 +143,7 @@ async function measureMotion(page, playerIndex, seq, samples) {
       if (groups[nm]) groups[nm].push(i);
     }
     const v = new THREE.Vector3();
+    const wp = (o) => new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
     const measure = () => {
       rp.step(0, 0); // 只更新 matrixWorld
       const res = {};
@@ -148,21 +151,53 @@ async function measureMotion(page, playerIndex, seq, samples) {
         const c = new THREE.Vector3();
         for (const i of groups[bn]) { mesh.getVertexPosition(i, v); c.add(v); } // CPU 蒙皮
         c.divideScalar(groups[bn].length);
-        const j = new THREE.Vector3().setFromMatrixPosition(pl.joints[bn].matrixWorld);
-        res[bn] = { C: c.toArray(), J: j.toArray() };
+        res[bn] = { C: c.toArray(), J: wp(pl.joints[bn]).toArray() };
       }
       return res;
     };
+    // 靜止＝綁定姿勢（root 留在場上原位）
+    rp.bindPose(playerIndex, false);
     const rest = measure();
+    rp.resetAll();
+
+    // A2(d)：參考 geo 人（createGeoCharacter＋createGeoAnimator、同身高同 root 位置朝向），
+    // 包住預覽實際驅動該球員的 animator，使參考人收到逐次相同的 trigger／update 呼叫
+    const ref = gc.createGeoCharacter({ claim: (key) => ({ key, index: 0 }) },
+      pl.playerId, pl.teamId, pl.height, pl.isLibero, '', null, null);
+    ref.root.position.copy(pl.root.position);
+    ref.root.quaternion.copy(pl.root.quaternion);
+    const refAnim = ga.createGeoAnimator(ref);
+    const anim = rp.animOf(playerIndex);
+    const origTrigger = anim.trigger; const origUpdate = anim.update;
+    const calls = { trigger: [], update: 0 };
+    anim.trigger = (...a) => { calls.trigger.push(a[0]); refAnim.trigger(...a); return origTrigger(...a); };
+    anim.update = (...a) => {
+      calls.update += 1;
+      ref.root.position.y = refAnim.update(...a) * ref.root.scale.y;
+      return origUpdate(...a);
+    };
+    const SEGS = [['rShoulder', 'rElbow'], ['rElbow', 'rWrist'], ['lShoulder', 'lElbow'], ['lElbow', 'lWrist'], ['rHip', 'rKnee'], ['lHip', 'lKnee']];
+    const dirAngles = () => {
+      ref.root.updateMatrixWorld(true);
+      const res = {};
+      for (const [a, b] of SEGS) {
+        const d1 = wp(pl.joints[b]).sub(wp(pl.joints[a])).normalize();
+        const d2 = wp(ref.joints[b]).sub(wp(ref.joints[a])).normalize();
+        res[a + '>' + b] = THREE.MathUtils.radToDeg(d1.angleTo(d2));
+      }
+      return res;
+    };
+    const dt = 1 / 60;
+    rp.step(dt, 30); // 待命（未觸發任何序列）0.5 秒
+    const idleDirs = dirAngles();
     rp.play(playerIndex, seq);
     const dur = rp.actionDur[seq];
-    const dt = 1 / 60;
     const out = [];
     let t = 0;
     for (let s = 1; s <= samples; s += 1) {
       const target = (dur * s) / (samples + 1); // 均勻落在 (0, dur) 內部
       while (t + 1e-9 < target) { rp.step(dt, 1); t += dt; }
-      out.push({ t, ...measure() });
+      out.push({ t, ...measure(), dirs: dirAngles() });
     }
     const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
     const summary = {};
@@ -175,9 +210,41 @@ async function measureMotion(page, playerIndex, seq, samples) {
       }
       summary[bn] = { groupSize: groups[bn].length, restCJ: r0, maxDev, maxMove };
     }
+    const segMax = {};
+    for (const [a, b] of SEGS) {
+      const k = a + '>' + b;
+      segMax[k] = Math.max(idleDirs[k], ...out.map((o) => o.dirs[k]));
+    }
+    const a2d = { idle: idleDirs, segMax, maxAngle: Math.max(...Object.values(segMax)), calls };
     rp.resetAll();
-    return { seq, playerIndex, samples: out.length, times: out.map((o) => o.t), summary };
+    return { seq, playerIndex, samples: out.length, times: out.map((o) => o.t), summary, a2d };
   }, { playerIndex, seq, samples });
+}
+
+// A2(c)：擺回算 boneInverses 當下的姿勢（含 root 單位變換）後，CPU 蒙皮頂點＝載入後未蒙皮頂點
+async function measureBindRestore(page) {
+  return page.evaluate(() => {
+    const rp = window.__realPreview;
+    const { THREE } = rp;
+    rp.resetAll();
+    const v = new THREE.Vector3();
+    const out = [];
+    for (let i = 0; i < rp.playerCount; i += 1) {
+      rp.bindPose(i, true);
+      const mesh = rp.players[i].mesh;
+      const pos = mesh.geometry.attributes.position;
+      let maxErr = 0; let minY = Infinity; let maxY = -Infinity;
+      for (let k = 0; k < pos.count; k += 1) {
+        mesh.getVertexPosition(k, v);
+        maxErr = Math.max(maxErr, Math.hypot(v.x - pos.getX(k), v.y - pos.getY(k), v.z - pos.getZ(k)));
+        minY = Math.min(minY, pos.getY(k)); maxY = Math.max(maxY, pos.getY(k));
+      }
+      // 「載入後（縮放、貼地後）」的旁證：未蒙皮頂點腳底 y=0、身高＝BASE_H
+      out.push({ id: rp.players[i].playerId, maxErr, minY, height: maxY - minY });
+      rp.resetAll();
+    }
+    return out;
+  });
 }
 
 const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--ignore-gpu-blocklist', '--use-angle=swiftshader'] });
@@ -196,10 +263,13 @@ try {
       playerCount: window.__realPreview.playerCount,
       faces: window.__realPreview.faces,
       variant: window.__realPreview.variant,
+      bridgeTris: window.__realPreview.bridgeTris,
+      groundOffset: window.__realPreview.groundOffset,
     }));
     await page.waitForTimeout(1200); // 讓 HUD 至少刷新一次 FPS
     const hud = await page.evaluate(() => document.getElementById('real-hud')?.textContent ?? '');
     const stat = await measureStatic(page);
+    const bindRestore = await measureBindRestore(page);
     const motion = [];
     for (const pi of [0, 7, 13]) { // A 隊一般、B 隊一般、B 隊自由人
       for (const seq of ['bump', 'spike', 'block']) motion.push(await measureMotion(page, pi, seq, 8));
@@ -213,7 +283,7 @@ try {
         ['portrait', 390, 844, [[6.5, 4.2, 12.5], [0, 1.2, 0]]],
       ]) {
         await page.setViewportSize({ width: w, height: h });
-        await page.evaluate((c) => { const rp = window.__realPreview; rp.resetAll(); rp.setCamera(c[0], c[1]); rp.step(0, 0); }, cam);
+        await page.evaluate((c) => { const rp = window.__realPreview; rp.resetAll(); rp.setCamera(c[0], c[1]); rp.step(1 / 60, 30); }, cam); // 靜止＝待命 0.5 秒
         await page.waitForTimeout(300);
         const covered = await page.evaluate(() => Boolean(document.getElementById('vd-boot-logo')));
         const still = resolve(output, `${name}-still.png`);
@@ -247,8 +317,12 @@ try {
 
     const a1 = info.playerCount === 14 && stat.teamCounts.A === 6 && stat.teamCounts.AL === 1
       && stat.teamCounts.B === 6 && stat.teamCounts.BL === 1 && errors.length === 0;
-    const a2 = motion.every((m) => ['rWrist', 'lWrist', 'rKnee'].every((bn) => m.summary[bn].maxDev <= 0.05 && m.samples >= 5)
+    const a2ab = motion.every((m) => ['rWrist', 'lWrist', 'rKnee'].every((bn) => m.summary[bn].maxDev <= 0.05 && m.samples >= 5)
       && m.summary.rWrist.maxMove >= 0.30 && m.summary.lWrist.maxMove >= 0.30);
+    const a2c = bindRestore.length === 14 && bindRestore.every((b) => b.maxErr <= 1e-3
+      && Math.abs(b.minY) <= 1e-3 && Math.abs(b.height - 1.85) <= 1e-3);
+    const a2d = motion.every((m) => m.a2d.maxAngle <= 10 && m.a2d.calls.update > 0 && m.a2d.calls.trigger.length > 0);
+    const a2 = a2ab && a2c && a2d;
     const a3 = stat.players.every((p) => p.a3.sumBad === 0 && p.a3.contraBad === 0);
     const a4 = stat.players.every((p) => p.a4.ratio <= 0.01);
     const a5 = stat.players.every((p) => p.a5.torsoOk && p.a5.headOk);
@@ -259,11 +333,16 @@ try {
       a2: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, samples: m.samples, times: m.times, ...m.summary })),
       a2MaxDev: Math.max(...motion.flatMap((m) => ['rWrist', 'lWrist', 'rKnee'].map((bn) => m.summary[bn].maxDev))),
       a2MinWristMove: Math.min(...motion.flatMap((m) => ['rWrist', 'lWrist'].map((bn) => m.summary[bn].maxMove))),
+      a2c: bindRestore,
+      a2cMaxErr: Math.max(...bindRestore.map((b) => b.maxErr)),
+      a2d: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a2d })),
+      a2dMaxAngle: Math.max(...motion.map((m) => m.a2d.maxAngle)),
+      a2dIdleMaxAngle: Math.max(...motion.map((m) => Math.max(...Object.values(m.a2d.idle)))),
       a3: stat.players.map((p) => ({ id: p.playerId, ...p.a3 })),
       a4: stat.players.map((p) => ({ id: p.playerId, ...p.a4 })),
       a4MaxRatio: Math.max(...stat.players.map((p) => p.a4.ratio)),
       a5: stat.players.map((p) => ({ id: p.playerId, libero: p.isLibero, ...p.a5 })),
-      pass: { A1: a1, A2: a2, A3: a3, A4: a4, A5: a5, A6faces: a6faces, A6hud: hudOk },
+      pass: { A1: a1, A2: a2, A2ab: a2ab, A2c: a2c, A2d: a2d, A3: a3, A4: a4, A5: a5, A6faces: a6faces, A6hud: hudOk },
     };
   }
 } finally {
@@ -316,6 +395,9 @@ report.a8.pass = report.a8.screenshots.length === 2 && report.a8.screenshots.eve
 report.pass = {
   A1: V.every((v) => v.pass.A1) && report.aliasPlayerCount === 14 && allErrors.length === 0,
   A2: V.every((v) => v.pass.A2),
+  A2ab: V.every((v) => v.pass.A2ab),
+  A2c: V.every((v) => v.pass.A2c),
+  A2d: V.every((v) => v.pass.A2d),
   A3: V.every((v) => v.pass.A3),
   A4: V.every((v) => v.pass.A4),
   A5: V.every((v) => v.pass.A5),
@@ -328,6 +410,8 @@ await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2))
 console.log(JSON.stringify({
   pass: report.pass,
   a2MaxDev: V.map((v) => v.a2MaxDev), a2MinWristMove: V.map((v) => v.a2MinWristMove),
+  a2cMaxErr: V.map((v) => v.a2cMaxErr), a2dMaxAngle: V.map((v) => v.a2dMaxAngle), a2dIdleMaxAngle: V.map((v) => v.a2dIdleMaxAngle),
+  bridgeTris: V.map((v) => v.info.bridgeTris),
   a4MaxRatio: V.map((v) => v.a4MaxRatio), faces: V.map((v) => v.info.faces), errors: allErrors.length,
 }, null, 2));
 process.exit(Object.values(report.pass).every((x) => x === true) ? 0 : 1);

@@ -3,10 +3,14 @@
 // 路線：骨架＝createGeoCharacter 建出的不可見關節 Object3D（部件 slot 不建任何 Mesh），
 // THREE.Skeleton 直接綁這些關節 ⇒ geoAnimator 照原樣寫關節旋轉，動作零移植。
 //
-// 綁定姿勢＝「geoAnimator 的零旋轉姿勢」：本檔把 **這名球員自己的** 關節位置
-// （.position，不是 geoCharacter.js 的常數）搬到白模的解剖地標上、旋轉全 0，
-// 在這個狀態算 boneInverses。之後動畫寫的絕對旋轉＝相對白模原始姿勢的旋轉：
-// 待命時四肢維持白模本身的張角（手臂微張、雙腿微開），動作姿勢照 POSES 旋轉。
+// 關節位置（改的是 **這名球員自己的** 關節 .position，不是 geoCharacter.js 的常數）：
+//  ・軀幹關節（pelvis/spine/spineUpper/neck）與髖、肩＝白模解剖地標（相對父關節）
+//  ・四肢子關節（膝、肘、腕）＝沿 geo 人的標準方向 −Y（geoCharacter.js 的
+//    knee (0,-0.46,0)／elbow (0,-0.32,0)／wrist (0,-0.34,0)），長度取白模量到的肢段長
+// 綁定姿勢：肩／肘／髖／膝擺出「−Y 對齊白模 A-pose 肢段」的旋轉（子關節取父框架內的
+// 最短弧，肘與膝只有彎、沒有扭），在這個姿勢算 boneInverses，之後全部旋轉歸 0 交給
+// geoAnimator ⇒ 動畫寫 0 時四肢跟 geo 人一樣下垂、動作與 geo 人同方向（A2(d)）。
+// applyBindPose() 可重現算 boneInverses 當下的姿勢（A2(c)）。
 //
 // 白模座標系（2026-09-26 實量 player_20k/5k.glb，兩檔同形）：Y 上、身高 2 單位
 // （-1..+1）、面向 +Z（腳尖在 +Z）、中線 x≈0 ⇒ 等比縮放到 BASE_H、腳底貼 y=0 後
@@ -18,23 +22,24 @@ import {
 } from './geoCharacter.js';
 
 // 解剖地標（公尺，BASE_H=1.85 縮放、腳底 y=0 之後的白模空間；左側 = 右側 x 取反）。
-// 量法：每 4cm 高度切片，取 |x|>0.205 的手臂截面質心／x<0 的腿截面質心
-// （scratchpad axis.mjs 實跑輸出，見回報）。
+// 量自 public/models/real/player_20k.glb（Modly 1790418894_189a5d87_opt20000.glb，雙臂 A-pose
+// 約 38°，2026-09-26 換檔）；量法與重量指令：node tools/real-player-landmarks.mjs
+// （5k 檔同指令量得差 ≤0.012m，取 20k 值；左右兩側鏡像平均）。
 export const LANDMARKS = {
-  pelvis: [0, 0.74, -0.02],
-  spine: [0, 0.88, -0.03],
-  spineUpper: [0, 1.18, -0.03],
-  neck: [0, 1.54, -0.02],
-  headTop: [0, 1.85, 0],
-  crotch: [0, 0.62, -0.01],
-  rHip: [-0.12, 0.68, 0],
-  rKnee: [-0.16, 0.38, -0.02],
-  rAnkle: [-0.175, 0.1, -0.03],
-  rToe: [-0.19, 0.02, 0.15],
-  rShoulder: [-0.235, 1.42, -0.05],
-  rElbow: [-0.265, 1.1, -0.045],
-  rWrist: [-0.27, 0.9, 0.01],
-  rHandTip: [-0.255, 0.68, 0.01],
+  pelvis: [0, 0.764, -0.014],
+  spine: [0, 0.92, -0.023],
+  spineUpper: [0, 1.31, -0.033],
+  neck: [0, 1.57, -0.048],
+  headTop: [0, 1.85, -0.015],
+  crotch: [0, 0.65, -0.007],
+  rHip: [-0.114, 0.714, 0.016],
+  rKnee: [-0.15, 0.403, -0.041],
+  rAnkle: [-0.185, 0.093, -0.098],
+  rToe: [-0.203, 0.02, 0.171],
+  rShoulder: [-0.178, 1.47, -0.075],
+  rElbow: [-0.363, 1.227, -0.049],
+  rWrist: [-0.517, 1.041, 0.02],
+  rHandTip: [-0.597, 0.877, 0.065],
 };
 const mirror = (p) => [-p[0], p[1], p[2]];
 for (const k of ['Hip', 'Knee', 'Ankle', 'Toe', 'Shoulder', 'Elbow', 'Wrist', 'HandTip']) {
@@ -58,8 +63,8 @@ const TORSO = { rx: 0.19, rz: 0.14 };
 const SEGMENTS = {
   pelvis: { segs: [[L.crotch, L.spine]], torso: true },
   spine: { segs: [[L.spine, L.spineUpper]], torso: true },
-  spineUpper: { segs: [[L.spineUpper, [0, 1.5, -0.03]]], torso: true },
-  neck: { segs: [[L.neck, [0, 1.78, 0]]], r: 0.085 },
+  spineUpper: { segs: [[L.spineUpper, L.neck]], torso: true },
+  neck: { segs: [[L.neck, [0, L.headTop[1] - 0.07, L.headTop[2]]]], r: 0.085 },
 };
 for (const s of ['r', 'l']) {
   SEGMENTS[`${s}Hip`] = { segs: [[L[`${s}Hip`], L[`${s}Knee`]]], r: 0.07 };
@@ -69,8 +74,8 @@ for (const s of ['r', 'l']) {
   SEGMENTS[`${s}Wrist`] = { segs: [[L[`${s}Wrist`], L[`${s}HandTip`]]], r: 0.04 };
 }
 
-const SIGMA = 0.03;
-const VIS_REACH = 0.06; // 法線測試的有效距離差（m） // 權重平滑衰減寬度（m）
+const SIGMA = 0.03; // 權重平滑衰減寬度（m）
+const VIS_REACH = 0.06; // 法線測試的有效距離差（m）
 const MAX_INFLUENCES = 3;
 
 function closestOnSeg(p, a, b, out) {
@@ -169,33 +174,44 @@ export function computeSkinWeights(positions, normals) {
   return { skinIndex, skinWeight, primary };
 }
 
-// 部位標籤（上色用）：依主骨＋綁定姿勢高度
+// 部位標籤（上色用）：依主骨＋綁定姿勢位置（全部相對地標，換白模重量地標即跟著走）
 export const PART = { SKIN: 0, HAIR: 1, JERSEY: 2, SHORTS: 3, SHOE: 4 };
-const WAIST_Y = 0.86;
-const SLEEVE_END_Y = L.rElbow[1] + 0.12;
-const SHORTS_HEM_Y = L.rKnee[1] + 0.13;
+const WAIST_Y = L.spine[1] - 0.02;
+const SLEEVE_T = 0.6; // 短袖蓋住上臂（肩→肘）的前 60%
+const SHORTS_T = 0.6; // 短褲蓋住大腿（髖→膝）的前 60%
 const SHOE_TOP_Y = 0.12;
+const HAIR_TOP_Y = L.headTop[1] - 0.105;
+const HAIR_BACK_Z = L.headTop[2] - 0.02;
+const HAIR_BACK_Y = L.neck[1] + 0.06;
+function segT(p, a, b) {
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  return ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2])
+    / (ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]);
+}
 export function computePartLabels(positions, primary) {
   const n = positions.length / 3;
   const out = new Uint8Array(n);
+  const p = [0, 0, 0];
   for (let i = 0; i < n; i += 1) {
-    const y = positions[i * 3 + 1], z = positions[i * 3 + 2];
+    p[0] = positions[i * 3]; p[1] = positions[i * 3 + 1]; p[2] = positions[i * 3 + 2];
+    const y = p[1], z = p[2];
     const bone = BONES[primary[i]];
+    const side = bone[0];
     let part;
     if (bone === 'neck' || y >= L.neck[1] + 0.02) {
       // 髮：頭頂與後腦（露臉）
-      part = (y > 1.745 || (z < -0.035 && y > 1.63)) ? PART.HAIR : PART.SKIN;
+      part = (y > HAIR_TOP_Y || (z < HAIR_BACK_Z && y > HAIR_BACK_Y)) ? PART.HAIR : PART.SKIN;
       if (y < L.neck[1] + 0.02 && bone !== 'neck') part = PART.JERSEY;
     } else if (bone === 'spine' || bone === 'spineUpper') {
       part = PART.JERSEY;
     } else if (bone === 'pelvis') {
       part = y >= WAIST_Y ? PART.JERSEY : PART.SHORTS;
     } else if (bone.endsWith('Shoulder')) {
-      part = y >= SLEEVE_END_Y ? PART.JERSEY : PART.SKIN;
+      part = segT(p, L[`${side}Shoulder`], L[`${side}Elbow`]) < SLEEVE_T ? PART.JERSEY : PART.SKIN;
     } else if (bone.endsWith('Elbow') || bone.endsWith('Wrist')) {
       part = PART.SKIN;
     } else if (bone.endsWith('Hip')) {
-      part = y >= SHORTS_HEM_Y ? PART.SHORTS : PART.SKIN;
+      part = segT(p, L[`${side}Hip`], L[`${side}Knee`]) < SHORTS_T ? PART.SHORTS : PART.SKIN;
     } else { // Knee（小腿＋腳）
       part = y < SHOE_TOP_Y ? PART.SHOE : PART.SKIN;
     }
@@ -300,6 +316,42 @@ function splitBridges(pos, nor, index, w, parts) {
   };
 }
 
+// 綁定資料（全員共用）：關節位置（相對父關節）與綁定旋轉
+const LIMB = { // 子關節 → [父關節, 子關節的下一個地標（算子段方向用，null＝不擺旋轉）]
+  rKnee: ['rHip', 'rAnkle'], lKnee: ['lHip', 'lAnkle'],
+  rElbow: ['rShoulder', 'rWrist'], lElbow: ['lShoulder', 'lWrist'],
+  rWrist: ['rElbow', null], lWrist: ['lElbow', null],
+};
+const DOWN = new THREE.Vector3(0, -1, 0);
+const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+function computeBind() {
+  const position = {};
+  const quaternion = {};
+  for (const b of BONES) {
+    quaternion[b] = new THREE.Quaternion();
+    if (LIMB[b]) {
+      position[b] = [0, -v3(L[b]).distanceTo(v3(L[LIMB[b][0]])), 0];
+    } else {
+      const parent = PARENT[b];
+      const pw = parent ? L[parent] : [0, 0, 0];
+      position[b] = [L[b][0] - pw[0], L[b][1] - pw[1], L[b][2] - pw[2]];
+    }
+  }
+  // 父段（髖／肩）：父框架＝軀幹，綁定時旋轉為 0 ⇒ 世界方向即局部方向
+  for (const [seg, child] of [['rHip', 'rKnee'], ['lHip', 'lKnee'], ['rShoulder', 'rElbow'], ['lShoulder', 'lElbow']]) {
+    const d = v3(L[child]).sub(v3(L[seg])).normalize();
+    quaternion[seg].setFromUnitVectors(DOWN, d);
+  }
+  // 子段（膝／肘）：在父段框架內取最短弧（只彎不扭）
+  for (const b of ['rKnee', 'lKnee', 'rElbow', 'lElbow']) {
+    const [parent, next] = LIMB[b];
+    const d = v3(L[next]).sub(v3(L[b])).normalize().applyQuaternion(quaternion[parent].clone().invert());
+    quaternion[b].setFromUnitVectors(DOWN, d);
+  }
+  return { position, quaternion };
+}
+const BIND = computeBind();
+
 const STUB_POOL = { claim: (key) => ({ key, index: 0 }) };
 let MAT = null;
 function realMaterial() {
@@ -317,14 +369,11 @@ export function createRealPlayer(asset, {
   const skin = SKINS[h % SKINS.length];
   const hair = HAIRS[(h >> 3) % HAIRS.length];
 
-  // 綁定姿勢：關節位置＝地標（相對父關節）、旋轉全 0、root 單位變換
   const { root, joints } = rig;
   for (const b of BONES) {
-    const parent = PARENT[b];
-    const w = LANDMARKS[b];
-    const pw = parent ? LANDMARKS[parent] : [0, 0, 0];
-    joints[b].position.set(w[0] - pw[0], w[1] - pw[1], w[2] - pw[2]);
-    joints[b].rotation.set(0, 0, 0);
+    const p = BIND.position[b];
+    joints[b].position.set(p[0], p[1], p[2]);
+    joints[b].quaternion.copy(BIND.quaternion[b]);
   }
   const rootScale = root.scale.x;
   root.position.set(0, 0, 0);
@@ -353,13 +402,40 @@ export function createRealPlayer(asset, {
   const mesh = new THREE.SkinnedMesh(geometry, realMaterial());
   mesh.frustumCulled = false; // 骨架帶著網格跑遍全場，原始包圍球不準
   mesh.bind(skeleton, new THREE.Matrix4());
+  const bindQuats = BONES.map((b) => joints[b].quaternion.clone());
+  for (const b of BONES) joints[b].rotation.set(0, 0, 0); // 交給 geoAnimator 的零姿勢
+  // 腳貼地：零姿勢（四肢下垂）時，白模 A-pose 斜腿拉直會讓腳底略低於地面——量一次
+  // 零姿勢下小腿＋腳頂點的蒙皮最低點，root 高度補回（呼叫端每幀加在 bodyY 上）
+  if (asset.groundOffset === undefined) {
+    root.updateMatrixWorld(true);
+    mesh.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    let minY = Infinity;
+    for (let i = 0; i < asset.primary.length; i += 1) {
+      if (!/Knee$/.test(BONES[asset.primary[i]])) continue;
+      mesh.getVertexPosition(i, v);
+      minY = Math.min(minY, v.y);
+    }
+    asset.groundOffset = -minY;
+  }
   root.scale.setScalar(rootScale);
 
   return {
-    rig, mesh, skeleton, kit, skin, hair, playerId, teamId, isLibero,
-    // 回到綁定姿勢（治具量 C_rest/J_rest 用；root 位置/朝向由呼叫端另存）
-    resetToBind() {
+    rig, mesh, skeleton, kit, skin, hair, playerId, teamId, isLibero, height, rootScale,
+    groundOffset: asset.groundOffset,
+    // 動畫零姿勢：全部關節旋轉歸 0（geoAnimator 接手前的狀態，與 geo 人相同）
+    resetPose() {
       for (const b of BONES) joints[b].rotation.set(0, 0, 0);
+    },
+    // 重現「算 boneInverses 當下」的關節姿勢（A2(c)）。atOrigin＝連 root 也回到
+    // 綁定時的單位變換（位置 0、旋轉 0、縮放 1）；否則 root 留在原地（量 C_rest 用）
+    applyBindPose({ atOrigin = false } = {}) {
+      BONES.forEach((b, i) => joints[b].quaternion.copy(bindQuats[i]));
+      if (atOrigin) {
+        root.position.set(0, 0, 0);
+        root.rotation.set(0, 0, 0);
+        root.scale.setScalar(1);
+      }
     },
   };
 }

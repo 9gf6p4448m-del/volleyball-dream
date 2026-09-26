@@ -41,7 +41,7 @@ export async function runRealPreview(ctx) {
     const row = Math.floor(slot / 3);
     const x = slot === 6 ? 3.6 : (col - 1) * 2.6;
     const z = side * (slot === 6 ? 6.8 : 1.6 + row * 3.2);
-    p.rig.root.position.set(x, 0, z);
+    p.rig.root.position.set(x, p.groundOffset * p.rootScale, z);
     p.rig.root.rotation.y = side < 0 ? 0 : Math.PI;
     p.home = { x, z, ry: p.rig.root.rotation.y };
     p.mesh.castShadow = castShadow;
@@ -81,7 +81,7 @@ export async function runRealPreview(ctx) {
       }
     }
     const bodyY = p.anim.update(dt, 0, 0, 1);
-    p.rig.root.position.y = bodyY * p.rig.root.scale.y;
+    p.rig.root.position.y = (bodyY + p.groundOffset) * p.rig.root.scale.y;
   }
   function stepAll(dt) { for (const p of players) stepPlayer(p, dt); }
 
@@ -123,6 +123,7 @@ export async function runRealPreview(ctx) {
     variant,
     faces: asset.faces,
     bridgeTris: asset.bridgeTris, // 接縫拆分處理的三角形數（見 realPlayer.js splitBridges）
+    groundOffset: asset.groundOffset, // 零姿勢腳貼地的 root 補高（m，BASE_H 比例）
     playerCount: players.length,
     baseH: BASE_H,
     boneNames: BONES.slice(),
@@ -131,21 +132,29 @@ export async function runRealPreview(ctx) {
     // spike 擊球關鍵幀距 play() 的秒數（windup 後 SPIKE_HIT_DELAY 接 spike，再走到 spike.hit）
     spikeHitTime: SPIKE_HIT_DELAY + hitLeadTicks('spike') / 60,
     players: players.map((p) => ({
-      playerId: p.playerId, teamId: p.teamId, isLibero: p.isLibero,
+      playerId: p.playerId, teamId: p.teamId, isLibero: p.isLibero, height: p.height,
       mesh: p.mesh, joints: p.rig.joints, root: p.rig.root,
     })),
+    // 治具：目前驅動該球員的 geoAnimator 實例（resetAll 會換新，取用時再拿）
+    animOf(i) { return players[i].anim; },
     hudText: () => hudEl.textContent,
     pause() { paused = true; auto = false; },
     resume() { paused = false; auto = true; },
-    // 治具：全員回綁定姿勢、清動畫狀態（新 animator）、回原位
+    // 治具：全員回動畫零姿勢、清動畫狀態（新 animator）、回原位原縮放
     resetAll() {
       for (const p of players) {
-        p.resetToBind();
+        p.resetPose();
         p.anim = createGeoAnimator(p.rig);
         p.action = null;
-        p.rig.root.position.set(p.home.x, 0, p.home.z);
-        p.rig.root.rotation.y = p.home.ry;
+        p.rig.root.position.set(p.home.x, p.groundOffset * p.rootScale, p.home.z);
+        p.rig.root.rotation.set(0, p.home.ry, 0);
+        p.rig.root.scale.setScalar(p.rootScale);
       }
+      scene.updateMatrixWorld(true);
+    },
+    // 治具（A2(c)／A2 靜止量測）：該球員擺回算 boneInverses 當下的姿勢
+    bindPose(i, atOrigin = false) {
+      players[i].applyBindPose({ atOrigin });
       scene.updateMatrixWorld(true);
     },
     play(i, type) { play(players[i], type); },
