@@ -1,4 +1,4 @@
-// 寫實球員卷 第一階段驗收治具（docs/real-player-stage1-acceptance.md A1–A10，含加嚴紀錄三批與修正紀錄（A2(d) 腿段比 IK 前、A2(g)））。
+// 寫實球員卷 第一階段驗收治具（docs/real-player-stage1-acceptance.md A1–A12，含加嚴紀錄四批、A2(d) 腿段使用者裁定與修正紀錄）。
 // 用法：先起 dev server（npm run dev -- --host 127.0.0.1 --port 5176 --strictPort），再
 //   node tools/real-player-browser.mjs
 // 環境變數：REAL_BASE_URL（預設 http://127.0.0.1:5176）、PLAYWRIGHT_MODULE（既有 Playwright 安裝路徑）、
@@ -25,7 +25,8 @@ const report = {
   createdAt: new Date().toISOString(),
   base,
   head: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim(),
-  dirty: execSync('git status --porcelain -- src tools', { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
+  // 證據產生順序（加嚴・第四批 LOW-3）：記錄產生當下的 HEAD 與整個工作區是否乾淨
+  dirty: execSync('git status --porcelain', { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
   device: 'Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字',
   variants: {},
   a7: null,
@@ -69,7 +70,7 @@ async function measureStatic(page) {
     const hexOf = (r, g, b) => new THREE.Color().setRGB(r, g, b).getHex();
     const ch = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
     const near = (a, b) => ch(a).every((v, k) => Math.abs(v - ch(b)[k]) <= 2);
-    const contra = /^(r|l)(Shoulder|Elbow|Wrist|Hip|Knee)$/;
+    const contra = /^(r|l)(Shoulder|Elbow|Wrist|Hip|Knee|Ankle)$/; // 含本卷自加的腳骨（加嚴紀錄・第四批）
     for (const pl of rp.players) {
       const g = pl.mesh.geometry;
       const pos = g.attributes.position;
@@ -214,7 +215,8 @@ async function measureMotion(page, playerIndex, seq, samples) {
       return origUpdate(...a);
     };
     const SEGS = [['rShoulder', 'rElbow'], ['rElbow', 'rWrist'], ['lShoulder', 'lElbow'], ['lElbow', 'lWrist'], ['rHip', 'rKnee'], ['lHip', 'lKnee']];
-    // A2(d)（修正紀錄・腿段）：手臂四段比最終世界方向；腿兩段比接地 IK 介入前（animator 寫入後）的方向
+    // A2(d)（使用者裁定甲，2026-09-27）：手臂四段比最終世界方向 ≤10°；腿兩段 IK 前（animator 寫入後）
+    // ≤10° 且 IK 後（最終）≤15°。腿段以 `rHip>rKnee`＝IK 前、`rHip>rKnee@post`＝IK 後分列
     const LEG_SEG = new Set(['rHip>rKnee', 'lHip>lKnee']);
     const dirAngles = () => {
       ref.root.updateMatrixWorld(true);
@@ -222,13 +224,45 @@ async function measureMotion(page, playerIndex, seq, samples) {
       const res = {};
       for (const [a, b] of SEGS) {
         const k = `${a}>${b}`;
-        const d1 = LEG_SEG.has(k)
-          ? new THREE.Vector3(...pre[b]).sub(new THREE.Vector3(...pre[a])).normalize()
-          : wp(pl.joints[b]).sub(wp(pl.joints[a])).normalize();
         const d2 = wp(ref.joints[b]).sub(wp(ref.joints[a])).normalize();
-        res[k] = THREE.MathUtils.radToDeg(d1.angleTo(d2));
+        const fin = wp(pl.joints[b]).sub(wp(pl.joints[a])).normalize();
+        if (LEG_SEG.has(k)) {
+          const d1 = new THREE.Vector3(...pre[b]).sub(new THREE.Vector3(...pre[a])).normalize();
+          res[k] = THREE.MathUtils.radToDeg(d1.angleTo(d2));
+          res[`${k}@post`] = THREE.MathUtils.radToDeg(fin.angleTo(d2));
+        } else {
+          res[k] = THREE.MathUtils.radToDeg(fin.angleTo(d2));
+        }
       }
       return res;
+    };
+    // A2(d) 膝不內外翻：膝到「含髖→踝（腳骨原點）連線與角色前向」之平面的距離
+    const kneeLateral = () => {
+      const out = {};
+      const fwd = pl.root.getWorldDirection(new THREE.Vector3());
+      for (const s of ['r', 'l']) {
+        const H = wp(pl.joints[`${s}Hip`]); const K = wp(pl.joints[`${s}Knee`]); const A = wp(pl.joints[`${s}Ankle`]);
+        const u = A.clone().sub(H).normalize();
+        const n = new THREE.Vector3().crossVectors(u, fwd).normalize();
+        out[s] = Math.abs(K.clone().sub(H).dot(n));
+      }
+      return out;
+    };
+    // 加嚴・第四批 LOW-1：鞋底離地 > 1cm 的那隻腳，腳骨相對小腿（膝骨）的角度須為 0（±0.5°）
+    const solesBy = { r: [], l: [] };
+    for (let i = 0; i < pos.count; i += 1) if (pos.getY(i) <= 0.03) (pos.getX(i) < 0 ? solesBy.r : solesBy.l).push(i);
+    const footAir = { frames: 0, maxAngle: 0 };
+    const checkAirFoot = () => {
+      for (const s of ['r', 'l']) {
+        let m = Infinity;
+        for (const i of solesBy[s]) { mesh.getVertexPosition(i, v); if (v.y < m) m = v.y; }
+        if (m > 0.01) {
+          const q = pl.joints[`${s}Ankle`].quaternion; // 父＝膝骨：局部旋轉即相對小腿
+          const ang = THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(q.w))));
+          footAir.frames += 1;
+          footAir.maxAngle = Math.max(footAir.maxAngle, ang);
+        }
+      }
     };
     // A2(g)：膝到「髖→踝連線」的有號距離（角色前方為正）。踝＝綁定姿勢 0.10 ≤ y ≤ 0.16 的該側
     // 頂點（小腿下段／腳踝一圈，幾何選取、不讀權重與地標）的蒙皮質心
@@ -258,6 +292,10 @@ async function measureMotion(page, playerIndex, seq, samples) {
     const kneeTrace = [];
     const idleKnee = kneeSigned();
     kneeTrace.push(idleKnee.r, idleKnee.l);
+    const latTrace = [];
+    const idleLat = kneeLateral();
+    latTrace.push(idleLat.r, idleLat.l);
+    checkAirFoot();
     // A10：骨盆世界 y 相對待命的最大下沉（寫實球員 vs 同步驅動的參考 geo 人）
     const pelvisY = () => { ref.root.updateMatrixWorld(true); return [wp(pl.joints.pelvis).y, wp(ref.joints.pelvis).y]; };
     const [idlePelvis, idleRefPelvis] = pelvisY();
@@ -275,6 +313,9 @@ async function measureMotion(page, playerIndex, seq, samples) {
       soleTrace.push(soleMin());
       const ks = kneeSigned();
       kneeTrace.push(ks.r, ks.l);
+      const kl = kneeLateral();
+      latTrace.push(kl.r, kl.l);
+      checkAirFoot();
       const [py, ry] = pelvisY();
       maxSink = Math.max(maxSink, idlePelvis - py);
       maxRefSink = Math.max(maxRefSink, idleRefPelvis - ry);
@@ -296,11 +337,15 @@ async function measureMotion(page, playerIndex, seq, samples) {
       summary[bn] = { groupSize: groups[bn].length, restCJ: r0, maxDev, maxMove };
     }
     const segMax = {};
-    for (const [a, b] of SEGS) {
-      const k = `${a}>${b}`;
-      segMax[k] = Math.max(idleDirs[k], ...out.map((o) => o.dirs[k]));
-    }
-    const a2d = { idle: idleDirs, segMax, maxAngle: Math.max(...Object.values(segMax)), calls };
+    for (const k of Object.keys(idleDirs)) segMax[k] = Math.max(idleDirs[k], ...out.map((o) => o.dirs[k]));
+    const arms = Object.keys(segMax).filter((k) => !k.includes('Hip'));
+    const a2d = {
+      idle: idleDirs, segMax, calls,
+      armMax: Math.max(...arms.map((k) => segMax[k])),
+      legPreMax: Math.max(segMax['rHip>rKnee'], segMax['lHip>lKnee']),
+      legPostMax: Math.max(segMax['rHip>rKnee@post'], segMax['lHip>lKnee@post']),
+      kneeLateralMax: Math.max(...latTrace), lateralFrames: latTrace.length / 2,
+    };
     const handAll = [rest.hand.r, rest.hand.l, ...out.flatMap((o) => [o.hand.r, o.hand.l])];
     const a2e = {
       handVerts: { r: hands.r.length, l: hands.l.length },
@@ -315,8 +360,34 @@ async function measureMotion(page, playerIndex, seq, samples) {
     rp.resetAll();
     const a10 = { maxSink, maxRefSink, ratio: maxRefSink > 0 ? maxSink / maxRefSink : null };
     const a2g = { ankleVerts: { r: ankles.r.length, l: ankles.l.length }, idle: idleKnee, min: Math.min(...kneeTrace), frames: kneeTrace.length / 2 };
-    return { seq, playerIndex, samples: out.length, times: out.map((o) => o.t), summary, a2d, a2e, a9, a10, a2g };
+    return { seq, playerIndex, samples: out.length, times: out.map((o) => o.t), summary, a2d, a2e, a9, a10, a2g, footAir };
   }, { playerIndex, seq, samples });
+}
+
+// A12：resume() 打開預覽自己的輪播排程，在同一段同步程式裡逐幀 step（rAF 插不進來），結束前 pause()
+async function measureContinuity(page, seconds = 21) {
+  return page.evaluate((seconds) => {
+    const rp = window.__realPreview;
+    rp.resetAll();
+    rp.resume();
+    const n = Math.round(seconds * 60);
+    const prev = rp.players.map((p) => p.root.getWorldPosition(new rp.THREE.Vector3()).y);
+    let maxJump = 0; let at = null;
+    const triggers = new Array(rp.playerCount).fill(0);
+    for (let f = 1; f <= n; f += 1) {
+      rp.step(1 / 60, 1);
+      rp.players.forEach((p, i) => {
+        const y = p.root.getWorldPosition(new rp.THREE.Vector3()).y;
+        const d = Math.abs(y - prev[i]);
+        if (d > maxJump) { maxJump = d; at = { player: p.playerId, frame: f, from: prev[i], to: y }; }
+        prev[i] = y;
+        if (rp.animOf(i).peek()?.t <= 1 / 60 + 1e-9) triggers[i] += 1;
+      });
+    }
+    rp.pause();
+    rp.resetAll();
+    return { seconds, frames: n, maxJump, at, minTriggersPerPlayer: Math.min(...triggers) };
+  }, seconds);
 }
 
 // A2(c)：擺回算 boneInverses 當下的姿勢（含 root 單位變換）後，CPU 蒙皮頂點＝載入後未蒙皮頂點
@@ -325,9 +396,16 @@ async function measureBindRestore(page) {
     const rp = window.__realPreview;
     const { THREE } = rp;
     rp.resetAll();
+    // 先讓全員進入接地 IK 生效的狀態（bump 下蹲），確認腳骨已被轉動，再逐人直接呼叫綁定姿勢函式
+    rp.step(1 / 60, 30);
+    for (let i = 0; i < rp.playerCount; i += 1) rp.play(i, 'bump');
+    rp.step(1 / 60, 5);
     const v = new THREE.Vector3();
     const out = [];
     for (let i = 0; i < rp.playerCount; i += 1) {
+      const j = rp.players[i].joints;
+      const footAngle = Math.max(...['rAnkle', 'lAnkle'].map((b) => (j[b]
+        ? THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(j[b].quaternion.w)))) : 0)));
       rp.bindPose(i, true);
       const mesh = rp.players[i].mesh;
       const pos = mesh.geometry.attributes.position;
@@ -338,9 +416,9 @@ async function measureBindRestore(page) {
         minY = Math.min(minY, pos.getY(k)); maxY = Math.max(maxY, pos.getY(k));
       }
       // 「載入後（縮放、貼地後）」的旁證：未蒙皮頂點腳底 y=0、身高＝BASE_H
-      out.push({ id: rp.players[i].playerId, maxErr, minY, height: maxY - minY });
-      rp.resetAll();
+      out.push({ id: rp.players[i].playerId, maxErr, minY, height: maxY - minY, footAngleBefore: footAngle });
     }
+    rp.resetAll();
     return out;
   });
 }
@@ -368,7 +446,9 @@ async function checkA11() {
     await entry.waitFor({ state: 'visible', timeout: 20000 });
     res.entryInView = await inView(entry);
     res.steps.push('menu entry visible');
-    await entry.click({ timeout: 10000 }); // Playwright 會檢查可點（未被遮擋）
+    // 點擊逾時 60s：headless 下預覽／主選單渲染可慢到約 1 FPS（2026-09-27 實測 3 個 rAF 2.7 秒），
+    // Playwright 的可點檢查（可見、穩定兩幀、命中測試未被遮擋）照做，只是等久一點
+    await entry.click({ timeout: 60000 });
     await page.waitForFunction(() => Boolean(window.__realPreview), null, { timeout: 120000 });
     res.previewUrl = page.url();
     res.playerCount = await page.evaluate(() => window.__realPreview.playerCount);
@@ -381,7 +461,7 @@ async function checkA11() {
     const hb = await page.locator('#real-hud').boundingBox(); const bb = await back.boundingBox();
     res.backOverlapsHud = Boolean(hb && bb) && !(bb.x + bb.width <= hb.x || hb.x + hb.width <= bb.x
       || bb.y + bb.height <= hb.y || hb.y + hb.height <= bb.y);
-    await back.click({ timeout: 10000 });
+    await back.click({ timeout: 60000 });
     await page.waitForURL((u) => !u.search.includes('mode=realpreview'), { timeout: 30000 });
     await page.waitForFunction(() => !document.getElementById('vd-boot-logo'), null, { timeout: 30000 });
     const entryAgain = page.getByRole('button', { name: ENTRY_TEXT });
@@ -425,6 +505,7 @@ try {
     const hud = await page.evaluate(() => document.getElementById('real-hud')?.textContent ?? '');
     const stat = await measureStatic(page);
     const bindRestore = await measureBindRestore(page);
+    const continuity = await measureContinuity(page);
     const ikBefore = await ikStatsOf();
     const motion = [];
     for (const pi of [0, 7, 13]) { // A 隊一般、B 隊一般、B 隊自由人
@@ -511,7 +592,10 @@ try {
       && m.summary.rWrist.maxMove >= 0.30 && m.summary.lWrist.maxMove >= 0.30);
     const a2c = bindRestore.length === 14 && bindRestore.every((b) => b.maxErr <= 1e-3
       && Math.abs(b.minY) <= 1e-3 && Math.abs(b.height - 1.85) <= 1e-3);
-    const a2d = motion.every((m) => m.a2d.maxAngle <= 10 && m.a2d.calls.update > 0 && m.a2d.calls.trigger.length > 0);
+    const a2d = motion.every((m) => m.a2d.armMax <= 10 && m.a2d.legPreMax <= 10 && m.a2d.legPostMax <= 15
+      && m.a2d.kneeLateralMax <= 0.02 && m.a2d.calls.update > 0 && m.a2d.calls.trigger.length > 0);
+    const footAirOk = motion.every((m) => m.footAir.maxAngle <= 0.5) && motion.some((m) => m.footAir.frames > 0);
+    const a12 = continuity.maxJump <= 0.05 && continuity.frames >= 1200;
     const a2e = motion.every((m) => m.a2e.max <= 0.15 && m.a2e.handVerts.r > 0 && m.a2e.handVerts.l > 0);
     const a2f = ['r', 'l'].every((s) => {
       const f = stat.a2f[s];
@@ -537,7 +621,12 @@ try {
       a2c: bindRestore,
       a2cMaxErr: Math.max(...bindRestore.map((b) => b.maxErr)),
       a2d: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a2d })),
-      a2dMaxAngle: Math.max(...motion.map((m) => m.a2d.maxAngle)),
+      a2dArmMax: Math.max(...motion.map((m) => m.a2d.armMax)),
+      a2dLegPreMax: Math.max(...motion.map((m) => m.a2d.legPreMax)),
+      a2dLegPostMax: Math.max(...motion.map((m) => m.a2d.legPostMax)),
+      a2dKneeLateralMax: Math.max(...motion.map((m) => m.a2d.kneeLateralMax)),
+      footAir: { frames: motion.reduce((a, m) => a + m.footAir.frames, 0), maxAngle: Math.max(...motion.map((m) => m.footAir.maxAngle)) },
+      continuity,
       a2dIdleMaxAngle: Math.max(...motion.map((m) => Math.max(...Object.values(m.a2d.idle)))),
       a2e: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a2e })),
       a2eMax: Math.max(...motion.map((m) => m.a2e.max)),
@@ -555,7 +644,7 @@ try {
       a9IdleRange: [Math.min(...motion.map((m) => m.a9.idleMin)), Math.max(...motion.map((m) => m.a9.idleMin))],
       pass: {
         A1: a1, A2: a2, A2ab: a2ab, A2c: a2c, A2d: a2d, A2e: a2e, A2f: a2f, A2g: a2g,
-        A3: a3, A4: a4, A5: a5, A6faces: a6faces, A6hud: hudOk, A9: a9, A10: a10,
+        A3: a3, A4: a4, A5: a5, A6faces: a6faces, A6hud: hudOk, A9: a9, A9footAir: footAirOk, A10: a10, A12: a12,
       },
     };
   }
@@ -646,7 +735,9 @@ report.pass = {
   A7: a7.pass,
   A8: report.a8.pass,
   A9: all('A9'),
+  A9footAir: all('A9footAir'),
   A10: all('A10'),
+  A12: all('A12'),
   A11: report.a11?.pass === true,
 };
 report.allErrors = allErrors;
@@ -655,7 +746,10 @@ const r3 = (x) => Math.round(x * 1000) / 1000;
 console.log(JSON.stringify({
   pass: report.pass,
   a2MaxDev: V.map((v) => r3(v.a2MaxDev)), a2MinWristMove: V.map((v) => r3(v.a2MinWristMove)),
-  a2cMaxErr: V.map((v) => v.a2cMaxErr), a2dMaxAngle: V.map((v) => r3(v.a2dMaxAngle)),
+  a2cMaxErr: V.map((v) => v.a2cMaxErr),
+  a2d: V.map((v) => ({ arm: r3(v.a2dArmMax), legPre: r3(v.a2dLegPreMax), legPost: r3(v.a2dLegPostMax), kneeLat: r3(v.a2dKneeLateralMax) })),
+  footAir: V.map((v) => ({ frames: v.footAir.frames, maxAngle: r3(v.footAir.maxAngle) })),
+  a12: V.map((v) => ({ maxJump: r3(v.continuity.maxJump), at: v.continuity.at && `${v.continuity.at.player}@${v.continuity.at.frame}`, trig: v.continuity.minTriggersPerPlayer })),
   a2eMax: V.map((v) => r3(v.a2eMax)),
   a2gMin: V.map((v) => r3(v.a2gMin)),
   a2f: V.map((v) => Object.fromEntries(Object.entries(v.a2f).map(([s, f]) => [s, Object.fromEntries(Object.entries(f).map(([k, x]) => [k, r3(x)]))]))),

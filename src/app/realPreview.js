@@ -9,7 +9,11 @@ import { loadRealPlayerAsset, createRealPlayer, BONES, LANDMARKS } from '../rend
 
 const DT = 1 / 60;
 // spike＝完整三段序列：windup（起跳，自動接 spikeHold）→ 滯空 → spike 擊球弧
-const SPIKE_HIT_DELAY = 0.3; // windup 觸發後幾秒接 spike（落在 spikeHold 滯空期內）
+// windup 觸發後幾秒接 spike（落在 spikeHold 滯空期內）。spike 帶 land：播完那一幀 geoAnimator 會
+// 直接收掉跳躍弧（air=null）。windup 的弧長 0.9s、spike 0.45s ⇒ spike 須在 ≥0.45s 才觸發，
+// 播完時人已落地；0.3s 時 spike 在離地約 0.25m 結束，root 單幀掉 0.27–0.29m（A12，加嚴・第四批）。
+// 代價：擊球幀落在弧頂之後（下降段約 0.39m），預覽用可接受
+const SPIKE_HIT_DELAY = 0.46;
 export const ACTION_DUR = { bump: 0.6, spike: 1.2, block: 1.0 };
 const LOOP = ['bump', 'spike', 'block'];
 

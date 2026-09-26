@@ -390,6 +390,7 @@ const BIND = computeBind();
 // e·Δ（e<1）。迭代時用上一步量到的效率 e 放大下一步的抬高量（割線法），通常 2～4 步收斂
 const IK_ITERS = 12;
 const IK_EPS = 1e-4;
+const FOOT_AIR = 0.01; // 鞋底離地超過這個高度＝騰空：腳骨跟著小腿走（不壓平、不做 IK）
 
 const STUB_POOL = { claim: (key) => ({ key, index: 0 }) };
 let MAT = null;
@@ -538,8 +539,17 @@ export function createRealPlayer(asset, {
       for (const b of ['rHip', 'rKnee', 'lHip', 'lKnee']) joints[b].getWorldPosition(preIK[b]);
       let ik = 0;
       for (const side of ['r', 'l']) {
-        flattenFoot(side);
+        // 腳掌只在接地時壓平（加嚴・第四批 LOW-1）：先以「腳跟著小腿」量鞋底，離地 > FOOT_AIR
+        // 就不動；壓平後若反而懸空（腳尖原本點地、壓平把腳尖抬起）也退回跟著小腿
         let m = soleMin(side);
+        if (m > FOOT_AIR) continue;
+        flattenFoot(side);
+        m = soleMin(side);
+        if (m > FOOT_AIR) {
+          joints[`${side}Ankle`].rotation.set(0, 0, 0);
+          joints[`${side}Ankle`].updateMatrixWorld(true);
+          continue;
+        }
         let gain = 1;
         for (let it = 0; it < IK_ITERS && m < -IK_EPS; it += 1) {
           const req = -m * gain;
