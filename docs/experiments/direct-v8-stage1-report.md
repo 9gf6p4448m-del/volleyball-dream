@@ -140,6 +140,7 @@
 ## 9. 背景程序（已關閉）
 
 - dev server（`vite`，127.0.0.1:5175，PID 25916）：四個治具跑完後以 `Stop-Process -Id 25916 -Force` 關閉，`netstat` 確認 5175 埠已釋放。
+- 2026-09-27 第二輪：5175（PID 40904，真樹）與 5176（PID 5180，突變副本）兩個 vite 於治具與突變驗紅全部跑完後以 `taskkill //PID … //F //T` 關閉，`netstat -ano | grep -E ":517[56]"` LISTENING 0 筆（§10 收尾驗證）。
 - 其他本工作樹起的背景程序（舊碼案例掃描、探針、`node --test`、Playwright 治具）皆已自行結束；分離工作樹 `scratchpad/old-3e90288`（舊碼紅燈用）保留在 scratchpad，未動 repo 的分支。
 - 未部署（未跑 `deploy:pages`）、未 push；`main` 未動。
 
@@ -151,7 +152,9 @@
 
 - 改了什麼：`tools/direct-play-browser.mjs:121-148`。同一顆餵球＋同一段走位（tick 20 起向右 0.7），對 tick 1…70 每一格都從 `restart()` 重播到該格，讀出手鈕的 `data-does` 與文字，再用真實觸控（CDP `Input.dispatchTouchEvent`）按下、step 一格，比對 sim 啟動的 `player.action` 與「按下前那一格按鈕顯示的動作」，同時檢查文字含「接球」／「魚躍」；累計不一致次數後 `assert.equal(perTick.mismatched, 0)`（`:148`），並斷言接球與魚躍都出現過。
 - 證據（`docs/experiments/direct-play-evidence/pass-browser.json` 的 `perTick`，三尺寸相同）：`{"checked":50,"pressed":50,"mismatched":0,"dives":9,"receives":41,"rows":[]}`——球在 tick 51 落地所以比到 50 格；9 格魚躍、41 格接球，0 處不同。
-- 突變驗紅（`scratchpad/mut/apply.mjs` 的 `c1-lag`：標籤落後一格；`c1-wrong`：該顯示魚躍時顯示接球）：待補。
+- 突變驗紅（`docs/experiments/direct-v8-stage1-r2-mutations.log`；突變套在 `HEAD` 的 `git archive` 副本、由 5176 的 dev server 供頁，還原自備份副本、sha1 與套用前相同；同一副本未突變時先跑一次對照組 = `PASS`）：
+  - `c1-lag`（`updateHitLabel` 顯示上一格的動作）：`AssertionError: hit button (data-does/text) vs the action the sim started on a real press, per tick: 2/50 differ [{"tick":34,"does":"receive","label":"接球 · J","started":"dive"},{"tick":43,"does":"dive","label":"魚躍 · J","started":"receive"}]`——落後一格正好在走進／走出撲救範圍的兩格被抓到。
+  - `c1-wrong`（該顯示魚躍時顯示接球）：`AssertionError: dive: hit button resolves to dive ({"tick":83,"action":"receive","label":"接球 · J"})`——紅在同一治具較早的魚躍站位檢查（`:96-114`，同樣是 `data-does`／文字對 sim 動作的比對），逐 tick 段沒有跑到；逐 tick 斷言本身的鑑別力由 `c1-lag` 那次證明。
 
 ### H1｜撲救範圍量錯時刻
 
@@ -172,7 +175,7 @@
 - 改了什麼：`tools/direct-play-browser.mjs:191-215`。同一卷腳本（tick 0 強力發球、tick 1–20 往後走到 z≈7.19、tick 45 魚躍）用 `p.command({ at })` 排進真實練習迴圈，慢動作開／關各跑一次，都以合成 60 Hz 時鐘驅動真實 `frame()` 直到 tick 160，取 `p.events()`（練習頁新增的 sim 事件紀錄，`src/app/directPractice.js:110,261,422`）與最終 `snapshot()` 逐位元比對（`:214-215`）；順便在球速 ≥ 13 m/s 那一格量 12 幀推進幾 tick。練習頁的 `frames()` 改成接續同一個 accumulator（`:433`），`command()` 支援 `at`（`:250`）。
 - 證據（`pass-browser.json` 的 `slowMotion`，三尺寸相同）：`identical: true`；開：armed tick 48、scale 0.5、12 幀推進 6 tick、`slowMotionTicks` 18、慢動作幀 23（portrait／landscape 24）、事件 3 筆、觸球 `64:dive/GOOD`；關：scale 1、12 幀推進 12 tick、`slowMotionTicks` 0、同樣 3 筆事件、`64:dive/GOOD`。
 - node 測試 `tests/direct-v8-context.test.js:175-194`：拿掉原本恆真的「開關事件序列相同」（那個 `enabled` 從來進不了 `stepDirectGame`），改斷言 `slowMotionScale` 不改狀態（每 tick 序列化前後相同，`:186`）＋觸發次數 > 0、觸發時球速 ≥ 13、關閉 0 次、倍率只有 1／0.5；發球錄影的站位改到 z=7（原 z=5 在新的撲救範圍量法下離 0.3 m 落點 2.7 m、永遠不觸發）。
-- 突變驗紅（`h3-timescale`：`stepDirectGame` 的子步 dt 乘上 `slowMotion()`）：待補。
+- 突變驗紅（`h3-timescale`：`stepDirectGame` 多收 `timeScale`、子步 `dt = DIRECT_DT * timeScale / substeps`，練習頁傳 `slowMotion()` 進去；同上檔）：`AssertionError: The serve reaches the passer as a hard ball at the same tick (54 / 48)`——慢動作一進到 sim 的時間，開慢動作那卷的球晚 6 tick 才到，治具在事件比對之前就在「同一 tick 到達」這條行為斷言變紅（事件序列必然也不同：觸球 tick 會變）。對照組（未突變副本）`PASS`。
 
 ### M2｜太早按被說成「沒按」
 
@@ -223,5 +226,6 @@
 ### 收尾驗證（本節在最終 commit 前更新）
 
 - `npm test`：待補。
-- 四個瀏覽器治具：`--pass` PASS（上文 C1／H3／L2 的證據就是這次的 `pass-browser.json`）；預設／`--assist`／`--motion`：待補。
+- 四個瀏覽器治具（真樹、5175，修補後的最終碼；指令與輸出見 §5 的 2026-09-27 段）：預設 PASS、`--assist` PASS、`--motion` PASS、`--pass` PASS（C1／H3／L2 的證據就是這次的 `pass-browser.json`）；另在 `HEAD` 副本（5176）上未突變的 `--pass` 對照組 PASS。
+- 背景程序：5175（PID 40904）與 5176（PID 5180）兩個 vite 都以 `taskkill //PID … //F //T` 關閉，`netstat -ano | grep -E ":517[56]"` 之後 LISTENING 0 筆（已釋放）。突變副本 `scratchpad/mut-tree` 與舊碼副本 `scratchpad/old-ae48ba2`／`old-3e90288` 都在 scratchpad，不在 repo。
 - `git diff ae48ba2..HEAD -- docs/kickoffs/`：空。
