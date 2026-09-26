@@ -329,3 +329,7 @@ export function getNumberTexture(number, colorHex) {
   numberTextureCache.set(key, texture);
   return texture;
 }
+
+// 寫實球員卷 第一階段（2026-09-26）：新增導出——供 realPlayer.js 取同一份配色池/雜湊
+// 替白模上色、供驗收治具算期望色。只加 export，不改上方任何既有行為。
+export { TEAM_KIT, LIBERO_KIT, SKINS, HAIRS, SHOE, idHash };

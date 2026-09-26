@@ -120,6 +120,10 @@ async function init() {
   } else if (params.get('mode') === 'freeball') {
     const { runFreeballSandbox } = await import('./app/freeballSandbox.js');
     await runFreeballSandbox(ctx);
+  } else if (params.get('mode') === 'realpreview' || params.get('devreal') === '1') {
+    // 寫實球員卷 第一階段：Modly 白模預覽（獨立場景，不碰正式賽場；&faces=5k 切減面版）
+    const { runRealPreview } = await import('./app/realPreview.js');
+    await runRealPreview(ctx);
   } else if (params.get('devkit') === '1') {
     // 配色卷批 1 治具：?devkit=1 全隊球衣預覽（16 隊卡片＋3D 舞台）——
     // 題 3 色票裁定工具兼驗收 K6 量測工具；動態載入，不進正常路徑的 bundle 熱路

@@ -1,0 +1,1564 @@
+{
+  "createdAt": "2026-09-26T11:01:52.040Z",
+  "base": "http://127.0.0.1:5176",
+  "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
+  "variants": {
+    "20k": {
+      "info": {
+        "playerCount": 14,
+        "faces": 20000,
+        "variant": "20k"
+      },
+      "hud": "FPS 6\n面數 20,000／人（20k）\n14 人",
+      "errors": [],
+      "teamCounts": {
+        "A": 6,
+        "AL": 1,
+        "B": 6,
+        "BL": 1
+      },
+      "bindPos": {
+        "pelvis": [
+          0,
+          0.74,
+          -0.02
+        ],
+        "rHip": [
+          -0.12,
+          0.68,
+          0
+        ],
+        "rKnee": [
+          -0.16,
+          0.38,
+          -0.02
+        ],
+        "lHip": [
+          0.12,
+          0.68,
+          0
+        ],
+        "lKnee": [
+          0.16,
+          0.38,
+          -0.02
+        ],
+        "spine": [
+          0,
+          0.88,
+          -0.03
+        ],
+        "spineUpper": [
+          0,
+          1.18,
+          -0.03
+        ],
+        "neck": [
+          0,
+          1.54,
+          -0.02
+        ],
+        "rShoulder": [
+          -0.235,
+          1.42,
+          -0.05
+        ],
+        "rElbow": [
+          -0.265,
+          1.1,
+          -0.045
+        ],
+        "rWrist": [
+          -0.27,
+          0.9,
+          0.010000000000000002
+        ],
+        "lShoulder": [
+          0.235,
+          1.42,
+          -0.05
+        ],
+        "lElbow": [
+          0.265,
+          1.1,
+          -0.045
+        ],
+        "lWrist": [
+          0.27,
+          0.9,
+          0.010000000000000002
+        ]
+      },
+      "zone": {
+        "shX": 0.205,
+        "hipY": 0.68,
+        "shY": 1.42,
+        "neckY": 1.54
+      },
+      "a2": [
+        {
+          "seq": "bump",
+          "player": 0,
+          "samples": 8,
+          "times": [
+            0.06666666666666667,
+            0.13333333333333333,
+            0.19999999999999998,
+            0.26666666666666666,
+            0.3333333333333333,
+            0.39999999999999997,
+            0.4666666666666666,
+            0.5333333333333333
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.12842602192762673,
+            "maxDev": 2.6662447250025423e-10,
+            "maxMove": 0.707128754514978
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.12060420926450993,
+            "maxDev": 1.1002934674486653e-10,
+            "maxMove": 0.7001888331913791
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.2902440896556642,
+            "maxDev": 0.000234558649909955,
+            "maxMove": 0.0908562177935534
+          }
+        },
+        {
+          "seq": "spike",
+          "player": 0,
+          "samples": 8,
+          "times": [
+            0.13333333333333333,
+            0.26666666666666666,
+            0.39999999999999997,
+            0.5333333333333333,
+            0.6666666666666671,
+            0.8000000000000008,
+            0.9333333333333346,
+            1.0666666666666678
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.12842602192762673,
+            "maxDev": 0.0017722750464004289,
+            "maxMove": 1.636822311694833
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.12060420926450993,
+            "maxDev": 5.429353772123946e-10,
+            "maxMove": 1.7022116504112916
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.2902440896556642,
+            "maxDev": 0.0002236092817918256,
+            "maxMove": 0.49890875737491064
+          }
+        },
+        {
+          "seq": "block",
+          "player": 0,
+          "samples": 8,
+          "times": [
+            0.11666666666666665,
+            0.2333333333333333,
+            0.3333333333333333,
+            0.44999999999999996,
+            0.5666666666666668,
+            0.6666666666666671,
+            0.7833333333333341,
+            0.9000000000000011
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.12842602192762673,
+            "maxDev": 0.00048227447754164987,
+            "maxMove": 1.5843874084009788
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.12060420926450993,
+            "maxDev": 3.518733637797311e-10,
+            "maxMove": 1.5664210664595912
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.2902440896556642,
+            "maxDev": 0.0002060627438262297,
+            "maxMove": 0.34142409685785663
+          }
+        },
+        {
+          "seq": "bump",
+          "player": 7,
+          "samples": 8,
+          "times": [
+            0.06666666666666667,
+            0.13333333333333333,
+            0.19999999999999998,
+            0.26666666666666666,
+            0.3333333333333333,
+            0.39999999999999997,
+            0.4666666666666666,
+            0.5333333333333333
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.12842602215790921,
+            "maxDev": 5.34820132624958e-10,
+            "maxMove": 0.7071287545149785
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.120604209202757,
+            "maxDev": 5.61568291868042e-11,
+            "maxMove": 0.7001888331913783
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.2902440895598484,
+            "maxDev": 0.00023455864998744858,
+            "maxMove": 0.09085621779355357
+          }
+        },
+        {
+          "seq": "spike",
+          "player": 7,
+          "samples": 8,
+          "times": [
+            0.13333333333333333,
+            0.26666666666666666,
+            0.39999999999999997,
+            0.5333333333333333,
+            0.6666666666666671,
+            0.8000000000000008,
+            0.9333333333333346,
+            1.0666666666666678
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.12842602215790921,
+            "maxDev": 0.0017722753479217646,
+            "maxMove": 1.636822311694833
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.120604209202757,
+            "maxDev": 5.475619957451272e-10,
+            "maxMove": 1.7022116504112916
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.2902440895598484,
+            "maxDev": 0.0002236092818655444,
+            "maxMove": 0.49890875737491064
+          }
+        },
+        {
+          "seq": "block",
+          "player": 7,
+          "samples": 8,
+          "times": [
+            0.11666666666666665,
+            0.2333333333333333,
+            0.3333333333333333,
+            0.44999999999999996,
+            0.5666666666666668,
+            0.6666666666666671,
+            0.7833333333333341,
+            0.9000000000000011
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.12842602215790921,
+            "maxDev": 0.00048227447668014456,
+            "maxMove": 1.5843874084009788
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.120604209202757,
+            "maxDev": 3.5187341929088234e-10,
+            "maxMove": 1.5664210664595912
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.2902440895598484,
+            "maxDev": 0.00020606274389417534,
+            "maxMove": 0.34142409685785663
+          }
+        },
+        {
+          "seq": "bump",
+          "player": 13,
+          "samples": 8,
+          "times": [
+            0.06666666666666667,
+            0.13333333333333333,
+            0.19999999999999998,
+            0.26666666666666666,
+            0.3333333333333333,
+            0.39999999999999997,
+            0.4666666666666666,
+            0.5333333333333333
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.11772385290748291,
+            "maxDev": 2.0310463311190574e-9,
+            "maxMove": 0.6482013583054009
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.11055385840186344,
+            "maxDev": 6.484866532652234e-10,
+            "maxMove": 0.6418397637587695
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.26605708208617623,
+            "maxDev": 0.00021501247501604093,
+            "maxMove": 0.08328486631075378
+          }
+        },
+        {
+          "seq": "spike",
+          "player": 13,
+          "samples": 8,
+          "times": [
+            0.13333333333333333,
+            0.26666666666666666,
+            0.39999999999999997,
+            0.5333333333333333,
+            0.6666666666666671,
+            0.8000000000000008,
+            0.9333333333333346,
+            1.0666666666666678
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.11772385290748291,
+            "maxDev": 0.001624588343423175,
+            "maxMove": 1.500420452386932
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.11055385840186344,
+            "maxDev": 8.642701693206689e-10,
+            "maxMove": 1.5603606795436833
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.26605708208617623,
+            "maxDev": 0.00020497548874737204,
+            "maxMove": 0.4573330275936687
+          }
+        },
+        {
+          "seq": "block",
+          "player": 13,
+          "samples": 8,
+          "times": [
+            0.11666666666666665,
+            0.2333333333333333,
+            0.3333333333333333,
+            0.44999999999999996,
+            0.5666666666666668,
+            0.6666666666666671,
+            0.7833333333333341,
+            0.9000000000000011
+          ],
+          "rWrist": {
+            "groupSize": 387,
+            "restCJ": 0.11772385290748291,
+            "maxDev": 0.00044208298748518726,
+            "maxMove": 1.4523551243675636
+          },
+          "lWrist": {
+            "groupSize": 361,
+            "restCJ": 0.11055385840186344,
+            "maxDev": 5.246270085024207e-10,
+            "maxMove": 1.4358859775879609
+          },
+          "rKnee": {
+            "groupSize": 771,
+            "restCJ": 0.26605708208617623,
+            "maxDev": 0.00018889112447578738,
+            "maxMove": 0.31297208878637006
+          }
+        }
+      ],
+      "a2MaxDev": 0.0017722753479217646,
+      "a2MinWristMove": 0.6418397637587695,
+      "a3": [
+        {
+          "id": "A1",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "A2",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "A3",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "A4",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "A5",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "A6",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "AL",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "B1",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "B2",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "B3",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "B4",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "B5",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "B6",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        },
+        {
+          "id": "BL",
+          "sumBad": 0,
+          "sumMaxErr": 4.470348358154297e-8,
+          "sideVerts": 7734,
+          "contraBad": 0
+        }
+      ],
+      "a4": [
+        {
+          "id": "A1",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "A2",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "A3",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "A4",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "A5",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "A6",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "AL",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "B1",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "B2",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "B3",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "B4",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "B5",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "B6",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        },
+        {
+          "id": "BL",
+          "zone": 2912,
+          "zoneArm": 4,
+          "ratio": 0.0013736263736263737
+        }
+      ],
+      "a4MaxRatio": 0.0013736263736263737,
+      "a5": [
+        {
+          "id": "A1",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "8a5a3d",
+          "hair": "151820",
+          "headMode": "8a5a3d",
+          "headOk": true
+        },
+        {
+          "id": "A2",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "e8b08c",
+          "hair": "151820",
+          "headMode": "e8b08c",
+          "headOk": true
+        },
+        {
+          "id": "A3",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "d99a72",
+          "hair": "151820",
+          "headMode": "d99a72",
+          "headOk": true
+        },
+        {
+          "id": "A4",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "c98a63",
+          "hair": "151820",
+          "headMode": "c98a63",
+          "headOk": true
+        },
+        {
+          "id": "A5",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "a9714f",
+          "hair": "151820",
+          "headMode": "a9714f",
+          "headOk": true
+        },
+        {
+          "id": "A6",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "8a5a3d",
+          "hair": "151820",
+          "headMode": "8a5a3d",
+          "headOk": true
+        },
+        {
+          "id": "AL",
+          "libero": true,
+          "expectJersey": "ffc531",
+          "torsoMode": "ffc531",
+          "torsoOk": true,
+          "skin": "d99a72",
+          "hair": "33261c",
+          "headMode": "d99a72",
+          "headOk": true
+        },
+        {
+          "id": "B1",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "e8b08c",
+          "hair": "33261c",
+          "headMode": "e8b08c",
+          "headOk": true
+        },
+        {
+          "id": "B2",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "d99a72",
+          "hair": "3d2e1e",
+          "headMode": "d99a72",
+          "headOk": true
+        },
+        {
+          "id": "B3",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "c98a63",
+          "hair": "3d2e1e",
+          "headMode": "c98a63",
+          "headOk": true
+        },
+        {
+          "id": "B4",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "a9714f",
+          "hair": "3d2e1e",
+          "headMode": "a9714f",
+          "headOk": true
+        },
+        {
+          "id": "B5",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "8a5a3d",
+          "hair": "3d2e1e",
+          "headMode": "8a5a3d",
+          "headOk": true
+        },
+        {
+          "id": "B6",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "e8b08c",
+          "hair": "3d2e1e",
+          "headMode": "e8b08c",
+          "headOk": true
+        },
+        {
+          "id": "BL",
+          "libero": true,
+          "expectJersey": "f2f4f8",
+          "torsoMode": "f2f4f8",
+          "torsoOk": true,
+          "skin": "c98a63",
+          "hair": "20242c",
+          "headMode": "c98a63",
+          "headOk": true
+        }
+      ],
+      "pass": {
+        "A1": true,
+        "A2": true,
+        "A3": true,
+        "A4": true,
+        "A5": true,
+        "A6faces": true,
+        "A6hud": true
+      }
+    },
+    "5k": {
+      "info": {
+        "playerCount": 14,
+        "faces": 5000,
+        "variant": "5k"
+      },
+      "hud": "FPS 0\n面數 5,000／人（5k）\n14 人",
+      "errors": [],
+      "teamCounts": {
+        "A": 6,
+        "AL": 1,
+        "B": 6,
+        "BL": 1
+      },
+      "bindPos": {
+        "pelvis": [
+          0,
+          0.74,
+          -0.02
+        ],
+        "rHip": [
+          -0.12,
+          0.68,
+          0
+        ],
+        "rKnee": [
+          -0.16,
+          0.38,
+          -0.02
+        ],
+        "lHip": [
+          0.12,
+          0.68,
+          0
+        ],
+        "lKnee": [
+          0.16,
+          0.38,
+          -0.02
+        ],
+        "spine": [
+          0,
+          0.88,
+          -0.03
+        ],
+        "spineUpper": [
+          0,
+          1.18,
+          -0.03
+        ],
+        "neck": [
+          0,
+          1.54,
+          -0.02
+        ],
+        "rShoulder": [
+          -0.235,
+          1.42,
+          -0.05
+        ],
+        "rElbow": [
+          -0.265,
+          1.1,
+          -0.045
+        ],
+        "rWrist": [
+          -0.27,
+          0.9,
+          0.010000000000000002
+        ],
+        "lShoulder": [
+          0.235,
+          1.42,
+          -0.05
+        ],
+        "lElbow": [
+          0.265,
+          1.1,
+          -0.045
+        ],
+        "lWrist": [
+          0.27,
+          0.9,
+          0.010000000000000002
+        ]
+      },
+      "zone": {
+        "shX": 0.205,
+        "hipY": 0.68,
+        "shY": 1.42,
+        "neckY": 1.54
+      },
+      "a2": [
+        {
+          "seq": "bump",
+          "player": 0,
+          "samples": 8,
+          "times": [
+            0.06666666666666667,
+            0.13333333333333333,
+            0.19999999999999998,
+            0.26666666666666666,
+            0.3333333333333333,
+            0.39999999999999997,
+            0.4666666666666666,
+            0.5333333333333333
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.12533780389848775,
+            "maxDev": 1.7362195015024895e-11,
+            "maxMove": 0.7048194421984955
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.11851191129769191,
+            "maxDev": 1.0859482202363324e-9,
+            "maxMove": 0.6987905991823656
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2902649123947229,
+            "maxDev": 0.00027231657557846844,
+            "maxMove": 0.09089814466772607
+          }
+        },
+        {
+          "seq": "spike",
+          "player": 0,
+          "samples": 8,
+          "times": [
+            0.13333333333333333,
+            0.26666666666666666,
+            0.39999999999999997,
+            0.5333333333333333,
+            0.6666666666666671,
+            0.8000000000000008,
+            0.9333333333333346,
+            1.0666666666666678
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.12533780389848775,
+            "maxDev": 0.0017096421912196624,
+            "maxMove": 1.6345580074437551
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.11851191129769191,
+            "maxDev": 5.065264124803903e-9,
+            "maxMove": 1.6979152553447636
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2902649123947229,
+            "maxDev": 0.0002623616101347648,
+            "maxMove": 0.4989033237972983
+          }
+        },
+        {
+          "seq": "block",
+          "player": 0,
+          "samples": 8,
+          "times": [
+            0.11666666666666665,
+            0.2333333333333333,
+            0.3333333333333333,
+            0.44999999999999996,
+            0.5666666666666668,
+            0.6666666666666671,
+            0.7833333333333341,
+            0.9000000000000011
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.12533780389848775,
+            "maxDev": 0.000484116154315567,
+            "maxMove": 1.579722453982758
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.11851191129769191,
+            "maxDev": 3.2443086550593137e-9,
+            "maxMove": 1.5628462821387121
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2902649123947229,
+            "maxDev": 0.0002298096752898493,
+            "maxMove": 0.34141687363973283
+          }
+        },
+        {
+          "seq": "bump",
+          "player": 7,
+          "samples": 8,
+          "times": [
+            0.06666666666666667,
+            0.13333333333333333,
+            0.19999999999999998,
+            0.26666666666666666,
+            0.3333333333333333,
+            0.39999999999999997,
+            0.4666666666666666,
+            0.5333333333333333
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.12533780388423754,
+            "maxDev": 3.524019964729064e-11,
+            "maxMove": 0.7048194421984957
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.11851191075100158,
+            "maxDev": 5.32049057588857e-10,
+            "maxMove": 0.6987905991823655
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2902649124672294,
+            "maxDev": 0.0002723165755105228,
+            "maxMove": 0.09089814466772607
+          }
+        },
+        {
+          "seq": "spike",
+          "player": 7,
+          "samples": 8,
+          "times": [
+            0.13333333333333333,
+            0.26666666666666666,
+            0.39999999999999997,
+            0.5333333333333333,
+            0.6666666666666671,
+            0.8000000000000008,
+            0.9333333333333346,
+            1.0666666666666678
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.12533780388423754,
+            "maxDev": 0.001709642171930148,
+            "maxMove": 1.6345580074437551
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.11851191075100158,
+            "maxDev": 5.150384133068009e-9,
+            "maxMove": 1.6979152553447636
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2902649124672294,
+            "maxDev": 0.0002623616100692616,
+            "maxMove": 0.4989033237972983
+          }
+        },
+        {
+          "seq": "block",
+          "player": 7,
+          "samples": 8,
+          "times": [
+            0.11666666666666665,
+            0.2333333333333333,
+            0.3333333333333333,
+            0.44999999999999996,
+            0.5666666666666668,
+            0.6666666666666671,
+            0.7833333333333341,
+            0.9000000000000011
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.12533780388423754,
+            "maxDev": 0.0004841161543703565,
+            "maxMove": 1.579722453982758
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.11851191075100158,
+            "maxDev": 3.2443086550593137e-9,
+            "maxMove": 1.5628462821387121
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2902649124672294,
+            "maxDev": 0.00022980967523245077,
+            "maxMove": 0.34141687363973283
+          }
+        },
+        {
+          "seq": "bump",
+          "player": 13,
+          "samples": 8,
+          "times": [
+            0.06666666666666667,
+            0.13333333333333333,
+            0.19999999999999998,
+            0.26666666666666666,
+            0.3333333333333333,
+            0.39999999999999997,
+            0.4666666666666666,
+            0.5333333333333333
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.1148929869365467,
+            "maxDev": 1.317465442296495e-10,
+            "maxMove": 0.6460844886819527
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.10863591795571728,
+            "maxDev": 6.241872574364038e-9,
+            "maxMove": 0.6405580492505049
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2660761697728969,
+            "maxDev": 0.00024962322953148153,
+            "maxMove": 0.08332329927874824
+          }
+        },
+        {
+          "seq": "spike",
+          "player": 13,
+          "samples": 8,
+          "times": [
+            0.13333333333333333,
+            0.26666666666666666,
+            0.39999999999999997,
+            0.5333333333333333,
+            0.6666666666666671,
+            0.8000000000000008,
+            0.9333333333333346,
+            1.0666666666666678
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.1148929869365467,
+            "maxDev": 0.0015671718215888725,
+            "maxMove": 1.4983448401567758
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.10863591795571728,
+            "maxDev": 7.867041476594672e-9,
+            "maxMove": 1.5564223173993654
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2660761697728969,
+            "maxDev": 0.00024049778185919468,
+            "maxMove": 0.45732804681419076
+          }
+        },
+        {
+          "seq": "block",
+          "player": 13,
+          "samples": 8,
+          "times": [
+            0.11666666666666665,
+            0.2333333333333333,
+            0.3333333333333333,
+            0.44999999999999996,
+            0.5666666666666668,
+            0.6666666666666671,
+            0.7833333333333341,
+            0.9000000000000011
+          ],
+          "rWrist": {
+            "groupSize": 91,
+            "restCJ": 0.1148929869365467,
+            "maxDev": 0.0004437732715144721,
+            "maxMove": 1.4480789161508634
+          },
+          "lWrist": {
+            "groupSize": 88,
+            "restCJ": 0.10863591795571728,
+            "maxDev": 5.0560834963242485e-9,
+            "maxMove": 1.4326090919604866
+          },
+          "rKnee": {
+            "groupSize": 184,
+            "restCJ": 0.2660761697728969,
+            "maxDev": 0.00021065865211472579,
+            "maxMove": 0.3129654675030879
+          }
+        }
+      ],
+      "a2MaxDev": 0.0017096421912196624,
+      "a2MinWristMove": 0.6405580492505049,
+      "a3": [
+        {
+          "id": "A1",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "A2",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "A3",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "A4",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "A5",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "A6",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "AL",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "B1",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "B2",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "B3",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "B4",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "B5",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "B6",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        },
+        {
+          "id": "BL",
+          "sumBad": 0,
+          "sumMaxErr": 3.3527612686157227e-8,
+          "sideVerts": 1958,
+          "contraBad": 0
+        }
+      ],
+      "a4": [
+        {
+          "id": "A1",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "A2",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "A3",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "A4",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "A5",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "A6",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "AL",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "B1",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "B2",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "B3",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "B4",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "B5",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "B6",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        },
+        {
+          "id": "BL",
+          "zone": 731,
+          "zoneArm": 1,
+          "ratio": 0.0013679890560875513
+        }
+      ],
+      "a4MaxRatio": 0.0013679890560875513,
+      "a5": [
+        {
+          "id": "A1",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "8a5a3d",
+          "hair": "151820",
+          "headMode": "8a5a3d",
+          "headOk": true
+        },
+        {
+          "id": "A2",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "e8b08c",
+          "hair": "151820",
+          "headMode": "e8b08c",
+          "headOk": true
+        },
+        {
+          "id": "A3",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "d99a72",
+          "hair": "151820",
+          "headMode": "d99a72",
+          "headOk": true
+        },
+        {
+          "id": "A4",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "c98a63",
+          "hair": "151820",
+          "headMode": "c98a63",
+          "headOk": true
+        },
+        {
+          "id": "A5",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "a9714f",
+          "hair": "151820",
+          "headMode": "a9714f",
+          "headOk": true
+        },
+        {
+          "id": "A6",
+          "libero": false,
+          "expectJersey": "2e7bff",
+          "torsoMode": "2e7bff",
+          "torsoOk": true,
+          "skin": "8a5a3d",
+          "hair": "151820",
+          "headMode": "8a5a3d",
+          "headOk": true
+        },
+        {
+          "id": "AL",
+          "libero": true,
+          "expectJersey": "ffc531",
+          "torsoMode": "ffc531",
+          "torsoOk": true,
+          "skin": "d99a72",
+          "hair": "33261c",
+          "headMode": "d99a72",
+          "headOk": true
+        },
+        {
+          "id": "B1",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "e8b08c",
+          "hair": "33261c",
+          "headMode": "e8b08c",
+          "headOk": true
+        },
+        {
+          "id": "B2",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "d99a72",
+          "hair": "3d2e1e",
+          "headMode": "d99a72",
+          "headOk": true
+        },
+        {
+          "id": "B3",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "c98a63",
+          "hair": "3d2e1e",
+          "headMode": "c98a63",
+          "headOk": true
+        },
+        {
+          "id": "B4",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "a9714f",
+          "hair": "3d2e1e",
+          "headMode": "a9714f",
+          "headOk": true
+        },
+        {
+          "id": "B5",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "8a5a3d",
+          "hair": "3d2e1e",
+          "headMode": "8a5a3d",
+          "headOk": true
+        },
+        {
+          "id": "B6",
+          "libero": false,
+          "expectJersey": "ff5340",
+          "torsoMode": "ff5340",
+          "torsoOk": true,
+          "skin": "e8b08c",
+          "hair": "3d2e1e",
+          "headMode": "e8b08c",
+          "headOk": true
+        },
+        {
+          "id": "BL",
+          "libero": true,
+          "expectJersey": "f2f4f8",
+          "torsoMode": "f2f4f8",
+          "torsoOk": true,
+          "skin": "c98a63",
+          "hair": "20242c",
+          "headMode": "c98a63",
+          "headOk": true
+        }
+      ],
+      "pass": {
+        "A1": true,
+        "A2": true,
+        "A3": true,
+        "A4": true,
+        "A5": true,
+        "A6faces": true,
+        "A6hud": true
+      }
+    }
+  },
+  "a7": {
+    "protectedDiff": "",
+    "geoCharacterRemoved": [],
+    "geoCharacterAdded": [
+      "+",
+      "+// 寫實球員卷 第一階段（2026-09-26）：新增導出——供 realPlayer.js 取同一份配色池/雜湊",
+      "+// 替白模上色、供驗收治具算期望色。只加 export，不改上方任何既有行為。",
+      "+export { TEAM_KIT, LIBERO_KIT, SKINS, HAIRS, SHOE, idHash };"
+    ],
+    "geoCharacterOk": true,
+    "mainRemoved": [],
+    "mainAdded": [
+      "+  } else if (params.get('mode') === 'realpreview' || params.get('devreal') === '1') {",
+      "+    // 寫實球員卷 第一階段：Modly 白模預覽（獨立場景，不碰正式賽場；&faces=5k 切減面版）",
+      "+    const { runRealPreview } = await import('./app/realPreview.js');",
+      "+    await runRealPreview(ctx);"
+    ],
+    "mainOk": true,
+    "npmTest": {
+      "pass": 2601,
+      "fail": 2,
+      "baselinePass": 2601,
+      "failing": [
+        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
+        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
+      ],
+      "baselineFailing": [
+        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
+        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
+      ],
+      "sameFailingAsBaseline": true
+    },
+    "npmTestOk": false,
+    "buildOk": true,
+    "pass": false
+  },
+  "a8": {
+    "screenshots": [
+      {
+        "viewport": "1280x720",
+        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-still.png",
+        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-spike-hit.png",
+        "spikeHitT": 0.48333333333333334
+      },
+      {
+        "viewport": "390x844",
+        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-still.png",
+        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-spike-hit.png",
+        "spikeHitT": 0.48333333333333334
+      }
+    ],
+    "pass": true
+  },
+  "pass": {
+    "A1": true,
+    "A2": true,
+    "A3": true,
+    "A4": true,
+    "A5": true,
+    "A6": true,
+    "A7": false,
+    "A8": true
+  },
+  "aliasPlayerCount": 14,
+  "allErrors": []
+}
