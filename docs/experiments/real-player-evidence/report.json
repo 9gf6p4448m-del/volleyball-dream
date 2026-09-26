@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-26T11:01:52.040Z",
+  "createdAt": "2026-09-26T11:03:20.453Z",
   "base": "http://127.0.0.1:5176",
   "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
   "variants": {
@@ -9,7 +9,7 @@
         "faces": 20000,
         "variant": "20k"
       },
-      "hud": "FPS 6\n面數 20,000／人（20k）\n14 人",
+      "hud": "FPS 39\n面數 20,000／人（20k）\n14 人",
       "errors": [],
       "teamCounts": {
         "A": 6,
@@ -755,7 +755,7 @@
         "faces": 5000,
         "variant": "5k"
       },
-      "hud": "FPS 0\n面數 5,000／人（5k）\n14 人",
+      "hud": "FPS 5\n面數 5,000／人（5k）\n14 人",
       "errors": [],
       "teamCounts": {
         "A": 6,
@@ -1538,13 +1538,15 @@
         "viewport": "1280x720",
         "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-still.png",
         "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-spike-hit.png",
-        "spikeHitT": 0.48333333333333334
+        "spikeHitT": 0.48333333333333334,
+        "logoCovered": false
       },
       {
         "viewport": "390x844",
         "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-still.png",
         "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-spike-hit.png",
-        "spikeHitT": 0.48333333333333334
+        "spikeHitT": 0.48333333333333334,
+        "logoCovered": false
       }
     ],
     "pass": true

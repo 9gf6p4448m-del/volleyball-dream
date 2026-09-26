@@ -206,6 +206,8 @@ try {
     }
     // A8：只在預設（20k）變體拍
     if (variant === '20k') {
+      // 開機 logo（showBootLogo）會蓋住畫面：等它自己退場再拍，並把「沒被蓋住」列入 A8 判定
+      await page.waitForFunction(() => !document.getElementById('vd-boot-logo'), null, { timeout: 30000 });
       for (const [name, w, h, cam] of [
         ['desktop', 1280, 720, [[9.5, 5.2, 11.5], [0, 1.1, 0]]],
         ['portrait', 390, 844, [[6.5, 4.2, 12.5], [0, 1.2, 0]]],
@@ -213,6 +215,7 @@ try {
         await page.setViewportSize({ width: w, height: h });
         await page.evaluate((c) => { const rp = window.__realPreview; rp.resetAll(); rp.setCamera(c[0], c[1]); rp.step(0, 0); }, cam);
         await page.waitForTimeout(300);
+        const covered = await page.evaluate(() => Boolean(document.getElementById('vd-boot-logo')));
         const still = resolve(output, `${name}-still.png`);
         await page.screenshot({ path: still });
         const hitT = await page.evaluate(() => {
@@ -228,7 +231,7 @@ try {
         await page.waitForTimeout(300);
         const hit = resolve(output, `${name}-spike-hit.png`);
         await page.screenshot({ path: hit });
-        report.a8.screenshots.push({ viewport: `${w}x${h}`, still, spikeHit: hit, spikeHitT: hitT });
+        report.a8.screenshots.push({ viewport: `${w}x${h}`, still, spikeHit: hit, spikeHitT: hitT, logoCovered: covered });
       }
       // 別名 ?devreal=1 也要能開
       const alias = await context.newPage();
@@ -309,7 +312,7 @@ report.a7 = a7;
 
 // ---- 彙總 ----
 const V = Object.values(report.variants);
-report.a8.pass = report.a8.screenshots.length === 2;
+report.a8.pass = report.a8.screenshots.length === 2 && report.a8.screenshots.every((x) => !x.logoCovered);
 report.pass = {
   A1: V.every((v) => v.pass.A1) && report.aliasPlayerCount === 14 && allErrors.length === 0,
   A2: V.every((v) => v.pass.A2),
