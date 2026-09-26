@@ -6,17 +6,12 @@ import { autoFaceAim } from '../input/directAutoFace.js';
 import { createDirectPlayerView } from '../render/directPlayerView.js';
 import { DIRECT_PHYSICS, DIRECT_ACTIONS, RECEIVE_ASSIST } from '../sim/directConstants.js';
 import { platformNormal } from '../sim/directPhysics.js';
-import { receiveContactEta } from '../sim/directReceiveAssist.js';
+import { receiveContactEta, receiveWindowOffset } from '../sim/directReceiveAssist.js';
 import './directPractice.css';
 
 const FEED_DELAY = 90; // ticks (1.5 s) from pressing feed to the ball
 const AUTO_FEED_PAUSE = 60; // ticks after a dead ball before the next countdown
 const GRADE_LABELS = { PERFECT: '完美', GOOD: '普通', POOR: '差' };
-const GRADE_TIPS = {
-  PERFECT: '時機完美！球直送舉球區。',
-  GOOD: '接到了，時機差一點，球偏了一些。',
-  POOR: '時機太早或太晚，球噴掉了。外圈變金色時再按。',
-};
 const ACTION_LABELS = { receive: '墊球', spike: '扣球', tip: '吊球', set: '舉球', block: '攔網', dive: '魚躍' };
 const SHOT_LABELS = { LINE: '直線重扣', CROSS_LEFT: '左斜線', CROSS_RIGHT: '右斜線', TIP: '單手吊球' };
 const PASS_LABELS = { NEUTRAL: '平台正對', HIGH: '高球到位', LOW: '低平安全球', LEFT: '平台偏左', RIGHT: '平台偏右' };
@@ -249,8 +244,15 @@ export function runDirectPractice(ctx) {
     stepDirectGame(state, commands);
     simTimes.push(performance.now() - before);
     if (simTimes.length > 3600) simTimes.shift();
+    trackRally();
     for (const event of state.events) {
+      if (event.type === 'action' && event.action === 'receive' && rally && rally.pressTick == null) rally.pressTick = event.tick;
+      if (event.type === 'contact' && event.tier && rally) rally.tiered = true;
+      // A body touch without a timed pass: remember the receive state at that moment.
+      if (event.type === 'contact' && !event.tier && rally && !rally.touch)
+        rally.touch = { action: state.player.action, actionTick: state.player.actionTick, offset: receiveWindowOffset(state.player, 0) };
       if (event.type === 'feed') {
+        rally = { crossing: null, touch: null, pressTick: null, tiered: false };
         drill = event.kind === 'pass-drill' ? { target: DRILL_TARGETS[(state.stats.feeds - 1) % DRILL_TARGETS.length], touched: false, result: null } : null;
         drillTarget.visible = !!drill;
         if (drill) drillTarget.position.set(drill.target.x, 0.027, drill.target.z);
@@ -266,12 +268,72 @@ export function runDirectPractice(ctx) {
       if (event.type === 'contact') {
         lastContactTick = state.tick;
         if (event.tier) showGrade(event);
+        if (event.tier && !playback) message(passReason(event));
         else if (!playback) message(`實際接觸 · ${PART_LABELS[event.part] ?? '身體'} · 試著改變出手時機與方向。`);
       } else if (!playback && ['ground', 'net', 'out'].includes(event.type)) {
-        message(event.type === 'net' ? '球碰網了。調整站位、出手時機，再餵一球。' : '這一球結束。回想接觸的位置，再試一次。');
+        if (rally && !rally.tiered) message(missReason());
+        else if (event.type === 'net') message('球碰網了。');
       }
     }
     if (playback && state.tick >= playback.endTick) { setPaused(true); message('回放結束。按「退出回放」返回訓練。'); }
+  }
+  // direct-v7 round 5: why a ball was missed or passed badly. Display only.
+  let rally = null;
+  // Record where the ball reaches the contact height (the first time), relative
+  // to the forearms (underhand) or forehead (overhand), and the receive state then.
+  function trackRally() {
+    // Only the incoming ball: stop once it has touched the body.
+    if (!rally || rally.crossing || rally.touch || rally.tiered || !state.ball.active) return;
+    const cue = receiveContactEta(state);
+    if (!cue || cue.t > DIRECT_DT) return;
+    const p = state.player, a = Math.atan2(p.aim.x, -p.aim.z) + (p.receiveTurn ?? 0);
+    const fx = Math.sin(a), fz = -Math.cos(a);
+    const ahead = cue.technique === 'overhand' ? RECEIVE_ASSIST.overForward : 0.31;
+    const px = p.x + fx * ahead * p.height, pz = p.z + fz * ahead * p.height;
+    const dx = cue.ball.x - px, dz = cue.ball.z - pz;
+    rally.crossing = {
+      tick: state.tick, technique: cue.technique,
+      right: dx * -fz + dz * fx, forward: dx * fx + dz * fz,
+      offset: receiveWindowOffset(p, 1), action: p.action, actionTick: p.actionTick,
+    };
+  }
+  const seconds = ticks => `${(Math.abs(ticks) / 60).toFixed(2)} 秒`;
+  function passReason(event) {
+    const parts = [];
+    if (event.tier === 'PERFECT') parts.push('時機剛好');
+    // A contact early in the window means the ball came right after the press: pressed late.
+    else if (event.offset < 0) parts.push(`按太晚 ${seconds(event.offset)}`);
+    else parts.push(`按太早 ${seconds(event.offset)}`);
+    if (event.ratio > RECEIVE_ASSIST.edgeRatio) parts.push('擦邊（站位偏了一點）');
+    if ((event.bodySpeed ?? 0) >= RECEIVE_ASSIST.unsetSpeed) parts.push('沒站穩');
+    parts.push(event.technique === 'overhand' ? '高手' : '低手');
+    if (event.airborne) parts.push('空中');
+    return `${GRADE_LABELS[event.tier]}：${parts.join(' · ')}`;
+  }
+  function missReason() {
+    const touch = rally.touch;
+    if (touch && !rally.crossing) {
+      // The ball met the body before reaching the contact height.
+      if (touch.action !== 'receive') return rally.pressTick == null ? '沒接到：沒按墊球，球碰到身體。' : '沒接到：按太早，手已經放下，球碰到身體。';
+      if (touch.offset === null) return touch.actionTick < DIRECT_ACTIONS.receive.windup ? '沒接到：按太晚，手還沒抬起來，球先碰到身體。' : '沒接到：按太早，手已經放下，球碰到身體。';
+      return touch.offset < 0 ? '沒接到：按太晚，手還沒抬好，球先碰到身體。' : '沒接到：按太早，手已經放下，球碰到身體。';
+    }
+    const c = rally.crossing;
+    if (!c) return '沒接到：球沒有經過你身邊，先移到落點圈上。';
+    const radius = c.technique === 'overhand'
+      ? state.assist?.overRadius ?? RECEIVE_ASSIST.overRadius : state.assist?.underRadius ?? RECEIVE_ASSIST.underRadius;
+    const off = Math.hypot(c.right, c.forward);
+    const tech = c.technique === 'overhand' ? '（高手高度）' : '';
+    if (off > radius) {
+      const dir = Math.abs(c.right) >= Math.abs(c.forward) ? (c.right > 0 ? '右' : '左') : (c.forward > 0 ? '前' : '後');
+      return `沒接到：站位偏了 ${Math.round(off * 100)} 公分，球在你${dir}邊，往${dir}移${tech}。`;
+    }
+    const r = DIRECT_ACTIONS.receive;
+    // Window open but no pass: early in the window means the hands were still coming up.
+    if (c.offset !== null) return c.offset < 0 ? `沒接到：按太晚，手還沒抬好${tech}。` : `沒接到：按太早，手已經在放下${tech}。`;
+    if (c.action === 'receive') return c.actionTick < r.windup - RECEIVE_ASSIST.windowPre ? `沒接到：按太晚，手還沒抬起來${tech}。` : `沒接到：按太早，手已經放下${tech}。`;
+    if (rally.pressTick == null) return `沒接到：沒按墊球${tech}。`;
+    return rally.pressTick > c.tick ? `沒接到：按太晚${tech}。` : `沒接到：按太早${tech}。`;
   }
   // direct-v7: timed pass feedback (PERFECT / GOOD / POOR, overhand / underhand).
   function showGrade(event) {
@@ -282,7 +344,6 @@ export function runDirectPractice(ctx) {
     grade.classList.remove('dp-grade-show');
     void grade.offsetWidth; // restart the fade animation
     grade.classList.add('dp-grade-show');
-    if (!playback) message(unset ? `${GRADE_TIPS[event.tier]}跑動中接球比較不準，先到位再接。` : GRADE_TIPS[event.tier]);
   }
   function drillResult(type) {
     if (!drill.touched) return { type, hit: false, text: '沒有接到球。先走到球路上，再按墊球。' };

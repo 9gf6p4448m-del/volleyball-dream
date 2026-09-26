@@ -38,6 +38,9 @@ export function createDirectGame({ seed = 1, height = 1.75, assist = null } = {}
       receiveReach: 0,
       receiveOverhand: 0,
       receiveOverhandChosen: false,
+      // direct-v7: the ball has touched the body during this receive; only the
+      // first touch is a timed pass, and the technique no longer changes.
+      receiveTouched: false,
       passType: null,
       passLateral: 0,
       passPitch: 0,
@@ -77,7 +80,8 @@ function applyPass(s, event, { technique, offset, ratio = 0, speed }) {
   const out = passOutcome({ from: b, ballSpeed: speed, technique, tier, passType: s.player.passType ?? 'NEUTRAL',
     seed: s.seed, tick: s.tick, salt: s.stats.contacts, bodySpeed });
   b.vx = out.vx; b.vy = out.vy; b.vz = out.vz;
-  Object.assign(event, { assisted: true, technique, tier, target: out.target, ballSpeed: speed, bodySpeed });
+  Object.assign(event, { assisted: true, technique, tier, target: out.target, ballSpeed: speed, bodySpeed,
+    offset, ratio, airborne: !s.player.grounded });
   // The pass leaves from inside the magnet radius; body capsules must not re-catch it.
   s.assistGhost = true;
 }
@@ -153,7 +157,8 @@ function overhandTarget(s) {
   const p = s.player, b = s.ball;
   if (p.action !== 'receive') return 0;
   if (p.receiveOverhandChosen) return 1;
-  if (!b.active || s.contactEpisode) return 0;
+  // Only an incoming (falling) ball, before this receive has touched it.
+  if (p.receiveTouched || !b.active || s.contactEpisode || b.vy >= 0) return 0;
   p.receiveOverhandChosen = predictOverhand(p, b);
   return p.receiveOverhandChosen ? 1 : 0;
 }
@@ -325,7 +330,7 @@ export function stepDirectGame(s, commands = []) {
     const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity, surfacePose);
     // direct-v7: a real forearm/hand hit inside the receive window is a timed pass too.
     const hitEvent = contact && s.events.slice(eventsBefore).find((e) => e.type === 'contact');
-    if (hitEvent && offset !== null && hitEvent.active && (hitEvent.part === 'forearm' || hitEvent.part === 'hand')) {
+    if (hitEvent && offset !== null && !p.receiveTouched && hitEvent.active && (hitEvent.part === 'forearm' || hitEvent.part === 'hand')) {
       const technique = p.receiveOverhandChosen ? 'overhand' : 'underhand';
       applyPass(s, hitEvent, { technique, offset, speed: speedBefore });
     }
@@ -341,7 +346,7 @@ export function stepDirectGame(s, commands = []) {
   // A near miss inside the magnet radius is passed at the end of the tick, so
   // any real touch during the tick's substeps always goes first.
   const offset = s.contactEpisode || !b.active ? null : receiveWindowOffset(p, 1);
-  if (offset !== null && b.vy < 0) {
+  if (offset !== null && b.vy < 0 && !p.receiveTouched) {
     const reach = assistReach(s, getDirectPose(s, 1), b);
     if (reach) {
       s.contactEpisode = true;
@@ -352,6 +357,7 @@ export function stepDirectGame(s, commands = []) {
       applyPass(s, event, { technique: reach.technique, offset, ratio: reach.ratio, speed: Math.hypot(b.vx, b.vy, b.vz) });
     }
   }
+  if (p.action === 'receive' && s.events.some((e) => e.type === 'contact')) p.receiveTouched = true;
   if (s.contactEpisode) {
     s.separationTicks = bodySeparated(b, getDirectPose(s, 1))
       ? s.separationTicks + 1
@@ -374,6 +380,7 @@ export function stepDirectGame(s, commands = []) {
       p.passPitch = 0;
       p.receiveOverhand = 0;
       p.receiveOverhandChosen = false;
+      p.receiveTouched = false;
     }
   }
   delete s.poseAimStart;

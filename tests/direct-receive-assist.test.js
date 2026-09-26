@@ -131,3 +131,32 @@ test('A27b 強力發球餵球：從對面過網、不碰網', () => {
   assert.ok(seen.includes('feed') && !seen.includes('net'), seen.join(','));
   assert.ok(s.ball.z > 0, `落在我方場地 z=${s.ball.z.toFixed(2)}`);
 });
+
+// Round 5 bugs found by the miss-reason feedback (stationary player at (0, 5), receive feed).
+function receiveRun(press) {
+  const s = createDirectGame({ seed: 17 }), graded = [], contacts = [];
+  let passedAt = null, handsUpAfterPass = false, underhandPass = false;
+  for (let t = 0; t < 240 && (t < 2 || s.ball.active); t++) {
+    stepDirectGame(s, [{ tick: s.tick, sequence: 0, move: { x: 0, z: 0 }, aim: { x: 0, z: -1 }, action: t === 0 ? 'feed' : t === press ? 'receive' : null, feedKind: 'receive' }]);
+    for (const e of s.events) if (e.type === 'contact') {
+      contacts.push(e);
+      if (e.tier) { graded.push(e); passedAt ??= t; }
+      if (e.tier && e.technique === 'underhand') underhandPass = true;
+    }
+    if (underhandPass && t > passedAt && (s.player.receiveOverhand > 0 || s.player.receiveOverhandChosen)) handsUpAfterPass = true;
+  }
+  return { graded, contacts, handsUpAfterPass };
+}
+test('A28g 低手接完球後不會因為往外飛的球而舉手（高手）', () => {
+  for (let press = 20; press <= 40; press++) {
+    const r = receiveRun(press);
+    assert.ok(!r.handsUpAfterPass, `press ${press}: 出球後手舉起來了`);
+  }
+});
+test('A28h 有等級的觸球只能是這一球的第一次觸球（先碰到身體就不再判等級）', () => {
+  for (let press = 20; press <= 45; press++) {
+    const r = receiveRun(press);
+    assert.ok(r.graded.length <= 1 && (!r.graded.length || r.contacts[0] === r.graded[0]),
+      `press ${press}: ${r.contacts.map((e) => `${e.part}${e.tier ? ':' + e.tier + '/' + e.technique : ''}`).join(' → ')}`);
+  }
+});

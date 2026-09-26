@@ -124,5 +124,6 @@ export function receiveContactEta(s) {
   const t = (b.vy + Math.sqrt(disc)) / C.gravity;
   const f = facing(p), ahead = technique === 'overhand' ? A.overForward : 0.4;
   const point = { x: p.x + f.x * ahead * p.height, z: p.z + f.z * ahead * p.height };
-  return { t, technique, miss: Math.hypot(b.x + b.vx * t - point.x, b.z + b.vz * t - point.z) };
+  return { t, technique, miss: Math.hypot(b.x + b.vx * t - point.x, b.z + b.vz * t - point.z),
+    ball: { x: b.x + b.vx * t, z: b.z + b.vz * t } };
 }
