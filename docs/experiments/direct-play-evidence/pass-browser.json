@@ -1,6 +1,199 @@
 {
-  "createdAt": "2026-09-26T14:46:25.765Z",
+  "createdAt": "2026-09-26T16:00:04.217Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
-  "scenes": []
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "beginner": {
+        "timing": true,
+        "now": true,
+        "platform": true,
+        "reach": true,
+        "touch": true
+      },
+      "standard": {
+        "timing": true,
+        "now": true,
+        "platform": true,
+        "reach": true,
+        "touch": true
+      },
+      "advanced": {
+        "timing": false,
+        "now": false,
+        "platform": false,
+        "reach": false,
+        "touch": false
+      },
+      "contextual": {
+        "receive": {
+          "label": "接球 · J",
+          "started": "receive"
+        },
+        "dive": {
+          "label": "魚躍 · J",
+          "started": "dive"
+        }
+      },
+      "perTick": {
+        "checked": 70,
+        "mismatched": 0,
+        "dives": 8
+      },
+      "tapResults": {
+        "0": "11/11",
+        "3": "11/11",
+        "6": "11/11",
+        "9": "11/11"
+      },
+      "slowMotion": {
+        "on": {
+          "armed": true,
+          "tick": 48,
+          "scale": 0.5,
+          "ticks": 5,
+          "slowMotionTicks": 5
+        },
+        "off": {
+          "armed": true,
+          "tick": 48,
+          "scale": 1,
+          "ticks": 11,
+          "slowMotionTicks": 0
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "beginner": {
+        "timing": true,
+        "now": true,
+        "platform": true,
+        "reach": true,
+        "touch": true
+      },
+      "standard": {
+        "timing": true,
+        "now": true,
+        "platform": true,
+        "reach": true,
+        "touch": true
+      },
+      "advanced": {
+        "timing": false,
+        "now": false,
+        "platform": false,
+        "reach": false,
+        "touch": false
+      },
+      "contextual": {
+        "receive": {
+          "label": "接球 · J",
+          "started": "receive"
+        },
+        "dive": {
+          "label": "魚躍 · J",
+          "started": "dive"
+        }
+      },
+      "perTick": {
+        "checked": 70,
+        "mismatched": 0,
+        "dives": 8
+      },
+      "tapResults": {
+        "0": "11/11",
+        "3": "11/11",
+        "6": "11/11",
+        "9": "11/11"
+      },
+      "slowMotion": {
+        "on": {
+          "armed": true,
+          "tick": 48,
+          "scale": 0.5,
+          "ticks": 6,
+          "slowMotionTicks": 6
+        },
+        "off": {
+          "armed": true,
+          "tick": 48,
+          "scale": 1,
+          "ticks": 12,
+          "slowMotionTicks": 0
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "beginner": {
+        "timing": true,
+        "now": true,
+        "platform": true,
+        "reach": true,
+        "touch": true
+      },
+      "standard": {
+        "timing": true,
+        "now": true,
+        "platform": true,
+        "reach": true,
+        "touch": true
+      },
+      "advanced": {
+        "timing": false,
+        "now": false,
+        "platform": false,
+        "reach": false,
+        "touch": false
+      },
+      "contextual": {
+        "receive": {
+          "label": "接球 · J",
+          "started": "receive"
+        },
+        "dive": {
+          "label": "魚躍 · J",
+          "started": "dive"
+        }
+      },
+      "perTick": {
+        "checked": 70,
+        "mismatched": 0,
+        "dives": 8
+      },
+      "tapResults": {
+        "0": "11/11",
+        "3": "11/11",
+        "6": "11/11",
+        "9": "11/11"
+      },
+      "slowMotion": {
+        "on": {
+          "armed": true,
+          "tick": 48,
+          "scale": 0.5,
+          "ticks": 6,
+          "slowMotionTicks": 6
+        },
+        "off": {
+          "armed": true,
+          "tick": 48,
+          "scale": 1,
+          "ticks": 12,
+          "slowMotionTicks": 0
+        }
+      },
+      "errors": []
+    }
+  ]
 }
