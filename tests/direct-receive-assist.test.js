@@ -4,7 +4,7 @@
 // section 4 B): A23a -> R8, A23d -> R2, A23e, A24d, A25, A26a, A27, A28g/h.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chase } from '../tools/receive-assist-probe.mjs';
+import { chase, sweep, SETS } from '../tools/receive-assist-probe.mjs';
 import { passOutcome } from '../src/sim/directReceiveAssist.js';
 import { RECEIVE_ASSIST as A } from '../src/sim/directConstants.js';
 
@@ -17,7 +17,18 @@ test('R8 難度不退步（A23a，門檻沿用）：真人追球 2646 全部案�
   assert.equal(c.n, 2646);
   assert.ok(c.whiff / c.n <= 0.25, `空接 ${c.whiff}/${c.n}`);
   assert.ok(c.net / c.n <= 0.05, `碰網 ${c.net}/${c.n}`);
-  assert.ok(c.zone / c.n >= 0.34, `舉球區 ${c.zone}/${c.n}`);
+  assert.ok(c.zone / c.n >= 0.34, `舉球區 ${c.zone}/${c.n}（身體彈進區內另計 ${c.bodyZone}，不算）`);
+});
+
+// A23c rewritten for the rules (section 4 B, thresholds unchanged from
+// 3e90288): the same diagonal stick grids, pressed with the contextual hit
+// button; the setter zone counts rule-judged touches only.
+test('A23c 斜前兩組不退步：舉球區 ≥ 108／277、碰網 ≤ 3%', () => {
+  const d = sweep(SETS.diagonal), n = sweep(SETS.diagonalNoisy);
+  assert.ok(d.zone >= 108, `diagonal 舉球區 ${d.zone}/${d.n}`);
+  assert.ok(n.zone >= 277, `diagonalNoisy 舉球區 ${n.zone}/${n.n}`);
+  assert.ok(d.net / d.n <= 0.03, `diagonal 碰網 ${d.net}/${d.n}`);
+  assert.ok(n.net / n.n <= 0.03, `diagonalNoisy 碰網 ${n.net}/${n.n}`);
 });
 
 test('R2 分級單調（A23d）：三級各 ≥ 5% 的觸球，落點到舉球目標平均距離 完美 < 普通 < 差', () => {

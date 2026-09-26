@@ -11,7 +11,9 @@ import { DIRECT_PHYSICS as C, DIRECT_ACTIONS, RECEIVE_ASSIST as A, RECEIVE_RULES
 import { windowScale, timingTier, passOutcome, rng } from './directReceiveAssist.js';
 import { closestPoint } from './directPhysics.js';
 
-export const createJudge = () => ({ done: false, over: false, under: false, miss: null });
+// `press`: the first receive/dive press for this ball, so a press so early that
+// the action has already finished at the judgement still reads as "too early".
+export const createJudge = () => ({ done: false, over: false, under: false, miss: null, press: null });
 export const underRadius = (s) => s.assist?.underRadius ?? A.underRadius;
 export const overRadius = (s) => s.assist?.overRadius ?? A.overRadius;
 
@@ -65,11 +67,21 @@ export function nextJudgement(s, { run = Infinity, dive = true } = {}) {
   if (over && over.d <= over.radius) return { stage: 'over', ...over };
   const under = stage('underhand', underRadius(s));
   if (under && under.d <= under.radius) return { stage: 'under', ...under };
-  if (dive && under && under.d <= underRadius(s) + R.diveReach) {
-    const cp = crossingPoint(b, R.diveHeight);
-    if (cp) return { stage: 'dive', technique: 'dive', t: cp.t, d: under.d, radius: underRadius(s) + R.diveReach, ball: cp, point: under.point, speed: cp.speed };
+  // The dive band is measured at the dive judgement moment (ball centre at
+  // R.diveHeight) from the underhand point (section 2): for a flat, fast ball
+  // that point is well past the platform-height crossing.
+  if (dive && under) {
+    const reach = diveReachOf(s, run);
+    if (reach && reach.d <= reach.radius) return { stage: 'dive', technique: 'dive', ...reach };
   }
   return null;
+}
+// Horizontal distance from the underhand point to the ball at the dive
+// judgement moment (ball centre at R.diveHeight), over the current run.
+export function diveReachOf(s, run = Infinity) {
+  const cp = crossingPoint(s.ball, R.diveHeight);
+  if (!cp) return null;
+  return { t: cp.t, ...runDistance(s.player, 'underhand', cp, Math.min(cp.t, run)), radius: underRadius(s) + R.diveReach, ball: cp, speed: cp.speed };
 }
 // R10: what the hit button does right now.
 export function contextAction(s) {
@@ -88,11 +100,13 @@ export function slowMotionScale(s, { enabled = true } = {}) {
   return j && j.t <= R.slowMotionLead ? R.slowMotionScale : 1;
 }
 // Where a dive started now would meet the ball: the ball's point at the dive
-// height, if a judgement is coming for this ball (same test as the hit button).
+// height, if a judgement is coming for this ball (same test as the hit button),
+// with the band distance `d` measured at that moment from the underhand point
+// (the judgement at R.diveHeight reads these, never the pose of the sliding body).
 export function diveTargetFor(s) {
   if (!nextJudgement(s)) return null;
-  const cp = crossingPoint(s.ball, R.diveHeight);
-  return cp ? { x: cp.x, z: cp.z, t: cp.t } : null;
+  const reach = diveReachOf(s);
+  return reach ? { x: reach.ball.x, z: reach.ball.z, t: reach.t, d: reach.d, radius: reach.radius, point: { x: reach.point.x, z: reach.point.z } } : null;
 }
 // How far the arms extend for a dive at a ball `distance` metres away: fully
 // for a far ball, bent toward a ball right beside the body (never below diveMinReach).
@@ -117,6 +131,15 @@ export const DIVE_WINDOW_CENTRE = R.diveWindowCentre;
 export function actionWindowOffset(p, action, fraction = 0) {
   if (p.action !== action) return null;
   return p.actionTick + fraction - (action === 'dive' ? DIVE_WINDOW_CENTRE : RECEIVE_WINDOW_CENTRE);
+}
+// Receive press offset at the end of this tick: the running receive, or a
+// receive pressed so early that it already finished (judge.press) — that is
+// "too early", not "no press". Null only when nothing was pressed for this ball.
+export function receiveOffset(s) {
+  const live = actionWindowOffset(s.player, 'receive', 1);
+  if (live !== null) return live;
+  const press = s.judge?.press;
+  return press?.action === 'receive' ? s.tick - press.tick + 1 - RECEIVE_WINDOW_CENTRE : null;
 }
 // Should body collision be skipped this tick? Yes while a rule judgement is
 // coming for this ball: the player is idle or receiving with the ball headed
@@ -173,10 +196,12 @@ function timingOf(offset, k) {
 function pass(s, pose, { technique, tier, offset, ratio, speed }) {
   const p = s.player, b = s.ball;
   const snapped = snapToArms(s, pose);
-  // A dive is not a running stance: its error is the dive multiplier alone.
-  const bodySpeed = technique === 'dive' ? 0 : Math.hypot(p.vx, p.vz);
-  const out = passOutcome({ from: b, ballSpeed: speed, technique: technique === 'dive' ? 'underhand' : technique, tier,
-    seed: s.seed, tick: s.tick, salt: s.stats.contacts, bodySpeed, errorMultiplier: technique === 'dive' ? R.diveErrorMultiplier : 1 });
+  const bodySpeed = Math.hypot(p.vx, p.vz);
+  // A dive is not a running stance: its error is the dive multiplier alone
+  // (stance 1, not the set-stance 0.7 nor the running 1.6).
+  const dive = technique === 'dive';
+  const out = passOutcome({ from: b, ballSpeed: speed, technique: dive ? 'underhand' : technique, tier,
+    seed: s.seed, tick: s.tick, salt: s.stats.contacts, bodySpeed, errorMultiplier: dive ? R.diveErrorMultiplier : 1, stance: dive ? 1 : undefined });
   b.vx = out.vx; b.vy = out.vy; b.vz = out.vz;
   return contact(s, { ...snapped, active: true, assisted: true, technique, tier, target: out.target, ballSpeed: speed, bodySpeed, offset, ratio, airborne: !p.grounded });
 }
@@ -196,44 +221,37 @@ function judgeStage(s, pose, technique) {
   const d = Math.hypot(b.x - point.x, b.z - point.z);
   if (d > radius) return null;
   const speed = Math.hypot(b.vx, b.vy, b.vz), k = windowScale(speed);
-  const offset = actionWindowOffset(p, 'receive', 1);
+  const offset = receiveOffset(s);
   const timing = timingOf(offset, k);
   if (timing !== 'inside') return spray(s, pose, { technique, offset, timing, speed, ratio: d / radius });
   return pass(s, pose, { technique, tier: timingTier(offset, d / radius, speed), offset, ratio: d / radius, speed });
 }
 // A dive is never better than GOOD (section 2: 品質上限「普通」).
 const CAP = { PERFECT: 'GOOD', GOOD: 'GOOD', POOR: 'POOR' };
-// Horizontal distance from the ball to the nearest point of the extended
-// forearm platform: any part of the outstretched arms digs a dive.
-export function platformDistance(pose, b) {
-  let best = Infinity;
-  for (const q of pose) {
-    if (q.part !== 'forearm') continue;
-    const dx = q.b.x - q.a.x, dz = q.b.z - q.a.z, l2 = dx * dx + dz * dz;
-    const u = l2 > 1e-12 ? Math.max(0, Math.min(1, ((b.x - q.a.x) * dx + (b.z - q.a.z) * dz) / l2)) : 0;
-    best = Math.min(best, Math.hypot(b.x - (q.a.x + dx * u), b.z - (q.a.z + dz * u)));
-  }
-  return best;
-}
+// Dive judgement at R.diveHeight: inside the band (d measured at this moment
+// from the underhand point, fixed when the dive was pressed) and pressed inside
+// the window → a dive pass graded by timing; there is no extra gate on where
+// the sliding body's platform ended up (section 2: 撲救範圍內且有按 → 魚躍).
 function judgeDive(s, pose) {
-  const p = s.player, b = s.ball, j = s.judge;
-  const centre = platformCentre(pose) ?? techniquePoint(p, 'underhand');
-  const d = platformDistance(pose, b), radius = underRadius(s);
+  const p = s.player, b = s.ball, j = s.judge, target = p.diveTarget;
+  const d = target.d, radius = target.radius;
   const speed = Math.hypot(b.vx, b.vy, b.vz), k = windowScale(speed);
   const offset = actionWindowOffset(p, 'dive', 1), timing = timingOf(offset, k);
   if (d > radius || timing !== 'inside') {
     j.done = true;
-    j.miss = { stage: 'dive', d, radius, ...relative(p, b, centre), pressed: true, offset, timing: d > radius ? null : timing };
+    j.miss = { stage: 'dive', d, radius, ...relative(p, b, target.point), pressed: true, offset, timing: d > radius ? null : timing };
     return null;
   }
   return pass(s, pose, { technique: 'dive', tier: CAP[timingTier(offset, d / radius, speed)], offset, ratio: d / radius, speed });
 }
 // Why the ball is going to be missed, measured at the underhand judgement.
-export function missInfo(s, stage) {
-  const p = s.player, b = s.ball, point = techniquePoint(p, 'underhand');
+// `ball` is the ball to extrapolate: for a body deflection the caller passes
+// the ball as it was before the collision (R7 reads the incoming ball).
+export function missInfo(s, stage, ball = s.ball) {
+  const p = s.player, b = ball, point = techniquePoint(p, 'underhand');
   const at = b.y > point.y ? crossingPoint(b, point.y) ?? b : b;
   const d = Math.hypot(at.x - point.x, at.z - point.z);
-  const offset = actionWindowOffset(p, 'receive', 1);
+  const offset = receiveOffset(s);
   return { stage, d, radius: underRadius(s), ...relative(p, at, point), pressed: offset !== null, offset, timing: timingOf(offset, windowScale(Math.hypot(b.vx, b.vy, b.vz))) };
 }
 // Timing cue: seconds until the ball reaches the contact height of the

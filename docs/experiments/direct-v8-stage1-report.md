@@ -106,7 +106,10 @@
 **A 退場（全部照清單）**：`tests/direct-absorb.test.js` 整檔刪除（A18a／A18b／A18c／A18c+ ×3，共 6 條）；`tests/direct-inner-gap.test.js` 整檔刪除（只剩 A22c 一條）；`tests/direct-physics.test.js:26-190` 的迎球轉身輔助 9 條與其 `receiveFeed` 輔助函式刪除，其餘 23 條不動；`tests/direct-pass.test.js` 的 A2、A3、A3b、A4、A6、A6b、A17、L1 刪除；`tests/direct-receive-assist.test.js` 的 A24c、A23b 刪除。
 **B 改寫（門檻不變）**：A23a → R8（`direct-receive-assist.test.js:15`，34%／25%／5%）；A23c 併入 R8（不再獨立斷言，探針 `sweep` 保留）；A23d → R2（`:23`，三級 ≥ 5%、單調）；A23e 保留（`:34`）；A25（`:73`，70%／90%／≥ 50）、A26a（`:91`，≥ 1.5）、A27a／b（`:97`、`:103`）改用新判定跑，門檻不變；A28g／A28h（`:130`、`:136`）保留、對新判定路徑斷言；A14／A16／A16b 併入 R8（刪除獨立測試）；A24d（`:59`）改成純畫面姿勢檢查，90%／95% 不變。探針對應改動：`tools/receive-assist-probe.mjs`（按情境出手、噴球也入列、`armGap` 用 tick 末姿勢）、`tools/receive-cue-probe.mjs`（提示排練認「有等級的觸球」、按情境出手）、`tools/receive-realism-probe.mjs`（站姿統計只算有等級且非魚躍的接球）。
 **C 退場**：`direct-pass.test.js` 的 A1、A7、A15；`direct-hold-release.test.js` 的 A21a、A21c、「覆審保留」（A19d 保留）；`direct-pass-lock.test.js` 整檔刪除（只剩 H1）。
-**D 不動**：`direct-physics.test.js` 其餘 23 條、`direct-input.test.js` 15 條、A5、A20a、A27b——內容未動；唯二機械修訂：A5（`direct-pass.test.js:150-153`）與「replay and mid-flight restore」（`direct-physics.test.js:530,554`）寫死的 `'direct-v7'` 版本字串改成 `'direct-v8.1'`，並各加一條「拒絕 `direct-v7`」的 `throws`（與前幾版升版做法相同；不是門檻）。
+**D 不動**：`direct-physics.test.js` 其餘 23 條、`direct-input.test.js` 15 條、A5、A20a、A27b——內容未動；唯二機械修訂（2026-09-27 第一輪覆審 L1 更正為如實描述）：
+- A5（`direct-pass.test.js`）：正向重播的 `simulationVersion` 由 `'direct-v7'` 改 `'direct-v8.1'`；**原本「拒絕 `direct-v6` 重播」的 `assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v6' … }))` 被刪掉、換成拒絕 `'direct-v7'` 的同型斷言**；「拒絕 `direct-v6` 還原」的 `restoreDirectGame` throws 保留，另加一條拒絕 `'direct-v7'` 還原。
+- 「replay and mid-flight restore」（`direct-physics.test.js`）：正向重播版本字串 `"direct-v7"` → `"direct-v8.1"`；原有的拒絕 `"direct-v6"` 還原／重播兩條都保留，只**新增**一條拒絕 `"direct-v7"` 還原。
+（與前幾版升版做法相同；不是門檻。）
 
 數量：退場 37 條（A 組 26＝absorb 6＋inner-gap 1＋physics 9＋pass 8＋receive-assist 2；B 組併入 R8 而消失 4＝A23c、A14、A16、A16b；C 組 7）、新增 15 條（`direct-v8-rules` 9、`direct-v8-context` 6）；現在全套 2581 條，推算舊套為 2581＋37−15＝2603（未在舊碼上實跑全套，此數為推算）；`git diff 3e90288..HEAD --stat` 內其餘既有測試檔沒有任何門檻被放寬（A 組整條刪、B 組門檻數字逐條相同、D 組只動版本字串）。
 

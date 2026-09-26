@@ -80,6 +80,7 @@ try {
       assert.equal(await page.locator('.dp-actions select').count(), 0, 'No action select on the main screen');
       assert.equal(await page.locator('.dp-settings [data-action]').count(), 1, 'The practice assignment lives in the settings');
       assert.equal(await page.locator('[data-action]').inputValue(), 'auto', 'The assignment defaults to automatic');
+      assert.equal(await page.locator('[data-face]').count(), 0, 'The receive auto-face trial setting is gone');
       const feedAt = (kind, x, z) => page.evaluate(([kind, x, z]) => {
         const p = window.__directPractice; p.restart(); p.pause();
         document.querySelector('[data-assist]').value = 'beginner';
@@ -112,22 +113,39 @@ try {
         contextual[label] = { label: last.label, started };
         await page.screenshot({ path: resolve(output, `${name}-context-${label}.png`) });
       }
-      // Every tick: the label equals what a press starts (a copy is pressed on each tick of a live ball).
-      const perTick = await page.evaluate(async () => {
+      // R10, every tick (second round, C1): the same ball and scripted walk are
+      // replayed from a fresh start up to each tick 1..70. On that tick the
+      // button's data-does and text are read, then the button is pressed for
+      // real (touch) and the action the sim starts must be the one the button
+      // named on that tick. The walk crosses the dive band, so both occur.
+      const walkTo = tick => page.evaluate(tick => {
         const p = window.__directPractice; p.restart(); p.pause();
+        document.querySelector('[data-assist]').value = 'beginner';
         p.command({ action: 'feed', feedKind: 'receive' }); p.step(1);
-        let checked = 0, mismatched = 0, dives = 0;
-        for (let i = 0; i < 70; i++) {
-          const before = p.assistState().hitAction;
-          // The label is recomputed after each tick; compare it with the action the sim would start now.
-          if (before === 'dive') dives++;
-          checked++;
-          p.command({ move: { x: i < 20 ? 0 : 0.7, z: 0 } }); p.step(1);
-          if (p.snapshot().player.action) break;
+        for (let i = 1; i < tick; i++) { p.command({ move: { x: i < 20 ? 0 : 0.7, z: 0 } }); p.step(1); }
+        const s = p.snapshot(), a = p.assistState();
+        return { tick: s.tick, does: a.hitAction, label: a.hitLabel, live: s.ball.active && !s.player.action };
+      }, tick);
+      const perTick = { checked: 0, pressed: 0, mismatched: 0, dives: 0, receives: 0, rows: [] };
+      for (let t = 1; t <= 70; t++) {
+        const before = await walkTo(t);
+        if (!before.live) break;
+        perTick.checked++;
+        if (before.does === 'dive') perTick.dives++; else if (before.does === 'receive') perTick.receives++;
+        const named = before.label.includes(before.does === 'dive' ? '魚躍' : before.does === 'receive' ? '接球' : '∅');
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
+        await page.evaluate(() => window.__directPractice.step(1));
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        const started = await page.evaluate(() => window.__directPractice.snapshot().player.action);
+        perTick.pressed++;
+        if (started !== before.does || !named) {
+          perTick.mismatched++;
+          if (perTick.rows.length < 8) perTick.rows.push({ tick: before.tick, does: before.does, label: before.label, started });
         }
-        return { checked, mismatched, dives };
-      });
+      }
       assert.ok(perTick.checked >= 20, `per-tick label check ran (${perTick.checked})`);
+      assert.ok(perTick.dives > 0 && perTick.receives > 0, `both receive and dive occur on the walk (${JSON.stringify(perTick)})`);
+      assert.equal(perTick.mismatched, 0, `hit button (data-does/text) vs the action the sim started on a real press, per tick: ${perTick.mismatched}/${perTick.pressed} differ ${JSON.stringify(perTick.rows)}`);
       // Tap resting on the glass (A21b): press at every gold tick and lift after 0/3/6/9 ticks; the pass must come up.
       const feedReceive = () => page.evaluate(() => {
         const p = window.__directPractice; p.restart(); p.pause();
@@ -163,29 +181,47 @@ try {
         assert.ok(up / golds.length >= 10 / 11, `Tap resting ${rest} ticks at gold: pass comes up ${up}/${golds.length}`);
       }
       await cdp.detach();
-      // R9: a hard serve slows the picture to 0.5x before the judgement; off, it runs at 1x.
+      // R9 (second round, H3): one scripted tape (hard serve at tick 0, a
+      // 20-tick walk to the back line where the serve's dive-height point is
+      // 0.7 m ahead of the platform, dive at tick 45) is run twice through the
+      // real frame() loop with a synthetic 60 Hz clock, slow motion on and off,
+      // up to the same tick. The sim event log and the final state must be
+      // identical bit for bit. On, the picture runs at 0.5x before the
+      // judgement (12 frames advance about 6 ticks; off, about 12).
       const slowRun = async enabled => page.evaluate(enabled => {
         const p = window.__directPractice; p.restart(); p.pause();
         document.querySelector('[data-slowmo]').checked = enabled;
-        p.command({ action: 'feed', feedKind: 'serve' }); p.step(1);
-        let armed = false, tick = null;
-        for (let i = 0; i < 120; i++) {
+        p.command({ at: 0, action: 'feed', feedKind: 'serve' });
+        for (let t = 1; t <= 20; t++) p.command({ at: t, move: { x: 0, z: 1 } });
+        p.command({ at: 21, move: { x: 0, z: 0 } });
+        p.command({ at: 45, action: 'dive' });
+        let armed = null, scale = null, ticks = null, frames = 0, slowFrames = 0;
+        while (p.snapshot().tick < 160 && frames < 1000) {
           const s = p.snapshot();
-          const speed = Math.hypot(s.ball.vx, s.ball.vy, s.ball.vz);
-          if (speed >= 13 && s.ball.y < 2.4 && s.ball.z > 3) { armed = true; tick = s.tick; break; }
-          p.step(1);
+          if (armed === null && Math.hypot(s.ball.vx, s.ball.vy, s.ball.vz) >= 13 && s.ball.y < 2.4 && s.ball.z > 3) {
+            armed = s.tick; scale = p.assistState().slowMotion; ticks = p.frames(12, 60); frames += 12; continue;
+          }
+          if (p.assistState().slowMotion < 1) slowFrames++;
+          p.frames(1, 60); frames++;
         }
-        const scale = p.assistState().slowMotion;
-        const ticks = p.frames(12, 60);
-        return { armed, tick, scale, ticks, slowMotionTicks: p.metrics().slowMotionTicks };
+        const s = p.snapshot();
+        return { armed, scale, ticks, frames, slowFrames, tick: s.tick, playerZ: s.player.z, slowMotionTicks: p.metrics().slowMotionTicks, events: JSON.stringify(p.events()), state: JSON.stringify(s) };
       }, enabled);
       const slowOn = await slowRun(true), slowOff = await slowRun(false);
-      assert.ok(slowOn.armed && slowOff.armed, 'The serve reaches the passer as a hard ball');
-      assert.equal(slowOn.scale, 0.5, `Slow motion scale 0.5 on a hard serve in range (${JSON.stringify(slowOn)})`);
+      assert.ok(slowOn.armed !== null && slowOn.armed === slowOff.armed, `The serve reaches the passer as a hard ball at the same tick (${slowOn.armed} / ${slowOff.armed})`);
+      assert.equal(slowOn.tick, 160, `slow-motion run reached tick 160 (${slowOn.tick})`);
+      assert.equal(slowOff.tick, 160, `full-speed run reached tick 160 (${slowOff.tick})`);
+      assert.equal(slowOn.events, slowOff.events, 'Slow motion on/off: the sim event log differs');
+      assert.equal(slowOn.state, slowOff.state, 'Slow motion on/off: the final sim state differs');
+      const slowEvents = JSON.parse(slowOn.events);
+      assert.ok(slowEvents.some(e => e.type === 'contact' && e.technique === 'dive' && e.tier), `The tape contains a judged dive (${slowOn.events})`);
+      assert.equal(slowOn.scale, 0.5, `Slow motion scale 0.5 on a hard serve in range (${JSON.stringify({ ...slowOn, events: undefined, state: undefined })})`);
       assert.ok(slowOn.ticks >= 5 && slowOn.ticks <= 7, `12 frames at 60 Hz advance about 6 ticks in slow motion (${slowOn.ticks})`);
-      assert.ok(slowOn.slowMotionTicks > 0, 'Slow-motion ticks were counted');
+      assert.ok(slowOn.slowMotionTicks > 0 && slowOn.slowFrames > 0, `Slow-motion ticks were counted (${slowOn.slowMotionTicks} ticks, ${slowOn.slowFrames} frames)`);
       assert.equal(slowOff.scale, 1, 'Slow motion off: scale 1');
       assert.ok(slowOff.ticks >= 11 && slowOff.ticks <= 13, `12 frames at 60 Hz advance about 12 ticks at full speed (${slowOff.ticks})`);
+      assert.equal(slowOff.slowMotionTicks, 0, 'Slow motion off: no slow-motion ticks');
+      const slowSummary = run => ({ ...run, events: undefined, state: undefined, eventCount: JSON.parse(run.events).length, contacts: JSON.parse(run.events).filter(e => e.type === 'contact').map(e => `${e.tick}:${e.technique}/${e.tier}`) });
       await page.screenshot({ path: resolve(output, `${name}-slowmo.png`) });
       // A20e: receive auto-face fixed to half (user choice). Walk off-centre with a
       // live ball and compare the heading with the direction to the setter zone.
@@ -208,7 +244,7 @@ try {
       assert.deepEqual(spike.aim, { x: 0, z: -1 }, 'Auto-face only applies while the hit button would receive');
       await page.evaluate(() => { document.querySelector('[data-action]').value = 'auto'; });
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
-      report.scenes.push({ name, width, height, beginner, standard, advanced, contextual, perTick, tapResults, slowMotion: { on: slowOn, off: slowOff }, errors });
+      report.scenes.push({ name, width, height, beginner, standard, advanced, contextual, perTick, tapResults, slowMotion: { on: slowSummary(slowOn), off: slowSummary(slowOff), identical: slowOn.events === slowOff.events && slowOn.state === slowOff.state }, errors });
       await context.close();
     }
   }

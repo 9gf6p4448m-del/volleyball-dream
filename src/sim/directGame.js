@@ -214,6 +214,9 @@ export function stepDirectGame(s, commands = []) {
       p.action = c.action;
       p.actionTick = 0;
       p.shotType = c.action === 'spike' ? (shotTypes.includes(c.shotType) ? c.shotType : 'LINE') : null;
+      // direct-v8 (R7): remember the first receive/dive press for this ball, so a
+      // press that finished before the judgement still reads as "too early".
+      if ((c.action === 'receive' || c.action === 'dive') && !s.judge.done && !s.judge.press) s.judge.press = { action: c.action, tick: s.tick };
       if (c.action === "dive" && p.grounded) {
         startDive = true;
         // direct-v8 (R4): a dive at a ball within reach throws itself at the ball.
@@ -324,12 +327,14 @@ export function stepDirectGame(s, commands = []) {
     const surfacePose = restingSurfacePose(s, (i + 1) / C.substeps, nextPose, {
       receiveTurn: turnBefore, receiveReach: reachBefore, receiveOverhand: overBefore,
     });
+    // The incoming ball, before the collision changes it (R7 reasons read this).
+    const incoming = { x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz };
     const contact = collideBody(s, oldPose, nextPose, dt, terminal?.t ?? Infinity, surfacePose);
     // A body touch before any judgement ends the rule chain for this ball:
     // it was outside every circle, so it is a miss deflecting off the body.
     if (contact && !s.judge.done) {
       s.judge.done = true;
-      s.judge.miss = missInfo(s, 'body');
+      s.judge.miss = missInfo(s, 'body', incoming);
     }
     // A valid earlier body hit changes the rest of the trajectory. Check that
     // new segment too, rather than retaining the pre-contact floor/net decision.

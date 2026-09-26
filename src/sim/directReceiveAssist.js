@@ -46,10 +46,11 @@ export function techniqueMultiplier(technique, ballSpeed) {
 }
 // Outgoing velocity of a pass: a lob to the setter zone centre, off by an
 // error that grows with worse timing, with an overhand on a fast ball, with a
-// running stance and (direct-v8) with a dive.
-export function passOutcome({ from, ballSpeed, technique, tier, seed = 1, tick = 0, salt = 0, bodySpeed = 0, errorMultiplier = 1 }) {
+// running stance and (direct-v8) with a dive. `stance` overrides the stance
+// multiplier (a dive is neither a set nor a running stance: 1).
+export function passOutcome({ from, ballSpeed, technique, tier, seed = 1, tick = 0, salt = 0, bodySpeed = 0, errorMultiplier = 1, stance = stanceMultiplier(bodySpeed) }) {
   const random = rng(seed >>> 0, tick, salt);
-  const radius = A.error[tier] * techniqueMultiplier(technique, ballSpeed) * stanceMultiplier(bodySpeed) * errorMultiplier * Math.sqrt(random());
+  const radius = A.error[tier] * techniqueMultiplier(technique, ballSpeed) * stance * errorMultiplier * Math.sqrt(random());
   const angle = random() * Math.PI * 2;
   // A bad pass may fly wide or long but is never aimed over the net.
   const target = { x: A.target.x + Math.cos(angle) * radius,

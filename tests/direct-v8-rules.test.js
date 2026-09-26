@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createDirectGame, stepDirectGame } from '../src/sim/directGame.js';
 import { windowScale } from '../src/sim/directReceiveAssist.js';
-import { RECEIVE_ASSIST as A, DIRECT_ACTIONS } from '../src/sim/directConstants.js';
+import { RECEIVE_ASSIST as A, DIRECT_ACTIONS, DIRECT_PHYSICS as C } from '../src/sim/directConstants.js';
 import { chase, armGap } from '../tools/receive-assist-probe.mjs';
 import { ghostFlight, crossingTick, commandsFor } from '../tools/receive-rules-cases.mjs';
 
@@ -26,18 +26,32 @@ const tag = (c) => `stick=${c.stick.join(',')} x0=${c.x0} z0=${c.z0} m=${c.m} rt
 const describe = (r) => (r.contact ? `${r.contact.part}${r.contact.tier ? ':' + r.contact.tier + '/' + r.contact.technique : ''}` : '沒有觸球') +
   (r.end ? ` → ${r.end.type} (${r.end.x.toFixed(2)}, ${r.end.z.toFixed(2)})` : '');
 
+// Free flight of the ball state `b` at the sim's substep scheme until the
+// ground (centre at the ball radius): where the pass would land untouched.
+function ballisticLanding(b) {
+  const dt = (1 / 60) / C.substeps;
+  let { x, y, z, vx, vy, vz } = b;
+  for (let i = 0; i < C.substeps * 600; i++) {
+    vy -= C.gravity * dt;
+    const nx = x + vx * dt, ny = y + vy * dt, nz = z + vz * dt;
+    if (ny <= C.radius) { const u = (y - C.radius) / (y - ny); return { x: x + (nx - x) * u, z: z + (nz - z) * u }; }
+    x = nx; y = ny; z = nz;
+  }
+  return null;
+}
 function runR1(c, turn = null) {
   const s = createDirectGame({ height: c.height }); s.player.x = c.x0; s.player.z = c.z0;
-  let contact = null, gap = null, end = null, later = 0;
+  let contact = null, gap = null, end = null, later = 0, landing = null;
   for (let t = 0; t < 240; t++) {
     if (turn !== null) s.player.receiveTurn = turn;
     stepDirectGame(s, commandsFor(s, c, t));
     const hit = s.events.find((e) => e.type === 'contact');
-    if (hit && !contact) { contact = hit; gap = armGap(s).gap; } else if (hit) later++;
+    // The ball right after the judged touch: its ballistic landing is where the pass goes.
+    if (hit && !contact) { contact = hit; gap = armGap(s).gap; landing = ballisticLanding(s.ball); } else if (hit) later++;
     const done = s.events.find((e) => ['ground', 'net', 'out'].includes(e.type));
     if (done) { end = { type: done.type, x: s.ball.x, z: s.ball.z }; break; }
   }
-  return { contact, gap, end, later };
+  return { contact, gap, end, later, landing };
 }
 
 test('R1 規則取代碰撞：舊碼碰到軀幹／臀／大腿／上臂的圈內完美時機案例（≥ 20），新碼全部判完美並送往舉球區', () => {
@@ -45,15 +59,16 @@ test('R1 規則取代碰撞：舊碼碰到軀幹／臀／大腿／上臂的圈�
   for (const c of CASES.cases)
     assert.ok(['torso', 'hips', 'arm'].includes(c.old.part) || /thigh/.test(c.old.id), `${tag(c)} 舊碼觸球部位 ${c.old.part}/${c.old.id}`);
   const results = CASES.cases.map((c) => ({ c, ...runR1(c) }));
-  // Sent to the setter zone: the pass is aimed there and lands there, unless the
-  // athlete (still holding the stick toward the net) runs under the pass and
-  // the ball meets the body again on the way down.
+  // Sent to the setter zone: the pass is judged PERFECT and the ball leaving the
+  // arms would land inside the zone (ballistic prediction from the ball state
+  // right after the touch). Whether the athlete, still running toward the net,
+  // later runs under the pass and touches it again does not count as a pass.
   const ok = (r) => r.contact?.tier === 'PERFECT' && r.contact.technique === 'underhand' && inZone(r.contact.target.x, r.contact.target.z) &&
-    ((r.end?.type === 'ground' && inZone(r.end.x, r.end.z)) || r.later > 0);
+    !!r.landing && inZone(r.landing.x, r.landing.z);
   const bad = results.filter((r) => !ok(r));
-  assert.equal(bad.length, 0, `完美且進舉球區 ${results.length - bad.length}/${results.length}；例：${bad.slice(0, 4).map((r) => `${tag(r.c)} → ${describe(r)}`).join('；')}`);
-  const landed = results.filter((r) => r.end?.type === 'ground' && inZone(r.end.x, r.end.z)).length;
-  assert.ok(landed >= results.length * 0.8, `實際落在舉球區 ${landed}/${results.length}`);
+  assert.equal(bad.length, 0, `完美且彈道落點在舉球區 ${results.length - bad.length}/${results.length}；例：${bad.slice(0, 4).map((r) => `${tag(r.c)} → ${describe(r)}${r.landing ? ` 彈道落點 (${r.landing.x.toFixed(2)}, ${r.landing.z.toFixed(2)})` : ''}`).join('；')}`);
+  const deviation = Math.max(...results.map((r) => Math.hypot(r.landing.x - r.contact.target.x, r.landing.z - r.contact.target.z)));
+  assert.ok(deviation <= 0.05, `彈道落點與 target 最大偏差 ${deviation.toFixed(3)} m`);
 });
 
 test('R1 轉身角度不影響判定：10 例 × receiveTurn −30°／0°／+30°，等級與落點逐值相同', () => {
@@ -223,6 +238,62 @@ test('R4 魚躍：撲救範圍外（d > 2.0 m）按出手 30 例，0 例救到',
   const runs = FAR_POINTS.map((p) => ({ p, ...runDrop(p, rt) }));
   const saved = runs.filter((r) => r.contact?.tier);
   assert.equal(saved.length, 0, `救到 ${saved.length}/30：${saved.slice(0, 4).map((r) => `${pointTag(r.p)} → ${describe(r)}`).join('；')}`);
+});
+
+// R4, second round (stricter, 2026-09-27): a hard serve is flat and fast, so
+// the ball travels about 1.4 m between the platform-height crossing and the
+// dive height. Section 2 measures the dive band at the dive judgement moment
+// (ball centre 0.3 m), from the underhand point; a judgement that measures it
+// at the platform-height crossing saves balls beyond 2.0 m and lets balls
+// inside 2.0 m go.
+const SERVE = ghostFlight('serve', H);
+const SERVE_DIVE = crossingTick(SERVE, DIVE_HEIGHT), SERVE_UNDER = crossingTick(SERVE, A.platformCueHeight * H);
+// Stances as (dx, dz) of the underhand point from the ball at the dive height.
+// Inside the band: mostly past the ball's path (dz > 0), where the distance to
+// the platform-height crossing is beyond 2.0 m; outside the band: before the
+// path (dz < 0), where that same distance is inside 2.0 m.
+const SERVE_IN = [[0, 1.2], [0, 1.6], [0, 1.9], [0.5, 1.5], [-0.5, 1.5], [0.8, 1.7], [-0.8, 1.7], [1.0, 0], [-1.0, 0], [1.5, 0.3], [-1.5, -0.3], [0.7, -0.6]];
+const SERVE_OUT = [[0.6, -2.0], [1.0, -1.9], [1.4, -1.6], [1.8, -1.2], [-0.8, -2.0], [-1.2, -1.8], [-1.6, -1.5], [0.9, -2.2], [-0.5, -2.3], [1.2, -2.1]];
+const servePoint = ([dx, dz]) => ({ x: SERVE_DIVE.x + dx, z: SERVE_DIVE.z + dz, d: Math.hypot(dx, dz), dUnder: Math.hypot(SERVE_DIVE.x + dx - SERVE_UNDER.x, SERVE_DIVE.z + dz - SERVE_UNDER.z) });
+const serveTag = (p) => `d(0.3 m)=${p.d.toFixed(2)} d(平台高)=${p.dUnder.toFixed(2)} (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`;
+function runServe(point, rt, press = 'auto') {
+  const s = createDirectGame(); s.player.x = point.x; s.player.z = point.z + UNDER_FORWARD * H;
+  let contact = null, end = null, action = null;
+  for (let t = 0; t < 240; t++) {
+    const a = t === 0 ? 'feed' : t === rt ? (press === 'auto' ? hitAction(s) : press) : null;
+    if (t === rt) action = a;
+    stepDirectGame(s, [cmd(s, a, { x: 0, z: 0 }, { feedKind: 'serve' })]);
+    const hit = s.events.find((e) => e.type === 'contact');
+    if (hit && !contact) contact = { ...hit, tick: t };
+    const done = s.events.find((e) => ['ground', 'net', 'out'].includes(e.type));
+    if (done) { end = { type: done.type, x: s.ball.x, z: s.ball.z }; break; }
+  }
+  return { action, contact, end };
+}
+
+test('R4 魚躍（加嚴）強力發球：0.3 m 時刻 0.5 < d ≤ 2.0 的 12 例全部判魚躍救到（含平台高度 d > 2.0 的 7 例），並在 0.3 m 判定時刻判定', () => {
+  assert.ok(SERVE_DIVE && SERVE_UNDER && Math.hypot(SERVE_DIVE.x - SERVE_UNDER.x, SERVE_DIVE.z - SERVE_UNDER.z) > 1, '發球在平台高度與 0.3 m 之間須飛行超過 1 m');
+  const points = SERVE_IN.map(servePoint);
+  for (const p of points) assert.ok(p.d > 0.5 && p.d <= 2.0, serveTag(p));
+  assert.ok(points.filter((p) => p.dUnder > 2.0).length >= 7, `平台高度 d > 2.0 的例數 ${points.filter((p) => p.dUnder > 2.0).length}`);
+  const rt = pressFor(SERVE_DIVE.tick, 0, DIVE_CENTRE);
+  const runs = points.map((p) => ({ p, ...runServe(p, rt) }));
+  if (rules) runs.forEach((r) => assert.equal(r.action, 'dive', `${serveTag(r.p)} 情境出手應為魚躍，得到 ${r.action}`));
+  const saved = runs.filter((r) => r.contact?.technique === 'dive' && r.contact.tier);
+  assert.equal(saved.length, runs.length, `魚躍救到 ${saved.length}/${runs.length}；例：${runs.filter((r) => !saved.includes(r)).slice(0, 4).map((r) => `${serveTag(r.p)} → ${describe(r)}`).join('；')}`);
+  for (const r of saved) assert.equal(r.contact.tick, SERVE_DIVE.tick, `${serveTag(r.p)} 判定 tick ${r.contact.tick} ≠ 0.3 m tick ${SERVE_DIVE.tick}`);
+  assert.equal(saved.filter((r) => r.contact.tier === 'PERFECT').length, 0, '魚躍出現完美');
+});
+
+test('R4 魚躍（加嚴）強力發球：0.3 m 時刻 d > 2.0 的 10 例（平台高度 d 都 ≤ 2.0）按出手與硬按魚躍都 0 例救到', () => {
+  const points = SERVE_OUT.map(servePoint);
+  for (const p of points) assert.ok(p.d > 2.0 && p.dUnder <= 2.0, serveTag(p));
+  const rt = pressFor(SERVE_DIVE.tick, 0, DIVE_CENTRE);
+  for (const press of ['auto', 'dive']) {
+    const runs = points.map((p) => ({ p, ...runServe(p, rt, press) }));
+    const saved = runs.filter((r) => r.contact?.tier);
+    assert.equal(saved.length, 0, `${press}: 救到 ${saved.length}/${runs.length}：${saved.slice(0, 4).map((r) => `${serveTag(r.p)} → ${describe(r)}`).join('；')}`);
+  }
 });
 
 test('R6 不隔空：R1 案例組＋追球探針的全部規則觸球，判定那一格球面到手掌／前臂表面 ≤ 0.05 m（100%）', () => {

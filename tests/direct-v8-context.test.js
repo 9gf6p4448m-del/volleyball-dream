@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDirectGame, stepDirectGame, snapshotDirectGame, restoreDirectGame, serializeDirectState, replayDirectTape } from '../src/sim/directGame.js';
-import { contextAction, resolveHitAction, slowMotionScale, RECEIVE_WINDOW_CENTRE, DIVE_WINDOW_CENTRE } from '../src/sim/directReceiveRules.js';
+import { contextAction, resolveHitAction, slowMotionScale, crossingPoint, RECEIVE_WINDOW_CENTRE, DIVE_WINDOW_CENTRE } from '../src/sim/directReceiveRules.js';
 import { RECEIVE_ASSIST as A, RECEIVE_RULES as R, DIRECT_ACTIONS } from '../src/sim/directConstants.js';
 import { createDirectControls } from '../src/input/directControls.js';
 import { contactReason, missReason } from '../src/app/directReceiveReasons.js';
@@ -103,11 +103,59 @@ test('R7 失誤原因：每顆球結束都有非空原因；沒接到說明站�
     assert.ok(typeof text === 'string' && text.length > 0, `${name}: 原因字串空白`);
     assert.ok(check(text), `${name}: 「${text}」`);
   }
+  // Second round (M2): a press so early that the 32-tick receive has finished
+  // by the judgement (here 40 ticks = 0.67 s before it) is "too early", not
+  // "no press". A ball from 3.5 m gives the flight time for such a press.
+  const highRows = flight({ x: 0, y: 3.5, z: 4, vx: 0, vy: 0, vz: 0 });
+  const highUnder = crossingTick(highRows, A.platformCueHeight * H);
+  const receiveLength = DIRECT_ACTIONS.receive.windup + DIRECT_ACTIONS.receive.active + DIRECT_ACTIONS.receive.recovery;
+  const early = pressFor(highUnder.tick, RECEIVE_WINDOW_CENTRE, 28);
+  assert.ok(early >= 0 && highUnder.tick - early >= receiveLength, `按鍵 tick ${early} 須在判定 tick ${highUnder.tick} 之前至少 ${receiveLength} tick`);
+  const r = run({ ...at(0.2, -0.2), y: 3.5, vx: 0, vy: 0, vz: 0 }, early, 'receive');
+  assert.ok(r.contact?.spray, `按太早（動作已收招）: 須為噴球（${r.contact ? JSON.stringify({ tier: r.contact.tier, spray: r.contact.spray, timing: r.contact.timing }) : '沒有觸球'}）`);
+  assert.equal(r.contact.active, false, '按太早（動作已收招）: 判定時接球動作應已結束');
+  assert.equal(r.contact.timing, 'early', `按太早（動作已收招）: timing ${r.contact.timing}`);
+  const text = contactReason(r.contact);
+  assert.ok(text.startsWith('噴球') && text.includes('按太早') && !text.includes('沒按'), `按太早（動作已收招）: 「${text}」`);
 });
 
-// R9: slow motion is a pure function of the state; the tape is the same with it on or off.
-function serveTape(playerX = 0) {
-  const s = createDirectGame(); s.player.x = playerX;
+// R7, body first (second round, H2): a ball outside every circle that meets the
+// body before any judgement is a stance miss, and its direction and centimetres
+// are those of the incoming ball (where it would have crossed the platform
+// height), not of the ball after it bounced off the body.
+test('R7 身體先碰：站位公分與方向和碰撞前的預測一致；站位和時機都不合格時寫站位', () => {
+  const dirOf = (m) => (Math.abs(m.right) >= Math.abs(m.forward) ? (m.right > 0 ? '右' : '左') : (m.forward > 0 ? '前' : '後'));
+  // Expected stance numbers: the incoming ball's free flight to the platform height, body frame of a player at (0, 5) facing the net.
+  const expect = (ball) => {
+    const at = crossingPoint(ball, A.platformCueHeight * H);
+    const right = at.x - PLATFORM.x, forward = -(at.z - PLATFORM.z);
+    return { d: Math.hypot(right, forward), dir: dirOf({ right, forward }) };
+  };
+  const cases = [
+    // [name, ball (with velocity), press tick or null]
+    ['右側來球碰身體，沒按', { x: 1.6, y: 1.5, z: 5.05, vx: -3, vy: 1.5, vz: 0 }, null],
+    ['右側來球碰身體，按太早（站位與時機都不合格）', { x: 1.6, y: 1.5, z: 5.05, vx: -3, vy: 1.5, vz: 0 }, 0],
+    ['正面平飛碰胸口，沒按', { x: 0.05, y: 1.35, z: 3.0, vx: 0, vy: 1.5, vz: 6 }, null],
+  ];
+  for (const [name, ball, rt] of cases) {
+    const want = expect(ball);
+    assert.ok(want.d > A.underRadius, `${name}: 案例須在低手圈外（預測 d=${want.d.toFixed(2)}）`);
+    const r = run(ball, rt ?? -1, 'receive');
+    assert.ok(r.contact && !r.contact.tier && !r.contact.spray, `${name}: 須先碰到身體（${r.contact ? r.contact.part : '沒有觸球'}）`);
+    assert.ok(r.end?.miss, `${name}: 終止事件沒有失誤資料`);
+    assert.equal(r.end.miss.stage, 'body', `${name}: stage ${r.end.miss.stage}`);
+    const text = missReason(r.end);
+    assert.ok(Math.abs(r.end.miss.d - want.d) <= 0.03, `${name}: 公分 ${(r.end.miss.d * 100).toFixed(0)} ≠ 碰撞前預測 ${(want.d * 100).toFixed(0)}（「${text}」）`);
+    assert.equal(dirOf(r.end.miss), want.dir, `${name}: 方向 ${dirOf(r.end.miss)} ≠ 碰撞前預測 ${want.dir}（「${text}」）`);
+    assert.ok(text.startsWith('沒接到') && text.includes('站位') && text.includes('公分') && text.includes(want.dir), `${name}: 「${text}」`);
+  }
+});
+
+// R9: slow motion is a pure function of the state. The passer stands at z = 7,
+// where the hard serve's dive-height point is 0.7 m ahead of the platform (in
+// the dive band; at z = 5 it is 2.7 m away, out of every range).
+function serveTape(playerX = 0, playerZ = 7) {
+  const s = createDirectGame(); s.player.x = playerX; s.player.z = playerZ;
   const initial = snapshotDirectGame(s), commands = [];
   // Press when the contextual button first says the judgement is 0.22 s away.
   let pressed = false;
@@ -120,25 +168,29 @@ function serveTape(playerX = 0) {
   }
   return { initial, commands, endTick: s.tick };
 }
-test('R9 慢動作：純函式；快球、判定前 ≤ 0.4 s、人在圈內或撲救範圍內 → 0.5，其他 → 1；開關不改 sim 事件序列（觸發次數 > 0）', () => {
+// The "on/off leaves the sim identical" half of R9 needs the real practice
+// loop (the scale only exists in src/app): tools/direct-play-browser.mjs --pass
+// drives frame() with a synthetic clock on the same scripted tape with slow
+// motion on and off and compares the sim event log bit for bit.
+test('R9 慢動作：純函式不寫狀態；快球、判定前 ≤ 0.4 s、人在圈內或撲救範圍內 → 0.5，其他 → 1；觸發次數 > 0', () => {
   const tape = serveTape();
   const replay = (enabled) => {
     const s = restoreDirectGame(tape.initial), byTick = new Map();
     for (const c of tape.commands) byTick.set(c.tick, [...(byTick.get(c.tick) ?? []), c]);
-    const events = [], scales = [];
+    const scales = [];
     let slowTicks = 0, seenSpeed = 0;
     while (s.tick < tape.endTick) {
+      // Reading the scale must not touch the state (a pure function of it).
+      const before = serializeDirectState(s);
       const scale = slowMotionScale(s, { enabled });
+      assert.equal(serializeDirectState(s), before, `tick ${s.tick}: slowMotionScale 改了狀態`);
       scales.push(scale);
       if (scale < 1) { slowTicks++; seenSpeed = Math.max(seenSpeed, Math.hypot(s.ball.vx, s.ball.vy, s.ball.vz)); }
       stepDirectGame(s, byTick.get(s.tick) ?? []);
-      events.push(...s.events);
     }
-    return { events: JSON.stringify(events), state: serializeDirectState(s), slowTicks, seenSpeed, scales };
+    return { slowTicks, seenSpeed, scales };
   };
   const on = replay(true), off = replay(false);
-  assert.equal(on.events, off.events, '開關慢動作的 sim 事件序列不同');
-  assert.equal(on.state, off.state, '開關慢動作的 sim 狀態不同');
   assert.ok(on.slowTicks > 0, `慢動作觸發 ${on.slowTicks} tick`);
   assert.ok(on.seenSpeed >= R.slowMotionSpeed, `觸發時球速 ${on.seenSpeed.toFixed(1)} m/s`);
   assert.equal(off.slowTicks, 0, '設定關閉仍觸發');
@@ -206,20 +258,27 @@ function controlsFixture() {
   return { ev, f: { win, doc, moveZone: make(), aimZone: make(), jumpButton: make(), hitButton: make(), actionSelect: null, feedButton: make(), feedSelect: make() } };
 }
 
-test('R11 決定論：含接球、噴球、魚躍的錄影，整卷重播與中途還原逐位元相同', () => {
+test('R11 決定論：含接球、噴球、魚躍、慢動作的錄影，整卷重播與中途還原逐位元相同', () => {
   const s = createDirectGame({ seed: 7 });
   const initial = snapshotDirectGame(s), commands = [], states = [];
-  // Receive feed + perfect press (pass); receive feed + late press (spray);
-  // hard serve landing 1.2 m ahead of the platform + dive; a walk in between.
+  // Receive feed + perfect press (pass); receive feed + late press (spray); a
+  // walk sideways and back, then 20 ticks toward the back line (to z ≈ 7.0,
+  // where the hard serve's dive-height point is 0.7 m ahead of the platform);
+  // hard serve + dive.
   const plan = [[0, 'feed', 'receive'], [29, 'receive', null], [200, 'feed', 'receive'], [244, 'receive', null], [400, 'feed', 'serve'], [445, 'dive', null]];
   const kinds = new Set();
+  let slowTicks = 0;
   for (let t = 0; t < 560; t++) {
+    if (slowMotionScale(s) < 1) slowTicks++;
     const step = plan.find((p) => p[0] === t);
-    const c = { ...cmd(s, step?.[1] ?? null, t >= 300 && t < 328 ? { x: 1, z: 0 } : t >= 330 && t < 358 ? { x: -1, z: 0 } : { x: 0, z: 0 }), ...(step?.[2] ? { feedKind: step[2] } : {}) };
+    const move = t >= 300 && t < 328 ? { x: 1, z: 0 } : t >= 330 && t < 358 ? { x: -1, z: 0 } : t >= 360 && t < 380 ? { x: 0, z: 1 } : { x: 0, z: 0 };
+    const c = { ...cmd(s, step?.[1] ?? null, move), ...(step?.[2] ? { feedKind: step[2] } : {}) };
     commands.push(c); stepDirectGame(s, [c]); states.push(snapshotDirectGame(s));
     for (const e of s.events) if (e.type === 'contact') kinds.add(e.tier ? e.technique : e.spray ? 'spray' : 'body');
   }
-  assert.ok(kinds.has('underhand') && kinds.has('spray') && kinds.has('dive'), `錄影內容 ${[...kinds].join(',')}`);
+  // The tape really contains all four: a receive, a spray, a dive and slow-motion ticks.
+  assert.ok(slowTicks > 0, `錄影中的慢動作 tick ${slowTicks}`);
+  for (const kind of ['underhand', 'spray', 'dive']) assert.ok(kinds.has(kind), `錄影內容缺 ${kind}（${[...kinds].join(',')}）`);
   for (let from = 0; from < states.length - 1; from += 23) {
     const restored = restoreDirectGame(states[from]);
     for (let t = restored.tick; t < s.tick; t++) {

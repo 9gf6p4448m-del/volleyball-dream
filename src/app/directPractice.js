@@ -104,7 +104,10 @@ export function runDirectPractice(ctx) {
   let simTimes = [];
   let maxBacklog = 0;
   let slowMotionTicks = 0; // sim ticks advanced while the picture ran at 0.5×
+  // Harness-injected commands; one with `at` waits for that simulation tick.
   const injected = [];
+  // Harness event log: every sim event since the last restart, in tick order.
+  let eventLog = [];
   // direct-v7 round 2: a feed from the button/key starts after a countdown, so
   // the player has time to move; continuous mode re-feeds after each dead ball.
   let pendingFeed = null;
@@ -139,6 +142,7 @@ export function runDirectPractice(ctx) {
     initial = snapshotDirectGame(state);
     recorded = [];
     injected.length = 0;
+    eventLog = [];
     pendingFeed = null;
     playback = null;
     liveState = null;
@@ -242,7 +246,11 @@ export function runDirectPractice(ctx) {
         commands.push({ tick: state.tick, sequence: 200000, action: 'feed', feedKind: pendingFeed.feedKind });
         pendingFeed = null;
       }
-      while (injected.length) commands.push({ ...injected.shift(), tick: state.tick, sequence: 100000 + commands.length });
+      for (let i = 0; i < injected.length;) {
+        if (injected[i].at != null && injected[i].at > state.tick) { i++; continue; }
+        const { at, ...command } = injected.splice(i, 1)[0];
+        commands.push({ ...command, tick: state.tick, sequence: 100000 + commands.length });
+      }
       if (state.tick >= MAX_TAPE_TICKS) { setPaused(true); message('本輪已達 10 分鐘，請匯出回放後重新開始。'); return; }
       recorded.push(...commands.map(command => structuredClone(command)));
     }
@@ -250,6 +258,7 @@ export function runDirectPractice(ctx) {
     stepDirectGame(state, commands);
     simTimes.push(performance.now() - before);
     if (simTimes.length > 3600) simTimes.shift();
+    if (eventLog.length < 20000) eventLog.push(...structuredClone(state.events));
     updateHitLabel();
     for (const event of state.events) {
       if (event.type === 'feed' && !playback) message('球來了：讓接球圈套住觸球點，外圈變金色就按。');
@@ -408,7 +417,9 @@ export function runDirectPractice(ctx) {
     assistState: () => ({ platformVisible: platformArrow.visible, timingActive, timingNow: $('[data-hit]').classList.contains('dp-timing-now'),
       reachVisible: reachRing.visible, touchVisible: touchRing.visible, hitAction: $('[data-hit]').dataset.does, hitLabel: $('[data-hit-label]').textContent,
       slowMotion: slowMotion(), message: $('[data-message]').textContent }), pause: () => setPaused(true), resume: () => setPaused(false),
+    // Inject a command for the next step, or for simulation tick `at`.
     command: command => injected.push(structuredClone(command)),
+    events: () => structuredClone(eventLog),
     step(count = 1) {
       // Single-step consumes actual queued input; unlike a user pause, it must not erase it.
       paused = true; accumulator = 0; lastTime = performance.now();
@@ -416,10 +427,12 @@ export function runDirectPractice(ctx) {
       for (let i = 0; i < Math.min(600, Math.max(0, count)); i++) step();
       draw();
     },
-    // Drive the real frame loop with a synthetic clock (harness): returns the ticks advanced.
+    // Drive the real frame loop with a synthetic clock (harness): returns the
+    // ticks advanced. Successive calls continue the same accumulator (a frame
+    // in slow motion may complete no tick; the next call finishes it).
     frames(count, fps = 60) {
       const start = state.tick;
-      setPaused(false);
+      paused = false; $('[data-pause]').textContent = '暫停';
       for (let i = 0; i < count && !paused; i++) frame(lastTime + 1000 / fps, false);
       paused = true; $('[data-pause]').textContent = '繼續';
       return state.tick - start;

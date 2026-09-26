@@ -1,0 +1,117 @@
+TAP version 13
+# Subtest: R7 失誤原因：每顆球結束都有非空原因；沒接到說明站位（公分＋方向）或時機；噴球寫太早／太晚／沒按；魚躍標明魚躍
+not ok 1 - R7 失誤原因：每顆球結束都有非空原因；沒接到說明站位（公分＋方向）或時機；噴球寫太早／太晚／沒按；魚躍標明魚躍
+  ---
+  duration_ms: 437.8072
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\909bbe7b-83ed-4cee-975c-a37e6e7ac45a\\scratchpad\\old-ae48ba2\\tests\\direct-v8-context.test.js:80:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    按太早（動作已收招）: timing none
+    
+    'none' !== 'early'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'early'
+  actual: 'none'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/909bbe7b-83ed-4cee-975c-a37e6e7ac45a/scratchpad/old-ae48ba2/tests/direct-v8-context.test.js:117:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.start (node:internal/test_runner/test:1177:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+  ...
+# Subtest: R7 身體先碰：站位公分與方向和碰撞前的預測一致；站位和時機都不合格時寫站位
+not ok 2 - R7 身體先碰：站位公分與方向和碰撞前的預測一致；站位和時機都不合格時寫站位
+  ---
+  duration_ms: 27.4578
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\909bbe7b-83ed-4cee-975c-a37e6e7ac45a\\scratchpad\\old-ae48ba2\\tests\\direct-v8-context.test.js:126:1'
+  failureType: 'testCodeFailure'
+  error: '右側來球碰身體，沒按: 公分 97 ≠ 碰撞前預測 61（「沒接到：站位偏了 97 公分，球在你後邊，往後移。」）'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/909bbe7b-83ed-4cee-975c-a37e6e7ac45a/scratchpad/old-ae48ba2/tests/direct-v8-context.test.js:148:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+    Test.postRun (node:internal/test_runner/test:1447:19)
+    Test.run (node:internal/test_runner/test:1372:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+  ...
+# Subtest: R1 規則取代碰撞：舊碼碰到軀幹／臀／大腿／上臂的圈內完美時機案例（≥ 20），新碼全部判完美並送往舉球區
+ok 3 - R1 規則取代碰撞：舊碼碰到軀幹／臀／大腿／上臂的圈內完美時機案例（≥ 20），新碼全部判完美並送往舉球區
+  ---
+  duration_ms: 1349.0588
+  type: 'test'
+  ...
+# Subtest: R4 魚躍（加嚴）強力發球：0.3 m 時刻 0.5 < d ≤ 2.0 的 12 例全部判魚躍救到（含平台高度 d > 2.0 的 7 例），並在 0.3 m 判定時刻判定
+not ok 4 - R4 魚躍（加嚴）強力發球：0.3 m 時刻 0.5 < d ≤ 2.0 的 12 例全部判魚躍救到（含平台高度 d > 2.0 的 7 例），並在 0.3 m 判定時刻判定
+  ---
+  duration_ms: 332.7105
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\909bbe7b-83ed-4cee-975c-a37e6e7ac45a\\scratchpad\\old-ae48ba2\\tests\\direct-v8-rules.test.js:274:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    d(0.3 m)=1.20 d(平台高)=2.60 (0.00, 8.37) 情境出手應為魚躍，得到 receive
+    
+    'receive' !== 'dive'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'dive'
+  actual: 'receive'
+  operator: 'strictEqual'
+  stack: |-
+    file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/909bbe7b-83ed-4cee-975c-a37e6e7ac45a/scratchpad/old-ae48ba2/tests/direct-v8-rules.test.js:281:41
+    Array.forEach (<anonymous>)
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/909bbe7b-83ed-4cee-975c-a37e6e7ac45a/scratchpad/old-ae48ba2/tests/direct-v8-rules.test.js:281:19)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+    Test.postRun (node:internal/test_runner/test:1447:19)
+    node:internal/test_runner/test:1214:31
+    node:internal/process/task_queues:151:7
+    AsyncResource.runInAsyncScope (node:async_hooks:227:14)
+  ...
+# Subtest: R4 魚躍（加嚴）強力發球：0.3 m 時刻 d > 2.0 的 10 例（平台高度 d 都 ≤ 2.0）按出手與硬按魚躍都 0 例救到
+not ok 5 - R4 魚躍（加嚴）強力發球：0.3 m 時刻 d > 2.0 的 10 例（平台高度 d 都 ≤ 2.0）按出手與硬按魚躍都 0 例救到
+  ---
+  duration_ms: 339.1428
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\909bbe7b-83ed-4cee-975c-a37e6e7ac45a\\scratchpad\\old-ae48ba2\\tests\\direct-v8-rules.test.js:288:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    auto: 救到 10/10：d(0.3 m)=2.09 d(平台高)=0.85 (0.60, 5.17) → forearm:GOOD/dive → ground (0.78, 2.05)；d(0.3 m)=2.15 d(平台高)=1.12 (1.00, 5.27) → forearm:GOOD/dive → ground (0.78, 2.05)；d(0.3 m)=2.13 d(平台高)=1.41 (1.40, 5.57) → forearm:GOOD/dive → ground (0.78, 2.05)；d(0.3 m)=2.16 d(平台高)=1.81 (1.80, 5.97) → forearm:GOOD/dive → ground (0.78, 2.05)
+    
+    10 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 10
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/909bbe7b-83ed-4cee-975c-a37e6e7ac45a/scratchpad/old-ae48ba2/tests/direct-v8-rules.test.js:295:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+    Test.postRun (node:internal/test_runner/test:1447:19)
+    Test.run (node:internal/test_runner/test:1372:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:897:7)
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 1
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2407.1996
