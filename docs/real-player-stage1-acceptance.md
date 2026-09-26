@@ -20,6 +20,10 @@
 - **A7 不動正式遊戲**：`git diff 26593b7 -- src/render/matchView.js src/render/geoAnimator.js` 為空；`src/render/geoCharacter.js` 若有改動只允許**新增 export**（不改既有行為行）；`src/main.js` 只新增 mode 分派；`npm test` 全綠且通過數 ≥ 基準（實作前在 26593b7 先跑一次記錄）；`npm run build` 成功。
 - **A8 截圖證據**：桌機 1280×720 與直式 390×844 各一張「靜止」與「spike 擊球瞬間」，落 `docs/experiments/real-player-evidence/`。
 
+## 加嚴紀錄（2026-09-26，02 §2.1：加嚴自行記錄）
+- **A2(c) 綁定還原**（補 A2(a) 盲點：(a) 只量距離，bind 矩陣差一個骨座標系內的平移時仍綠，實作 agent 以故意改壞的版本實測確認）：實作須提供重現「算 boneInverses 當下關節姿勢」的函式；在該姿勢下，每名受測球員 CPU 蒙皮後的頂點位置＝載入後（縮放、貼地後）未蒙皮頂點位置，最大誤差 ≤ 1e-3 m。20k／5k 都要驗。
+- **A2(d) 肢段方向與 geo 人一致**（補目標「沿用既有 geoAnimator」的隱含要求：原實作把白模原始張角當旋轉 0，換 A-pose 白模後所有動作都會多出約 35° 外張；原條件無一條量得到）：以同一組 `trigger`／`step` 序列同步驅動一個參考 geo 人（`createGeoCharacter`＋`createGeoAnimator`，同 root 位置朝向），在 A2 的每個取樣時間點**以及未觸發任何序列的待命狀態**，比較 `rShoulder→rElbow`、`rElbow→rWrist`、`lShoulder→lElbow`、`lElbow→lWrist`、`rHip→rKnee`、`lHip→lKnee` 六段的世界方向，夾角全部 ≤ 10°。
+
 ## 使用者側（不阻塞本階段交付，決定是否進賽場）
 - 手機經區網開預覽，實測 5k／20k 兩版 14 人 FPS（門檻：60 FPS，`docs/design-brief.md:42`）。
 - 重生雙臂 A-pose 30–45° 原圖（Q4）→ 重跑生成與減面，換檔後 A1–A8 重跑。
