@@ -87,14 +87,14 @@ export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3 } = {
       stepDirectGame(s, [cmd(s, t === Math.max(0, press) ? 'receive' : null, move)]);
       const hit = s.events.find((e) => e.type === 'contact');
       if (hit && !touched) {
-        touched = { ...hit, ...armGap(s) };
+        touched = { ...hit, ...armGap(s), bodySpeed: Math.hypot(s.player.vx, s.player.vz) };
         if (hit.tier) c.tiers[hit.tier] = (c.tiers[hit.tier] ?? 0) + 1;
         if (hit.technique) c.tech[hit.technique] = (c.tech[hit.technique] ?? 0) + 1;
       }
       const end = s.events.find((e) => ['ground', 'net', 'out'].includes(e.type));
       if (end) {
         c.n++;
-        if (touched?.tier) c.rows.push({ tier: touched.tier, technique: touched.technique, assist: touched.id === 'assist', gap: touched.gap, handY: touched.handY, over: touched.over, actionTick: touched.actionTick, end: end.type, x: s.ball.x, z: s.ball.z });
+        if (touched?.tier) c.rows.push({ tier: touched.tier, technique: touched.technique, assist: touched.id === 'assist', bodySpeed: touched.bodySpeed, gap: touched.gap, handY: touched.handY, over: touched.over, actionTick: touched.actionTick, end: end.type, x: s.ball.x, z: s.ball.z });
         if (!touched) c.whiff++;
         else if (end.type === 'net') c.net++;
         else if (end.type === 'out') c.out++;
