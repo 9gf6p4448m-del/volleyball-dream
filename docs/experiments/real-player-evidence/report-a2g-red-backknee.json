@@ -1,11 +1,10 @@
 {
-  "createdAt": "2026-09-26T14:08:21.499Z",
+  "createdAt": "2026-09-26T13:54:30.194Z",
   "base": "http://127.0.0.1:5176",
-  "head": "6148429f3214b3fc307e2557aeb52f27058a2137",
+  "head": "a313a06afaade1b140ace1d52d4b5273fece705a",
   "dirty": [
     "M src/app/realPreview.js",
     " M src/render/realPlayer.js",
-    " M src/ui/careerScreen.js",
     " M tools/real-player-browser.mjs"
   ],
   "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
@@ -17,8 +16,8 @@
         "variant": "20k",
         "bridgeTris": 0
       },
-      "hud": "FPS 3.5\n面數 20,000／人（20k）\n14 人",
-      "hudFps": 3.5,
+      "hud": "FPS 20\n面數 20,000／人（20k）\n14 人",
+      "hudFps": 20,
       "errors": [],
       "ikStats": {
         "ikFrames": 10578,
@@ -148,9 +147,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.2183780912715725,
-            "maxDev": 0.0004456486792880632,
-            "maxMove": 0.06947305929918658
+            "restCJ": 0.2173328854187335,
+            "maxDev": 0.0016945549469102317,
+            "maxMove": 0.06389050024389172
           }
         },
         {
@@ -181,9 +180,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.2183780912715725,
-            "maxDev": 0.0007373830122504588,
-            "maxMove": 0.5018817140389915
+            "restCJ": 0.2173328854187335,
+            "maxDev": 0.0022893666587185113,
+            "maxMove": 0.5065804331057753
           }
         },
         {
@@ -214,9 +213,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.2183780912715725,
-            "maxDev": 0.0013142366334154276,
-            "maxMove": 0.34334465261838665
+            "restCJ": 0.2173328854187335,
+            "maxDev": 0.0032580049680010215,
+            "maxMove": 0.34865004867239896
           }
         },
         {
@@ -247,9 +246,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.21837809134301112,
-            "maxDev": 0.00044564867914187456,
-            "maxMove": 0.06947305929918658
+            "restCJ": 0.21733288549051566,
+            "maxDev": 0.0016945549463460163,
+            "maxMove": 0.06389050024389173
           }
         },
         {
@@ -280,9 +279,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.21837809134301112,
-            "maxDev": 0.0007373830120083191,
-            "maxMove": 0.5018817140389914
+            "restCJ": 0.21733288549051566,
+            "maxDev": 0.0022893666579541783,
+            "maxMove": 0.506580433105775
           }
         },
         {
@@ -313,9 +312,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.21837809134301112,
-            "maxDev": 0.0013142366329828847,
-            "maxMove": 0.3433446526183866
+            "restCJ": 0.21733288549051566,
+            "maxDev": 0.00325800496690809,
+            "maxMove": 0.34865004867239885
           }
         },
         {
@@ -346,9 +345,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.20017991632257992,
-            "maxDev": 0.0004085117470221111,
-            "maxMove": 0.06368363769092249
+            "restCJ": 0.19922181168357803,
+            "maxDev": 0.00155334154056061,
+            "maxMove": 0.05856629189021661
           }
         },
         {
@@ -379,9 +378,9 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.20017991632257992,
-            "maxDev": 0.0006759350107990725,
-            "maxMove": 0.46005823786907624
+            "restCJ": 0.19922181168357803,
+            "maxDev": 0.0020985854663149173,
+            "maxMove": 0.4643653970136274
           }
         },
         {
@@ -412,13 +411,13 @@
           },
           "rKnee": {
             "groupSize": 656,
-            "restCJ": 0.20017991632257992,
-            "maxDev": 0.0012047176808648585,
-            "maxMove": 0.3147325982335212
+            "restCJ": 0.19922181168357803,
+            "maxDev": 0.002986503695208337,
+            "maxMove": 0.31959587794970074
           }
         }
       ],
-      "a2MaxDev": 0.0013142366334154276,
+      "a2MaxDev": 0.0032580049680010215,
       "a2MinWristMove": 0.48641708257391875,
       "a2c": [
         {
@@ -900,10 +899,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234932472,
-            "l": 0.0755755075322915
+            "r": -0.09724697398766811,
+            "l": -0.09638556161236862
           },
-          "min": 0.0755755075322915,
+          "min": -0.2197302505117478,
           "frames": 37
         },
         {
@@ -914,10 +913,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234932472,
-            "l": 0.0755755075322915
+            "r": -0.09724697398766811,
+            "l": -0.09638556161236862
           },
-          "min": 0.028473725929081217,
+          "min": -0.287929987161313,
           "frames": 73
         },
         {
@@ -928,10 +927,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234932472,
-            "l": 0.0755755075322915
+            "r": -0.09724697398766811,
+            "l": -0.09638556161236862
           },
-          "min": 0.030833443806019392,
+          "min": -0.287929987161313,
           "frames": 61
         },
         {
@@ -942,10 +941,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234988584,
-            "l": 0.07557550752391809
+            "r": -0.09724697398696251,
+            "l": -0.09638556162304127
           },
-          "min": 0.07557550752391809,
+          "min": -0.2197302505107748,
           "frames": 37
         },
         {
@@ -956,10 +955,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234988584,
-            "l": 0.07557550752391809
+            "r": -0.09724697398696251,
+            "l": -0.09638556162304127
           },
-          "min": 0.02847372591364304,
+          "min": -0.28792998716006263,
           "frames": 73
         },
         {
@@ -970,10 +969,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.07592655234988584,
-            "l": 0.07557550752391809
+            "r": -0.09724697398696251,
+            "l": -0.09638556162304127
           },
-          "min": 0.030833443806599598,
+          "min": -0.28792998716006263,
           "frames": 61
         },
         {
@@ -984,10 +983,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.06959933560940709,
-            "l": 0.06927754333620911
+            "r": -0.08914306350407285,
+            "l": -0.08835343667711598
           },
-          "min": 0.06927754333620911,
+          "min": -0.20141940032438418,
           "frames": 37
         },
         {
@@ -998,10 +997,10 @@
             "l": 172
           },
           "idle": {
-            "r": 0.06959933560940709,
-            "l": 0.06927754333620911
+            "r": -0.08914306350407285,
+            "l": -0.08835343667711598
           },
-          "min": 0.026100910218453104,
+          "min": -0.26393582560688067,
           "frames": 73
         },
         {
@@ -1012,14 +1011,14 @@
             "l": 172
           },
           "idle": {
-            "r": 0.06959933560940709,
-            "l": 0.06927754333620911
+            "r": -0.08914306350407285,
+            "l": -0.08835343667711598
           },
-          "min": 0.0282639861234298,
+          "min": -0.26393582560688067,
           "frames": 61
         }
       ],
-      "a2gMin": 0.026100910218453104,
+      "a2gMin": -0.287929987161313,
       "a3": [
         {
           "id": "A1",
@@ -1368,94 +1367,94 @@
           "seq": "bump",
           "player": 0,
           "soleVerts": 388,
-          "idleMin": -2.2676088437534325e-16,
+          "idleMin": 8.565197162635485e-18,
           "frames": 36,
           "backToIdle": true,
-          "minY": -4.1235115380117624e-16,
+          "minY": -5.233734562636919e-16,
           "minFrame": 23
         },
         {
           "seq": "spike",
           "player": 0,
           "soleVerts": 388,
-          "idleMin": -2.2676088437534325e-16,
+          "idleMin": 8.565197162635485e-18,
           "frames": 72,
           "backToIdle": true,
-          "minY": -2.846572803860692e-16,
-          "minFrame": 55
+          "minY": -4.10288948803369e-16,
+          "minFrame": 53
         },
         {
           "seq": "block",
           "player": 0,
           "soleVerts": 388,
-          "idleMin": -2.2676088437534325e-16,
+          "idleMin": 8.565197162635485e-18,
           "frames": 60,
           "backToIdle": true,
-          "minY": -2.846572803860692e-16,
-          "minFrame": 52
+          "minY": -4.10288948803369e-16,
+          "minFrame": 50
         },
         {
           "seq": "bump",
           "player": 7,
           "soleVerts": 388,
-          "idleMin": -2.3570555229834866e-16,
+          "idleMin": 8.40256683676266e-18,
           "frames": 36,
           "backToIdle": true,
-          "minY": -3.8962720172976656e-16,
+          "minY": -5.263428748101039e-16,
           "minFrame": 23
         },
         {
           "seq": "spike",
           "player": 7,
           "soleVerts": 388,
-          "idleMin": -2.3570555229834866e-16,
+          "idleMin": 8.40256683676266e-18,
           "frames": 72,
           "backToIdle": true,
-          "minY": -3.8223470105155695e-16,
-          "minFrame": 55
+          "minY": -2.1721990525747081e-16,
+          "minFrame": 59
         },
         {
           "seq": "block",
           "player": 7,
           "soleVerts": 388,
-          "idleMin": -2.3570555229834866e-16,
+          "idleMin": 8.40256683676266e-18,
           "frames": 60,
           "backToIdle": true,
-          "minY": -3.8223470105155695e-16,
-          "minFrame": 52
+          "minY": -2.1721990525747081e-16,
+          "minFrame": 56
         },
         {
           "seq": "bump",
           "player": 13,
           "soleVerts": 388,
-          "idleMin": -2.0025214125807267e-16,
+          "idleMin": -4.4425184017593544e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -7.959941299845452e-16,
-          "minFrame": 24
+          "minY": -7.2682203137997e-16,
+          "minFrame": 10
         },
         {
           "seq": "spike",
           "player": 13,
           "soleVerts": 388,
-          "idleMin": -2.0025214125807267e-16,
+          "idleMin": -4.4425184017593544e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -7.062968919679936e-16,
-          "minFrame": 52
+          "minY": -7.9212022918175e-16,
+          "minFrame": 55
         },
         {
           "seq": "block",
           "player": 13,
           "soleVerts": 388,
-          "idleMin": -2.0025214125807267e-16,
+          "idleMin": -4.4425184017593544e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -7.062968919679936e-16,
-          "minFrame": 49
+          "minY": -7.9212022918175e-16,
+          "minFrame": 52
         }
       ],
-      "a9MinY": -7.959941299845452e-16,
+      "a9MinY": -7.9212022918175e-16,
       "a10": [
         {
           "seq": "bump",
@@ -1523,18 +1522,18 @@
       ],
       "a10MinRatio": 1,
       "a9IdleRange": [
-        -2.3570555229834866e-16,
-        -2.0025214125807267e-16
+        -4.4425184017593544e-17,
+        8.565197162635485e-18
       ],
       "pass": {
         "A1": true,
-        "A2": true,
+        "A2": false,
         "A2ab": true,
         "A2c": true,
         "A2d": true,
         "A2e": true,
         "A2f": true,
-        "A2g": true,
+        "A2g": false,
         "A3": true,
         "A4": true,
         "A5": true,
@@ -1551,8 +1550,8 @@
         "variant": "5k",
         "bridgeTris": 0
       },
-      "hud": "FPS 4.5\n面數 5,000／人（5k）\n14 人",
-      "hudFps": 4.5,
+      "hud": "FPS 5.3\n面數 5,000／人（5k）\n14 人",
+      "hudFps": 5.3,
       "errors": [],
       "ikStats": {
         "ikFrames": 10578,
@@ -1682,9 +1681,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991404970343,
-            "maxDev": 0.00021432512452182473,
-            "maxMove": 0.07036020154470354
+            "restCJ": 0.21423006699801447,
+            "maxDev": 0.0019708047952369523,
+            "maxMove": 0.06456697188974293
           }
         },
         {
@@ -1715,9 +1714,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991404970343,
-            "maxDev": 0.000462253938392887,
-            "maxMove": 0.5020714043708983
+            "restCJ": 0.21423006699801447,
+            "maxDev": 0.002629789051175835,
+            "maxMove": 0.5063743477364336
           }
         },
         {
@@ -1748,9 +1747,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991404970343,
-            "maxDev": 0.0009996472881731722,
-            "maxMove": 0.343540395502593
+            "restCJ": 0.21423006699801447,
+            "maxDev": 0.0036767131419891685,
+            "maxMove": 0.3485107908739907
           }
         },
         {
@@ -1781,9 +1780,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991408226974,
-            "maxDev": 0.00021432512448937846,
-            "maxMove": 0.07036020154470357
+            "restCJ": 0.21423006703080885,
+            "maxDev": 0.001970804794932307,
+            "maxMove": 0.06456697188974275
           }
         },
         {
@@ -1814,9 +1813,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991408226974,
-            "maxDev": 0.00046225393832280415,
-            "maxMove": 0.5020714043708981
+            "restCJ": 0.21423006703080885,
+            "maxDev": 0.0026297890507679667,
+            "maxMove": 0.5063743477364335
           }
         },
         {
@@ -1847,9 +1846,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.21572991408226974,
-            "maxDev": 0.0009996472880213214,
-            "maxMove": 0.34354039550259285
+            "restCJ": 0.21423006703080885,
+            "maxDev": 0.00367671314141646,
+            "maxMove": 0.34851079087399056
           }
         },
         {
@@ -1880,9 +1879,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.19775242081601838,
-            "maxDev": 0.0001964649646615524,
-            "maxMove": 0.06449685141597838
+            "restCJ": 0.19637756144392338,
+            "maxDev": 0.001806570771688859,
+            "maxMove": 0.05918639089893217
           }
         },
         {
@@ -1913,9 +1912,9 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.19775242081601838,
-            "maxDev": 0.00042373311710192096,
-            "maxMove": 0.46023212067332386
+            "restCJ": 0.19637756144392338,
+            "maxDev": 0.0024106395884642973,
+            "maxMove": 0.46417648542506446
           }
         },
         {
@@ -1946,13 +1945,13 @@
           },
           "rKnee": {
             "groupSize": 172,
-            "restCJ": 0.19775242081601838,
-            "maxDev": 0.000916343795102581,
-            "maxMove": 0.31491202921071076
+            "restCJ": 0.19637756144392338,
+            "maxDev": 0.003370319874558242,
+            "maxMove": 0.3194682249678243
           }
         }
       ],
-      "a2MaxDev": 0.0009996472881731722,
+      "a2MaxDev": 0.0036767131419891685,
       "a2MinWristMove": 0.4867790349549413,
       "a2c": [
         {
@@ -2434,10 +2433,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07682849887603786,
-            "l": 0.07473589150764674
+            "r": -0.09653540103249608,
+            "l": -0.09473558686460781
           },
-          "min": 0.07473589150764674,
+          "min": -0.2191922658618882,
           "frames": 37
         },
         {
@@ -2448,10 +2447,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07682849887603786,
-            "l": 0.07473589150764674
+            "r": -0.09653540103249608,
+            "l": -0.09473558686460781
           },
-          "min": 0.02893308416095656,
+          "min": -0.28750798410099543,
           "frames": 73
         },
         {
@@ -2462,10 +2461,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07682849887603786,
-            "l": 0.07473589150764674
+            "r": -0.09653540103249608,
+            "l": -0.09473558686460781
           },
-          "min": 0.03123749993895307,
+          "min": -0.28750798410099543,
           "frames": 61
         },
         {
@@ -2476,10 +2475,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.0768284988757269,
-            "l": 0.07473589149799637
+            "r": -0.09653540103288051,
+            "l": -0.09473558687720428
           },
-          "min": 0.07473589149799637,
+          "min": -0.21919226586241283,
           "frames": 37
         },
         {
@@ -2490,10 +2489,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.0768284988757269,
-            "l": 0.07473589149799637
+            "r": -0.09653540103288051,
+            "l": -0.09473558687720428
           },
-          "min": 0.02893308414172636,
+          "min": -0.2875079841016668,
           "frames": 73
         },
         {
@@ -2504,10 +2503,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.0768284988757269,
-            "l": 0.07473589149799637
+            "r": -0.09653540103288051,
+            "l": -0.09473558687720428
           },
-          "min": 0.031237499928863707,
+          "min": -0.2875079841016668,
           "frames": 61
         },
         {
@@ -2518,10 +2517,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07042612332985393,
-            "l": 0.06850789363603171
+            "r": -0.08849078491523711,
+            "l": -0.0868409614985139
           },
-          "min": 0.06850789363603171,
+          "min": -0.20092624434316197,
           "frames": 37
         },
         {
@@ -2532,10 +2531,10 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07042612332985393,
-            "l": 0.06850789363603171
+            "r": -0.08849078491523711,
+            "l": -0.0868409614985139
           },
-          "min": 0.02652198692388987,
+          "min": -0.2635489860654446,
           "frames": 73
         },
         {
@@ -2546,14 +2545,14 @@
             "l": 41
           },
           "idle": {
-            "r": 0.07042612332985393,
-            "l": 0.06850789363603171
+            "r": -0.08849078491523711,
+            "l": -0.0868409614985139
           },
-          "min": 0.028634368049765994,
+          "min": -0.2635489860654446,
           "frames": 61
         }
       ],
-      "a2gMin": 0.02652198692388987,
+      "a2gMin": -0.2875079841016668,
       "a3": [
         {
           "id": "A1",
@@ -2902,94 +2901,94 @@
           "seq": "bump",
           "player": 0,
           "soleVerts": 89,
-          "idleMin": -5.735429492448318e-17,
+          "idleMin": 3.5019730171281793e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -4.1194039735105485e-16,
+          "minY": -5.229626998135705e-16,
           "minFrame": 23
         },
         {
           "seq": "spike",
           "player": 0,
           "soleVerts": 89,
-          "idleMin": -5.735429492448318e-17,
+          "idleMin": 3.5019730171281793e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -3.7643499428696714e-16,
-          "minFrame": 49
+          "minY": -4.091297579843788e-16,
+          "minFrame": 53
         },
         {
           "seq": "block",
           "player": 0,
           "soleVerts": 89,
-          "idleMin": -5.735429492448318e-17,
+          "idleMin": 3.5019730171281793e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -3.7643499428696714e-16,
-          "minFrame": 46
+          "minY": -4.091297579843788e-16,
+          "minFrame": 50
         },
         {
           "seq": "bump",
           "player": 7,
           "soleVerts": 89,
-          "idleMin": -6.006480035569695e-17,
+          "idleMin": 2.2985086056692694e-17,
           "frames": 36,
           "backToIdle": true,
-          "minY": -3.900606218753091e-16,
+          "minY": -5.260278605867776e-16,
           "minFrame": 23
         },
         {
           "seq": "spike",
           "player": 7,
           "soleVerts": 89,
-          "idleMin": -6.006480035569695e-17,
+          "idleMin": 2.2985086056692694e-17,
           "frames": 72,
           "backToIdle": true,
-          "minY": -5.033950686850197e-16,
-          "minFrame": 49
+          "minY": -3.012997837337217e-16,
+          "minFrame": 46
         },
         {
           "seq": "block",
           "player": 7,
           "soleVerts": 89,
-          "idleMin": -6.006480035569695e-17,
+          "idleMin": 2.2985086056692694e-17,
           "frames": 60,
           "backToIdle": true,
-          "minY": -5.033950686850197e-16,
-          "minFrame": 46
+          "minY": -3.012997837337217e-16,
+          "minFrame": 43
         },
         {
           "seq": "bump",
           "player": 13,
           "soleVerts": 89,
-          "idleMin": -1.3118846287074604e-16,
+          "idleMin": 2.8189256484623115e-16,
           "frames": 36,
           "backToIdle": true,
-          "minY": -6.453793209154143e-16,
-          "minFrame": 17
+          "minY": -7.357395942486633e-16,
+          "minFrame": 9
         },
         {
           "seq": "spike",
           "player": 13,
           "soleVerts": 89,
-          "idleMin": -1.3118846287074604e-16,
+          "idleMin": 2.8189256484623115e-16,
           "frames": 72,
           "backToIdle": true,
-          "minY": -7.077545474607763e-16,
+          "minY": -7.914493794623408e-16,
+          "minFrame": 55
+        },
+        {
+          "seq": "block",
+          "player": 13,
+          "soleVerts": 89,
+          "idleMin": 2.8189256484623115e-16,
+          "frames": 60,
+          "backToIdle": true,
+          "minY": -7.914493794623408e-16,
           "minFrame": 52
-        },
-        {
-          "seq": "block",
-          "player": 13,
-          "soleVerts": 89,
-          "idleMin": -1.3118846287074604e-16,
-          "frames": 60,
-          "backToIdle": true,
-          "minY": -7.077545474607763e-16,
-          "minFrame": 49
         }
       ],
-      "a9MinY": -7.077545474607763e-16,
+      "a9MinY": -7.914493794623408e-16,
       "a10": [
         {
           "seq": "bump",
@@ -3057,18 +3056,18 @@
       ],
       "a10MinRatio": 1,
       "a9IdleRange": [
-        -1.3118846287074604e-16,
-        -5.735429492448318e-17
+        2.2985086056692694e-17,
+        2.8189256484623115e-16
       ],
       "pass": {
         "A1": true,
-        "A2": true,
+        "A2": false,
         "A2ab": true,
         "A2c": true,
         "A2d": true,
         "A2e": true,
         "A2f": true,
-        "A2g": true,
+        "A2g": false,
         "A3": true,
         "A4": true,
         "A5": true,
@@ -3097,110 +3096,33 @@
       "+    await runRealPreview(ctx);"
     ],
     "mainOk": true,
-    "careerScreenRemoved": [],
-    "careerScreenAdded": [
-      "+    // 寫實球員卷（2026-09-26 使用者：「我們遊戲都是 PWA」）：測試用預覽入口，同連線對戰整頁導航",
-      "+    inner.appendChild(button('寫實球員預覽（測試）', false, () => {",
-      "+      window.location.assign(`${window.location.pathname}?mode=realpreview`);",
-      "+    }));"
-    ],
-    "careerScreenOk": true,
-    "testLogSource": {
-      "ranInTool": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\npm-test-after.log",
-      "seconds": 357
-    },
-    "npmTest": {
-      "tests": 2603,
-      "pass": 2601,
-      "fail": 2,
-      "failing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "baselinePath": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\npm-test-baseline-e0dd285.log",
-      "baselinePass": 2601,
-      "baselineFailing": [
-        "✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5%",
-        "✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8%"
-      ],
-      "newFailures": [],
-      "sameFailingAsBaseline": true
-    },
-    "npmTestOk": true,
-    "buildOk": true,
-    "pass": true
+    "npmTest": "not run（A7_SKIP_TESTS=1）",
+    "npmTestOk": null,
+    "buildOk": null,
+    "pass": false
   },
   "a8": {
-    "screenshots": [
-      {
-        "viewport": "1280x720",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\desktop-spike-hit.png",
-        "spikeHitT": 0.48333333333333334,
-        "logoCovered": false
-      },
-      {
-        "viewport": "390x844",
-        "still": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-still.png",
-        "spikeHit": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\portrait-spike-hit.png",
-        "spikeHitT": 0.48333333333333334,
-        "logoCovered": false
-      }
-    ],
-    "extra": [
-      {
-        "name": "side-bump-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-bump-deepest.png",
-        "frame": 5,
-        "knee": 0.9629268335214102,
-        "phase": "bump",
-        "kneeDeg": 55.17164354067325
-      },
-      {
-        "name": "side-spike-land-deepest",
-        "path": "C:\\Users\\shung\\worktrees\\volleyball-realplayer\\docs\\experiments\\real-player-evidence\\side-spike-land-deepest.png",
-        "frame": 50,
-        "knee": 1.3236070624573433,
-        "phase": "landSoft",
-        "kneeDeg": 75.83709841251452
-      }
-    ],
-    "pass": true
+    "screenshots": [],
+    "extra": [],
+    "pass": null
   },
   "pass": {
     "A1": true,
-    "A2": true,
+    "A2": false,
     "A2ab": true,
     "A2c": true,
     "A2d": true,
     "A2e": true,
     "A2f": true,
-    "A2g": true,
+    "A2g": false,
     "A3": true,
     "A4": true,
     "A5": true,
-    "A6": true,
-    "A7": true,
-    "A8": true,
+    "A6": false,
+    "A7": false,
+    "A8": null,
     "A9": true,
-    "A10": true,
-    "A11": true
+    "A10": true
   },
-  "a11": {
-    "steps": [
-      "menu entry visible",
-      "preview loaded",
-      "back to menu"
-    ],
-    "errors": [],
-    "entryInView": true,
-    "previewUrl": "http://127.0.0.1:5176/?mode=realpreview",
-    "playerCount": 14,
-    "backInView": true,
-    "backOverlapsHud": false,
-    "menuBack": true,
-    "pass": true
-  },
-  "aliasPlayerCount": 14,
   "allErrors": []
 }

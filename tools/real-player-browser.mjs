@@ -1,4 +1,4 @@
-// 寫實球員卷 第一階段驗收治具（docs/real-player-stage1-acceptance.md A1–A9，含加嚴紀錄兩批與修正紀錄）。
+// 寫實球員卷 第一階段驗收治具（docs/real-player-stage1-acceptance.md A1–A10，含加嚴紀錄三批與修正紀錄（A2(d) 腿段比 IK 前、A2(g)））。
 // 用法：先起 dev server（npm run dev -- --host 127.0.0.1 --port 5176 --strictPort），再
 //   node tools/real-player-browser.mjs
 // 環境變數：REAL_BASE_URL（預設 http://127.0.0.1:5176）、PLAYWRIGHT_MODULE（既有 Playwright 安裝路徑）、
@@ -18,6 +18,7 @@ const base = process.env.REAL_BASE_URL || 'http://127.0.0.1:5176';
 const output = resolve('docs/experiments/real-player-evidence');
 const reportName = process.env.REPORT_NAME || 'report.json';
 const skipShots = process.env.SKIP_SHOTS === '1';
+const a11Only = process.env.A11_ONLY === '1'; // 只跑 A11（取紅燈證據用）
 await mkdir(output, { recursive: true });
 
 const report = {
@@ -213,21 +214,54 @@ async function measureMotion(page, playerIndex, seq, samples) {
       return origUpdate(...a);
     };
     const SEGS = [['rShoulder', 'rElbow'], ['rElbow', 'rWrist'], ['lShoulder', 'lElbow'], ['lElbow', 'lWrist'], ['rHip', 'rKnee'], ['lHip', 'lKnee']];
+    // A2(d)（修正紀錄・腿段）：手臂四段比最終世界方向；腿兩段比接地 IK 介入前（animator 寫入後）的方向
+    const LEG_SEG = new Set(['rHip>rKnee', 'lHip>lKnee']);
     const dirAngles = () => {
       ref.root.updateMatrixWorld(true);
+      const pre = rp.legPreIK(playerIndex);
       const res = {};
       for (const [a, b] of SEGS) {
-        const d1 = wp(pl.joints[b]).sub(wp(pl.joints[a])).normalize();
+        const k = `${a}>${b}`;
+        const d1 = LEG_SEG.has(k)
+          ? new THREE.Vector3(...pre[b]).sub(new THREE.Vector3(...pre[a])).normalize()
+          : wp(pl.joints[b]).sub(wp(pl.joints[a])).normalize();
         const d2 = wp(ref.joints[b]).sub(wp(ref.joints[a])).normalize();
-        res[`${a}>${b}`] = THREE.MathUtils.radToDeg(d1.angleTo(d2));
+        res[k] = THREE.MathUtils.radToDeg(d1.angleTo(d2));
       }
       return res;
+    };
+    // A2(g)：膝到「髖→踝連線」的有號距離（角色前方為正）。踝＝綁定姿勢 0.10 ≤ y ≤ 0.16 的該側
+    // 頂點（小腿下段／腳踝一圈，幾何選取、不讀權重與地標）的蒙皮質心
+    const ankles = { r: [], l: [] };
+    for (let i = 0; i < pos.count; i += 1) {
+      const y = pos.getY(i);
+      if (y >= 0.10 && y <= 0.16) (pos.getX(i) < 0 ? ankles.r : ankles.l).push(i);
+    }
+    const kneeSigned = () => {
+      const out = {};
+      const fwd = pl.root.getWorldDirection(new THREE.Vector3());
+      for (const s of ['r', 'l']) {
+        const H = wp(pl.joints[`${s}Hip`]); const K = wp(pl.joints[`${s}Knee`]); const A = centroid(ankles[s]);
+        const u = A.clone().sub(H).normalize();
+        const hk = K.clone().sub(H);
+        const perp = hk.sub(u.clone().multiplyScalar(hk.dot(u)));
+        const f = fwd.clone().sub(u.clone().multiplyScalar(fwd.dot(u))).normalize();
+        out[s] = perp.dot(f);
+      }
+      return out;
     };
     const dt = 1 / 60;
     rp.step(dt, 30); // 待命（未觸發任何序列）0.5 秒
     const rest = measure();
     const idleDirs = dirAngles();
     const idleSole = soleMin();
+    const kneeTrace = [];
+    const idleKnee = kneeSigned();
+    kneeTrace.push(idleKnee.r, idleKnee.l);
+    // A10：骨盆世界 y 相對待命的最大下沉（寫實球員 vs 同步驅動的參考 geo 人）
+    const pelvisY = () => { ref.root.updateMatrixWorld(true); return [wp(pl.joints.pelvis).y, wp(ref.joints.pelvis).y]; };
+    const [idlePelvis, idleRefPelvis] = pelvisY();
+    let maxSink = 0; let maxRefSink = 0;
 
     rp.play(playerIndex, seq);
     const dur = rp.actionDur[seq];
@@ -239,6 +273,11 @@ async function measureMotion(page, playerIndex, seq, samples) {
     while (frames < 360) { // 上限 6 秒
       rp.step(dt, 1); t += dt; frames += 1;
       soleTrace.push(soleMin());
+      const ks = kneeSigned();
+      kneeTrace.push(ks.r, ks.l);
+      const [py, ry] = pelvisY();
+      maxSink = Math.max(maxSink, idlePelvis - py);
+      maxRefSink = Math.max(maxRefSink, idleRefPelvis - ry);
       if (targets.length && t + 1e-9 >= targets[0]) {
         targets.shift();
         out.push({ t, ...measure(), dirs: dirAngles() });
@@ -274,7 +313,9 @@ async function measureMotion(page, playerIndex, seq, samples) {
       minY: Math.min(...soleTrace), minFrame: minFrame + 1,
     };
     rp.resetAll();
-    return { seq, playerIndex, samples: out.length, times: out.map((o) => o.t), summary, a2d, a2e, a9 };
+    const a10 = { maxSink, maxRefSink, ratio: maxRefSink > 0 ? maxSink / maxRefSink : null };
+    const a2g = { ankleVerts: { r: ankles.r.length, l: ankles.l.length }, idle: idleKnee, min: Math.min(...kneeTrace), frames: kneeTrace.length / 2 };
+    return { seq, playerIndex, samples: out.length, times: out.map((o) => o.t), summary, a2d, a2e, a9, a10, a2g };
   }, { playerIndex, seq, samples });
 }
 
@@ -307,8 +348,58 @@ async function measureBindRestore(page) {
 const in01 = (x, lo, hi) => x >= lo && x <= hi;
 const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--ignore-gpu-blocklist', '--use-angle=swiftshader'] });
 const allErrors = [];
+// A11 PWA 可達：直式 390×844 從主選單實際點「寫實球員預覽（測試）」→ 預覽 14 人 → 點「返回」→ 主選單按鈕列可見
+const ENTRY_TEXT = '寫實球員預覽（測試）';
+async function checkA11() {
+  const res = { steps: [], errors: [] };
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  page.on('pageerror', (e) => res.errors.push(`pageerror: ${e}`));
+  page.on('console', (m) => { if (m.type() === 'error') res.errors.push(`console: ${m.text()}`); });
+  const inView = async (loc) => {
+    const box = await loc.boundingBox();
+    return Boolean(box) && box.x >= 0 && box.y >= 0 && box.x + box.width <= 390 && box.y + box.height <= 844
+      && box.width >= 32 && box.height >= 32;
+  };
+  try {
+    await page.goto(`${base}/`, { timeout: 120000 });
+    await page.waitForFunction(() => !document.getElementById('vd-boot-logo'), null, { timeout: 30000 });
+    const entry = page.getByRole('button', { name: ENTRY_TEXT });
+    await entry.waitFor({ state: 'visible', timeout: 20000 });
+    res.entryInView = await inView(entry);
+    res.steps.push('menu entry visible');
+    await entry.click({ timeout: 10000 }); // Playwright 會檢查可點（未被遮擋）
+    await page.waitForFunction(() => Boolean(window.__realPreview), null, { timeout: 120000 });
+    res.previewUrl = page.url();
+    res.playerCount = await page.evaluate(() => window.__realPreview.playerCount);
+    res.steps.push('preview loaded');
+    await page.waitForFunction(() => !document.getElementById('vd-boot-logo'), null, { timeout: 30000 });
+    const back = page.getByRole('button', { name: /返回/ });
+    await back.waitFor({ state: 'visible', timeout: 10000 });
+    res.backInView = await inView(back);
+    // 返回鈕不得擋 HUD（FPS＋面數）
+    const hb = await page.locator('#real-hud').boundingBox(); const bb = await back.boundingBox();
+    res.backOverlapsHud = Boolean(hb && bb) && !(bb.x + bb.width <= hb.x || hb.x + hb.width <= bb.x
+      || bb.y + bb.height <= hb.y || hb.y + hb.height <= bb.y);
+    await back.click({ timeout: 10000 });
+    await page.waitForURL((u) => !u.search.includes('mode=realpreview'), { timeout: 30000 });
+    await page.waitForFunction(() => !document.getElementById('vd-boot-logo'), null, { timeout: 30000 });
+    const entryAgain = page.getByRole('button', { name: ENTRY_TEXT });
+    await entryAgain.waitFor({ state: 'visible', timeout: 20000 });
+    res.menuBack = await page.getByRole('button', { name: '▶ 生涯' }).isVisible();
+    res.steps.push('back to menu');
+  } catch (e) {
+    res.failure = String(e).split('\n')[0];
+  }
+  await context.close();
+  res.pass = !res.failure && res.entryInView === true && res.playerCount === 14 && res.backInView === true
+    && res.backOverlapsHud === false && res.menuBack === true && res.errors.length === 0;
+  return res;
+}
+
 try {
-  for (const [variant, query, expectFaces] of [['20k', '?mode=realpreview', 20000], ['5k', '?mode=realpreview&faces=5k', 5000]]) {
+  report.a11 = await checkA11();
+  for (const [variant, query, expectFaces] of (a11Only ? [] : [['20k', '?mode=realpreview', 20000], ['5k', '?mode=realpreview&faces=5k', 5000]])) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors = [];
@@ -323,6 +414,7 @@ try {
       variant: window.__realPreview.variant,
       bridgeTris: window.__realPreview.bridgeTris,
     }));
+    const ikStatsOf = () => page.evaluate(() => ({ ...window.__realPreview.ikStats }));
     // A6：HUD 的 FPS 須為實測數值 > 0（等 HUD 至少刷新出一個數字，最多 20 秒）
     const fpsOf = (t) => { const m = /FPS\s+(\d+(?:\.\d+)?)/.exec(t); return m ? Number(m[1]) : null; };
     await page.waitForFunction(() => {
@@ -333,10 +425,12 @@ try {
     const hud = await page.evaluate(() => document.getElementById('real-hud')?.textContent ?? '');
     const stat = await measureStatic(page);
     const bindRestore = await measureBindRestore(page);
+    const ikBefore = await ikStatsOf();
     const motion = [];
     for (const pi of [0, 7, 13]) { // A 隊一般、B 隊一般、B 隊自由人
       for (const seq of ['bump', 'spike', 'block']) motion.push(await measureMotion(page, pi, seq, 8));
     }
+    const ikAfter = await ikStatsOf();
     // A8：只在預設（20k）變體拍
     if (variant === '20k' && !skipShots) {
       // 開機 logo（showBootLogo）會蓋住畫面：等它自己退場再拍，並把「沒被蓋住」列入 A8 判定
@@ -423,7 +517,9 @@ try {
       const f = stat.a2f[s];
       return in01(f.hipY, 0.87, 1.04) && in01(f.kneeY, 0.48, 0.57) && in01(f.upperArm, 0.28, 0.39) && in01(f.forearm, 0.22, 0.31);
     });
-    const a2 = a2ab && a2c && a2d && a2e && a2f;
+    // A2(g)：A2 取樣點與 A9 每一幀（本治具逐幀量，含待命），膝有號距離 ≥ −0.01 m
+    const a2g = motion.every((m) => m.a2g.min >= -0.01 && m.a2g.ankleVerts.r > 0 && m.a2g.ankleVerts.l > 0);
+    const a2 = a2ab && a2c && a2d && a2e && a2f && a2g;
     const a3 = stat.players.every((p) => p.a3.sumBad === 0 && p.a3.contraBad === 0);
     const a4 = stat.players.every((p) => p.a4.ratio <= 0.01);
     const a5 = stat.players.every((p) => p.a5.torsoOk && p.a5.headOk);
@@ -431,8 +527,10 @@ try {
     const hudFps = fpsOf(hud);
     const hudOk = hudFps != null && hudFps > 0 && hud.includes(info.faces.toLocaleString('en-US'));
     const a9 = motion.every((m) => m.a9.backToIdle && m.a9.minY >= -0.03 && in01(m.a9.idleMin, -0.01, 0.02) && m.a9.soleVerts > 0);
+    // A10：bump／spike／block 骨盆最大下沉 ≥ 參考 geo 人的 80%（且 A9 同時過）
+    const a10 = a9 && motion.every((m) => m.a10.maxRefSink > 0 && m.a10.maxSink >= 0.8 * m.a10.maxRefSink);
     report.variants[variant] = {
-      info, hud, hudFps, errors, teamCounts: stat.teamCounts, bindPos: stat.bindPos, zone: stat.zone,
+      info, hud, hudFps, errors, ikStats: ikAfter && ikBefore && { ikFrames: ikAfter.ikFrames - ikBefore.ikFrames, liftFrames: ikAfter.liftFrames - ikBefore.liftFrames, maxLift: ikAfter.maxLift }, teamCounts: stat.teamCounts, bindPos: stat.bindPos, zone: stat.zone,
       a2: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, samples: m.samples, times: m.times, ...m.summary })),
       a2MaxDev: Math.max(...motion.flatMap((m) => ['rWrist', 'lWrist', 'rKnee'].map((bn) => m.summary[bn].maxDev))),
       a2MinWristMove: Math.min(...motion.flatMap((m) => ['rWrist', 'lWrist'].map((bn) => m.summary[bn].maxMove))),
@@ -444,16 +542,20 @@ try {
       a2e: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a2e })),
       a2eMax: Math.max(...motion.map((m) => m.a2e.max)),
       a2f: stat.a2f,
+      a2g: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a2g })),
+      a2gMin: Math.min(...motion.map((m) => m.a2g.min)),
       a3: stat.players.map((p) => ({ id: p.playerId, ...p.a3 })),
       a4: stat.players.map((p) => ({ id: p.playerId, ...p.a4 })),
       a4MaxRatio: Math.max(...stat.players.map((p) => p.a4.ratio)),
       a5: stat.players.map((p) => ({ id: p.playerId, libero: p.isLibero, ...p.a5 })),
       a9: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a9 })),
       a9MinY: Math.min(...motion.map((m) => m.a9.minY)),
+      a10: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, ...m.a10 })),
+      a10MinRatio: Math.min(...motion.map((m) => m.a10.ratio ?? 0)),
       a9IdleRange: [Math.min(...motion.map((m) => m.a9.idleMin)), Math.max(...motion.map((m) => m.a9.idleMin))],
       pass: {
-        A1: a1, A2: a2, A2ab: a2ab, A2c: a2c, A2d: a2d, A2e: a2e, A2f: a2f,
-        A3: a3, A4: a4, A5: a5, A6faces: a6faces, A6hud: hudOk, A9: a9,
+        A1: a1, A2: a2, A2ab: a2ab, A2c: a2c, A2d: a2d, A2e: a2e, A2f: a2f, A2g: a2g,
+        A3: a3, A4: a4, A5: a5, A6faces: a6faces, A6hud: hudOk, A9: a9, A10: a10,
       },
     };
   }
@@ -476,6 +578,13 @@ const mainChanged = mainDiff.split('\n').filter((l) => /^[+-]/.test(l) && !/^(\+
 a7.mainRemoved = mainChanged.filter((l) => l.startsWith('-'));
 a7.mainAdded = mainChanged.filter((l) => l.startsWith('+'));
 a7.mainOk = a7.mainRemoved.length === 0 && a7.mainAdded.every((l) => /realpreview|devreal|runRealPreview|^\+\s*(\/\/|\}\s*else if|$)/.test(l));
+// A7 範圍補註：careerScreen.js 只允許新增「寫實球員預覽（測試）」這一顆按鈕（含註解），不得改動既有行
+const csDiff = sh('git diff -U0 26593b7 -- src/ui/careerScreen.js');
+const csChanged = csDiff.split('\n').filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+a7.careerScreenRemoved = csChanged.filter((l) => l.startsWith('-'));
+a7.careerScreenAdded = csChanged.filter((l) => l.startsWith('+'));
+a7.careerScreenOk = a7.careerScreenRemoved.length === 0 && a7.careerScreenAdded.length <= 4
+  && a7.careerScreenAdded.every((l) => /^\+\s*(\/\/|inner\.appendChild\(button\('寫實球員預覽（測試）'|window\.location\.assign\(`\$\{window\.location\.pathname\}\?mode=realpreview`\);|\}\)\);)/.test(l));
 const parseTestLog = (s) => ({
   tests: Number(/ℹ tests (\d+)/.exec(s)?.[1] ?? NaN),
   pass: Number(/ℹ pass (\d+)/.exec(s)?.[1] ?? NaN),
@@ -513,7 +622,7 @@ if (testLog != null) {
 if (process.env.A7_SKIP_BUILD !== '1') {
   try { sh('npm run build'); a7.buildOk = true; } catch (e) { a7.buildOk = false; a7.buildError = String(e.stderr || e).slice(-2000); }
 } else a7.buildOk = null;
-a7.pass = a7.protectedDiff === '' && a7.geoCharacterOk && a7.mainOk && a7.npmTestOk === true && a7.buildOk === true;
+a7.pass = a7.protectedDiff === '' && a7.geoCharacterOk && a7.mainOk && a7.careerScreenOk && a7.npmTestOk === true && a7.buildOk === true;
 report.a7 = a7;
 
 // ---- 彙總 ----
@@ -529,6 +638,7 @@ report.pass = {
   A2d: all('A2d'),
   A2e: all('A2e'),
   A2f: all('A2f'),
+  A2g: all('A2g'),
   A3: all('A3'),
   A4: all('A4'),
   A5: all('A5'),
@@ -536,6 +646,8 @@ report.pass = {
   A7: a7.pass,
   A8: report.a8.pass,
   A9: all('A9'),
+  A10: all('A10'),
+  A11: report.a11?.pass === true,
 };
 report.allErrors = allErrors;
 await writeFile(resolve(output, reportName), JSON.stringify(report, null, 2));
@@ -545,10 +657,14 @@ console.log(JSON.stringify({
   a2MaxDev: V.map((v) => r3(v.a2MaxDev)), a2MinWristMove: V.map((v) => r3(v.a2MinWristMove)),
   a2cMaxErr: V.map((v) => v.a2cMaxErr), a2dMaxAngle: V.map((v) => r3(v.a2dMaxAngle)),
   a2eMax: V.map((v) => r3(v.a2eMax)),
+  a2gMin: V.map((v) => r3(v.a2gMin)),
   a2f: V.map((v) => Object.fromEntries(Object.entries(v.a2f).map(([s, f]) => [s, Object.fromEntries(Object.entries(f).map(([k, x]) => [k, r3(x)]))]))),
+  a10MinRatio: V.map((v) => r3(v.a10MinRatio)),
+  a10: V.map((v) => v.a10.filter((m) => m.player === 0).map((m) => `${m.seq}:${r3(m.maxSink)}/${r3(m.maxRefSink)}`)),
   a9MinY: V.map((v) => r3(v.a9MinY)), a9IdleRange: V.map((v) => v.a9IdleRange.map(r3)),
   hudFps: V.map((v) => v.hudFps), bridgeTris: V.map((v) => v.info.bridgeTris),
   a4MaxRatio: V.map((v) => v.a4MaxRatio), faces: V.map((v) => v.info.faces), errors: allErrors.length,
-  a7: { npmTestOk: a7.npmTestOk, buildOk: a7.buildOk, diffEmpty: a7.protectedDiff === '', gc: a7.geoCharacterOk, main: a7.mainOk },
+  a11: report.a11 && { pass: report.a11.pass, failure: report.a11.failure, steps: report.a11.steps, entryInView: report.a11.entryInView, backInView: report.a11.backInView, backOverlapsHud: report.a11.backOverlapsHud, errors: report.a11.errors.length },
+  a7: { npmTestOk: a7.npmTestOk, buildOk: a7.buildOk, diffEmpty: a7.protectedDiff === '', gc: a7.geoCharacterOk, main: a7.mainOk, careerScreen: a7.careerScreenOk },
 }));
 process.exit(Object.values(report.pass).every((x) => x === true) ? 0 : 1);

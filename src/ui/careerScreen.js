@@ -1956,6 +1956,10 @@ export function createCareerScreen(store, {
     inner.appendChild(button('📡 連線對戰', false, () => {
       window.location.assign(`${window.location.pathname}?net=1`);
     }));
+    // 寫實球員卷（2026-09-26 使用者：「我們遊戲都是 PWA」）：測試用預覽入口，同連線對戰整頁導航
+    inner.appendChild(button('寫實球員預覽（測試）', false, () => {
+      window.location.assign(`${window.location.pathname}?mode=realpreview`);
+    }));
     // 2026-08-12：常駐「怎麼玩」——`tutorial.js` 是開場一次性卡片（看過就再也不出現），
     // 忘了就查不到。這裡是可以隨時回來翻的那一份（生涯畫面底部也有同一個入口）。
     inner.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));

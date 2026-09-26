@@ -1,0 +1,66 @@
+{
+  "createdAt": "2026-09-26T14:04:03.145Z",
+  "base": "http://127.0.0.1:5176",
+  "head": "6148429f3214b3fc307e2557aeb52f27058a2137",
+  "dirty": [
+    "M src/app/realPreview.js",
+    " M src/render/realPlayer.js",
+    " M tools/real-player-browser.mjs"
+  ],
+  "device": "Desktop headless Chromium（SwiftShader/WebGL）；FPS 非真機數字",
+  "variants": {},
+  "a7": {
+    "protectedDiff": "",
+    "geoCharacterRemoved": [],
+    "geoCharacterAdded": [
+      "+",
+      "+// 寫實球員卷 第一階段（2026-09-26）：新增導出——供 realPlayer.js 取同一份配色池/雜湊",
+      "+// 替白模上色、供驗收治具算期望色。只加 export，不改上方任何既有行為。",
+      "+export { TEAM_KIT, LIBERO_KIT, SKINS, HAIRS, SHOE, idHash };"
+    ],
+    "geoCharacterOk": true,
+    "mainRemoved": [],
+    "mainAdded": [
+      "+  } else if (params.get('mode') === 'realpreview' || params.get('devreal') === '1') {",
+      "+    // 寫實球員卷 第一階段：Modly 白模預覽（獨立場景，不碰正式賽場；&faces=5k 切減面版）",
+      "+    const { runRealPreview } = await import('./app/realPreview.js');",
+      "+    await runRealPreview(ctx);"
+    ],
+    "mainOk": true,
+    "npmTest": "not run（A7_SKIP_TESTS=1）",
+    "npmTestOk": null,
+    "buildOk": null,
+    "pass": false
+  },
+  "a8": {
+    "screenshots": [],
+    "extra": [],
+    "pass": null
+  },
+  "pass": {
+    "A1": true,
+    "A2": true,
+    "A2ab": true,
+    "A2c": true,
+    "A2d": true,
+    "A2e": true,
+    "A2f": true,
+    "A2g": true,
+    "A3": true,
+    "A4": true,
+    "A5": true,
+    "A6": true,
+    "A7": false,
+    "A8": null,
+    "A9": true,
+    "A10": true,
+    "A11": false
+  },
+  "a11": {
+    "steps": [],
+    "errors": [],
+    "failure": "TimeoutError: locator.waitFor: Timeout 20000ms exceeded.",
+    "pass": false
+  },
+  "allErrors": []
+}

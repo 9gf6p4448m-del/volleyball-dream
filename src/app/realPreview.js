@@ -64,6 +64,7 @@ export async function runRealPreview(ctx) {
     else p.anim.trigger(type);
   }
   let auto = true;
+  const ikStats = { ikFrames: 0, liftFrames: 0, maxLift: 0 }; // 接地統計（治具讀）
   function stepPlayer(p, dt) {
     if (p.action) {
       p.action.t += dt;
@@ -80,12 +81,14 @@ export async function runRealPreview(ctx) {
         p.loopWait = 0.9;
       }
     }
+    p.resetLegs();
     const bodyY = p.anim.update(dt, 0, 0, 1);
     p.rig.root.position.y = bodyY * p.rig.root.scale.y;
-    // 接地（A9）：geoAnimator 的下蹲／落地緩衝只把 root 往下壓，沒有腳鎖；鞋底入地時才把
-    // root 往上補到剛好貼地——只補不壓，騰空（跳躍弧）時鞋底在地面上，完全不動
-    const low = p.soleMinY();
-    if (low < 0) p.rig.root.position.y -= low;
+    // 接地（A9／A10）：geoAnimator 的下蹲／落地緩衝只把 root 往下壓、沒有腳鎖——鞋底入地的
+    // 腳用兩骨 IK 抬回地面，骨盆保持動畫給的高度；抬 root 只剩 IK 解不完的殘差（見 groundLegs）
+    const g = p.groundLegs();
+    ikStats.ikFrames += g.ik > 0 ? 1 : 0;
+    if (g.lifted) { ikStats.liftFrames += 1; ikStats.maxLift = Math.max(ikStats.maxLift, g.residual); }
   }
   function stepAll(dt) { for (const p of players) stepPlayer(p, dt); }
 
@@ -96,6 +99,15 @@ export async function runRealPreview(ctx) {
     + 'z-index:20;padding:8px 12px;border-radius:10px;background:rgba(12,16,26,.7);color:#eef2fa;'
     + 'font:600 14px/1.4 ui-monospace,Consolas,monospace;pointer-events:none;white-space:pre';
   document.body.appendChild(hudEl);
+  // 返回主選單（PWA 內沒有網址列可改）：左下角、避開右上 HUD，觸控目標 ≥44px
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.textContent = '← 返回';
+  backBtn.style.cssText = 'position:fixed;left:max(12px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));'
+    + 'z-index:20;min-width:88px;min-height:48px;padding:10px 18px;border:1px solid rgba(238,242,250,.35);border-radius:12px;'
+    + 'background:rgba(12,16,26,.78);color:#eef2fa;font:600 16px/1 system-ui,sans-serif;cursor:pointer;touch-action:manipulation';
+  backBtn.addEventListener('click', () => window.location.assign(window.location.pathname));
+  document.body.appendChild(backBtn);
   let fps = null; // 第一個量測窗（0.5 秒）前不顯示數字
   const fmtFps = () => (fps == null ? '—' : (fps < 10 ? fps.toFixed(1) : String(Math.round(fps))));
   const fmtHud = () => `FPS ${fmtFps()}\n面數 ${asset.faces.toLocaleString()}／人（${variant}）\n${players.length} 人`;
@@ -128,7 +140,8 @@ export async function runRealPreview(ctx) {
     variant,
     faces: asset.faces,
     bridgeTris: asset.bridgeTris, // 接縫拆分處理的三角形數（見 realPlayer.js splitBridges）
-    soleVerts: asset.sole.n, // 逐幀接地補償用的鞋底頂點數
+    soleVerts: asset.sole.n, // 接地判定用的鞋底頂點數
+    ikStats, // IK 介入幀數、退回抬 root 的幀數與最大抬高量（全員累計）
     playerCount: players.length,
     baseH: BASE_H,
     boneNames: BONES.slice(),
@@ -142,6 +155,8 @@ export async function runRealPreview(ctx) {
     })),
     // 治具：目前驅動該球員的 geoAnimator 實例（resetAll 會換新，取用時再拿）
     animOf(i) { return players[i].anim; },
+    // 治具（A2(d) 腿段）：最近一幀 animator 寫入後、接地 IK 前的髖／膝世界座標
+    legPreIK(i) { return players[i].legPreIK(); },
     hudText: () => hudEl.textContent,
     pause() { paused = true; auto = false; },
     resume() { paused = false; auto = true; },
