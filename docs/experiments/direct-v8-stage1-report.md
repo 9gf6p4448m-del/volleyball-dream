@@ -9,6 +9,7 @@
 - R1–R11 每條都有對應測試或治具且為綠；R12 的 `npm test` 全綠（2581 條、0 skip，只少了第四節核准退場的測試）、四個瀏覽器治具 PASS。R12 的部署與 `--delivery` 對線上版由主對話做，本分支未部署、未 push。
 - 鑑別力：R1、R3、R4、R6 的新測試在舊碼 `3e90288` 上 8/9 條紅（第 9 條「範圍外 0 例救到」新舊皆綠，見 §2），紅的原因全是行為斷言（`docs/experiments/direct-v8-stage1-old-red.tap`）。R9 慢動作觸發 tick 數 > 0、R10 情境切到魚躍次數 > 0（§1 R9／R10）。
 - 版本字串單一來源 `src/sim/directConstants.js:3` → `direct-v8.1`（練習頁 `[data-build]` 與匯出檔 `simulationVersion` 都由它產生）。
+- **2026-09-27 第二輪（第一輪 fresh opus 覆審的 12 條 findings 修補，§10）**：C1、H1、H2、H3、M2、M3、M4、L1、L2、L3、L4 修好且各有舊碼或突變紅燈；M5 的四條 B 組測試改寫成獨立測試、門檻原封不動，其中 **A14（b 舉球區 0.478、c 弧頂中位數 1.24 m）與 A16b（舉球區 0.450）不過門檻 0.50／3.0**，依指示沒動門檻、例數、網格，數字交主對話裁定。`npm test` 最終：2588 條、2586 過、**2 敗（就是 A14 與 A16b）**、0 skip；四個瀏覽器治具 PASS。R8 在修補後是 901/2646 = 34.05%，只比 34% 門檻多 1 例（原因見 §10 L4）。
 
 ## 1. R1–R12 逐條
 
@@ -84,6 +85,25 @@
 ℹ todo 0
 ℹ duration_ms 193936.9042
 ```
+
+- 2026-09-27 第二輪（最終樹 `8064811` 的內容、單獨跑、無其他負載；指令 `npm test`，05:35:51 → 05:40:00）：
+
+```
+✖ A14 到位球：少碰網、落在舉球區、弧頂夠高 (8556.3194ms)
+✖ A16b 邊移動邊接（放開搖桿減速中觸球）：碰網 ≤ 10%，舉球區 ≥ 50% (21736.1065ms)
+  AssertionError [ERR_ASSERTION]: A14b set zone 0.48 (n=345)
+  AssertionError [ERR_ASSERTION]: A16b moving set zone 0.45 (n=436)
+ℹ tests 2588
+ℹ suites 0
+ℹ pass 2586
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 247978.3963
+```
+
+兩敗都是 B 組改寫後門檻不過（§10 M5），沒有其他失敗；新增 7 條（R4 加嚴 2、R7 身體先碰 1、A23c 1、A14／A16／A16b 3）→ 2581 + 7 = 2588。慢測試都有跑：A23c 69.7 s、A25 45.5 s、R6 與 chase 照舊。
 
 ## 5. 四個瀏覽器治具
 
@@ -223,9 +243,9 @@
 
 - §6「D 不動」改為如實描述：A5 原本「拒絕 `direct-v6` 重播」的 `assert.throws(replayDirectTape(... 'direct-v6'))` 被刪、換成拒絕 `direct-v7`；`direct-v6` 還原的 throws 保留。
 
-### 收尾驗證（本節在最終 commit 前更新）
+### 收尾驗證
 
-- `npm test`：待補。
+- `npm test`（單獨跑，§4 第二輪段有最後 10 行）：2588 條、2586 過、2 敗、0 skip。兩敗 = `A14b set zone 0.48 (n=345)`、`A16b moving set zone 0.45 (n=436)`，即 M5 的 B 組門檻不過，未動門檻，交主對話。其餘 2586 條（含本輪新增的 R4 加嚴 ×2、R7 身體先碰、A23c、A16 與所有 R1–R11）全綠。
 - 四個瀏覽器治具（真樹、5175，修補後的最終碼；指令與輸出見 §5 的 2026-09-27 段）：預設 PASS、`--assist` PASS、`--motion` PASS、`--pass` PASS（C1／H3／L2 的證據就是這次的 `pass-browser.json`）；另在 `HEAD` 副本（5176）上未突變的 `--pass` 對照組 PASS。
 - 背景程序：5175（PID 40904）與 5176（PID 5180）兩個 vite 都以 `taskkill //PID … //F //T` 關閉，`netstat -ano | grep -E ":517[56]"` 之後 LISTENING 0 筆（已釋放）。突變副本 `scratchpad/mut-tree` 與舊碼副本 `scratchpad/old-ae48ba2`／`old-3e90288` 都在 scratchpad，不在 repo。
 - `git diff ae48ba2..HEAD -- docs/kickoffs/`：空。
