@@ -295,6 +295,9 @@ async function measureMotion(page, playerIndex, seq, samples) {
     const latTrace = [];
     const idleLat = kneeLateral();
     latTrace.push(idleLat.r, idleLat.l);
+    // A2(d) 腿段 IK 後逐幀（加嚴・第五批）：觸發到回待命的每一幀＋待命，取兩腿最大
+    const legPostNow = () => { const d = dirAngles(); return Math.max(d['rHip>rKnee@post'], d['lHip>lKnee@post']); };
+    let legPostFrameMax = legPostNow(); let legPostFrameAt = 0;
     checkAirFoot();
     // A10：骨盆世界 y 相對待命的最大下沉（寫實球員 vs 同步驅動的參考 geo 人）
     const pelvisY = () => { ref.root.updateMatrixWorld(true); return [wp(pl.joints.pelvis).y, wp(ref.joints.pelvis).y]; };
@@ -315,6 +318,8 @@ async function measureMotion(page, playerIndex, seq, samples) {
       kneeTrace.push(ks.r, ks.l);
       const kl = kneeLateral();
       latTrace.push(kl.r, kl.l);
+      const lp = legPostNow();
+      if (lp > legPostFrameMax) { legPostFrameMax = lp; legPostFrameAt = frames; }
       checkAirFoot();
       const [py, ry] = pelvisY();
       maxSink = Math.max(maxSink, idlePelvis - py);
@@ -343,7 +348,9 @@ async function measureMotion(page, playerIndex, seq, samples) {
       idle: idleDirs, segMax, calls,
       armMax: Math.max(...arms.map((k) => segMax[k])),
       legPreMax: Math.max(segMax['rHip>rKnee'], segMax['lHip>lKnee']),
-      legPostMax: Math.max(segMax['rHip>rKnee@post'], segMax['lHip>lKnee@post']),
+      legPostMax: Math.max(segMax['rHip>rKnee@post'], segMax['lHip>lKnee@post'], legPostFrameMax),
+      legPostSampleMax: Math.max(segMax['rHip>rKnee@post'], segMax['lHip>lKnee@post']),
+      legPostFrameMax, legPostFrameAt,
       kneeLateralMax: Math.max(...latTrace), lateralFrames: latTrace.length / 2,
     };
     const handAll = [rest.hand.r, rest.hand.l, ...out.flatMap((o) => [o.hand.r, o.hand.l])];
@@ -591,7 +598,8 @@ try {
     const a2ab = motion.every((m) => ['rWrist', 'lWrist', 'rKnee'].every((bn) => m.summary[bn].maxDev <= 0.05 && m.samples >= 5)
       && m.summary.rWrist.maxMove >= 0.30 && m.summary.lWrist.maxMove >= 0.30);
     const a2c = bindRestore.length === 14 && bindRestore.every((b) => b.maxErr <= 1e-3
-      && Math.abs(b.minY) <= 1e-3 && Math.abs(b.height - 1.85) <= 1e-3);
+      && Math.abs(b.minY) <= 1e-3 && Math.abs(b.height - 1.85) <= 1e-3
+      && b.footAngleBefore > 1); // 加嚴・第五批：量測前腳骨確已被 IK 轉動
     const a2d = motion.every((m) => m.a2d.armMax <= 10 && m.a2d.legPreMax <= 10 && m.a2d.legPostMax <= 15
       && m.a2d.kneeLateralMax <= 0.02 && m.a2d.calls.update > 0 && m.a2d.calls.trigger.length > 0);
     const footAirOk = motion.every((m) => m.footAir.maxAngle <= 0.5) && motion.some((m) => m.footAir.frames > 0);
@@ -684,17 +692,28 @@ const parseTestLog = (s) => ({
 const baselinePath = resolve(process.env.A7_BASELINE_LOG || 'docs/experiments/real-player-evidence/npm-test-baseline-e0dd285.log');
 const baseline = parseTestLog(await readFile(baselinePath, 'utf8'));
 let testLog = null;
+// A7 證據來源（加嚴・第五批）：npm test log 須記錄執行時的 HEAD 與工作區是否乾淨，且須等於本報告的 HEAD、乾淨
+const headNow = sh('git rev-parse HEAD').trim();
 if (process.env.A7_TEST_LOG) {
+  // 治具外另跑的 log：須附 tools/npm-test-with-provenance.mjs 寫的 <log>.json
   const p = resolve(process.env.A7_TEST_LOG);
   testLog = await readFile(p, 'utf8');
-  a7.testLogSource = { provided: p, mtime: (await stat(p)).mtime.toISOString() };
+  let prov = null;
+  try { prov = JSON.parse(await readFile(`${p}.json`, 'utf8')); } catch { prov = null; }
+  a7.testLogSource = { provided: p, mtime: (await stat(p)).mtime.toISOString(), provenance: prov };
 } else if (process.env.A7_SKIP_TESTS !== '1') {
   const t0 = Date.now();
+  const dirtyAtStart = sh('git status --porcelain').trim().split('\n').filter(Boolean);
   try { testLog = sh('npm test', { timeout: 60 * 60 * 1000 }); } catch (e) { testLog = `${e.stdout ?? ''}\n${e.stderr ?? ''}`; }
   const p = resolve(output, 'npm-test-after.log');
   await writeFile(p, testLog);
-  a7.testLogSource = { ranInTool: p, seconds: Math.round((Date.now() - t0) / 1000) };
+  a7.testLogSource = {
+    ranInTool: p, seconds: Math.round((Date.now() - t0) / 1000),
+    provenance: { head: headNow, clean: dirtyAtStart.length === 0, dirty: dirtyAtStart, headAfter: sh('git rev-parse HEAD').trim() },
+  };
 }
+const prov = a7.testLogSource?.provenance;
+a7.testLogProvenanceOk = Boolean(prov) && prov.head === headNow && prov.clean === true && (prov.headAfter ?? prov.head) === headNow;
 if (testLog != null) {
   const after = parseTestLog(testLog);
   a7.npmTest = {
@@ -703,7 +722,8 @@ if (testLog != null) {
     sameFailingAsBaseline: JSON.stringify(after.failing) === JSON.stringify(baseline.failing),
   };
   a7.npmTestOk = Number.isFinite(after.pass) && Number.isFinite(baseline.pass)
-    && a7.npmTest.sameFailingAsBaseline && after.fail === baseline.fail && after.pass >= baseline.pass;
+    && a7.npmTest.sameFailingAsBaseline && after.fail === baseline.fail && after.pass >= baseline.pass
+    && a7.testLogProvenanceOk;
 } else {
   a7.npmTest = 'not run（A7_SKIP_TESTS=1）';
   a7.npmTestOk = null;
@@ -749,6 +769,8 @@ console.log(JSON.stringify({
   a2cMaxErr: V.map((v) => v.a2cMaxErr),
   a2d: V.map((v) => ({ arm: r3(v.a2dArmMax), legPre: r3(v.a2dLegPreMax), legPost: r3(v.a2dLegPostMax), kneeLat: r3(v.a2dKneeLateralMax) })),
   footAir: V.map((v) => ({ frames: v.footAir.frames, maxAngle: r3(v.footAir.maxAngle) })),
+  a2dLegPostFrame: V.map((v) => v.a2d.map((m) => `${m.seq}#${m.player}:${r3(m.legPostFrameMax)}@${m.legPostFrameAt}`).join(' ')),
+  a2cFootBefore: V.map((v) => r3(Math.min(...v.a2c.map((b) => b.footAngleBefore)))),
   a12: V.map((v) => ({ maxJump: r3(v.continuity.maxJump), at: v.continuity.at && `${v.continuity.at.player}@${v.continuity.at.frame}`, trig: v.continuity.minTriggersPerPlayer })),
   a2eMax: V.map((v) => r3(v.a2eMax)),
   a2gMin: V.map((v) => r3(v.a2gMin)),
@@ -759,6 +781,6 @@ console.log(JSON.stringify({
   hudFps: V.map((v) => v.hudFps), bridgeTris: V.map((v) => v.info.bridgeTris),
   a4MaxRatio: V.map((v) => v.a4MaxRatio), faces: V.map((v) => v.info.faces), errors: allErrors.length,
   a11: report.a11 && { pass: report.a11.pass, failure: report.a11.failure, steps: report.a11.steps, entryInView: report.a11.entryInView, backInView: report.a11.backInView, backOverlapsHud: report.a11.backOverlapsHud, errors: report.a11.errors.length },
-  a7: { npmTestOk: a7.npmTestOk, buildOk: a7.buildOk, diffEmpty: a7.protectedDiff === '', gc: a7.geoCharacterOk, main: a7.mainOk, careerScreen: a7.careerScreenOk },
+  a7: { provenanceOk: a7.testLogProvenanceOk, npmTestOk: a7.npmTestOk, buildOk: a7.buildOk, diffEmpty: a7.protectedDiff === '', gc: a7.geoCharacterOk, main: a7.mainOk, careerScreen: a7.careerScreenOk },
 }));
 process.exit(Object.values(report.pass).every((x) => x === true) ? 0 : 1);
