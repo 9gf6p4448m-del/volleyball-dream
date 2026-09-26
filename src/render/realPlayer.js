@@ -541,20 +541,22 @@ export function createRealPlayer(asset, {
       for (const side of ['r', 'l']) {
         // 腳掌只在接地時壓平（加嚴・第四批 LOW-1）：先以「腳跟著小腿」量鞋底，離地 > FOOT_AIR
         // 就不動；壓平後若反而懸空（腳尖原本點地、壓平把腳尖抬起）也退回跟著小腿
-        let m = soleMin(side);
-        if (m > FOOT_AIR) continue;
+        const mShin = soleMin(side);
+        if (mShin > FOOT_AIR) continue;
         flattenFoot(side);
-        m = soleMin(side);
-        if (m > FOOT_AIR) {
+        let m = soleMin(side);
+        let flat = true;
+        if (m > FOOT_AIR) { // 壓平會懸空：腳跟著小腿（腳尖點地）；若腳尖已入地，下面照樣用 IK 抬
           joints[`${side}Ankle`].rotation.set(0, 0, 0);
           joints[`${side}Ankle`].updateMatrixWorld(true);
-          continue;
+          flat = false;
+          m = mShin;
         }
         let gain = 1;
         for (let it = 0; it < IK_ITERS && m < -IK_EPS; it += 1) {
           const req = -m * gain;
           solveLeg(side, req);
-          flattenFoot(side);
+          if (flat) flattenFoot(side);
           ik += 1;
           const m2 = soleMin(side);
           const eff = (m2 - m) / req; // 這一步踝抬 req，鞋底最低點實際抬了多少比例
