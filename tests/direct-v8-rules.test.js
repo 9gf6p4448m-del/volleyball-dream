@@ -278,9 +278,10 @@ test('R4 魚躍（加嚴）強力發球：0.3 m 時刻 0.5 < d ≤ 2.0 的 12 �
   assert.ok(points.filter((p) => p.dUnder > 2.0).length >= 7, `平台高度 d > 2.0 的例數 ${points.filter((p) => p.dUnder > 2.0).length}`);
   const rt = pressFor(SERVE_DIVE.tick, 0, DIVE_CENTRE);
   const runs = points.map((p) => ({ p, ...runServe(p, rt) }));
-  if (rules) runs.forEach((r) => assert.equal(r.action, 'dive', `${serveTag(r.p)} 情境出手應為魚躍，得到 ${r.action}`));
+  // The save is the load-bearing assertion (it is what the old code fails on); the button check follows.
   const saved = runs.filter((r) => r.contact?.technique === 'dive' && r.contact.tier);
-  assert.equal(saved.length, runs.length, `魚躍救到 ${saved.length}/${runs.length}；例：${runs.filter((r) => !saved.includes(r)).slice(0, 4).map((r) => `${serveTag(r.p)} → ${describe(r)}`).join('；')}`);
+  assert.equal(saved.length, runs.length, `魚躍救到 ${saved.length}/${runs.length}；例：${runs.filter((r) => !saved.includes(r)).slice(0, 4).map((r) => `${serveTag(r.p)} 情境出手 ${r.action} → ${describe(r)}`).join('；')}`);
+  if (rules) runs.forEach((r) => assert.equal(r.action, 'dive', `${serveTag(r.p)} 情境出手應為魚躍，得到 ${r.action}`));
   for (const r of saved) assert.equal(r.contact.tick, SERVE_DIVE.tick, `${serveTag(r.p)} 判定 tick ${r.contact.tick} ≠ 0.3 m tick ${SERVE_DIVE.tick}`);
   assert.equal(saved.filter((r) => r.contact.tier === 'PERFECT').length, 0, '魚躍出現完美');
 });
