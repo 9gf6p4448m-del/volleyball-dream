@@ -147,9 +147,10 @@ test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，d
         assert.equal(serializeDirectState(restored), serializeDirectState(states[t]));
       }
     }
-    assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v7', initial, commands, endTick: s.tick })), serializeDirectState(s));
+    assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v8.1', initial, commands, endTick: s.tick })), serializeDirectState(s));
     assert.throws(() => restoreDirectGame({ ...initial, simulationVersion: 'direct-v6' }));
-    assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v6', initial, commands, endTick: 10 }));
+    assert.throws(() => restoreDirectGame({ ...initial, simulationVersion: 'direct-v7' }));
+    assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v7', initial, commands, endTick: 10 }));
   }
 });
 

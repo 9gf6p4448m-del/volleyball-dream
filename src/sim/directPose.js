@@ -1,4 +1,4 @@
-import { DIRECT_ACTIONS, DIRECT_PHYSICS } from "./directConstants.js";
+import { DIRECT_ACTIONS } from "./directConstants.js";
 
 const blend = (a, b, q) => ({
   x: a.x + (b.x - a.x) * q,
@@ -123,12 +123,9 @@ export function getDirectPose(state, fraction = 0) {
       hand = blend(hand, bodyPoint(sign * 0.20, 0.94, 0.12), Math.min(1, tuck * 12));
     }
     if (p.action === "receive") {
-      // Platform choice: yaw the forearms about the shoulder line and raise or
-      // lower the hands. Same capsules; the ball still rebounds off the real arm.
-      const yaw = (p.passLateral ?? 0) * DIRECT_PHYSICS.passYaw;
-      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      // Forearm platform (direct-v8: one neutral platform, no swipe choice).
       const reach = p.receiveReach ?? 0;
-      const platform = (x, y, f) => point((x + reach) * cy + f * sy, y, -(x + reach) * sy + f * cy);
+      const platform = (x, y, f) => point(x + reach, y, f);
       elbow = blend(
         elbow,
         platform(sign * 0.11, 0.69 + phase * 0.11, 0.21),
@@ -136,7 +133,7 @@ export function getDirectPose(state, fraction = 0) {
       );
       hand = blend(
         hand,
-        platform(sign * 0.045, 0.585 + phase * 0.11 + (p.passPitch ?? 0) * DIRECT_PHYSICS.passPitch, 0.41),
+        platform(sign * 0.045, 0.585 + phase * 0.11, 0.41),
         raise * recover,
       );
       // direct-v7 overhand pass: hands in front of the forehead (the set pose).
@@ -146,8 +143,10 @@ export function getDirectPose(state, fraction = 0) {
         hand = blend(hand, point(sign * 0.11, 1.02, 0.15), over);
       }
     } else if (p.action === 'dive') {
-      elbow = blend(elbow, point(sign * 0.12, 0.47, 0.56), weight);
-      hand = blend(hand, point(sign * 0.045, 0.42, 0.77), weight);
+      // direct-v8: the arms extend fully for a far ball, less for one beside the body.
+      const reach = p.diveReach ?? 1;
+      elbow = blend(elbow, point(sign * 0.12, 0.47, 0.56 * reach), weight);
+      hand = blend(hand, point(sign * 0.045, 0.42, 0.77 * reach), weight);
     } else if (p.action === "spike" || p.action === "tip") {
       if (sign === 1) {
         const tip = p.action === 'tip' ? 1 : Math.max(0, Math.min(1, p.shotBlend ?? (p.shotType === 'TIP' ? 1 : 0)));
