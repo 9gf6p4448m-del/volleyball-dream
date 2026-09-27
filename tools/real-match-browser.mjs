@@ -205,7 +205,22 @@ async function installSampler(page, { subAtTick }) {
       window.__lastSampledTick = tick;
       const mv = window.__phase1.loop().stage.matchView;
       const units = mv.debug.units;
-      const sample = { tick, appearance: mv.debug.appearance, visibleCount: 0, players: [] };
+      // B6：逐格輕量 sim 狀態簽章（分數＋球位置＋全員位置），供治具在「兩模式都採到
+      // 的最後一個共同 tick」比對——不用賽末各自 runUntilTick 停下的那個 tick（粗
+      // 推進的 20s 分段在 geo/real 兩邊落點可能差 1-2 tick，比對那個點的完整 game
+      // 序列化只會比出「兩個不同時間點的狀態不同」，跟 render 有沒有影響 sim 無關）。
+      const actorSig = Object.keys(gameState.actors).sort().map((id) => {
+        const a = gameState.actors[id];
+        return `${id}:${a.x.toFixed(4)},${a.z.toFixed(4)},${(a.divedUntil ?? 0)},${(a.blockUntil ?? 0)}`;
+      }).join('|');
+      const stateSig = JSON.stringify({
+        score: gameState.match.score, tick,
+        ball: [gameState.ball.x, gameState.ball.y, gameState.ball.z].map((v) => v.toFixed(4)),
+        actorSig,
+      });
+      const sample = {
+        tick, appearance: mv.debug.appearance, visibleCount: 0, players: [], stateSig,
+      };
       for (const [id, u] of Object.entries(units)) {
         const p = gameState.players[id];
         const visible = u.rig.root.scale.x > 0.001;
@@ -300,14 +315,29 @@ async function installSampler(page, { subAtTick }) {
 // createGeoPool 12 池，每池 mesh.count 應收斂到實際 claim 數；useReal 時沒人 claim，
 // count 應為 0——這裡直接讀 scene 而不是只看 units，才抓得到「units 都是 real 但幾何
 // 池仍殘留可見實例」這種漏洞，見 geoCharacter.js finishColors 的 count 收斂修正）
+// 診斷實測（2026-09-27）：scene 裡還有別的 InstancedMesh 跟球員外觀完全無關——
+// 觀眾席（arena.js createArena，count=712，capacity=712，從開機就在，與外觀/match
+// 狀態無關）。廣泛比對「任何 InstancedMesh」會把觀眾席也算進來，恆是假陽性。
+// geoCharacter.js 的 12 池（PART_SLOTS）capacity 固定是 playerCount×1 或 ×2——
+// 只挑這個範圍內的 InstancedMesh 才是「幾何球員部件池」，不比對其餘（觀眾席／未來
+// 可能新增的其他裝飾用 InstancedMesh）。
 async function checkGeoPoolEmpty(page) {
   return page.evaluate(() => {
     const scene = window.__phase1.scene;
+    const playerCount = Object.keys(window.__phase1.loop().stage.matchView.debug.units).length;
+    const candidates = [];
     const nonEmpty = [];
     scene.traverse((o) => {
-      if (o.isInstancedMesh && o.count > 0) nonEmpty.push({ uuid: o.uuid, count: o.count });
+      if (!o.isInstancedMesh) return;
+      const capacity = o.instanceMatrix.count;
+      if (capacity !== playerCount && capacity !== playerCount * 2) return; // 排除觀眾席等無關池
+      candidates.push({ uuid: o.uuid, count: o.count, capacity });
+      if (o.count > 0) nonEmpty.push({ uuid: o.uuid, count: o.count, capacity });
     });
-    return { nonEmptyPools: nonEmpty, allEmpty: nonEmpty.length === 0 };
+    return {
+      playerCount, candidateCount: candidates.length, nonEmptyPools: nonEmpty,
+      allEmpty: nonEmpty.length === 0,
+    };
   });
 }
 
@@ -550,9 +580,22 @@ for (const seed of SEEDS) {
   const b4Ok = realEntries.every((p) => p.headTopDiff == null || p.headTopDiff <= 0.05);
   const b5PlateOk = realEntries.every((p) => !p.plateDist
     || ((p.plateDist.back == null || p.plateDist.back <= 0.06) && (p.plateDist.front == null || p.plateDist.front <= 0.06)));
-  const eventsEqual = JSON.stringify(g.final.events) === JSON.stringify(r.final.events);
-  const snapshotEqual = g.final.snapshotError == null && r.final.snapshotError == null
-    && g.final.snapshot === r.final.snapshot;
+  // B6：兩模式各自跑到「≥TARGET_TICKS」就停（粗推進 20s 分段，geo/real 落點可能差
+  // 1-2 tick），比對整場 events／收尾 snapshot 前，先算「兩邊取樣都採到的最後一個
+  // 共同 tick」，用逐格輕量狀態簽章（stateSig：分數＋球位置＋全員位置）在那個確定
+  // 共同的時間點比對，並把 events 裁到那個 tick 為止再比——避免把「兩邊各自多跑了
+  // 1-2 tick、状態自然不同」誤判成「render 影響了 sim」。
+  const commonStateTick = commonTicks.length ? Math.max(...commonTicks) : null;
+  const stateSigEqual = commonStateTick != null
+    && gMap.get(commonStateTick).stateSig === rMap.get(commonStateTick).stateSig;
+  const trimEvents = (events) => events.filter((e) => commonStateTick == null || e.tick <= commonStateTick);
+  const eventsEqual = JSON.stringify(trimEvents(g.final.events)) === JSON.stringify(trimEvents(r.final.events));
+  // 完整 game 序列化只在兩邊剛好落在同一個最終 tick 時才具鑑別力（否則本來就該不同）；
+  // 落點不同時這裡只記錄「不適用」，不當作失敗依據——見上面 stateSig 才是主要證據。
+  const finalTickAligned = g.finalTick === r.finalTick;
+  const snapshotEqual = !finalTickAligned ? null
+    : (g.final.snapshotError == null && r.final.snapshotError == null
+      && g.final.snapshot === r.final.snapshot);
   const activityOk = g.final.events.length > 0 && realEntries.length > 0;
   const eventTypes = new Set(r.final.events.map((e) => e.type));
   const hasLiberoSwap = eventTypes.has('LIBERO_SWAP') || g.final.events.some((e) => e.type === 'LIBERO_SWAP');
@@ -563,12 +606,14 @@ for (const seed of SEEDS) {
     matchEntryId: g.boot.matchEntryId,
     finalTickGeo: g.finalTick, finalTickReal: r.finalTick,
     commonTickCount: commonTicks.length, visibleCountMismatches: visibleCountMismatches.length,
-    b2Pass: visibleCountMismatches.length === 0 && r.geoPoolCheck?.allEmpty === true,
+    b2Pass: visibleCountMismatches.length === 0 && r.geoPoolCheck?.allEmpty === true
+      && r.geoPoolCheck?.candidateCount === 12, // geoCharacter.js PART_SLOTS 剛好 12 種部件池
     geoPoolCheck: r.geoPoolCheck,
     b3HandOk, b3SoleOk, b3SampleCount: realEntries.length,
     b4Ok, b4SampleCount: realEntries.filter((p) => p.headTopDiff != null).length,
     b5PlateOk, b5PlateSampleCount: realEntries.filter((p) => p.plateDist).length,
     b6EventsEqual: eventsEqual, b6SnapshotEqual: snapshotEqual, b6ActivityOk: activityOk,
+    b6StateSigEqual: stateSigEqual, b6CommonStateTick: commonStateTick, b6FinalTickAligned: finalTickAligned,
     hasLiberoSwap, hasSubstitution, subTick: r.subResult?.tick ?? null,
     colorCheck: r.colors,
     seqCoverage: r.seqCoverage,
@@ -714,7 +759,11 @@ report.pass = {
     && b3Coverage.countOk && b3Coverage.allGroupsOk,
   B4: Object.values(perSeed).every((p) => p.b4Ok) && b4SamplesOk,
   B5: Object.values(perSeed).every((p) => p.b5PlateOk) && b5PlateSamplesOk && colorAllOk && n4Ok,
-  B6: Object.values(perSeed).every((p) => p.b6EventsEqual && p.b6SnapshotEqual && p.b6ActivityOk),
+  // B6 主要證據＝b6StateSigEqual（兩邊都採到的最後共同 tick，分數/球/全員位置逐值同）
+  // ＋裁到共同 tick 為止的 events 逐值同；b6SnapshotEqual 只在兩邊剛好落在同一個
+  // 最終 tick 時才有意義（null＝不適用，不當失敗）。
+  B6: Object.values(perSeed).every((p) => p.b6EventsEqual && p.b6StateSigEqual && p.b6ActivityOk
+    && (p.b6SnapshotEqual === null || p.b6SnapshotEqual === true)),
   B7: b7.pass,
   B8b: b8b ? b8b.pass : null,
   B9: b9 ? b9.pass : null,

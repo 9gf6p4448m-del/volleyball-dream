@@ -1,0 +1,354 @@
+{
+  "createdAt": "2026-09-27T04:38:10.460Z",
+  "base": "http://127.0.0.1:5190",
+  "head": "b993c5afeb99068a0104de9648e8d170789348c6",
+  "dirty": [
+    "?? docs/experiments/real-match-evidence/report-mut-b2.json",
+    "?? docs/experiments/real-match-evidence/sessions-raw.json"
+  ],
+  "method": "生涯比賽（直接呼叫 resolveMatchConfig/buildMatchStage/startMatchLoop，跳過新生涯精靈與出戰按鈕的選單導航；換人走 stage.handlers.requestSub 正式路徑）＋ page.clock 虛擬時間 ＋ no-op 渲染（CPU 側量測不依賴實際 render()）",
+  "device": "Desktop headless Chromium（SwiftShader/WebGL）；非真機 FPS（B11 由使用者手機另測）",
+  "seeds": [
+    1
+  ],
+  "sampleEvery": 10,
+  "targetTicks": 1500,
+  "subAtTick": 200,
+  "sessions": {},
+  "pass": {
+    "B2": false,
+    "B3": false,
+    "B4": true,
+    "B5": true,
+    "B6": true,
+    "B7": true,
+    "B8b": null,
+    "B9": null,
+    "B12": null
+  },
+  "perSeed": {
+    "1": {
+      "matchEntryId": "group-1",
+      "finalTickGeo": 2096,
+      "finalTickReal": 2096,
+      "commonTickCount": 210,
+      "visibleCountMismatches": 0,
+      "b2Pass": false,
+      "geoPoolCheck": {
+        "nonEmptyPools": [
+          {
+            "uuid": "0da74f0a-5479-47bb-b4b1-b22a2733ee59",
+            "count": 712
+          }
+        ],
+        "allEmpty": false
+      },
+      "b3HandOk": true,
+      "b3SoleOk": false,
+      "b3SampleCount": 4085,
+      "b4Ok": true,
+      "b4SampleCount": 4085,
+      "b5PlateOk": true,
+      "b5PlateSampleCount": 3010,
+      "b6EventsEqual": true,
+      "b6SnapshotEqual": true,
+      "b6ActivityOk": true,
+      "hasLiberoSwap": true,
+      "hasSubstitution": true,
+      "subTick": 447,
+      "colorCheck": [
+        {
+          "id": "A1",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A2",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A3",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A4",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A5",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A6",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "AL",
+          "teamId": "A",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 16762161,
+          "expected": 16762161,
+          "ok": true
+        },
+        {
+          "id": "A7",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "B1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B5",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B6",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BL",
+          "teamId": "B",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 14209736,
+          "expected": 14209736,
+          "ok": true
+        },
+        {
+          "id": "BR1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        }
+      ],
+      "seqCoverage": [
+        "serve",
+        "receiveReady",
+        "bump",
+        "transitionWait",
+        "setReady",
+        "overhead",
+        "approach3",
+        "windup",
+        "spikeHold",
+        "spike",
+        "blockJump",
+        "landSoft",
+        "cheer",
+        "approach4"
+      ],
+      "errors": []
+    }
+  },
+  "b3Coverage": {
+    "distinctKeys": [
+      "serve",
+      "receiveReady",
+      "bump",
+      "transitionWait",
+      "setReady",
+      "overhead",
+      "approach3",
+      "windup",
+      "spikeHold",
+      "spike",
+      "blockJump",
+      "landSoft",
+      "cheer",
+      "approach4"
+    ],
+    "count": 14,
+    "groupsCovered": {
+      "bump": true,
+      "overhead": true,
+      "spike": true,
+      "block": true,
+      "serve": true,
+      "approach": true
+    },
+    "allGroupsOk": true,
+    "countOk": true
+  },
+  "colorAllOk": true,
+  "n4Ok": true,
+  "plateMeshCounts": {
+    "1": 28
+  },
+  "b7": {
+    "protectedDiff": "",
+    "protectedDiffEmpty": true,
+    "importers": [
+      "src/app/realPreview.js",
+      "src/render/matchView.js"
+    ],
+    "extraImporters": [],
+    "importersOk": true,
+    "pass": true
+  },
+  "b8b": null,
+  "b9": null,
+  "b12": null,
+  "sessionsSummary": {
+    "1:geo": {
+      "finalTick": 2096,
+      "sampleCount": 215,
+      "errors": [],
+      "subResult": {
+        "tick": 447,
+        "inId": "A7",
+        "outId": "A1",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 45,
+      "eventCounts": {
+        "LIBERO_SWAP": 2,
+        "SERVE": 5,
+        "BALL_OVER_NET": 10,
+        "TOUCH": 16,
+        "DEAD_BALL": 4,
+        "SCORE": 4,
+        "ROTATE": 2,
+        "SUBSTITUTION": 1,
+        "BLOCK_TOUCH": 1
+      }
+    },
+    "1:real": {
+      "finalTick": 2096,
+      "sampleCount": 215,
+      "errors": [],
+      "subResult": {
+        "tick": 447,
+        "inId": "A7",
+        "outId": "A1",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 45,
+      "eventCounts": {
+        "LIBERO_SWAP": 2,
+        "SERVE": 5,
+        "BALL_OVER_NET": 10,
+        "TOUCH": 16,
+        "DEAD_BALL": 4,
+        "SCORE": 4,
+        "ROTATE": 2,
+        "SUBSTITUTION": 1,
+        "BLOCK_TOUCH": 1
+      }
+    }
+  },
+  "vacuousGuard": {
+    "b3SamplesOk": true,
+    "b4SamplesOk": true,
+    "b5PlateSamplesOk": true
+  }
+}
