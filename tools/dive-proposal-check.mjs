@@ -134,14 +134,16 @@ console.log('左右語意實測：', JSON.stringify(report.semantics, (k, x) => 
 for (const variant of VARIANTS) {
   for (const handed of ['r', 'l']) {
     const fr = run(variant, handed);
-    const worst = (key) => fr.reduce((m, x) => Math.min(m, x[key]), Infinity);
+    const act = fr.filter((x) => x.active); // 摘要只算魚躍窗（之後是遊戲既有待命姿勢）
+    const worst = (key) => act.reduce((m, x) => Math.min(m, x[key]), Infinity);
     const fails = ['F1', 'F2', 'F3', 'G', 'H'].map((c) => [c, fr.filter((x) => !x[c]).map((x) => x.k)]);
     const s = {
       frames: fr.length,
       minShoe: worst('shoe'), minTorso: worst('torso'), minAll: worst('all'),
-      minAllPart: fr.reduce((m, x) => (x.all < m.all ? x : m), { all: Infinity }).allPart,
+      minAllPart: act.reduce((m, x) => (x.all < m.all ? x : m), { all: Infinity }).allPart,
       minKnee: worst('kneeMin'),
-      maxHandFwd: Math.max(...fr.map((x) => x.handFwd)),
+      maxHandFwd: Math.max(...act.map((x) => x.handFwd)),
+      activeFrames: act.length,
       groundedTorsoMax: Math.max(...fr.filter((x) => x.grounded).map((x) => x.torso)),
       fails: Object.fromEntries(fails),
     };
@@ -149,7 +151,7 @@ for (const variant of VARIANTS) {
     const isProposal = variant.seq !== 'dive';
     const pass = fails.every(([, l]) => l.length === 0);
     if (isProposal && !pass) ok = false;
-    console.log(`${pass ? 'PASS' : 'FAIL'} ${variant.name} 慣用手${handed}：鞋最低 ${f3(s.minShoe)}／軀幹最低 ${f3(s.minTorso)}／全身最低 ${f3(s.minAll)}(${s.minAllPart})／膝最小 ${f3(s.minKnee)} rad／貼地段軀幹最高 ${f3(s.groundedTorsoMax)}／手最遠 ${f3(s.maxHandFwd)} m`
+    console.log(`${pass ? 'PASS' : 'FAIL'} ${variant.name} 慣用手${handed}（魚躍窗 ${s.activeFrames} 幀）：鞋最低 ${f3(s.minShoe)}／軀幹最低 ${f3(s.minTorso)}／全身最低 ${f3(s.minAll)}(${s.minAllPart})／膝最小 ${f3(s.minKnee)} rad／貼地段軀幹最高 ${f3(s.groundedTorsoMax)}／手最遠 ${f3(s.maxHandFwd)} m`
       + (pass ? '' : `｜未過幀 ${fails.filter(([, l]) => l.length).map(([c, l]) => `${c}:[${l.join(',')}]`).join(' ')}`));
   }
 }

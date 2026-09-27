@@ -1,0 +1,61 @@
+HEAD=ecda0a5（src 與本 log 同版）
+✔ ★B5-4 鑑別力★ 同一批人只改戰力：最強的落在強豪、去向要跨越多個等級 (0.6175ms)
+✔ ★B5-2 真實路徑★ 招募來的舊識不得被分配去向覆寫（王勝翔不升學、詹子曜不分身） (0.3543ms)
+✔ ★B5-4 反向對照★ 換一份隊友組成，去向要跟著變（不是寫死的假分配） (0.2703ms)
+✔ B5-4 自由人也有去向（凍結條文沒規定，實作選擇把他算進來） (0.2168ms)
+✔ B5-4 只剩一位同屆隊友時不會無條件直上第一強豪 (0.3267ms)
+✔ B5-4 空名冊／壞資料不炸（畢業後名冊被清空的存檔） (0.219ms)
+✔ ★B5-5★ 選校後章節＝大學、school 存得住、enteredAtSeason＝4（大學第一年是第 4 屆） (45.8136ms)
+✔ B5-5 冪等：再選一次不會覆寫已決定的志願 (1.6896ms)
+✔ B5-5 手改存檔塞了不存在的學校 ⇒ 當作沒選（不讓壞值往下游流） (1.0405ms)
+✔ B5-7 每校三軸代價文字非空 (0.2709ms)
+✔ ★B5-7 防佔位★ 同 tier 三校的三軸不得完全相同；強豪與弱校的球權說法必須不同 (0.2923ms)
+✔ 走向固定目標：不過衝＋精準停（停在 5mm 內；修前死區讓人停在 19.6mm 外） (16.5589ms)
+✔ 接近目標的最後 20 tick：不得出現「靜止→滿速→靜止」或「滿速→靜止→滿速」的交替 (2.9648ms)
+✔ 整場實跑：滿速↔靜止的 stop-go 交替率 < 0.5%（修前 5.92%） (1650.5295ms)
+✔ 決定論：同 seed 兩次整場逐 tick 位置逐值相同（幅值化走位不引入浮點分岔） (2051.7956ms)
+ℹ tests 2603
+ℹ suites 0
+ℹ pass 2601
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1629597.8789
+
+✖ failing tests:
+
+test at tests\direct-receive-assist.test.js:13:1
+✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5% (9.6186ms)
+  AssertionError [ERR_ASSERTION]: 舉球區 860/2646
+      at TestContext.<anonymous> (file:///C:/Users/shung/worktrees/volleyball-dive/tests/direct-receive-assist.test.js:18:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.start (node:internal/test_runner/test:1177:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests\direct-receive-assist.test.js:21:1
+✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8% (178944.2823ms)
+  AssertionError [ERR_ASSERTION]: 舉球區 350/1035
+      at TestContext.<anonymous> (file:///C:/Users/shung/worktrees/volleyball-dive/tests/direct-receive-assist.test.js:25:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+EXIT 1
