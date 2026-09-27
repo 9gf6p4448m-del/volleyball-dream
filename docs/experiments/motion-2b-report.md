@@ -15,7 +15,7 @@
 | E5 寫實人回歸 | 過 | 第一階段治具 A1–A6、A8–A12 全 true（A7 依 E5 排除）；IK 後大腿偏離 12.49° → 3.73° |
 | E6 起跳不掉手 | 過 | 過渡窗最小權重 1.0000、腕高最大逐幀變化 0.0270 m（修前權重 0、0.86 m） |
 | E7 並排對照 | 已交付，待使用者判定 | 8 組（7 技術＋扣球引臂）× 桌機／直式，幾何＋寫實；參考照片只在本機 |
-| E8 測試與建置 | 過（見文末最終 npm test） | 失敗清單與基準逐項相同（A23a、A23b）；`npm run build` exit 0 |
+| E8 測試與建置 | 過 | 失敗清單與基準逐項相同（A23a、A23b）；`npm run build` exit 0 |
 | E9 鑑別力 | 過 | 8 個突變全紅在行為斷言上；還原後 sha1 全相符；D0 自我檢查 24／24 |
 
 ## E2 做不到的 3 列（停手回報，未自行豁免、未改任何檢查）
@@ -145,7 +145,7 @@ pass：A1、A2（ab／c／d／e／f／g）、A3、A4、A5、A6、A8、A9、A9foo
 ### E8
 - 基準（f4ccbec，實作前實跑）：tests 2603、pass 2601、fail 2＝A23a、A23b（`npm-test-baseline-f4ccbec-tail.txt`）。
 - 中途（fc283bb）：2603／2601／2，失敗清單相同。
-- 最終：見文末。
+- 最終（7d40d0b）：2603／2601／2，失敗清單相同（文末）。
 - `npm run build`：exit 0（HEAD 7d40d0b，src 與最終相同）。
 
 ### E9（`python e9.py 7d40d0b`，git archive 副本；結果 `e9-result.json`）
@@ -178,4 +178,106 @@ pass：A1、A2（ab／c／d／e／f／g）、A3、A4、A5、A6、A8、A9、A9foo
 - dev server 啟動時 vite 會寫共用 `node_modules/.vite` 快取（node_modules 為 junction，與其他工作樹共用）。
 
 ## 最終 npm test 與 diff
-（見下方，最終全套測試完成後補上）
+
+基準（f4ccbec，實作前）摘要：
+```
+ℹ tests 2603
+ℹ suites 0
+ℹ pass 2601
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4261711.0639
+✖ failing tests:
+✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5% (1.9796ms)
+✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8% (111741.6551ms)
+```
+最終（HEAD 7d40d0b，src 與本報告 commit 相同；log 頭記 HEAD）摘要：
+```
+ℹ tests 2603
+ℹ suites 0
+ℹ pass 2601
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8623725.0036
+✖ failing tests:
+✖ A23a 真人追球（全部案例當分母）：舉球區 ≥ 34%、空接 ≤ 25%、碰網 ≤ 5% (29.0993ms)
+✖ A23b 正前（1035）：舉球區 ≥ 38%、空接 ≤ 26.8% (236990.3773ms)
+```
+兩者失敗清單逐項相同（A23a、A23b，既有失敗），通過數 2601＝2601。完整末 12 行在 `motion-2b-evidence/npm-test-baseline-f4ccbec-tail.txt`、`npm-test-final-7d40d0b-tail.txt`。
+
+`git diff --stat f4ccbec..HEAD`（本段寫入前）：
+```
+ .../motion-2b-evidence/acceptance-2b-drivers.md    |   42 +
+ .../motion-2b-evidence/block-desktop-geo-real.png  |  Bin 0 -> 259987 bytes
+ .../motion-2b-evidence/block-geo-desktop.png       |  Bin 0 -> 61277 bytes
+ .../motion-2b-evidence/block-geo-portrait.png      |  Bin 0 -> 34068 bytes
+ .../motion-2b-evidence/block-portrait-geo-real.png |  Bin 0 -> 110947 bytes
+ .../motion-2b-evidence/block-real-desktop.png      |  Bin 0 -> 93391 bytes
+ .../motion-2b-evidence/block-real-portrait.png     |  Bin 0 -> 52049 bytes
+ .../motion-2b-evidence/bump-desktop-geo-real.png   |  Bin 0 -> 316491 bytes
+ .../motion-2b-evidence/bump-geo-desktop.png        |  Bin 0 -> 71792 bytes
+ .../motion-2b-evidence/bump-geo-portrait.png       |  Bin 0 -> 37512 bytes
+ .../motion-2b-evidence/bump-portrait-geo-real.png  |  Bin 0 -> 124953 bytes
+ .../motion-2b-evidence/bump-real-desktop.png       |  Bin 0 -> 115558 bytes
+ .../motion-2b-evidence/bump-real-portrait.png      |  Bin 0 -> 56322 bytes
+ .../motion-2b-evidence/check-after.json            |  996 ++++++
+ .../motion-2b-evidence/check-before-174ba07.json   | 2565 +++++++++++++++
+ docs/experiments/motion-2b-evidence/d0-after.json  | 3071 +++++++++++++++++
+ .../motion-2b-evidence/d0-before-f4ccbec.json      | 3071 +++++++++++++++++
+ .../motion-2b-evidence/d0-restore-only.json        | 3071 +++++++++++++++++
+ docs/experiments/motion-2b-evidence/e1-after.json  | 1507 +++++++++
+ .../e5-real-player-harness-tail.txt                |    2 +
+ .../e5-real-player-report-628bccd.json             | 3452 ++++++++++++++++++++
+ docs/experiments/motion-2b-evidence/e9-result.json |  140 +
+ docs/experiments/motion-2b-evidence/e9-script.py   |  107 +
+ docs/experiments/motion-2b-evidence/manifest.json  |  784 +++++
+ .../npm-test-baseline-f4ccbec-tail.txt             |   12 +
+ .../servefloat-desktop-geo-real.png                |  Bin 0 -> 275490 bytes
+ .../motion-2b-evidence/servefloat-geo-desktop.png  |  Bin 0 -> 69394 bytes
+ .../motion-2b-evidence/servefloat-geo-portrait.png |  Bin 0 -> 35867 bytes
+ .../servefloat-portrait-geo-real.png               |  Bin 0 -> 112644 bytes
+ .../motion-2b-evidence/servefloat-real-desktop.png |  Bin 0 -> 101440 bytes
+ .../servefloat-real-portrait.png                   |  Bin 0 -> 52936 bytes
+ .../servejump-desktop-geo-real.png                 |  Bin 0 -> 273172 bytes
+ .../motion-2b-evidence/servejump-geo-desktop.png   |  Bin 0 -> 70743 bytes
+ .../motion-2b-evidence/servejump-geo-portrait.png  |  Bin 0 -> 38193 bytes
+ .../servejump-portrait-geo-real.png                |  Bin 0 -> 120068 bytes
+ .../motion-2b-evidence/servejump-real-desktop.png  |  Bin 0 -> 99052 bytes
+ .../motion-2b-evidence/servejump-real-portrait.png |  Bin 0 -> 56944 bytes
+ .../motion-2b-evidence/set-desktop-geo-real.png    |  Bin 0 -> 259917 bytes
+ .../motion-2b-evidence/set-geo-desktop.png         |  Bin 0 -> 60286 bytes
+ .../motion-2b-evidence/set-geo-portrait.png        |  Bin 0 -> 33439 bytes
+ .../motion-2b-evidence/set-portrait-geo-real.png   |  Bin 0 -> 114938 bytes
+ .../motion-2b-evidence/set-real-desktop.png        |  Bin 0 -> 96777 bytes
+ .../motion-2b-evidence/set-real-portrait.png       |  Bin 0 -> 55110 bytes
+ .../motion-2b-evidence/spike-desktop-geo-real.png  |  Bin 0 -> 267490 bytes
+ .../motion-2b-evidence/spike-geo-desktop.png       |  Bin 0 -> 67401 bytes
+ .../motion-2b-evidence/spike-geo-portrait.png      |  Bin 0 -> 37016 bytes
+ .../motion-2b-evidence/spike-portrait-geo-real.png |  Bin 0 -> 120350 bytes
+ .../motion-2b-evidence/spike-real-desktop.png      |  Bin 0 -> 96293 bytes
+ .../motion-2b-evidence/spike-real-portrait.png     |  Bin 0 -> 55784 bytes
+ .../spikeWind-desktop-geo-real.png                 |  Bin 0 -> 258086 bytes
+ .../motion-2b-evidence/spikeWind-geo-desktop.png   |  Bin 0 -> 66714 bytes
+ .../motion-2b-evidence/spikeWind-geo-portrait.png  |  Bin 0 -> 37161 bytes
+ .../spikeWind-portrait-geo-real.png                |  Bin 0 -> 120185 bytes
+ .../motion-2b-evidence/spikeWind-real-desktop.png  |  Bin 0 -> 91070 bytes
+ .../motion-2b-evidence/spikeWind-real-portrait.png |  Bin 0 -> 55232 bytes
+ .../motion-2b-evidence/tip-desktop-geo-real.png    |  Bin 0 -> 234676 bytes
+ .../motion-2b-evidence/tip-geo-desktop.png         |  Bin 0 -> 58266 bytes
+ .../motion-2b-evidence/tip-geo-portrait.png        |  Bin 0 -> 32523 bytes
+ .../motion-2b-evidence/tip-portrait-geo-real.png   |  Bin 0 -> 106170 bytes
+ .../motion-2b-evidence/tip-real-desktop.png        |  Bin 0 -> 80227 bytes
+ .../motion-2b-evidence/tip-real-portrait.png       |  Bin 0 -> 47649 bytes
+ docs/experiments/motion-2b-report.md               |  181 +
+ src/render/geoAnimator.js                          |  238 +-
+ tools/motion-2b-check.mjs                          |  275 ++
+ tools/motion-2b-e1-mirror.mjs                      |  179 +
+ tools/motion-2b-lib.mjs                            |  107 +
+ tools/motion-2b-poses.html                         |  145 +
+ tools/motion-2b-shots.mjs                          |  132 +
+ 68 files changed, 20017 insertions(+), 60 deletions(-)
+```
