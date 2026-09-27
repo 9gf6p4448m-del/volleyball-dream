@@ -36,6 +36,9 @@
       #hud .fps span { font-size: 14px; font-weight: 400; opacity: 0.7; }
       #hud .stats { font-size: 12px; line-height: 1.5; white-space: pre-line; opacity: 0.9; }
       #hud .settings { font-size: 11px; margin-top: 4px; opacity: 0.6; }
+      /* 進賽場卷 2A B11：寫實模式 FPS 摘要（平均/最低/面數）——刻意不受 .hud-min 的
+         .stats/.settings 隱藏規則影響，極簡模式下手機截圖也要看得到這一行 */
+      #hud .real-summary:not(:empty) { font-size: 11px; margin-top: 2px; opacity: 0.85; }
       /* 極簡 HUD（預設遊玩模式）：只留小 FPS 角標；?hud=1 才是完整偵錯版 */
       #hud.hud-min { background: transparent; padding: 6px 10px; }
       #hud.hud-min .fps { font-size: 13px; font-weight: 600; opacity: 0.45; }

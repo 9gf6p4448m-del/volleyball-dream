@@ -37,7 +37,9 @@ export default defineConfig({
         // 主遊戲零模型檔（幾何球員）；soldier.glb 只剩 ?mode=bench 用，改按需載入不預快取
         // 大作感卷 批1/2（A5b）：SFX 取樣進 precache（體積小、常駐音效要離線可用）；
         // BGM 刻意**不**加 glob——串流播放、換檔即生效，進 precache 反而鎖死舊版
-        globPatterns: ['**/*.{js,css,html,png,webmanifest}', 'audio/sfx/*.m4a'],
+        // 進賽場卷 2A（B10）：寫實模式的 glb 白模要離線可用——PWA 開寫實模式不能因為
+        // 沒網路就叫不到模型；20k／5k 兩檔都收（使用者可能切 &faces=5k 重量）
+        globPatterns: ['**/*.{js,css,html,png,webmanifest}', 'audio/sfx/*.m4a', 'models/real/*.glb'],
       },
       manifest: {
         name: '排球夢',

@@ -162,10 +162,16 @@ export function createGeoPool(scene, castShadow, playerCount) {
       p.mesh.setColorAt(index, tmpColor);
       return { key, index };
     },
-    // 全部球員建立完成後呼叫一次，把 instanceColor 緩衝區推上 GPU
+    // 全部球員建立完成後呼叫一次，把 instanceColor 緩衝區推上 GPU。
+    // 進賽場卷 2A：同時把每池的 count 收斂到實際 claim 數——capacity 是用
+    // playerCount 上限先配好的（見 createGeoPool 呼叫端），寫實模式整場沒人 claim
+    // 幾何 pool 時 cursor 會停在 0，若不收斂 count，未寫入矩陣的那些 instance
+    // （預設全零矩陣）仍會照 capacity 全部繪出，變成一堆疊在原點的幾何殘塊——
+    // 這條在純幾何模式下 cursor 恆等於 capacity，等於沒變化（B2 不自我降級的既有安全網）。
     finishColors() {
       for (const p of Object.values(pools)) {
         if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+        p.mesh.count = p.cursor;
       }
     },
     writeMatrix(slot, matrixWorld) {

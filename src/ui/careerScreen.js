@@ -69,6 +69,8 @@ import { createBeatStage } from '../render/beatStage.js';
 import {
   loadPresentationPref, savePresentationPref, createBeatTimeline, driveTimeline,
 } from './presentation.js';
+// 進賽場卷 2A（B1）：球員外觀開關——主選單與生涯首頁設定列兩處共用同一個 localStorage 鍵
+import { loadAppearancePref, saveAppearancePref } from '../render/playerAppearance.js';
 import { createRitualStage } from '../render/ritualStage.js';
 import { playMenu, cycleMenuTrack, BGM_TRACKS } from './bgm.js';
 import { get as getAudioPrefs, set as setAudioPrefs } from './audioPrefs.js';
@@ -1960,6 +1962,15 @@ export function createCareerScreen(store, {
     inner.appendChild(button('寫實球員預覽（測試）', false, () => {
       window.location.assign(`${window.location.pathname}?mode=realpreview`);
     }));
+    // 進賽場卷 2A（B1）：球員外觀開關——預設幾何；與生涯首頁設定列（ioRow）同一顆
+    // 鍵，任一處切換、重新整理後兩處與下一場比賽（快速比賽／生涯出戰）都吃得到。
+    const appearanceLabel = () => `球員外觀：${loadAppearancePref(window.localStorage) === 'real' ? '寫實' : '幾何'}`;
+    const appearanceBtn = button(appearanceLabel(), false, () => {
+      const next = loadAppearancePref(window.localStorage) === 'real' ? 'geo' : 'real';
+      saveAppearancePref(window.localStorage, next);
+      appearanceBtn.textContent = appearanceLabel();
+    });
+    inner.appendChild(appearanceBtn);
     // 2026-08-12：常駐「怎麼玩」——`tutorial.js` 是開場一次性卡片（看過就再也不出現），
     // 忘了就查不到。這裡是可以隨時回來翻的那一份（生涯畫面底部也有同一個入口）。
     inner.appendChild(button('❓ 怎麼玩', false, () => showHowToPlay()));
@@ -3009,6 +3020,14 @@ export function createCareerScreen(store, {
       prefBtn.textContent = prefLabel();
     });
     ioRow.appendChild(prefBtn);
+    // 進賽場卷 2A（B1）：球員外觀開關——與主選單同款按鈕，讀寫同一個 localStorage 鍵
+    const appearanceLabel2 = () => `球員外觀：${loadAppearancePref(window.localStorage) === 'real' ? '寫實' : '幾何'}`;
+    const appearanceBtn2 = smallButton(appearanceLabel2(), () => {
+      const next = loadAppearancePref(window.localStorage) === 'real' ? 'geo' : 'real';
+      saveAppearancePref(window.localStorage, next);
+      appearanceBtn2.textContent = appearanceLabel2();
+    });
+    ioRow.appendChild(appearanceBtn2);
     // 大作感卷 批2 A4d：音量設定——靜音鈕＋音效/音樂滑桿＋選單曲切換，同風格擺
     // 🎬 演出鈕旁。拖動/點擊即 setAudioPrefs（localStorage 立即寫入，重整後生效），
     // sfx.js 的音效總線與 bgm.js 播放中的軌道都訂閱了 prefs 變更、不必重整頁面。

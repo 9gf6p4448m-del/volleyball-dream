@@ -356,6 +356,9 @@ function createLoopState({ ctx, config, gates, stage, careerCtx, playerId, game,
     game, aiState,
     seed: config.seed,          // 快速比賽局終點擊換局：seed+1 再開
     servedThisTurn: false,      // 每個發球回合只處理一次發球決策
+    // 進賽場卷 2A B11：本場第一個 SERVE 事件是否已發生過——單調（一旦 true 不回頭），
+    // 供 FPS 摘要（平均/最低）判定「格子起算點」，見 applyEvents 的 SERVE 分支
+    servedOnce: false,
     serveStyleSel: null,        // 發球面板重做（08-28）：式切換（null=穩定|'float'|'jump'）
                                 // ——跨發球回合沿用（打法是習慣）；只影響本機面板產生的
                                 // Intent，連線模式下 style 隨 Intent 走鎖步通道，天然同步
@@ -2364,6 +2367,8 @@ function applyEvents(s, frameEvents, now) {
       s.callLive = false;
     }
     if (e.type === 'SERVE') {
+      // 進賽場卷 2A B11：本場第一個 SERVE——FPS 摘要（平均/最低）從這一刻起算
+      if (!s.servedOnce) { s.servedOnce = true; s.ctx.hud.markServed?.(); }
       s.rallyStartFlight = game.rally.flightId;
       stage.floatText.setBaseOffset?.(0); // banner 已自動收（1.6s）——字卡帶歸位泡泡下
       // 4.5B §3：發球＝操作開始——演出窗必收（主角視角條款）；本球關鍵分判定落此
@@ -4280,5 +4285,11 @@ function frameStep(s, now) {
   if (aimAt) stage.aimMarker.show(aimAt);
   else stage.aimMarker.hide();
   ctx.postFx.render(ctx.scene, ctx.camera); // 批3：渲染單一出口（A3）
-  ctx.hud.frame(now, delta, simSteps);
+  // 進賽場卷 2A B11：寫實模式才餵 FPS 摘要所需資訊（document.hidden／目前面數）；
+  // 幾何模式傳 null——hud.js 只在收到非 null 的 realInfo 時才顯示平均/最低那一行。
+  const realDebug = stage.matchView.debug;
+  const realInfo = realDebug?.appearance === 'real'
+    ? { hidden: (typeof document !== 'undefined' && document.hidden), faces: realDebug.faces }
+    : null;
+  ctx.hud.frame(now, delta, simSteps, realInfo);
 }

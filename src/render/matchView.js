@@ -10,6 +10,9 @@ import {
 } from './geoCharacter.js';
 import { numbersForRoster, initialOnCourtIds } from '../career/teamKit.js';
 import { createGeoAnimator, contactSeqFor } from './geoAnimator.js';
+// 進賽場卷 2A：寫實球員（B7 限定 import 名單之一）＋外觀設定（單一決定函式，B1/B8(a)）
+import { loadRealPlayerAsset, createRealPlayer } from './realPlayer.js';
+import { resolvePlayerAppearance } from './playerAppearance.js';
 import { STAMINA, tierOf, staminaPerfMul } from '../sim/stamina.js';
 import { TUNING } from '../sim/game.js';
 import { HUDDLE, huddleSlot, coachPos } from './huddleLayout.js';
@@ -61,6 +64,21 @@ const REACH_KIND_ACTION = {
   spike: REACH_ACTION.SPIKE, dive: REACH_ACTION.DIVE,
 };
 
+// 進賽場卷 2A（B9 邊界）：寫實模型載入失敗時的可見提示——比賽照常用幾何球員開打，
+// 只是浮一個不擋互動的短暫 toast（子字串「寫實模型載入失敗」供治具比對）。
+// 6 秒後自動收起；不放在極簡 HUD 裡（HUD 專職 FPS，錯誤另有自己的視覺語言）。
+function showRealLoadFailToast(doc) {
+  const toast = doc.createElement('div');
+  toast.id = 'real-load-fail-toast';
+  toast.textContent = '寫實模型載入失敗，本場改用幾何球員顯示';
+  toast.style.cssText = 'position:fixed;left:50%;top:max(12px,env(safe-area-inset-top));'
+    + 'transform:translateX(-50%);z-index:30;padding:8px 14px;border-radius:10px;'
+    + 'background:rgba(120,20,20,.88);color:#fff;font:600 13px/1.4 system-ui,sans-serif;'
+    + 'pointer-events:none;white-space:nowrap;';
+  doc.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+
 // kits（配色卷批 1）：{ A?, B? } 各側隊伍 kit（career/teamKit.js 形狀）；
 // null/缺鍵＝該側穿 geoCharacter 側別預設（快速比賽、練習賽、無 kit 的隊）
 // teamName（配色卷階段二 E4）：現在的隊名字串，只餵給暫停戰術板（huddleProps）；
@@ -68,6 +86,7 @@ const REACH_KIND_ACTION = {
 // 自查章節★——這個值必須從呼叫端（matchStage←matchConfig.currentTeamName）傳進來。
 export async function createMatchView(
   scene, quality, game, initialControlledId, forcePose = null, kits = null, teamName = null,
+  params = null,
 ) {
   let highlightId = initialControlledId;
   let huddleTeam = null; // W7.1 #3A：目前正在集合帶位的隊伍（'A'|'B'|null）——matchLoop 逐幀灌入
@@ -78,6 +97,30 @@ export async function createMatchView(
   let hideOwnTag = false;   // 近身視角（defend/attack/first）：藏自己的頭上標籤
   let tagsVisible = true;   // 4.6 §2 重演特寫：全員標籤總開關（賽中恆 true）
   const castShadow = quality.shadowSize > 0;
+
+  // 進賽場卷 2A（B1/B8(a)）：外觀（幾何／寫實）與面數的決定集中在
+  // resolvePlayerAppearance——輸入只有 localStorage 設定值與 URL 參數，不吃
+  // performance.now／FPS（架構鐵律②不自我降級：降規只能靠使用者手動切設定）。
+  const { appearance: appearancePref, faces: faceVariant } = resolvePlayerAppearance({
+    storage: (typeof window !== 'undefined' ? window.localStorage : null),
+    params,
+  });
+  let realAsset = null;
+  let realLoadFailed = false;
+  if (appearancePref === 'real') {
+    try {
+      const url = `${import.meta.env.BASE_URL}models/real/player_${faceVariant === 5000 ? '5k' : '20k'}.glb`;
+      realAsset = await loadRealPlayerAsset(url);
+    } catch (err) {
+      // B9（邊界）：載入失敗不得擋開賽——整場照舊用幾何球員顯示，只浮出一個不擋互動
+      // 的提示；pageerror 必須是 0，所以這裡把例外整個吞掉（訊息印一份到 console 供除錯）。
+      realLoadFailed = true;
+      // eslint-disable-next-line no-console
+      console.error('[real-match] 寫實模型載入失敗，本場改用幾何球員', err);
+    }
+  }
+  const useReal = appearancePref === 'real' && realAsset != null;
+  if (realLoadFailed && typeof document !== 'undefined') showRealLoadFailToast(document);
 
   // InstancedMesh 池（每種幾何一池＝12 draw calls，取代每人 16+ 個獨立 Mesh）；
   // root 骨架不再加入 scene——它只是不可見的關節 Object3D 樹，逐幀由 sync() 手動
@@ -103,12 +146,28 @@ export async function createMatchView(
   for (const p of playerList) {
     // p.name＝慣用手的雜湊鍵（見 geoCharacter.isLeftHanded）：id 母體只有十幾個固定
     // 字面，餵名字才會有真正的左手分佈，且慣用手跟著人不跟著輪轉槽位
-    const rig = createGeoCharacter(
+    // 進賽場卷 2A（B2）：外觀對整場一致——寫實模式用 createRealPlayer（內部仍走
+    // createGeoCharacter 建關節樹＋背號槽位，只是骨架不進幾何 InstancedMesh 池，
+    // 見 realPlayer.js 的 STUB_POOL）；real.rig 與純幾何 rig 形狀相同
+    // （root/joints/parts/numberSlots），下面 sync() 共用的讀取路徑不需要分岔。
+    const real = useReal ? createRealPlayer(realAsset, {
+      playerId: p.id, teamId: p.teamId, height: p.height.current,
+      isLibero: p.currentRole === 'libero', name: p.name,
+      teamKit: kits?.[p.teamId] ?? null, number: numberMap[p.id] ?? null,
+    }) : null;
+    const rig = real ? real.rig : createGeoCharacter(
       pool, p.id, p.teamId, p.height.current, p.currentRole === 'libero', p.name,
       kits?.[p.teamId] ?? null, numberMap[p.id] ?? null,
     );
     rig.root.rotation.order = 'YXZ'; // 先朝向(y)再前傾(x)——魚躍飛撲沿朝向前方傾倒才正確
     rig.root.rotation.y = TEAM_SIDE[p.teamId] === 1 ? Math.PI : 0; // 面向球網
+    if (real) {
+      // 寫實球員是獨立 SkinnedMesh（不像幾何走 InstancedMesh 池）：mesh 本身留在單位
+      // 變換，靠骨架（skeleton）的世界矩陣帶動蒙皮——只需加進 scene 一次（同 realPreview.js）
+      real.mesh.castShadow = castShadow;
+      real.mesh.receiveShadow = false;
+      scene.add(real.mesh);
+    }
     // 背號面片（N4）：只有開場上場者現在就建 Mesh；其餘 rig.numberSlots 仍在，
     // 等 SUBSTITUTION 事件把他換上場時才惰性補建（見 routeEvents）
     const buildNow = rig.numberSlots && eagerNumberIds.has(p.id);
@@ -116,6 +175,7 @@ export async function createMatchView(
     const numberFront = buildNow ? makeNumberPlate(scene, rig.numberSlots.front) : null;
     units[p.id] = {
       rig,
+      real, // 進賽場卷 2A：寫實球員的額外方法／mesh（groundLegs/resetLegs/…）；幾何＝null
       animator: createGeoAnimator(rig),
       yaw: rig.root.rotation.y,
       tag: makeTag(scene),
@@ -210,6 +270,15 @@ export async function createMatchView(
 
   return {
     count: Object.keys(units).length,
+    // 進賽場卷 2A：治具介面（偵錯用，不參與遊戲邏輯；同 window.__phase1 既有慣例）——
+    // 透過 window.__phase1.loop().stage.matchView.debug 存取，供 tools/real-match-browser.mjs
+    // 逐點量測 B1–B12（外觀/面數設定、載入失敗旗標、各單位的 mesh/rig/animator）。
+    debug: {
+      appearance: appearancePref,
+      faces: faceVariant,
+      realLoadFailed,
+      units,
+    },
     triggerPose(playerId, type, opts = null) {
       const u = units[playerId];
       if (u) setPose(u, type, opts); // opts 穿透（2026-08-10 快攻滯空修正：hangTicks）
@@ -404,6 +473,9 @@ export async function createMatchView(
         // game.js:479）同一個函式、同一組數字，演出只是把既有的 sim 事實做到看得見，
         // 未啟用體力系統時 staminaPerfMul 恆回 1（零副作用，行為不變）
         const staminaMul = staminaPerfMul(gameState, gameState.players[id]);
+        // 進賽場卷 2A：IK 會寫髖／膝／腳骨的整個四元數（含 animator 不寫的 y/z 分量）；
+        // 每幀 animator 更新前先歸零，同 realPlayer.js 註解與 realPreview.js 既有排程
+        if (u.real) u.real.resetLegs();
         const bodyY = u.animator.update(dt, speed, lateral, staminaMul);
         // 魚躍飛撲（純視覺）：dive 期間沿朝向前撲一段＋微騰空落地＋身體前傾接近水平——
         // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）
@@ -471,9 +543,17 @@ export async function createMatchView(
         u.rig.root.rotation.set(diveTilt, u.yaw, 0);
 
         // root 不在 scene 裡（無 Mesh 可畫），手動推一次 matrixWorld，
-        // 再把各部件 slot 的世界矩陣寫進 InstancedMesh 池
+        // 再把各部件 slot 的世界矩陣寫進 InstancedMesh 池（寫實球員是獨立
+        // SkinnedMesh、骨架世界矩陣已經在改，不進池——見下方 real 分支）
         u.rig.root.updateMatrixWorld(true);
-        for (const part of u.rig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+        if (u.real) {
+          // 進賽場卷 2A 接地（同 realPreview.js 既有排程）：鞋底入地的腳用兩骨 IK
+          // 抬回地面、骨盆維持動畫給的高度；內部會再呼叫一次 root.updateMatrixWorld(true)，
+          // 下面的背號面片與（若為受控者）光圈都吃得到 IK 之後的最終位置
+          u.real.groundLegs();
+        } else {
+          for (const part of u.rig.parts) pool.writeMatrix(part, part.node.matrixWorld);
+        }
         // 背號面片（N4）：貼齊點的世界矩陣直接整份複製到獨立 Mesh——同上一行的手法，
         // 不重算一次位置/旋轉數學。numberBack 有值代表 numberFront／rig.numberSlots 皆有值
         if (u.numberBack) {

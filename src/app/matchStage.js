@@ -51,8 +51,11 @@ export async function buildMatchStage({ ctx, config, gates, playerId, game }) {
   let matchView;
   try {
     // ?pose=bump|overhead|spike|block|serve：強制循環播放單一姿勢（調角度用）
+    // 進賽場卷 2A：多帶 params——createMatchView 內部用它讀 &faces= 決定寫實模式的面數
+    // （B8(a) 單一決定函式；外觀本身讀 localStorage，見 playerAppearance.js）
     matchView = await createMatchView(
       scene, quality, game, playerId, params.get('pose'), config.kits ?? null, config.teamName ?? null,
+      params,
     );
   } catch (err) {
     loadingEl.textContent = `模型載入失敗：${err.message ?? err}`;

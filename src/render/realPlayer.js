@@ -400,11 +400,15 @@ function realMaterial() {
 }
 
 // 一名寫實球員：geo 關節樹（搬到白模地標）＋SkinnedMesh（共用位置/權重，獨立頂點色）
+// 進賽場卷 2A：新增 teamKit／number（預設 null，與第一階段呼叫端行為完全相同）——
+// teamKit 讓正式比賽的隊伍配色覆寫（config.kits）在寫實模式也生效（同一份 resolveKit，
+// 同一個值同時餵給內部 createGeoCharacter 的背號槽位與這裡的球衣頂點色，兩處不會分岔）；
+// number 讓 createGeoCharacter 建出背號貼齊點（rig.numberSlots），供 matchView 掛面片。
 export function createRealPlayer(asset, {
-  playerId, teamId, height = BASE_H, isLibero = false, name = '',
+  playerId, teamId, height = BASE_H, isLibero = false, name = '', teamKit = null, number = null,
 }) {
-  const rig = createGeoCharacter(STUB_POOL, playerId, teamId, height, isLibero, name, null, null);
-  const kit = resolveKit(teamId, isLibero, null);
+  const rig = createGeoCharacter(STUB_POOL, playerId, teamId, height, isLibero, name, teamKit, number);
+  const kit = resolveKit(teamId, isLibero, teamKit);
   const h = idHash(playerId);
   const skin = SKINS[h % SKINS.length];
   const hair = HAIRS[(h >> 3) % HAIRS.length];
