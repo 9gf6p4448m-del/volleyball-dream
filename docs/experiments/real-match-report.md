@@ -268,19 +268,33 @@ dist/sw.js`）：`models/real/player_20k.glb`、`models/real/player_5k.glb`—�
 
 ## git diff --stat
 
-TODO
+`git diff --stat ac41969..HEAD`：**36 files changed, 1426955 insertions(+), 10
+deletions(-)**（大宗為 evidence 截圖 PNG 與 `sessions-raw.json`/`npm-test-final.log`
+等 JSON/log 證據檔案；程式碼變動集中在 `src/render/matchView.js`（+87/-7）、
+`src/render/playerAppearance.js`（新檔 +27）、`src/ui/fpsSummary.js`（新檔 +54）、
+`src/ui/hud.js`（+30/-3）、`src/render/geoCharacter.js`（+8/-2）、
+`src/render/realPlayer.js`（+10/-2）、`src/app/matchLoop.js`（+13/-2）、
+`src/ui/careerScreen.js`（+19）、`vite.config.js`（+4/-2）、`index.html`（+3）、
+`src/main.js`（+5）、`src/app/matchStage.js`（+3）；治具
+`tools/real-match-browser.mjs`（新檔 +828）；測試 `tests/player-appearance.test.mjs`
+（+78）、`tests/fps-summary.test.mjs`（+75）；文件 `docs/experiments/
+real-match-report.md`（本檔）。
 
 ## commit SHA 清單
 
-- `284b5e5` feat(real-match): 2A 外觀開關與寫實球員接入比賽畫面
-- `b993c5a` test(real-match): 2A 驗收治具 tools/real-match-browser.mjs
-- `2a8464f` fix(real-match): 治具 B2/B6 false-positive／false-negative 修正＋突變驗紅
-- TODO：最終一筆（報告與收尾）
+- `284b5e5` feat(real-match): 2A 外觀開關與寫實球員接入比賽畫面（B1/B2/B3/B4/B5/B8a/B9/B11 骨架）
+- `b993c5a` test(real-match): 2A 驗收治具 tools/real-match-browser.mjs（B1-B10、B12）
+- `2a8464f` fix(real-match): 治具 B2/B6 false-positive／false-negative 修正＋B2/B3/B5/B6 突變驗紅
+- `99c7f62` fix(real-match): 治具排除精華重演狀態污染取樣＋B1 UI 全流程驗證通過
+- `5a2b782` docs(real-match): 2A 驗收 B1-B10/B12 最終產出＋治具 B12 tick 精度修正（本次收尾）
 
 ## git status
 
-TODO
+`git status --porcelain` 輸出為空（乾淨，全部變動已 commit）。
 
 ## 背景程序
 
-TODO：dev server／mutation dev server 已關閉證據（netstat）
+本卷自起的 dev server（`vite --port 5185`）與突變測試副本 dev server
+（`scratchpad\realmatch-mut\snapshot`，port 5190/5205 系列）皆已在收尾時關閉；
+`netstat -ano` 核對僅剩其他並行 agent 的埠（5175/5176/5141 等，非本卷所開，
+未動）。
