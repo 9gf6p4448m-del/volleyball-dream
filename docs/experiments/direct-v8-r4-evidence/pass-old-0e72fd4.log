@@ -1,0 +1,17 @@
+21:46:51
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: stance (-0.3, 4.8) none: the drawn ball jumped 0.136 m on the judgement frame (sim snap ? m)
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.16.0
+exit 1
+22:05:01

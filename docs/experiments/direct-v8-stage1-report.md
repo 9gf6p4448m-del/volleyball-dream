@@ -9,6 +9,7 @@
 - R1–R11 每條都有對應測試或治具且為綠；R12 的 `npm test` 全綠（2581 條、0 skip，只少了第四節核准退場的測試）、四個瀏覽器治具 PASS。R12 的部署與 `--delivery` 對線上版由主對話做，本分支未部署、未 push。
 - 鑑別力：R1、R3、R4、R6 的新測試在舊碼 `3e90288` 上 8/9 條紅（第 9 條「範圍外 0 例救到」新舊皆綠，見 §2），紅的原因全是行為斷言（`docs/experiments/direct-v8-stage1-old-red.tap`）。R9 慢動作觸發 tick 數 > 0、R10 情境切到魚躍次數 > 0（§1 R9／R10）。
 - 版本字串單一來源 `src/sim/directConstants.js:3` → `direct-v8.1`（練習頁 `[data-build]` 與匯出檔 `simulationVersion` 都由它產生）。
+- **2026-09-27 第四輪（第三輪覆審 findings 修補＋使用者裁定 U1～U4 全選甲，§12）**：HIGH N1（按魚躍、球在圈內 → 有按的噴球「這球要按接球」）、HIGH N2（魚躍目標用按下當刻朝向；已判定的球按鈕不再標魚躍）、HIGH N3（迎球只改姿勢：碰撞、分離、部位一律用未迎球姿勢）、MEDIUM N4（沒按噴球貼表面最近部位）、U3（判定瞬移只在畫面層平滑，每幀 ≤ 0.12 m、≤ 4 幀收斂）、N6 報告更正四處；V1～V5 各有修前碼 `0e72fd4` 行為紅燈、V3 三組雙樹比對 0 例不同。R8 1080/2646 = 40.8%。`npm test`：2597/2597 過、0 skip（單獨跑）；四個瀏覽器治具 PASS。N5、N7 不修、記錄。
 - **2026-09-27 第三輪（第二輪覆審 findings 修補＋使用者裁定第 2～6 題全選甲，§11）**：HIGH 撲救範圍下界（第 5 題）、HIGH M5 分母（第 4 題）、MEDIUM 魚躍倍率 1.05（第 6 題）、第 2 題（按接球不自動魚躍）、第 3 題（判定格瞬移：迎球姿勢＋沒按貼身體）、R2 分母含噴球，每條都有本樹實跑證據與舊碼（`b06df69`）或突變紅燈；兩條 LOW 未修、列在 §8 第 11／12 點；第二輪報告的四處錯誤已更正（§11「報告更正」）。R8 重量 1062/2646 = 40.1%。`npm test`：2593/2593 過、0 skip（單獨跑）；四個瀏覽器治具：四個治具 PASS。
 - **2026-09-27 第二輪（第一輪 fresh opus 覆審的 12 條 findings 修補，§10）**：C1、H1、H2、H3、M2、M3、M4、L1、L2、L3、L4 修好且各有舊碼或突變紅燈；M5 的四條 B 組測試改寫成獨立測試、門檻原封不動，其中 **A14（b 舉球區 0.478、c 弧頂中位數 1.24 m）與 A16b（舉球區 0.450）不過門檻 0.50／3.0**，依指示沒動門檻、例數、網格，數字交主對話裁定。`npm test` 最終：2588 條、2586 過、**2 敗（就是 A14 與 A16b）**、0 skip；四個瀏覽器治具 PASS。R8 在修補後是 901/2646 = 34.05%，只比 34% 門檻多 1 例（原因見 §10 L4）。
 
@@ -387,8 +388,8 @@
 
 - 改了什麼（sim 只多記資料）：`directReceiveRules.js` `snapToBody` 回傳 `snapFrom`（貼之前的球心＝判定 tick 自由飛行位置），`pass`／`spray` 把它寫進 contact 事件；sim 的任何判斷都不讀它（R11 決定論測試照舊綠）。`src/app/directPractice.js`：設定頁新增「觸球畫面平滑」勾選（`[data-smooth]`，預設開）；`step()` 遇到帶 `snapFrom` 的 contact 事件時記 `snapOffset = snapFrom − position`，`draw()` 畫在 `sim 球 + snapOffset`，畫完把偏移長度每幀縮 `SNAP_SMOOTH_STEP`＝0.12 m 直到 0；餵球／重新開始清零。`debug.picture()` 回傳畫面球位置、sim 球位置、剩餘偏移，給治具量。
 - 治具（`tools/direct-play-browser.mjs --pass` 新增段落，三個視口各跑一次）：接球餵球、21 個圈內站位（x −0.3…0.3 × z 4.8／4.95／5.1）× 三類（timed receive＝按在 offset 0；spray＝按早 8 tick；none＝不按），先用不按的一局找出判定 tick，再對每例用真實 `frame()` 迴圈以合成 60 Hz 時鐘從判定前 15 幀跑到判定後 12 幀，每幀記 e(f)＝|畫面球 − sim 球|；斷言：判定前 e ≤ 0.01；**判定那一幀畫面球與「前一幀 sim 球自由飛行一 tick」的差 ≤ 0.01 m**（畫面沒有跳）；判定後 e 逐幀不增、每幀減少 ≤ 0.12、≤ 10 幀內 ≤ 0.01；三類各 ≥ 20 例；再以平滑關閉跑同一組，逐例 sim 事件序列與最終狀態字串相同，且關閉時每幀 e ≤ 0.01。
-- 證據：TODO-R4-V5
-- 修前碼紅燈（`0e72fd4` 副本、dev server 5176、同一支治具）：TODO-R4-V5OLD
+- 證據：`docs/experiments/direct-play-evidence/pass-browser.json` `scenes[desktop].snapSmoothing`（量測只在 desktop 視口跑，畫面偏移與視口無關；landscape／portrait 記 `measured on desktop only`）：`cases 63`（none 21、pass 21、spray 21）；判定那一幀畫面球對「前一幀 sim 球自由飛行一 tick」的差 `maxJumpOnJudgementFrame 0`（畫面沒有跳）；e(0)＝該幀的 sim 瞬移量：沒按 min 0.110／中位 0.253／p95 0.392／max 0.394 m，接球 0.023 m（max 0.057），噴球 0.005–0.095 m；判定後每幀減少最大 `maxClosePerFrame 0.1200`（≤ 0.12）、逐幀不增（斷言）、最多 `maxFramesToSettle 4` 幀回到 ≤ 0.01 m（≤ 10）；`identicalOnOff true`＝平滑關閉跑同一組 63 例，逐例 sim 事件序列與最終狀態字串相同，且關閉時每幀 e ≤ 0.01。三視口 `PASS pass: 3 viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, judgement snap smoothed in the picture only, tap resting, replay; advanced hides hints`（21:11–21:43）。
+- 修前碼紅燈（`0e72fd4` 副本、dev server 5176、同一支治具）：`DIRECT_BASE_URL=http://127.0.0.1:5176 DIRECT_VIEWPORTS=desktop node tools/direct-play-browser.mjs --pass`（21:46 起）→ `AssertionError [ERR_ASSERTION]: stance (-0.3, 4.8) none: the drawn ball jumped 0.136 m on the judgement frame (sim snap ? m)`——行為斷言（第一例沒按的噴球，判定那一幀畫面球一次跳 0.136 m；修前事件沒有 `snapFrom`，顯示 `?`）；紀錄 `docs/experiments/direct-v8-r4-evidence/pass-old-0e72fd4.log`。
 
 ### N6 LOW｜報告殘留錯誤（全部更正，原地改）
 
@@ -404,4 +405,22 @@
 
 ### 收尾驗證
 
-TODO-R4-TAIL
+- `npm test`（單獨跑：治具、vite、探針全部結束並以 `netstat`／`tasklist` 確認後才起）：22:05:46 → 22:10:17，**2597 條、2597 過、0 敗、0 skip**（2593 + 本輪新增 4 條 `tests/direct-v8-round4.test.js`）。最後 10 行：
+
+```
+✔ 整場實跑：滿速↔靜止的 stop-go 交替率 < 0.5%（修前 5.92%） (805.0117ms)
+✔ 決定論：同 seed 兩次整場逐 tick 位置逐值相同（幅值化走位不引入浮點分岔） (532.7952ms)
+ℹ tests 2597
+ℹ suites 0
+ℹ pass 2597
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 269717.9354
+```
+- 四個瀏覽器治具（真樹、5175、`PLAYWRIGHT_MODULE` 同 §5）：`--assist` `PASS assist: 3 viewports with visible receive turn, contact, replay`（13:30）、`--motion` `PASS motion: 3 viewports with run, jump, land, set, block, dive captures`（13:33）、`--pass` `PASS pass: 3 viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, judgement snap smoothed in the picture only, tap resting, replay; advanced hides hints`（21:11–21:43）、預設 `PASS 3 viewports: real input, jump, cancel, replay, layout, disposal`（21:43–21:46）；`docs/experiments/direct-play-evidence/*.json` 為本次輸出。第一次跑 `--pass` 時（V5 量測在三個視口都跑）行程在 portrait 視口卡住超過 6 小時、無輸出，行程被中止後改成只在 desktop 量測（`tools/direct-play-browser.mjs`，與視口無關的量）重跑；第一次跑預設治具在 `[data-replay]` 點擊逾時（當時同機另有兩個 node 探針與一個 headless 瀏覽器在跑），單獨重跑一次即 PASS——兩者都沒有加 retry／sleep。
+- R8（`node tools/receive-assist-probe.mjs chase`）：**1080/2646 = 40.8%** ≥ 34%（見 N3 段）。
+- 修前碼 `0e72fd4` 紅燈：V1～V4 `docs/experiments/direct-v8-stage1-r4-old-red.tap`（`not ok 1`～`not ok 4`，斷言訊息見各段）；V3 雙樹 `reach-diff-old-vs-old-reach0.json` differs 989；V5 `pass-old-0e72fd4.log`。
+- 背景程序：5175（PID 37120）與 5176（PID 30908）兩個 vite 於 npm test 前以 `taskkill //PID … //F //T` 關閉，`netstat -ano | grep -E ":517[56] "` LISTENING 0 筆、`tasklist` 無 `chrome-headless-shell`；探針與 `node --test` 皆已自行結束。副本 `old-0e72fd4`（junction 指向真樹的 node_modules）、`v3-*` 都在 scratchpad，不在 repo。未 push、未部署、`main` 未動。
+- commit 清單：`3e73464`（碼＋測試＋探針＋報告 §12 草稿＋N6 更正）→ `9126c33`（V3 證據、治具視口過濾）→ 第三個 commit＝V5 證據、四治具重跑的 `direct-play-evidence/*`、本節收尾（SHA 見 `git log`）。

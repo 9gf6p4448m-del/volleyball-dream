@@ -283,6 +283,9 @@ try {
         }
         return results;
       }, enabled);
+      // The frame-by-frame measurement renders ~20k frames; it runs on the
+      // desktop viewport only (the picture offset is viewport-independent).
+      const snapSummary = name !== 'desktop' ? 'measured on desktop only' : await (async () => {
       const snapOn = await snapRun(true), snapOff = await snapRun(false);
       const snapStats = { classes: {}, maxJump: 0, maxDrop: 0, maxSettle: 0, snap: [] };
       for (const c of snapOn) {
@@ -320,7 +323,8 @@ try {
         for (const row of snapOff[i].frames) assert.ok(row.e <= 0.01, `smoothing off: drawn ball off the sim ball (frame ${row.f}, ${row.e.toFixed(3)} m)`);
       }
       const q = (arr, k) => { const a = [...arr].sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(k * (a.length - 1)))] : NaN; };
-      const snapSummary = { cases: snapOn.length, byClass: Object.fromEntries(Object.entries(snapStats.classes).map(([k, v]) => [k, { n: v.n, e0: { min: Math.min(...v.e0), median: q(v.e0, 0.5), p95: q(v.e0, 0.95), max: Math.max(...v.e0) } }])), maxJumpOnJudgementFrame: snapStats.maxJump, maxClosePerFrame: snapStats.maxDrop, maxFramesToSettle: snapStats.maxSettle, identicalOnOff: true };
+      return { cases: snapOn.length, byClass: Object.fromEntries(Object.entries(snapStats.classes).map(([k, v]) => [k, { n: v.n, e0: { min: Math.min(...v.e0), median: q(v.e0, 0.5), p95: q(v.e0, 0.95), max: Math.max(...v.e0) } }])), maxJumpOnJudgementFrame: snapStats.maxJump, maxClosePerFrame: snapStats.maxDrop, maxFramesToSettle: snapStats.maxSettle, identicalOnOff: true };
+      })();
       // A20e: receive auto-face fixed to half (user choice). Walk off-centre with a
       // live ball and compare the heading with the direction to the setter zone.
       const faceAfterWalk = action => page.evaluate(action => {

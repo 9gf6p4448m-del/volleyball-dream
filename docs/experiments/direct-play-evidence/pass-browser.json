@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-27T02:38:34.482Z",
+  "createdAt": "2026-09-27T13:11:18.966Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -83,6 +83,42 @@
         },
         "identical": true
       },
+      "snapSmoothing": {
+        "cases": 63,
+        "byClass": {
+          "none": {
+            "n": 21,
+            "e0": {
+              "min": 0.11040666666664123,
+              "median": 0.2525054870421357,
+              "p95": 0.39222388340115016,
+              "max": 0.39373999999997267
+            }
+          },
+          "pass": {
+            "n": 21,
+            "e0": {
+              "min": 0.022601999996617616,
+              "median": 0.022601999996617644,
+              "p95": 0.022601999996617817,
+              "max": 0.05672108083376527
+            }
+          },
+          "spray": {
+            "n": 21,
+            "e0": {
+              "min": 0.004651056677013467,
+              "median": 0.04983480680851689,
+              "p95": 0.0949459702145668,
+              "max": 0.0949459702145668
+            }
+          }
+        },
+        "maxJumpOnJudgementFrame": 0,
+        "maxClosePerFrame": 0.12000000000000066,
+        "maxFramesToSettle": 4,
+        "identicalOnOff": true
+      },
       "errors": []
     },
     {
@@ -165,6 +201,7 @@
         },
         "identical": true
       },
+      "snapSmoothing": "measured on desktop only",
       "errors": []
     },
     {
@@ -247,6 +284,7 @@
         },
         "identical": true
       },
+      "snapSmoothing": "measured on desktop only",
       "errors": []
     }
   ]
