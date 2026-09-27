@@ -675,7 +675,9 @@ export function createGeoAnimator(rig) {
       const w0 = current && (current.seq.sustain
         || ((current.seq.chain || current.seq.airborne) && seq.airborne)) ? lastW : 0;
       startSeq(seq, type, { t: carry, w0, hitInTicks: opts?.hitInTicks ?? null });
-      if (w0 === 0 && lastOut) { fadeFrom = lastOut; fadeT = 0; }
+      // windup 例外：時長 0.1 s 被 E3 鎖住，雙臂得從助跑後擺甩到頭上；從上一幀輸出過渡反而更遠
+      // （腕單幀 0.73 m，從待命底層漸入 0.46 m），維持舊路徑
+      if (w0 === 0 && lastOut && type !== 'windup') { fadeFrom = lastOut; fadeT = 0; }
     },
     // 追趕到擊球關鍵幀（**只前進、不回退**；回傳被追掉的秒數，0＝本來就到位）。
     // 擊球弧是照 hitPoint 預測提前觸發的，而 sim 的實際觸球比預測早 1–9 tick

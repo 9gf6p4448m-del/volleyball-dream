@@ -2,7 +2,7 @@
   "meta": {
     "tool": "tools/motion-d0-measure.mjs",
     "src": {
-      "src/render/geoAnimator.js": "f2bcd52859ec21196be23bc5d89bfb27272f2978",
+      "src/render/geoAnimator.js": "30b74f4ea132416273fad54ea1ae248afa492216",
       "src/render/geoCharacter.js": "2ec2c2ebc034a23aca0d90e8a379fa915816db56"
     },
     "probe": {

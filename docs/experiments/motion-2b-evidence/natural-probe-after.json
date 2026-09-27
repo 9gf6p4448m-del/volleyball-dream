@@ -2,13 +2,13 @@
   "worktree": {
     "spike": {
       "frames": 176,
-      "M1_maxVelJump_degPerFrame2": 29.01282225508983,
+      "M1_maxVelJump_degPerFrame2": 25.047052776110185,
       "M1_at": {
-        "frame": 110,
+        "frame": 105,
         "joint": "rShoulder.x",
         "seq": "windup"
       },
-      "M1_jumpFrames": 9,
+      "M1_jumpFrames": 16,
       "M2_onsetSpreadBySegment": [
         {
           "seq": "approach3",
@@ -19,7 +19,7 @@
         {
           "seq": "windup",
           "frames": 6,
-          "spread": 2,
+          "spread": 1,
           "joints": 10
         },
         {
@@ -43,16 +43,16 @@
       ],
       "M3_longestStill_frames": 0,
       "M3_seq": null,
-      "M4_pelvisChestPeakLag_frames": 1,
+      "M4_pelvisChestPeakLag_frames": 0,
       "M5_plantedFootMaxSpeed_mps": 12.673174653461476,
       "M5_at": {
         "frame": 64,
         "foot": "l",
         "seq": "approach3"
       },
-      "M6_wristMaxStep_m": 0.7307896450366363,
+      "M6_wristMaxStep_m": 0.47892300133968985,
       "M6_at": {
-        "frame": 108,
+        "frame": 107,
         "seq": "windup",
         "prevSeq": "windup"
       }

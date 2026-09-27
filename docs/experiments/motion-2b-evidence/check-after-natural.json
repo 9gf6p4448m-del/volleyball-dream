@@ -565,29 +565,29 @@
         "windowStart": 4,
         "minW": 1,
         "maxDy": 0.026564786744728952,
-        "attackMaxDy": 0.5947751308049627,
+        "attackMaxDy": 0.4702877455887631,
         "sawHold": true,
         "ok": true,
         "trace": [
           {
             "seq": "windup",
             "w": 0.2083,
-            "wristY": 0.8969
+            "wristY": 1.1429
           },
           {
             "seq": "windup",
             "w": 0.4167,
-            "wristY": 1.0933
+            "wristY": 1.6132
           },
           {
             "seq": "windup",
             "w": 0.625,
-            "wristY": 1.688
+            "wristY": 1.975
           },
           {
             "seq": "windup",
             "w": 0.8333,
-            "wristY": 2.0253
+            "wristY": 1.9857
           },
           {
             "seq": "windup",
@@ -639,29 +639,29 @@
         "windowStart": 4,
         "minW": 1,
         "maxDy": 0.026564786744728952,
-        "attackMaxDy": 0.5947751308049627,
+        "attackMaxDy": 0.4702877455887631,
         "sawHold": true,
         "ok": true,
         "trace": [
           {
             "seq": "windup",
             "w": 0.2083,
-            "wristY": 0.8969
+            "wristY": 1.1429
           },
           {
             "seq": "windup",
             "w": 0.4167,
-            "wristY": 1.0933
+            "wristY": 1.6132
           },
           {
             "seq": "windup",
             "w": 0.625,
-            "wristY": 1.688
+            "wristY": 1.975
           },
           {
             "seq": "windup",
             "w": 0.8333,
-            "wristY": 2.0253
+            "wristY": 1.9857
           },
           {
             "seq": "windup",
@@ -708,29 +708,29 @@
         "windowStart": 4,
         "minW": 1,
         "maxDy": 0.026564786744728952,
-        "attackMaxDy": 0.5947751308049627,
+        "attackMaxDy": 0.4702877455887631,
         "sawHold": true,
         "ok": true,
         "trace": [
           {
             "seq": "windup",
             "w": 0.2083,
-            "wristY": 0.8969
+            "wristY": 1.1429
           },
           {
             "seq": "windup",
             "w": 0.4167,
-            "wristY": 1.0933
+            "wristY": 1.6132
           },
           {
             "seq": "windup",
             "w": 0.625,
-            "wristY": 1.688
+            "wristY": 1.975
           },
           {
             "seq": "windup",
             "w": 0.8333,
-            "wristY": 2.0253
+            "wristY": 1.9857
           },
           {
             "seq": "windup",
@@ -782,29 +782,29 @@
         "windowStart": 4,
         "minW": 1,
         "maxDy": 0.026564786744728952,
-        "attackMaxDy": 0.5947751308049627,
+        "attackMaxDy": 0.4702877455887631,
         "sawHold": true,
         "ok": true,
         "trace": [
           {
             "seq": "windup",
             "w": 0.2083,
-            "wristY": 0.8969
+            "wristY": 1.1429
           },
           {
             "seq": "windup",
             "w": 0.4167,
-            "wristY": 1.0933
+            "wristY": 1.6132
           },
           {
             "seq": "windup",
             "w": 0.625,
-            "wristY": 1.688
+            "wristY": 1.975
           },
           {
             "seq": "windup",
             "w": 0.8333,
-            "wristY": 2.0253
+            "wristY": 1.9857
           },
           {
             "seq": "windup",
@@ -856,29 +856,29 @@
         "windowStart": 4,
         "minW": 1,
         "maxDy": 0.026564786744728952,
-        "attackMaxDy": 0.5947751308049627,
+        "attackMaxDy": 0.4702877455887631,
         "sawHold": true,
         "ok": true,
         "trace": [
           {
             "seq": "windup",
             "w": 0.2083,
-            "wristY": 0.8969
+            "wristY": 1.1429
           },
           {
             "seq": "windup",
             "w": 0.4167,
-            "wristY": 1.0933
+            "wristY": 1.6132
           },
           {
             "seq": "windup",
             "w": 0.625,
-            "wristY": 1.688
+            "wristY": 1.975
           },
           {
             "seq": "windup",
             "w": 0.8333,
-            "wristY": 2.0253
+            "wristY": 1.9857
           },
           {
             "seq": "windup",
@@ -925,29 +925,29 @@
         "windowStart": 4,
         "minW": 1,
         "maxDy": 0.026564786744728952,
-        "attackMaxDy": 0.5947751308049627,
+        "attackMaxDy": 0.4702877455887631,
         "sawHold": true,
         "ok": true,
         "trace": [
           {
             "seq": "windup",
             "w": 0.2083,
-            "wristY": 0.8969
+            "wristY": 1.1429
           },
           {
             "seq": "windup",
             "w": 0.4167,
-            "wristY": 1.0933
+            "wristY": 1.6132
           },
           {
             "seq": "windup",
             "w": 0.625,
-            "wristY": 1.688
+            "wristY": 1.975
           },
           {
             "seq": "windup",
             "w": 0.8333,
-            "wristY": 2.0253
+            "wristY": 1.9857
           },
           {
             "seq": "windup",
