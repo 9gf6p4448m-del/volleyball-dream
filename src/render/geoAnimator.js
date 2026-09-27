@@ -119,10 +119,10 @@ function stepPhase(t, order, ampTable, env) {
 // ★ 2B 文獻校準（docs/experiments/motion-d0-table.md 的列號）★ 數值由 D0 腳本量世界座標驗證。
 const POSES = {
   // 低手（Ridgway & Hamilton 1987 HS 組）：起始肘角 159°（bump.start.elbow）、頭前傾 7°
-  bumpReady: { rSh: [-0.95, 0.24], lSh: [-0.95, -0.24], rEl: -0.36, lEl: -0.36, spine: 0.5, neck: -0.55, crouch: 0.2, spineUp: 0.16 },
+  bumpReady: { rSh: [-0.95, 0.24], lSh: [-0.95, -0.24], rEl: -0.36, lEl: -0.36, spine: 0.5, neck: -0.55, crouch: 0.2, spineUp: 0.16, stagger: 0.22 },
   // 肩 x 含部分胸椎前後傾補償（spineUp 於鏡像修正後的 ec8efc7 才加上）：−1.16 使手臂世界方向與
   // 1fd5da6 意圖差 3.4°（≤5°），且仍滿足既有測試「觸球幀手臂已伸到墊球位 < −1.15」
-  bumpHit: { rSh: [-1.16, 0.24], lSh: [-1.16, -0.24], rEl: 0, lEl: 0, spine: 0.32, neck: -0.3, crouch: 0.08, spineUp: -0.1 },
+  bumpHit: { rSh: [-1.39, 0.24], lSh: [-1.39, -0.24], rEl: 0, lEl: 0, spine: 0.55, neck: -0.3, crouch: 0.08, spineUp: -0.1, stagger: 0.22 },
   // 低手收勢隨揮（2B 新增）：觸球後平台往前上方送（上臂約水平）、軀幹維持前傾、抬頭目送球
   bumpFollow: { rSh: [-1.9, 0.22], lSh: [-1.9, -0.22], rEl: -0.12, lEl: -0.12, spine: 0.3, neck: -0.45, crouch: 0.03, spineUp: 0.05 },
   // 高手舉球（Lanzani 2026）：裝填肘屈約 100°（set.load.elflex）、出手肘屈約 40°（fast／seven 型）。
@@ -133,28 +133,28 @@ const POSES = {
   // 4.7 §P2 上升弓身：胸椎後仰（spineUp 負＝反弓）、骨盆先轉、非慣用手上舉指球。
   // 2B（Zahálka 2017）：最大後擺髖線 157°、肩線 105°（擊球側往後轉 23°／75°，髖肩分離 52°）
   spikeWind: {
-    rSh: [-2.5, 0.38], lSh: [-2.55, -0.1], rEl: -1.9, lEl: -0.25, spine: -0.24, neck: -0.2,
-    spineUp: -0.34, pelvisY: -0.4, chestY: -0.95, wrist: -0.5,
+    rSh: [-2.5, 0.38], lSh: [-1.9, -0.1], rEl: -1.9, lEl: -0.25, spine: -0.24, neck: -0.2,
+    spineUp: -0.5, pelvisY: -0.4, chestY: -0.95, wrist: -0.5, airTuck: 1.3,
   },
   // §P3 鞭打中段：肩已解鎖、肘開始伸、腕仍後倒（三者不得同幀一起轉）。
   // 2B：轉體介於引臂與擊球之間（Zahálka 2017 肩線角由 105° 單調轉到擊球 137°）
   spikeUnlock: {
     rSh: [-2.75, 0.2], lSh: [-1.7, -0.16], rEl: -0.9, lEl: -0.3, spine: -0.05, neck: -0.12,
-    spineUp: -0.1, pelvisY: -0.4, chestY: -0.72, wrist: -0.62,
+    spineUp: -0.1, pelvisY: -0.4, chestY: -0.72, wrist: -0.62, airTuck: 1.1,
   },
   // §P3 擊球：收腹前屈、轉體完成、**壓腕 snap**（wrist 由負轉正＝手掌蓋下去）。
   // 2B（Reeser 2010 斜線扣：肩外展 130、肘屈 34、水平內收 29；Zahálka 2017 擊球肩線 137／
   // 髖線 157）：擊球臂由「正上方伸直」改為「側上方、肘仍彎」，軀幹往非擊球側側傾（lean）
   // 保住擊球高度（腕高 2.08 m，修前 1.97 m）
   spikeHit: {
-    rSh: [-2.6, -1.0], lSh: [-0.85, -0.2], rEl: -0.6, lEl: -0.4, spine: 0.18, neck: -0.05,
-    spineUp: 0.26, pelvisY: -0.4, chestY: -0.5, lean: -0.25, wrist: 0.55,
+    rSh: [-2.55, -1.15], lSh: [-0.85, -0.2], rEl: -0.6, lEl: -0.4, spine: 0.18, neck: -0.9,
+    spineUp: 0.26, pelvisY: -0.4, chestY: -0.55, lean: -0.4, wrist: 0.55, airTuck: 0.8,
   },
   // §P4 下降收臂：擊球臂沿對角跨體收回（rSh z 正＝往左髖方向），身體回中性。
   // 擊球臂 z 例外：保留跨體（教學描述 spiking arm coming down across your body）
   spikeFollow: {
     rSh: [-0.6, 0.34], lSh: [-0.45, -0.15], rEl: -0.5, lEl: -0.3, spine: 0.46, neck: 0.1,
-    spineUp: 0.12, pelvisY: 0.06, wrist: 0.2,
+    spineUp: 0.12, pelvisY: 0.06, wrist: 0.2, airTuck: 0.5,
   },
   // W2-5（07-30）曾把張臂 z 改成 ∓0.4 對齊 sim 帶寬 1.0m（跨距 0.28→0.92m）——
   // **Sawmah 試玩裁定：原本較好看，寬臂案否決**（`docs/blocking-reference.md` §5 佐證：
@@ -236,8 +236,8 @@ const POSES = {
   // 由「正上方伸直」改為「側上方、肘彎約 43°」，軀幹往非擊球側側傾（lean −0.4）保住擊球
   // 高度（hold 腕高 1.98 m，修前 2.00 m）；tipReach 為往擊球位置的中途。非擊球臂與 z 以外
   // 欄位不動（本組姿勢 09-10 後加入，不在鏡像還原的 25 個之內）
-  tipReach: { rSh: [-2.4, -0.5], lSh: [-0.6, 0.2], rEl: -0.4, lEl: -0.3, spine: 0.06, neck: -0.1, spineUp: 0.1, pelvisY: 0.04, lean: -0.2, wrist: -0.25 },
-  tipHit: { rSh: [-2.05, -0.85], lSh: [-0.4, 0.15], rEl: -0.75, lEl: -0.2, spine: 0.16, neck: -0.05, spineUp: 0.15, pelvisY: 0.0, lean: -0.4, wrist: 0.35 },
+  tipReach: { rSh: [-2.4, -0.5], lSh: [-0.6, 0.2], rEl: -0.4, lEl: -0.3, spine: 0.06, neck: -0.1, spineUp: 0.1, pelvisY: 0.04, lean: -0.2, wrist: -0.25, airTuck: 1.0 },
+  tipHit: { rSh: [-2.05, -0.85], lSh: [-0.4, 0.15], rEl: -0.75, lEl: -0.2, spine: 0.16, neck: -0.05, spineUp: 0.15, pelvisY: 0.0, lean: -0.4, wrist: 0.35, airTuck: 0.8 },
   tipFollow: { rSh: [-1.2, 0.14], lSh: [-0.3, 0.1], rEl: -0.3, lEl: -0.15, spine: 0.26, neck: 0.05, spineUp: 0.08, wrist: 0.1 },
 };
 
@@ -547,7 +547,8 @@ export function createGeoAnimator(rig) {
     }
     // 4.7 動作重製新增欄位：spineUp＝胸椎（弓身/收腹）、wrist＝壓腕（側別由呼叫端
     // 決定，見 update() 的壓腕路由）。pelvisY/chestY 只有攻擊姿勢在用、鏡像時反號
-    for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist']) {
+    // stagger（2B 石川差距 f）＝前後腳：後腳髖往後擺的弧度；airTuck（a）＝滯空屈膝收腿的膝彎弧度
+    for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist', 'stagger', 'airTuck']) {
       out[k] = lerp(poseVal(pa, k), poseVal(pb, k), f);
     }
     // lean（2B）＝胸椎側傾 spineUpper.z：負＝上身往非擊球側（右手選手的左側 +X）倒
@@ -806,10 +807,24 @@ export function createGeoAnimator(rig) {
         // 交替量隨 sideW 收掉，改成併步該有的低姿屈膝
         const walkKnee = 1 - sideW * 0.85;
         const shuffleCrouch = sideW * runW * 0.28;
+        // 前後腳站位（2B 石川差距 f，接發）：後腳＝非慣用側（右手選手的左腳）髖往後擺，
+        // 膝彎交給 liftKnee 抬到鞋底不入地＝後腳腳跟離地踮著，前腳維持小腿鉛直
+        const stagger = pose ? blended.stagger * w : 0;
+        if (stagger) j[handed === 'l' ? 'rHip' : 'lHip'].rotation.x += stagger;
         j.rKnee.rotation.x = liftKnee(j.rHip.rotation.x, (0.12 + Math.max(0, -s) * 0.95 * walkKnee) * runW
           + squat + shuffleCrouch, sinkY);
         j.lKnee.rotation.x = liftKnee(j.lHip.rotation.x, (0.12 + Math.max(0, s) * 0.95 * walkKnee) * runW
           + squat + shuffleCrouch, sinkY);
+      }
+
+      // 滯空屈膝收腿（2B 石川差距 a）：只作用在跳躍弧 > 0 的幀，隨離地高度在 12 cm 內漸入，
+      // 接地幀（E4 量鞋底的幀）完全不受影響。大腿微前擺、小腿往後收
+      if (pose && blended.airTuck && jumpY > 0) {
+        const tuck = blended.airTuck * w * Math.min(jumpY / 0.12, 1);
+        for (const side of ['r', 'l']) {
+          j[`${side}Hip`].rotation.x -= tuck * 0.35;
+          j[`${side}Knee`].rotation.x += tuck;
+        }
       }
 
       // 軀幹/頭（4.7：脊椎兩節＋骨盆獨立轉——髖肩分離與弓身的來源）

@@ -40,7 +40,9 @@ export const EXCEPTIONS = {
   setPush: { vectors: ARMS, rows: ['set.push.elflex.fast'], url: KOACH,
     note: '同上；還原後出手雙腕相距 0.748 m，保留靠攏（0.152 m），肘屈校準到 40°（fast／seven 型）' },
   spikeWind: { vectors: [...ARMS, 'shoulderLine', 'hipLine'], rows: ['spike.wind.shline', 'spike.wind.sep'],
-    note: '還原後轉體方向已正確但幅度不足（肩線 162.2°、分離 2.9°）；依 Zahálka 加大到肩線 105、髖線 157——胸椎轉動帶著雙臂一起轉，世界方向因此偏離' },
+    url: 'https://vbm.link/21613/',
+    note: '還原後轉體方向已正確但幅度不足（肩線 162.2°、分離 2.9°）；依 Zahálka 加大到肩線 105、髖線 157——胸椎轉動帶著雙臂一起轉，世界方向因此偏離。'
+      + '非擊球臂另依石川祐希引臂照（vbm.link 21613，使用者 2026-09-27 裁定照石川調）由高舉過頭（肩 −2.55，左腕高於頭）降到前舉約頭高（肩 −1.9）' },
   spikeUnlock: { vectors: [...ARMS, 'shoulderLine', 'hipLine'], url: ZH,
     note: 'Zahálka 2017 肩線角自最大後擺 105° 單調增加到擊球 137°；還原值（胸 −0.16）在校準後的引臂（肩線 107.6°）與擊球（136.8°）之間會先超轉到 167.5° 再轉回 136.8°；改為兩者之間（胸 −0.72，肩線 116.1°）' },
   spikeHit: { vectors: [...ARMS, 'shoulderLine', 'hipLine'],
