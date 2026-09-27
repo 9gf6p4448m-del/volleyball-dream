@@ -231,6 +231,19 @@ async function installSampler(page, { subAtTick }) {
         const visible = u.rig.root.scale.x > 0.001;
         if (visible) sample.visibleCount += 1;
         const entry = { id, real: !!u.real, seq: u.animator.peek?.()?.type ?? null, visible };
+        // H1（身高縮放修復驗證，2026-09-27）：直接量 u.rig（geoCharacter 骨架，真人/幾何
+        // 兩模式共用同一份，見 realPlayer.js「rig＝createGeoCharacter 建出的關節 Object3D」）
+        // 的頭部 slot 世界座標＋頭半徑（0.125，geometries().head 半徑）×根縮放——這條量測
+        // 只吃 u.rig.root.scale，正是 matchView.js:384 那行縮放公式的直接下游，不像既有
+        // headTopDiff（比對 real 網格 vs. ref rig，ref rig 的 scale 是從 u.rig 複製來的）
+        // 會把 bug 本身也複製進參照值、失去鑑別力。
+        if (visible) {
+          const headPart = u.rig.parts.find((pt) => pt.key === 'head');
+          if (headPart) {
+            entry.headTopY = worldPos(headPart.node).y + 0.125 * u.rig.root.scale.y;
+            entry.heightCur = p.height.current;
+          }
+        }
         if (u.real && visible) {
           if (!window.__vertexSets[id]) window.__vertexSets[id] = buildVertexSets(u);
           const vs = window.__vertexSets[id];
@@ -394,6 +407,40 @@ async function checkColors(page) {
     }
     return out;
   });
+}
+
+// H1：在該 session 的取樣裡挑「場上可見球員身高分散度最大」的那個 tick（分散度不足
+// 代表當下場上球員身高太接近，比不出縮放有沒有生效），量「頭頂世界高度」與
+// 「該球員 height.current」是否成比例。回傳 ok=false 時 reason 說明卡在哪個子條件。
+function computeH1(session) {
+  let best = null;
+  for (const s of session.samples) {
+    const entries = s.players.filter((p) => p.headTopY != null && p.heightCur != null);
+    if (entries.length < 2) continue;
+    const heights = entries.map((e) => e.heightCur);
+    const spread = Math.max(...heights) - Math.min(...heights);
+    if (!best || spread > best.spread) best = { tick: s.tick, entries, spread };
+  }
+  if (!best) return { ok: false, reason: 'no-sample-with-headTopY' };
+  const ratios = best.entries.map((e) => ({ id: e.id, ratio: e.headTopY / e.heightCur }));
+  const ratioMax = Math.max(...ratios.map((r) => r.ratio));
+  const ratioMin = Math.min(...ratios.map((r) => r.ratio));
+  const ratioSpread = ratioMax / ratioMin;
+  const tallest = best.entries.reduce((a, b) => (a.heightCur > b.heightCur ? a : b));
+  const shortest = best.entries.reduce((a, b) => (a.heightCur < b.heightCur ? a : b));
+  const headDiff = tallest.headTopY - shortest.headTopY;
+  const heightDiff = tallest.heightCur - shortest.heightCur;
+  const spreadOk = best.spread >= 0.05;
+  const ratioOk = ratioSpread <= 1.03;
+  const propOk = heightDiff > 0 ? headDiff >= 0.5 * heightDiff : false;
+  return {
+    ok: spreadOk && ratioOk && propOk,
+    tick: best.tick, entryCount: best.entries.length, heightSpread: best.spread,
+    ratioMax, ratioMin, ratioSpread,
+    tallest: { id: tallest.id, height: tallest.heightCur, headTopY: tallest.headTopY },
+    shortest: { id: shortest.id, height: shortest.heightCur, headTopY: shortest.headTopY },
+    headDiff, heightDiff, spreadOk, ratioOk, propOk,
+  };
 }
 
 // 粗推進到 targetTicks（每次 RUNFOR_CHUNK_MS 虛擬毫秒），回報實際到達的 tick
@@ -648,6 +695,8 @@ for (const seed of SEEDS) {
   const hasLiberoSwap = eventTypes.has('LIBERO_SWAP') || g.final.events.some((e) => e.type === 'LIBERO_SWAP');
   const hasSubstitution = r.subResult?.ok === true && g.subResult?.ok === true
     && r.subResult.tick === g.subResult.tick;
+  const h1Geo = computeH1(g);
+  const h1Real = computeH1(r);
 
   perSeed[seed] = {
     matchEntryId: g.boot.matchEntryId,
@@ -662,6 +711,7 @@ for (const seed of SEEDS) {
     b6EventsEqual: eventsEqual, b6SnapshotEqual: snapshotEqual, b6ActivityOk: activityOk,
     b6StateSigEqual: stateSigEqual, b6CommonStateTick: commonStateTick, b6FinalTickAligned: finalTickAligned,
     hasLiberoSwap, hasSubstitution, subTick: r.subResult?.tick ?? null,
+    h1Geo, h1Real,
     colorCheck: r.colors,
     seqCoverage: r.seqCoverage,
     errors: [...g.errors, ...r.errors],
@@ -816,6 +866,7 @@ report.pass = {
   B8b: b8b ? b8b.pass : null,
   B9: b9 ? b9.pass : null,
   B12: b12 ? b12.pass : null,
+  H1: Object.values(perSeed).every((p) => p.h1Geo.ok && p.h1Real.ok),
 };
 report.vacuousGuard = { b3SamplesOk, b4SamplesOk, b5PlateSamplesOk };
 
@@ -824,5 +875,6 @@ console.log(JSON.stringify({ pass: report.pass, perSeed: Object.fromEntries(Obje
   b2Pass: v.b2Pass, b3HandOk: v.b3HandOk, b3SoleOk: v.b3SoleOk, b4Ok: v.b4Ok, b5PlateOk: v.b5PlateOk,
   b6EventsEqual: v.b6EventsEqual, b6SnapshotEqual: v.b6SnapshotEqual, hasLiberoSwap: v.hasLiberoSwap,
   hasSubstitution: v.hasSubstitution, subTick: v.subTick,
+  h1Geo: v.h1Geo, h1Real: v.h1Real,
 }])), b3Coverage, colorAllOk, b7: { pass: b7.pass, protectedDiffEmpty: b7.protectedDiffEmpty, importersOk: b7.importersOk }, b8b, b9 }, null, 1));
 await browser.close();

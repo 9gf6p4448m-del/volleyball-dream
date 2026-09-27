@@ -268,6 +268,72 @@ dist/sw.js`）：`models/real/player_20k.glb`、`models/real/player_5k.glb`—�
 
 ## git diff --stat
 
+## 身高縮放修復（2026-09-27，主對話 fix ＋ fresh-context 驗收）
+
+**結論：修復生效，H1 新增檢查通過；B2/B3/B4/B6 與 npm test 未受影響。**
+
+### 缺陷
+
+`src/render/matchView.js:384`（`hideMe ? 0.0001 : ...`）原本每幀寫死
+`u.rig.root.scale.setScalar(hideMe ? 0.0001 : 1)`，蓋掉 `createGeoCharacter`
+（`src/render/geoCharacter.js:298`，`root.scale.setScalar(height / BASE_H)`）建角色時
+設好的身高縮放——比賽中全部球員（幾何與寫實兩模式）恆以 `BASE_H`＝1.85m 顯示，與
+`gameState.players[id].height.current`（1.72–1.96m 不等）無關。修法：
+`u.rig.root.scale.setScalar(hideMe ? 0.0001 : gameState.players[id].height.current / BASE_H)`。
+
+### H1 新增檢查（`tools/real-match-browser.mjs`）
+
+既有 B4（`headTopDiff`）比對的是「real 網格頂點 vs. 用同一顆 `u.rig` 縮放複製出來的
+參照 rig」——參照 rig 的 scale 是從 `u.rig.root.scale` 複製來的，**若那個 scale 本身是
+bug（恆 1），參照值也會恆 1，此檢查對本次的縮放 bug 完全沒有鑑別力**。H1 改成直接量
+`u.rig.parts` 的 `head` slot 世界座標＋頭半徑（`0.125`）×`u.rig.root.scale.y`，與
+`gameState.players[id].height.current` 對比——這條量測只吃 `matchView.js:384` 那行縮放
+公式的直接下游，兩模式（幾何／寫實）共用同一份 `u.rig`（`realPlayer.js`：
+`rig = createGeoCharacter(...)`），量法一致。
+
+驗收條件（每個取樣 tick 挑「場上可見球員身高分散度最大」的一筆）：
+①身高分散度 ≥0.05m（先確認場上真有高矮差）②頭頂高度／`height.current` 比值在全體可見
+球員間 max/min ≤1.03 ③最高與最矮球員的頭頂高度差 ≥0.5×兩人身高差。
+
+### 鑑別力（`02-dispatch-rules.md §6.1` 第 1 條）
+
+修前碼（`git archive 93698f3` 解到 scratchpad，套用同一份新檢查，另 init 一次性 git repo
+供治具讀 `git rev-parse HEAD`；`checkB7()` 因無對應 baseline commit 改包 try/catch 略過，
+不影響 H1）跑出：
+
+```
+h1Geo:  ratioSpread=1.1395  headDiff=0        heightDiff=0.24  ok=false
+h1Real: ratioSpread=1.1395  headDiff=0        heightDiff=0.24  ok=false
+```
+
+最高（A3，1.96m）與最矮（BL，1.72m）球員的 `headTopY` **逐值相同**（`1.832708388416191`
+／`1.8247218552503113`）——直接對應「全員恆以 1.85m 顯示」的行為斷言，不是
+`AttributeError` 之類的旁枝錯誤。修後碼（seed=1、`docs/experiments/real-match-evidence/
+h1-postfix-report.json`）：
+
+```
+h1Geo:  ratioSpread=1.0203  headDiff=0.2392  heightDiff=0.24  ok=true
+h1Real: ratioSpread=1.0195  headDiff=0.2381  heightDiff=0.24  ok=true
+```
+
+A3 頭頂 1.9423m／BL 頭頂 1.7031m（geo），headDiff／heightDiff＝0.997（遠高於 0.5 門檻），
+ratioSpread 1.02（<1.03）。反面同時成立：健康狀態下綠、修復前紅，符合鑑別力要求。
+
+### B2/B3/B4/B6 與 npm test 重驗（修復後，seed=1 全長 TARGET_TICKS=10800）
+
+`docs/experiments/real-match-evidence/h1-postfix-report.json`：
+`pass = { B2: true, B3: true, B4: true, B5: true, B6: true, H1: true }`
+（B7/B8b/B9/B12 該次治具呼叫用 `SKIP_B8B=1 SKIP_B9=1 SKIP_SHOTS=1` 跳過，不代表變紅，
+未跑而已；B7 走純 git/grep 邏輯不受本次改動影響）。
+
+`npm test`：2610/2612 綠，失敗清單與分支基準（`ac41969`）逐名逐訊息相同——
+`tests/direct-receive-assist.test.js` 的 A23a、A23b（`docs/experiments/
+npm-test-baseline-ac41969.log`），與本次改動無關。
+
+### commit
+
+見下方「commit SHA 清單」新增的最後一筆。
+
 `git diff --stat ac41969..HEAD`：**36 files changed, 1426955 insertions(+), 10
 deletions(-)**（大宗為 evidence 截圖 PNG 與 `sessions-raw.json`/`npm-test-final.log`
 等 JSON/log 證據檔案；程式碼變動集中在 `src/render/matchView.js`（+87/-7）、

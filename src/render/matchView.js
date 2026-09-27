@@ -380,7 +380,8 @@ export async function createMatchView(
         }
         // W8 圈內第一人稱：鏡頭就是受控者的眼睛——隱藏他的本體與標籤（防身體擋鏡）
         const hideMe = huddleViewOn && id === highlightId;
-        u.rig.root.scale.setScalar(hideMe ? 0.0001 : 1);
+        // 縮放＝身高÷BASE_H（createGeoCharacter 建立時設的值）；原本每幀寫死 1，全場球員都變 1.85 m
+        u.rig.root.scale.setScalar(hideMe ? 0.0001 : gameState.players[id].height.current / BASE_H);
         // 標籤另加近身視角條件（07-26）：自己的標籤在防守/攻擊/一人稱下爆大擋讀線
         u.tag.sprite.visible = tagsVisible && !hideMe && !(hideOwnTag && id === highlightId);
 
