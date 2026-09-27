@@ -72,7 +72,7 @@ function scenario(v, name) {
   } else if (name === 'bump') {
     c.anim.trigger('receiveReady'); ticks(18); c.anim.trigger('bump'); untilIdle();
   } else if (name === 'servejump') {
-    c.anim.setHold('serveReady'); ticks(20); c.anim.setHold(null);
+    c.anim.setHold('serveReady'); ticks(20); c.anim.setHold(null); // 同 matchView：發球觸發後 phase 轉 rally、hold 清掉
     c.anim.trigger('serveJump'); speed = 0.8; untilIdle(); speed = 0; ticks(10);
   }
   return frames;

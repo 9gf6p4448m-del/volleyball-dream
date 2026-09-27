@@ -491,6 +491,22 @@ export function createGeoAnimator(rig) {
   let lastJumpY = 0; // 上一幀的跳躍弧高度（唯讀窺視用，見 probe()）
   let phase = 0;
   const blended = {};
+  // 慣性過渡（2B 自然度）：冷觸發（w0＝0）的新動作，由「上一幀實際輸出的全身關節角」平滑過渡
+  // INERTIA_S 秒到新動作的結果，不再先掉回待命底層。舊版從持球觸發跳發時腕單幀位移 0.65 m、
+  // 助跑接起跳 0.48 m（自然度探針 M6）
+  const INERTIA_S = 0.08;
+  const FADE_AXES = ['x', 'y', 'z'];
+  let fadeFrom = null;
+  let fadeT = 0;
+  let lastOut = null;
+  function snapshot() {
+    const o = {};
+    // 只過渡上半身：腿角由 squatAngle／groundKnee 依當幀骨盆下降量求解，內插會讓鞋子沉進地板
+    for (const [n, jt] of Object.entries(j)) {
+      if (jt?.rotation && !/Hip$|Knee$|Foot$/.test(n)) o[n] = [jt.rotation.x, jt.rotation.y, jt.rotation.z];
+    }
+    return o;
+  }
   // 腿部分支切換過渡（2B 自然度）：助跑步相分支 ↔ 一般跑動分支切換時，腿角由切換前一幀
   // 緩入到新分支（LEG_SWITCH_S 秒）；否則切換那一幀膝角單幀跳 24°、腳尖插地
   const LEG_SW_KEYS = ['rHx', 'lHx', 'rHz', 'lHz', 'rK', 'lK'];
@@ -522,41 +538,73 @@ export function createGeoAnimator(rig) {
     if (h !== 'l') return outSide === 'r' ? 'rEl' : 'lEl';
     return outSide === 'r' ? 'lEl' : 'rEl';
   }
+  // ★ 2B 自然度（使用者 E7 判定「看起來不自然」後的改善）★
+  // 舊版＝相鄰兩關鍵影格**線性**內插：每到一個影格角速度瞬間換檔（自然度探針 M1），而且全身
+  // 各關節同一幀起動、同一幀到位（M2：起動幀差 0）。改成：
+  //  ① 通過關鍵影格的 C1 連續曲線（Catmull-Rom／Hermite，切線取前後影格）：影格上的值**完全不變**
+  //    （D0 在影格時刻量的角度不受影響），影格之間速度連續、有緩入緩出
+  //  ② 近端領先、遠端跟隨（重疊動作）：每段的進度 f 依關節做一個「兩端固定」的時間彎曲——
+  //    骨盆 f^0.7 先轉、胸椎與肩 f^0.9、肘 f^1.15、腕與頭 f^1.35 最後到；f=0、f=1 時所有關節仍在
+  //    影格值上，所以擊球幀等所有關鍵時刻的姿勢不變
   function blendKeys(seq, t, out, handed = 'r') {
     const keys = seq.keys;
     let i = 0;
     while (i < keys.length - 1 && t > keys[i + 1].at) i += 1;
     const a = keys[i];
     const b = keys[Math.min(i + 1, keys.length - 1)];
+    const k0 = keys[Math.max(i - 1, 0)];
+    const k3 = keys[Math.min(i + 2, keys.length - 1)];
     const span = Math.max(b.at - a.at, 1e-4);
     const f = Math.min(Math.max((t - a.at) / span, 0), 1);
-    const pa = POSES[a.p];
-    const pb = POSES[b.p];
+    const P = [POSES[k0.p], POSES[a.p], POSES[b.p], POSES[k3.p]];
+    const T = [k0.at, a.at, b.at, k3.at];
+    const hitAt = seq.hit ?? null;
+    // 取第 idx 個影格的某個值（get 回傳數值）；曲線＝Hermite，端點切線依非等距影格縮放
+    const curve = (get, warp) => {
+      const v0 = get(P[0]); const v1 = get(P[1]); const v2 = get(P[2]); const v3 = get(P[3]);
+      const u = warp === 1 ? f : f ** warp;
+      const d12 = Math.max(T[2] - T[1], 1e-4);
+      let m1 = T[2] - T[0] > 1e-4 ? ((v2 - v0) * d12) / (T[2] - T[0]) : 0;
+      let m2 = T[3] - T[1] > 1e-4 ? ((v3 - v1) * d12) / (T[3] - T[1]) : 0;
+      // 擊球影格的切線只看「來向」（單側差分）：觸球瞬間延續揮臂的速度，不預支收臂的方向
+      // （否則擊球後第一幀肩就高速轉向收臂，蓋過解鎖段——鞭打順序測試守的正是這個）
+      if (hitAt != null && Math.abs(b.at - hitAt) < 1e-6) m2 = v2 - v1;
+      if (hitAt != null && Math.abs(a.at - hitAt) < 1e-6) m1 = T[1] - T[0] > 1e-4 ? ((v1 - v0) * d12) / (T[1] - T[0]) : 0;
+      const u2 = u * u; const u3 = u2 * u;
+      return (2 * u3 - 3 * u2 + 1) * v1 + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * v2 + (u3 - u2) * m2;
+    };
     for (const outSide of ['rSh', 'lSh']) {
       const srcKey = armKeyFor(outSide === 'rSh' ? 'r' : 'l', handed);
-      let ra = poseArm(pa, srcKey);
-      let rb = poseArm(pb, srcKey);
       // 鏡像＝對調左右來源＋反轉 z（見檔頭證明：對稱姿勢兩側 z 互為相反數，
       // swap 後再反號＝原值不變；只有非對稱姿勢會真的變）
-      if (handed === 'l') { ra = [ra[0], -ra[1]]; rb = [rb[0], -rb[1]]; }
-      out[outSide] = [lerp(ra[0], rb[0], f), lerp(ra[1], rb[1], f)];
+      const zs = handed === 'l' ? -1 : 1;
+      out[outSide] = [
+        curve((p) => poseArm(p, srcKey)[0], 0.9),
+        curve((p) => zs * poseArm(p, srcKey)[1], 0.9),
+      ];
     }
     for (const outKey of ['rEl', 'lEl']) {
       const srcKey = elKeyFor(outKey === 'rEl' ? 'r' : 'l', handed);
-      out[outKey] = lerp(poseVal(pa, srcKey), poseVal(pb, srcKey), f);
+      // 肘不能過伸（x 正＝往後折）：曲線在「彎→直」影格附近的過衝夾在 0（解剖上限）
+      out[outKey] = Math.min(curve((p) => poseVal(p, srcKey), 1.15), 0);
     }
     // 4.7 動作重製新增欄位：spineUp＝胸椎（弓身/收腹）、wrist＝壓腕（側別由呼叫端
     // 決定，見 update() 的壓腕路由）。pelvisY/chestY 只有攻擊姿勢在用、鏡像時反號
     // airTuck（2B 石川差距 a）＝滯空屈膝收腿的膝彎弧度；stagger（f）＝前後腳：後腳髖後擺的弧度
+    const WARP = { spine: 0.8, neck: 1.35, crouch: 0.8, spineUp: 0.9, wrist: 1.35, airTuck: 1, stagger: 0.8 };
     for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist', 'airTuck', 'stagger']) {
-      out[k] = lerp(poseVal(pa, k), poseVal(pb, k), f);
+      const val = curve((p) => poseVal(p, k), WARP[k]);
+      // 曲線可能在影格之間微幅過衝：只能為正的量（下蹲、收腿、後擺）夾在 0 以上
+      out[k] = (k === 'crouch' || k === 'airTuck' || k === 'stagger') ? Math.max(val, 0) : val;
     }
     // lean（2B）＝胸椎側傾 spineUpper.z：負＝上身往非擊球側（右手選手的左側 +X）倒
+    const WARP_Y = { pelvisY: 0.7, chestY: 0.9, lean: 0.9 };
     for (const k of ['pelvisY', 'chestY', 'lean']) {
-      const v = lerp(poseVal(pa, k), poseVal(pb, k), f);
+      const v = curve((p) => poseVal(p, k), WARP_Y[k]);
       out[k] = handed === 'l' ? -v : v;
     }
   }
+
 
   // 起一段新序列（trigger 與段落自動接續 chain／landSoft 共用同一條路）
   function startSeq(seq, type, { t = 0, w0 = 0, hitInTicks = null } = {}) {
@@ -627,6 +675,7 @@ export function createGeoAnimator(rig) {
       const w0 = current && (current.seq.sustain
         || ((current.seq.chain || current.seq.airborne) && seq.airborne)) ? lastW : 0;
       startSeq(seq, type, { t: carry, w0, hitInTicks: opts?.hitInTicks ?? null });
+      if (w0 === 0 && lastOut) { fadeFrom = lastOut; fadeT = 0; }
     },
     // 追趕到擊球關鍵幀（**只前進、不回退**；回傳被追掉的秒數，0＝本來就到位）。
     // 擊球弧是照 hitPoint 預測提前觸發的，而 sim 的實際觸球比預測早 1–9 tick
@@ -641,7 +690,11 @@ export function createGeoAnimator(rig) {
       current.t = target;
       return skipped;
     },
-    setHold(type) { hold = type; },
+    // hold 切換（例：攔網牆姿隨 blockDuty 開關、持球預備）也走慣性過渡，不瞬間套滿權重
+    setHold(type) {
+      if (type !== hold && current === null && lastOut) { fadeFrom = lastOut; fadeT = 0; }
+      hold = type;
+    },
     isIdle() { return current === null; },
     // 唯讀窺視（測試與 tools/contact-frame-probe.mjs 量「觸球那一幀播到哪」用）：
     // 不得回傳可變的內部參考——外部只會讀數字
@@ -867,6 +920,10 @@ export function createGeoAnimator(rig) {
       j.spineUpper.rotation.x = pose ? blended.spineUp * w : 0;
       j.spineUpper.rotation.y = pose ? blended.chestY * w : 0;
       j.spineUpper.rotation.z = pose ? blended.lean * w : 0;
+      // 2B 自然度：動作層滿權重撐住（預備、持球、滯空 hold）時仍有呼吸——舊版底層的呼吸只在
+      // 沒有動作時才有，撐住的那幾百毫秒全身完全靜止（自然度探針 M3）。幅度 ±1.4° 胸椎、±1.1° 肩
+      const holdBreath = pose ? Math.sin(phase * 0.9) * 0.025 * w : 0;
+      j.spineUpper.rotation.x += holdBreath;
       j.pelvis.rotation.y = pose ? blended.pelvisY * w : 0;
       j.neck.rotation.x = pose ? lerp(-0.04, blended.neck, w) : -0.04;
 
@@ -877,13 +934,26 @@ export function createGeoAnimator(rig) {
         const sh = j[`${side}Shoulder`];
         const el = j[`${side}Elbow`];
         const arm = pose ? blended[`${side}Sh`] : null;
-        sh.rotation.x = pose ? lerp(armX[side], arm[0], w) : armX[side];
+        sh.rotation.x = (pose ? lerp(armX[side], arm[0], w) : armX[side]) - holdBreath * 0.8;
         sh.rotation.z = pose ? lerp(0, arm[1], w) : 0;
         el.rotation.x = pose ? lerp(restElbow, blended[`${side}El`], w) : restElbow;
         // 壓腕只給慣用手：右手選手＝r、左手選手鏡像＝l（W2 補課⑤）——非慣用手恆中性，
         // 雙手一起壓看起來像機器人
         j[`${side}Wrist`].rotation.x = pose && side === handed ? blended.wrist * w : 0;
       }
+
+      if (fadeFrom) {
+        fadeT += dt;
+        const k = Math.min(fadeT / INERTIA_S, 1);
+        const e = k * k * (3 - 2 * k);
+        for (const [n, v] of Object.entries(fadeFrom)) {
+          const jt = j[n];
+          if (!jt?.rotation) continue;
+          FADE_AXES.forEach((ax, i) => { jt.rotation[ax] = lerp(v[i], jt.rotation[ax], e); });
+        }
+        if (k >= 1) fadeFrom = null;
+      }
+      lastOut = snapshot();
 
       // 垂直位移：跳躍弧－下蹲；跑動小起伏（bob 已在上方算好，腿同步吸收）
       return jumpY - crouch * 0.55 + bob;
