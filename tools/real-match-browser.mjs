@@ -304,6 +304,12 @@ async function installSampler(page, { subAtTick }) {
     const origSync = mv.sync.bind(mv);
     mv.sync = (gameState, alpha, dt, frameEvents) => {
       origSync(gameState, alpha, dt, frameEvents);
+      // 精華重演／回放（runReplayFrame）用「重播用的 player.state」（rallyTape 的複製狀態，
+      // 不是 window.__phase1.game 本尊）呼叫同一個 matchView.sync——tick 會倒退／重複播放
+      // 過去的片段。治具只認活體 game（window.__phase1.game 那個物件參考），否則 tick 會
+      // 非單調、B12 的序列轉換記錄與逐格取樣都會混進「正在重播的過去那一刻」而非真正
+      // 當下——這正是 B12 seqLog 長度只有 4、tick 還倒退的成因。
+      if (gameState !== window.__phase1.game) return;
       window.__sampleNow(gameState);
       window.__trySubstitute(gameState);
       window.__logSeq(gameState);

@@ -1,0 +1,17 @@
+OK
+{
+ "steps": [
+  "menu button visible, default label captured"
+ ],
+ "menuDefaultLabel": "球員外觀：幾何",
+ "menuAfterClickLabel": "球員外觀：寫實",
+ "localStorageAfterClick": "real",
+ "menuAfterReloadLabel": "球員外觀：寫實",
+ "quickMatchAppearance": "real",
+ "careerHomeLabel": "球員外觀：寫實",
+ "careerMatchAppearance": "real",
+ "errors": [],
+ "pass": true
+}
+
+[exited with code 0]
