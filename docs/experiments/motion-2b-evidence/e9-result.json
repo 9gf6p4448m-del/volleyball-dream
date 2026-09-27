@@ -1,0 +1,140 @@
+{
+  "rev": "7d40d0b",
+  "runs": [
+    {
+      "mutation": "撤銷鏡像修正（25 姿勢肩 z／pelvisY／chestY 回 f4ccbec）",
+      "kind": "e1",
+      "exit": 1,
+      "red": true,
+      "tail": [
+        "  FAIL bumpHit         rUpperArm=27.71!(28.08) lUpperArm=27.71!(28.08) rForearm=27.71!(28.08) lForearm=27.71!(28.08) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL spikeFollow     rUpperArm=38.75*(38.75) lUpperArm=18.05!(18.05) rForearm=30.43*(30.43) lForearm=15.20!(15.20) shoulderLine=6.88!(6.88) hipLine=6.88!(6.88)",
+        "  FAIL windup          rUpperArm=40.11!(40.11) lUpperArm=17.19!(17.19) rForearm=8.94!(8.94) lForearm=16.42!(16.42) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL approachBack    rUpperArm=22.92!(22.92) lUpperArm=22.92!(22.92) rForearm=20.61!(20.61) lForearm=20.61!(20.61) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL approachDrive   rUpperArm=25.21!(25.21) lUpperArm=25.21!(25.21) rForearm=15.59!(15.59) lForearm=15.59!(15.59) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL landDeep        rUpperArm=22.92!(22.92) lUpperArm=22.92!(22.92) rForearm=17.48!(17.48) lForearm=17.48!(17.48) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL landRise        rUpperArm=16.04!(16.04) lUpperArm=16.04!(16.04) rForearm=14.44!(14.44) lForearm=14.44!(14.44) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL diveReach       rUpperArm=34.38!(34.38) lUpperArm=34.38!(34.38) rForearm=34.38!(34.38) lForearm=34.38!(34.38) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL diveSprawl      rUpperArm=29.79!(29.79) lUpperArm=29.79!(29.79) rForearm=29.57!(29.57) lForearm=29.57!(29.57) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL divePush        rUpperArm=38.96!(38.96) lUpperArm=38.96!(38.96) rForearm=21.41!(21.41) lForearm=21.41!(21.41) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL serveReady      rUpperArm=11.46!(11.46) lUpperArm=11.46!(11.46) rForearm=10.05!(10.05) lForearm=10.05!(10.05) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL floatWind       rUpperArm=17.19!(18.96) lUpperArm=17.19!(18.96) rForearm=14.64!(16.68) lForearm=16.65!(18.47) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL floatPush       rUpperArm=5.76*(6.68) lUpperArm=17.53!(17.53) rForearm=49.52*(6.68) lForearm=16.77!(16.77) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL gasp            rUpperArm=13.75!(13.75) lUpperArm=13.75!(13.75) rForearm=10.51!(10.51) lForearm=10.51!(10.51) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL waveUp          rUpperArm=40.11!(40.11) lUpperArm=6.88!(6.88) rForearm=39.27!(39.27) lForearm=6.84!(6.84) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL waveSide        rUpperArm=34.38!(34.38) lUpperArm=6.88!(6.88) rForearm=33.67!(33.67) lForearm=6.84!(6.84) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL blockLoad       rUpperArm=17.19!(18.50) lUpperArm=17.19!(18.50) rForearm=10.66!(12.68) lForearm=10.66!(12.68) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "  FAIL windupHesitant  rUpperArm=34.38!(34.38) lUpperArm=13.75!(13.75) rForearm=9.07!(9.07) lForearm=12.66!(12.66) shoulderLine=0.00(0.00) hipLine=0.00(0.00)",
+        "[E1] bump.contact.span=0.7638 m（≤0.20）FAIL；spike.wind.shline=197.77°（<180）FAIL",
+        "[E1] 例外成立＝*、超出且無例外＝!。總判定：FAIL"
+      ],
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "低手 bump.start.elbow：bumpReady rEl −0.36→−0.6496（+16.59°）",
+      "kind": "d0",
+      "row": "bump.start.elbow",
+      "current": 142,
+      "lit": 158.83,
+      "tol": 11.59,
+      "out": true,
+      "red": true,
+      "selftestPass": 24,
+      "selftestTotal": 24,
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "高手 set.load.elflex：setReach rEl −1.75→−2.0118（+15°）",
+      "kind": "d0",
+      "row": "set.load.elflex",
+      "current": 115.3,
+      "lit": 100,
+      "tol": 10,
+      "out": true,
+      "red": true,
+      "selftestPass": 24,
+      "selftestTotal": 24,
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "扣球 spike.hit.elflex：spikeHit rEl −0.6→−0.8618（+15°）",
+      "kind": "d0",
+      "row": "spike.hit.elflex",
+      "current": 49.4,
+      "lit": 34,
+      "tol": 10,
+      "out": true,
+      "red": true,
+      "selftestPass": 24,
+      "selftestTotal": 24,
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "吊球 tip.hit.elflex：tipHit rEl −0.75→−0.4533（−17°）",
+      "kind": "d0",
+      "row": "tip.hit.elflex",
+      "current": 26,
+      "lit": 43,
+      "tol": 12,
+      "out": true,
+      "red": true,
+      "selftestPass": 24,
+      "selftestTotal": 24,
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "跳發 servejump.hit.elflex：spikeHit rEl −0.6→−0.059（−31°）",
+      "kind": "d0",
+      "row": "servejump.hit.elflex",
+      "current": 3.4,
+      "lit": 48,
+      "tol": 26,
+      "out": true,
+      "red": true,
+      "selftestPass": 24,
+      "selftestTotal": 24,
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "飄球 servefloat.hit.elflex：floatPush rEl −0.87→−0.486（−22°）",
+      "kind": "d0",
+      "row": "servefloat.hit.elflex",
+      "current": 27.8,
+      "lit": 50,
+      "tol": 17,
+      "out": true,
+      "red": true,
+      "selftestPass": 24,
+      "selftestTotal": 24,
+      "restoredSha1Match": true
+    },
+    {
+      "mutation": "過渡空窗改回（接續那一幀不產生姿勢）",
+      "kind": "e6",
+      "exit": 1,
+      "red": true,
+      "tail": [
+        "[E6] FAIL windup→spikeHold   D0Probe(r) 幀 12（窗自第 4 幀）、最小權重 0.0000、慣用手腕最大逐幀高度變化 0.8163 m（窗外 windup 漸入 0.4579 m，不判）",
+        "[E6] FAIL windup→spike       D0Probe(r) 幀 11（窗自第 4 幀）、最小權重 0.0000、慣用手腕最大逐幀高度變化 0.8163 m（窗外 windup 漸入 0.4579 m，不判）",
+        "[E6] FAIL windup→tip         D0Probe(r) 幀 12（窗自第 4 幀）、最小權重 0.0000、慣用手腕最大逐幀高度變化 0.8163 m（窗外 windup 漸入 0.4579 m，不判）",
+        "[E6] FAIL windup→spikeHold   L2BProbe0(l) 幀 12（窗自第 4 幀）、最小權重 0.0000、慣用手腕最大逐幀高度變化 0.8163 m（窗外 windup 漸入 0.4579 m，不判）",
+        "[E6] FAIL windup→spike       L2BProbe0(l) 幀 11（窗自第 4 幀）、最小權重 0.0000、慣用手腕最大逐幀高度變化 0.8163 m（窗外 windup 漸入 0.4579 m，不判）",
+        "[E6] FAIL windup→tip         L2BProbe0(l) 幀 12（窗自第 4 幀）、最小權重 0.0000、慣用手腕最大逐幀高度變化 0.8163 m（窗外 windup 漸入 0.4579 m，不判）",
+        "[E6] FAIL"
+      ],
+      "restoredSha1Match": true
+    }
+  ],
+  "healthy": {
+    "d0SelftestPass": 24,
+    "d0SelftestTotal": 24,
+    "rowsOut": [
+      "bump.end.trunk",
+      "bump.end.uarm",
+      "set.push.elflex.quick"
+    ],
+    "e1Exit": 0,
+    "e6Exit": 0
+  },
+  "origSha1": "c0558c1e366d77d1cf1c9d0532a0535326afe7b6"
+}
