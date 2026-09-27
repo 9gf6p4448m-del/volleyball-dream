@@ -1,0 +1,1507 @@
+{
+  "old": "1fd5da6",
+  "base": "f4ccbec",
+  "sanity": [
+    {
+      "pose": "land",
+      "worst": 0,
+      "ang": {
+        "rUpperArm": 0,
+        "lUpperArm": 0,
+        "rForearm": 0,
+        "lForearm": 0,
+        "shoulderLine": 0,
+        "hipLine": 0
+      },
+      "ok": true
+    },
+    {
+      "pose": "nodNeutral",
+      "worst": 0,
+      "ang": {
+        "rUpperArm": 0,
+        "lUpperArm": 0,
+        "rForearm": 0,
+        "lForearm": 0,
+        "shoulderLine": 0,
+        "hipLine": 0
+      },
+      "ok": true
+    },
+    {
+      "pose": "nodDown",
+      "worst": 0,
+      "ang": {
+        "rUpperArm": 0,
+        "lUpperArm": 0,
+        "rForearm": 0,
+        "lForearm": 0,
+        "shoulderLine": 0,
+        "hipLine": 0
+      },
+      "ok": true
+    },
+    {
+      "pose": "__sanityX",
+      "worst": 0,
+      "ang": {
+        "rUpperArm": 0,
+        "lUpperArm": 0,
+        "rForearm": 0,
+        "lForearm": 0,
+        "shoulderLine": 0,
+        "hipLine": 0
+      },
+      "ok": true
+    }
+  ],
+  "poses": [
+    {
+      "pose": "bumpReady",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 8.904032667862813,
+          "base": 28.96166343908232,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 8.904032667862813,
+          "base": 28.96166343908232,
+          "within": false,
+          "exception": true
+        },
+        "rForearm": {
+          "cur": 11.725238964457613,
+          "base": 28.96166343908232,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 11.725238964457613,
+          "base": 28.96166343908232,
+          "within": false,
+          "exception": true
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "lUpperArm",
+          "rForearm",
+          "lForearm"
+        ],
+        "rows": [
+          "bump.start.head",
+          "bump.start.uarm",
+          "bump.start.elbow"
+        ],
+        "note": "還原後起始幀肘全直 180°（文獻 158.8±11.6）、上臂 25.8°（9.1±10）；校準為肘彎 −0.36、保留胸椎前傾不補償"
+      }
+    },
+    {
+      "pose": "bumpHit",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 3.339185675734372,
+          "base": 28.081200296965317,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 3.339185675734372,
+          "base": 28.081200296965317,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 3.339185675734372,
+          "base": 28.081200296965275,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 3.339185675734372,
+          "base": 28.081200296965275,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "setReach",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 35.84635712267423,
+          "base": 35.84635712267423,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 35.84635712267423,
+          "base": 35.84635712267423,
+          "within": false,
+          "exception": true
+        },
+        "rForearm": {
+          "cur": 51.686063461503366,
+          "base": 21.050147029787013,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 51.686063461503366,
+          "base": 21.050147029787013,
+          "within": false,
+          "exception": true
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "lUpperArm",
+          "rForearm",
+          "lForearm"
+        ],
+        "rows": [
+          "set.load.elflex"
+        ],
+        "url": "https://www.koachvolleyball.com/guides/overhead-setting-the-setter-s-technique",
+        "note": "還原後雙腕相距 0.748 m（肘屈到 100° 仍 0.60 m），違反教學描述「hands a few centimeters apart、拇指食指成三角、在額頭上方」；保留雙手靠攏（0.297 m）並把肘屈校準到 100°"
+      }
+    },
+    {
+      "pose": "setPush",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 30.327474306977866,
+          "base": 30.327474306977866,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 30.327474306977866,
+          "base": 30.327474306977866,
+          "within": false,
+          "exception": true
+        },
+        "rForearm": {
+          "cur": 32.83840424487128,
+          "base": 29.39881887035342,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 32.83840424487128,
+          "base": 29.39881887035342,
+          "within": false,
+          "exception": true
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "lUpperArm",
+          "rForearm",
+          "lForearm"
+        ],
+        "rows": [
+          "set.push.elflex.fast"
+        ],
+        "url": "https://www.koachvolleyball.com/guides/overhead-setting-the-setter-s-technique",
+        "note": "同上；還原後出手雙腕相距 0.748 m，保留靠攏（0.152 m），肘屈校準到 40°（fast／seven 型）"
+      }
+    },
+    {
+      "pose": "spikeWind",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 34.171886784959334,
+          "base": 35.67746649921274,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 28.7773054125364,
+          "base": 14.930310723568764,
+          "within": false,
+          "exception": true
+        },
+        "rForearm": {
+          "cur": 55.77284899580134,
+          "base": 21.604122447950907,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 16.572087335870535,
+          "base": 5.785316732063234,
+          "within": false,
+          "exception": true
+        },
+        "shoulderLine": {
+          "cur": 54.616903817633506,
+          "base": 35.54697141828388,
+          "within": false,
+          "exception": true
+        },
+        "hipLine": {
+          "cur": 8.021409131831549,
+          "base": 29.79380534680281,
+          "within": false,
+          "exception": true
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "lUpperArm",
+          "rForearm",
+          "lForearm",
+          "shoulderLine",
+          "hipLine"
+        ],
+        "rows": [
+          "spike.wind.shline",
+          "spike.wind.sep"
+        ],
+        "note": "還原後轉體方向已正確但幅度不足（肩線 162.2°、分離 2.9°）；依 Zahálka 加大到肩線 105、髖線 157——胸椎轉動帶著雙臂一起轉，世界方向因此偏離"
+      }
+    },
+    {
+      "pose": "spikeUnlock",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 18.481148015775535,
+          "base": 13.857948185162979,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 50.58116017026335,
+          "base": 43.104705336961146,
+          "within": false,
+          "exception": true
+        },
+        "rForearm": {
+          "cur": 27.409261547994397,
+          "base": 27.206002503171476,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 45.390735065731,
+          "base": 39.75788312717979,
+          "within": false,
+          "exception": true
+        },
+        "shoulderLine": {
+          "cur": 51.34692301185036,
+          "base": 25.00770285903407,
+          "within": false,
+          "exception": true
+        },
+        "hipLine": {
+          "cur": 19.480565034448,
+          "base": 6.875493541570039,
+          "within": false,
+          "exception": true
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "lUpperArm",
+          "rForearm",
+          "lForearm",
+          "shoulderLine",
+          "hipLine"
+        ],
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5548173/",
+        "note": "Zahálka 2017 肩線角自最大後擺 105° 單調增加到擊球 137°；還原值（胸 −0.16）在校準後的引臂（肩線 107.6°）與擊球（136.8°）之間會先超轉到 167.5° 再轉回 136.8°；改為兩者之間（胸 −0.72，肩線 116.1°）"
+      }
+    },
+    {
+      "pose": "spikeHit",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 74.37601552721593,
+          "base": 17.305429247112727,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 46.26997944428947,
+          "base": 12.07016833362276,
+          "within": false,
+          "exception": true
+        },
+        "rForearm": {
+          "cur": 54.59839762973131,
+          "base": 15.926871737504905,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 56.562949737710255,
+          "base": 4.4510669638638864,
+          "within": false,
+          "exception": true
+        },
+        "shoulderLine": {
+          "cur": 53.22621951685974,
+          "base": 19.972955141283517,
+          "within": false,
+          "exception": true
+        },
+        "hipLine": {
+          "cur": 29.79380534680282,
+          "base": 13.750987083139798,
+          "within": false,
+          "exception": true
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "lUpperArm",
+          "rForearm",
+          "lForearm",
+          "shoulderLine",
+          "hipLine"
+        ],
+        "rows": [
+          "spike.hit.abd",
+          "spike.hit.elflex",
+          "spike.hit.hadd",
+          "spike.hit.shline",
+          "spike.hit.hipline",
+          "spike.hit.sep"
+        ],
+        "note": "擊球臂改側上方、肘彎 34°（Reeser 2010）；轉體照 Zahálka；非擊球臂 z 已還原，世界方向偏離來自軀幹轉動與側傾"
+      }
+    },
+    {
+      "pose": "spikeFollow",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 38.96113006889598,
+          "base": 38.750838406683805,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 18.048829268092806,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 34.03484168496103,
+          "base": 30.425170642796367,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 15.202563398484429,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 8.537736462515939e-7,
+          "base": 6.8754935415699325,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0.0000012074182697257333,
+          "base": 6.875493541570039,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "rForearm"
+        ],
+        "url": "https://www.improveyourvolley.com/spiking-in-volleyball.html",
+        "note": "還原會讓擊球臂收勢往外張；教學描述「spiking arm coming down across your body」，且原註解本意即「跨體收回往左髖」——保留現況跨體（非擊球臂、骨盆已還原 0.00°）"
+      }
+    },
+    {
+      "pose": "windup",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 40.10704565915764,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 17.188733853924706,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 8.93655174781193,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 16.41560284505868,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "approachBack",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 22.918311805232893,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 22.918311805232893,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 20.610366722947223,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 20.610366722947223,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "approachDrive",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 25.2101429857562,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 25.2101429857562,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 15.592844811033997,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 15.592844811033997,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "landDeep",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 22.91831180523291,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 22.91831180523291,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 17.479977190786585,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 17.479977190786585,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "landRise",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 16.042818263663015,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 16.042818263663015,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 14.436725826681228,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 14.436725826681228,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "diveReach",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 34.37746770784939,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 34.37746770784939,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 34.37746770784939,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 34.37746770784939,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "diveSprawl",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 29.793805346802795,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 29.793805346802795,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 29.57464069386063,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 29.57464069386063,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "divePush",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 38.96113006889599,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 38.96113006889599,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 21.41087064252989,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 21.41087064252989,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "serveReady",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 11.45915590261653,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 11.45915590261653,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 10.052491536364466,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 10.052491536364466,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "floatWind",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 18.95553008968637,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 18.95553008968633,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 16.68185637487195,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 18.469685975274714,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "floatPush",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 45.839541889666535,
+          "base": 6.681041513764315,
+          "within": false,
+          "exception": true
+        },
+        "lUpperArm": {
+          "cur": 3.399133189892926,
+          "base": 17.526605491502966,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 62.81500205012866,
+          "base": 6.681041513764315,
+          "within": false,
+          "exception": true
+        },
+        "lForearm": {
+          "cur": 3.4025228415901054,
+          "base": 16.76929224427913,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": {
+        "vectors": [
+          "rUpperArm",
+          "rForearm"
+        ],
+        "rows": [
+          "servefloat.hit.abd",
+          "servefloat.hit.elflex",
+          "servefloat.hit.hadd"
+        ],
+        "note": "擊球臂改側上方、肘彎 50°（Reeser 2010 飄球）；非擊球臂已還原（3.40°）"
+      }
+    },
+    {
+      "pose": "gasp",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 13.750987083139691,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 13.750987083139691,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 10.506827124460944,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 10.506827124460944,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "dejected",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 4.583662361046627,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 4.583662361046627,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 4.53216576695799,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 4.53216576695799,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "waveUp",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 40.10704565915764,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 6.875493541569827,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 39.27434392799166,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 6.8411037436425595,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "waveSide",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 34.37746770784938,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 6.875493541569827,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 33.671549385378114,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 6.8411037436425595,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "blockLoad",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 18.503238152991457,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 0,
+          "base": 18.503238152991457,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 0,
+          "base": 12.679600432012741,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 12.679600432012741,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    },
+    {
+      "pose": "windupHesitant",
+      "ok": true,
+      "vec": {
+        "rUpperArm": {
+          "cur": 0,
+          "base": 34.37746770784937,
+          "within": true,
+          "exception": null
+        },
+        "lUpperArm": {
+          "cur": 8.537736462515939e-7,
+          "base": 13.750987083139798,
+          "within": true,
+          "exception": null
+        },
+        "rForearm": {
+          "cur": 8.537736462515939e-7,
+          "base": 9.068074095669864,
+          "within": true,
+          "exception": null
+        },
+        "lForearm": {
+          "cur": 0,
+          "base": 12.66086607804028,
+          "within": true,
+          "exception": null
+        },
+        "shoulderLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        },
+        "hipLine": {
+          "cur": 0,
+          "base": 0,
+          "within": true,
+          "exception": null
+        }
+      },
+      "exception": null
+    }
+  ],
+  "checks": {
+    "d0Json": "C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/b611e1c3-cb6d-40b3-94b3-ee053003c6ba/scratchpad/d0-after-r2.json",
+    "bumpContactSpan": 0.1362,
+    "spikeWindShLine": 107.6096
+  },
+  "pass": {
+    "sanity": true,
+    "poses": true,
+    "span": true,
+    "shline": true,
+    "all": true
+  },
+  "sensitivity": {
+    "pose": "__sensZ（z 與 pelvisY/chestY 非零、未還原）",
+    "ang": {
+      "rUpperArm": 77.87065911462717,
+      "lUpperArm": 7.5956361015363765,
+      "rForearm": 86.82178164146985,
+      "lForearm": 21.296739233211163,
+      "shoulderLine": 57.18429036287708,
+      "hipLine": 34.37746770784939
+    }
+  },
+  "missing": [],
+  "exceptionDetail": [
+    {
+      "pose": "bumpReady",
+      "vectors": [
+        "rUpperArm",
+        "lUpperArm",
+        "rForearm",
+        "lForearm"
+      ],
+      "rows": [
+        {
+          "id": "bump.start.head",
+          "lit": 7.23,
+          "tol": 10,
+          "restored": 17.8,
+          "restoredOut": true,
+          "now": 6.3,
+          "nowOut": false
+        },
+        {
+          "id": "bump.start.uarm",
+          "lit": 9.06,
+          "tol": 10,
+          "restored": 25.8,
+          "restoredOut": true,
+          "now": 16.6,
+          "nowOut": false
+        },
+        {
+          "id": "bump.start.elbow",
+          "lit": 158.83,
+          "tol": 11.59,
+          "restored": 180,
+          "restoredOut": true,
+          "now": 158.8,
+          "nowOut": false
+        }
+      ],
+      "url": null,
+      "note": "還原後起始幀肘全直 180°（文獻 158.8±11.6）、上臂 25.8°（9.1±10）；校準為肘彎 −0.36、保留胸椎前傾不補償"
+    },
+    {
+      "pose": "setReach",
+      "vectors": [
+        "rUpperArm",
+        "lUpperArm",
+        "rForearm",
+        "lForearm"
+      ],
+      "rows": [
+        {
+          "id": "set.load.elflex",
+          "lit": 100,
+          "tol": 10,
+          "restored": 57.3,
+          "restoredOut": true,
+          "now": 100.3,
+          "nowOut": false
+        }
+      ],
+      "url": "https://www.koachvolleyball.com/guides/overhead-setting-the-setter-s-technique",
+      "note": "還原後雙腕相距 0.748 m（肘屈到 100° 仍 0.60 m），違反教學描述「hands a few centimeters apart、拇指食指成三角、在額頭上方」；保留雙手靠攏（0.297 m）並把肘屈校準到 100°"
+    },
+    {
+      "pose": "setPush",
+      "vectors": [
+        "rUpperArm",
+        "lUpperArm",
+        "rForearm",
+        "lForearm"
+      ],
+      "rows": [
+        {
+          "id": "set.push.elflex.fast",
+          "lit": 40,
+          "tol": 10,
+          "restored": 14.3,
+          "restoredOut": true,
+          "now": 40.1,
+          "nowOut": false
+        }
+      ],
+      "url": "https://www.koachvolleyball.com/guides/overhead-setting-the-setter-s-technique",
+      "note": "同上；還原後出手雙腕相距 0.748 m，保留靠攏（0.152 m），肘屈校準到 40°（fast／seven 型）"
+    },
+    {
+      "pose": "spikeWind",
+      "vectors": [
+        "rUpperArm",
+        "lUpperArm",
+        "rForearm",
+        "lForearm",
+        "shoulderLine",
+        "hipLine"
+      ],
+      "rows": [
+        {
+          "id": "spike.wind.shline",
+          "lit": 105,
+          "tol": 10,
+          "restored": 162.2,
+          "restoredOut": true,
+          "now": 107.6,
+          "nowOut": false
+        },
+        {
+          "id": "spike.wind.sep",
+          "lit": 52,
+          "tol": 10,
+          "restored": 2.9,
+          "restoredOut": true,
+          "now": 49.5,
+          "nowOut": false
+        }
+      ],
+      "url": null,
+      "note": "還原後轉體方向已正確但幅度不足（肩線 162.2°、分離 2.9°）；依 Zahálka 加大到肩線 105、髖線 157——胸椎轉動帶著雙臂一起轉，世界方向因此偏離"
+    },
+    {
+      "pose": "spikeUnlock",
+      "vectors": [
+        "rUpperArm",
+        "lUpperArm",
+        "rForearm",
+        "lForearm",
+        "shoulderLine",
+        "hipLine"
+      ],
+      "rows": [],
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5548173/",
+      "note": "Zahálka 2017 肩線角自最大後擺 105° 單調增加到擊球 137°；還原值（胸 −0.16）在校準後的引臂（肩線 107.6°）與擊球（136.8°）之間會先超轉到 167.5° 再轉回 136.8°；改為兩者之間（胸 −0.72，肩線 116.1°）"
+    },
+    {
+      "pose": "spikeHit",
+      "vectors": [
+        "rUpperArm",
+        "lUpperArm",
+        "rForearm",
+        "lForearm",
+        "shoulderLine",
+        "hipLine"
+      ],
+      "rows": [
+        {
+          "id": "spike.hit.abd",
+          "lit": 130,
+          "tol": 10,
+          "restored": 177.5,
+          "restoredOut": true,
+          "now": 132.5,
+          "nowOut": false
+        },
+        {
+          "id": "spike.hit.elflex",
+          "lit": 34,
+          "tol": 10,
+          "restored": 4.6,
+          "restoredOut": true,
+          "now": 34.4,
+          "nowOut": false
+        },
+        {
+          "id": "spike.hit.hadd",
+          "lit": 29,
+          "tol": 14,
+          "restored": 93.9,
+          "restoredOut": true,
+          "now": 29.1,
+          "nowOut": false
+        },
+        {
+          "id": "spike.hit.shline",
+          "lit": 137,
+          "tol": 10,
+          "restored": 190,
+          "restoredOut": true,
+          "now": 136.8,
+          "nowOut": false
+        },
+        {
+          "id": "spike.hit.hipline",
+          "lit": 157,
+          "tol": 10,
+          "restored": 186.9,
+          "restoredOut": true,
+          "now": 157.1,
+          "nowOut": false
+        },
+        {
+          "id": "spike.hit.sep",
+          "lit": 20,
+          "tol": 10,
+          "restored": -3.1,
+          "restoredOut": true,
+          "now": 20.3,
+          "nowOut": false
+        }
+      ],
+      "url": null,
+      "note": "擊球臂改側上方、肘彎 34°（Reeser 2010）；轉體照 Zahálka；非擊球臂 z 已還原，世界方向偏離來自軀幹轉動與側傾"
+    },
+    {
+      "pose": "spikeFollow",
+      "vectors": [
+        "rUpperArm",
+        "rForearm"
+      ],
+      "rows": [],
+      "url": "https://www.improveyourvolley.com/spiking-in-volleyball.html",
+      "note": "還原會讓擊球臂收勢往外張；教學描述「spiking arm coming down across your body」，且原註解本意即「跨體收回往左髖」——保留現況跨體（非擊球臂、骨盆已還原 0.00°）"
+    },
+    {
+      "pose": "floatPush",
+      "vectors": [
+        "rUpperArm",
+        "rForearm"
+      ],
+      "rows": [
+        {
+          "id": "servefloat.hit.abd",
+          "lit": 133,
+          "tol": 11,
+          "restored": 176.6,
+          "restoredOut": true,
+          "now": 132.1,
+          "nowOut": false
+        },
+        {
+          "id": "servefloat.hit.elflex",
+          "lit": 50,
+          "tol": 17,
+          "restored": 0,
+          "restoredOut": true,
+          "now": 49.8,
+          "nowOut": false
+        },
+        {
+          "id": "servefloat.hit.hadd",
+          "lit": 30,
+          "tol": 16,
+          "restored": 95.4,
+          "restoredOut": true,
+          "now": 30.2,
+          "nowOut": false
+        }
+      ],
+      "url": null,
+      "note": "擊球臂改側上方、肘彎 50°（Reeser 2010 飄球）；非擊球臂已還原（3.40°）"
+    }
+  ]
+}
