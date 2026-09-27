@@ -1,0 +1,784 @@
+{
+  "createdAt": "2026-09-27T07:29:33.934Z",
+  "head": "7d40d0b7a25917e56da2a02fb23a1dbb02ff1bca",
+  "dirty": [],
+  "note": "遊戲截圖由 tools/motion-2b-poses.html（真實 createGeoCharacter／createRealPlayer＋createGeoAnimator，觸發鏈同 D0 腳本 FRAME_DEFS）產生。真人參考照片只存本機、不進 repo；此處只記來源。",
+  "shots": [
+    {
+      "file": "bump-geo-desktop.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球"
+    },
+    {
+      "file": "bump-real-desktop.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球"
+    },
+    {
+      "file": "set-geo-desktop.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手"
+    },
+    {
+      "file": "set-real-desktop.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手"
+    },
+    {
+      "file": "spike-geo-desktop.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球"
+    },
+    {
+      "file": "spike-real-desktop.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球"
+    },
+    {
+      "file": "spikeWind-geo-desktop.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂"
+    },
+    {
+      "file": "spikeWind-real-desktop.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂"
+    },
+    {
+      "file": "block-geo-desktop.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點"
+    },
+    {
+      "file": "block-real-desktop.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點"
+    },
+    {
+      "file": "servejump-geo-desktop.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球"
+    },
+    {
+      "file": "servejump-real-desktop.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球"
+    },
+    {
+      "file": "servefloat-geo-desktop.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球"
+    },
+    {
+      "file": "servefloat-real-desktop.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球"
+    },
+    {
+      "file": "tip-geo-desktop.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球"
+    },
+    {
+      "file": "tip-real-desktop.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球"
+    },
+    {
+      "file": "bump-geo-portrait.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球"
+    },
+    {
+      "file": "bump-real-portrait.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球"
+    },
+    {
+      "file": "set-geo-portrait.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手"
+    },
+    {
+      "file": "set-real-portrait.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手"
+    },
+    {
+      "file": "spike-geo-portrait.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球"
+    },
+    {
+      "file": "spike-real-portrait.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球"
+    },
+    {
+      "file": "spikeWind-geo-portrait.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂"
+    },
+    {
+      "file": "spikeWind-real-portrait.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂"
+    },
+    {
+      "file": "block-geo-portrait.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點"
+    },
+    {
+      "file": "block-real-portrait.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點"
+    },
+    {
+      "file": "servejump-geo-portrait.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球"
+    },
+    {
+      "file": "servejump-real-portrait.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球"
+    },
+    {
+      "file": "servefloat-geo-portrait.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球"
+    },
+    {
+      "file": "servefloat-real-portrait.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球"
+    },
+    {
+      "file": "tip-geo-portrait.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球"
+    },
+    {
+      "file": "tip-real-portrait.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球"
+    }
+  ],
+  "composites": [
+    {
+      "tech": "bump",
+      "viewport": "desktop",
+      "d0Frame": "bump-contact",
+      "repoFile": "bump-desktop-geo-real.png",
+      "reference": {
+        "localFile": "bump-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Valeriya_Korotenko4.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/9/95/Valeriya_Korotenko4.jpg",
+        "license": "Public domain",
+        "author": "Elnur Khalilov",
+        "view": "oblique",
+        "phase": "觸球瞬間，雙臂伸直併攏成平台，屈膝、屁股後坐，軀幹前傾",
+        "note": ""
+      }
+    },
+    {
+      "tech": "set",
+      "viewport": "desktop",
+      "d0Frame": "set-push",
+      "repoFile": "set-desktop-geo-real.png",
+      "reference": {
+        "localFile": "set-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Joanna_Wo%C5%82osz_is_setting.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Joanna_Wo%C5%82osz_is_setting.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "view": "front",
+        "phase": "出手瞬間，雙手在額前上方推出，肘部由彎轉伸",
+        "note": ""
+      }
+    },
+    {
+      "tech": "spike",
+      "viewport": "desktop",
+      "d0Frame": "spike-hit",
+      "repoFile": "spike-desktop-geo-real.png",
+      "reference": {
+        "localFile": "spike-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Volleyball_spike.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Volleyball_spike.jpg",
+        "license": "CC BY-SA 2.0",
+        "author": "druchoy / Andrew Choy",
+        "view": "side",
+        "phase": "擊球瞬間，空中、擊球臂在頭側上方、肘微彎、軀幹側傾",
+        "note": "畫面中球未入鏡（球已擊出或即將擊中），但手臂與軀幹姿勢符合擊球瞬間描述"
+      }
+    },
+    {
+      "tech": "spikeWind",
+      "viewport": "desktop",
+      "d0Frame": "spike-wind",
+      "repoFile": "spikeWind-desktop-geo-real.png",
+      "reference": {
+        "localFile": "spikeWind-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Dejan_About_to_Spike_(7168980499).jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Dejan_About_to_Spike_%287168980499%29.jpg/1280px-Dejan_About_to_Spike_%287168980499%29.jpg",
+        "license": "CC BY-SA 2.0",
+        "author": "Chris Hunkeler from Carlsbad, California, USA",
+        "view": "side",
+        "phase": "最大引臂（bow-and-arrow），擊球側肩往後轉、肘高舉在後",
+        "note": ""
+      }
+    },
+    {
+      "tech": "block",
+      "viewport": "desktop",
+      "d0Frame": "block-top",
+      "repoFile": "block-desktop-geo-real.png",
+      "reference": {
+        "localFile": "block-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg/1280px-20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Pierre-Yves Beaudouin",
+        "view": "oblique",
+        "phase": "最高點，雙臂打直伸過網、雙手約肩寬（雙人攔網）",
+        "note": ""
+      }
+    },
+    {
+      "tech": "servejump",
+      "viewport": "desktop",
+      "d0Frame": "servejump-hit",
+      "repoFile": "servejump-desktop-geo-real.png",
+      "reference": {
+        "localFile": "servejump-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Micha%C5%82_Winiarski_is_serving_2014.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5f/Micha%C5%82_Winiarski_is_serving_2014.jpg/1280px-Micha%C5%82_Winiarski_is_serving_2014.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "view": "side",
+        "phase": "擊球瞬間（空中）",
+        "note": ""
+      }
+    },
+    {
+      "tech": "servefloat",
+      "viewport": "desktop",
+      "d0Frame": "servefloat-hit",
+      "repoFile": "servefloat-desktop-geo-real.png",
+      "reference": {
+        "localFile": "servefloat-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg/1280px-231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Sport the library",
+        "view": "side",
+        "phase": "擊球瞬間／剛擊出，站立、掌根推擊、手臂在頭側前上方，雙腳著地",
+        "note": "此為帕拉林匹克站立排球（Standing Volleyball）選手，右下肢為義肢，雙腳確實著地站立發球（該項目規則要求不可騰空跳發），發球臂／掌根動作與一般站立飄球技術一致；因義肢緣故下肢外觀與一般選手不同，僅供參考手臂與軀幹動作"
+      }
+    },
+    {
+      "tech": "tip",
+      "viewport": "desktop",
+      "d0Frame": "tip-hit",
+      "repoFile": "tip-desktop-geo-real.png",
+      "reference": {
+        "localFile": "tip-desktop-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Tip-Volleyball.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Tip-Volleyball.jpg/1280px-Tip-Volleyball.jpg",
+        "license": "Public domain",
+        "author": "Unknown",
+        "view": "side",
+        "phase": "觸球瞬間，空中單手，手臂在頭側上方、肘微彎",
+        "note": ""
+      }
+    },
+    {
+      "tech": "bump",
+      "viewport": "portrait",
+      "d0Frame": "bump-contact",
+      "repoFile": "bump-portrait-geo-real.png",
+      "reference": {
+        "localFile": "bump-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Valeriya_Korotenko4.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/9/95/Valeriya_Korotenko4.jpg",
+        "license": "Public domain",
+        "author": "Elnur Khalilov",
+        "view": "oblique",
+        "phase": "觸球瞬間，雙臂伸直併攏成平台，屈膝、屁股後坐，軀幹前傾",
+        "note": ""
+      }
+    },
+    {
+      "tech": "set",
+      "viewport": "portrait",
+      "d0Frame": "set-push",
+      "repoFile": "set-portrait-geo-real.png",
+      "reference": {
+        "localFile": "set-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Joanna_Wo%C5%82osz_is_setting.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Joanna_Wo%C5%82osz_is_setting.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "view": "front",
+        "phase": "出手瞬間，雙手在額前上方推出，肘部由彎轉伸",
+        "note": ""
+      }
+    },
+    {
+      "tech": "spike",
+      "viewport": "portrait",
+      "d0Frame": "spike-hit",
+      "repoFile": "spike-portrait-geo-real.png",
+      "reference": {
+        "localFile": "spike-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Volleyball_spike.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Volleyball_spike.jpg",
+        "license": "CC BY-SA 2.0",
+        "author": "druchoy / Andrew Choy",
+        "view": "side",
+        "phase": "擊球瞬間，空中、擊球臂在頭側上方、肘微彎、軀幹側傾",
+        "note": "畫面中球未入鏡（球已擊出或即將擊中），但手臂與軀幹姿勢符合擊球瞬間描述"
+      }
+    },
+    {
+      "tech": "spikeWind",
+      "viewport": "portrait",
+      "d0Frame": "spike-wind",
+      "repoFile": "spikeWind-portrait-geo-real.png",
+      "reference": {
+        "localFile": "spikeWind-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Dejan_About_to_Spike_(7168980499).jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Dejan_About_to_Spike_%287168980499%29.jpg/1280px-Dejan_About_to_Spike_%287168980499%29.jpg",
+        "license": "CC BY-SA 2.0",
+        "author": "Chris Hunkeler from Carlsbad, California, USA",
+        "view": "side",
+        "phase": "最大引臂（bow-and-arrow），擊球側肩往後轉、肘高舉在後",
+        "note": ""
+      }
+    },
+    {
+      "tech": "block",
+      "viewport": "portrait",
+      "d0Frame": "block-top",
+      "repoFile": "block-portrait-geo-real.png",
+      "reference": {
+        "localFile": "block-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg/1280px-20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Pierre-Yves Beaudouin",
+        "view": "oblique",
+        "phase": "最高點，雙臂打直伸過網、雙手約肩寬（雙人攔網）",
+        "note": ""
+      }
+    },
+    {
+      "tech": "servejump",
+      "viewport": "portrait",
+      "d0Frame": "servejump-hit",
+      "repoFile": "servejump-portrait-geo-real.png",
+      "reference": {
+        "localFile": "servejump-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Micha%C5%82_Winiarski_is_serving_2014.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5f/Micha%C5%82_Winiarski_is_serving_2014.jpg/1280px-Micha%C5%82_Winiarski_is_serving_2014.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "view": "side",
+        "phase": "擊球瞬間（空中）",
+        "note": ""
+      }
+    },
+    {
+      "tech": "servefloat",
+      "viewport": "portrait",
+      "d0Frame": "servefloat-hit",
+      "repoFile": "servefloat-portrait-geo-real.png",
+      "reference": {
+        "localFile": "servefloat-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg/1280px-231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Sport the library",
+        "view": "side",
+        "phase": "擊球瞬間／剛擊出，站立、掌根推擊、手臂在頭側前上方，雙腳著地",
+        "note": "此為帕拉林匹克站立排球（Standing Volleyball）選手，右下肢為義肢，雙腳確實著地站立發球（該項目規則要求不可騰空跳發），發球臂／掌根動作與一般站立飄球技術一致；因義肢緣故下肢外觀與一般選手不同，僅供參考手臂與軀幹動作"
+      }
+    },
+    {
+      "tech": "tip",
+      "viewport": "portrait",
+      "d0Frame": "tip-hit",
+      "repoFile": "tip-portrait-geo-real.png",
+      "reference": {
+        "localFile": "tip-portrait-ref-geo-real.png",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Tip-Volleyball.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Tip-Volleyball.jpg/1280px-Tip-Volleyball.jpg",
+        "license": "Public domain",
+        "author": "Unknown",
+        "view": "side",
+        "phase": "觸球瞬間，空中單手，手臂在頭側上方、肘微彎",
+        "note": ""
+      }
+    }
+  ],
+  "references": {
+    "bump": [
+      {
+        "phase": "觸球瞬間，雙臂伸直併攏成平台，屈膝、屁股後坐，軀幹前傾",
+        "view": "oblique",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Valeriya_Korotenko4.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/9/95/Valeriya_Korotenko4.jpg",
+        "license": "Public domain",
+        "author": "Elnur Khalilov",
+        "note": ""
+      },
+      {
+        "phase": "觸球瞬間，雙臂併攏平台前伸",
+        "view": "oblique",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:NCAA_beach_volleyball_match_at_Stanford_in_2016_(25606826015).jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/1/16/NCAA_beach_volleyball_match_at_Stanford_in_2016_%2825606826015%29.jpg",
+        "license": "CC BY 2.0",
+        "author": "John Loo from Sunnyvale, USA",
+        "note": "站姿較直立，屈膝與屁股後坐幅度不如標準教學姿勢明顯，可作為次要參考角度"
+      }
+    ],
+    "set": [
+      {
+        "phase": "出手瞬間，雙手在額前上方推出，肘部由彎轉伸",
+        "view": "front",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Joanna_Wo%C5%82osz_is_setting.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Joanna_Wo%C5%82osz_is_setting.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "note": ""
+      },
+      {
+        "phase": "出手瞬間（跳舉），雙手在額前上方推出，肘部由彎轉伸",
+        "view": "oblique",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Jump_Set.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Jump_Set.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Skipshearer",
+        "note": "此為跳躍舉球（jump set），非站立舉球，但手部出手動作與描述一致，可作為第二角度參考"
+      }
+    ],
+    "spike": [
+      {
+        "phase": "擊球瞬間，空中、擊球臂在頭側上方、肘微彎、軀幹側傾",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Volleyball_spike.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Volleyball_spike.jpg",
+        "license": "CC BY-SA 2.0",
+        "author": "druchoy / Andrew Choy",
+        "note": "畫面中球未入鏡（球已擊出或即將擊中），但手臂與軀幹姿勢符合擊球瞬間描述"
+      },
+      {
+        "phase": "最大引臂（bow-and-arrow），擊球側肩往後轉、肘高舉在後",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Dejan_About_to_Spike_(7168980499).jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Dejan_About_to_Spike_%287168980499%29.jpg/1280px-Dejan_About_to_Spike_%287168980499%29.jpg",
+        "license": "CC BY-SA 2.0",
+        "author": "Chris Hunkeler from Carlsbad, California, USA",
+        "note": ""
+      }
+    ],
+    "block": [
+      {
+        "phase": "最高點，雙臂打直伸過網、雙手約肩寬（雙人攔網）",
+        "view": "oblique",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg/1280px-20130330_-_Racing_Club_de_Cannes_-_Stella_%C3%89toile_Sportive_Calais_-_104.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Pierre-Yves Beaudouin",
+        "note": ""
+      },
+      {
+        "phase": "最高點，雙臂打直伸過網（單人攔對方雙人攻）",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:20130330_-_Vannes_Volley-Ball_-_Terville_Florange_Olympique_Club_-_038.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/20130330_-_Vannes_Volley-Ball_-_Terville_Florange_Olympique_Club_-_038.jpg/1280px-20130330_-_Vannes_Volley-Ball_-_Terville_Florange_Olympique_Club_-_038.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Pierre-Yves Beaudouin",
+        "note": ""
+      }
+    ],
+    "servejump": [
+      {
+        "phase": "擊球瞬間（空中）",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Micha%C5%82_Winiarski_is_serving_2014.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5f/Micha%C5%82_Winiarski_is_serving_2014.jpg/1280px-Micha%C5%82_Winiarski_is_serving_2014.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "note": ""
+      },
+      {
+        "phase": "擊球瞬間（空中）",
+        "view": "back",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Agnieszka_Bednarek-Kasza_is_serving.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/4/41/Agnieszka_Bednarek-Kasza_is_serving.jpg",
+        "license": "CC BY-SA 4.0",
+        "author": "Zorro2212",
+        "note": "背面視角，非優先側面視角，但清楚顯示空中擊球瞬間手臂與球接觸位置"
+      }
+    ],
+    "servefloat": [
+      {
+        "phase": "擊球瞬間／剛擊出，站立、掌根推擊、手臂在頭側前上方，雙腳著地",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg/1280px-231000_-_Standing_volleyball_Dan_Byrne_serves_-_3b_-_2000_Sydney_match_photo.jpg",
+        "license": "CC BY-SA 3.0",
+        "author": "Sport the library",
+        "note": "此為帕拉林匹克站立排球（Standing Volleyball）選手，右下肢為義肢，雙腳確實著地站立發球（該項目規則要求不可騰空跳發），發球臂／掌根動作與一般站立飄球技術一致；因義肢緣故下肢外觀與一般選手不同，僅供參考手臂與軀幹動作"
+      },
+      {
+        "phase": "擊球臂在頭側前上方、疑似擊球瞬間",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Andrea_Nannini_-_Gruppo_Sportivo_Panini.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Andrea_Nannini_-_Gruppo_Sportivo_Panini.jpg/1280px-Andrea_Nannini_-_Gruppo_Sportivo_Panini.jpg",
+        "license": "Public domain",
+        "author": "Unknown author",
+        "note": "1970-80年代黑白老照片，畫質較粗顆粒，雙腳是否完全著地（站立發球或起跳）無法百分之百確認，僅供次要參考"
+      }
+    ],
+    "tip": [
+      {
+        "phase": "觸球瞬間，空中單手，手臂在頭側上方、肘微彎",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Tip-Volleyball.jpg",
+        "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Tip-Volleyball.jpg/1280px-Tip-Volleyball.jpg",
+        "license": "Public domain",
+        "author": "Unknown",
+        "note": ""
+      }
+    ]
+  },
+  "errors": []
+}

@@ -1,0 +1,276 @@
+{
+  "f4ccbec": {
+    "spike": {
+      "frames": 176,
+      "M1_maxVelJump_degPerFrame2": 258.3829019330944,
+      "M1_at": {
+        "frame": 112,
+        "joint": "rShoulder.x",
+        "seq": "spikeHold"
+      },
+      "M1_jumpFrames": 39,
+      "M2_onsetSpreadBySegment": [
+        {
+          "seq": "approach3",
+          "frames": 44,
+          "spread": 0,
+          "joints": 6
+        },
+        {
+          "seq": "windup",
+          "frames": 6,
+          "spread": 0,
+          "joints": 10
+        },
+        {
+          "seq": "spikeHold",
+          "frames": 5,
+          "spread": 0,
+          "joints": 10
+        },
+        {
+          "seq": "spike",
+          "frames": 27,
+          "spread": 4,
+          "joints": 10
+        },
+        {
+          "seq": "landSoft",
+          "frames": 16,
+          "spread": 1,
+          "joints": 6
+        }
+      ],
+      "M3_longestStill_frames": 0,
+      "M3_seq": null,
+      "M4_pelvisChestPeakLag_frames": 12,
+      "M5_plantedFootMaxSpeed_mps": 16.494669977650513,
+      "M5_at": {
+        "frame": 104,
+        "foot": "l",
+        "seq": null
+      },
+      "M6_wristMaxStep_m": 1.0335192280635763,
+      "M6_at": {
+        "frame": 112,
+        "seq": "spikeHold",
+        "prevSeq": "spikeHold"
+      }
+    },
+    "bump": {
+      "frames": 85,
+      "M1_maxVelJump_degPerFrame2": 9.907395207470483,
+      "M1_at": {
+        "frame": 30,
+        "joint": "rShoulder.x",
+        "seq": "receiveReady"
+      },
+      "M1_jumpFrames": 17,
+      "M2_onsetSpreadBySegment": [
+        {
+          "seq": "receiveReady",
+          "frames": 18,
+          "spread": 0,
+          "joints": 7
+        },
+        {
+          "seq": "bump",
+          "frames": 30,
+          "spread": 18,
+          "joints": 7
+        }
+      ],
+      "M3_longestStill_frames": 0,
+      "M3_seq": null,
+      "M4_pelvisChestPeakLag_frames": 0,
+      "M5_plantedFootMaxSpeed_mps": 0.05278685241156905,
+      "M5_at": {
+        "frame": 33,
+        "foot": "r",
+        "seq": "receiveReady"
+      },
+      "M6_wristMaxStep_m": 0.0666170325000577,
+      "M6_at": {
+        "frame": 30,
+        "seq": "receiveReady",
+        "prevSeq": null
+      }
+    },
+    "servejump": {
+      "frames": 133,
+      "M1_maxVelJump_degPerFrame2": 59.15977701471655,
+      "M1_at": {
+        "frame": 51,
+        "joint": "rShoulder.x",
+        "seq": "serveJump"
+      },
+      "M1_jumpFrames": 35,
+      "M2_onsetSpreadBySegment": [
+        {
+          "seq": "serveJump",
+          "frames": 50,
+          "spread": 0,
+          "joints": 10
+        },
+        {
+          "seq": "landSoft",
+          "frames": 16,
+          "spread": 1,
+          "joints": 8
+        }
+      ],
+      "M3_longestStill_frames": 0,
+      "M3_seq": null,
+      "M4_pelvisChestPeakLag_frames": 0,
+      "M5_plantedFootMaxSpeed_mps": 1.5428963184959343,
+      "M5_at": {
+        "frame": 121,
+        "foot": "r",
+        "seq": null
+      },
+      "M6_wristMaxStep_m": 0.6484617493695753,
+      "M6_at": {
+        "frame": 30,
+        "seq": null,
+        "prevSeq": null
+      }
+    }
+  },
+  "8bda3f6": {
+    "spike": {
+      "frames": 176,
+      "M1_maxVelJump_degPerFrame2": 44.4118638230177,
+      "M1_at": {
+        "frame": 90,
+        "joint": "rKnee.x",
+        "seq": "approach3"
+      },
+      "M1_jumpFrames": 40,
+      "M2_onsetSpreadBySegment": [
+        {
+          "seq": "approach3",
+          "frames": 44,
+          "spread": 0,
+          "joints": 6
+        },
+        {
+          "seq": "windup",
+          "frames": 6,
+          "spread": 0,
+          "joints": 10
+        },
+        {
+          "seq": "spikeHold",
+          "frames": 5,
+          "spread": 0,
+          "joints": 2
+        },
+        {
+          "seq": "spike",
+          "frames": 27,
+          "spread": 14,
+          "joints": 10
+        },
+        {
+          "seq": "landSoft",
+          "frames": 16,
+          "spread": 1,
+          "joints": 6
+        }
+      ],
+      "M3_longestStill_frames": 0,
+      "M3_seq": null,
+      "M4_pelvisChestPeakLag_frames": 0,
+      "M5_plantedFootMaxSpeed_mps": 22.804170550364145,
+      "M5_at": {
+        "frame": 74,
+        "foot": "r",
+        "seq": "approach3"
+      },
+      "M6_wristMaxStep_m": 0.4603624968261554,
+      "M6_at": {
+        "frame": 107,
+        "seq": "windup",
+        "prevSeq": "windup"
+      }
+    },
+    "bump": {
+      "frames": 96,
+      "M1_maxVelJump_degPerFrame2": 9.907395207470483,
+      "M1_at": {
+        "frame": 30,
+        "joint": "rShoulder.x",
+        "seq": "receiveReady"
+      },
+      "M1_jumpFrames": 20,
+      "M2_onsetSpreadBySegment": [
+        {
+          "seq": "receiveReady",
+          "frames": 18,
+          "spread": 0,
+          "joints": 6
+        },
+        {
+          "seq": "bump",
+          "frames": 41,
+          "spread": 0,
+          "joints": 7
+        }
+      ],
+      "M3_longestStill_frames": 13,
+      "M3_seq": "receiveReady",
+      "M4_pelvisChestPeakLag_frames": 0,
+      "M5_plantedFootMaxSpeed_mps": 4.4017794695769155,
+      "M5_at": {
+        "frame": 30,
+        "foot": "r",
+        "seq": "receiveReady"
+      },
+      "M6_wristMaxStep_m": 0.08354558077653057,
+      "M6_at": {
+        "frame": 89,
+        "seq": null,
+        "prevSeq": "bump"
+      }
+    },
+    "servejump": {
+      "frames": 133,
+      "M1_maxVelJump_degPerFrame2": 59.01465289847478,
+      "M1_at": {
+        "frame": 30,
+        "joint": "rShoulder.x",
+        "seq": null
+      },
+      "M1_jumpFrames": 32,
+      "M2_onsetSpreadBySegment": [
+        {
+          "seq": "serveJump",
+          "frames": 50,
+          "spread": 0,
+          "joints": 10
+        },
+        {
+          "seq": "landSoft",
+          "frames": 16,
+          "spread": 1,
+          "joints": 8
+        }
+      ],
+      "M3_longestStill_frames": 19,
+      "M3_seq": null,
+      "M4_pelvisChestPeakLag_frames": -2,
+      "M5_plantedFootMaxSpeed_mps": 16.846964269867623,
+      "M5_at": {
+        "frame": 119,
+        "foot": "l",
+        "seq": null
+      },
+      "M6_wristMaxStep_m": 0.6484617493695753,
+      "M6_at": {
+        "frame": 30,
+        "seq": null,
+        "prevSeq": null
+      }
+    }
+  }
+}

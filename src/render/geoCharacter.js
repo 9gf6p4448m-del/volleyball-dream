@@ -230,7 +230,11 @@ export function createGeoCharacter(
     add(hip, 'thigh', kit.shorts, 0, 0, 0); // 及膝運動短褲
     const knee = joint(hip, `${side}Knee`, 0, -0.46, 0);
     add(knee, 'shin', skin, 0, 0, 0);
-    add(knee, 'shoe', SHOE, 0, -0.44, 0.05);
+    // 2B（動作自然度）：鞋盒改掛在腳關節（膝下 0.44 m，＝原掛點的位置等價，零旋轉時外觀不變）。
+    // geoAnimator 用它讓著地的鞋底保持水平——沒有這一節時鞋盒跟著小腿轉，後擺腿鞋尖必入地，
+    // 補救的膝彎又會單幀跳 30–48°。命名 foot（寫實人另有自己的 ankle 骨，互不干擾）
+    const foot = joint(knee, `${side}Foot`, 0, -0.44, 0);
+    add(foot, 'shoe', SHOE, 0, 0, 0.05);
   }
 
   // 軀幹（球衣）→ 胸椎 → 頸/頭 → 雙臂。

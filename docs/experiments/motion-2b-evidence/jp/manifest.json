@@ -1,0 +1,999 @@
+{
+  "createdAt": "2026-09-27T10:25:12.826Z",
+  "head": "9728196708bc543c6ae6c2f3db156bec573e2d5f",
+  "dirty": [
+    "M tools/motion-2b-shots.mjs"
+  ],
+  "note": "遊戲截圖由 tools/motion-2b-poses.html（真實 createGeoCharacter／createRealPlayer＋createGeoAnimator，觸發鏈同 D0 腳本 FRAME_DEFS）產生。真人參考照片只存本機、不進 repo；此處只記來源。",
+  "shots": [
+    {
+      "file": "bump-geo-desktop.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球",
+      "cam": {
+        "az": 25,
+        "el": 8,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "bump-real-desktop.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球",
+      "cam": {
+        "az": 25,
+        "el": 8,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "set-geo-desktop.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手",
+      "cam": {
+        "az": -150,
+        "el": 4,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "set-real-desktop.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手",
+      "cam": {
+        "az": -150,
+        "el": 4,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "spike-geo-desktop.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球",
+      "cam": {
+        "az": -40,
+        "el": 4,
+        "dist": 4
+      }
+    },
+    {
+      "file": "spike-real-desktop.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球",
+      "cam": {
+        "az": -40,
+        "el": 4,
+        "dist": 4
+      }
+    },
+    {
+      "file": "spikeWind-geo-desktop.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂",
+      "cam": {
+        "az": 70,
+        "el": 6,
+        "dist": 4.2
+      }
+    },
+    {
+      "file": "spikeWind-real-desktop.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂",
+      "cam": {
+        "az": 70,
+        "el": 6,
+        "dist": 4.2
+      }
+    },
+    {
+      "file": "block-geo-desktop.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點",
+      "cam": {
+        "az": 20,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "block-real-desktop.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點",
+      "cam": {
+        "az": 20,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "servejump-geo-desktop.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球",
+      "cam": {
+        "az": 150,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "servejump-real-desktop.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球",
+      "cam": {
+        "az": 150,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "servefloat-geo-desktop.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.4
+      }
+    },
+    {
+      "file": "servefloat-real-desktop.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.4
+      }
+    },
+    {
+      "file": "tip-geo-desktop.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "geo",
+      "viewport": "desktop",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "tip-real-desktop.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "real",
+      "viewport": "desktop",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "bump-geo-portrait.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球",
+      "cam": {
+        "az": 25,
+        "el": 8,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "bump-real-portrait.png",
+      "tech": "bump",
+      "d0Frame": "bump-contact",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "bump",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.05500000000000001,
+      "label": "低手接球・觸球",
+      "cam": {
+        "az": 25,
+        "el": 8,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "set-geo-portrait.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手",
+      "cam": {
+        "az": -150,
+        "el": 4,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "set-real-portrait.png",
+      "tech": "set",
+      "d0Frame": "set-push",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "overhead",
+      "t": 0.30800000000000005,
+      "tNorm": 0.56,
+      "rootY": -0.011000000000000001,
+      "label": "高手舉球・出手",
+      "cam": {
+        "az": -150,
+        "el": 4,
+        "dist": 3.2
+      }
+    },
+    {
+      "file": "spike-geo-portrait.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球",
+      "cam": {
+        "az": -40,
+        "el": 4,
+        "dist": 4
+      }
+    },
+    {
+      "file": "spike-real-portrait.png",
+      "tech": "spike",
+      "d0Frame": "spike-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "spike",
+      "t": 0.18000000000000002,
+      "tNorm": 0.4,
+      "rootY": 0.46629381612386595,
+      "label": "扣球・擊球",
+      "cam": {
+        "az": -40,
+        "el": 4,
+        "dist": 4
+      }
+    },
+    {
+      "file": "spikeWind-geo-portrait.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂",
+      "cam": {
+        "az": 70,
+        "el": 6,
+        "dist": 4.2
+      }
+    },
+    {
+      "file": "spikeWind-real-portrait.png",
+      "tech": "spikeWind",
+      "d0Frame": "spike-wind",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "tNorm": 0.5,
+      "rootY": 0.24900806396460773,
+      "label": "扣球・最大引臂",
+      "cam": {
+        "az": 70,
+        "el": 6,
+        "dist": 4.2
+      }
+    },
+    {
+      "file": "block-geo-portrait.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點",
+      "cam": {
+        "az": 20,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "block-real-portrait.png",
+      "tech": "block",
+      "d0Frame": "block-top",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "blockJump",
+      "t": 0.19999999999999998,
+      "tNorm": 0.39999999999999997,
+      "rootY": 0.329,
+      "label": "攔網・最高點",
+      "cam": {
+        "az": 20,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "servejump-geo-portrait.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球",
+      "cam": {
+        "az": 150,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "servejump-real-portrait.png",
+      "tech": "servejump",
+      "d0Frame": "servejump-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "serveJump",
+      "t": 0.34,
+      "tNorm": 0.4,
+      "rootY": 0.5120810839623344,
+      "label": "跳發・擊球",
+      "cam": {
+        "az": 150,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "servefloat-geo-portrait.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.4
+      }
+    },
+    {
+      "file": "servefloat-real-portrait.png",
+      "tech": "servefloat",
+      "d0Frame": "servefloat-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "tNorm": 0.45,
+      "rootY": -0.011000000000000001,
+      "label": "飄球・擊球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.4
+      }
+    },
+    {
+      "file": "tip-geo-portrait.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "geo",
+      "viewport": "portrait",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.6
+      }
+    },
+    {
+      "file": "tip-real-portrait.png",
+      "tech": "tip",
+      "d0Frame": "tip-hit",
+      "kind": "real",
+      "viewport": "portrait",
+      "seq": "tip",
+      "t": 0.1596,
+      "tNorm": 0.38,
+      "rootY": 0.46431206012447995,
+      "label": "吊球・觸球",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.6
+      }
+    }
+  ],
+  "composites": [
+    {
+      "tech": "bump",
+      "viewport": "desktop",
+      "d0Frame": "bump-contact",
+      "repoFile": "bump-desktop-geo-real.png",
+      "cam": {
+        "az": 25,
+        "el": 8,
+        "dist": 3.2,
+        "refFile": "bump-1.jpg"
+      },
+      "reference": {
+        "localFile": "bump-desktop-ref-geo-real.png",
+        "file": "bump-1.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員，球衣8號，未找到石川祐希本人的接發照）",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/12/251227_120.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "view": "front",
+        "phase": "低手接發（forearm pass）觸球瞬間，雙臂夾緊伸直迎球",
+        "note": "找不到石川祐希本人清楚的接發低手照，依指示改用其他日本男排選手（關田誠大）；此照雖非攻擊手接發，但觸球瞬間與姿勢符合 bump 需求。"
+      }
+    },
+    {
+      "tech": "set",
+      "viewport": "desktop",
+      "d0Frame": "set-push",
+      "repoFile": "set-desktop-geo-real.png",
+      "cam": {
+        "az": -150,
+        "el": 4,
+        "dist": 3.2,
+        "refFile": "set-1.jpg"
+      },
+      "reference": {
+        "localFile": "set-desktop-ref-geo-real.png",
+        "file": "set-1.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員）",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/10/740A8860.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "view": "side",
+        "phase": "高手舉球出手瞬間，跳起側身舉球，指尖剛送出球",
+        "note": "側面視角，可見球剛離開指尖，動作清楚。"
+      }
+    },
+    {
+      "tech": "spike",
+      "viewport": "desktop",
+      "d0Frame": "spike-hit",
+      "repoFile": "spike-desktop-geo-real.png",
+      "cam": {
+        "az": -40,
+        "el": 4,
+        "dist": 4,
+        "refFile": "spike-1.jpg"
+      },
+      "reference": {
+        "localFile": "spike-desktop-ref-geo-real.png",
+        "file": "spike-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，球衣14號＋JPN國旗清楚可見）",
+        "pageUrl": "https://volleyballking.jp/article/83314/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2026/06/26.-0613-1200x800.jpg",
+        "license": "未知（照片來源標註 Volleyball World，經バレーボールキング刊登）",
+        "author": "Volleyball World（經 バレーボールキング 轉載）",
+        "view": "oblique",
+        "phase": "扣球擊球瞬間，於攔網上方最高點擊球，對手中國隊2號Jiang C.伸手攔網",
+        "note": "2026 VNL 日本對中國賽事實戰扣球照，人物與動作皆確認無誤。"
+      }
+    },
+    {
+      "tech": "spikeWind",
+      "viewport": "desktop",
+      "d0Frame": "spike-wind",
+      "repoFile": "spikeWind-desktop-geo-real.png",
+      "cam": {
+        "az": 70,
+        "el": 6,
+        "dist": 4.2,
+        "refFile": "spikeWind-1.jpg"
+      },
+      "reference": {
+        "localFile": "spikeWind-desktop-ref-geo-real.png",
+        "file": "spikeWind-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，日本隊背號14，照片中球衣可見14號）",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/5193f8eac14e12e4c7fa09aeaa913916-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "view": "oblique",
+        "phase": "跳發球拋球後、擊球臂於頭後最大引臂、非持球手前舉指向來球、軀幹反弓（本圖取自石川祐希的跳發球連續動作照，非進攻扣球）",
+        "note": "找不到石川祐希本人在比賽中「進攻扣球」的最大引臂（拉弓）照片，改用他跳發球（jump serve）拋球後最大引臂瞬間的照片代替——兩者引臂姿勢（擊球臂肘高舉在後、非擊球手前舉、軀幹反弓）視覺上高度相似，但實際技術動作是發球而非扣球，請留意腳步與節奏不同。"
+      }
+    },
+    {
+      "tech": "block",
+      "viewport": "desktop",
+      "d0Frame": "block-top",
+      "repoFile": "block-desktop-geo-real.png",
+      "cam": {
+        "az": 20,
+        "el": 6,
+        "dist": 3.6,
+        "refFile": "block-1.jpg"
+      },
+      "reference": {
+        "localFile": "block-desktop-ref-geo-real.png",
+        "file": "block-1.jpg",
+        "player": "日本隊選手（背號5，未確認姓名；黑色客場球衣，胸前可見 asics 標誌，為日本隊贊助商）",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Iran_VS_Japan.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f4/Iran_VS_Japan.jpg",
+        "license": "CC BY 4.0",
+        "author": "Javid Nikpour",
+        "view": "side",
+        "phase": "攔網最高點，雙手過網攔阻伊朗隊攻擊手",
+        "note": "2016年世界奧運資格賽（東京）伊朗對日本；黑色球衣經確認印有 asics 標誌（日本隊當時贊助商），白色球衣選手袖口可見伊朗國旗，故判定黑衣為日本隊。未找到石川祐希本人的攔網照，依指示改用其他日本男排選手（背號5、姓名未確認）。"
+      }
+    },
+    {
+      "tech": "servejump",
+      "viewport": "desktop",
+      "d0Frame": "servejump-hit",
+      "repoFile": "servejump-desktop-geo-real.png",
+      "cam": {
+        "az": 150,
+        "el": 6,
+        "dist": 3.6,
+        "refFile": "servejump-1.jpg"
+      },
+      "reference": {
+        "localFile": "servejump-desktop-ref-geo-real.png",
+        "file": "servejump-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，球衣背後可見「ISHIKAWA」字樣與14號）",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/99a89a55c70d0151321f7b041a957c52-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "view": "side",
+        "phase": "跳發球擊球瞬間前，手臂完全向上伸直即將觸球",
+        "note": "球衣背後印有「ISHIKAWA」姓氏，確認為石川祐希本人；此為連續照系列中最接近觸球瞬間的一張。"
+      }
+    },
+    {
+      "tech": "servefloat",
+      "viewport": "desktop",
+      "d0Frame": "servefloat-hit",
+      "repoFile": "servefloat-desktop-geo-real.png",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.4
+      },
+      "reference": null,
+      "missingReference": "日本男排參考照未找到（見參考照 manifest 的蒐集紀錄）"
+    },
+    {
+      "tech": "tip",
+      "viewport": "desktop",
+      "d0Frame": "tip-hit",
+      "repoFile": "tip-desktop-geo-real.png",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.6
+      },
+      "reference": null,
+      "missingReference": "日本男排參考照未找到（見參考照 manifest 的蒐集紀錄）"
+    },
+    {
+      "tech": "bump",
+      "viewport": "portrait",
+      "d0Frame": "bump-contact",
+      "repoFile": "bump-portrait-geo-real.png",
+      "cam": {
+        "az": 25,
+        "el": 8,
+        "dist": 3.2,
+        "refFile": "bump-1.jpg"
+      },
+      "reference": {
+        "localFile": "bump-portrait-ref-geo-real.png",
+        "file": "bump-1.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員，球衣8號，未找到石川祐希本人的接發照）",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/12/251227_120.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "view": "front",
+        "phase": "低手接發（forearm pass）觸球瞬間，雙臂夾緊伸直迎球",
+        "note": "找不到石川祐希本人清楚的接發低手照，依指示改用其他日本男排選手（關田誠大）；此照雖非攻擊手接發，但觸球瞬間與姿勢符合 bump 需求。"
+      }
+    },
+    {
+      "tech": "set",
+      "viewport": "portrait",
+      "d0Frame": "set-push",
+      "repoFile": "set-portrait-geo-real.png",
+      "cam": {
+        "az": -150,
+        "el": 4,
+        "dist": 3.2,
+        "refFile": "set-1.jpg"
+      },
+      "reference": {
+        "localFile": "set-portrait-ref-geo-real.png",
+        "file": "set-1.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員）",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/10/740A8860.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "view": "side",
+        "phase": "高手舉球出手瞬間，跳起側身舉球，指尖剛送出球",
+        "note": "側面視角，可見球剛離開指尖，動作清楚。"
+      }
+    },
+    {
+      "tech": "spike",
+      "viewport": "portrait",
+      "d0Frame": "spike-hit",
+      "repoFile": "spike-portrait-geo-real.png",
+      "cam": {
+        "az": -40,
+        "el": 4,
+        "dist": 4,
+        "refFile": "spike-1.jpg"
+      },
+      "reference": {
+        "localFile": "spike-portrait-ref-geo-real.png",
+        "file": "spike-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，球衣14號＋JPN國旗清楚可見）",
+        "pageUrl": "https://volleyballking.jp/article/83314/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2026/06/26.-0613-1200x800.jpg",
+        "license": "未知（照片來源標註 Volleyball World，經バレーボールキング刊登）",
+        "author": "Volleyball World（經 バレーボールキング 轉載）",
+        "view": "oblique",
+        "phase": "扣球擊球瞬間，於攔網上方最高點擊球，對手中國隊2號Jiang C.伸手攔網",
+        "note": "2026 VNL 日本對中國賽事實戰扣球照，人物與動作皆確認無誤。"
+      }
+    },
+    {
+      "tech": "spikeWind",
+      "viewport": "portrait",
+      "d0Frame": "spike-wind",
+      "repoFile": "spikeWind-portrait-geo-real.png",
+      "cam": {
+        "az": 70,
+        "el": 6,
+        "dist": 4.2,
+        "refFile": "spikeWind-1.jpg"
+      },
+      "reference": {
+        "localFile": "spikeWind-portrait-ref-geo-real.png",
+        "file": "spikeWind-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，日本隊背號14，照片中球衣可見14號）",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/5193f8eac14e12e4c7fa09aeaa913916-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "view": "oblique",
+        "phase": "跳發球拋球後、擊球臂於頭後最大引臂、非持球手前舉指向來球、軀幹反弓（本圖取自石川祐希的跳發球連續動作照，非進攻扣球）",
+        "note": "找不到石川祐希本人在比賽中「進攻扣球」的最大引臂（拉弓）照片，改用他跳發球（jump serve）拋球後最大引臂瞬間的照片代替——兩者引臂姿勢（擊球臂肘高舉在後、非擊球手前舉、軀幹反弓）視覺上高度相似，但實際技術動作是發球而非扣球，請留意腳步與節奏不同。"
+      }
+    },
+    {
+      "tech": "block",
+      "viewport": "portrait",
+      "d0Frame": "block-top",
+      "repoFile": "block-portrait-geo-real.png",
+      "cam": {
+        "az": 20,
+        "el": 6,
+        "dist": 3.6,
+        "refFile": "block-1.jpg"
+      },
+      "reference": {
+        "localFile": "block-portrait-ref-geo-real.png",
+        "file": "block-1.jpg",
+        "player": "日本隊選手（背號5，未確認姓名；黑色客場球衣，胸前可見 asics 標誌，為日本隊贊助商）",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Iran_VS_Japan.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f4/Iran_VS_Japan.jpg",
+        "license": "CC BY 4.0",
+        "author": "Javid Nikpour",
+        "view": "side",
+        "phase": "攔網最高點，雙手過網攔阻伊朗隊攻擊手",
+        "note": "2016年世界奧運資格賽（東京）伊朗對日本；黑色球衣經確認印有 asics 標誌（日本隊當時贊助商），白色球衣選手袖口可見伊朗國旗，故判定黑衣為日本隊。未找到石川祐希本人的攔網照，依指示改用其他日本男排選手（背號5、姓名未確認）。"
+      }
+    },
+    {
+      "tech": "servejump",
+      "viewport": "portrait",
+      "d0Frame": "servejump-hit",
+      "repoFile": "servejump-portrait-geo-real.png",
+      "cam": {
+        "az": 150,
+        "el": 6,
+        "dist": 3.6,
+        "refFile": "servejump-1.jpg"
+      },
+      "reference": {
+        "localFile": "servejump-portrait-ref-geo-real.png",
+        "file": "servejump-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，球衣背後可見「ISHIKAWA」字樣與14號）",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/99a89a55c70d0151321f7b041a957c52-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "view": "side",
+        "phase": "跳發球擊球瞬間前，手臂完全向上伸直即將觸球",
+        "note": "球衣背後印有「ISHIKAWA」姓氏，確認為石川祐希本人；此為連續照系列中最接近觸球瞬間的一張。"
+      }
+    },
+    {
+      "tech": "servefloat",
+      "viewport": "portrait",
+      "d0Frame": "servefloat-hit",
+      "repoFile": "servefloat-portrait-geo-real.png",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.4
+      },
+      "reference": null,
+      "missingReference": "日本男排參考照未找到（見參考照 manifest 的蒐集紀錄）"
+    },
+    {
+      "tech": "tip",
+      "viewport": "portrait",
+      "d0Frame": "tip-hit",
+      "repoFile": "tip-portrait-geo-real.png",
+      "cam": {
+        "az": -90,
+        "el": 6,
+        "dist": 3.6
+      },
+      "reference": null,
+      "missingReference": "日本男排參考照未找到（見參考照 manifest 的蒐集紀錄）"
+    }
+  ],
+  "references": {
+    "spikeWind": [
+      {
+        "file": "spikeWind-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，日本隊背號14，照片中球衣可見14號）",
+        "phase": "跳發球拋球後、擊球臂於頭後最大引臂、非持球手前舉指向來球、軀幹反弓（本圖取自石川祐希的跳發球連續動作照，非進攻扣球）",
+        "view": "oblique",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/5193f8eac14e12e4c7fa09aeaa913916-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "note": "找不到石川祐希本人在比賽中「進攻扣球」的最大引臂（拉弓）照片，改用他跳發球（jump serve）拋球後最大引臂瞬間的照片代替——兩者引臂姿勢（擊球臂肘高舉在後、非擊球手前舉、軀幹反弓）視覺上高度相似，但實際技術動作是發球而非扣球，請留意腳步與節奏不同。"
+      }
+    ],
+    "spike": [
+      {
+        "file": "spike-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，球衣14號＋JPN國旗清楚可見）",
+        "phase": "扣球擊球瞬間，於攔網上方最高點擊球，對手中國隊2號Jiang C.伸手攔網",
+        "view": "oblique",
+        "pageUrl": "https://volleyballking.jp/article/83314/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2026/06/26.-0613-1200x800.jpg",
+        "license": "未知（照片來源標註 Volleyball World，經バレーボールキング刊登）",
+        "author": "Volleyball World（經 バレーボールキング 轉載）",
+        "note": "2026 VNL 日本對中國賽事實戰扣球照，人物與動作皆確認無誤。"
+      },
+      {
+        "file": "spike-2.jpg",
+        "player": "石川祐希（Yuki Ishikawa，效力 Sir Susa Vim Perugia，深色球衣）",
+        "phase": "扣球擊球瞬間，面對 Cucine Lube Civitanova 三人攔網（21、18、12號）",
+        "view": "front",
+        "pageUrl": "https://volleyballking.jp/article/11019/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2024/11/%E7%9F%B3%E5%B7%9D-241103-205329-61336--1200x800.jpg",
+        "license": "未知（原始 EXIF 描述為 Sir Susa Vim Perugia vs Cucine Lube Civitanova 義甲比賽照）",
+        "author": "未標註攝影師（バレーボールキング 刊登，2024/11/3 義大利 Superlega 賽事）",
+        "note": "正面視角、面部清楚可辨認為石川祐希，作為 spike 類別的第二張備選照。"
+      }
+    ],
+    "servejump": [
+      {
+        "file": "servejump-1.jpg",
+        "player": "石川祐希（Yuki Ishikawa，球衣背後可見「ISHIKAWA」字樣與14號）",
+        "phase": "跳發球擊球瞬間前，手臂完全向上伸直即將觸球",
+        "view": "side",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/99a89a55c70d0151321f7b041a957c52-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "note": "球衣背後印有「ISHIKAWA」姓氏，確認為石川祐希本人；此為連續照系列中最接近觸球瞬間的一張。"
+      }
+    ],
+    "bump": [
+      {
+        "file": "bump-1.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員，球衣8號，未找到石川祐希本人的接發照）",
+        "phase": "低手接發（forearm pass）觸球瞬間，雙臂夾緊伸直迎球",
+        "view": "front",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/12/251227_120.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "note": "找不到石川祐希本人清楚的接發低手照，依指示改用其他日本男排選手（關田誠大）；此照雖非攻擊手接發，但觸球瞬間與姿勢符合 bump 需求。"
+      }
+    ],
+    "block": [
+      {
+        "file": "block-1.jpg",
+        "player": "日本隊選手（背號5，未確認姓名；黑色客場球衣，胸前可見 asics 標誌，為日本隊贊助商）",
+        "phase": "攔網最高點，雙手過網攔阻伊朗隊攻擊手",
+        "view": "side",
+        "pageUrl": "https://commons.wikimedia.org/wiki/File:Iran_VS_Japan.jpg",
+        "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f4/Iran_VS_Japan.jpg",
+        "license": "CC BY 4.0",
+        "author": "Javid Nikpour",
+        "note": "2016年世界奧運資格賽（東京）伊朗對日本；黑色球衣經確認印有 asics 標誌（日本隊當時贊助商），白色球衣選手袖口可見伊朗國旗，故判定黑衣為日本隊。未找到石川祐希本人的攔網照，依指示改用其他日本男排選手（背號5、姓名未確認）。"
+      }
+    ],
+    "set": [
+      {
+        "file": "set-1.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員）",
+        "phase": "高手舉球出手瞬間，跳起側身舉球，指尖剛送出球",
+        "view": "side",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/10/740A8860.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "note": "側面視角，可見球剛離開指尖，動作清楚。"
+      },
+      {
+        "file": "set-2.jpg",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員，球衣8號）",
+        "phase": "高手舉球，雙手在額前上方準備觸球",
+        "view": "front",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/12/251227_079.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "note": "正面視角備選照，作為 set 類別第二張參考。"
+      }
+    ]
+  },
+  "errors": []
+}

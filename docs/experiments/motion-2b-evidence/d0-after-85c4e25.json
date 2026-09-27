@@ -1,0 +1,3071 @@
+{
+  "meta": {
+    "tool": "tools/motion-d0-measure.mjs",
+    "src": {
+      "src/render/geoAnimator.js": "95d804d9a207d6ae03a442ddc8d5c9c6472ae484",
+      "src/render/geoCharacter.js": "ae337501c0533e68350625e660f1c8b64f0c8efe"
+    },
+    "probe": {
+      "name": "D0Probe",
+      "handed": "r",
+      "height": 1.85
+    },
+    "conventions": "角色面向 +Z（網）、上 +Y、右手側 −X；root 不轉向不平移，root.y＝bodyY；不含 reachAssist／魚躍根旋轉／寫實人腿部 IK"
+  },
+  "selftest": [
+    {
+      "name": "膝伸直",
+      "setup": "rKnee.x=0",
+      "expected": 180,
+      "measured": 180,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "膝 90°（2D）",
+      "setup": "rKnee.x=π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "膝 90°（3D）",
+      "setup": "rKnee.x=π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "大腿前平舉",
+      "setup": "rHip.x=−π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "肘 90°（2D 夾角）",
+      "setup": "rElbow.x=−π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "肘屈 90°（3D）",
+      "setup": "rElbow.x=−π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "肘屈 34.4°（3D）",
+      "setup": "rElbow.x=−0.6",
+      "expected": 34.3775,
+      "measured": 34.3775,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "上臂前平舉（矢狀面）",
+      "setup": "rShoulder.x=−π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "肩屈前平舉（相對軀幹）",
+      "setup": "rShoulder.x=−π/2",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "肩屈 150°（相對軀幹）",
+      "setup": "rShoulder.x=−150°",
+      "expected": 150,
+      "measured": 150,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "整體前傾 0.5 rad → 軀幹",
+      "setup": "root.x=0.5",
+      "expected": 28.6479,
+      "measured": 28.6479,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "整體前傾 0.5 rad → 頭",
+      "setup": "root.x=0.5",
+      "expected": 28.6479,
+      "measured": 28.6479,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "整體前傾 0.5 rad → 大腿（往後）",
+      "setup": "root.x=0.5",
+      "expected": -28.6479,
+      "measured": -28.6479,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "側平舉 → 肩外展",
+      "setup": "rShoulder=(0,0,−π/2)",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "側平舉 → 水平內收",
+      "setup": "rShoulder=(0,0,−π/2)",
+      "expected": 0,
+      "measured": 0,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "側平舉前移 30° → 肩外展",
+      "setup": "rShoulder=(0,π/6,−π/2)",
+      "expected": 90,
+      "measured": 90,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "側平舉前移 30° → 水平內收",
+      "setup": "rShoulder=(0,π/6,−π/2)",
+      "expected": 30,
+      "measured": 30,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "正上舉 → 肩外展",
+      "setup": "rShoulder=(−π,0,0)",
+      "expected": 180,
+      "measured": 180,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "骨盆右側後轉 30° → 髖線",
+      "setup": "pelvis.y=−π/6",
+      "expected": 150,
+      "measured": 150,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "骨盆右側後轉 30° → 肩線",
+      "setup": "pelvis.y=−π/6",
+      "expected": 150,
+      "measured": 150,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "胸椎再後轉 20° → 肩線",
+      "setup": "+spineUpper.y=−π/9",
+      "expected": 130,
+      "measured": 130,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "胸椎再後轉 20° → 髖肩分離",
+      "setup": "+spineUpper.y=−π/9",
+      "expected": 20,
+      "measured": 20,
+      "err": 0,
+      "unit": "°",
+      "ok": true
+    },
+    {
+      "name": "零姿勢雙腕間距＝肩寬",
+      "setup": "全關節 0",
+      "expected": 0.45,
+      "measured": 0.45,
+      "err": 0,
+      "unit": "m",
+      "ok": true
+    },
+    {
+      "name": "root 上移 0.1 m → 質心上移",
+      "setup": "root.y=0.1",
+      "expected": 1.1174,
+      "measured": 1.1175,
+      "err": 0,
+      "unit": "m",
+      "ok": true
+    }
+  ],
+  "frames": {
+    "bump-start": {
+      "id": "bump-start",
+      "seqLabel": "receiveReady t=0.30 s",
+      "how": "接球預備 receiveReady 撐住段（兩關鍵幀皆 bumpReady），即 bump 觸發前一幀",
+      "w": "1",
+      "seq": "receiveReady",
+      "t": 0.3,
+      "dur": 0.5,
+      "tNorm": 0.6,
+      "rootY": -0.121,
+      "m": {
+        "head": 6.3025,
+        "trunk": 22.7646,
+        "upperArm": 16.6158,
+        "elbow2D": 158.8182,
+        "elbow3D": 159.3735,
+        "thigh": 42.5272,
+        "knee2D": 137.4728,
+        "knee3D": 137.4728,
+        "abdFrontal": 17.5678,
+        "elev3D": 41.3406,
+        "hAdd": 111.0919,
+        "hAddProjRatio": 0.6605,
+        "shFlexSag": 39.3804,
+        "elbowFlex": 20.6265,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 0.1466,
+        "shoulderSpan": 0.45,
+        "wristBend": 0,
+        "comY": 0.9051,
+        "pelvisY": 0.839
+      },
+      "P": {
+        "pelvis": [
+          0,
+          0.839,
+          0
+        ],
+        "spine": [
+          0,
+          0.959,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.2223,
+          0.1438
+        ],
+        "neck": [
+          0,
+          1.3803,
+          0.2665
+        ],
+        "rShoulder": [
+          -0.225,
+          1.3171,
+          0.2174
+        ],
+        "lShoulder": [
+          0.225,
+          1.3171,
+          0.2174
+        ],
+        "rElbow": [
+          -0.1489,
+          1.0192,
+          0.3063
+        ],
+        "lElbow": [
+          0.1489,
+          1.0192,
+          0.3063
+        ],
+        "rWrist": [
+          -0.0733,
+          0.7573,
+          0.5094
+        ],
+        "lWrist": [
+          0.0733,
+          0.7573,
+          0.5094
+        ],
+        "rHip": [
+          -0.095,
+          0.799,
+          0
+        ],
+        "lHip": [
+          0.095,
+          0.799,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.46,
+          0.3109
+        ],
+        "lKnee": [
+          0.095,
+          0.46,
+          0.3109
+        ],
+        "rAnkle": [
+          -0.095,
+          0.02,
+          0.3109
+        ],
+        "lAnkle": [
+          0.095,
+          0.02,
+          0.3109
+        ],
+        "headC": [
+          0,
+          1.5194,
+          0.2818
+        ],
+        "rHandAx": [
+          -0.0511,
+          0.6803,
+          0.5692
+        ],
+        "lHandAx": [
+          0.0511,
+          0.6803,
+          0.5692
+        ],
+        "com": [
+          0,
+          0.9051,
+          0.1766
+        ]
+      }
+    },
+    "bump-contact": {
+      "id": "bump-contact",
+      "seqLabel": "bump t=hit×dur",
+      "how": "receiveReady 撐 0.30 s 後觸發 bump，停在擊球關鍵幀 bumpHit",
+      "w": "1（預備段交棒 w0=1）",
+      "seq": "bump",
+      "t": 0.225,
+      "dur": 0.5,
+      "tNorm": 0.45,
+      "rootY": -0.055,
+      "m": {
+        "head": -4.5837,
+        "trunk": 12.1099,
+        "upperArm": 53.858,
+        "elbow2D": 180,
+        "elbow3D": 180,
+        "thigh": 28.3051,
+        "knee2D": 151.6949,
+        "knee3D": 151.6949,
+        "abdFrontal": 31.0018,
+        "elev3D": 66.6981,
+        "hAdd": 104.9997,
+        "hAddProjRatio": 0.9184,
+        "shFlexSag": 65.9679,
+        "elbowFlex": 0,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 0.1362,
+        "shoulderSpan": 0.45,
+        "wristBend": 0,
+        "comY": 0.9826,
+        "pelvisY": 0.905
+      },
+      "P": {
+        "pelvis": [
+          0,
+          0.905,
+          0
+        ],
+        "spine": [
+          0,
+          1.025,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.3098,
+          0.0944
+        ],
+        "neck": [
+          0,
+          1.505,
+          0.138
+        ],
+        "rShoulder": [
+          -0.225,
+          1.4269,
+          0.1206
+        ],
+        "lShoulder": [
+          0.225,
+          1.4269,
+          0.1206
+        ],
+        "rElbow": [
+          -0.1489,
+          1.2436,
+          0.3716
+        ],
+        "lElbow": [
+          0.1489,
+          1.2436,
+          0.3716
+        ],
+        "rWrist": [
+          -0.0681,
+          1.0488,
+          0.6383
+        ],
+        "lWrist": [
+          0.0681,
+          1.0488,
+          0.6383
+        ],
+        "rHip": [
+          -0.095,
+          0.865,
+          0
+        ],
+        "lHip": [
+          0.095,
+          0.865,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.46,
+          0.2181
+        ],
+        "lKnee": [
+          0.095,
+          0.46,
+          0.2181
+        ],
+        "rAnkle": [
+          -0.095,
+          0.02,
+          0.2181
+        ],
+        "lAnkle": [
+          0.095,
+          0.02,
+          0.2181
+        ],
+        "headC": [
+          0,
+          1.6445,
+          0.1268
+        ],
+        "rHandAx": [
+          -0.0443,
+          0.9915,
+          0.7167
+        ],
+        "lHandAx": [
+          0.0443,
+          0.9915,
+          0.7167
+        ],
+        "com": [
+          0,
+          0.9826,
+          0.1323
+        ]
+      }
+    },
+    "bump-end": {
+      "id": "bump-end",
+      "seqLabel": "bump t=dur−1 tick",
+      "how": "同上，停在 bump 最後一幀（遊戲無隨揮姿勢：at=1 回 bumpReady，且已在 RELEASE 淡出）",
+      "w": "0.083（(dur−t)/RELEASE）",
+      "seq": "bump",
+      "t": 0.4833,
+      "dur": 0.5,
+      "tNorm": 0.9667,
+      "rootY": -0.0275,
+      "m": {
+        "head": -5.7296,
+        "trunk": 13.0655,
+        "upperArm": 88.8085,
+        "elbow2D": 172.9564,
+        "elbow3D": 173.1245,
+        "thigh": 19.9119,
+        "knee2D": 160.0881,
+        "knee3D": 160.0881,
+        "abdFrontal": 132.6181,
+        "elev3D": 101.5837,
+        "hAdd": 102.8716,
+        "hAddProjRatio": 0.9796,
+        "shFlexSag": 101.8739,
+        "elbowFlex": 6.8755,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 0.163,
+        "shoulderSpan": 0.45,
+        "wristBend": 0,
+        "comY": 1.0246,
+        "pelvisY": 0.9325
+      },
+      "P": {
+        "pelvis": [
+          0,
+          0.9325,
+          0
+        ],
+        "spine": [
+          0,
+          1.0525,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.3391,
+          0.0887
+        ],
+        "neck": [
+          0,
+          1.527,
+          0.1572
+        ],
+        "rShoulder": [
+          -0.225,
+          1.4518,
+          0.1298
+        ],
+        "lShoulder": [
+          0.225,
+          1.4518,
+          0.1298
+        ],
+        "rElbow": [
+          -0.1552,
+          1.4453,
+          0.442
+        ],
+        "lElbow": [
+          0.1552,
+          1.4453,
+          0.442
+        ],
+        "rWrist": [
+          -0.0815,
+          1.4792,
+          0.7722
+        ],
+        "lWrist": [
+          0.0815,
+          1.4792,
+          0.7722
+        ],
+        "rHip": [
+          -0.095,
+          0.8925,
+          0
+        ],
+        "lHip": [
+          0.095,
+          0.8925,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.46,
+          0.1567
+        ],
+        "lKnee": [
+          0.095,
+          0.46,
+          0.1567
+        ],
+        "rAnkle": [
+          -0.095,
+          0.02,
+          0.1567
+        ],
+        "lAnkle": [
+          0.095,
+          0.02,
+          0.1567
+        ],
+        "headC": [
+          0,
+          1.6663,
+          0.1433
+        ],
+        "rHandAx": [
+          -0.0598,
+          1.4891,
+          0.8693
+        ],
+        "lHandAx": [
+          0.0598,
+          1.4891,
+          0.8693
+        ],
+        "com": [
+          0,
+          1.0246,
+          0.1252
+        ]
+      }
+    },
+    "set-load": {
+      "id": "set-load",
+      "seqLabel": "overhead t=0.42×dur",
+      "how": "setReady 撐 0.30 s 後觸發 overhead，停在推出前最後一個 setReach 關鍵幀",
+      "w": "1（交棒 w0=1）",
+      "seq": "overhead",
+      "t": 0.231,
+      "dur": 0.55,
+      "tNorm": 0.42,
+      "rootY": -0.044,
+      "m": {
+        "head": -38.3882,
+        "trunk": -3.787,
+        "upperArm": 144.3854,
+        "elbow2D": 80.1818,
+        "elbow3D": 79.7324,
+        "thigh": 25.2644,
+        "knee2D": 154.7356,
+        "knee3D": 154.7356,
+        "abdFrontal": 158.1826,
+        "elev3D": 137.5786,
+        "hAdd": 115.9815,
+        "hAddProjRatio": 0.6746,
+        "shFlexSag": 140.5983,
+        "elbowFlex": 100.2676,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 0.2967,
+        "shoulderSpan": 0.45,
+        "wristBend": -24.0642,
+        "comY": 1.041,
+        "pelvisY": 0.916
+      },
+      "P": {
+        "pelvis": [
+          0,
+          0.916,
+          0
+        ],
+        "spine": [
+          0,
+          1.036,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.3358,
+          -0.012
+        ],
+        "neck": [
+          0,
+          1.5309,
+          -0.0556
+        ],
+        "rShoulder": [
+          -0.225,
+          1.4529,
+          -0.0382
+        ],
+        "lShoulder": [
+          0.225,
+          1.4529,
+          -0.0382
+        ],
+        "rElbow": [
+          -0.1304,
+          1.7014,
+          0.1398
+        ],
+        "lElbow": [
+          0.1304,
+          1.7014,
+          0.1398
+        ],
+        "rWrist": [
+          -0.1483,
+          1.8491,
+          -0.1659
+        ],
+        "lWrist": [
+          0.1483,
+          1.8491,
+          -0.1659
+        ],
+        "rHip": [
+          -0.095,
+          0.876,
+          0
+        ],
+        "lHip": [
+          0.095,
+          0.876,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.46,
+          0.1963
+        ],
+        "lKnee": [
+          0.095,
+          0.46,
+          0.1963
+        ],
+        "rAnkle": [
+          -0.095,
+          0.02,
+          0.1963
+        ],
+        "lAnkle": [
+          0.095,
+          0.02,
+          0.1963
+        ],
+        "headC": [
+          0,
+          1.6407,
+          -0.1426
+        ],
+        "rHandAx": [
+          -0.165,
+          1.8534,
+          -0.2644
+        ],
+        "lHandAx": [
+          0.1536,
+          1.8926,
+          -0.2558
+        ],
+        "com": [
+          0,
+          1.041,
+          0.0338
+        ]
+      }
+    },
+    "set-push": {
+      "id": "set-push",
+      "seqLabel": "overhead t=hit×dur",
+      "how": "同上，停在擊球關鍵幀 setPush",
+      "w": "1",
+      "seq": "overhead",
+      "t": 0.308,
+      "dur": 0.55,
+      "tNorm": 0.56,
+      "rootY": -0.011,
+      "m": {
+        "head": -11.4592,
+        "trunk": 1.1845,
+        "upperArm": 150.1149,
+        "elbow2D": 138.9252,
+        "elbow3D": 139.893,
+        "thigh": 12.5552,
+        "knee2D": 167.4448,
+        "knee3D": 167.4448,
+        "abdFrontal": 163.1284,
+        "elev3D": 147.9582,
+        "hAdd": 118.984,
+        "hAddProjRatio": 0.5305,
+        "shFlexSag": 151.2995,
+        "elbowFlex": 40.107,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 0.1518,
+        "shoulderSpan": 0.45,
+        "wristBend": 22.9183,
+        "comY": 1.0761,
+        "pelvisY": 0.949
+      },
+      "P": {
+        "pelvis": [
+          0,
+          0.949,
+          0
+        ],
+        "spine": [
+          0,
+          1.069,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.369,
+          0
+        ],
+        "neck": [
+          0,
+          1.568,
+          0.02
+        ],
+        "rShoulder": [
+          -0.225,
+          1.4884,
+          0.012
+        ],
+        "lShoulder": [
+          0.225,
+          1.4884,
+          0.012
+        ],
+        "rElbow": [
+          -0.1427,
+          1.7565,
+          0.1661
+        ],
+        "lElbow": [
+          0.1427,
+          1.7565,
+          0.1661
+        ],
+        "rWrist": [
+          -0.0759,
+          2.0835,
+          0.1014
+        ],
+        "lWrist": [
+          0.0759,
+          2.0835,
+          0.1014
+        ],
+        "rHip": [
+          -0.095,
+          0.909,
+          0
+        ],
+        "lHip": [
+          0.095,
+          0.909,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.46,
+          0.1
+        ],
+        "lKnee": [
+          0.095,
+          0.46,
+          0.1
+        ],
+        "rAnkle": [
+          -0.095,
+          0.02,
+          0.1
+        ],
+        "lAnkle": [
+          0.095,
+          0.02,
+          0.1
+        ],
+        "headC": [
+          0,
+          1.7052,
+          -0.0078
+        ],
+        "rHandAx": [
+          -0.0513,
+          2.1783,
+          0.1218
+        ],
+        "lHandAx": [
+          0.0562,
+          2.1797,
+          0.0823
+        ],
+        "com": [
+          0,
+          1.0761,
+          0.036
+        ]
+      }
+    },
+    "spike-wind": {
+      "id": "spike-wind",
+      "seqLabel": "spikeHold t=0.04 s",
+      "how": "windup 起跳（0.1 s）自動接滯空 hold spikeHold，停在 hold 內（姿勢＝spikeWind 引臂）",
+      "w": "1（chain 交棒）",
+      "seq": "spikeHold",
+      "t": 0.04,
+      "dur": 0.08,
+      "tNorm": 0.5,
+      "rootY": 0.249,
+      "m": {
+        "head": -34.5466,
+        "trunk": -31.919,
+        "upperArm": 179.1715,
+        "elbow2D": 77.5964,
+        "elbow3D": 71.138,
+        "thigh": 11.592,
+        "knee2D": 168.408,
+        "knee3D": 167.4448,
+        "abdFrontal": 171.7519,
+        "elev3D": 155.3175,
+        "hAdd": 108.3862,
+        "hAddProjRatio": 0.4176,
+        "shFlexSag": 156.4371,
+        "elbowFlex": 108.862,
+        "shLine": 107.6096,
+        "hipLine": 157.0817,
+        "sep": 49.4721,
+        "wristSpan": 0.5793,
+        "shoulderSpan": 0.45,
+        "wristBend": 28.6479,
+        "comY": 1.3205,
+        "pelvisY": 1.209
+      },
+      "P": {
+        "pelvis": [
+          0,
+          1.209,
+          0
+        ],
+        "spine": [
+          0,
+          1.329,
+          0
+        ],
+        "spineUpper": [
+          0.0278,
+          1.6204,
+          -0.0657
+        ],
+        "neck": [
+          0.0705,
+          1.7877,
+          -0.1666
+        ],
+        "rShoulder": [
+          -0.0076,
+          1.6205,
+          -0.3182
+        ],
+        "lShoulder": [
+          0.1143,
+          1.8211,
+          0.0657
+        ],
+        "rElbow": [
+          -0.0915,
+          1.9292,
+          -0.3138
+        ],
+        "lElbow": [
+          -0.0046,
+          2.0845,
+          -0.0716
+        ],
+        "rWrist": [
+          0.2204,
+          1.9021,
+          -0.4464
+        ],
+        "lWrist": [
+          -0.0515,
+          2.3727,
+          -0.2458
+        ],
+        "rHip": [
+          -0.0875,
+          1.169,
+          -0.037
+        ],
+        "lHip": [
+          0.0875,
+          1.169,
+          0.037
+        ],
+        "rKnee": [
+          -0.1264,
+          0.72,
+          0.0551
+        ],
+        "lKnee": [
+          0.0486,
+          0.72,
+          0.1291
+        ],
+        "rAnkle": [
+          -0.1264,
+          0.28,
+          0.0551
+        ],
+        "lAnkle": [
+          0.0486,
+          0.28,
+          0.1291
+        ],
+        "headC": [
+          0.1258,
+          1.8936,
+          -0.2395
+        ],
+        "rHandAx": [
+          0.2991,
+          1.8475,
+          -0.4749
+        ],
+        "lHandAx": [
+          -0.0653,
+          2.4575,
+          -0.2971
+        ],
+        "com": [
+          0.0101,
+          1.3205,
+          -0.0392
+        ]
+      }
+    },
+    "spike-hit": {
+      "id": "spike-hit",
+      "seqLabel": "spike t=hit×dur",
+      "how": "windup 後 11 tick 觸發擊球弧 spike（hitInTicks=11，倍率 1），停在擊球關鍵幀 spikeHit",
+      "w": "1（airborne 交棒）",
+      "seq": "spike",
+      "t": 0.18,
+      "dur": 0.45,
+      "tNorm": 0.4,
+      "rootY": 0.4663,
+      "m": {
+        "head": 32.4061,
+        "trunk": 1.264,
+        "upperArm": -170.1357,
+        "elbow2D": 178.4626,
+        "elbow3D": 145.6225,
+        "thigh": 11.592,
+        "knee2D": 168.408,
+        "knee3D": 167.4448,
+        "abdFrontal": 132.512,
+        "elev3D": 128.6843,
+        "hAdd": 29.1386,
+        "hAddProjRatio": 0.7806,
+        "shFlexSag": 148.6953,
+        "elbowFlex": 34.3775,
+        "shLine": 136.7603,
+        "hipLine": 157.0817,
+        "sep": 20.3214,
+        "wristSpan": 1.2099,
+        "shoulderSpan": 0.45,
+        "wristBend": 31.5127,
+        "comY": 1.5142,
+        "pelvisY": 1.4263
+      },
+      "P": {
+        "pelvis": [
+          0,
+          1.4263,
+          0
+        ],
+        "spine": [
+          0,
+          1.5463,
+          0
+        ],
+        "spineUpper": [
+          -0.0209,
+          1.8414,
+          0.0495
+        ],
+        "neck": [
+          -0.0214,
+          2.0067,
+          0.1622
+        ],
+        "rShoulder": [
+          -0.1698,
+          2.0355,
+          -0.0227
+        ],
+        "lShoulder": [
+          0.1274,
+          1.8457,
+          0.2569
+        ],
+        "rElbow": [
+          -0.415,
+          2.2381,
+          -0.0579
+        ],
+        "lElbow": [
+          -0.091,
+          1.6134,
+          0.229
+        ],
+        "rWrist": [
+          -0.5067,
+          2.559,
+          -0.1226
+        ],
+        "lWrist": [
+          -0.3705,
+          1.4357,
+          0.3055
+        ],
+        "rHip": [
+          -0.0875,
+          1.3863,
+          -0.037
+        ],
+        "lHip": [
+          0.0875,
+          1.3863,
+          0.037
+        ],
+        "rKnee": [
+          -0.1264,
+          0.9373,
+          0.0551
+        ],
+        "lKnee": [
+          0.0486,
+          0.9373,
+          0.1291
+        ],
+        "rAnkle": [
+          -0.1264,
+          0.4973,
+          0.0551
+        ],
+        "lAnkle": [
+          0.0486,
+          0.4973,
+          0.1291
+        ],
+        "headC": [
+          -0.0165,
+          2.1248,
+          0.2372
+        ],
+        "rHandAx": [
+          -0.58,
+          2.626,
+          -0.1345
+        ],
+        "lHandAx": [
+          -0.4527,
+          1.3834,
+          0.328
+        ],
+        "com": [
+          -0.0439,
+          1.5142,
+          0.0668
+        ]
+      }
+    },
+    "tip-hit": {
+      "id": "tip-hit",
+      "seqLabel": "tip t=hit×dur",
+      "how": "windup 後 12 tick 觸發 tip（hitInTicks=10，倍率 1），停在擊球關鍵幀 tipHit",
+      "w": "1（airborne 交棒）",
+      "seq": "tip",
+      "t": 0.1596,
+      "dur": 0.42,
+      "tNorm": 0.38,
+      "rootY": 0.4643,
+      "m": {
+        "head": 14.6518,
+        "trunk": 9.5283,
+        "upperArm": 116.6051,
+        "elbow2D": 141.0402,
+        "elbow3D": 137.0282,
+        "thigh": 12.5552,
+        "knee2D": 167.4448,
+        "knee3D": 167.4448,
+        "abdFrontal": 122.6878,
+        "elev3D": 114.813,
+        "hAdd": 43.9036,
+        "hAddProjRatio": 0.9077,
+        "shFlexSag": 123.6925,
+        "elbowFlex": 42.9718,
+        "shLine": 187.3492,
+        "hipLine": 180,
+        "sep": -7.3492,
+        "wristSpan": 1.3622,
+        "shoulderSpan": 0.45,
+        "wristBend": 20.0535,
+        "comY": 1.5057,
+        "pelvisY": 1.4243
+      },
+      "P": {
+        "pelvis": [
+          0,
+          1.4243,
+          0
+        ],
+        "spine": [
+          0,
+          1.5443,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.8405,
+          0.0478
+        ],
+        "neck": [
+          0.0779,
+          2.0159,
+          0.104
+        ],
+        "rShoulder": [
+          -0.1605,
+          2.0292,
+          0.1082
+        ],
+        "lShoulder": [
+          0.254,
+          1.8623,
+          0.0548
+        ],
+        "rElbow": [
+          -0.344,
+          2.1466,
+          0.3426
+        ],
+        "lElbow": [
+          0.1845,
+          1.5513,
+          0.0846
+        ],
+        "rWrist": [
+          -0.4066,
+          2.4508,
+          0.4809
+        ],
+        "lWrist": [
+          0.1225,
+          1.2316,
+          0.1822
+        ],
+        "rHip": [
+          -0.095,
+          1.3843,
+          0
+        ],
+        "lHip": [
+          0.095,
+          1.3843,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.9353,
+          0.1
+        ],
+        "lKnee": [
+          0.095,
+          0.9353,
+          0.1
+        ],
+        "rAnkle": [
+          -0.095,
+          0.4953,
+          0.1
+        ],
+        "lAnkle": [
+          0.095,
+          0.4953,
+          0.1
+        ],
+        "headC": [
+          0.1323,
+          2.1407,
+          0.1366
+        ],
+        "rHandAx": [
+          -0.446,
+          2.5204,
+          0.541
+        ],
+        "lHandAx": [
+          0.1042,
+          1.1376,
+          0.2109
+        ],
+        "com": [
+          0.0033,
+          1.5057,
+          0.0731
+        ]
+      }
+    },
+    "block-top": {
+      "id": "block-top",
+      "seqLabel": "blockJump t=0.20 s",
+      "how": "攔網待命 hold 中觸發 blockJump，停在跳躍弧頂（airDur 0.4 的一半；姿勢在 blockPunch→blockUp 的 7.7% 處）",
+      "w": "1",
+      "seq": "blockJump",
+      "t": 0.2,
+      "dur": 0.5,
+      "tNorm": 0.4,
+      "rootY": 0.329,
+      "m": {
+        "head": 11.8558,
+        "trunk": 13.0964,
+        "upperArm": 123.1859,
+        "elbow2D": 180,
+        "elbow3D": 180,
+        "thigh": 12.5552,
+        "knee2D": 167.4448,
+        "knee3D": 167.4448,
+        "abdFrontal": 180,
+        "elev3D": 136.2824,
+        "hAdd": 90,
+        "hAddProjRatio": 0.6911,
+        "shFlexSag": 136.2824,
+        "elbowFlex": 0,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 0.45,
+        "shoulderSpan": 0.45,
+        "wristBend": -39.0052,
+        "comY": 1.3965,
+        "pelvisY": 1.289
+      },
+      "P": {
+        "pelvis": [
+          0,
+          1.289,
+          0
+        ],
+        "spine": [
+          0,
+          1.409,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.6973,
+          0.0829
+        ],
+        "neck": [
+          0,
+          1.8813,
+          0.1614
+        ],
+        "rShoulder": [
+          -0.225,
+          1.8077,
+          0.13
+        ],
+        "lShoulder": [
+          0.225,
+          1.8077,
+          0.13
+        ],
+        "rElbow": [
+          -0.225,
+          1.9829,
+          0.3978
+        ],
+        "lElbow": [
+          0.225,
+          1.9829,
+          0.3978
+        ],
+        "rWrist": [
+          -0.225,
+          2.169,
+          0.6823
+        ],
+        "lWrist": [
+          0.225,
+          2.169,
+          0.6823
+        ],
+        "rHip": [
+          -0.095,
+          1.249,
+          0
+        ],
+        "lHip": [
+          0.095,
+          1.249,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.8,
+          0.1
+        ],
+        "lKnee": [
+          0.095,
+          0.8,
+          0.1
+        ],
+        "rAnkle": [
+          -0.095,
+          0.36,
+          0.1
+        ],
+        "lAnkle": [
+          0.095,
+          0.36,
+          0.1
+        ],
+        "headC": [
+          0,
+          2.0183,
+          0.1901
+        ],
+        "rHandAx": [
+          -0.225,
+          2.2642,
+          0.7129
+        ],
+        "lHandAx": [
+          0.225,
+          2.2237,
+          0.766
+        ],
+        "com": [
+          0,
+          1.3965,
+          0.109
+        ]
+      }
+    },
+    "servejump-hit": {
+      "id": "servejump-hit",
+      "seqLabel": "serveJump t=0.40×dur",
+      "how": "serveReady 持球 hold 中觸發 serveJump，停在 spikeHit 關鍵幀（此序列無 hit 欄位；sim 的擊球＝SERVE 事件在序列 t=0）",
+      "w": "1",
+      "seq": "serveJump",
+      "t": 0.34,
+      "dur": 0.85,
+      "tNorm": 0.4,
+      "rootY": 0.5121,
+      "m": {
+        "head": 32.4061,
+        "trunk": 1.264,
+        "upperArm": -170.1357,
+        "elbow2D": 178.4626,
+        "elbow3D": 145.6225,
+        "thigh": 11.592,
+        "knee2D": 168.408,
+        "knee3D": 167.4448,
+        "abdFrontal": 132.512,
+        "elev3D": 128.6843,
+        "hAdd": 29.1386,
+        "hAddProjRatio": 0.7806,
+        "shFlexSag": 148.6953,
+        "elbowFlex": 34.3775,
+        "shLine": 136.7603,
+        "hipLine": 157.0817,
+        "sep": 20.3214,
+        "wristSpan": 1.2099,
+        "shoulderSpan": 0.45,
+        "wristBend": 31.5127,
+        "comY": 1.56,
+        "pelvisY": 1.4721
+      },
+      "P": {
+        "pelvis": [
+          0,
+          1.4721,
+          0
+        ],
+        "spine": [
+          0,
+          1.5921,
+          0
+        ],
+        "spineUpper": [
+          -0.0209,
+          1.8872,
+          0.0495
+        ],
+        "neck": [
+          -0.0214,
+          2.0525,
+          0.1622
+        ],
+        "rShoulder": [
+          -0.1698,
+          2.0812,
+          -0.0227
+        ],
+        "lShoulder": [
+          0.1274,
+          1.8915,
+          0.2569
+        ],
+        "rElbow": [
+          -0.415,
+          2.2839,
+          -0.0579
+        ],
+        "lElbow": [
+          -0.091,
+          1.6592,
+          0.229
+        ],
+        "rWrist": [
+          -0.5067,
+          2.6048,
+          -0.1226
+        ],
+        "lWrist": [
+          -0.3705,
+          1.4814,
+          0.3055
+        ],
+        "rHip": [
+          -0.0875,
+          1.4321,
+          -0.037
+        ],
+        "lHip": [
+          0.0875,
+          1.4321,
+          0.037
+        ],
+        "rKnee": [
+          -0.1264,
+          0.9831,
+          0.0551
+        ],
+        "lKnee": [
+          0.0486,
+          0.9831,
+          0.1291
+        ],
+        "rAnkle": [
+          -0.1264,
+          0.5431,
+          0.0551
+        ],
+        "lAnkle": [
+          0.0486,
+          0.5431,
+          0.1291
+        ],
+        "headC": [
+          -0.0165,
+          2.1706,
+          0.2372
+        ],
+        "rHandAx": [
+          -0.58,
+          2.6718,
+          -0.1345
+        ],
+        "lHandAx": [
+          -0.4527,
+          1.4292,
+          0.328
+        ],
+        "com": [
+          -0.0439,
+          1.56,
+          0.0668
+        ]
+      }
+    },
+    "servefloat-hit": {
+      "id": "servefloat-hit",
+      "seqLabel": "serveFloat t=0.45×dur",
+      "how": "同上觸發 serveFloat，停在 floatPush 關鍵幀（sim 擊球在序列 t=0）",
+      "w": "1",
+      "seq": "serveFloat",
+      "t": 0.225,
+      "dur": 0.5,
+      "tNorm": 0.45,
+      "rootY": -0.011,
+      "m": {
+        "head": 4.5837,
+        "trunk": 5.6916,
+        "upperArm": 141.5206,
+        "elbow2D": 121.6866,
+        "elbow3D": 130.1527,
+        "thigh": 12.5552,
+        "knee2D": 167.4448,
+        "knee3D": 167.4448,
+        "abdFrontal": 132.0634,
+        "elev3D": 127.9604,
+        "hAdd": 30.1691,
+        "hAddProjRatio": 0.7884,
+        "shFlexSag": 147.2121,
+        "elbowFlex": 49.8473,
+        "shLine": 180,
+        "hipLine": 180,
+        "sep": 0,
+        "wristSpan": 1.2276,
+        "shoulderSpan": 0.45,
+        "wristBend": 0,
+        "comY": 1.043,
+        "pelvisY": 0.949
+      },
+      "P": {
+        "pelvis": [
+          0,
+          0.949,
+          0
+        ],
+        "spine": [
+          0,
+          1.069,
+          0
+        ],
+        "spineUpper": [
+          0,
+          1.3668,
+          0.0359
+        ],
+        "neck": [
+          0,
+          1.5636,
+          0.0717
+        ],
+        "rShoulder": [
+          -0.225,
+          1.4849,
+          0.0574
+        ],
+        "lShoulder": [
+          0.225,
+          1.4849,
+          0.0574
+        ],
+        "rElbow": [
+          -0.4431,
+          1.6682,
+          0.2031
+        ],
+        "lElbow": [
+          0.1772,
+          1.247,
+          0.266
+        ],
+        "rWrist": [
+          -0.5926,
+          1.9555,
+          0.0995
+        ],
+        "lWrist": [
+          0.1286,
+          1.0718,
+          0.5533
+        ],
+        "rHip": [
+          -0.095,
+          0.909,
+          0
+        ],
+        "lHip": [
+          0.095,
+          0.909,
+          0
+        ],
+        "rKnee": [
+          -0.095,
+          0.46,
+          0.1
+        ],
+        "lKnee": [
+          0.095,
+          0.46,
+          0.1
+        ],
+        "rAnkle": [
+          -0.095,
+          0.02,
+          0.1
+        ],
+        "lAnkle": [
+          0.095,
+          0.02,
+          0.1
+        ],
+        "headC": [
+          0,
+          1.7032,
+          0.0829
+        ],
+        "rHandAx": [
+          -0.6365,
+          2.04,
+          0.069
+        ],
+        "lHandAx": [
+          0.1144,
+          1.0203,
+          0.6378
+        ],
+        "com": [
+          -0.0137,
+          1.043,
+          0.0655
+        ]
+      }
+    },
+    "serve-hit": {
+      "id": "serve-hit",
+      "seqLabel": "serve t=0.50×dur",
+      "how": "同上觸發一般發球 serve，停在 spikeHit 關鍵幀（sim 擊球在序列 t=0）",
+      "w": "1",
+      "seq": "serve",
+      "t": 0.36,
+      "dur": 0.72,
+      "tNorm": 0.5,
+      "rootY": 0.289,
+      "m": {
+        "head": 32.4061,
+        "trunk": 1.264,
+        "upperArm": -170.1357,
+        "elbow2D": 178.4626,
+        "elbow3D": 145.6225,
+        "thigh": 11.592,
+        "knee2D": 168.408,
+        "knee3D": 167.4448,
+        "abdFrontal": 132.512,
+        "elev3D": 128.6843,
+        "hAdd": 29.1386,
+        "hAddProjRatio": 0.7806,
+        "shFlexSag": 148.6953,
+        "elbowFlex": 34.3775,
+        "shLine": 136.7603,
+        "hipLine": 157.0817,
+        "sep": 20.3214,
+        "wristSpan": 1.2099,
+        "shoulderSpan": 0.45,
+        "wristBend": 31.5127,
+        "comY": 1.3369,
+        "pelvisY": 1.249
+      },
+      "P": {
+        "pelvis": [
+          0,
+          1.249,
+          0
+        ],
+        "spine": [
+          0,
+          1.369,
+          0
+        ],
+        "spineUpper": [
+          -0.0209,
+          1.6642,
+          0.0495
+        ],
+        "neck": [
+          -0.0214,
+          1.8294,
+          0.1622
+        ],
+        "rShoulder": [
+          -0.1698,
+          1.8582,
+          -0.0227
+        ],
+        "lShoulder": [
+          0.1274,
+          1.6684,
+          0.2569
+        ],
+        "rElbow": [
+          -0.415,
+          2.0608,
+          -0.0579
+        ],
+        "lElbow": [
+          -0.091,
+          1.4361,
+          0.229
+        ],
+        "rWrist": [
+          -0.5067,
+          2.3817,
+          -0.1226
+        ],
+        "lWrist": [
+          -0.3705,
+          1.2584,
+          0.3055
+        ],
+        "rHip": [
+          -0.0875,
+          1.209,
+          -0.037
+        ],
+        "lHip": [
+          0.0875,
+          1.209,
+          0.037
+        ],
+        "rKnee": [
+          -0.1264,
+          0.76,
+          0.0551
+        ],
+        "lKnee": [
+          0.0486,
+          0.76,
+          0.1291
+        ],
+        "rAnkle": [
+          -0.1264,
+          0.32,
+          0.0551
+        ],
+        "lAnkle": [
+          0.0486,
+          0.32,
+          0.1291
+        ],
+        "headC": [
+          -0.0165,
+          1.9475,
+          0.2372
+        ],
+        "rHandAx": [
+          -0.58,
+          2.4487,
+          -0.1345
+        ],
+        "lHandAx": [
+          -0.4527,
+          1.2061,
+          0.328
+        ],
+        "com": [
+          -0.0439,
+          1.3369,
+          0.0668
+        ]
+      }
+    }
+  },
+  "approach": {
+    "primary": {
+      "speed": 2.55,
+      "standComY": 1.0091,
+      "minComY": 0.7722,
+      "atT": 0.4667,
+      "atTNorm": 0.6222,
+      "drop": 0.2368,
+      "dropPct": 12.8025,
+      "pelvisDrop": 0.3382
+    },
+    "secondary": {
+      "speed": 4.5,
+      "standComY": 1.0091,
+      "minComY": 0.7877,
+      "atT": 0.5,
+      "atTNorm": 0.6667,
+      "drop": 0.2213,
+      "dropPct": 11.9632,
+      "pelvisDrop": 0.301
+    }
+  },
+  "simBound": {
+    "windup": {
+      "type": "windup",
+      "peak": 0.489,
+      "tPeak": 0.45,
+      "airAbove2cm": 0.85
+    },
+    "blockJump": {
+      "type": "blockJump",
+      "peak": 0.329,
+      "tPeak": 0.2,
+      "airAbove2cm": 0.35
+    },
+    "serveJump": {
+      "type": "serveJump",
+      "peak": 0.5387,
+      "tPeak": 0.4167,
+      "airAbove2cm": 0.8167
+    },
+    "serveFloat": {
+      "type": "serveFloat",
+      "peak": -0.011,
+      "tPeak": 0.0167,
+      "airAbove2cm": 0
+    },
+    "serve": {
+      "type": "serve",
+      "peak": 0.2889,
+      "tPeak": 0.3667,
+      "airAbove2cm": 0.6667
+    },
+    "overheadJump": {
+      "type": "overheadJump",
+      "peak": 0.3021,
+      "tPeak": 0.35,
+      "airAbove2cm": 0.5667
+    }
+  },
+  "rows": [
+    {
+      "kind": "angle",
+      "id": "bump.start.head",
+      "tech": "低手接球",
+      "phase": "起始（準備期末、最大屈）",
+      "frame": "bump-start",
+      "variable": "頭傾角",
+      "def": "D-head",
+      "metric": "head",
+      "lit": {
+        "mean": 7.23,
+        "sd": 5.52,
+        "shown": "7.23±5.52"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 3.87±1.96",
+      "ruling": "R-none-prep",
+      "current": 6.3,
+      "diff": -0.9,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.start.trunk",
+      "tech": "低手接球",
+      "phase": "起始（準備期末、最大屈）",
+      "frame": "bump-start",
+      "variable": "軀幹前傾",
+      "def": "D-trunk",
+      "metric": "trunk",
+      "lit": {
+        "mean": 28.46,
+        "sd": 6.91,
+        "shown": "28.46±6.91"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 15.15±4.26",
+      "ruling": "R-none-prep",
+      "current": 22.8,
+      "diff": -5.7,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.start.uarm",
+      "tech": "低手接球",
+      "phase": "起始（準備期末、最大屈）",
+      "frame": "bump-start",
+      "variable": "上臂前擺",
+      "def": "D-uarm",
+      "metric": "upperArm",
+      "lit": {
+        "mean": 9.06,
+        "sd": 6.15,
+        "shown": "9.06±6.15"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 10.21±5.19",
+      "ruling": "R-none-prep",
+      "current": 16.6,
+      "diff": 7.5,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.start.elbow",
+      "tech": "低手接球",
+      "phase": "起始（準備期末、最大屈）",
+      "frame": "bump-start",
+      "variable": "肘角",
+      "def": "D-elbow",
+      "metric": "elbow2D",
+      "lit": {
+        "mean": 158.83,
+        "sd": 11.59,
+        "shown": "158.83±11.59"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 151.34±7.76",
+      "ruling": "R-none-prep",
+      "current": 158.8,
+      "diff": 0,
+      "tol": 11.59,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.start.thigh",
+      "tech": "低手接球",
+      "phase": "起始（準備期末、最大屈）",
+      "frame": "bump-start",
+      "variable": "大腿前擺",
+      "def": "D-thigh",
+      "metric": "thigh",
+      "lit": {
+        "mean": 46.29,
+        "sd": 6.42,
+        "shown": "46.29±6.42"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 46.56±4.55",
+      "ruling": "R-none-prep",
+      "current": 42.5,
+      "diff": -3.8,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.start.knee",
+      "tech": "低手接球",
+      "phase": "起始（準備期末、最大屈）",
+      "frame": "bump-start",
+      "variable": "膝角",
+      "def": "D-knee",
+      "metric": "knee2D",
+      "lit": {
+        "mean": 134.82,
+        "sd": 7.48,
+        "shown": "134.82±7.48"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 125.61±10.40",
+      "ruling": "R-none-prep",
+      "current": 137.5,
+      "diff": 2.7,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.contact.head",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "頭傾角",
+      "def": "D-head",
+      "metric": "head",
+      "lit": {
+        "mean": 2.19,
+        "sd": 4.91,
+        "shown": "2.19±4.91"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 -2.46±3.67",
+      "ruling": "R-none-prep",
+      "current": -4.6,
+      "diff": -6.8,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.contact.trunk",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "軀幹前傾",
+      "def": "D-trunk",
+      "metric": "trunk",
+      "lit": {
+        "mean": 19.84,
+        "sd": 10.19,
+        "shown": "19.84±10.19"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 8.75±4.66",
+      "ruling": "R-none-prep",
+      "current": 12.1,
+      "diff": -7.7,
+      "tol": 10.19,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.contact.uarm",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "上臂前擺",
+      "def": "D-uarm",
+      "metric": "upperArm",
+      "lit": {
+        "mean": 50.71,
+        "sd": 6.13,
+        "shown": "50.71±6.13"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 58.03±7.89",
+      "ruling": "R-none-prep",
+      "current": 53.9,
+      "diff": 3.2,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.contact.elbow",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "肘角",
+      "def": "D-elbow",
+      "metric": "elbow2D",
+      "lit": {
+        "mean": 172.44,
+        "sd": 5.08,
+        "shown": "172.44±5.08"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 161.29±7.46",
+      "ruling": "R-none-prep",
+      "current": 180,
+      "diff": 7.6,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.contact.thigh",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "大腿前擺",
+      "def": "D-thigh",
+      "metric": "thigh",
+      "lit": {
+        "mean": 30.68,
+        "sd": 9.28,
+        "shown": "30.68±9.28"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 31.56±4.23",
+      "ruling": "R-none-prep",
+      "current": 28.3,
+      "diff": -2.4,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.contact.knee",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "膝角",
+      "def": "D-knee",
+      "metric": "knee2D",
+      "lit": {
+        "mean": 147.38,
+        "sd": 10.61,
+        "shown": "147.38±10.61"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 143.18±11.74",
+      "ruling": "R-none-prep",
+      "current": 151.7,
+      "diff": 4.3,
+      "tol": 10.61,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.end.head",
+      "tech": "低手接球",
+      "phase": "收勢（隨揮末）",
+      "frame": "bump-end",
+      "variable": "頭傾角",
+      "def": "D-head",
+      "metric": "head",
+      "lit": {
+        "mean": -6.5,
+        "sd": 10.03,
+        "shown": "-6.50±10.03"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 -10.12±5.3",
+      "ruling": "R-none-prep",
+      "current": -5.7,
+      "diff": 0.8,
+      "tol": 10.03,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.end.trunk",
+      "tech": "低手接球",
+      "phase": "收勢（隨揮末）",
+      "frame": "bump-end",
+      "variable": "軀幹前傾",
+      "def": "D-trunk",
+      "metric": "trunk",
+      "lit": {
+        "mean": 20.02,
+        "sd": 11.31,
+        "shown": "20.02±11.31"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 4.41±6.28",
+      "ruling": "R-none-prep",
+      "current": 13.1,
+      "diff": -6.9,
+      "tol": 11.31,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.end.uarm",
+      "tech": "低手接球",
+      "phase": "收勢（隨揮末）",
+      "frame": "bump-end",
+      "variable": "上臂前擺",
+      "def": "D-uarm",
+      "metric": "upperArm",
+      "lit": {
+        "mean": 85.66,
+        "sd": 10.82,
+        "shown": "85.66±10.82"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 95.86±11.43",
+      "ruling": "R-none-prep",
+      "current": 88.8,
+      "diff": 3.1,
+      "tol": 10.82,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.end.elbow",
+      "tech": "低手接球",
+      "phase": "收勢（隨揮末）",
+      "frame": "bump-end",
+      "variable": "肘角",
+      "def": "D-elbow",
+      "metric": "elbow2D",
+      "lit": {
+        "mean": 170.22,
+        "sd": 6.39,
+        "shown": "170.22±6.39"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 166.62±9.25",
+      "ruling": "R-none-prep",
+      "current": 173,
+      "diff": 2.8,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.end.thigh",
+      "tech": "低手接球",
+      "phase": "收勢（隨揮末）",
+      "frame": "bump-end",
+      "variable": "大腿前擺",
+      "def": "D-thigh",
+      "metric": "thigh",
+      "lit": {
+        "mean": 18.76,
+        "sd": 7.19,
+        "shown": "18.76±7.19"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 22.84±7.03",
+      "ruling": "R-none-prep",
+      "current": 19.9,
+      "diff": 1.1,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "bump.end.knee",
+      "tech": "低手接球",
+      "phase": "收勢（隨揮末）",
+      "frame": "bump-end",
+      "variable": "膝角",
+      "def": "D-knee",
+      "metric": "knee2D",
+      "lit": {
+        "mean": 158.91,
+        "sd": 11.19,
+        "shown": "158.91±11.19"
+      },
+      "src": "RH1987",
+      "status": "V",
+      "note": "HS 組；LS 組 154.31±13.89",
+      "ruling": "R-none-prep",
+      "current": 160.1,
+      "diff": 1.2,
+      "tol": 11.19,
+      "out": false
+    },
+    {
+      "kind": "qual",
+      "id": "bump.contact.span",
+      "tech": "低手接球",
+      "phase": "觸球",
+      "frame": "bump-contact",
+      "variable": "雙腕間距（平台）",
+      "def": "D-span",
+      "metric": "wristSpan",
+      "unit": "m",
+      "lit": {
+        "text": "雙手掌根併攏成平台（≈0）"
+      },
+      "src": "JVA",
+      "status": "Q",
+      "note": "見「量測中的發現 1」",
+      "ruling": "R-none-prep",
+      "current": 136.2,
+      "out": null
+    },
+    {
+      "kind": "angle",
+      "id": "set.load.elflex",
+      "tech": "高手舉球",
+      "phase": "裝填（最大肘屈）",
+      "frame": "set-load",
+      "variable": "肘屈",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 100,
+        "sd": null
+      },
+      "src": "LZ2026",
+      "status": "VA",
+      "note": "fast／seven／quick 皆「約 100°」",
+      "ruling": "R-none-prep",
+      "current": 100.3,
+      "diff": 0.3,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "set.push.elflex.fast",
+      "tech": "高手舉球",
+      "phase": "出手收勢",
+      "frame": "set-push",
+      "variable": "肘屈（fast／seven 型）",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 40,
+        "sd": null
+      },
+      "src": "LZ2026",
+      "status": "VA",
+      "note": "遊戲所有舉球共用一支動畫",
+      "ruling": "R-none-prep",
+      "current": 40.1,
+      "diff": 0.1,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "set.push.elflex.quick",
+      "tech": "高手舉球",
+      "phase": "出手收勢",
+      "frame": "set-push",
+      "variable": "肘屈（quick 型）",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 70,
+        "sd": null
+      },
+      "src": "LZ2026",
+      "status": "VA",
+      "note": "同上",
+      "ruling": "R-none-prep",
+      "current": 40.1,
+      "diff": -29.9,
+      "tol": 10,
+      "out": true
+    },
+    {
+      "kind": "angle",
+      "id": "set.push.shflex",
+      "tech": "高手舉球",
+      "phase": "出手收勢",
+      "frame": "set-push",
+      "variable": "肩屈（pipe 型）",
+      "def": "D-shflex",
+      "metric": "shFlexSag",
+      "lit": {
+        "mean": 150,
+        "sd": null
+      },
+      "src": "LZ2026",
+      "status": "VA",
+      "note": "原文僅 pipe 給收勢肩屈",
+      "ruling": "R-none-prep",
+      "current": 151.3,
+      "diff": 1.3,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "qual",
+      "id": "set.load.wrist",
+      "tech": "高手舉球",
+      "phase": "裝填（拉球期）",
+      "frame": "set-load",
+      "variable": "腕",
+      "def": "D-wrist",
+      "metric": "wristBend",
+      "lit": {
+        "text": "拉球期腕背伸（手往後倒）"
+      },
+      "src": "OZ2019",
+      "status": "Q",
+      "note": "幾何人看不見腕角",
+      "ruling": "R-none-prep",
+      "current": -24.1,
+      "out": null
+    },
+    {
+      "kind": "qual",
+      "id": "set.push.wrist",
+      "tech": "高手舉球",
+      "phase": "出手（推球期）",
+      "frame": "set-push",
+      "variable": "腕",
+      "def": "D-wrist",
+      "metric": "wristBend",
+      "lit": {
+        "text": "推球期腕屈肌釋放（手往前推）"
+      },
+      "src": "OZ2019",
+      "status": "Q",
+      "note": "同上",
+      "ruling": "R-none-prep",
+      "current": 22.9,
+      "out": null
+    },
+    {
+      "kind": "angle",
+      "id": "spike.wind.shline",
+      "tech": "扣球",
+      "phase": "最大後擺",
+      "frame": "spike-wind",
+      "variable": "肩線對網角",
+      "def": "D-shline",
+      "metric": "shLine",
+      "lit": {
+        "mean": 105,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "V",
+      "note": "RA 組；GA 未給；絕對角假設 root 正對網，可靠度低於髖肩分離",
+      "ruling": "R-none-spike",
+      "current": 107.6,
+      "diff": 2.6,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.wind.hipline",
+      "tech": "扣球",
+      "phase": "最大後擺",
+      "frame": "spike-wind",
+      "variable": "髖線對網角",
+      "def": "D-hipline",
+      "metric": "hipLine",
+      "lit": {
+        "mean": 157,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "V",
+      "note": "RA 組；絕對角假設 root 正對網",
+      "ruling": "R-none-spike",
+      "current": 157.1,
+      "diff": 0.1,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.wind.sep",
+      "tech": "扣球",
+      "phase": "最大後擺",
+      "frame": "spike-wind",
+      "variable": "髖肩分離",
+      "def": "D-sep",
+      "metric": "sep",
+      "lit": {
+        "mean": 52,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "VX",
+      "note": "157−105（RA）",
+      "ruling": "R-none-spike",
+      "current": 49.5,
+      "diff": -2.5,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "2C",
+      "id": "spike.wind.er",
+      "tech": "扣球",
+      "phase": "最大後擺（cocking 末）",
+      "frame": null,
+      "variable": "肩最大外旋",
+      "def": "D-2C",
+      "lit": {
+        "mean": 160,
+        "sd": 10
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "斜線扣；直線扣 163±10",
+      "ruling": "R-none-spike",
+      "current": null,
+      "out": null
+    },
+    {
+      "kind": "angle",
+      "id": "spike.hit.abd",
+      "tech": "扣球",
+      "phase": "擊球",
+      "frame": "spike-hit",
+      "variable": "肩外展",
+      "def": "D-abd",
+      "metric": "abdFrontal",
+      "lit": {
+        "mean": 130,
+        "sd": 8
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "斜線扣；直線扣 133±7",
+      "ruling": "R-none-spike",
+      "current": 132.5,
+      "diff": 2.5,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.hit.elflex",
+      "tech": "扣球",
+      "phase": "擊球",
+      "frame": "spike-hit",
+      "variable": "肘屈",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 34,
+        "sd": 10
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "斜線與直線扣同為 34±10",
+      "ruling": "R-none-spike",
+      "current": 34.4,
+      "diff": 0.4,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.hit.hadd",
+      "tech": "扣球",
+      "phase": "擊球",
+      "frame": "spike-hit",
+      "variable": "肩水平內收",
+      "def": "D-hadd",
+      "metric": "hAdd",
+      "lit": {
+        "mean": 29,
+        "sd": 14
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "斜線扣；直線扣 33±15",
+      "ruling": "R-none-spike",
+      "current": 29.1,
+      "diff": 0.1,
+      "tol": 14,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.hit.shline",
+      "tech": "扣球",
+      "phase": "擊球",
+      "frame": "spike-hit",
+      "variable": "肩線對網角",
+      "def": "D-shline",
+      "metric": "shLine",
+      "lit": {
+        "mean": 137,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "V",
+      "note": "RA 組；GA 150；絕對角假設 root 正對網",
+      "ruling": "R-none-spike",
+      "current": 136.8,
+      "diff": -0.2,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.hit.hipline",
+      "tech": "扣球",
+      "phase": "擊球",
+      "frame": "spike-hit",
+      "variable": "髖線對網角",
+      "def": "D-hipline",
+      "metric": "hipLine",
+      "lit": {
+        "mean": 157,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "V",
+      "note": "RA 組；GA 164；絕對角假設 root 正對網",
+      "ruling": "R-none-spike",
+      "current": 157.1,
+      "diff": 0.1,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "spike.hit.sep",
+      "tech": "扣球",
+      "phase": "擊球",
+      "frame": "spike-hit",
+      "variable": "髖肩分離",
+      "def": "D-sep",
+      "metric": "sep",
+      "lit": {
+        "mean": 20,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "VX",
+      "note": "157−137（RA）；GA 164−150=14",
+      "ruling": "R-none-spike",
+      "current": 20.3,
+      "diff": 0.3,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "comdrop",
+      "id": "spike.approach.comdrop",
+      "tech": "扣球",
+      "phase": "助跑最低點",
+      "frame": "approach-low",
+      "variable": "重心下降／身高",
+      "def": "D-comdrop",
+      "metric": "dropPct",
+      "unit": "%",
+      "lit": {
+        "mean": 12.7,
+        "sd": null
+      },
+      "src": "ZH2017",
+      "status": "VX",
+      "note": "原文「約 0.25 m」÷ 平均身高 1.966 m",
+      "ruling": "R-none-approach",
+      "current": 12.8,
+      "diff": 0.1,
+      "tol": null,
+      "out": null
+    },
+    {
+      "kind": "angle",
+      "id": "tip.hit.abd",
+      "tech": "吊球",
+      "phase": "擊球",
+      "frame": "tip-hit",
+      "variable": "肩外展",
+      "def": "D-abd",
+      "metric": "abdFrontal",
+      "lit": {
+        "mean": 122,
+        "sd": 9
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "roll shot（遊戲註解自稱 Tip／Roll Shot）",
+      "ruling": "R-tip",
+      "current": 122.7,
+      "diff": 0.7,
+      "tol": 10,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "tip.hit.elflex",
+      "tech": "吊球",
+      "phase": "擊球",
+      "frame": "tip-hit",
+      "variable": "肘屈",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 43,
+        "sd": 12
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "",
+      "ruling": "R-tip",
+      "current": 43,
+      "diff": 0,
+      "tol": 12,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "tip.hit.hadd",
+      "tech": "吊球",
+      "phase": "擊球",
+      "frame": "tip-hit",
+      "variable": "肩水平內收",
+      "def": "D-hadd",
+      "metric": "hAdd",
+      "lit": {
+        "mean": 43,
+        "sd": 15
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "",
+      "ruling": "R-tip",
+      "current": 43.9,
+      "diff": 0.9,
+      "tol": 15,
+      "out": false
+    },
+    {
+      "kind": "2C",
+      "id": "tip.wind.er",
+      "tech": "吊球",
+      "phase": "最大後擺",
+      "frame": null,
+      "variable": "肩最大外旋",
+      "def": "D-2C",
+      "lit": {
+        "mean": 129,
+        "sd": 32
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "tip 序列自 spikeWind 起手",
+      "ruling": "R-tip",
+      "current": null,
+      "out": null
+    },
+    {
+      "kind": "qual",
+      "id": "block.top.elflex",
+      "tech": "攔網",
+      "phase": "最高點",
+      "frame": "block-top",
+      "variable": "肘屈（手臂打直）",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "text": "手臂盡量打直伸過網（≈0）"
+      },
+      "src": "BLOCKREF",
+      "status": "Q",
+      "note": "FK2014 只有質心量，無角度",
+      "ruling": "R-block",
+      "current": 0,
+      "out": null
+    },
+    {
+      "kind": "qual",
+      "id": "block.top.span",
+      "tech": "攔網",
+      "phase": "最高點",
+      "frame": "block-top",
+      "variable": "雙腕間距",
+      "def": "D-span",
+      "metric": "wristSpan",
+      "unit": "m",
+      "lit": {
+        "text": "虎口對齊肩寬"
+      },
+      "src": "BLOCKREF",
+      "status": "Q",
+      "note": "肩寬＝肩關節距 0.450 m",
+      "ruling": "R-block",
+      "current": 450,
+      "out": null
+    },
+    {
+      "kind": "angle",
+      "id": "servejump.hit.abd",
+      "tech": "發球・跳發",
+      "phase": "擊球",
+      "frame": "servejump-hit",
+      "variable": "肩外展",
+      "def": "D-abd",
+      "metric": "abdFrontal",
+      "lit": {
+        "mean": 129,
+        "sd": 11
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=5",
+      "ruling": "R-none-serve",
+      "current": 132.5,
+      "diff": 3.5,
+      "tol": 11,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "servejump.hit.elflex",
+      "tech": "發球・跳發",
+      "phase": "擊球",
+      "frame": "servejump-hit",
+      "variable": "肘屈",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 48,
+        "sd": 26
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=5",
+      "ruling": "R-none-serve",
+      "current": 34.4,
+      "diff": -13.6,
+      "tol": 26,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "servejump.hit.hadd",
+      "tech": "發球・跳發",
+      "phase": "擊球",
+      "frame": "servejump-hit",
+      "variable": "肩水平內收",
+      "def": "D-hadd",
+      "metric": "hAdd",
+      "lit": {
+        "mean": 23,
+        "sd": 24
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=5",
+      "ruling": "R-none-serve",
+      "current": 29.1,
+      "diff": 6.1,
+      "tol": 24,
+      "out": false
+    },
+    {
+      "kind": "2C",
+      "id": "servejump.wind.er",
+      "tech": "發球・跳發",
+      "phase": "引臂末（cocking）",
+      "frame": null,
+      "variable": "肩最大外旋",
+      "def": "D-2C",
+      "lit": {
+        "mean": 164,
+        "sd": 11
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=5",
+      "ruling": "R-none-serve",
+      "current": null,
+      "out": null
+    },
+    {
+      "kind": "angle",
+      "id": "servefloat.hit.abd",
+      "tech": "發球・飄球",
+      "phase": "擊球",
+      "frame": "servefloat-hit",
+      "variable": "肩外展",
+      "def": "D-abd",
+      "metric": "abdFrontal",
+      "lit": {
+        "mean": 133,
+        "sd": 11
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=14；原文未寫站立或跳飄（稱 traditional float serve）；遊戲飄球為站立",
+      "ruling": "R-none-serve",
+      "current": 132.1,
+      "diff": -0.9,
+      "tol": 11,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "servefloat.hit.elflex",
+      "tech": "發球・飄球",
+      "phase": "擊球",
+      "frame": "servefloat-hit",
+      "variable": "肘屈",
+      "def": "D-elflex",
+      "metric": "elbowFlex",
+      "lit": {
+        "mean": 50,
+        "sd": 17
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=14",
+      "ruling": "R-none-serve",
+      "current": 49.8,
+      "diff": -0.2,
+      "tol": 17,
+      "out": false
+    },
+    {
+      "kind": "angle",
+      "id": "servefloat.hit.hadd",
+      "tech": "發球・飄球",
+      "phase": "擊球",
+      "frame": "servefloat-hit",
+      "variable": "肩水平內收",
+      "def": "D-hadd",
+      "metric": "hAdd",
+      "lit": {
+        "mean": 30,
+        "sd": 16
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=14",
+      "ruling": "R-none-serve",
+      "current": 30.2,
+      "diff": 0.2,
+      "tol": 16,
+      "out": false
+    },
+    {
+      "kind": "2C",
+      "id": "servefloat.wind.er",
+      "tech": "發球・飄球",
+      "phase": "引臂末（cocking）",
+      "frame": null,
+      "variable": "肩最大外旋",
+      "def": "D-2C",
+      "lit": {
+        "mean": 158,
+        "sd": 12
+      },
+      "src": "RS2010",
+      "status": "VD",
+      "note": "n=14",
+      "ruling": "R-none-serve",
+      "current": null,
+      "out": null
+    },
+    {
+      "kind": "none",
+      "id": "serve.hit.none",
+      "tech": "發球・一般（穩定）",
+      "phase": "擊球",
+      "frame": "serve-hit",
+      "variable": "—",
+      "def": null,
+      "lit": {
+        "text": "查無對應文獻（遊戲自訂的「穩定」發球，跳 0.3 m）"
+      },
+      "src": null,
+      "status": "N",
+      "note": "現況值見 JSON frames.serve-hit",
+      "ruling": "R-none-serve",
+      "current": null,
+      "out": null
+    },
+    {
+      "kind": "none",
+      "id": "dive.none",
+      "tech": "魚躍",
+      "phase": "撲出／觸球／著地",
+      "frame": null,
+      "variable": "—",
+      "def": null,
+      "lit": {
+        "text": "查無數字。定性：sprawl＝快速降到地面、平台伸到球下（IYV）；pancake＝手掌貼地（LEB2025）；經典 dive 背弓撐接"
+      },
+      "src": "IYV、LEB2025",
+      "status": "Q",
+      "note": "軀幹前傾由 matchView DIVE_TILT 驅動、不在 animator 內，本表不量",
+      "ruling": "R-dive",
+      "current": null,
+      "out": null
+    }
+  ]
+}

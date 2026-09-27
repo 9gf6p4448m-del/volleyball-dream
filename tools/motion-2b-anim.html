@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2B 動態對照台</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1119; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<script type="module">
+// 寫實球員卷 2B 自然度：動態（逐幀）對照截圖台，tools/motion-2b-gif.mjs 驅動。
+// 只用改前（f4ccbec）、2B 現況、本輪三個版本都有的 API（createGeoAnimator 的 trigger／update／
+// setHold／peek／isIdle；createGeoPool／createGeoCharacter；createRealPlayer 的 resetLegs／groundLegs），
+// 所以同一份頁面可放進三個版本的副本各自跑、逐 tick 對齊。
+// 情境時序同 tools/motion-2b-natural-probe.mjs（60 Hz；root 依情境等速前移、鏡頭跟隨）。
+import * as THREE from 'three';
+import { createGeoAnimator } from '/src/render/geoAnimator.js';
+import { createGeoPool, createGeoCharacter } from '/src/render/geoCharacter.js';
+import { loadRealPlayerAsset, createRealPlayer } from '/src/render/realPlayer.js';
+
+const TICK = 1 / 60;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x151b27);
+scene.add(new THREE.HemisphereLight(0xc8d6ff, 0x2a2f3a, 1.1));
+const key = new THREE.DirectionalLight(0xfff1dc, 2.2);
+key.position.set(-3, 6, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -4, right: 4, top: 5, bottom: -2, near: 0.5, far: 30 });
+scene.add(key);
+scene.add(key.target);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0xc98a4b, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+// 地板格線：看得出腳有沒有滑
+const grid = new THREE.GridHelper(40, 40, 0x6b4a2a, 0x6b4a2a);
+grid.position.y = 0.002;
+scene.add(grid);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 60);
+
+// 鏡頭：以角色為中心的方位角（0＝正前 +Z、−90＝右側 −X），跟隨 root 的 z
+const CAMS = { spike: { az: -70, el: 6, dist: 3.3, look: 1.15 }, bump: { az: -35, el: 6, dist: 2.6, look: 0.85 }, servejump: { az: -70, el: 6, dist: 3.3, look: 1.15 } };
+
+let asset = null;
+let S = null;
+function clear() {
+  if (!S) return;
+  for (const o of S.objects) scene.remove(o);
+  S = null;
+}
+function build(kind) {
+  if (kind === 'geo') {
+    const before = new Set(scene.children);
+    const pool = createGeoPool(scene, true, 1);
+    const rig = createGeoCharacter(pool, 'D0Probe', 'A', 1.85, false, 'D0Probe', null, null);
+    pool.finishColors?.();
+    const objects = scene.children.filter((o) => !before.has(o));
+    return {
+      rig, objects, pre() {},
+      post() { rig.root.updateMatrixWorld(true); for (const p of rig.parts) pool.writeMatrix(p, p.node.matrixWorld); pool.markDirty(); },
+    };
+  }
+  const p = createRealPlayer(asset, { playerId: 'D0Probe', teamId: 'A', height: 1.85, name: 'D0Probe' });
+  p.mesh.castShadow = true;
+  scene.add(p.rig.root);
+  scene.add(p.mesh);
+  return { rig: p.rig, objects: [p.rig.root, p.mesh], pre() { p.resetLegs(); }, post() { p.rig.root.updateMatrixWorld(true); p.groundLegs(); } };
+}
+
+// 情境腳本：回傳每 tick 呼叫一次的產生器（yield 前已做完該 tick 的 trigger／速度設定）
+function* script(name, anim, st) {
+  const wait = function* (n) { for (let i = 0; i < n; i += 1) yield; };
+  yield* wait(20);
+  if (name === 'spike') {
+    st.speed = 2.55; yield* wait(30);
+    anim.trigger('approach3');
+    let n = 0; while (anim.peek()?.type === 'approach3' && n < 200) { yield; n += 1; }
+    st.speed = 1.0; anim.trigger('windup'); yield* wait(11);
+    anim.trigger('spike', { hitInTicks: 11 }); st.speed = 0.6;
+    n = 0; while (!anim.isIdle() && n < 200) { yield; n += 1; }
+    st.speed = 0; yield* wait(15);
+  } else if (name === 'bump') {
+    anim.trigger('receiveReady'); yield* wait(18);
+    anim.trigger('bump');
+    let n = 0; while (!anim.isIdle() && n < 200) { yield; n += 1; }
+    yield* wait(15);
+  } else if (name === 'servejump') {
+    anim.setHold('serveReady'); yield* wait(30);
+    anim.setHold(null); anim.trigger('serveJump'); st.speed = 0.8; // 同 matchView：發球後 hold 清掉
+    let n = 0; while (!anim.isIdle() && n < 200) { yield; n += 1; }
+    st.speed = 0; yield* wait(15);
+  }
+}
+
+async function setup(name, kind) {
+  if (kind === 'real' && !asset) asset = await loadRealPlayerAsset('/models/real/player_20k.glb');
+  clear();
+  S = build(kind);
+  S.anim = createGeoAnimator(S.rig);
+  S.st = { speed: 0, z: 0 };
+  S.it = script(name, S.anim, S.st);
+  S.name = name;
+  S.tick = 0;
+  return true;
+}
+function render() {
+  const W = innerWidth; const H = innerHeight;
+  renderer.setSize(W, H);
+  camera.aspect = W / H;
+  const c = CAMS[S.name];
+  const az = (c.az * Math.PI) / 180; const el = (c.el * Math.PI) / 180;
+  const d = c.dist * (W / H < 1 ? 1.35 : 1);
+  const z = S.rig.root.position.z;
+  const ly = c.look + Math.max(S.rig.root.position.y, 0) * 0.6; // 跳起時鏡頭跟一部分高度
+  camera.position.set(d * Math.sin(az) * Math.cos(el), ly + d * Math.sin(el), z + d * Math.cos(az) * Math.cos(el));
+  camera.lookAt(0, ly, z);
+  camera.updateProjectionMatrix();
+  key.position.set(-3, 6, z + 4); key.target.position.set(0, 0, z);
+  renderer.render(scene, camera);
+}
+// n 個 tick 前進後渲染一次；回傳是否已播完
+function step(n) {
+  let done = false;
+  for (let i = 0; i < n; i += 1) {
+    const r = S.it.next();
+    if (r.done) { done = true; break; }
+    S.pre();
+    const y = S.anim.update(TICK, S.st.speed, 0, 1);
+    S.st.z += S.st.speed * TICK;
+    S.rig.root.position.set(0, y * S.rig.root.scale.y, S.st.z);
+    S.post();
+    S.tick += 1;
+  }
+  render();
+  return { done, tick: S.tick, seq: S.anim.peek()?.type ?? null };
+}
+window.__anim = { setup, step };
+window.__animReady = true;
+</script>
+</body>
+</html>

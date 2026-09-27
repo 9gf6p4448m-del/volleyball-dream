@@ -22,6 +22,7 @@ import {
   REACH, reachWindow, reachBias, applyReachBias, localBallOffset, worldReachOffset,
 } from './reachAssist.js';
 import { REACH_ACTION } from '../sim/reach.js';
+import { diveRootPose, geoBodyMinY, diveGroundLift } from './diveStyles.js';
 
 // 提前觸發的有效期（秒）：這麼久還沒觸到球就作廢、放行 TOUCH 重播一次——寧可補一次
 // 動作，也不要整拍沒動作。探針實測「提前觸發→實際觸球」最長 41 tick（0.68s，舉球提前量
@@ -33,11 +34,10 @@ const TAG_COLORS = { A: '#6ee7ff', B: '#ff9d7a' };
 const ROLE_TAG = { setter: 'S', outside: 'OH', middle: 'MB', opposite: 'OPP', libero: 'L' };
 
 // 轉身收斂率／轉速上限／近身混合帶皆在 facing.js 的 FACING（純函式可單測）
-// 魚躍飛撲視覺（純表現，sim 不含位移）：沿朝向撲出一段＋身體前傾接近水平
+// 魚躍飛撲視覺（純表現，sim 不含位移）：沿朝向撲出一段＋身體前傾接近水平——
+// 魚躍方案 A（DA1 併入，使用者裁定）：root 位移/前傾曲線與接地補償見 diveStyles.js，
+// 這裡只留 sim 對齊的倒地恢復時長
 const DIVE_RECOVER = 42;   // 同 sim TUNING.DIVE_RECOVER_TICKS（魚躍倒地恢復＝撲救動畫時長）
-const DIVE_LUNGE = 1.35;   // 撲出水平距離（m）
-const DIVE_TILT = 1.2;     // 撲出時身體前傾（rad，接近水平 1.57）
-const DIVE_HOP = 0.22;     // 撲出微騰空（m，飛撲離地的弧）
 // W7.1 #3A：暫停集合帶位（純視覺，不動 sim actors——比照魚躍純視覺位移前例）
 // W8 暫停演出（07-26 拍板 B 案）：幾何改圍圈弧（huddleLayout 單一事實源）、
 // 兩隊各自圍自家教練（真實排球任一方暫停雙方都回板凳圈）、教練＋戰術板道具
@@ -334,6 +334,11 @@ export async function createMatchView(
         // 都靠這裡演，修「按魚躍站著不動」bug（sim 端已倒地、缺的是視覺）
         const diveActor = gameState.actors[id];
         if (diveActor.divedUntil > gameState.tick && diveActor.divedUntil !== u.lastDived) {
+          // 魚躍方案 A（DA1）：撲出方向鎖定為「出手瞬間人→球」水平方向，倒地期間不再
+          // 追著飛走的球轉身（追球轉身重建量測 p90 約 100°，見 feat/dive-proposals 說明）
+          const bx = gameState.ball.x - diveActor.x;
+          const bz = gameState.ball.z - diveActor.z;
+          u.diveYaw = Math.hypot(bx, bz) > 0.3 ? Math.atan2(bx, bz) : u.yaw;
           u.animator.trigger('dive');
           // 4.5B §8 小件：魚躍塵土（落地擦出的塵——重量感；同 DEAD_BALL 塵土管線）
           dust.burst(diveActor.x, diveActor.z, 8, 0.7);
@@ -465,7 +470,7 @@ export async function createMatchView(
           coachX: cp?.x,
           coachZ: cp?.z,
         });
-        u.yaw = approachYaw(u.yaw, targetYaw, dt);
+        u.yaw = approachYaw(u.yaw, a.divedUntil > gameState.tick ? u.diveYaw : targetYaw, dt);
 
         // 4.7 根運動：移動方向相對朝向的橫向分量——沿網橫移＝側併步（見 geoAnimator）
         const lateral = speed > 0.25
@@ -480,28 +485,17 @@ export async function createMatchView(
         if (u.real) u.real.resetLegs();
         const bodyY = u.animator.update(dt, speed, lateral, staminaMul);
         // 魚躍飛撲（純視覺）：dive 期間沿朝向前撲一段＋微騰空落地＋身體前傾接近水平——
-        // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）
+        // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）。
+        // 魚躍方案 A（DA1 併入）：root 曲線改用 diveStyles.diveRootPose（sprawl 滑撲時序）
         let diveX = 0; let diveZ = 0; let diveTilt = 0; let diveY = 0;
         if (a.divedUntil > gameState.tick) {
           const remain = a.divedUntil - gameState.tick; // 42→0
           const p = 1 - Math.max(0, remain) / DIVE_RECOVER; // 撲救進度 0→1
-          // 爬起自然化（Sawmah 07-23：原「滑回與立起同時」＝站著溜冰＋線性回正＝殭屍彈起）：
-          // 滑回提前且緩動——大半發生在身體仍前傾時（低姿爬行感）；前傾晚收尾、緩動回正
-          const ease = (t) => t * t * (3 - 2 * t); // smoothstep：起緩收緩
-          // 撲出位移三段：0-0.3 快速撲出、0.3-0.5 趴住、0.5-0.86 低姿爬回；0.86 後原地起身
-          let lungeP;
-          if (p < 0.3) lungeP = (p / 0.3) ** 0.6;
-          else if (p < 0.5) lungeP = 1;
-          else lungeP = 1 - ease(Math.min((p - 0.5) / 0.36, 1));
-          diveX = Math.sin(u.yaw) * DIVE_LUNGE * lungeP;
-          diveZ = Math.cos(u.yaw) * DIVE_LUNGE * lungeP;
-          // 前傾三段：0-0.24 前撲、0.24-0.62 貼地、0.62-1 撐起回正（先爬後起，收尾放緩）
-          let tiltP;
-          if (p < 0.24) tiltP = p / 0.24;
-          else if (p < 0.62) tiltP = 1;
-          else tiltP = 1 - ease((p - 0.62) / 0.38);
-          diveTilt = DIVE_TILT * tiltP;
-          diveY = p < 0.4 ? DIVE_HOP * Math.sin((p / 0.4) * Math.PI) : 0; // 只撲出段微騰空、落地貼地
+          const r = diveRootPose(p);
+          diveX = Math.sin(u.yaw) * r.fwd;
+          diveZ = Math.cos(u.yaw) * r.fwd;
+          diveTilt = r.tilt;
+          diveY = r.up;
         }
         // 跳躍落地塵土：從空中回到地面的瞬間（含魚躍落地）
         const totalY = bodyY + diveY;
@@ -543,6 +537,12 @@ export async function createMatchView(
         // 垂直伸展加在 dust 判定之後：落地塵土仍只看動畫的跳躍弧，不被伸展誤觸
         u.rig.root.position.set(x + diveX + rOff.dx, totalY + bias.rootUp, z + diveZ + rOff.dz);
         u.rig.root.rotation.set(diveTilt, u.yaw, 0);
+        if (a.divedUntil > gameState.tick || u.animator.peek()?.type === 'dive') {
+          // 魚躍方案 A（DA1）接地補償：全身最低點低於地板才把 root 抬上來（只抬不壓，
+          // 見 diveStyles.js）；涵蓋 divedUntil 剛過期但序列仍在收尾播放的幾幀
+          u.rig.root.updateMatrixWorld(true);
+          u.rig.root.position.y += diveGroundLift(geoBodyMinY(u.rig));
+        }
 
         // root 不在 scene 裡（無 Mesh 可畫），手動推一次 matrixWorld，
         // 再把各部件 slot 的世界矩陣寫進 InstancedMesh 池（寫實球員是獨立
