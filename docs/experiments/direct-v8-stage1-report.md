@@ -131,7 +131,7 @@
 **C 退場**：`direct-pass.test.js` 的 A1、A7、A15；`direct-hold-release.test.js` 的 A21a、A21c、「覆審保留」（A19d 保留）；`direct-pass-lock.test.js` 整檔刪除（只剩 H1）。
 **D 不動**：`direct-physics.test.js` 其餘 23 條、`direct-input.test.js` 15 條、A5、A20a、A27b——內容未動；唯二機械修訂（2026-09-27 第一輪覆審 L1 更正為如實描述）：
 - A5（`direct-pass.test.js`）：正向重播的 `simulationVersion` 由 `'direct-v7'` 改 `'direct-v8.1'`；**原本「拒絕 `direct-v6` 重播」的 `assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v6' … }))` 被刪掉、換成拒絕 `'direct-v7'` 的同型斷言**；「拒絕 `direct-v6` 還原」的 `restoreDirectGame` throws 保留，另加一條拒絕 `'direct-v7'` 還原。
-- 「replay and mid-flight restore」（`direct-physics.test.js`）：正向重播版本字串 `"direct-v7"` → `"direct-v8.1"`；原有的拒絕 `"direct-v6"` 還原／重播兩條都保留，只**新增**一條拒絕 `"direct-v7"` 還原。
+- 「replay and mid-flight restore」（`direct-physics.test.js`）：正向重播版本字串 `"direct-v7"` → `"direct-v8.1"`；原檔（`3e90288`）的拒絕斷言是三條——還原 `"bad"`、還原 `"direct-v6"`、重播 `"bad"`——全部保留，只**新增**一條拒絕 `"direct-v7"` 還原（第三輪更正：第二輪寫成「拒絕 `direct-v6` 還原／重播兩條」是錯的，原檔沒有拒絕 `direct-v6` 重播那條，重播那條拒絕的是 `"bad"`；現行檔 `:379,:388,:391,:395`）。
 （與前幾版升版做法相同；不是門檻。）
 
 數量：退場 37 條（A 組 26＝absorb 6＋inner-gap 1＋physics 9＋pass 8＋receive-assist 2；B 組併入 R8 而消失 4＝A23c、A14、A16、A16b；C 組 7）、新增 15 條（`direct-v8-rules` 9、`direct-v8-context` 6）；現在全套 2581 條，推算舊套為 2581＋37−15＝2603（未在舊碼上實跑全套，此數為推算）；`git diff 3e90288..HEAD --stat` 內其餘既有測試檔沒有任何門檻被放寬（A 組整條刪、B 組門檻數字逐條相同、D 組只動版本字串）。
@@ -156,6 +156,8 @@
 8. **提示與姿勢**：舉手（高手姿勢）改在預測會判高手且剩 ≤ 0.25 s 時才舉（A24d 綠）；A25 沿用 `receiveContactEta`（改用新判定幾何）。
 9. 練習頁移除了「接球方向練習」餵球與目標圈（P1 之後無意義），未在驗收清單內、屬順手清理，覆審若認為超出範圍可還原。
 10. `.dp-actions` 的出手鈕屬性原本也叫 `data-action`，與設定內的 `<select data-action>` 撞名讓治具定位到兩個元素，改成 `data-does`。
+11. **（第二輪覆審 LOW，未修、如實列出）跑動低手的誤差倍率可能高於魚躍**：低手傳球的站姿倍率 `stanceMultiplier(bodySpeed)` 在 0.5 → 5.5 m/s 之間由 0.7 線性升到 1.6（`directConstants.js` `stanceStill/stanceRun`），魚躍的總倍率是固定的 1.05（第 6 題裁定後）——身體速度 ≥ 2.44 m/s 的跑動低手（0.7 + 0.9 × (2.44 − 0.5) / 5 = 1.05）誤差倍率就已經和魚躍一樣、再快就更高（覆審時倍率還是 1.5，門檻是 4.94 m/s）。這是設計取捨（跑動中的墊球本來就不準），本輪不改。
+12. **（第二輪覆審 LOW，未修、如實列出）球低於平台高度後情境判斷回 `null`**：`nextJudgement` 的魚躍段要先算得出平台高度的穿越點（`if (dive && under)`），球心一低於平台高度 `crossingPoint` 回 null，於是 `contextAction` 回 null（按鈕退回「接球」）、`slowMotionScale` 回 1——強力發球錄影裡慢動作在 tick 59（球過平台高度）就關掉，魚躍判定在 tick 64 才發生。這段 5 tick 內按出手會啟動接球而不是魚躍（`resolveHitAction` 的 `?? 'receive'`）；R10「按鈕文字＝sim 動作」仍成立（兩邊都回接球）。本輪不改，第二階段若動出手鍵再一併處理。
 
 ## 9. 背景程序（已關閉）
 
@@ -205,7 +207,7 @@
 
 ### M3｜魚躍誤差倍率與註解不符
 
-- 改了什麼：`src/sim/directReceiveAssist.js:51,53` `passOutcome` 多一個 `stance` 參數（預設仍 `stanceMultiplier(bodySpeed)`）；`directReceiveRules.js:196-203` 魚躍傳 `stance: 1`＋`errorMultiplier: 1.5`，所以倍率真的是 1.5（原本 0.7×1.5 = 1.05）。`bodySpeed` 照實記在事件裡（畫面「沒站穩」本來就對魚躍不顯示）。
+- 改了什麼：`src/sim/directReceiveAssist.js:51,53` `passOutcome` 多一個 `stance` 參數（預設仍 `stanceMultiplier(bodySpeed)`）；`directReceiveRules.js` 魚躍傳 `stance: 1`＋`errorMultiplier: 1.5`，所以倍率當時真的是 1.5（原本 0.7×1.5 = 1.05）。×1.5 是實作者自訂的數值（第二節沒規定倍率、R4 只要求魚躍比低手不準）；**第三輪依第 6 題裁定改回總倍率 1.05**（§11）。`bodySpeed` 照實記在事件裡（畫面「沒站穩」本來就對魚躍不顯示）。
 - 證據：R4 誤差比較重跑（`tests/direct-v8-rules.test.js` 第 2 條 R4）：魚躍平均落點誤差 1.77 m（n=300）> 低手 0.483 m（n=192）（第一輪 1.061 m）。
 
 ### M4｜R11 沒斷言慢動作真的出現
@@ -217,7 +219,7 @@
 
 門檻、網格、例數一律照 `3e90288` 原測試抄；按法一律 `resolveHitAction(s)`（v8 預設情境出手＝真人按的那顆鍵）。
 
-- A23c（`tests/direct-receive-assist.test.js:26-32`）：`sweep` 探針改成情境出手、舉球區只算規則觸球（`tools/receive-assist-probe.mjs:37-58`）。**過**：diagonal 舉球區 714/2070（≥ 108）、碰網 0；diagonalNoisy 1454/4140（≥ 277）、碰網 2/4140 = 0.05%（≤ 3%）。（舊碼 `3e90288` 的同網格：72／224。）
+- A23c（`tests/direct-receive-assist.test.js:26-32`）：`sweep` 探針改成情境出手、舉球區只算規則觸球（`tools/receive-assist-probe.mjs:37-58`）。**過**：diagonal 舉球區 714/2070（≥ 108）、碰網 0；diagonalNoisy 1454/4140（≥ 277）、碰網 2/4140 = 0.05%（≤ 3%）。（第三輪更正：舊碼 `3e90288` 的原 A23c 在同網格實跑是 **diagonal 273／2070、diagonalNoisy 511／4140**（碰網 0 與 9；指令：在 `3e90288` 的 `git archive` 副本跑 `node tools/receive-assist-probe.mjs`，輸出 `diagonal {"n":2070,…,"zone":"273 13.2%","net":0…}`、`diagonalNoisy {"n":4140,…,"zone":"511 12.3%","net":9…}`）；第二輪寫的「72／224」是錯的。）
 - A14（`tests/direct-pass.test.js:48-85`，網格 5×3×23）：n=345 全部是主動前臂／手觸球。A14a 碰網 0/345 = 0.00（≤ 0.10）**過**；**A14b 舉球區 165/345 = 0.478 < 0.50 不過**（測試在這條停）；A14c 弧頂中位數（測試沒跑到，同構探針算出）1.24 m < 3.0 m **也不過**；A14d（低球平台不以碰網為主）沒有規則版對應物——上下滑平台選擇已隨 P1 退場，該子句沒寫進來（報告明列，不算改寫）。
 - A16（`:87-120`）：n=258，碰網 0.00 過，舉球區 132/258 = 0.512 ≥ 0.50 **過**（只多 3 例）。
 - A16b（`:122-129`）：n=436，碰網 0.00 過，**舉球區 196/436 = 0.450 < 0.50 不過**。
@@ -237,7 +239,7 @@
 
 - 改了什麼：`tools/receive-assist-probe.mjs:28-35` `settle()`：沒有等級也不是噴球的觸球（身體彈開）一律進 `groundOther`，落進區內另計 `bodyZone` 不算 `zone`；`chase`／`sweep` 共用（`:55,112`）。
 - 證據（`node tools/receive-assist-probe.mjs chase`，最終碼）：n=2646、空接 175（6.61%）≤ 25%、碰網 8（0.30%）≤ 5%、**舉球區 901（34.05%）≥ 34%——只比門檻多 1 例（34% × 2646 = 899.6）**；身體彈進區 27 例（已排除）；噴球 521；情境出手 dive 1460／receive 1186；有等級 1131。R2：PERFECT 191（16.89%，平均 0.211 m）< GOOD 845（74.71%，1.18 m）< POOR 95（8.40%，1.873 m）。
-- 為什麼從第一輪的 39.1%（審查員排除身體彈開後 38.06%）掉到 34.05%：不是 L4 一項（那只扣 27 例），主要是 H1（撲救範圍改在 0.3 m 時刻量，chase 網格裡按魚躍的案例 1293 → 1460、被救起來的更多，但）加 M3（魚躍誤差倍率 1.05 → 1.5，魚躍傳球落點散得更開，`other` 1010 → 1555）。這兩項都是規格與設計要求的修正，門檻沒動，數字如實寫在這裡。
+- 為什麼從第一輪的 39.1%（審查員排除身體彈開後 38.06%）掉到 34.05%（第三輪依覆審員實測更正歸因；每項各自套用、其餘不動，舉球區例數的變化）：H1 約 **+66**（撲救範圍改在 0.3 m 時刻量，chase 網格裡按魚躍的案例 1293 → 1460、被救起來的更多）、M3 約 **−169**（魚躍誤差倍率 1.05 → 1.5 讓魚躍傳球落點散開，`other` 1010 → 1555）、L4 **−27**（身體彈進區內不計）；淨值就是 1034 → 901。M3 的 ×1.5 是實作者自訂的數值，不是規格或設計要求（第二節沒有規定倍率），第 6 題已裁回 1.05（§11）；門檻沒動。
 
 ### L1
 

@@ -5,18 +5,22 @@ import { createDirectGame, stepDirectGame, getDirectPose } from '../src/sim/dire
 import { closestPoint } from '../src/sim/directPhysics.js';
 import { resolveHitAction } from '../src/sim/directReceiveRules.js';
 
-// Gap (m) between the ball surface and the nearest forearm/hand surface, and
-// the lower hand height in body heights, from the pose at the end of the tick
-// (after stepDirectGame the end-of-tick pose is fraction 0 of the next tick).
+// Gap (m) between the ball surface and the nearest forearm/hand surface
+// (`gap`) and the nearest surface of any body part (`bodyGap`; R6 measures an
+// unpressed spray there, Q3 2026-09-27), and the lower hand height in body
+// heights, from the pose at the end of the tick (after stepDirectGame the
+// end-of-tick pose is fraction 0 of the next tick).
 export function armGap(s) {
   const pose = getDirectPose(s, 0), b = s.ball;
-  let gap = Infinity;
-  for (const q of pose) if (q.part === 'forearm' || q.part === 'hand') {
+  let gap = Infinity, bodyGap = Infinity;
+  for (const q of pose) {
     const c = closestPoint(b, q.a, q.b);
-    gap = Math.min(gap, Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z) - q.radius - b.radius);
+    const g = Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z) - q.radius - b.radius;
+    bodyGap = Math.min(bodyGap, g);
+    if (q.part === 'forearm' || q.part === 'hand') gap = Math.min(gap, g);
   }
   const hands = pose.filter((q) => q.part === 'hand').map((q) => (q.a.y - s.player.y) / s.player.height);
-  return { gap: Math.max(0, gap), handY: Math.min(...hands), over: s.player.receiveOverhand, actionTick: s.player.actionTick };
+  return { gap: Math.max(0, gap), bodyGap: Math.max(0, bodyGap), handY: Math.min(...hands), over: s.player.receiveOverhand, actionTick: s.player.actionTick };
 }
 
 const cmd = (s, action, move) => ({ tick: s.tick, sequence: 0, move, aim: { x: 0, z: -1 }, action });
@@ -81,8 +85,10 @@ function arrival(f, y) { // first time the falling ball reaches height y
   return { t, x: f.x + f.vx * t, z: f.z + f.vz * t };
 }
 // contactHeight: body heights where the chaser meets the ball (0.44 ~ forearms;
-// 1.02 = forehead, i.e. the player takes it overhead); forward: stance offset.
-export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3 } = {}) {
+// 1.02 = forehead, i.e. the player takes it overhead); forward: stance offset;
+// press: 'auto' = the contextual hit button, 'none' = the chaser never presses
+// (every touch is then an unpressed spray or a body deflection).
+export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3, press: pressMode = 'auto' } = {}) {
   const c = { n: 0, whiff: 0, zone: 0, bodyZone: 0, net: 0, out: 0, groundOther: 0, sprays: 0, tiers: {}, tech: {}, actions: {}, rows: [] };
   for (const f of CHASE.feeds) for (const [px, pz] of [[-1, 6], [1, 6], [0, 7.5]]) for (const [ex, ez] of CHASE.errors) for (const off of CHASE.offsets) {
     const s = createDirectGame(); s.player.x = px; s.player.z = pz;
@@ -94,7 +100,7 @@ export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3 } = {
     for (let t = 0; t < 240; t++) {
       const dx = goal.x - s.player.x, dz = goal.z - s.player.z, d = Math.hypot(dx, dz);
       const move = t < reaction || d < 0.08 ? { x: 0, z: 0 } : { x: dx / Math.max(d, 0.4), z: dz / Math.max(d, 0.4) };
-      const action = t === Math.max(0, press) ? resolveHitAction(s) : null;
+      const action = pressMode === 'auto' && t === Math.max(0, press) ? resolveHitAction(s) : null;
       stepDirectGame(s, [cmd(s, action, move)]);
       if (action) c.actions[action] = (c.actions[action] ?? 0) + 1;
       const hit = s.events.find((e) => e.type === 'contact');
@@ -108,7 +114,7 @@ export function chase({ reaction = 12, contactHeight = 0.44, forward = 0.3 } = {
       if (end) {
         // One row per rule-judged touch (pass, dive or spray); body deflections
         // are misses and never count toward the setter zone (R8).
-        if (touched?.tier || touched?.spray) c.rows.push({ tier: touched.tier ?? null, spray: !!touched.spray, technique: touched.technique, bodySpeed: touched.bodySpeed, gap: touched.gap, handY: touched.handY, over: touched.over, actionTick: touched.actionTick, end: end.type, x: s.ball.x, z: s.ball.z });
+        if (touched?.tier || touched?.spray) c.rows.push({ tier: touched.tier ?? null, spray: !!touched.spray, timing: touched.timing ?? null, technique: touched.technique, bodySpeed: touched.bodySpeed, gap: touched.gap, bodyGap: touched.bodyGap, handY: touched.handY, over: touched.over, actionTick: touched.actionTick, end: end.type, x: s.ball.x, z: s.ball.z });
         settle(c, s, end, touched);
         break;
       }

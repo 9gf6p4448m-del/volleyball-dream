@@ -14,10 +14,11 @@ export const DIRECT_PHYSICS = Object.freeze({
   receiveTurnLimit: 35 * Math.PI / 180,
   receiveTrackCone: 60 * Math.PI / 180,
   receiveTrackReach: 1.1, // body heights; tracking never enlarges the actual capsules
-  // Side reach (direct-v4): the platform slides toward an off-centre ball while
-  // the body squares up to the path. Visible, rate-limited, same capsules.
-  receiveReachLimit: 0.2, // body heights
-  receiveReachSpeed: 1.5, // body heights per second
+  // Platform reach (direct-v4 side reach; direct-v8 Q3 also forward): the
+  // platform slides toward where the coming ball will be judged. Visible,
+  // rate-limited, same capsules; fast enough to arrive within the 8-tick windup.
+  receiveReachLimit: 0.25, // body heights
+  receiveReachSpeed: 3, // body heights per second
   platformFaceCos: 0.5, // capsule normal within 60 degrees of the platform face uses the face normal
   diveSpeed: 6.5,
   diveFriction: 7,
@@ -76,7 +77,10 @@ export const RECEIVE_RULES = Object.freeze({
   // ticks): the same press lead as a receive, since the ball reaches the dive
   // height about 7 ticks after the platform height.
   diveWindowCentre: 20,
-  diveErrorMultiplier: 1.5, // pass error of a dive (its tier is capped at GOOD)
+  // Total pass-error multiplier of a dive (its tier is capped at GOOD): the dive
+  // takes no stance multiplier (1, not the set-stance 0.7 nor the running 1.6),
+  // so this is the whole factor — 1.05, i.e. 1.5 × the set stance's 0.7 (Q6, 2026-09-27).
+  diveErrorMultiplier: 1.05,
   slowMotionSpeed: 13, // m/s: a ball at least this fast is a hard ball
   slowMotionLead: 0.4, // seconds before the judgement in which the picture slows
   slowMotionScale: 0.5,

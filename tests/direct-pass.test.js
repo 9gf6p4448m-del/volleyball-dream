@@ -9,6 +9,8 @@ import {
   serializeDirectState, replayDirectTape,
 } from '../src/sim/directGame.js';
 import { resolveHitAction } from '../src/sim/directReceiveRules.js';
+import { windowScale } from '../src/sim/directReceiveAssist.js';
+import { RECEIVE_ASSIST as A } from '../src/sim/directConstants.js';
 
 const cmd = (s, action = null, extra = {}) => ({
   tick: s.tick, sequence: 0, move: { x: 0, z: 0 }, aim: { x: 0, z: -1 }, action, ...extra,
@@ -41,10 +43,20 @@ test('A5 含 passType 的錄影整卷重播與逐 tick 還原逐位元相同，d
 
 // A14/A16/A16b (frozen 2026-09-24, rewritten 2026-09-27 for the rules): the
 // playability grids on the real receive feed. The only press is the contextual
-// hit button (v8 has one platform and no swipe); an active receive is a
-// rule-judged touch on the forearms or hands (the sim puts the ball there).
+// hit button (v8 has one platform and no swipe).
+// Denominator (Q4 ruling, 2026-09-27; the same meaning as 3e90288's
+// `hit.active`): the first touch is a rule-judged touch on the forearms or
+// hands (the sim puts the ball there) made while the pressed action's window
+// offset was inside the timing window, |offset| ≤ goodTicks × windowScale(ball
+// speed). In 3e90288 a press outside that window was a passive touch and not
+// in the denominator; from v8 it is a spray (Q3), likewise not counted. A body
+// deflection (no tier, not a spray) is never a rule-judged touch, so it is out
+// of the denominator too (A16b ruling). Thresholds, grids and case counts are
+// those of 3e90288.
 // The A14d clause (the LOW platform must not mostly hit the net) has no rules
 // counterpart: the up/down platform choice was retired with the swipe (P1).
+const timed = (hit) => !!hit && !!(hit.tier || hit.spray) && ['forearm', 'hand'].includes(hit.part) &&
+  hit.offset != null && Math.abs(hit.offset) <= A.goodTicks * windowScale(hit.ballSpeed);
 function outcome(x, z, rt) {
   const s = createDirectGame(); s.player.x = x; s.player.z = z;
   let hit = null, apex = -Infinity;
@@ -53,7 +65,7 @@ function outcome(x, z, rt) {
     for (const e of s.events) {
       if (e.type === 'contact' && !hit) hit = e;
       if (['ground', 'net', 'out'].includes(e.type))
-        return hit ? { active: hit.active && ['forearm', 'hand'].includes(hit.part), end: e.type, x: s.ball.x, z: s.ball.z, apex } : null;
+        return hit ? { active: timed(hit), end: e.type, x: s.ball.x, z: s.ball.z, apex } : null;
     }
     if (hit) apex = Math.max(apex, s.ball.y);
   }
@@ -83,7 +95,7 @@ test('A14 到位球：少碰網、落在舉球區、弧頂夠高', () => {
   assert.ok(median >= 3.0, `A14c apex median ${median.toFixed(2)} (n=${n.length})`);
 });
 
-// Moving contacts: the first touch is a rule-judged active receive while the body still moves.
+// Moving contacts: the first touch is a timed rule-judged receive (`timed`) while the body still moves.
 function movingRows(cases) {
   const rows = [];
   for (const { x0, moveAt, rt } of cases) {
@@ -97,7 +109,7 @@ function movingRows(cases) {
         if (['ground', 'net', 'out'].includes(e.type)) end = e.type;
       }
       if (end) {
-        if (hit?.active && ['forearm', 'hand'].includes(hit.part) && Math.abs(vx) >= 0.05) rows.push({ end, x: s.ball.x, z: s.ball.z });
+        if (timed(hit) && Math.abs(vx) >= 0.05) rows.push({ end, x: s.ball.x, z: s.ball.z });
         break;
       }
     }

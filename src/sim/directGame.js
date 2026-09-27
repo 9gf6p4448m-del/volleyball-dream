@@ -7,7 +7,7 @@ import {
 } from "./directConstants.js";
 import { getDirectPose } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
-import { createJudge, judgeTick, ruleGhost, nextJudgement, diveTargetFor, diveLaunchSpeed, diveReachFor, missInfo } from "./directReceiveRules.js";
+import { createJudge, judgeTick, ruleGhost, nextJudgement, diveTargetFor, diveLaunchSpeed, diveReachFor, missInfo, receiveReachTarget } from "./directReceiveRules.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
 // The receive platform is locked once the windup is over; the input layer
 // uses the same check so the hit button label never disagrees with the sim.
@@ -34,7 +34,10 @@ export function createDirectGame({ seed = 1, height = 1.75, assist = null } = {}
       shotType: null,
       shotBlend: 0,
       receiveTurn: 0,
+      // direct-v8 (Q3): the platform reaches sideways (receiveReach) and forward
+      // (receiveAhead), in body heights, toward where the ball will be judged.
       receiveReach: 0,
+      receiveAhead: 0,
       receiveOverhand: 0,
       receiveOverhandChosen: false,
       // direct-v7: the ball has touched the body during this receive; only the
@@ -117,12 +120,13 @@ function dead(s, type) {
 const approach = (x, target, max) =>
   x + Math.max(-max, Math.min(max, target - x));
 // Visible receive turn toward the incoming ball. Display only from direct-v8:
-// the rule judgement never reads it (R1).
+// the rule judgement never reads it (R1). The platform's sideways/forward reach
+// toward the judged ball comes from receiveReachTarget (directReceiveRules.js).
 function receiveTurnTarget(s) {
   const p = s.player, b = s.ball;
   const action = DIRECT_ACTIONS.receive;
-  if (p.action !== 'receive' || p.actionTick >= action.windup + action.active) return { turn: 0, reach: 0 };
-  const current = { turn: p.receiveTurn ?? 0, reach: p.receiveReach ?? 0 };
+  if (p.action !== 'receive' || p.actionTick >= action.windup + action.active) return { turn: 0 };
+  const current = { turn: p.receiveTurn ?? 0 };
   // After contact, hold the platform through follow-through. Recovery then
   // returns to manual aim; an outgoing or passed ball never steers the body.
   if (!b.active || b.y <= b.radius || s.contactEpisode) return current;
@@ -140,11 +144,7 @@ function receiveTurnTarget(s) {
   const aimAngle = Math.atan2(p.aim.x, -p.aim.z);
   const difference = Math.atan2(Math.sin(path - aimAngle), Math.cos(path - aimAngle));
   if (Math.abs(difference) > C.receiveTrackCone) return current;
-  const turn = Math.max(-C.receiveTurnLimit, Math.min(C.receiveTurnLimit, difference));
-  // Lateral offset of the ball in the squared-up body frame (right is positive).
-  const facing = aimAngle + turn;
-  const lateral = (dx * Math.cos(facing) + dz * Math.sin(facing)) / p.height;
-  return { turn, reach: Math.max(-C.receiveReachLimit, Math.min(C.receiveReachLimit, lateral)) };
+  return { turn: Math.max(-C.receiveTurnLimit, Math.min(C.receiveTurnLimit, difference)) };
 }
 // direct-v8: raise the hands for an overhand pass shortly before a ball that
 // will be judged at the forehead. Once chosen it is kept for this receive
@@ -163,7 +163,7 @@ function overhandTarget(s) {
 // hands-up blend held at their substep-start values, so none of them adds impulse.
 export function restingSurfacePose(s, fraction, nextPose, before) {
   const p = s.player;
-  const keys = ['receiveTurn', 'receiveReach', 'receiveOverhand'];
+  const keys = ['receiveTurn', 'receiveReach', 'receiveAhead', 'receiveOverhand'];
   // A key missing from `before` means its resting value, 0.
   if (keys.every((k) => (p[k] ?? 0) === (before[k] ?? 0))) return nextPose;
   const after = keys.map((k) => p[k]);
@@ -268,6 +268,8 @@ export function stepDirectGame(s, commands = []) {
   b.py = b.y;
   b.pz = b.z;
   const receiveTarget = receiveTurnTarget(s);
+  // Null = hold the reach where it is (after the touch, through follow-through).
+  const reachTarget = receiveReachTarget(s) ?? { reach: p.receiveReach ?? 0, ahead: p.receiveAhead ?? 0 };
   const overTarget = overhandTarget(s);
   // direct-v8: a ball headed for a rule judgement passes the body untouched;
   // the judgement at the end of the tick puts it on the hands (R1, R6).
@@ -277,9 +279,10 @@ export function stepDirectGame(s, commands = []) {
     const oldPose = getDirectPose(s, i / C.substeps);
     // Move the same body pose used by rendering and swept collision. There is
     // no ball impulse, target landing point, or extra reach in this assistance.
-    const turnBefore = p.receiveTurn ?? 0, reachBefore = p.receiveReach ?? 0, overBefore = p.receiveOverhand ?? 0;
+    const turnBefore = p.receiveTurn ?? 0, reachBefore = p.receiveReach ?? 0, aheadBefore = p.receiveAhead ?? 0, overBefore = p.receiveOverhand ?? 0;
     p.receiveTurn = approach(turnBefore, receiveTarget.turn, C.receiveTurnSpeed * dt);
-    p.receiveReach = approach(reachBefore, receiveTarget.reach, C.receiveReachSpeed * dt);
+    p.receiveReach = approach(reachBefore, reachTarget.reach, C.receiveReachSpeed * dt);
+    p.receiveAhead = approach(aheadBefore, reachTarget.ahead, C.receiveReachSpeed * dt);
     p.receiveOverhand = approach(overBefore, overTarget, RECEIVE_ASSIST.overPoseSpeed * dt);
     const oldX = p.x, oldZ = p.z;
     p.x = Math.max(-4.25, Math.min(4.25, p.x + p.vx * dt));
@@ -325,7 +328,7 @@ export function stepDirectGame(s, commands = []) {
     // The sweep follows the turning body and the hands-up blend, but the
     // contact-surface velocity excludes both, so neither swings the ball like a bat.
     const surfacePose = restingSurfacePose(s, (i + 1) / C.substeps, nextPose, {
-      receiveTurn: turnBefore, receiveReach: reachBefore, receiveOverhand: overBefore,
+      receiveTurn: turnBefore, receiveReach: reachBefore, receiveAhead: aheadBefore, receiveOverhand: overBefore,
     });
     // The incoming ball, before the collision changes it (R7 reasons read this).
     const incoming = { x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz };

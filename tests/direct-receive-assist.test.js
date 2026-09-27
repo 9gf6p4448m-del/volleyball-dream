@@ -31,9 +31,11 @@ test('A23c 斜前兩組不退步：舉球區 ≥ 108／277、碰網 ≤ 3%', () 
   assert.ok(n.net / n.n <= 0.03, `diagonalNoisy 碰網 ${n.net}/${n.n}`);
 });
 
-test('R2 分級單調（A23d）：三級各 ≥ 5% 的觸球，落點到舉球目標平均距離 完美 < 普通 < 差', () => {
-  const rows = CHASE.rows.filter((x) => x.tier), total = rows.length, mean = {};
-  assert.ok(total >= 200, `有等級的觸球 ${total}`);
+// Denominator (ruling 2026-09-27, the stricter reading): every rule-judged
+// touch of the chase run, sprays included — not only the graded ones.
+test('R2 分級單調（A23d）：三級各 ≥ 5% 的觸球（含噴球），落點到舉球目標平均距離 完美 < 普通 < 差', () => {
+  const total = CHASE.rows.length, rows = CHASE.rows.filter((x) => x.tier), mean = {};
+  assert.ok(rows.length >= 200 && total > rows.length, `有等級的觸球 ${rows.length}／觸球 ${total}`);
   for (const tier of ['PERFECT', 'GOOD', 'POOR']) {
     const r = rows.filter((x) => x.tier === tier);
     assert.ok(r.length / total >= 0.05, `${tier} ${r.length}/${total}`);

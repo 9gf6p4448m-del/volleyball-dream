@@ -123,9 +123,10 @@ export function getDirectPose(state, fraction = 0) {
       hand = blend(hand, bodyPoint(sign * 0.20, 0.94, 0.12), Math.min(1, tuck * 12));
     }
     if (p.action === "receive") {
-      // Forearm platform (direct-v8: one neutral platform, no swipe choice).
-      const reach = p.receiveReach ?? 0;
-      const platform = (x, y, f) => point(x + reach, y, f);
+      // Forearm platform (direct-v8: one neutral platform, no swipe choice),
+      // reaching sideways/forward toward the coming ball (receiveReachTarget).
+      const reach = p.receiveReach ?? 0, ahead = p.receiveAhead ?? 0;
+      const platform = (x, y, f) => point(x + reach, y, f + ahead);
       elbow = blend(
         elbow,
         platform(sign * 0.11, 0.69 + phase * 0.11, 0.21),
@@ -139,8 +140,8 @@ export function getDirectPose(state, fraction = 0) {
       // direct-v7 overhand pass: hands in front of the forehead (the set pose).
       const over = (p.receiveOverhand ?? 0) * raise * recover;
       if (over > 0) {
-        elbow = blend(elbow, point(sign * 0.17, 0.87, 0.08), over);
-        hand = blend(hand, point(sign * 0.11, 1.02, 0.15), over);
+        elbow = blend(elbow, platform(sign * 0.17, 0.87, 0.08), over);
+        hand = blend(hand, platform(sign * 0.11, 1.02, 0.15), over);
       }
     } else if (p.action === 'dive') {
       // direct-v8: the arms extend fully for a far ball, less for one beside the body.

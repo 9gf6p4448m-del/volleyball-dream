@@ -297,12 +297,29 @@ test('R4 魚躍（加嚴）強力發球：0.3 m 時刻 d > 2.0 的 10 例（平�
   }
 });
 
-test('R6 不隔空：R1 案例組＋追球探針的全部規則觸球，判定那一格球面到手掌／前臂表面 ≤ 0.05 m（100%）', () => {
-  const gaps = [];
+// R6 (Q3 ruling, 2026-09-27): a pressed touch (pass, dive, early/late spray)
+// is measured to the hands/forearms; an unpressed spray (the chaser never
+// presses: chase({ press: 'none' })) is measured to the nearest surface of any
+// body part, where the rules now put it.
+test('R6 不隔空：R1 案例組＋追球探針的全部規則觸球，判定那一格球面到手掌／前臂表面 ≤ 0.05 m（100%）；沒按的噴球量身體任一部位表面 ≤ 0.05 m', () => {
+  const gaps = [], unpressed = [];
   for (const c of CASES.cases) { const r = runR1(c); if (r.contact) gaps.push({ tag: tag(c), gap: r.gap }); }
   const probe = chase();
-  for (const row of probe.rows) gaps.push({ tag: `chase ${row.technique ?? 'spray'}:${row.tier ?? 'spray'}`, gap: row.gap });
+  for (const row of probe.rows) {
+    assert.notEqual(row.timing, 'none', `有按的探針出現沒按的噴球 ${JSON.stringify(row)}`);
+    gaps.push({ tag: `chase ${row.technique ?? 'spray'}:${row.tier ?? row.timing}`, gap: row.gap });
+  }
   assert.ok(gaps.length >= 220, `觸球 ${gaps.length}`);
   const far = gaps.filter((g) => g.gap > 0.05);
   assert.equal(far.length, 0, `${far.length}/${gaps.length} 例超過 0.05 m（中位數 ${median(gaps.map((g) => g.gap)).toFixed(3)} m），例：${far.slice(0, 4).map((g) => `${g.tag} ${g.gap.toFixed(3)}`).join('；')}`);
+  const silent = chase({ press: 'none' });
+  for (const row of silent.rows) {
+    assert.ok(row.spray && row.timing === 'none', `沒按的探針出現有按的觸球 ${JSON.stringify(row)}`);
+    unpressed.push({ gap: row.bodyGap, arm: row.gap });
+  }
+  assert.ok(unpressed.length >= 100, `沒按的噴球 ${unpressed.length}`);
+  const farBody = unpressed.filter((g) => g.gap > 0.05);
+  assert.equal(farBody.length, 0, `沒按：${farBody.length}/${unpressed.length} 例球面離身體任一部位表面超過 0.05 m`);
+  // The body rule is real: some unpressed balls sit on a part that is not an arm.
+  assert.ok(unpressed.some((g) => g.arm > 0.05), '沒按的噴球全部貼在手臂上（身體表面規則沒有被行使）');
 });
