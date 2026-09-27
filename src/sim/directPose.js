@@ -38,7 +38,11 @@ function kneeBetween(hip, ankle) {
 
 // The renderer consumes these exact collision capsules. Fraction is a partial tick,
 // allowing physics to sample the curved action path between displayed frames.
-export function getDirectPose(state, fraction = 0) {
+// `reach: false` leaves out the receive reach toward the judged ball
+// (receiveReach / receiveAhead, direct-v8 Q3): that reach is picture only
+// (U4, 2026-09-27), so the simulation's collision and part choice use this
+// pose, while rendering and the judgement-frame snap use the reached one.
+export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
   const p = state.player,
     h = p.height,
     def = DIRECT_ACTIONS[p.action];
@@ -125,8 +129,8 @@ export function getDirectPose(state, fraction = 0) {
     if (p.action === "receive") {
       // Forearm platform (direct-v8: one neutral platform, no swipe choice),
       // reaching sideways/forward toward the coming ball (receiveReachTarget).
-      const reach = p.receiveReach ?? 0, ahead = p.receiveAhead ?? 0;
-      const platform = (x, y, f) => point(x + reach, y, f + ahead);
+      const side = reach ? p.receiveReach ?? 0 : 0, ahead = reach ? p.receiveAhead ?? 0 : 0;
+      const platform = (x, y, f) => point(x + side, y, f + ahead);
       elbow = blend(
         elbow,
         platform(sign * 0.11, 0.69 + phase * 0.11, 0.21),

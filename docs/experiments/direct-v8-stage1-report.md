@@ -136,14 +136,14 @@
 **C 退場**：`direct-pass.test.js` 的 A1、A7、A15；`direct-hold-release.test.js` 的 A21a、A21c、「覆審保留」（A19d 保留）；`direct-pass-lock.test.js` 整檔刪除（只剩 H1）。
 **D 不動**：`direct-physics.test.js` 其餘 23 條、`direct-input.test.js` 15 條、A5、A20a、A27b——內容未動；唯二機械修訂（2026-09-27 第一輪覆審 L1 更正為如實描述）：
 - A5（`direct-pass.test.js`）：正向重播的 `simulationVersion` 由 `'direct-v7'` 改 `'direct-v8.1'`；**原本「拒絕 `direct-v6` 重播」的 `assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v6' … }))` 被刪掉、換成拒絕 `'direct-v7'` 的同型斷言**；「拒絕 `direct-v6` 還原」的 `restoreDirectGame` throws 保留，另加一條拒絕 `'direct-v7'` 還原。
-- 「replay and mid-flight restore」（`direct-physics.test.js`）：正向重播版本字串 `"direct-v7"` → `"direct-v8.1"`；原檔（`3e90288`）的拒絕斷言是三條——還原 `"bad"`、還原 `"direct-v6"`、重播 `"bad"`——全部保留，只**新增**一條拒絕 `"direct-v7"` 還原（第三輪更正：第二輪寫成「拒絕 `direct-v6` 還原／重播兩條」是錯的，原檔沒有拒絕 `direct-v6` 重播那條，重播那條拒絕的是 `"bad"`；現行檔 `:379,:388,:391,:395`）。
+- 「replay and mid-flight restore」（`direct-physics.test.js`）：正向重播版本字串 `"direct-v7"` → `"direct-v8.1"`；原檔（`3e90288`）的拒絕斷言是**五條**——還原 `"bad"`、還原 `"direct-v1"`、還原 `"direct-v2"`、還原 `"direct-v6"`、重播 `"bad"`（`git show 3e90288:tests/direct-physics.test.js` 541–559 行）——全部保留，只**新增**一條拒絕 `"direct-v7"` 還原（第四輪更正 N6：第二輪寫成「拒絕 `direct-v6` 還原／重播兩條」、第三輪寫成「三條」都是錯的，漏數了 `direct-v1`／`direct-v2` 兩條；現行檔 `:378-396`：還原 bad `:379`、v1 `:382`、v2 `:385`、v6 `:388`、v7 `:391`（新增）、重播 bad `:393-395`）。
 （與前幾版升版做法相同；不是門檻。）
 
 數量：退場 37 條（A 組 26＝absorb 6＋inner-gap 1＋physics 9＋pass 8＋receive-assist 2；B 組併入 R8 而消失 4＝A23c、A14、A16、A16b；C 組 7）、新增 15 條（`direct-v8-rules` 9、`direct-v8-context` 6）；現在全套 2581 條，推算舊套為 2581＋37−15＝2603（未在舊碼上實跑全套，此數為推算）；`git diff 3e90288..HEAD --stat` 內其餘既有測試檔沒有任何門檻被放寬（A 組整條刪、B 組門檻數字逐條相同、D 組只動版本字串）。
 
 ## 7. 實作摘要（給覆審用的地圖）
 
-- `src/sim/directReceiveRules.js`（新）：判定點（額頭 0.12 h／平台中心 0.31 h／魚躍 0.3 m）、`nextJudgement`（預測會成立的判定：高手 → 低手 → 魚躍）、`contextAction`／`resolveHitAction`（R10）、`slowMotionScale`（R9）、`ruleGhost`（往判定去的球穿過身體不碰撞）、`judgeTick`（tick 末判定：圈內＋窗內 → `pass`；圈內＋窗外／沒按 → `spray`；魚躍在 0.3 m 判，等級封頂 GOOD、誤差 ×1.5）、`snapToArms`（貼到最近的手掌／前臂表面）、`missInfo`（R7 資料）、`receiveContactEta`（提示）。
+- `src/sim/directReceiveRules.js`（新）：判定點（額頭 0.12 h／平台中心 0.31 h／魚躍 0.3 m）、`nextJudgement`（預測會成立的判定：高手 → 低手 → 魚躍）、`contextAction`／`resolveHitAction`（R10）、`slowMotionScale`（R9）、`ruleGhost`（往判定去的球穿過身體不碰撞）、`judgeTick`（tick 末判定：圈內＋窗內 → `pass`；圈內＋窗外／沒按／按成魚躍（第四輪 U2）→ `spray`；魚躍在 0.3 m 判，等級封頂 GOOD、誤差總倍率 1.05（第 6 題甲，第三輪改；第二輪一度是 1.5））、`snapToBody`（第四輪更正 N6：函式名一直是 `snapToBody`，不是 `snapToArms`；有按的貼到最近的手掌／前臂表面、沒按的貼到身體任一部位表面最近者（第 3 題甲）；第四輪起「最近」用表面距離、部位由未迎球姿勢決定、球放到畫面姿勢上）、`missInfo`（R7 資料）、`receiveContactEta`（提示）。
 - `src/sim/directGame.js`：拿掉 v7 磁吸與「真實前臂觸球即傳球」、平台左右滑（`passType`）；`judge` 狀態隨球重置；魚躍在範圍內自動朝球（`diveTargetFor`、`diveLaunchSpeed`、伸臂比例 `diveReach`），魚躍期間朝向鎖定；身體物理碰撞先於判定時（球在圈外）標成 `body` 失誤。`DIRECT_ACTIONS.dive.recovery` 25 → 42。
 - `src/sim/directReceiveAssist.js`：只剩時機分級與傳球落點（`passOutcome` 加 `errorMultiplier`，去掉 `passType`）。`src/sim/directPose.js`：平台不再偏擺；魚躍手臂依 `diveReach` 伸出。
 - `src/input/directControls.js`：`resolveAction` 回呼（出手鍵動作由 app 決定）、拿掉接球滑動；`directInput.js` 去掉 `passType`。
@@ -153,8 +153,8 @@
 
 1. **R1 的「送往舉球區」判讀**（第二輪 L3 已改）：36 例 `target` 全在舉球區、32 例實際落區；再碰到自己的是 15 例（不是第一輪寫的 4 例）。第一輪的「目標在區內且（落地在區內或再度觸球）＋落區 ≥ 80%」兩個寬鬆子句已拿掉，改為「觸球後球速的彈道預測落點 36/36 在舉球區」（§10 L3）。
 2. **R1 案例組來源**：原 A22 網格在舊碼上湊不出任何符合前提的案例（見 §3），案例組是放寬同一產法參數後得到的；36 例裡 31 例是高球餵球碰大腿。
-3. **R6 的「全部觸球」**：噴球也貼到手臂（依第二節「判定那一格要把球貼到手上」），因此 100% 是實作保證的結果（量測是真的量、舊碼是紅的）；圈外的球仍會與身體物理碰撞而偏彈，這類「沒接到」的物理觸球沒有列入 R6 的分母（它們不是規則觸球）。
-4. **魚躍時窗中心**：接球沿用現行時窗；魚躍沒有現成時窗，我定為動作第 20 格（`RECEIVE_RULES.diveWindowCentre`，windup 6 + active 15 的尾端），讓「同一個提前量」按接球與魚躍都合理。R4 的 10 種偏差以此為基準。等級封頂 GOOD（`PERFECT→GOOD`），誤差再 ×1.5、不吃站姿倍率。
+3. **R6 的「全部觸球」**：有按的噴球（按太早／太晚、按成魚躍）貼到手臂、沒按的噴球貼到身體任一部位表面最近者（第 3 題甲；第四輪更正 N6：第一輪的「噴球也貼到手臂」自第三輪起已不成立），因此 100% 是實作保證的結果（量測是真的量、舊碼是紅的）；圈外的球仍會與身體物理碰撞而偏彈，這類「沒接到」的物理觸球沒有列入 R6 的分母（它們不是規則觸球）。
+4. **魚躍時窗中心**：接球沿用現行時窗；魚躍沒有現成時窗，我定為動作第 20 格（`RECEIVE_RULES.diveWindowCentre`，windup 6 + active 15 的尾端），讓「同一個提前量」按接球與魚躍都合理。R4 的 10 種偏差以此為基準。等級封頂 GOOD（`PERFECT→GOOD`），誤差總倍率 1.05、不吃站姿倍率（第 6 題甲；第四輪更正 N6：第一輪寫的「再 ×1.5」是第二輪一度的值，第三輪已改回 1.05）。
 5. **R2 的 POOR 佔比 7.2%**：新規則下窗外一律噴球，POOR 只來自「擦邊降一級」（`edgeRatio 0.7`）與魚躍，離 5% 門檻餘裕不大。
 6. **情境出手的判定**：`nextJudgement` 用「目前跑動延伸到穿越時刻之前任一點」的最近距離（跑動中的人往前跑會到得了的球算接球），停下來或反向跑則按靜止判；chase 探針裡 dive 1293／receive 1353。慢動作的「人在範圍內」用同一個函式。
 7. **球穿身**：往判定去的球在判定前不與身體碰撞（`ruleGhost`），視覺上球可能穿過胸口幾格再貼到手上；圈外的球照舊物理碰撞。
@@ -244,7 +244,7 @@
 
 - 改了什麼：`tools/receive-assist-probe.mjs:28-35` `settle()`：沒有等級也不是噴球的觸球（身體彈開）一律進 `groundOther`，落進區內另計 `bodyZone` 不算 `zone`；`chase`／`sweep` 共用（`:55,112`）。
 - 證據（`node tools/receive-assist-probe.mjs chase`，最終碼）：n=2646、空接 175（6.61%）≤ 25%、碰網 8（0.30%）≤ 5%、**舉球區 901（34.05%）≥ 34%——只比門檻多 1 例（34% × 2646 = 899.6）**；身體彈進區 27 例（已排除）；噴球 521；情境出手 dive 1460／receive 1186；有等級 1131。R2：PERFECT 191（16.89%，平均 0.211 m）< GOOD 845（74.71%，1.18 m）< POOR 95（8.40%，1.873 m）。
-- 為什麼從第一輪的 39.1%（審查員排除身體彈開後 38.06%）掉到 34.05%（第三輪依覆審員實測更正歸因；每項各自套用、其餘不動，舉球區例數的變化）：H1 約 **+66**（撲救範圍改在 0.3 m 時刻量，chase 網格裡按魚躍的案例 1293 → 1460、被救起來的更多）、M3 約 **−169**（魚躍誤差倍率 1.05 → 1.5 讓魚躍傳球落點散開，`other` 1010 → 1555）、L4 **−27**（身體彈進區內不計）；淨值就是 1034 → 901。M3 的 ×1.5 是實作者自訂的數值，不是規格或設計要求（第二節沒有規定倍率），第 6 題已裁回 1.05（§11）；門檻沒動。
+- 為什麼從第一輪的 39.1%（審查員排除身體彈開後 38.06%）掉到 34.05%（第三輪依覆審員實測更正歸因；每項各自套用、其餘不動，舉球區例數的變化）：H1 約 **+66**（撲救範圍改在 0.3 m 時刻量，chase 網格裡按魚躍的案例 1293 → 1460、被救起來的更多）、M3 約 **−169**（魚躍誤差倍率 1.05 → 1.5 讓魚躍傳球落點散開，`other` 1010 → 1555）、L4 **−27**（身體彈進區內不計）；三項加總是 1034 − 130 = **904**，實測是 901，差 3 例來自三項的交互作用（每項是各自單獨套用量到的，不可直接相加；第四輪更正 N6：第三輪寫「淨值就是 1034 → 901」是把不可加的數字當成加總）。M3 的 ×1.5 是實作者自訂的數值，不是規格或設計要求（第二節沒有規定倍率），第 6 題已裁回 1.05（§11）；門檻沒動。
 
 ### L1
 
@@ -322,7 +322,7 @@
 
 ### R8 重量（本輪最終碼）
 
-`node tools/receive-assist-probe.mjs chase`：`{"n":2646,"whiff":"5.8%","zone":"1062 40.1%","bodyZone":58,"net":4,"out":11,"other":1416,"sprays":512,"tiers":{"GOOD":839,"POOR":84,"PERFECT":191},"tech":{"dive":616,"underhand":1010},"actions":{"dive":1460,"receive":1186}}`——空接 153/2646 = 5.8% ≤ 25%、碰網 4/2646 = 0.15% ≤ 5%、舉球區 1062/2646 = **40.1%** ≥ 34%（身體彈進區 58 例不算）。與第二輪 34.05% 的差：第 6 題把魚躍倍率改回 1.05（魚躍傳球收斂，`other` 1555 → 1416）加第 3 題的迎球姿勢。
+`node tools/receive-assist-probe.mjs chase`：`{"n":2646,"whiff":"5.8%","zone":"1062 40.1%","bodyZone":58,"net":4,"out":11,"other":1416,"sprays":512,"tiers":{"GOOD":839,"POOR":84,"PERFECT":191},"tech":{"dive":616,"underhand":1010},"actions":{"dive":1460,"receive":1186}}`——空接 153/2646 = 5.8% ≤ 25%、碰網 4/2646 = 0.15% ≤ 5%、舉球區 1062/2646 = **40.1%** ≥ 34%（身體彈進區 58 例不算）。與第二輪 34.05% 的差全部來自第 6 題把魚躍倍率改回 1.05（魚躍傳球收斂，`other` 1555 → 1416）；第 3 題的迎球姿勢**不是**回升的來源，它反而讓舉球區少 18 例（第四輪更正 N6，覆審員在 `0e72fd4` 上實測：迎球開 1062、`receiveReachLimit`＝0 時 1080——伸出的前臂攔到 58 顆本來會被判定的球，第四輪 U4 修掉這件事後見 §12）。
 
 ### 收尾驗證
 
@@ -343,3 +343,62 @@
 - 四個瀏覽器治具（真樹、5175；前置同 §5）：預設 `PASS 3 viewports: real input, jump, cancel, replay, layout, disposal`；`--assist` `PASS assist: 3 viewports with visible receive turn, contact, replay`；`--motion` `PASS motion: 3 viewports with run, jump, land, set, block, dive captures`；`--pass` `PASS pass: 3 viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, tap resting, replay; advanced hides hints`（10:31–11:04 循序跑，`docs/experiments/direct-play-evidence/*.json` 為本次輸出；即 R9／R10／A21b 的第三輪證據）
 - 背景程序：5175 的 vite（PID 38468）於 11:06 以 `taskkill //PID 38468 //F //T` 關閉（含子行程 33032），`netstat -ano | grep -E ":517[56]"` LISTENING 0 筆；`--pass` 治具結束後殘留的 `chrome-headless-shell`（PID 24832 樹，父 node 34660 已結束）在 11:07 下 `taskkill //PID 24832 //F //T` 時已自行結束（回「找不到處理程序」），隨後 `tasklist | grep -ci chrome-headless-shell` = 0；其他本 session 起的 node（探針、`node --test`）皆已自行結束，機器上剩下的 node 行程只有 09-26 起的 MCP server（非本 session）。突變副本 `mut-tree`／`mut-tree-backup` 與舊碼副本 `old-b06df69`／`old-3e90288` 都在 scratchpad，不在 repo。
 - commit 清單：`d2054ec`（sim＋測試＋探針＋報告 §6/§8/§10 更正）→ 第二個 commit＝本 §11、`direct-v8-stage1-r3-old-red.tap`、`direct-v8-stage1-r3-mutations.log`、`direct-v8-r3-probes/`、四治具重跑的 `direct-play-evidence/*`（SHA 見 `git log`，本節寫入時尚未建立）。未 push、未部署、`main` 未動。
+
+## 12. 第三輪覆審修補對照（2026-09-27，使用者裁定 U1～U4 全選甲、第 4 輪驗收 V1～V6）
+
+修補起點 `b62c611`（碼＝`0e72fd4`）。驗收文件未改（`git diff b62c611..HEAD -- docs/kickoffs/` 為空）；門檻、例數、案例集、網格一律不動。證據的取得路徑：**修前碼紅燈**＝把最終版測試（`tests/direct-v8-round4.test.js`＋`tools/direct-v8-round4-probes.mjs`、瀏覽器治具 `tools/direct-play-browser.mjs`）複製到 `0e72fd4` 的 `git archive` 副本上跑（`docs/experiments/direct-v8-stage1-r4-old-red.tap`；V5 另起該副本的 dev server 5176 跑 `--pass`）；**雙樹比對**（V3）＝`tools/receive-reach-diff.mjs <本樹副本> <改常數的副本>`，副本只複製 `src/`＋`tools/`、只改副本的 `directConstants.js`，真樹不動。所有數字都是本樹實跑，指令逐項列出。
+
+### U1｜撲救下界的量法（不需改碼，寫明）
+
+按下魚躍（或情境出手判為魚躍）那一刻，`diveTargetFor`（`src/sim/directReceiveRules.js`）用 `nextJudgement` 以當下跑動外推（`runDistance`）預測「低手判定那一刻球是否在低手圈內」，記成 `player.diveTarget.stage`；上界（0.3 m 時刻 d ≤ 2.0）同一時刻、同一做法（`diveReachOf`）。撲出後身體位置改變不再重量。與 §11「HIGH 撲救範圍下界」所述實作相同，本輪未動。
+
+### N1 HIGH／U2／V1｜按魚躍、判定時球在接球圈內 → 有按的噴球
+
+- 改了什麼：`src/sim/directReceiveRules.js` `pressOf(s)`（接在 `receiveOffset` 後）——這顆球的按鍵：進行中的接球或魚躍，否則 `judge.press` 記的第一個接球／魚躍按鍵（含已收招的）；`circleTiming(press, k)`：按的是魚躍 → timing `'dive'`，否則照 `timingOf`。`judgeStage` 改用 `pressOf`＋`circleTiming`；`spray` 對 `timing !== 'none'` 一律貼手掌／前臂（`'dive'` 屬有按類），事件 `active` 對進行中的魚躍也為 true。`missInfo` 同樣改用 `pressOf`（`pressed`＝有按過、`timing` 可為 `'dive'`）。`src/app/directReceiveReasons.js` `contactReason`：timing `'dive'` → 「噴球：這球要按接球，按成魚躍了 · 低手／高手」；`missReason`：圈內、有按、timing `'dive'` → 「沒接到：這球要按接球，按成魚躍了。」（身體先碰到球的 body 類才會走到）。
+- 網格：`tools/direct-v8-round4-probes.mjs diveInCircle`＝覆審 `dive-in-circle.mjs` 同網格（練習指定＝魚躍、球自 2.5 m 直落、d 0.1／0.2／0.3／0.4／0.49 × 8 方位 × 兩個時窗 × 偏差 −3／0／+3 ＝ 240 例；tU 32、tD 40）。其中 **206 例按下在判定前**（覆審員的 206）、34 例球在額頭高度就被判定（tick 22）而按鍵在 tick 23／24 之後才到——那 34 例維持「噴球：沒按 · 高手」，是事實。
+- 證據（`node tools/direct-v8-round4-probes.mjs dive-in-circle`，本樹）：`pressedBefore 206`、`outcomes {"stage=over -> spray:dive": 68, "stage=under -> spray:dive": 138}`、`noneTiming 0`、`textWith沒按 0`、`textWith要按接球 206`、`armGapOver005 0`、`graded 0`、`dives 0`；例 `d=0.1 ang=0 diveWin off0 rt21: spray:dive 「噴球：這球要按接球，按成魚躍了 · 高手」 armGap 0.000 part forearm`。測試 `tests/direct-v8-round4.test.js` V1（同一函式）綠。
+- 修前碼紅燈（`0e72fd4`）：`not ok 1 - V1 … timing 為 none：206/206，例：d=0.1 ang=0 diveWin off0: spray:none 「噴球：沒按 · 高手」 armGap 0.582；…`（行為斷言：206 例全是沒按噴球、球離手臂 0.58 m）。
+
+### N2 HIGH／V2｜練習頁情境出手：按鈕判斷與 sim 用不同朝向
+
+- 改了什麼：`src/sim/directGame.js` 指令迴圈裡的魚躍分支——`diveTargetFor(s)` 改在 `p.aim` 暫時換回 `s.poseAimStart`（本 tick 開始時的朝向＝按鈕標籤計算時的狀態）下計算，算完還原，所以 sim 記的 `diveTarget.stage` 與標籤的 `nextJudgement` 完全同一個狀態；本 tick 的 aim 指令仍照舊套用到身體。`src/sim/directReceiveRules.js` `contextAction`：這顆球已判定（`judge.done`）就回 null——已判定的球按魚躍不會有目標，按鈕不得再標「魚躍」（覆審 `first` 變體裡 700 例就是這種：沒按的噴球發生後標籤仍寫魚躍）。練習頁 `directPractice.js:238-239` 的送法未動。
+- 網格：`tools/direct-v8-round4-probes.mjs aimFlip`＝覆審 `aim-flip.mjs`（chase 餵球／站位誤差／偏差 × 起點 (±1, 6)、(0, 7.5)、(±2, 6)＝4410 局；接球時送自動朝向、魚躍時送搖桿朝向）。
+- 證據（`node tools/direct-v8-round4-probes.mjs aim-flip`，本樹）：chase 變體 `divePresses 2617、stageMismatch 0、nullTarget 0`（tally 只剩 `label=dive sim=dive` 四種結果：body 1337、dive:GOOD 1048、miss:dive 170、dive:POOR 62）；first 變體 `divePresses 3703、stageMismatch 0、nullTarget 0`（修 `contextAction` 前 700／700）。測試 V2 兩變體都斷言 0 且每例 `labelStage === 'dive'`，綠。
+- 修前碼紅燈：`not ok 2 - V2 … chase: 顯示魚躍而 diveTarget 為 null 28/2617，例：feed vx-1.5 vy0 vz5 start(2,6) err(0,0) off-9: aim jump 24.0° label dive -> sim null -> miss:under；…`（覆審員的 28；stage≠dive 的 39 由第二條斷言抓，第一條先紅就停）。
+
+### N3 HIGH／U4／V3｜迎球只改姿勢，不改判定與碰撞
+
+- 改了什麼：`src/sim/directPose.js` `getDirectPose(state, fraction, { reach = true })`——`reach: false` 時平台不加 `receiveReach`／`receiveAhead`。`src/sim/directGame.js`：碰撞用的 `oldPose`／`nextPose`／`restingSurfacePose`（鍵只剩 `receiveTurn`、`receiveOverhand`）、`bodySeparated` 一律用 `collisionPose(f)`＝`getDirectPose(s, f, { reach: false })`；`judgeTick(s, getDirectPose(s, 1), collisionPose(1))`——球放到畫面姿勢上、**部位由未迎球姿勢選**（`directReceiveRules.js` `snapToBody(s, pose, parts, base)`：在 `base` 選最近部位，再把球放到 `pose` 同 id 的那段表面）。渲染（`directPractice.js` `view.sync(getDirectPose(state))`）與 R6 量法（`armGap`，預設姿勢）仍是迎球姿勢。迎球目標（`receiveReachTarget`）、預測消失時保持伸展、觸球後保持——都沒動。
+- 後果（如實）：預測消失後仍伸著的前臂**不再攔球**——球會穿過畫面上的前臂（修前是彈開判 body）。追球探針 chase：這種球 76 例落地判站位失誤、37 例走到判定（噴球 13、傳球 24）、3 例仍碰到身體其他部位；R8 因此從 1062 變 1080（見下）、空接從 153 變 229。
+- 證據 V3（`node tools/receive-reach-diff.mjs <本樹副本> <副本>`，簽名＝第一觸的 tick／kind／part／id／tier／technique／timing／offset／target ＋ 終止事件的 type／tick／judged／miss stage；chase 有按 2646＋chase 沒按 2646＋A14 345＋A16 276＋A16b 1150）：TODO-R4-V3
+- 單元測試 `tests/direct-v8-round4.test.js` V3：覆審 `events-diff.reach0.json` 列出的 8 例（feed vx −1.5 vy 1.5 vz 4、起點 (−1, 6)、誤差 (0.5, 0.3)×5 偏差／(−0.5, −0.3)×3 偏差）第一觸須等於不迎球版（無觸球、tick 54 落地、`miss.stage under`），且過程中 `receiveReach`／`receiveAhead` 有伸出（> 0.05 h）。本樹綠；修前碼紅：`not ok 3 - V3 … start(-1,6) err(0.5,0.3) off-9: 伸出的前臂攔到球 → body（tick 45, forearm）`。
+- R8 重量（`node tools/receive-assist-probe.mjs chase`，本樹）：`{"n":2646,"whiff":"8.7%","zone":"1080 40.8%","bodyZone":0,"net":0,"out":0,"other":1337,"sprays":525,"tiers":{"GOOD":850,"POOR":97,"PERFECT":191},"tech":{"dive":616,"underhand":1047},"actions":{"dive":1460,"receive":1186}}`——舉球區 1080/2646 = **40.8%** ≥ 34%、空接 229/2646 = 8.7% ≤ 25%、碰網 0 ≤ 5%。與覆審員在 `0e72fd4` 上把 `receiveReachLimit` 設 0 量到的 `{"zone":1080,"bodyZone":0,"whiff":229,"net":0,"out":0,"other":1337,"sprays":525,…}` 逐值相同（`scratchpad/v8-r3/r8.m-reach0.json`）：迎球開著的本樹，判定結果已經和沒有迎球一樣。
+
+### N4 MEDIUM／V4｜沒按的噴球貼「表面最近」的部位
+
+- 改了什麼：`snapToBody` 比較 `|球心 − 軸線最近點| − 部位半徑`（表面距離），不再比軸線距離。
+- 證據（`node tools/direct-v8-round4-probes.mjs nearest-surface`，chase 網格全不按，量法同覆審 `nearest-surface.mjs`：以判定 tick 自由飛行位置對 tick 末姿勢逐部位算表面距離）：`n 1253、notNearestSurface 0`、位移 `median 0.271 p95 0.603 max 0.689`（修前 0.283／0.619／0.701）、選中部位 `torso 294、hand 938、forearm 7、leg 14`（修前 forearm 1176、torso 77）、`reachNonZero 0`（沒按類判定時迎球都是 0，所以「未迎球姿勢選部位」與覆審員在畫面姿勢上量是同一件事）、`snapFromMatchesFreeFlight 1253/1253`（事件新欄位 `snapFrom` 與自由飛行外推逐值相同，見 V5）。測試 V4 綠。
+- 修前碼紅燈：`not ok 4 - V4 … 1169/1253 例貼到的不是表面最近的部位，例：right-forearm 表面距 0.308 vs torso 0.211；…`（覆審員的 1169）。
+
+### U3／V5｜沒按類（及所有判定）的畫面瞬移只在畫面層平滑
+
+- 改了什麼（sim 只多記資料）：`directReceiveRules.js` `snapToBody` 回傳 `snapFrom`（貼之前的球心＝判定 tick 自由飛行位置），`pass`／`spray` 把它寫進 contact 事件；sim 的任何判斷都不讀它（R11 決定論測試照舊綠）。`src/app/directPractice.js`：設定頁新增「觸球畫面平滑」勾選（`[data-smooth]`，預設開）；`step()` 遇到帶 `snapFrom` 的 contact 事件時記 `snapOffset = snapFrom − position`，`draw()` 畫在 `sim 球 + snapOffset`，畫完把偏移長度每幀縮 `SNAP_SMOOTH_STEP`＝0.12 m 直到 0；餵球／重新開始清零。`debug.picture()` 回傳畫面球位置、sim 球位置、剩餘偏移，給治具量。
+- 治具（`tools/direct-play-browser.mjs --pass` 新增段落，三個視口各跑一次）：接球餵球、21 個圈內站位（x −0.3…0.3 × z 4.8／4.95／5.1）× 三類（timed receive＝按在 offset 0；spray＝按早 8 tick；none＝不按），先用不按的一局找出判定 tick，再對每例用真實 `frame()` 迴圈以合成 60 Hz 時鐘從判定前 15 幀跑到判定後 12 幀，每幀記 e(f)＝|畫面球 − sim 球|；斷言：判定前 e ≤ 0.01；**判定那一幀畫面球與「前一幀 sim 球自由飛行一 tick」的差 ≤ 0.01 m**（畫面沒有跳）；判定後 e 逐幀不增、每幀減少 ≤ 0.12、≤ 10 幀內 ≤ 0.01；三類各 ≥ 20 例；再以平滑關閉跑同一組，逐例 sim 事件序列與最終狀態字串相同，且關閉時每幀 e ≤ 0.01。
+- 證據：TODO-R4-V5
+- 修前碼紅燈（`0e72fd4` 副本、dev server 5176、同一支治具）：TODO-R4-V5OLD
+
+### N6 LOW｜報告殘留錯誤（全部更正，原地改）
+
+- §6 D 組：原檔拒絕斷言是五條（還原 bad／v1／v2／v6＋重播 bad），已改，附原檔行號與現行行號。
+- §7：`snapToArms` → `snapToBody`；「誤差 ×1.5」→ 總倍率 1.05。§8 第 3 點「噴球也貼到手臂」→ 有按貼手臂、沒按貼身體；第 4 點「再 ×1.5」→ 1.05。
+- §10 L4：「淨值就是 1034 → 901」→ 三項加總 904、實測 901、差 3 例是交互作用。
+- §11 R8 重量：回升全部來自第 6 題；迎球姿勢反而讓舉球區少 18 例（1062 vs 1080）。
+
+### N5、N7（不修，記錄）
+
+- N5：A14／A16 新分母的鑑別力偏弱（資訊）——不動。
+- N7：`direct-v8.1` 從未部署、沒有外流錄影，版本字串不升。
+
+### 收尾驗證
+
+TODO-R4-TAIL

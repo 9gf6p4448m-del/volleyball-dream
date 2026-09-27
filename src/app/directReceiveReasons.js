@@ -6,10 +6,12 @@ export const GRADE_LABELS = { PERFECT: '完美', GOOD: '普通', POOR: '差' };
 const TECH_LABELS = { overhand: '高手', underhand: '低手', dive: '魚躍' };
 const seconds = (ticks) => `${(Math.abs(ticks) / 60).toFixed(2)} 秒`;
 
-// A judged touch: pass (tier) or spray.
+// A judged touch: pass (tier) or spray. A spray's `timing` is 'none' (no
+// press), 'early' / 'late', or 'dive' (U2: the press was a dive at a ball
+// inside a receive circle — a press, the wrong one).
 export function contactReason(event) {
   if (event.spray) {
-    const how = event.timing === 'none' ? '沒按' : event.timing === 'early' ? `按太早 ${seconds(event.offset)}` : `按太晚 ${seconds(event.offset)}`;
+    const how = event.timing === 'none' ? '沒按' : event.timing === 'dive' ? '這球要按接球，按成魚躍了' : event.timing === 'early' ? `按太早 ${seconds(event.offset)}` : `按太晚 ${seconds(event.offset)}`;
     return `噴球：${how} · ${TECH_LABELS[event.technique] ?? '低手'}`;
   }
   const parts = [];
@@ -38,5 +40,6 @@ export function missReason(end) {
   // Position first: a ball outside every circle is a stance error whatever the timing.
   if (miss.d > miss.radius) return `沒接到：站位偏了 ${cm} 公分，球在你${dir}邊，往${dir}移。`;
   if (!miss.pressed) return '沒接到：沒按出手。';
+  if (miss.timing === 'dive') return '沒接到：這球要按接球，按成魚躍了。';
   return `沒接到：時機${miss.timing === 'early' ? '太早' : '太晚'}。`;
 }

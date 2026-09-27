@@ -159,16 +159,17 @@ function overhandTarget(s) {
   p.receiveOverhandChosen = next?.stage === 'over' && next.t <= RECEIVE_ASSIST.overPoseLead;
   return p.receiveOverhandChosen ? 1 : 0;
 }
-// Pose used only for contact-surface velocity: the assist turn, side reach and
-// hands-up blend held at their substep-start values, so none of them adds impulse.
+// Pose used only for contact-surface velocity: the assist turn and hands-up
+// blend held at their substep-start values, so neither adds impulse. Like
+// every collision pose it leaves out the picture-only receive reach (U4).
 export function restingSurfacePose(s, fraction, nextPose, before) {
   const p = s.player;
-  const keys = ['receiveTurn', 'receiveReach', 'receiveAhead', 'receiveOverhand'];
+  const keys = ['receiveTurn', 'receiveOverhand'];
   // A key missing from `before` means its resting value, 0.
   if (keys.every((k) => (p[k] ?? 0) === (before[k] ?? 0))) return nextPose;
   const after = keys.map((k) => p[k]);
   keys.forEach((k) => { p[k] = before[k] ?? 0; });
-  const pose = getDirectPose(s, fraction);
+  const pose = getDirectPose(s, fraction, { reach: false });
   keys.forEach((k, i) => { p[k] = after[i]; });
   return pose;
 }
@@ -220,7 +221,14 @@ export function stepDirectGame(s, commands = []) {
       if (c.action === "dive" && p.grounded) {
         startDive = true;
         // direct-v8 (R4): a dive at a ball within reach throws itself at the ball.
+        // The target (and the judgement stage it records) is predicted with the
+        // heading the player had when pressing — before this tick's aim command
+        // — which is the state the hit button's label was computed from, so the
+        // recorded stage never disagrees with the label (R10; round 3 N2).
+        const aim = p.aim;
+        p.aim = s.poseAimStart;
         p.diveTarget = s.judge.done ? null : diveTargetFor(s);
+        p.aim = aim;
       }
       s.events.push({ type: "action", tick: s.tick, action: c.action });
     }
@@ -275,8 +283,12 @@ export function stepDirectGame(s, commands = []) {
   // the judgement at the end of the tick puts it on the hands (R1, R6).
   const ghost = ruleGhost(s);
   const dt = DIRECT_DT / C.substeps;
+  // Collision poses leave out the receive reach (U4, 2026-09-27): the reach
+  // toward the judged ball is drawn, but the ball meets the body where the body
+  // would be without it, so reach values never change a judgement or a bounce.
+  const collisionPose = (fraction) => getDirectPose(s, fraction, { reach: false });
   for (let i = 0; i < C.substeps; i++) {
-    const oldPose = getDirectPose(s, i / C.substeps);
+    const oldPose = collisionPose(i / C.substeps);
     // Move the same body pose used by rendering and swept collision. There is
     // no ball impulse, target landing point, or extra reach in this assistance.
     const turnBefore = p.receiveTurn ?? 0, reachBefore = p.receiveReach ?? 0, aheadBefore = p.receiveAhead ?? 0, overBefore = p.receiveOverhand ?? 0;
@@ -311,7 +323,7 @@ export function stepDirectGame(s, commands = []) {
         p.landingAge = 0;
       }
     }
-    const nextPose = getDirectPose(s, (i + 1) / C.substeps);
+    const nextPose = collisionPose((i + 1) / C.substeps);
     if (!b.active) continue;
     b.vy -= C.gravity * dt;
     const predicted = { x: b.x + b.vx * dt, y: b.y + b.vy * dt, z: b.z + b.vz * dt };
@@ -349,10 +361,11 @@ export function stepDirectGame(s, commands = []) {
     }
   }
   // direct-v8: the rule judgement at the end of the tick (position + timing).
-  judgeTick(s, getDirectPose(s, 1));
+  // The ball is put on the drawn pose; the part is picked on the collision pose.
+  judgeTick(s, getDirectPose(s, 1), collisionPose(1));
   if (p.action === 'receive' && s.events.some((e) => e.type === 'contact')) p.receiveTouched = true;
   if (s.contactEpisode) {
-    s.separationTicks = bodySeparated(b, getDirectPose(s, 1))
+    s.separationTicks = bodySeparated(b, collisionPose(1))
       ? s.separationTicks + 1
       : 0;
     if (s.separationTicks >= 3) {

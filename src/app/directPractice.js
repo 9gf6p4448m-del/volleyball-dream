@@ -15,6 +15,11 @@ const AUTO_FEED_PAUSE = 60; // ticks after a dead ball before the next countdown
 const ACTION_LABELS = { receive: '接球', spike: '扣球', tip: '吊球', set: '舉球', block: '攔網', dive: '魚躍' };
 const SHOT_LABELS = { LINE: '直線重扣', CROSS_LEFT: '左斜線', CROSS_RIGHT: '右斜線', TIP: '單手吊球' };
 const MAX_TAPE_TICKS = 36000;
+// direct-v8 U3 (2026-09-27): on the judgement tick the sim puts the ball on the
+// body (R6); the drawn ball instead continues from where it was and closes on
+// the sim ball by at most this much per rendered frame. Picture only: the sim
+// never reads it, and the recorded tape is the same with it on or off.
+const SNAP_SMOOTH_STEP = 0.12; // metres per rendered frame
 const PART_LABELS = { head: '頭部', hand: '手掌', forearm: '前臂', arm: '上臂', torso: '軀幹', leg: '腿部' };
 const HINT_IDLE = '走到球路上，讓接球圈套住球的觸球點，外圈變金色就按出手；圈外的球出手鍵會自動改成魚躍 · 扣球時上滑吊球、下滑直線、左右滑斜線';
 
@@ -38,6 +43,7 @@ export function runDirectPractice(ctx) {
           <label>資訊輔助<select data-assist><option value="beginner">入門 · 預測落點</option><option value="standard">標準 · 只看球影</option><option value="advanced">進階 · 關閉額外提示</option></select></label>
           <label class="dp-check"><input data-auto-feed type="checkbox"> 連續餵球（球落地後自動再餵）</label>
           <label class="dp-check"><input data-slowmo type="checkbox" checked> 快球慢動作（只慢畫面，不改判定）</label>
+          <label class="dp-check"><input data-smooth type="checkbox" checked> 觸球畫面平滑（判定那一格球只在畫面上滑到身上，不改判定）</label>
           <label>身高 <output data-height-label>175 cm</output><input data-height type="range" min="150" max="210" value="175" step="1"></label>
           <label>低手接球範圍 <output data-under-label>50 cm</output><input data-under type="range" min="20" max="90" value="50" step="5"></label>
           <label>高手接球範圍 <output data-over-label>35 cm</output><input data-over type="range" min="15" max="70" value="35" step="5"></label>
@@ -104,6 +110,9 @@ export function runDirectPractice(ctx) {
   let simTimes = [];
   let maxBacklog = 0;
   let slowMotionTicks = 0; // sim ticks advanced while the picture ran at 0.5×
+  // U3: drawn ball = sim ball + snapOffset; set on a judged touch, closed frame by frame.
+  let snapOffset = null;
+  let shownBall = null; // where the ball was drawn in the last frame
   // Harness-injected commands; one with `at` waits for that simulation tick.
   const injected = [];
   // Harness event log: every sim event since the last restart, in tick order.
@@ -149,6 +158,7 @@ export function runDirectPractice(ctx) {
     accumulator = 0;
     lastContactTick = -1000;
     slowMotionTicks = 0;
+    snapOffset = null;
     rehearsal = { tick: -1, key: null, value: false };
     frameTimes = [];
     simTimes = [];
@@ -261,11 +271,15 @@ export function runDirectPractice(ctx) {
     if (eventLog.length < 20000) eventLog.push(...structuredClone(state.events));
     updateHitLabel();
     for (const event of state.events) {
-      if (event.type === 'feed' && !playback) message('球來了：讓接球圈套住觸球點，外圈變金色就按。');
+      if (event.type === 'feed') { snapOffset = null; if (!playback) message('球來了：讓接球圈套住觸球點，外圈變金色就按。'); }
       if (!playback && ['ground', 'net', 'out'].includes(event.type) && $('[data-auto-feed]').checked && !pendingFeed)
         pendingFeed = { tick: state.tick + AUTO_FEED_PAUSE + FEED_DELAY, feedKind: $('[data-feed-kind]').value };
       if (event.type === 'contact') {
         lastContactTick = state.tick;
+        // U3: a judged touch moved the ball onto the body (snapFrom → position);
+        // keep drawing it where it was and let the picture catch up.
+        if (event.snapFrom && $('[data-smooth]').checked)
+          snapOffset = { x: event.snapFrom.x - event.position.x, y: event.snapFrom.y - event.position.y, z: event.snapFrom.z - event.position.z };
         if (event.tier) showGrade(event);
         if ((event.tier || event.spray) && !playback) message(contactReason(event));
         else if (!playback) message(`球碰到${PART_LABELS[event.part] ?? '身體'}彈開了 · 試著改變站位與出手時機。`);
@@ -324,9 +338,18 @@ export function runDirectPractice(ctx) {
   }
   function draw(dt = 0) {
     view.sync(getDirectPose(state));
-    // No interpolation of collision-bearing body or ball: both show the same completed tick.
-    const shownY = state.stats.feeds === 0 ? -10 : state.ball.y;
-    ctx.ballView.sync({ ...state.ball, y: shownY, px: state.ball.x, py: shownY, pz: state.ball.z }, 1, dt, false, state.tick - lastContactTick < 8 ? 0.5 : 0);
+    // No interpolation of collision-bearing body or ball: both show the same
+    // completed tick — except the U3 snap offset, which is picture only.
+    const o = snapOffset ?? { x: 0, y: 0, z: 0 };
+    const shownX = state.ball.x + o.x, shownZ = state.ball.z + o.z;
+    const shownY = state.stats.feeds === 0 ? -10 : state.ball.y + o.y;
+    ctx.ballView.sync({ ...state.ball, x: shownX, y: shownY, z: shownZ, px: shownX, py: shownY, pz: shownZ }, 1, dt, false, state.tick - lastContactTick < 8 ? 0.5 : 0);
+    shownBall = { x: shownX, y: shownY, z: shownZ };
+    if (snapOffset) {
+      // Close on the sim ball by at most SNAP_SMOOTH_STEP per rendered frame.
+      const m = Math.hypot(o.x, o.y, o.z), k = m > SNAP_SMOOTH_STEP ? (m - SNAP_SMOOTH_STEP) / m : 0;
+      snapOffset = k > 0 ? { x: o.x * k, y: o.y * k, z: o.z * k } : null;
+    }
     const { player, ball } = state;
     const portrait = ctx.camera.aspect < 0.85;
     cameraTarget.set(player.x * 0.45, 1.55, player.z - 2.8);
@@ -417,6 +440,9 @@ export function runDirectPractice(ctx) {
     assistState: () => ({ platformVisible: platformArrow.visible, timingActive, timingNow: $('[data-hit]').classList.contains('dp-timing-now'),
       reachVisible: reachRing.visible, touchVisible: touchRing.visible, hitAction: $('[data-hit]').dataset.does, hitLabel: $('[data-hit-label]').textContent,
       slowMotion: slowMotion(), message: $('[data-message]').textContent }), pause: () => setPaused(true), resume: () => setPaused(false),
+    // U3 (harness): where the ball was drawn in the last frame, the sim ball, and the remaining picture offset.
+    picture: () => ({ shown: shownBall ? { ...shownBall } : null, sim: { x: state.ball.x, y: state.ball.y, z: state.ball.z }, tick: state.tick,
+      offset: snapOffset ? Math.hypot(snapOffset.x, snapOffset.y, snapOffset.z) : 0 }),
     // Inject a command for the next step, or for simulation tick `at`.
     command: command => injected.push(structuredClone(command)),
     events: () => structuredClone(eventLog),

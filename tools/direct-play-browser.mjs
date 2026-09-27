@@ -223,6 +223,102 @@ try {
       assert.equal(slowOff.slowMotionTicks, 0, 'Slow motion off: no slow-motion ticks');
       const slowSummary = run => ({ ...run, events: undefined, state: undefined, eventCount: JSON.parse(run.events).length, contacts: JSON.parse(run.events).filter(e => e.type === 'contact').map(e => `${e.tick}:${e.technique}/${e.tier}`) });
       await page.screenshot({ path: resolve(output, `${name}-slowmo.png`) });
+      // U3 / V5 (round 4): on the judgement tick the sim moves the ball onto the
+      // body (R6). The drawn ball must not jump: on that frame it stays where
+      // free flight would have put it, then closes on the sim ball by at most
+      // 0.12 m per frame, monotonically, within 10 frames. Measured through the
+      // real frame() loop at a synthetic 60 Hz on the receive feed, 21 stances
+      // in the underhand circle x three classes (timed receive, early receive =
+      // spray, no press), smoothing on; then the same tape with smoothing off:
+      // the sim event log and final state must be identical, and the drawn ball
+      // then equals the sim ball on every frame.
+      const snapRun = enabled => page.evaluate(enabled => {
+        const p = window.__directPractice;
+        const stances = []; for (const x of [-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3]) for (const z of [4.8, 4.95, 5.1]) stances.push([x, z]);
+        // One or more ticks of free flight at the sim's substep scheme (where the ball goes when nothing touches it).
+        const free = (b, ticks) => { const dt = (1 / 60) / 16; let { x, y, z, vx, vy, vz } = b; for (let n = 0; n < ticks; n++) for (let i = 0; i < 16; i++) { vy -= 9.81 * dt; x += vx * dt; y += vy * dt; z += vz * dt; } return { x, y, z }; };
+        const picture = () => { const s = p.snapshot(); return p.picture ? p.picture() : { shown: { x: s.ball.x, y: s.ball.y, z: s.ball.z }, sim: { x: s.ball.x, y: s.ball.y, z: s.ball.z }, tick: s.tick, offset: 0 }; };
+        const setup = (x, z) => {
+          p.restart(); p.pause();
+          const smooth = document.querySelector('[data-smooth]'); if (smooth) smooth.checked = enabled;
+          document.querySelector('[data-assist]').value = 'beginner';
+          p.command({ action: 'feed', feedKind: 'receive' }); p.step(1);
+          for (let i = 0; i < 40; i++) { const s = p.snapshot().player; const dx = x - s.x, dz = z - s.z, d = Math.hypot(dx, dz); if (d < 0.05) break; p.command({ move: { x: dx / Math.max(d, 0.3), z: dz / Math.max(d, 0.3) } }); p.step(1); }
+          p.command({ move: { x: 0, z: 0 } }); p.step(1);
+        };
+        // The judgement tick of each stance, from an unpressed run stepped tick by tick.
+        const cases = [];
+        for (const [x, z] of stances) {
+          setup(x, z);
+          let tj = null;
+          for (let i = 0; i < 260 && tj === null; i++) { p.step(1); const c = p.events().find(e => e.type === 'contact'); if (c) tj = c.tick; if (!p.snapshot().ball.active) break; }
+          if (tj === null) continue;
+          for (const [cls, pressAt] of [['none', null], ['pass', tj - 12], ['spray', tj - 20]]) cases.push({ x, z, cls, tj, pressAt });
+        }
+        const results = [];
+        for (const c of cases) {
+          setup(c.x, c.z);
+          if (c.pressAt != null) p.command({ at: c.pressAt, action: 'receive' });
+          while (p.snapshot().tick < c.tj - 15) p.step(1);
+          const frames = []; let contactFrame = null, contact = null, seen = p.events().length;
+          for (let f = 0; f < 40; f++) {
+            const ballBefore = { ...p.snapshot().ball };
+            const advanced = p.frames(1, 60);
+            const pic = picture(), log = p.events();
+            const fresh = log.slice(seen); seen = log.length;
+            const ev = fresh.find(e => e.type === 'contact');
+            const row = { f, tick: pic.tick, advanced, e: Math.hypot(pic.shown.x - pic.sim.x, pic.shown.y - pic.sim.y, pic.shown.z - pic.sim.z) };
+            if (ev && contactFrame === null) {
+              contactFrame = f;
+              contact = { tick: ev.tick, tier: ev.tier ?? null, spray: !!ev.spray, timing: ev.timing ?? null, technique: ev.technique ?? null, part: ev.part, snap: ev.snapFrom ? Math.hypot(ev.snapFrom.x - ev.position.x, ev.snapFrom.y - ev.position.y, ev.snapFrom.z - ev.position.z) : null };
+              const expect = free(ballBefore, advanced);
+              row.jump = Math.hypot(pic.shown.x - expect.x, pic.shown.y - expect.y, pic.shown.z - expect.z);
+            }
+            frames.push(row);
+            if (contactFrame !== null && f >= contactFrame + 12) break;
+          }
+          results.push({ ...c, contactFrame, contact, frames, events: JSON.stringify(p.events()), state: JSON.stringify(p.snapshot()) });
+        }
+        return results;
+      }, enabled);
+      const snapOn = await snapRun(true), snapOff = await snapRun(false);
+      const snapStats = { classes: {}, maxJump: 0, maxDrop: 0, maxSettle: 0, snap: [] };
+      for (const c of snapOn) {
+        const tag = `stance (${c.x}, ${c.z}) ${c.cls}`;
+        assert.ok(c.contactFrame !== null && c.contact, `${tag}: no judged touch in the framed window`);
+        const kind = c.contact.tier ? 'pass' : c.contact.spray ? (c.contact.timing === 'none' ? 'none' : 'spray') : 'body';
+        assert.equal(kind, c.cls, `${tag}: expected a ${c.cls}, got ${JSON.stringify(c.contact)}`);
+        const at = c.frames[c.contactFrame];
+        for (const row of c.frames.slice(0, c.contactFrame)) assert.ok(row.e <= 0.01, `${tag}: drawn ball off the sim ball before the judgement (frame ${row.f}, ${row.e.toFixed(3)} m)`);
+        if (at.advanced === 1) {
+          assert.ok(at.jump <= 0.01, `${tag}: the drawn ball jumped ${at.jump.toFixed(3)} m on the judgement frame (sim snap ${c.contact.snap?.toFixed(3) ?? '?'} m)`);
+          snapStats.maxJump = Math.max(snapStats.maxJump, at.jump);
+        }
+        let settle = null;
+        for (let f = c.contactFrame + 1; f < c.frames.length; f++) {
+          const prev = c.frames[f - 1].e, cur = c.frames[f].e;
+          assert.ok(cur <= prev + 1e-9, `${tag}: offset grew after the judgement (frame ${f - c.contactFrame}: ${prev.toFixed(3)} → ${cur.toFixed(3)} m)`);
+          assert.ok(prev - cur <= 0.12 + 1e-6, `${tag}: offset closed ${(prev - cur).toFixed(3)} m in one frame (> 0.12)`);
+          snapStats.maxDrop = Math.max(snapStats.maxDrop, prev - cur);
+          if (settle === null && cur <= 0.01) settle = f - c.contactFrame;
+        }
+        if (at.e <= 0.01) settle = 0;
+        assert.ok(settle !== null && settle <= 10, `${tag}: drawn ball not back on the sim ball within 10 frames (e ${c.frames.slice(c.contactFrame).map(r => r.e.toFixed(2)).join(' ')})`);
+        snapStats.maxSettle = Math.max(snapStats.maxSettle, settle);
+        const cls = snapStats.classes[c.cls] ??= { n: 0, e0: [] };
+        cls.n++; cls.e0.push(at.e);
+        snapStats.snap.push(at.e);
+      }
+      for (const cls of ['pass', 'spray', 'none']) assert.ok((snapStats.classes[cls]?.n ?? 0) >= 20, `${cls}: ${snapStats.classes[cls]?.n ?? 0} cases (need 20)`);
+      assert.ok(snapOn.filter(c => c.frames[c.contactFrame]?.advanced === 1).length >= 60, 'the judgement frame advanced exactly one tick in at least 60 cases');
+      assert.equal(snapOff.length, snapOn.length, 'smoothing off ran the same cases');
+      for (let i = 0; i < snapOn.length; i++) {
+        assert.equal(snapOff[i].events, snapOn[i].events, `smoothing on/off: the sim event log differs (${snapOn[i].cls} at (${snapOn[i].x}, ${snapOn[i].z}))`);
+        assert.equal(snapOff[i].state, snapOn[i].state, `smoothing on/off: the final sim state differs (${snapOn[i].cls} at (${snapOn[i].x}, ${snapOn[i].z}))`);
+        for (const row of snapOff[i].frames) assert.ok(row.e <= 0.01, `smoothing off: drawn ball off the sim ball (frame ${row.f}, ${row.e.toFixed(3)} m)`);
+      }
+      const q = (arr, k) => { const a = [...arr].sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(k * (a.length - 1)))] : NaN; };
+      const snapSummary = { cases: snapOn.length, byClass: Object.fromEntries(Object.entries(snapStats.classes).map(([k, v]) => [k, { n: v.n, e0: { min: Math.min(...v.e0), median: q(v.e0, 0.5), p95: q(v.e0, 0.95), max: Math.max(...v.e0) } }])), maxJumpOnJudgementFrame: snapStats.maxJump, maxClosePerFrame: snapStats.maxDrop, maxFramesToSettle: snapStats.maxSettle, identicalOnOff: true };
       // A20e: receive auto-face fixed to half (user choice). Walk off-centre with a
       // live ball and compare the heading with the direction to the setter zone.
       const faceAfterWalk = action => page.evaluate(action => {
@@ -244,7 +340,7 @@ try {
       assert.deepEqual(spike.aim, { x: 0, z: -1 }, 'Auto-face only applies while the hit button would receive');
       await page.evaluate(() => { document.querySelector('[data-action]').value = 'auto'; });
       assert.deepEqual(errors, [], 'No browser errors during the pass drill');
-      report.scenes.push({ name, width, height, beginner, standard, advanced, contextual, perTick, tapResults, slowMotion: { on: slowSummary(slowOn), off: slowSummary(slowOff), identical: slowOn.events === slowOff.events && slowOn.state === slowOff.state }, errors });
+      report.scenes.push({ name, width, height, beginner, standard, advanced, contextual, perTick, tapResults, slowMotion: { on: slowSummary(slowOn), off: slowSummary(slowOff), identical: slowOn.events === slowOff.events && slowOn.state === slowOff.state }, snapSmoothing: snapSummary, errors });
       await context.close();
     }
   }
@@ -490,7 +586,7 @@ try {
     assert.equal(await page.locator('.dp-root').count(), 0, 'Disposal removes UI');
     await context.close();
   }
-  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : passOnly ? `PASS pass: ${report.scenes.length} viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, tap resting, replay; advanced hides hints` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
+  console.log(deliveryOnly ? `PASS delivery: menu navigation, direct practice, export metadata; ${report.delivery.build}` : motionOnly ? `PASS motion: ${report.scenes.length} viewports with run, jump, land, set, block, dive captures` : assistOnly ? `PASS assist: ${report.scenes.length} viewports with visible receive turn, contact, replay` : passOnly ? `PASS pass: ${report.scenes.length} viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, judgement snap smoothed in the picture only, tap resting, replay; advanced hides hints` : `PASS ${report.scenes.length} viewports: real input, jump, cancel, replay, layout, disposal`);
 } finally {
   await writeFile(resolve(output, deliveryOnly ? 'delivery-browser.json' : motionOnly ? 'motion-browser.json' : assistOnly ? 'assist-browser.json' : passOnly ? 'pass-browser.json' : 'browser-report.json'), JSON.stringify(report, null, 2));
   await browser.close();
