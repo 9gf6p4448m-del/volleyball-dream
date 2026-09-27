@@ -1,0 +1,66 @@
+[
+  {
+    "file": "desktop-receive-geo.png",
+    "seed": 1,
+    "tick": 4015,
+    "seq": "bump",
+    "appearance": "geo",
+    "viewport": "desktop"
+  },
+  {
+    "file": "desktop-receive-real.png",
+    "seed": 1,
+    "tick": 4015,
+    "seq": "bump",
+    "appearance": "real",
+    "viewport": "desktop"
+  },
+  {
+    "file": "portrait-receive-geo.png",
+    "seed": 1,
+    "tick": 4015,
+    "seq": "bump",
+    "appearance": "geo",
+    "viewport": "portrait"
+  },
+  {
+    "file": "portrait-receive-real.png",
+    "seed": 1,
+    "tick": 4015,
+    "seq": "bump",
+    "appearance": "real",
+    "viewport": "portrait"
+  },
+  {
+    "file": "desktop-spike-hit-geo.png",
+    "seed": 1,
+    "tick": 4011,
+    "seq": "spike",
+    "appearance": "geo",
+    "viewport": "desktop"
+  },
+  {
+    "file": "desktop-spike-hit-real.png",
+    "seed": 1,
+    "tick": 4011,
+    "seq": "spike",
+    "appearance": "real",
+    "viewport": "desktop"
+  },
+  {
+    "file": "portrait-spike-hit-geo.png",
+    "seed": 1,
+    "tick": 4011,
+    "seq": "spike",
+    "appearance": "geo",
+    "viewport": "portrait"
+  },
+  {
+    "file": "portrait-spike-hit-real.png",
+    "seed": 1,
+    "tick": 4011,
+    "seq": "spike",
+    "appearance": "real",
+    "viewport": "portrait"
+  }
+]

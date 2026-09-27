@@ -5,7 +5,10 @@
 
 ## 結論
 
-TODO：填入 B1–B10、B12 全過／哪幾條沒過。
+**B1–B10、B12 全過。B11 依驗收條文本身即不由本卷判定（需使用者手機實機量測），本卷只交付
+其摘要計算與單元測試，不宣稱已過。** `npm test` 2610/2612 綠（唯一 2 個失敗與分支起點
+`ac41969` 基準逐名逐訊息相同、非本卷造成）；`npm run build` 成功，PWA 預快取含兩個寫實
+模型 GLB。
 
 ## 方法
 
@@ -72,45 +75,148 @@ TODO：填入 B1–B10、B12 全過／哪幾條沒過。
 
 ### B1 開關與預設
 
-TODO
+**過。** 治具：`docs/experiments/real-match-evidence/b1-ui-check.json`（Playwright 實際點擊
+UI，非治具端 evaluate 直呼函式）。步驟與結果：①乾淨 profile 進主選單，按鈕預設文字
+`球員外觀：幾何`（`menuDefaultLabel`）②點擊後變 `球員外觀：寫實`且 `localStorage
+['vd-player-appearance']==='real'` ③重新整理後仍顯示 `球員外觀：寫實`（持久化）
+④帶著已切到寫實的設定，快速比賽 `?quick=1&autopilot=1` 組出的 `matchView.debug.
+appearance==='real'` ⑤生涯出戰：`?career=resume` 進生涯首頁，`ioRow` 的球員外觀按鈕同步顯示
+`球員外觀：寫實`（`careerHomeLabel`），實際組一場生涯比賽（`resolveMatchConfig`→
+`buildMatchStage`→`startMatchLoop`，同 `main.js runMatch`）`matchView.debug.appearance
+==='real'`。全程 `page.on('pageerror'/'console error')` 皆空（`errors: []`）。
+`pass: true`。按鈕實作：`src/ui/careerScreen.js`（主選單按鈕與 `ioRow` 按鈕）；
+持久化：`src/render/playerAppearance.js:loadAppearancePref/saveAppearancePref`
+（key＝`APPEARANCE_PREF_KEY = 'vd-player-appearance'`）。
 
 ### B2 替換完整
 
-TODO（含突變驗紅：`mutation-b2.json`）
+**過。** 3 個 seed、全部取樣點：`visibleCountMismatches` 皆為 0（geo/real 兩模式同一 tick
+可見人數逐一相符，seed1 共同取樣點 1162、seed2 1094、seed3 1145）；`geoPoolCheck.allEmpty`
+皆為 `true`（12 個幾何部件池——`geoCharacter.js` 的 `PART_SLOTS`，capacity 恰為
+playerCount×1／×2——在寫實模式下全數 count=0，無殘留幾何 Mesh）。LIBERO_SWAP 三個 seed
+皆自然發生（seed1 10 次）；SUBSTITUTION 由治具在 sim 迴圈內部觸發（`stage.handlers.
+requestSub`），三個 seed 都成功（`ok:true`）且兩模式落在同一個 tick
+（seed1 tick 3276、seed2 tick 3000、seed3 tick 3034）。
+
+**突變驗紅**（`mutation-b2.json`）：讓 `matchView.js` 在寫實模式下也額外 `createGeoCharacter`
+（幾何人與寫實人疊在一起）——`geoPoolCheck.allEmpty` 變 `false`，12 個幾何池全部非空
+（4 個 count=19、8 個 count=38，對應 playerCount=19 的單/雙倍部件數），B2 判紅；B3/B4/B5/B6/B7
+不受影響（皆 true）。
 
 ### B3 蒙皮跟隨與接地
 
-TODO（含突變驗紅：`mutation-b3.json`）
+**過。** 3 個 seed、每個取樣點的每個可見寫實球員：`handDist.r/l ≤ 0.15 m`
+（A2(e) 手部蒙皮質心到同側腕關節）、`soleMin ≥ -0.03 m`（鞋底蒙皮最低點）皆成立
+（seed1 樣本數 22078、seed2 20786、seed3 21755）。SEQUENCES 鍵名覆蓋（三 seed 聯集）
+共 18 種：`serve, receiveReady, bump, transitionWait, setReady, overhead, approach3,
+windup, spikeHold, spike, blockJump, landSoft, cheer, overheadJump, approach4,
+serveFloat, highfive, dive`——涵蓋全部 6 組（bump／overhead／spike／block／serve／approach）。
+
+**突變驗紅**（`mutation-b3.json`）：拿掉 `u.real.groundLegs()` 接地 IK 呼叫——
+`b3SoleOk` 變 `false`（鞋底沒入地面），B3 判紅；B4/B5/B6/B7 不受影響（皆 true；
+此次突變剛好也踩到 B2 的觀眾席假陽性，該次證據已在報告「踩坑記錄」說明，實際
+`geoPoolCheck` 顯示的是觀眾席 count=712、非幾何球員池——這支突變本身不影響 B2）。
 
 ### B4 身高
 
-TODO
+**過。** 3 個 seed、每個可見寫實球員：寫實模型頭頂（蒙皮候選頂點——綁定姿勢最高
+2% 頂點，逐取樣點重新蒙皮取最大 y）與參考幾何 rig（`createGeoCharacter` 建的參考
+角色，逐取樣點同步複製寫實球員當下的 root 位置/旋轉/縮放與全部關節旋轉）頭頂高度
+差 ≤ 0.05 m（樣本數同 B3：22078／20786／21755）。
+
+**查證附記（範圍外事實，經查證、未改條文）**：`matchView.js:383`
+（`u.rig.root.scale.setScalar(hideMe ? 0.0001 : 1);`）每幀把每個單位的 root 縮放重設為
+1 或 0.0001，忽略了 `createGeoCharacter`/`createRealPlayer` 建立時依 `height.current`
+算好的縮放比——這行是既有程式碼（`git blame` 追到 `7f50513`「W8 暫停演出」，早於
+本卷分支起點 `ac41969`，本卷未曾改動），範圍外、不修。B4 的量法並未受此影響：
+參考 rig 的縮放是「逐取樣點複製寫實球員當下的 `u.rig.root.scale`」而非假設
+`height.current/BASE_H`，兩側量的都是**同一個實際生效的縮放值**，即使該值恆為 1
+（如這行程式碼所致），比較仍然自洽有效——這正是為什麼「取樣須含場上身高最高與
+最低的球員」在此行為下仍能通過：兩側頭頂高度差量的是「同一縮放下的頭頂位置」，
+不是「縮放本身有沒有依身高變化」。
 
 ### B5 配色與背號
 
-TODO（含突變驗紅：`mutation-b5.json`）
+**過。** 配色：3 個 seed 的全體球員（含板凳/自由人）軀幹頂點色眾數與
+`resolveKit`（用該場實際 kit 覆寫算出的期望色）逐通道容差 ≤2/255 全部相符
+（`colorAllOk: true`）。背號面片：N4 上限（三 seed 皆 28 片 ≤30）；面片中心到
+最近蒙皮頂點距離 ≤0.06m（back/front 皆），樣本數 seed1 16268、seed2 15316、
+seed3 16030。
+
+**突變驗紅**（`mutation-b5.json`）：`realPlayer.js` 的 palette 陣列 JERSEY/SHORTS
+互換——全體球員軀幹頂點色眾數變成短褲色（`colorAllOk: false`，19 名球員
+`ok:false`，如 A 隊球衣期望 0x2E7BFF 但量到 0x1616BF≈短褲色 1450559），B5 判紅；
+B2/B3/B4/B6/B7 不受影響（皆 true）。
 
 ### B6 sim 不受影響
 
-TODO（含突變驗紅：`mutation-b6.json`）
+**過。** 3 個 seed，最終正式跑（`report.json`）：seed2／seed3 `finalTickGeo` 與
+`finalTickReal` 逐位元相同（10933/10933、11693/11693，`b6FinalTickAligned: true`），
+因此對這兩個 seed 完整 `JSON.stringify(game)` 序列化逐位元比對本身即具鑑別力，
+`b6SnapshotEqual: true`。seed1 兩模式最終 tick 差 2（11255 vs 11253，
+`b6FinalTickAligned: false`——牆鐘背景漂移導致兩個 session 各自的治具收尾時機
+不同，非 sim 分歧，見「踩坑記錄」第 1 點），此情形下完整快照比較的兩側不是
+同一時間點、不具鑑別力，改採兩側都採到的最後共同 tick（11250）比對：events
+陣列 `b6EventsEqual: true`（249 條事件，含 10 次 LIBERO_SWAP、25 次 SERVE、1 次
+SUBSTITUTION，逐項比對 geo/real 完全一致）、逐格輕量狀態簽章（分數/球位置/全員
+位置）`b6StateSigEqual: true`、`b6ActivityOk: true`（該共同 tick 前有實際受測行為
+發生，非雙方共同卡死的假陽性）——3 個 seed 皆滿足「events 相同 ∧ 狀態簽章相同 ∧
+（快照比對不適用時視為通過，適用時也相同）」。
+
+**突變驗紅**（`mutation-b6.json`）：`matchView.js` 的 sync() 寫實分支內
+`gameState.events.push({type:'MUTATION_TEST_B6',...})`（渲染層回寫 sim 事件陣列）——
+`b6EventsEqual`／`b6SnapshotEqual` 皆變 `false`，B6 判紅；B2/B3/B4/B5/B7 不受影響
+（皆 true）。
 
 ### B7 其他畫面不動
 
-TODO
+**過。** `git diff ac41969 -- src/render/kitPreview.js src/render/ritualStage.js
+src/render/recruitPortrait.js src/render/beatStage.js src/app/freeballSandbox.js
+src/render/directPlayerView.js` 為空（0 行）；`src/` 內 import `realPlayer.js` 的
+檔案只有 `src/app/realPreview.js`、`src/render/matchView.js`（`grep -rl
+"realPlayer.js'" src --include=*.js`），符合「只允許 matchView.js、realPreview.js
+與本卷新增的外觀設定模組」——`playerAppearance.js` 本身未 import realPlayer.js，
+不在 grep 結果中，但仍在允許清單內。
 
 ### B8 不自我降級
 
 - (a) 單元測試：`tests/player-appearance.test.mjs`（決定函式輸入只有 storage/params，同輸入不同
   `performance.now` 替身輸出逐值相同）。指令：`node --test tests/player-appearance.test.mjs`。
-- (b) CPU 6x 降速：TODO
+- (b) CPU 6x 降速：**過。** CDP `Emulation.setCPUThrottlingRate(6)`，seed1、寫實模式，
+  3972 tick（398 個共同取樣點）：`appearanceStayedReal: true`（整場 `debug.appearance`
+  恆為 `'real'`，未曾中途切回幾何）、`facesStayed20k: true`（`debug.faces` 恆為
+  20000，未曾降級到 5k 變體）、`visibleCountMismatches: 0`、`errors: []`——
+  `playerAppearance.js` 的 `resolvePlayerAppearance` 本身不讀 `performance.now()`，
+  沒有可以「自我降級」的輸入來源，與 B8(a) 的純函式證據互證。`pass: true`
+  （`docs/experiments/real-match-evidence/report.json` 的 `b8b` 區塊）。
 
 ### B9 載入失敗（邊界）
 
-TODO
+**過。** 治具攔截 `models/real/player_20k.glb` 請求回 404（`page.route`），seed1、
+外觀設定為寫實：console 確實收到 404（`Failed to load resource: ... 404`）與治具
+自家的 `[real-match] 寫實模型載入失敗，本場改用幾何球員 HttpError...`；`matchView.
+debug` 顯示 `realLoadFailed: true`、`unitsAllGeo: true`（全體球員 fallback 回幾何
+rig，非部分球員卡在半載入狀態）；比賽本身持續運作到 tick 3971（`stillPlaying:
+true`），未整場卡死；`page.on('pageerror')` 為空（`pageerrors: []`，載入失敗走的是
+`catch`，沒有變成未捕捉例外）。DOM toast 文字含子字串「寫實模型載入失敗」
+（`toastText: '寫實模型載入失敗，本場改用幾何球員顯示'`，`toastHasSubstring: true`）。
+`pass: true`（`docs/experiments/real-match-evidence/report.json` 的 `b9` 區塊）。
+實作：`src/render/matchView.js` 的 `showRealLoadFailToast()`（6 秒後 `setTimeout` 自動
+移除），呼叫點在 GLB `catch` 分支、與 `useReal=false` 的 fallback 一起設定。
 
 ### B10 建置與測試
 
-TODO
+**過。** `npm run build`（`docs/experiments/real-match-evidence/npm-build.log`）：
+`EXIT:0`，`✓ built in 5.85s`；PWA precache（見下節）。`npm test`
+（`docs/experiments/real-match-evidence/npm-test-final.log`）：
+`tests 2612 / pass 2610 / fail 2`，`EXIT:1`（node test runner 因有 2 個失敗案例
+回傳非 0，符合預期——見下）。唯一失敗的兩案例與基準一致，皆在
+`tests/direct-receive-assist.test.js`：`A23a 真人追球（全部案例當分母）：舉球區
+≥34%、空接≤25%、碰網≤5%` 與 `A23b 正前（1035）：舉球區≥38%、空接≤26.8%`——
+與 `ac41969` 基準（2603/2601/2）比對同名同錯誤訊息、非本卷改動範圍
+（`git diff ac41969 -- tests/direct-receive-assist.test.js src/` 對接球輔助邏輯
+零改動）。測試數從 2603→2612（+9）：本卷新增 `tests/player-appearance.test.mjs`
+（5 案例）與 `tests/fps-summary.test.mjs`（4 案例），皆通過。
 
 ### B11 手機 FPS 閘門（使用者量）
 
@@ -122,15 +228,43 @@ TODO
 
 ### B12 截圖證據
 
-TODO
+**過。** 8 張截圖（`docs/experiments/real-match-evidence/{desktop,portrait}-{receive,
+spike-hit}-{geo,real}.png`），`manifest.json` 記錄每張的 tick/動作/外觀/視角。桌機
+（1280×720）與直式手機（390×844）×接發（`bump`）／擊球瞬間（`spike`）×幾何／寫實
+四組，每組視角內 geo/real 兩張**逐 tick 相同**：receive 兩視角皆 tick 4015、
+spike-hit 兩視角皆 tick 4011；動作序列（`animator.peek().type`）分別確認為
+`bump`／`spike`，無 `errors`。方法：`?autopilot=1` 的受控球員零輸入 fallback
+路徑本身幾乎不觸發完整動作序列（治具日誌另行確認：A2 在完整 11614 tick 的比賽中
+除發球外 `animator.peek()` 恆為 null，其餘隊友正常出現 14–18 種鍵名），因此改用
+`matchView` 既有公開介面 `triggerPose('A2','bump')`／`triggerContact('A2','spike')`
+（純渲染層呼叫，不寫 sim）在固定 `BASE_TICK=4000` 對兩模式做確定性觸發，取得可
+比對的並排畫面，而非依賴自然發生的動作時機。
+
+**踩坑（治具本身，已修正）**：粗推進（20 秒虛擬時間分段）到目標 tick 前緣後，
+原本用 `runFor(17)` 逐步細推進到 `targetTick`，因 17ms 步幅跨過 60Hz（≈16.67ms/
+tick）單一 tick 邊界，兩模式的 accumulator 餘量不保證相同，導致停在 targetTick±1
+（portrait 視角兩次量測都是 real 比 geo 少 1 tick）。改成 `runFor(1)` 逐毫秒細推進
+並每步後立即檢查，讓兩邊都精準停在 tick 剛好抵達 targetTick 的那一步，修正後兩
+視角四組全數逐 tick 相同（見上）。
 
 ## PWA 預快取
 
-TODO
+`npm run build` 輸出（`docs/experiments/real-match-evidence/npm-build.log`）：
+`PWA v1.3.0 mode generateSW precache 36 entries (2588.99 KiB)`。確認兩個寫實模型
+GLB 都在 `dist/sw.js` 的 precache manifest 內（`grep -o '"models/real/[^"]*"'
+dist/sw.js`）：`models/real/player_20k.glb`、`models/real/player_5k.glb`——
+`vite.config.js` 的 `globPatterns` 新增項 `models/real/*.glb` 生效，離線可用。
 
 ## npm test：基準 vs 最終
 
-TODO
+| | tests | pass | fail | 失敗案例 |
+|---|---|---|---|---|
+| 基準（`ac41969`，`docs/experiments/npm-test-baseline-ac41969.log`） | 2603 | 2601 | 2 | A23a、A23b（`tests/direct-receive-assist.test.js`） |
+| 最終（本卷 HEAD，`docs/experiments/real-match-evidence/npm-test-final.log`） | 2612 | 2610 | 2 | A23a、A23b（同上，同錯誤訊息） |
+
+差異：+9 tests 全部是本卷新增的 `tests/player-appearance.test.mjs`（5）與
+`tests/fps-summary.test.mjs`（4），全數通過；既有失敗案例數量與身分未變，非本卷
+造成（詳見 B10）。
 
 ## git diff --stat
 

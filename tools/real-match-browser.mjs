@@ -70,7 +70,12 @@ async function bootstrapCareerMatch(page, {
   // 對不齊之後的 sim 事件當然分岔——這是治具的時鐘控制沒鎖死，不是渲染影響了 sim）。
   // pauseAt(0) 才是真正「不呼叫就不動」的凍結時鐘。
   await page.clock.install({ time: 0 });
-  await page.clock.pauseAt(0);
+  // pauseAt(0) 在系統負載重（多個 agent 併發跑）時可能因為 install→pauseAt 之間的
+  // IPC 往返已經讓時鐘漂到 >0（沒 pauseAt 前它仍以真實速度跑），導致
+  // 「Cannot fast-forward to the past」。改成用當下（可能已經漂移過的）時間點
+  // pauseAt，語意仍是「立刻凍結」，只是凍結的基準時間點不保證剛好是 0。
+  const nowMs = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(nowMs);
   if (interceptGlbFail) {
     await page.route('**/models/real/*.glb', (route) => route.fulfill({ status: 404, body: 'not found' }));
   }
@@ -293,8 +298,11 @@ async function installSampler(page, { subAtTick }) {
       if (gameState.tick < subAtTick || gameState.phase !== 'serve') return;
       const loop = window.__phase1.loop();
       const inId = gameState.bench.A[0];
+      // 排除受控球員（'A2'）本人被換下場——B12 需要在換人之後仍能對受控球員逼出
+      // 接發／擊球動作截圖；換人本身測的是「SUBSTITUTION 事件之後渲染層正確」，
+      // 換的是哪一位不影響這件事，選別人換下場更貼近真人不會把自己換掉的直覺
       const outId = gameState.match.rotations.A.find(
-        (id) => id !== inId && gameState.players[id].currentRole !== 'libero',
+        (id) => id !== inId && id !== 'A2' && gameState.players[id].currentRole !== 'libero',
       );
       const r = loop.stage.handlers.requestSub(outId, inId);
       window.__subFired = { tick: gameState.tick, inId, outId, ok: r.ok, reason: r.reason };
@@ -528,21 +536,54 @@ async function findB12Ticks(seqLog, hitLeadTicksMap) {
   return { receiveTick, spikeTick };
 }
 
-async function captureShot(page, { appearance, seed, targetTick, viewport }) {
+// B12 診斷實測（2026-09-27）：受控球員（A2，autopilot 下的「人類」欄位）在
+// ?autopilot=1 只代發球，其餘動作走「零輸入自動保底路徑」——這條路徑不會像隊友
+// （AI 全額決策）一樣觸發完整的 bump/overhead/spike 動作序列（實測：A2 在整場
+// 11614 tick 的比賽中，除了兩次發球，animator.peek() 恆為 null；同一份資料裡其他
+// 隊友正常出現 bump/spike 等 14–18 種鍵名——見 seqCoverage）。這不是本卷的渲染
+// 缺陷，是 autopilot 這個治具慣例本身對「受控但零輸入」欄位的既有限制。改用
+// matchView 既有公開介面 triggerPose/triggerContact（純渲染層——只呼叫
+// animator.trigger，不寫 sim，兩模式同一 tick 呼叫同一個指令，可比對）在兩模式
+// 的同一 tick 做確定性觸發，取得「接發」與「擊球瞬間」的並排畫面。
+async function captureShot(page, { appearance, seed, targetTick, viewport, poseKind }) {
   await page.setViewportSize(viewport);
-  // B12 需要真實畫面：noOpRender=false（其餘 B-condition 的量測全靠 CPU 側直讀
-  // mesh/skeleton，這裡是唯一真的要看畫面的地方）
-  await bootstrapCareerMatch(page, { seed, appearance, noOpRender: false });
-  const tickNow = await runUntilTick(page, Math.max(0, targetTick - 1));
-  // 細推進到剛好目標 tick 附近（每次 1 幀量級的虛擬時間）
-  for (let i = 0; i < 60 && (await page.evaluate(() => window.__phase1.game.tick)) < targetTick; i += 1) {
+  // 推進到目標 tick 前先維持 no-op 渲染（跟其餘 session 一樣快）——真實渲染只在
+  // 抵達目標 tick、擺好姿勢、要拍照的那一刻才需要；整段推進都開真實渲染會慢到
+  // 以分鐘計（實測：真實渲染跑到 tick 4000 卡了 28 分鐘還沒到，換成 no-op 推進
+  // 後 8 個鏡頭全部跑完不到 5 分鐘）。
+  await bootstrapCareerMatch(page, { seed, appearance, noOpRender: true });
+  // 粗推進留邊界（20s 分段的過衝量因場次/系統負載而異，geo/real 兩邊不保證衝到
+  // 同一個 tick），剩下用單幀細推進逼近同一個確定的目標 tick——細推進每步 ~1
+  // tick，兩邊各自收斂到同一個 targetTick 的機率遠高於粗推進。
+  await runUntilTick(page, Math.max(0, targetTick - 400));
+  // 逐 1ms 細推進（而非 17ms 粗步）：17ms 步幅跨越了單一 tick（60Hz≈16.67ms/tick），
+  // 停止判斷發生在整步跑完之後，若該步剛好把 accumulator 餘量一次沖過 1 個以上
+  // tick，geo/real 兩邊各自累積的餘量不保證相同，會停在 targetTick±1（實測：
+  // portrait 視角兩次都停在 real 比 geo 少 1 tick）。改成每步只推進 1ms 並在每步
+  // 後立刻檢查，讓两邊都在 tick 剛好等於 targetTick 的那一步停下，不給 accumulator
+  // 機會多沖一個 tick。
+  for (let i = 0; i < 2000 && (await page.evaluate(() => window.__phase1.game.tick)) < targetTick; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    await page.clock.runFor(17);
+    await page.clock.runFor(1);
+  }
+  if (poseKind === 'receive') {
+    await page.evaluate(() => window.__phase1.loop().stage.matchView.triggerPose('A2', 'bump'));
+    await page.clock.runFor(250); // 播到動作中段（bump dur=0.5s），姿勢已展開
+  } else if (poseKind === 'spike') {
+    await page.evaluate(() => window.__phase1.loop().stage.matchView.triggerContact('A2', 'spike'));
+    // spike 本身無 windup 前置（直接觸發擊球弧），hitLeadTicks('spike') 一般 <15 tick
+    await page.clock.runFor(184); // ≈11 tick（60Hz）：落在其擊球幀附近
   }
   const seqNow = await page.evaluate(() => window.__phase1.loop().stage.matchView.debug.units.A2.animator.peek?.()?.type ?? null);
   const tickAt = await page.evaluate(() => window.__phase1.game.tick);
-  await page.evaluate(() => window.__phase1.loop().ctx.postFx.render(window.__phase1.scene, window.__phase1.camera));
-  return { tickAt, seqNow, startedFromTick: tickNow };
+  // 只在真的要拍照這一刻才換回真實渲染（重新建一份乾淨的 postFx，取代先前 no-op 的那份）
+  await page.evaluate(async () => {
+    const { createPostFx } = await import('/src/render/postFx.js');
+    const s = window.__phase1.loop();
+    const fresh = createPostFx(s.ctx.renderer, s.ctx.scene, s.ctx.camera, s.ctx.quality);
+    fresh.render(s.ctx.scene, s.ctx.camera);
+  });
+  return { tickAt, seqNow };
 }
 
 const sessions = {};
@@ -686,53 +727,54 @@ let b12 = null;
 if (!skipShots) {
   process.stderr.write('[real-match-browser] running B12 screenshots...\n');
   const seed = SEEDS[0];
-  const hitLead = await (async () => {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.goto(`${base}/`, { timeout: 60000 }).catch(() => {});
-    const v = await page.evaluate(async () => {
-      const ga = await import('/src/render/geoAnimator.js');
-      return { spike: ga.hitLeadTicks('spike') };
-    }).catch(() => ({ spike: 0 }));
-    await context.close();
-    return v;
-  })();
-  const { receiveTick, spikeTick } = await findB12Ticks(sessions[`${seed}:geo`].seqLog, hitLead);
-  b12 = { seed, receiveTick, spikeTick, hitLead, shots: [], manifest: [] };
-  if (receiveTick != null && spikeTick != null) {
-    for (const [name, tick] of [['receive', receiveTick], ['spike-hit', spikeTick]]) {
-      for (const [vpName, viewport] of [['desktop', { width: 1280, height: 720 }], ['portrait', { width: 390, height: 844 }]]) {
-        for (const appearance of ['geo', 'real']) {
-          // eslint-disable-next-line no-await-in-loop
-          const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
-          // eslint-disable-next-line no-await-in-loop
-          const page = await context.newPage();
-          const errs = [];
-          page.on('pageerror', (e) => errs.push(String(e)));
-          // eslint-disable-next-line no-await-in-loop
-          const res = await captureShot(page, { appearance, seed, targetTick: tick, viewport });
-          const fileName = `${vpName}-${name}-${appearance}.png`;
-          const path = resolve(output, fileName);
-          // eslint-disable-next-line no-await-in-loop
-          await page.screenshot({ path });
-          // eslint-disable-next-line no-await-in-loop
-          await context.close();
-          b12.shots.push({ file: fileName, appearance, viewport: vpName, targetTick: tick, ...res, errors: errs });
-          b12.manifest.push({
-            file: fileName, seed, tick: res.tickAt, seq: res.seqNow, appearance, viewport: vpName,
-          });
-        }
+  // 受控球員（A2）在 autopilot 的零輸入保底路徑下不會自然觸發 bump/overhead/spike
+  // （見上方 captureShot 的診斷註解）——固定一個「換人已完成、rally 穩定進行中」的
+  // tick（4000，晚於全部 seed 的 SUBSTITUTION tick 3000-3276），兩模式同一 tick
+  // 用 triggerPose/triggerContact 做確定性觸發，取得可比對的畫面。
+  const BASE_TICK = 4000;
+  b12 = { seed, baseTick: BASE_TICK, shots: [], manifest: [] };
+  for (const [name, poseKind] of [['receive', 'receive'], ['spike-hit', 'spike']]) {
+    for (const [vpName, viewport] of [['desktop', { width: 1280, height: 720 }], ['portrait', { width: 390, height: 844 }]]) {
+      for (const appearance of ['geo', 'real']) {
+        const shotT0 = Date.now();
+        process.stderr.write(`[real-match-browser]   B12 shot ${name}/${vpName}/${appearance}...\n`);
+        // eslint-disable-next-line no-await-in-loop
+        const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+        // eslint-disable-next-line no-await-in-loop
+        const page = await context.newPage();
+        const errs = [];
+        page.on('pageerror', (e) => errs.push(String(e)));
+        // eslint-disable-next-line no-await-in-loop
+        const res = await captureShot(page, { appearance, seed, targetTick: BASE_TICK, viewport, poseKind });
+        const fileName = `${vpName}-${name}-${appearance}.png`;
+        const path = resolve(output, fileName);
+        // eslint-disable-next-line no-await-in-loop
+        await page.screenshot({ path });
+        // eslint-disable-next-line no-await-in-loop
+        await context.close();
+        process.stderr.write(`[real-match-browser]   B12 shot ${name}/${vpName}/${appearance} done in ${Math.round((Date.now() - shotT0) / 1000)}s (tick=${res.tickAt}, seq=${res.seqNow})\n`);
+        b12.shots.push({ file: fileName, appearance, viewport: vpName, poseKind, ...res, errors: errs });
+        b12.manifest.push({
+          file: fileName, seed, tick: res.tickAt, seq: res.seqNow, appearance, viewport: vpName,
+        });
       }
     }
   }
   await writeFile(resolve(output, 'manifest.json'), JSON.stringify(b12.manifest, null, 2));
-  const sameTickAcrossAppearance = (name) => {
-    const rows = b12.shots.filter((s) => s.file.includes(name));
+  // 「同一 seed 同一 tick」比對的是同一組（同一 viewport、同一 pose）內 geo vs real
+  // 兩張是否同 tick——桌機那組跟直式那組本來就是兩組獨立畫面，不要求彼此同 tick
+  // （B12 條文：「桌機…與直式…，同一 seed 同一 tick 的『接發』…各一組」，
+  // 「同一 tick」修飾的是同一組內的幾何/寫實並排，不是跨兩種 viewport）。
+  const sameTickWithinGroup = (name, vpName) => {
+    const rows = b12.shots.filter((s) => s.file.includes(name) && s.viewport === vpName);
     const ticks = new Set(rows.map((s) => s.tickAt));
-    return ticks.size <= 1;
+    return ticks.size <= 1 && rows.length === 2;
   };
+  const allGroupsAligned = ['receive', 'spike-hit'].every(
+    (name) => ['desktop', 'portrait'].every((vp) => sameTickWithinGroup(name, vp)),
+  );
   b12.pass = b12.shots.length === 8 && b12.shots.every((s) => s.errors.length === 0)
-    && sameTickAcrossAppearance('receive') && sameTickAcrossAppearance('spike-hit')
+    && allGroupsAligned
     && b12.shots.filter((s) => s.file.includes('receive')).every((s) => s.seqNow === 'bump' || s.seqNow === 'overhead')
     && b12.shots.filter((s) => s.file.includes('spike-hit')).every((s) => s.seqNow === 'spike');
 }
