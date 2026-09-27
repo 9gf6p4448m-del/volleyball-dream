@@ -1,0 +1,13 @@
+dive: first tick body moves after stick push at 12 -> 74  none: 13  receive: 13
+dive contact { t: 32, timing: 'dive', part: 'hand', spray: true } reason: 噴球：這球要按接球，按成魚躍了 · 低手
+receive contact null
+9 dive {"t":9,"x":0,"act":null,"handY":0.823,"handZ":4.79} | idle {"t":9,"x":0,"act":null,"handY":0.823,"handZ":4.79}
+11 dive {"t":11,"x":0,"act":"dive","stage":"under","handY":0.823,"handZ":4.79} | idle {"t":11,"x":0,"act":null,"handY":0.823,"handZ":4.79}
+14 dive {"t":14,"x":0,"act":"dive","stage":"under","handY":0.823,"handZ":4.79} | idle {"t":14,"x":0.04,"act":null,"handY":0.844,"handZ":4.779}
+18 dive {"t":18,"x":0,"act":"dive","stage":"under","handY":0.823,"handZ":4.79} | idle {"t":18,"x":0.187,"act":null,"handY":0.883,"handZ":4.818}
+25 dive {"t":25,"x":0,"act":"dive","stage":"under","handY":0.823,"handZ":4.79} | idle {"t":25,"x":0.698,"act":null,"handY":0.984,"handZ":4.95}
+40 dive {"t":40,"x":0,"act":"dive","stage":"under","handY":0.823,"handZ":4.79} | idle {"t":40,"x":2.073,"act":null,"handY":0.93,"handZ":4.619}
+60 dive {"t":60,"x":0,"act":"dive","stage":"under","handY":0.823,"handZ":4.79} | idle {"t":60,"x":3.907,"act":null,"handY":0.995,"handZ":4.452}
+73 dive {"t":73,"x":0.007,"act":null,"handY":0.83,"handZ":4.785} | idle {"t":73,"x":4.25,"act":null,"handY":0.824,"handZ":4.788}
+chase(5 starts) contextual dive presses 2636 of which U2 (circle stage) 0
+u2 exit 0

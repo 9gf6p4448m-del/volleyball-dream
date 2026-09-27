@@ -44,6 +44,19 @@ function kneeBetween(hip, ankle) {
 export function diveThrown(p) {
   return p.action === 'dive' && (!p.diveTarget || p.diveTarget.stage === 'dive');
 }
+// Durations (ticks) of the running action, or undefined. A dive that does not
+// throw the body (U2) is over as quickly as a receive — DIRECT_ACTIONS.receive,
+// 32 ticks, not the thrown dive's 63 (round 5 NEW-A 甲, 2026-09-28): the stick
+// moves the body again as soon as it ends, instead of a 1.05 s freeze.
+export function actionDef(p) {
+  if (!p.action) return undefined;
+  return p.action === 'dive' && !diveThrown(p) ? DIRECT_ACTIONS.receive : DIRECT_ACTIONS[p.action];
+}
+// How deep the un-thrown dive's whiff goes, as a share of the thrown dive's
+// crouch / lean / leg reach: enough to read as a lunge that found no ball
+// (pelvis ≥ 0.10 m lower, torso ≥ 20° forward at the action's peak), not a
+// slide.
+const WHIFF = 0.35;
 
 // The renderer consumes these exact collision capsules. Fraction is a partial tick,
 // allowing physics to sample the curved action path between displayed frames.
@@ -57,7 +70,7 @@ export function diveThrown(p) {
 export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
   const p = state.player,
     h = p.height,
-    def = DIRECT_ACTIONS[p.action];
+    def = actionDef(p);
   const t = p.actionTick + fraction;
   const active = !!def && t >= def.windup && t < def.windup + def.active;
   const phase = def
@@ -77,7 +90,13 @@ export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
     fz = -Math.cos(angle);
   const weight = raise * recover;
   const thrown = diveThrown(p);
-  const dive = thrown ? weight : 0;
+  // U2 whiff (round 5 NEW-A 甲, 2026-09-28): a dive pressed at a ball headed
+  // into a receive circle does not throw the body, but is not nothing either —
+  // the body dips and leans into a lunge that finds no ball (WHIFF of the
+  // thrown dive's depth), the arms up at the circle the ball is coming to, so
+  // the ball is still put on the hands/forearms near where it is judged (W2).
+  const whiff = p.action === 'dive' && !thrown ? WHIFF * weight : 0;
+  const dive = thrown ? weight : whiff;
   const speed = Math.hypot(p.gaitVx ?? 0, p.gaitVz ?? 0);
   const run = Math.min(1, speed / 5.5) * (p.grounded ? 1 : 0) * (1 - dive);
   const forward = speed ? ((p.gaitVx ?? 0) * fx + (p.gaitVz ?? 0) * fz) / speed : 0;
@@ -89,8 +108,8 @@ export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
   const crouch =
     (p.action === "receive"
       ? 0.1 * raise * recover
-      : thrown
-        ? 0.28 * raise * recover
+      : p.action === "dive"
+        ? 0.28 * dive // thrown: the full weight; U2 whiff: WHIFF of it
         : 0) + landing +
     // A passer settles the platform: the running bob fades out with the receive
     // weight, so residual movement at contact cannot drop the platform (direct-v4).
@@ -166,6 +185,12 @@ export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
       const reach = p.diveReach ?? 1;
       elbow = blend(elbow, point(sign * 0.12, 0.47, 0.56 * reach), weight);
       hand = blend(hand, point(sign * 0.045, 0.42, 0.77 * reach), weight);
+    } else if (p.action === "dive") {
+      // U2 whiff: the hands go to the circle the ball is coming into — the
+      // forehead (set pose) for the overhand circle, the platform otherwise.
+      const over = p.diveTarget?.stage === 'over';
+      elbow = blend(elbow, point(sign * (over ? 0.17 : 0.11), over ? 0.87 : 0.69, over ? 0.08 : 0.21), weight);
+      hand = blend(hand, point(sign * (over ? 0.11 : 0.045), over ? 1.02 : 0.585, over ? 0.15 : 0.41), weight);
     } else if (p.action === "spike" || p.action === "tip") {
       if (sign === 1) {
         const tip = p.action === 'tip' ? 1 : Math.max(0, Math.min(1, p.shotBlend ?? (p.shotType === 'TIP' ? 1 : 0)));
