@@ -49,6 +49,7 @@ const refs = JSON.parse(await readFile(resolve(REF_DIR, 'manifest.json'), 'utf8'
 function pickRef(refKey, tech) {
   const [technique, phaseKey] = SET === 'jp' ? PLAN_JP[tech] : refKey;
   if (CAMS[tech]?.refFile) return refs.find((r) => r.file === CAMS[tech].refFile) ?? null;
+  if (SET === 'jp' && CAMS[tech]) return null; // jp 版只用鏡頭表指定的參考照
   const c = refs.filter((r) => r.technique === technique && (!phaseKey || String(r.phase).includes(phaseKey)));
   return c[0] ?? null;
 }
@@ -122,6 +123,8 @@ for (const vp of VIEWPORTS) {
         await writeFile(resolve(REF_OUT, scratchFile), await compose([await dataUrl(refPath), ...imgs], [`真人參考（${ref.phase}）`, ...caps]));
         comp.reference = { localFile: basename(scratchFile), file: ref.file, player: ref.player ?? null, pageUrl: ref.pageUrl, imageUrl: ref.imageUrl, license: ref.license, author: ref.author, view: ref.view, phase: ref.phase, note: ref.note };
       }
+    } else if (SET === 'jp') {
+      comp.missingReference = '日本男排參考照未找到（見參考照 manifest 的蒐集紀錄）';
     } else {
       errors.push(`${item.tech}：找不到參考照片`);
     }

@@ -281,3 +281,61 @@ pass：A1、A2（ab／c／d／e／f／g）、A3、A4、A5、A6、A8、A9、A9foo
  tools/motion-2b-shots.mjs                          |  132 +
  68 files changed, 20017 insertions(+), 60 deletions(-)
 ```
+
+## 裁定後重驗（2026-09-27，使用者裁定兩題皆甲，修訂紀錄 a4c1d33）
+
+- 舉球肘角維持 fast（40±10），`set.push.elflex.quick` 自 E2(a) 移出，E2(a) 改為 39 列；程式不改。
+- 低手收勢：`bump` 加 `sustain: 0.2`（dur 0.5／hit 0.45 不動），commit **85c4e25**。
+
+在 85c4e25 的 git archive 副本上重跑。repo 內 `motion-d0-measure.json` 保持 D0 基準、未覆蓋；改後輸出另存 `motion-2b-evidence/d0-after-85c4e25.json`。
+
+| 條 | 結果 |
+|---|---|
+| E2(a) | **39／39 範圍內**；bump.end：頭 −5.7、軀幹 13.1、上臂 88.8、肘 173.0、大腿 19.9、膝 160.1 |
+| E2(b) | 0.2368 m |
+| E1 | PASS（例外表不變；span 0.1362 m、shline 107.61°） |
+| E3 | 29 鍵差異 0；hitLeadTicks 區塊逐字相同；geo-animator 50／50 |
+| E4 | 86 條驅動、4830 幀全過；最低鞋底 −0.0250 m |
+| E5 | 85c4e25 本機 clone、埠 5205：A1–A6、A8–A12 全 true（`e5-real-player-report-85c4e25.json`） |
+| E6 | 過（窗內最小權重 1.0000、最大逐幀 0.0270 m） |
+| E8 | npm test 2603／2601／2＝A23a、A23b，與基準逐項相同（`npm-test-85c4e25-tail.txt`）；`npm run build` exit 0 |
+
+修改後的測試有鑑別力：新測試配 864524d 的舊 animator（無 sustain）時，紅在行為斷言「bump 在 dur 0.5s 後應仍在尾段保持（sustain 0.2）」；以備份還原後 sha1 相符（95d804d9…），轉綠。
+
+測試改動（使用者本條明確同意），改前／改後逐字 diff：
+
+```diff
+diff --git a/tests/geo-animator.test.mjs b/tests/geo-animator.test.mjs
+index 2fb8c5f..8545e9b 100644
+--- a/tests/geo-animator.test.mjs
++++ b/tests/geo-animator.test.mjs
+@@ -253,13 +253,17 @@ test('§3 sustain 有界：預備撐完仍會鬆手回待命（不得永遠卡
+   assert.ok(anim.isIdle(), '沒等到球的二傳應在撐住期滿後回待命');
+ });
+ 
+-test('§3 無 sustain 的序列行為完全不變（既有動作零影響）', () => {
++// 2026-09-27 使用者裁定（2B 低手收勢，選甲）：bump 加尾段保持 sustain 0.2（dur／hit 不動），
++// 本測試改為反映新的結束時刻＝dur 0.5＋sustain 0.2＝0.7s（見 docs/kickoffs/real-player-stage2-match.md 修訂紀錄）
++test('§3 bump 尾段保持有界：dur 0.5s 後仍撐住隨揮、dur＋sustain 0.7s 後結束', () => {
+   const rig = mkRig();
+   const anim = createGeoAnimator(rig);
+-  anim.trigger('bump'); // dur 0.5、無 sustain
++  anim.trigger('bump'); // dur 0.5、sustain 0.2
+   anim.update(0.5, 0);
+   anim.update(0.01, 0);
+-  assert.ok(anim.isIdle(), 'bump 應仍在 dur 0.5s 後結束（total===dur）');
++  assert.ok(!anim.isIdle(), 'bump 在 dur 0.5s 後應仍在尾段保持（sustain 0.2）');
++  anim.update(0.2, 0);
++  assert.ok(anim.isIdle(), 'bump 應在 dur＋sustain 0.7s 後結束');
+ });
+ 
+ // Phase 5 W1 §2 助跑三步節奏 ＋ §1b 慣用手（07-28 kickoff：表現層＋步序，戰術層不做）
+```
+
+## E7 日本男排參考版（使用者指示「以日本男排為主，石川祐希的動作很漂亮」）
+
+- 三格並排圖（真人｜幾何｜寫實，只在本機）：`C:\Users\shung\AppData\Local\Temp\claude\C--Users-shung\b611e1c3-cb6d-40b3-94b3-ee053003c6ba\scratchpad\motion-2b-sidebyside-jp\`
+- repo 內的遊戲截圖與 manifest（只記來源 URL、選手與對應關係）：`motion-2b-evidence/jp/`
+- 遊戲鏡頭依參考照的視角調整（方位角記在 manifest `composites[].cam`）。
+- 參考照：石川祐希 4 張（引臂＝他的跳發引臂、扣球擊球 2 張、跳發）、關田誠大 3 張（低手接發、舉球 2 張）、日本隊 5 號攔網 1 張。飄球、吊球找不到日本隊合格照片，只附幾何與寫實兩格。
+- 與石川的差距清單：`docs/experiments/motion-2b-ishikawa-gap.md`（只列清單，未改 animator）。
