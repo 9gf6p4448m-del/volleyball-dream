@@ -1,5 +1,7 @@
 # 2B · 與石川祐希（日本男排）動作的差距清單
 
+> **2026-09-27 更新**：使用者裁定「全做」（a14d3ef）。a～g 已實作於 e6b1899（空中收腿、擊球抬頭、擊球臂更豎直、引臂反弓、接發前傾、接發前後腳〔需新增腳關節〕、引臂非擊球手降低），結果見 `motion-2b-report.md`「第三輪」。下方表格保留當時的判讀原文。
+
 > 用途：使用者指示「參考的照片以日本男排為主，石川祐希的動作很漂亮」。本清單只列**肉眼可見的差異**與**各條能不能在現行約束內調**，**本卷未依此改任何 `geoAnimator.js`**。要不要照石川調，由使用者決定。
 > 並排圖（參考照片不進 repo）：本機 `C:\Users\shung\AppData\Local\Temp\claude\C--Users-shung\b611e1c3-cb6d-40b3-94b3-ee053003c6ba\scratchpad\motion-2b-sidebyside-jp\`，12 組三格（真人｜幾何｜寫實）＋4 組兩格（飄球、吊球找不到日本隊照片）。repo 內的遊戲截圖在 `motion-2b-evidence/jp/`，來源 URL 記在其中 `manifest.json`。
 > 遊戲側數字：85c4e25 的 D0 腳本輸出（`motion-2b-evidence/d0-after-85c4e25.json`）；真人側是**目測照片**，只有方向和大概幅度，不是量測值。

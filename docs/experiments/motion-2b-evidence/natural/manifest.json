@@ -1,0 +1,205 @@
+{
+  "note": "三欄＝改前 f4ccbec／2B 現況 8bda3f6／本輪 e6b1899，列＝幾何（上）、寫實（下）；直式 390×844 每 2 tick 一幀（30 fps），三版逐 tick 對齊同一情境腳本（tools/motion-2b-anim.html）。真人參考靜圖只在本機版（repo 外），此處只記來源。",
+  "gifs": {
+    "spike": "spike.gif",
+    "bump": "bump.gif",
+    "servejump": "servejump.gif"
+  },
+  "sources": [
+    {
+      "label": "改前 f4ccbec",
+      "url": "http://127.0.0.1:5207"
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "url": "http://127.0.0.1:5208"
+    },
+    {
+      "label": "本輪 e6b1899",
+      "url": "http://127.0.0.1:5206"
+    }
+  ],
+  "frames": [
+    {
+      "label": "改前 f4ccbec",
+      "scenario": "spike",
+      "kind": "geo",
+      "frames": 83
+    },
+    {
+      "label": "改前 f4ccbec",
+      "scenario": "spike",
+      "kind": "real",
+      "frames": 83
+    },
+    {
+      "label": "改前 f4ccbec",
+      "scenario": "bump",
+      "kind": "geo",
+      "frames": 43
+    },
+    {
+      "label": "改前 f4ccbec",
+      "scenario": "bump",
+      "kind": "real",
+      "frames": 43
+    },
+    {
+      "label": "改前 f4ccbec",
+      "scenario": "servejump",
+      "kind": "geo",
+      "frames": 67
+    },
+    {
+      "label": "改前 f4ccbec",
+      "scenario": "servejump",
+      "kind": "real",
+      "frames": 67
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "scenario": "spike",
+      "kind": "geo",
+      "frames": 83
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "scenario": "spike",
+      "kind": "real",
+      "frames": 83
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "scenario": "bump",
+      "kind": "geo",
+      "frames": 48
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "scenario": "bump",
+      "kind": "real",
+      "frames": 48
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "scenario": "servejump",
+      "kind": "geo",
+      "frames": 67
+    },
+    {
+      "label": "2B 現況 8bda3f6",
+      "scenario": "servejump",
+      "kind": "real",
+      "frames": 67
+    },
+    {
+      "label": "本輪 e6b1899",
+      "scenario": "spike",
+      "kind": "geo",
+      "frames": 83
+    },
+    {
+      "label": "本輪 e6b1899",
+      "scenario": "spike",
+      "kind": "real",
+      "frames": 83
+    },
+    {
+      "label": "本輪 e6b1899",
+      "scenario": "bump",
+      "kind": "geo",
+      "frames": 48
+    },
+    {
+      "label": "本輪 e6b1899",
+      "scenario": "bump",
+      "kind": "real",
+      "frames": 48
+    },
+    {
+      "label": "本輪 e6b1899",
+      "scenario": "servejump",
+      "kind": "geo",
+      "frames": 67
+    },
+    {
+      "label": "本輪 e6b1899",
+      "scenario": "servejump",
+      "kind": "real",
+      "frames": 67
+    }
+  ],
+  "pageErrors": [
+    [],
+    [],
+    []
+  ],
+  "references": {
+    "spike": [
+      {
+        "file": "spikeWind-1.jpg",
+        "technique": "spikeWind",
+        "player": "石川祐希（Yuki Ishikawa，日本隊背號14，照片中球衣可見14號）",
+        "phase": "跳發球拋球後、擊球臂於頭後最大引臂、非持球手前舉指向來球、軀幹反弓（本圖取自石川祐希的跳發球連續動作照，非進攻扣球）",
+        "view": "oblique",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/5193f8eac14e12e4c7fa09aeaa913916-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "note": "找不到石川祐希本人在比賽中「進攻扣球」的最大引臂（拉弓）照片，改用他跳發球（jump serve）拋球後最大引臂瞬間的照片代替——兩者引臂姿勢（擊球臂肘高舉在後、非擊球手前舉、軀幹反弓）視覺上高度相似，但實際技術動作是發球而非扣球，請留意腳步與節奏不同。"
+      },
+      {
+        "file": "spike-1.jpg",
+        "technique": "spike",
+        "player": "石川祐希（Yuki Ishikawa，球衣14號＋JPN國旗清楚可見）",
+        "phase": "扣球擊球瞬間，於攔網上方最高點擊球，對手中國隊2號Jiang C.伸手攔網",
+        "view": "oblique",
+        "pageUrl": "https://volleyballking.jp/article/83314/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2026/06/26.-0613-1200x800.jpg",
+        "license": "未知（照片來源標註 Volleyball World，經バレーボールキング刊登）",
+        "author": "Volleyball World（經 バレーボールキング 轉載）",
+        "note": "2026 VNL 日本對中國賽事實戰扣球照，人物與動作皆確認無誤。"
+      },
+      {
+        "file": "spike-2.jpg",
+        "technique": "spike",
+        "player": "石川祐希（Yuki Ishikawa，效力 Sir Susa Vim Perugia，深色球衣）",
+        "phase": "扣球擊球瞬間，面對 Cucine Lube Civitanova 三人攔網（21、18、12號）",
+        "view": "front",
+        "pageUrl": "https://volleyballking.jp/article/11019/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2024/11/%E7%9F%B3%E5%B7%9D-241103-205329-61336--1200x800.jpg",
+        "license": "未知（原始 EXIF 描述為 Sir Susa Vim Perugia vs Cucine Lube Civitanova 義甲比賽照）",
+        "author": "未標註攝影師（バレーボールキング 刊登，2024/11/3 義大利 Superlega 賽事）",
+        "note": "正面視角、面部清楚可辨認為石川祐希，作為 spike 類別的第二張備選照。"
+      }
+    ],
+    "bump": [
+      {
+        "file": "bump-1.jpg",
+        "technique": "bump",
+        "player": "關田誠大（Masahiro Sekita，日本隊舉球員，球衣8號，未找到石川祐希本人的接發照）",
+        "phase": "低手接發（forearm pass）觸球瞬間，雙臂夾緊伸直迎球",
+        "view": "front",
+        "pageUrl": "https://volleyballking.jp/article/83714/",
+        "imageUrl": "https://volleyballking.jp/wp-content/uploads/2025/12/251227_120.jpg",
+        "license": "未知",
+        "author": "バレーボールキング",
+        "note": "找不到石川祐希本人清楚的接發低手照，依指示改用其他日本男排選手（關田誠大）；此照雖非攻擊手接發，但觸球瞬間與姿勢符合 bump 需求。"
+      }
+    ],
+    "servejump": [
+      {
+        "file": "servejump-1.jpg",
+        "technique": "servejump",
+        "player": "石川祐希（Yuki Ishikawa，球衣背後可見「ISHIKAWA」字樣與14號）",
+        "phase": "跳發球擊球瞬間前，手臂完全向上伸直即將觸球",
+        "view": "side",
+        "pageUrl": "https://vbm.link/21613/",
+        "imageUrl": "https://vbm.link/v/wp-content/uploads/2018/09/99a89a55c70d0151321f7b041a957c52-683x1024.jpg",
+        "license": "未知（バレーボールマガジン編輯圖片，全日本男子石川選手スパイクサーブ連續照特輯）",
+        "author": "バレーボールマガジン（Volleyball Magazine）",
+        "note": "球衣背後印有「ISHIKAWA」姓氏，確認為石川祐希本人；此為連續照系列中最接近觸球瞬間的一張。"
+      }
+    ]
+  }
+}
