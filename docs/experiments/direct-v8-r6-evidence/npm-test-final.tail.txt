@@ -1,0 +1,23 @@
+=== cleanup 06:24:38
+���\: PID �� 47168 (PID �� 46280 ���l�B�z�{��) ���B�z�{�Ǥw�פ�C
+���\: PID �� 46280 (PID �� 7608 ���l�B�z�{��) ���B�z�{�Ǥw�פ�C
+netstat 517x LISTENING lines: 0
+chrome-headless-shell count: 0
+direct-play-browser node procs: 0
+=== npm test start 06:24:41
+
+[... 2604 passing lines omitted ...]
+✔ ★B5-7 防佔位★ 同 tier 三校的三軸不得完全相同；強豪與弱校的球權說法必須不同 (0.3845ms)
+✔ 走向固定目標：不過衝＋精準停（停在 5mm 內；修前死區讓人停在 19.6mm 外） (8.9781ms)
+✔ 接近目標的最後 20 tick：不得出現「靜止→滿速→靜止」或「滿速→靜止→滿速」的交替 (3.2707ms)
+✔ 整場實跑：滿速↔靜止的 stop-go 交替率 < 0.5%（修前 5.92%） (900.8569ms)
+✔ 決定論：同 seed 兩次整場逐 tick 位置逐值相同（幅值化走位不引入浮點分岔） (448.135ms)
+ℹ tests 2604
+ℹ suites 0
+ℹ pass 2604
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 263543.4919
+=== npm test exit 0 06:29:06
