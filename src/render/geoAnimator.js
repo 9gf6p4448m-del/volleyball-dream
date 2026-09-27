@@ -518,6 +518,9 @@ export function createGeoAnimator(rig) {
   // Phase 5 W1 §1b：慣用手只影響助跑步序方向（見檔頭 STEP_ORDER_*）；
   // 未帶 handed 欄位（例如舊測試手造的 rig）視同右手，外觀零改變
   const handed = rig.handed === 'l' ? 'l' : 'r';
+  // 髖的歐拉順序 YXZ：先屈（x）再做反向扭轉（y，見 update 的髖反扭）＝屈曲平面維持在角色前向。
+  // 骨盆不轉時 y＝0，與預設 XYZ 完全相同
+  for (const n of ['rHip', 'lHip']) if (j[n]?.rotation) j[n].rotation.order = 'YXZ';
   const order3 = handed === 'l' ? STEP_ORDER_L3 : STEP_ORDER_R3;
   const order4 = handed === 'l' ? STEP_ORDER_L4 : STEP_ORDER_R4;
 
@@ -591,9 +594,10 @@ export function createGeoAnimator(rig) {
     // 4.7 動作重製新增欄位：spineUp＝胸椎（弓身/收腹）、wrist＝壓腕（側別由呼叫端
     // 決定，見 update() 的壓腕路由）。pelvisY/chestY 只有攻擊姿勢在用、鏡像時反號
     // airTuck（2B 石川差距 a）＝滯空屈膝收腿的膝彎弧度；stagger（f）＝前後腳：後腳髖後擺的弧度
-    const WARP = { spine: 0.8, neck: 1.35, crouch: 0.8, spineUp: 0.9, wrist: 1.35, airTuck: 1, stagger: 0.8 };
+    const WARP = { spine: 0.8, neck: 1.35, crouch: 1, spineUp: 0.9, wrist: 1.35, airTuck: 1, stagger: 0.8 };
     for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist', 'airTuck', 'stagger']) {
-      const val = curve((p) => poseVal(p, k), WARP[k]);
+      // crouch 維持線性：它直接決定 root 高度，曲線的切線會讓落地緩衝的單幀下沉超過寫實人 A12 的 0.05 m
+      const val = k === 'crouch' ? lerp(poseVal(P[1], k), poseVal(P[2], k), f) : curve((p) => poseVal(p, k), WARP[k]);
       // 曲線可能在影格之間微幅過衝：只能為正的量（下蹲、收腿、後擺）夾在 0 以上
       out[k] = (k === 'crouch' || k === 'airTuck' || k === 'stagger') ? Math.max(val, 0) : val;
     }
@@ -927,6 +931,10 @@ export function createGeoAnimator(rig) {
       const holdBreath = pose ? Math.sin(phase * 0.9) * 0.025 * w : 0;
       j.spineUpper.rotation.x += holdBreath;
       j.pelvis.rotation.y = pose ? blended.pelvisY * w : 0;
+      // 髖反向扭轉（髖內外旋）：骨盆轉體時腿與膝仍朝角色前方——滯空屈膝收腿後，膝蓋若跟著骨盆
+      // 轉出前向平面，寫實人 A2(d)「膝不內外翻」會超標（幾何人量得 0.12 m）
+      j.rHip.rotation.y = -j.pelvis.rotation.y;
+      j.lHip.rotation.y = -j.pelvis.rotation.y;
       j.neck.rotation.x = pose ? lerp(-0.04, blended.neck, w) : -0.04;
 
       // 手臂：跑動反向擺（無動作時）→ 動作姿勢（有動作時）

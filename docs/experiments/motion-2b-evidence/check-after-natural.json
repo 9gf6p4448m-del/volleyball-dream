@@ -40,7 +40,7 @@
         "driver": "cold:bump",
         "probe": "D0Probe",
         "frames": 47,
-        "worstFoot": -0.025000000000000154
+        "worstFoot": -0.025000000000000258
       },
       {
         "driver": "cold:overhead",
@@ -52,7 +52,7 @@
         "driver": "cold:overheadJump",
         "probe": "D0Probe",
         "frames": 59,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:windup",
@@ -64,19 +64,19 @@
         "driver": "cold:spikeHold",
         "probe": "D0Probe",
         "frames": 10,
-        "worstFoot": -0.025000000000000078
+        "worstFoot": -0.025000000000000085
       },
       {
         "driver": "cold:spike",
         "probe": "D0Probe",
         "frames": 49,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:tip",
         "probe": "D0Probe",
         "frames": 47,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:serve",
@@ -88,13 +88,13 @@
         "driver": "cold:serveJump",
         "probe": "D0Probe",
         "frames": 72,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:serveFloat",
         "probe": "D0Probe",
         "frames": 36,
-        "worstFoot": -0.025000000000000133
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:serveReady",
@@ -106,7 +106,7 @@
         "driver": "cold:gasp",
         "probe": "D0Probe",
         "frames": 65,
-        "worstFoot": -0.025000000000000133
+        "worstFoot": -0.025000000000000085
       },
       {
         "driver": "cold:gaspHeavy",
@@ -124,25 +124,25 @@
         "driver": "cold:block",
         "probe": "D0Probe",
         "frames": 63,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:blockJump",
         "probe": "D0Probe",
         "frames": 52,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:blockJumpGraze",
         "probe": "D0Probe",
         "frames": 52,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:approach3",
         "probe": "D0Probe",
         "frames": 50,
-        "worstFoot": -0.02500000000000014
+        "worstFoot": -0.025000000000000085
       },
       {
         "driver": "cold:approach4",
@@ -178,7 +178,7 @@
         "driver": "cold:landSoft",
         "probe": "D0Probe",
         "frames": 21,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:cheer",
@@ -214,7 +214,7 @@
         "driver": "chain:receiveReady→bump",
         "probe": "D0Probe",
         "frames": 65,
-        "worstFoot": -0.025000000000000154
+        "worstFoot": -0.025000000000000258
       },
       {
         "driver": "chain:setReady→overhead",
@@ -226,13 +226,13 @@
         "driver": "chain:windup→spike",
         "probe": "D0Probe",
         "frames": 60,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:windup→tip",
         "probe": "D0Probe",
         "frames": 59,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:windup(hold 到落地)",
@@ -244,13 +244,13 @@
         "driver": "chain:serveReady hold→serveJump",
         "probe": "D0Probe",
         "frames": 78,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:serveReady hold→serveFloat",
         "probe": "D0Probe",
         "frames": 42,
-        "worstFoot": -0.025000000000000133
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:serveReady hold→serve",
@@ -262,13 +262,13 @@
         "driver": "chain:block hold→blockJump",
         "probe": "D0Probe",
         "frames": 58,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:block hold→blockJumpGraze",
         "probe": "D0Probe",
         "frames": 58,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:approach3@2.55",
@@ -298,7 +298,7 @@
         "driver": "cold:bump",
         "probe": "L2BProbe0",
         "frames": 47,
-        "worstFoot": -0.025000000000000154
+        "worstFoot": -0.025000000000000258
       },
       {
         "driver": "cold:overhead",
@@ -310,7 +310,7 @@
         "driver": "cold:overheadJump",
         "probe": "L2BProbe0",
         "frames": 59,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:windup",
@@ -322,19 +322,19 @@
         "driver": "cold:spikeHold",
         "probe": "L2BProbe0",
         "frames": 10,
-        "worstFoot": -0.025000000000000078
+        "worstFoot": -0.025000000000000085
       },
       {
         "driver": "cold:spike",
         "probe": "L2BProbe0",
         "frames": 49,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:tip",
         "probe": "L2BProbe0",
         "frames": 47,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:serve",
@@ -346,13 +346,13 @@
         "driver": "cold:serveJump",
         "probe": "L2BProbe0",
         "frames": 72,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:serveFloat",
         "probe": "L2BProbe0",
         "frames": 36,
-        "worstFoot": -0.025000000000000133
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:serveReady",
@@ -364,7 +364,7 @@
         "driver": "cold:gasp",
         "probe": "L2BProbe0",
         "frames": 65,
-        "worstFoot": -0.025000000000000133
+        "worstFoot": -0.025000000000000085
       },
       {
         "driver": "cold:gaspHeavy",
@@ -382,25 +382,25 @@
         "driver": "cold:block",
         "probe": "L2BProbe0",
         "frames": 63,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:blockJump",
         "probe": "L2BProbe0",
         "frames": 52,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:blockJumpGraze",
         "probe": "L2BProbe0",
         "frames": 52,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:approach3",
         "probe": "L2BProbe0",
         "frames": 50,
-        "worstFoot": -0.02500000000000014
+        "worstFoot": -0.025000000000000085
       },
       {
         "driver": "cold:approach4",
@@ -436,7 +436,7 @@
         "driver": "cold:landSoft",
         "probe": "L2BProbe0",
         "frames": 21,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "cold:cheer",
@@ -472,7 +472,7 @@
         "driver": "chain:receiveReady→bump",
         "probe": "L2BProbe0",
         "frames": 65,
-        "worstFoot": -0.025000000000000154
+        "worstFoot": -0.025000000000000258
       },
       {
         "driver": "chain:setReady→overhead",
@@ -484,13 +484,13 @@
         "driver": "chain:windup→spike",
         "probe": "L2BProbe0",
         "frames": 60,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:windup→tip",
         "probe": "L2BProbe0",
         "frames": 59,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:windup(hold 到落地)",
@@ -502,13 +502,13 @@
         "driver": "chain:serveReady hold→serveJump",
         "probe": "L2BProbe0",
         "frames": 78,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:serveReady hold→serveFloat",
         "probe": "L2BProbe0",
         "frames": 42,
-        "worstFoot": -0.025000000000000133
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:serveReady hold→serve",
@@ -520,13 +520,13 @@
         "driver": "chain:block hold→blockJump",
         "probe": "L2BProbe0",
         "frames": 58,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:block hold→blockJumpGraze",
         "probe": "L2BProbe0",
         "frames": 58,
-        "worstFoot": -0.02500000000000025
+        "worstFoot": -0.025000000000000147
       },
       {
         "driver": "chain:approach3@2.55",
