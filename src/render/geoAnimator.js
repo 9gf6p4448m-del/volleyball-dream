@@ -19,45 +19,37 @@ const SWING_MAX = 0.62;      // 擺腿振幅上限（原固定值＝現在的天
 // 大腿前擺角 a 由骨盆下降量反解**：THIGH_LEN·(1−cos a)＝下降量，膝彎＝a（鞋盒因此保持
 // 水平、鞋底不入地）。root 下降公式（crouch×0.55）不變，只改腿怎麼吸收它。
 const THIGH_LEN = 0.46;      // geoCharacter.js：膝在髖下 0.46（BASE_H 空間）
+const LEG_SWITCH_S = 0.15;   // 腿部分支切換的緩入秒數
+const BACK_KNEE = 2.0;       // 一般跑動後擺腿的連續膝彎係數
 const SQUAT_MAX = 1.45;      // 大腿前擺上限（rad，約 83°）；下降量超過時截在此
 function squatAngle(drop) {
   const c = Math.min(Math.max(drop, 0) / THIGH_LEN, 1 - Math.cos(SQUAT_MAX));
   return Math.acos(1 - c);
 }
-// 擺腿時的腳底保護（2B E4）：小腿鉛直的下蹲只在兩腿都不擺時成立——助跑／跑動的後擺腿
-// 大腿往後轉＝腿的垂直長度變長，鞋就插進地板（2B 探針：助跑制動步最深 −0.18 m）。
-// 幾何角色沒有腳踝，鞋盒跟著小腿轉；這裡只在「該腿鞋盒最低角點低於站姿鞋底」時加大
-// **該腿**膝彎把腳抬起（後擺腿自然就是屈膝收小腿），root 高度與下蹲深度一律不動。
-// 平面三角（髖、膝只有 x 旋轉；鞋盒＝geoCharacter.js 的 0.13×0.09×0.26、掛膝下 (0,−0.44,0.05)）
+// 腳底保護（2B E4＋自然度）：幾何人有腳關節（geoCharacter.js rFoot／lFoot）後，著地的鞋底由
+// 腳關節保持水平，鞋底高度只由「踝高」決定，而踝高對小腿傾角是單調的⇒可以**解析、連續**地求
+// 最小膝彎：THIGH_LEN·cos(hip)＋SHIN_LEN·cos(hip＋knee) ≤ 站姿腿長 − 骨盆下降量。
+// （之前鞋盒跟著小腿轉，鞋尖入地／抬腳的可行解不連續，助跑膝角單幀跳 30–48°。）
 const SHIN_LEN = 0.44;
-const SHOE_CORNERS_YZ = [[-0.395, -0.08], [-0.395, 0.18], [-0.485, -0.08], [-0.485, 0.18]];
-const STAND_SOLE = -(THIGH_LEN + 0.485); // 站直時鞋底相對髖的高度（髖在 root 上 0.92 ⇒ 鞋底 −0.025）
-// hipX／kneeX＝關節 rotation.x；回傳鞋盒最低角點相對髖關節的高度
-function footLowRel(hipX, kneeX) {
-  const kneeY = -THIGH_LEN * Math.cos(hipX);
-  const rho = hipX + kneeX; // 小腿的絕對轉角（繞 x）
-  const c = Math.cos(rho);
-  const sn = Math.sin(rho);
-  let low = Infinity;
-  for (const [y, z] of SHOE_CORNERS_YZ) low = Math.min(low, y * c - z * sn);
-  return kneeY + low;
+const STAND_LEG = THIGH_LEN + SHIN_LEN;
+function groundKnee(hipX, kneeX, drop) {
+  const reach = STAND_LEG - drop - THIGH_LEN * Math.cos(hipX); // 小腿可用的最大垂直長度
+  const c = reach / SHIN_LEN;
+  if (c >= 1) return kneeX; // 小腿鉛直也碰不到地面以下
+  const need = Math.acos(Math.max(-1, c)); // 小腿至少要傾這麼多
+  const tilt = hipX + kneeX;
+  if (Math.abs(tilt) >= need) return kneeX;
+  return (tilt < 0 ? -need : need) - hipX;
 }
-// drop＝骨盆（髖）相對站姿的下降量；鞋底不得低於站姿鞋底（＝地面下 0.025 m 的既有接觸高度）
-function liftKnee(hipX, kneeX, drop) {
-  const floor = STAND_SOLE + drop - 1e-6;
-  if (footLowRel(hipX, kneeX) >= floor) return kneeX;
-  // 膝彎加大時腳尖先微降、再上抬：先粗掃找到第一個夠高的角度，再二分收斂
-  let hi = null;
-  for (let k = kneeX + 0.05; k <= kneeX + 2.0; k += 0.05) {
-    if (footLowRel(hipX, k) >= floor) { hi = k; break; }
-  }
-  if (hi == null) return kneeX + 2.0;
-  let lo = hi - 0.05;
-  for (let i = 0; i < 12; i += 1) {
-    const mid = (lo + hi) / 2;
-    if (footLowRel(hipX, mid) >= floor) hi = mid; else lo = mid;
-  }
-  return hi;
+// 腳關節角：鞋子的淨傾角（相對地面）限制在「踝離地高度撐得住」的範圍——鞋尖／鞋跟離踝
+// 約 0.18 m，淨傾角 τ 讓最低角點下降約 0.18·sin|τ|，所以 |τ| ≤ asin(離地高度／0.2)；踝貼地時鞋底
+// 放平、抬高後逐漸跟著小腿自然垂下。連續、無分段
+function footAngle(hipX, kneeX, drop) {
+  const shin = hipX + kneeX;
+  const ankleUp = STAND_LEG - drop - THIGH_LEN * Math.cos(hipX) - SHIN_LEN * Math.cos(shin);
+  const tauMax = Math.asin(Math.min(Math.max(ankleUp, 0) / 0.2, 1));
+  const tau = Math.max(-tauMax, Math.min(tauMax, shin));
+  return tau - shin;
 }
 
 // Phase 5 W1 §2-2/§2-4 助跑三步節奏：取代舊版「兩關鍵幀＝走過去然後拔起」。
@@ -119,10 +111,10 @@ function stepPhase(t, order, ampTable, env) {
 // ★ 2B 文獻校準（docs/experiments/motion-d0-table.md 的列號）★ 數值由 D0 腳本量世界座標驗證。
 const POSES = {
   // 低手（Ridgway & Hamilton 1987 HS 組）：起始肘角 159°（bump.start.elbow）、頭前傾 7°
-  bumpReady: { rSh: [-0.95, 0.24], lSh: [-0.95, -0.24], rEl: -0.36, lEl: -0.36, spine: 0.5, neck: -0.55, crouch: 0.2, spineUp: 0.16, stagger: 0.22 },
+  bumpReady: { rSh: [-0.95, 0.24], lSh: [-0.95, -0.24], rEl: -0.36, lEl: -0.36, spine: 0.5, neck: -0.55, crouch: 0.2, spineUp: 0.16, stagger: 0.25 },
   // 肩 x 含部分胸椎前後傾補償（spineUp 於鏡像修正後的 ec8efc7 才加上）：−1.16 使手臂世界方向與
   // 1fd5da6 意圖差 3.4°（≤5°），且仍滿足既有測試「觸球幀手臂已伸到墊球位 < −1.15」
-  bumpHit: { rSh: [-1.39, 0.24], lSh: [-1.39, -0.24], rEl: 0, lEl: 0, spine: 0.55, neck: -0.3, crouch: 0.08, spineUp: -0.1, stagger: 0.22 },
+  bumpHit: { rSh: [-1.39, 0.24], lSh: [-1.39, -0.24], rEl: 0, lEl: 0, spine: 0.55, neck: -0.3, crouch: 0.08, spineUp: -0.1, stagger: 0.25 },
   // 低手收勢隨揮（2B 新增）：觸球後平台往前上方送（上臂約水平）、軀幹維持前傾、抬頭目送球
   bumpFollow: { rSh: [-1.9, 0.22], lSh: [-1.9, -0.22], rEl: -0.12, lEl: -0.12, spine: 0.3, neck: -0.45, crouch: 0.03, spineUp: 0.05 },
   // 高手舉球（Lanzani 2026）：裝填肘屈約 100°（set.load.elflex）、出手肘屈約 40°（fast／seven 型）。
@@ -499,6 +491,14 @@ export function createGeoAnimator(rig) {
   let lastJumpY = 0; // 上一幀的跳躍弧高度（唯讀窺視用，見 probe()）
   let phase = 0;
   const blended = {};
+  // 腿部分支切換過渡（2B 自然度）：助跑步相分支 ↔ 一般跑動分支切換時，腿角由切換前一幀
+  // 緩入到新分支（LEG_SWITCH_S 秒）；否則切換那一幀膝角單幀跳 24°、腳尖插地
+  const LEG_SW_KEYS = ['rHx', 'lHx', 'rHz', 'lHz', 'rK', 'lK'];
+  const legSw = { rHx: 0, lHx: 0, rHz: 0, lHz: 0, rK: 0, lK: 0 };
+  const legSwPrev = {};
+  let legFrom = null;
+  let legT = 0;
+  let lastStep = false;
   // Phase 5 W1 §1b：慣用手只影響助跑步序方向（見檔頭 STEP_ORDER_*）；
   // 未帶 handed 欄位（例如舊測試手造的 rig）視同右手，外觀零改變
   const handed = rig.handed === 'l' ? 'l' : 'r';
@@ -547,8 +547,8 @@ export function createGeoAnimator(rig) {
     }
     // 4.7 動作重製新增欄位：spineUp＝胸椎（弓身/收腹）、wrist＝壓腕（側別由呼叫端
     // 決定，見 update() 的壓腕路由）。pelvisY/chestY 只有攻擊姿勢在用、鏡像時反號
-    // stagger（2B 石川差距 f）＝前後腳：後腳髖往後擺的弧度；airTuck（a）＝滯空屈膝收腿的膝彎弧度
-    for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist', 'stagger', 'airTuck']) {
+    // airTuck（2B 石川差距 a）＝滯空屈膝收腿的膝彎弧度；stagger（f）＝前後腳：後腳髖後擺的弧度
+    for (const k of ['spine', 'neck', 'crouch', 'spineUp', 'wrist', 'airTuck', 'stagger']) {
       out[k] = lerp(poseVal(pa, k), poseVal(pb, k), f);
     }
     // lean（2B）＝胸椎側傾 spineUpper.z：負＝上身往非擊球側（右手選手的左側 +X）倒
@@ -778,17 +778,17 @@ export function createGeoAnimator(rig) {
         const trail = sw * 0.3;
         // 2B：左腿原本寫成 `lead==='l' ? -forward : -trail`——兩髖關節同向建立（不鏡像），
         // 那等於左腳領跨時往**後**擺、拖曳時往前擺（舊版只比 |角度| 所以沒被抓到）。改成兩腿同一規則
-        j.rHip.rotation.x = (stepInfo.lead === 'r' ? forward : trail) - squat;
-        j.lHip.rotation.x = (stepInfo.lead === 'l' ? forward : trail) - squat;
-        j.rHip.rotation.z = 0;
-        j.lHip.rotation.z = 0;
+        legSw.rHx = stepInfo.lead === 'r' ? forward : trail;
+        legSw.lHx = stepInfo.lead === 'l' ? forward : trail;
+        legSw.rHz = 0;
+        legSw.lHz = 0;
         // 下蹲屈膝＝squat（小腿鉛直）；踩前腳另加抬膝；後擺腿入地時加膝彎抬腳
-        j.rKnee.rotation.x = liftKnee(j.rHip.rotation.x, squat + (stepInfo.lead === 'r' ? sw * 0.5 : 0), sinkY);
-        j.lKnee.rotation.x = liftKnee(j.lHip.rotation.x, squat + (stepInfo.lead === 'l' ? sw * 0.5 : 0), sinkY);
+        legSw.rK = stepInfo.lead === 'r' ? sw * 0.5 : 0;
+        legSw.lK = stepInfo.lead === 'l' ? sw * 0.5 : 0;
       } else {
         // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
-        j.rHip.rotation.x = -legSwing * s - squat;
-        j.lHip.rotation.x = legSwing * s - squat;
+        legSw.rHx = -legSwing * s;
+        legSw.lHx = legSwing * s;
         // 側併步（07-28 重做；Sawmah 回報「橫移時雙腿很不自然」）：
         // 舊版兩髖 z **同號**＝兩條腿一起倒向同一邊，只是幅度輪流大小——那不是併步。
         // geoCharacter.js:161-162 兩髖同向建立（只差位置 sx*0.095，無鏡像旋轉），
@@ -801,20 +801,48 @@ export function createGeoAnimator(rig) {
         const spread = shuffle * 0.34 * openW;
         const trail = shuffle * 0.34 * closeW;
         const f = 0.5 + 0.5 * Math.max(-1, Math.min(1, latW * 3)); // 0＝右側領跨、1＝左側領跨
-        j.lHip.rotation.z = spread * f + trail * (1 - f);
-        j.rHip.rotation.z = -(spread * (1 - f) + trail * f);
+        legSw.lHz = spread * f + trail * (1 - f);
+        legSw.rHz = -(spread * (1 - f) + trail * f);
         // 橫移時膝蓋不該再跑前進步態的交替抬腿（髖在併步、膝在走路＝兩套動作疊著）：
         // 交替量隨 sideW 收掉，改成併步該有的低姿屈膝
         const walkKnee = 1 - sideW * 0.85;
         const shuffleCrouch = sideW * runW * 0.28;
-        // 前後腳站位（2B 石川差距 f，接發）：後腳＝非慣用側（右手選手的左腳）髖往後擺，
-        // 膝彎交給 liftKnee 抬到鞋底不入地＝後腳腳跟離地踮著，前腳維持小腿鉛直
-        const stagger = pose ? blended.stagger * w : 0;
-        if (stagger) j[handed === 'l' ? 'rHip' : 'lHip'].rotation.x += stagger;
-        j.rKnee.rotation.x = liftKnee(j.rHip.rotation.x, (0.12 + Math.max(0, -s) * 0.95 * walkKnee) * runW
-          + squat + shuffleCrouch, sinkY);
-        j.lKnee.rotation.x = liftKnee(j.lHip.rotation.x, (0.12 + Math.max(0, s) * 0.95 * walkKnee) * runW
-          + squat + shuffleCrouch, sinkY);
+        legSw.rK = (0.12 + Math.max(0, -s) * 0.95 * walkKnee) * runW + shuffleCrouch;
+        legSw.lK = (0.12 + Math.max(0, s) * 0.95 * walkKnee) * runW + shuffleCrouch;
+      }
+
+      // 腿部分支切換過渡：只內插「擺腿量」（legSw），下蹲量每幀用當下值——內插整個腿角會打破
+      // 「大腿角 ↔ 骨盆下降量」的對應，切換後幾幀鞋子沉進地板
+      const isStep = stepInfo != null;
+      if (isStep !== lastStep) {
+        legFrom = LEG_SW_KEYS.map((k) => legSwPrev[k] ?? legSw[k]);
+        legT = 0;
+        lastStep = isStep;
+      }
+      if (legFrom) {
+        legT += dt;
+        const k = Math.min(legT / LEG_SWITCH_S, 1);
+        const e = k * k * (3 - 2 * k);
+        LEG_SW_KEYS.forEach((key, i) => { legSw[key] = lerp(legFrom[i], legSw[key], e); });
+        if (k >= 1) legFrom = null;
+      }
+      for (const key of LEG_SW_KEYS) legSwPrev[key] = legSw[key];
+      j.rHip.rotation.x = legSw.rHx - squat;
+      j.lHip.rotation.x = legSw.lHx - squat;
+      j.rHip.rotation.z = legSw.rHz;
+      j.lHip.rotation.z = legSw.lHz;
+      // 後擺腿（大腿在下蹲基準之後）連續加膝彎 BACK_KNEE×後擺量：沒有踝關節，後擺時鞋尖入地；
+      // 與（過渡後的）後擺量成正比＝連續，不用「找可行解」那種會單幀跳的做法
+      j.rKnee.rotation.x = legSw.rK + squat + BACK_KNEE * Math.max(0, legSw.rHx);
+      j.lKnee.rotation.x = legSw.lK + squat + BACK_KNEE * Math.max(0, legSw.lHx);
+      // 前後腳站位（2B 石川差距 f，接發）：後腳＝非慣用側（右手選手的左腳）髖往後擺；
+      // 膝彎由下面的 groundKnee 連續補到踝不入地、腳關節把鞋底放平
+      const stagger = pose ? blended.stagger * w : 0;
+      if (stagger) j[handed === 'l' ? 'rHip' : 'lHip'].rotation.x += stagger;
+      // 腳底保護（連續，見 groundKnee）＋著地鞋底放平（footAngle）。兩個分支都套
+      for (const side of ['r', 'l']) {
+        const hx = j[`${side}Hip`].rotation.x;
+        j[`${side}Knee`].rotation.x = groundKnee(hx, j[`${side}Knee`].rotation.x, sinkY);
       }
 
       // 滯空屈膝收腿（2B 石川差距 a）：只作用在跳躍弧 > 0 的幀，隨離地高度在 12 cm 內漸入，
@@ -824,6 +852,12 @@ export function createGeoAnimator(rig) {
         for (const side of ['r', 'l']) {
           j[`${side}Hip`].rotation.x -= tuck * 0.35;
           j[`${side}Knee`].rotation.x += tuck;
+        }
+      }
+
+      if (j.rFoot && j.lFoot) {
+        for (const side of ['r', 'l']) {
+          j[`${side}Foot`].rotation.x = footAngle(j[`${side}Hip`].rotation.x, j[`${side}Knee`].rotation.x, sinkY - jumpY);
         }
       }
 

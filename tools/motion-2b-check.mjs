@@ -61,7 +61,12 @@ function frameMetrics(c) {
     const proj = H.clone().addScaledVector(u, K.clone().sub(H).dot(u));
     const fwd = K.clone().sub(proj).z;
     out.knees[s] = { angle: inc, fwd };
-    for (const [x, y, z] of SHOE_CORNERS) out.footMin = Math.min(out.footMin, j[`${s}Knee`].localToWorld(V(x, y, z)).y);
+    // 鞋盒掛點：有腳關節（2B 自然度卷起 geoCharacter 的 rFoot／lFoot）就從腳關節算，否則舊掛點（膝局部）
+    const foot = j[`${s}Foot`];
+    for (const [x, y, z] of SHOE_CORNERS) {
+      const p = foot ? foot.localToWorld(V(x, y + 0.44, z)) : j[`${s}Knee`].localToWorld(V(x, y, z));
+      out.footMin = Math.min(out.footMin, p.y);
+    }
     // 肘有號角：前臂方向換到上臂（肩關節）局部座標，屈＝局部 +Z（肘 x 負），過伸＝局部 −Z
     const S = j[`${s}Shoulder`].getWorldPosition(V());
     const E = j[`${s}Elbow`].getWorldPosition(V());
