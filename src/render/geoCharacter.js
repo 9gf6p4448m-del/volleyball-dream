@@ -274,7 +274,8 @@ export function createGeoCharacter(
     add(wr, 'hand', skin, 0, 0, 0);
   }
 
-  // 背號面片槽位（配色卷批 2，N2/N4；F1 對抗覆審修正 2026-08-24）：不進 InstancedMesh
+  // 背號面片槽位（配色卷批 2，N2/N4；F1 對抗覆審修正 2026-08-24；B5 修正
+  // 2026-09-28：改掛 chest／spineUpper，理由見下）：不進 InstancedMesh
   // 池——每人號碼各異、貼圖各自快取（見下方 getNumberTexture）。這裡只建「貼齊點」
   // （Object3D，非 Mesh，不會被加進 scene，本函式不碰 scene，建置成本可忽略）；
   // matchView 逐幀複製其 matrixWorld 到獨立建立的真實 Mesh 上（同 pool.writeMatrix
@@ -283,16 +284,26 @@ export function createGeoCharacter(
   // 這裡槽位一律建；真正的 Mesh 何時建（開場上場者立刻建／板凳等 SUBSTITUTION
   // 事件才惰性建）是 matchView 的政策，不在這層決定——number＝null 只留給
   // 呼叫端明確不想要背號的場景（如本檔內建預設、node 單測）。
+  // ★ B5 修正：原本掛在 `spine`（腰／下段），y=0.34/0.36 卻已經高於 spineUpper
+  // 關節本身的局部偏移（chest = joint(spine,'spineUpper',0,0.3,0)）——也就是面片
+  // 實際落在胸／上背區，寫實模型該區的蒙皮權重也綁的是 spineUpper 骨頭（見
+  // realPlayer.js 的 L.spine/L.spineUpper 分段），但面片卻繼承 spine 的旋轉、不
+  // 繼承 spineUpper 的旋轉。2B 加入 `spineUpper.rotation.z`（胸椎側傾 lean，
+  // geoAnimator.js:983）後，扣球引臂等姿勢 spineUpper 轉但面片不轉，兩者在面片
+  // 高度處的世界位置隨側傾角度拉開（0.04~0.06m 力臂 × sinθ），導致 B5 超線
+  // （seed 1 最大 0.0610 m，全在 spikeHold/spike 幀）。改掛 chest（spineUpper）
+  // 並把 y 減去 0.3（chest 相對 spine 的偏移）維持面片原本的世界位置不變，只是
+  // 換成跟著 spineUpper 轉。
   let numberSlots = null;
   if (number != null) {
     const textColor = numberTextColor(kit.jersey);
     const back = new THREE.Object3D();
-    back.position.set(0, 0.34, -0.14); // 背後、略高於腰——真實球衣背號慣例
+    back.position.set(0, 0.04, -0.14); // 背後、略高於腰——真實球衣背號慣例（相對 chest）
     back.rotation.y = Math.PI; // 面向 -Z（背後）；Y 軸旋轉是正規變換，文字不會鏡像
-    spine.add(back);
+    chest.add(back);
     const front = new THREE.Object3D();
-    front.position.set(0, 0.36, 0.14); // 胸前，略高於背號（真實球衣慣例）；面向 +Z
-    spine.add(front);
+    front.position.set(0, 0.06, 0.14); // 胸前，略高於背號（真實球衣慣例）；面向 +Z（相對 chest）
+    chest.add(front);
     numberSlots = {
       back: { node: back, number, color: textColor, size: 0.30 },
       front: { node: front, number, color: textColor, size: 0.13 },
