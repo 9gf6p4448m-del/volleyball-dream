@@ -5,10 +5,11 @@
 // grid (contextual press), chase grid never pressed, A14 / A16 / A16b grids.
 // Per case the first touch (tick, kind, part, id, tier, technique, timing,
 // offset, target) must be identical, and for a ball nothing touched the
-// terminal event (type, tick, judged, miss stage) too. After a touch the ball
-// leaves from the drawn arms (R6 measures there), so its contact position and
-// its landing (tick, spot) may differ; the terminal type / miss stage after a
-// touch is reported on its own line. Read-only.
+// terminal event (type, tick, judged, miss stage) too. Round 5 (W3,
+// 2026-09-28): after a touch as well, the landing spot must agree within
+// 0.01 m and the terminal type / miss stage must be the same (the ball now
+// leaves from the un-reached pose); the landing tick and the contact position
+// are still reported on their own lines. Read-only.
 // Usage: node tools/receive-reach-diff.mjs <rootA> <rootB>
 import { pathToFileURL } from 'node:url';
 const load = async (root) => {
@@ -68,7 +69,7 @@ for (const x of [-0.2, -0.1, 0, 0.1, 0.2]) for (const z of [4.8, 5.0, 5.2]) for 
 for (const x0 of [-0.6, -0.3, 0.3, 0.6]) for (const m of [0.1, 0.2, 0.3]) for (let rt = 18; rt <= 40; rt++) grids.push({ kind: 'A16', x: x0, z: 5, rt, moveAt: (t) => (t >= 20 ? { x: -Math.sign(x0) * m, z: 0 } : { x: 0, z: 0 }) });
 for (const dir of [-1, 1]) for (const x0 of [0.3, 0.6, 0.9, 1.2, 1.5]) for (const stop of [26, 30, 34, 38, 99]) for (let rt = 18; rt <= 40; rt++) grids.push({ kind: 'A16b', x: -dir * x0, z: 5, rt, moveAt: (t) => ({ x: t >= 10 && t < stop ? dir * 0.5 : 0, z: 0 }) });
 const tally = {}, add = (k) => (tally[k] = (tally[k] ?? 0) + 1), ex = [];
-let reachedA = 0, reachedB = 0;
+let reachedA = 0, reachedB = 0, maxLanding = 0;
 const cases = [...chaseCases(LA).map((c) => ({ ...c, run: runChase })), ...grids.map((c) => ({ ...c, run: runFeedGrid }))];
 for (const c of cases) {
   const ra = c.run(LA, c), rb = c.run(LB, c);
@@ -87,13 +88,19 @@ for (const c of cases) {
     add(`${c.kind} UNTOUCHED BALL, TERMINAL DIFFERS`);
     if (ex.length < 8) ex.push(example());
   } else if (touched && finKind(a.fin) !== finKind(b.fin)) {
-    add(`${c.kind} same first touch, terminal type/miss after the touch differs`);
+    add(`${c.kind} TOUCHED BALL, TERMINAL TYPE/MISS AFTER THE TOUCH DIFFERS`);
     add(`${c.kind}   ${finKind(a.fin)} -> ${finKind(b.fin)}`);
     if (ex.length < 8) ex.push(example());
   } else {
+    const landing = a.landing && b.landing ? Math.hypot(a.landing[0] - b.landing[0], a.landing[1] - b.landing[1]) : 0;
+    if (touched) maxLanding = Math.max(maxLanding, landing);
+    if (touched && landing > 0.01) {
+      add(`${c.kind} TOUCHED BALL, LANDING SPOT DIFFERS > 0.01 m`);
+      if (ex.length < 8) ex.push(example() + ` landing ${JSON.stringify(a.landing)} vs ${JSON.stringify(b.landing)}`);
+    }
     if (!ps) add(`${c.kind} same first touch, contact position differs (allowed)`);
-    if (touched && (!fs || !ls)) add(`${c.kind} same first touch, landing tick/spot after the touch differs (allowed)`);
+    if (touched && !fs) add(`${c.kind} same first touch, landing tick after the touch differs (allowed)`);
   }
 }
 const differs = Object.entries(tally).filter(([k]) => k.includes('DIFFERS')).reduce((v, [, n]) => v + n, 0);
-console.log(JSON.stringify({ A: { root: process.argv[2].split(/[\\/]/).pop(), ...LA.reach, maxReachSeen: r3(reachedA) }, B: { root: process.argv[3].split(/[\\/]/).pop(), ...LB.reach, maxReachSeen: r3(reachedB) }, differs, tally, ex }, null, 1));
+console.log(JSON.stringify({ A: { root: process.argv[2].split(/[\\/]/).pop(), ...LA.reach, maxReachSeen: r3(reachedA) }, B: { root: process.argv[3].split(/[\\/]/).pop(), ...LB.reach, maxReachSeen: r3(reachedB) }, differs, maxLandingDifferenceAfterTouch: r3(maxLanding), tally, ex }, null, 1));

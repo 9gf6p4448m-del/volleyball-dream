@@ -1,0 +1,45 @@
+{
+ "A": {
+  "root": "old",
+  "limit": 0.25,
+  "speed": 3,
+  "maxReachSeen": 0.25
+ },
+ "B": {
+  "root": "old-reach0",
+  "limit": 0,
+  "speed": 3,
+  "maxReachSeen": 0
+ },
+ "differs": 1094,
+ "maxLandingDifferenceAfterTouch": 3.545,
+ "tally": {
+  "chase-auto n": 2646,
+  "chase-auto same first touch, contact position differs (allowed)": 1045,
+  "chase-auto TOUCHED BALL, LANDING SPOT DIFFERS > 0.01 m": 461,
+  "chase-auto same first touch, landing tick after the touch differs (allowed)": 294,
+  "chase-none n": 2646,
+  "A14 n": 345,
+  "A14 TOUCHED BALL, LANDING SPOT DIFFERS > 0.01 m": 166,
+  "A14 same first touch, contact position differs (allowed)": 345,
+  "A14 same first touch, landing tick after the touch differs (allowed)": 108,
+  "A16 n": 276,
+  "A16 TOUCHED BALL, LANDING SPOT DIFFERS > 0.01 m": 113,
+  "A16 same first touch, contact position differs (allowed)": 257,
+  "A16 same first touch, landing tick after the touch differs (allowed)": 81,
+  "A16b n": 1150,
+  "A16b TOUCHED BALL, LANDING SPOT DIFFERS > 0.01 m": 354,
+  "A16b same first touch, contact position differs (allowed)": 724,
+  "A16b same first touch, landing tick after the touch differs (allowed)": 288
+ },
+ "ex": [
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":0,\"ez\":0,\"off\":6,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} landing [-0.271,3.529] vs [-0.243,3.545]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":0.3,\"ez\":0,\"off\":-9,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"early\",\"offset\":7,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"early\",\"offset\":7,\"target\":null} {\"type\":\"ground\",\"tick\":92,\"judged\":true,\"miss\":null} landing [-0.297,3.529] vs [-0.232,3.504]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":0.3,\"ez\":0,\"off\":6,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":92,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} landing [-0.179,3.554] vs [-0.319,3.516]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":0.3,\"ez\":0,\"off\":9,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-11,\"target\":null} {\"type\":\"ground\",\"tick\":92,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"left-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-11,\"target\":null} {\"type\":\"ground\",\"tick\":92,\"judged\":true,\"miss\":null} landing [-0.278,3.463] vs [-0.322,3.457]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":-0.3,\"ez\":0,\"off\":-9,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"right-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"early\",\"offset\":7,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"right-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"early\",\"offset\":7,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} landing [-0.318,3.532] vs [-0.294,3.529]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":-0.3,\"ez\":0,\"off\":6,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"right-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"forearm\",\"id\":\"right-forearm\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":92,\"judged\":true,\"miss\":null} landing [-0.305,3.517] vs [-0.265,3.472]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":0,\"ez\":0.3,\"off\":-9,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"hand\",\"id\":\"left-hand\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"early\",\"offset\":7,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"hand\",\"id\":\"left-hand\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"early\",\"offset\":7,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} landing [-0.293,3.532] vs [-0.302,3.488]",
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[-1.5,1.5,4],\"px\":-1,\"pz\":6,\"ex\":0,\"ez\":0.3,\"off\":6,\"mode\":\"auto\"}: A {\"tick\":46,\"kind\":\"spray\",\"part\":\"hand\",\"id\":\"left-hand\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":92,\"judged\":true,\"miss\":null} | B {\"tick\":46,\"kind\":\"spray\",\"part\":\"hand\",\"id\":\"left-hand\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-8,\"target\":null} {\"type\":\"ground\",\"tick\":91,\"judged\":true,\"miss\":null} landing [-0.249,3.506] vs [-0.307,3.56]"
+ ]
+}

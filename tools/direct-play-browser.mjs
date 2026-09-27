@@ -255,12 +255,13 @@ try {
           let tj = null;
           for (let i = 0; i < 260 && tj === null; i++) { p.step(1); const c = p.events().find(e => e.type === 'contact'); if (c) tj = c.tick; if (!p.snapshot().ball.active) break; }
           if (tj === null) continue;
-          for (const [cls, pressAt] of [['none', null], ['pass', tj - 12], ['spray', tj - 20]]) cases.push({ x, z, cls, tj, pressAt });
+          // 'dive' (round 5, W2): 魚躍 pressed at a ball in the underhand circle = a pressed spray (U2).
+          for (const [cls, pressAt, action] of [['none', null, null], ['pass', tj - 12, 'receive'], ['spray', tj - 20, 'receive'], ['dive', tj - 12, 'dive']]) cases.push({ x, z, cls, tj, pressAt, action });
         }
         const results = [];
         for (const c of cases) {
           setup(c.x, c.z);
-          if (c.pressAt != null) p.command({ at: c.pressAt, action: 'receive' });
+          if (c.pressAt != null) p.command({ at: c.pressAt, action: c.action });
           while (p.snapshot().tick < c.tj - 15) p.step(1);
           const frames = []; let contactFrame = null, contact = null, seen = p.events().length;
           for (let f = 0; f < 40; f++) {
@@ -269,7 +270,8 @@ try {
             const pic = picture(), log = p.events();
             const fresh = log.slice(seen); seen = log.length;
             const ev = fresh.find(e => e.type === 'contact');
-            const row = { f, tick: pic.tick, advanced, e: Math.hypot(pic.shown.x - pic.sim.x, pic.shown.y - pic.sim.y, pic.shown.z - pic.sim.z) };
+            const row = { f, tick: pic.tick, advanced, e: Math.hypot(pic.shown.x - pic.sim.x, pic.shown.y - pic.sim.y, pic.shown.z - pic.sim.z),
+              reachLag: pic.reach ? Math.hypot(pic.reach.shown.side - pic.reach.sim.side, pic.reach.shown.ahead - pic.reach.sim.ahead) : 0 };
             if (ev && contactFrame === null) {
               contactFrame = f;
               contact = { tick: ev.tick, tier: ev.tier ?? null, spray: !!ev.spray, timing: ev.timing ?? null, technique: ev.technique ?? null, part: ev.part, snap: ev.snapFrom ? Math.hypot(ev.snapFrom.x - ev.position.x, ev.snapFrom.y - ev.position.y, ev.snapFrom.z - ev.position.z) : null };
@@ -291,7 +293,7 @@ try {
       for (const c of snapOn) {
         const tag = `stance (${c.x}, ${c.z}) ${c.cls}`;
         assert.ok(c.contactFrame !== null && c.contact, `${tag}: no judged touch in the framed window`);
-        const kind = c.contact.tier ? 'pass' : c.contact.spray ? (c.contact.timing === 'none' ? 'none' : 'spray') : 'body';
+        const kind = c.contact.tier ? 'pass' : c.contact.spray ? (c.contact.timing === 'none' ? 'none' : c.contact.timing === 'dive' ? 'dive' : 'spray') : 'body';
         assert.equal(kind, c.cls, `${tag}: expected a ${c.cls}, got ${JSON.stringify(c.contact)}`);
         const at = c.frames[c.contactFrame];
         for (const row of c.frames.slice(0, c.contactFrame)) assert.ok(row.e <= 0.01, `${tag}: drawn ball off the sim ball before the judgement (frame ${row.f}, ${row.e.toFixed(3)} m)`);
@@ -314,7 +316,7 @@ try {
         cls.n++; cls.e0.push(at.e);
         snapStats.snap.push(at.e);
       }
-      for (const cls of ['pass', 'spray', 'none']) assert.ok((snapStats.classes[cls]?.n ?? 0) >= 20, `${cls}: ${snapStats.classes[cls]?.n ?? 0} cases (need 20)`);
+      for (const cls of ['pass', 'spray', 'none', 'dive']) assert.ok((snapStats.classes[cls]?.n ?? 0) >= 20, `${cls}: ${snapStats.classes[cls]?.n ?? 0} cases (need 20)`);
       assert.ok(snapOn.filter(c => c.frames[c.contactFrame]?.advanced === 1).length >= 60, 'the judgement frame advanced exactly one tick in at least 60 cases');
       assert.equal(snapOff.length, snapOn.length, 'smoothing off ran the same cases');
       for (let i = 0; i < snapOn.length; i++) {
@@ -323,7 +325,8 @@ try {
         for (const row of snapOff[i].frames) assert.ok(row.e <= 0.01, `smoothing off: drawn ball off the sim ball (frame ${row.f}, ${row.e.toFixed(3)} m)`);
       }
       const q = (arr, k) => { const a = [...arr].sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(k * (a.length - 1)))] : NaN; };
-      return { cases: snapOn.length, byClass: Object.fromEntries(Object.entries(snapStats.classes).map(([k, v]) => [k, { n: v.n, e0: { min: Math.min(...v.e0), median: q(v.e0, 0.5), p95: q(v.e0, 0.95), max: Math.max(...v.e0) } }])), maxJumpOnJudgementFrame: snapStats.maxJump, maxClosePerFrame: snapStats.maxDrop, maxFramesToSettle: snapStats.maxSettle, identicalOnOff: true };
+      const reachLag = Math.max(0, ...snapOn.flatMap(c => c.frames.map(r => r.reachLag ?? 0)));
+      return { cases: snapOn.length, maxDrawnReachLag: reachLag, byClass: Object.fromEntries(Object.entries(snapStats.classes).map(([k, v]) => [k, { n: v.n, e0: { min: Math.min(...v.e0), median: q(v.e0, 0.5), p95: q(v.e0, 0.95), max: Math.max(...v.e0) } }])), maxJumpOnJudgementFrame: snapStats.maxJump, maxClosePerFrame: snapStats.maxDrop, maxFramesToSettle: snapStats.maxSettle, identicalOnOff: true };
       })();
       // A20e: receive auto-face fixed to half (user choice). Walk off-centre with a
       // live ball and compare the heading with the direction to the setter zone.

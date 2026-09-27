@@ -364,7 +364,7 @@
 
 - 改了什麼：`src/sim/directGame.js` 指令迴圈裡的魚躍分支——`diveTargetFor(s)` 改在 `p.aim` 暫時換回 `s.poseAimStart`（本 tick 開始時的朝向＝按鈕標籤計算時的狀態）下計算，算完還原，所以 sim 記的 `diveTarget.stage` 與標籤的 `nextJudgement` 完全同一個狀態；本 tick 的 aim 指令仍照舊套用到身體。`src/sim/directReceiveRules.js` `contextAction`：這顆球已判定（`judge.done`）就回 null——已判定的球按魚躍不會有目標，按鈕不得再標「魚躍」（覆審 `first` 變體裡 700 例就是這種：沒按的噴球發生後標籤仍寫魚躍）。練習頁 `directPractice.js:238-239` 的送法未動。
 - 網格：`tools/direct-v8-round4-probes.mjs aimFlip`＝覆審 `aim-flip.mjs`（chase 餵球／站位誤差／偏差 × 起點 (±1, 6)、(0, 7.5)、(±2, 6)＝4410 局；接球時送自動朝向、魚躍時送搖桿朝向）。
-- 證據（`node tools/direct-v8-round4-probes.mjs aim-flip`，本樹）：chase 變體 `divePresses 2617、stageMismatch 0、nullTarget 0`（tally 只剩 `label=dive sim=dive` 四種結果：body 1337、dive:GOOD 1048、miss:dive 170、dive:POOR 62）；first 變體 `divePresses 3703、stageMismatch 0、nullTarget 0`（修 `contextAction` 前 700／700）。測試 V2 兩變體都斷言 0 且每例 `labelStage === 'dive'`，綠。
+- 證據（`node tools/direct-v8-round4-probes.mjs aim-flip`，本樹）：chase 變體 `divePresses 2617、stageMismatch 0、nullTarget 0`（tally 只剩 `label=dive sim=dive` 四種結果：body 1337、dive:GOOD 1048、miss:dive 170、dive:POOR 62）；first 變體 `divePresses 3003、stageMismatch 0、nullTarget 0`（修 `contextAction` 前 700／700）。測試 V2 兩變體都斷言 0 且每例 `labelStage === 'dive'`，綠。
 - 修前碼紅燈：`not ok 2 - V2 … chase: 顯示魚躍而 diveTarget 為 null 28/2617，例：feed vx-1.5 vy0 vz5 start(2,6) err(0,0) off-9: aim jump 24.0° label dive -> sim null -> miss:under；…`（覆審員的 28；stage≠dive 的 39 由第二條斷言抓，第一條先紅就停）。
 
 ### N3 HIGH／U4／V3｜迎球只改姿勢，不改判定與碰撞

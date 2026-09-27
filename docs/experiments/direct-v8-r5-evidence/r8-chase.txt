@@ -1,0 +1,1 @@
+chase {"n":2646,"whiff":"8.7%","zone":"1080 40.8%","bodyZone":0,"net":0,"out":0,"other":1337,"sprays":525,"tiers":{"GOOD":850,"POOR":97,"PERFECT":191},"tech":{"dive":616,"underhand":1047},"actions":{"dive":1460,"receive":1186}}

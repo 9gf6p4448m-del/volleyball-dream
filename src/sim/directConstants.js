@@ -19,6 +19,7 @@ export const DIRECT_PHYSICS = Object.freeze({
   // rate-limited, same capsules; fast enough to arrive within the 8-tick windup.
   receiveReachLimit: 0.25, // body heights
   receiveReachSpeed: 3, // body heights per second
+  receiveReachMargin: 0.15, // metres inside the circle's edge at which the reach is full (none at the edge)
   platformFaceCos: 0.5, // capsule normal within 60 degrees of the platform face uses the face normal
   diveSpeed: 6.5,
   diveFriction: 7,
