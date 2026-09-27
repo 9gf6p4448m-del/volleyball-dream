@@ -253,13 +253,17 @@ test('§3 sustain 有界：預備撐完仍會鬆手回待命（不得永遠卡�
   assert.ok(anim.isIdle(), '沒等到球的二傳應在撐住期滿後回待命');
 });
 
-test('§3 無 sustain 的序列行為完全不變（既有動作零影響）', () => {
+// 2026-09-27 使用者裁定（2B 低手收勢，選甲）：bump 加尾段保持 sustain 0.2（dur／hit 不動），
+// 本測試改為反映新的結束時刻＝dur 0.5＋sustain 0.2＝0.7s（見 docs/kickoffs/real-player-stage2-match.md 修訂紀錄）
+test('§3 bump 尾段保持有界：dur 0.5s 後仍撐住隨揮、dur＋sustain 0.7s 後結束', () => {
   const rig = mkRig();
   const anim = createGeoAnimator(rig);
-  anim.trigger('bump'); // dur 0.5、無 sustain
+  anim.trigger('bump'); // dur 0.5、sustain 0.2
   anim.update(0.5, 0);
   anim.update(0.01, 0);
-  assert.ok(anim.isIdle(), 'bump 應仍在 dur 0.5s 後結束（total===dur）');
+  assert.ok(!anim.isIdle(), 'bump 在 dur 0.5s 後應仍在尾段保持（sustain 0.2）');
+  anim.update(0.2, 0);
+  assert.ok(anim.isIdle(), 'bump 應在 dur＋sustain 0.7s 後結束');
 });
 
 // Phase 5 W1 §2 助跑三步節奏 ＋ §1b 慣用手（07-28 kickoff：表現層＋步序，戰術層不做）

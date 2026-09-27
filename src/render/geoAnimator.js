@@ -248,9 +248,11 @@ const POSES = {
 //   ① matchLoop 用 hitLeadTicks() 提前觸發（讓擊球幀落在 sim 的觸球 tick 上）
 //   ② 空中接續（windup→spike）的 carry 上限改吃 hit（見 trigger）
 const SEQUENCES = {
-  // 2B：觸球後補隨揮（平台往前上方送，Ridgway & Hamilton 1987 收勢上臂約 86°）——時長／擊球幀不動，
-  // 只把原本 at=1 回 bumpReady 改成觸球→隨揮→撐住（末段照舊在 RELEASE 內淡回待命）
-  bump: { dur: 0.5, jump: 0, land: false, hit: 0.45, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.45, p: 'bumpHit' }, { at: 0.75, p: 'bumpFollow' }, { at: 1, p: 'bumpFollow' }] },
+  // 2B：觸球後補隨揮（平台往前上方送，Ridgway & Hamilton 1987 收勢上臂約 86°）——dur／hit 不動，
+  // 只把原本 at=1 回 bumpReady 改成觸球→隨揮→撐住。sustain 0.2（2026-09-27 使用者裁定甲）：
+  // 隨揮姿勢在 dur 末滿權重撐 0.2 s 再走 RELEASE 淡回待命——否則 bump 最後一幀權重只剩 0.083，
+  // 隨揮根本看不到（D0 bump-end 幀）。可見尾段因此多 0.2 s，擊球時刻與提前量不變
+  bump: { dur: 0.5, sustain: 0.2, jump: 0, land: false, hit: 0.45, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.45, p: 'bumpHit' }, { at: 0.75, p: 'bumpFollow' }, { at: 1, p: 'bumpFollow' }] },
   // 4.7 動作協調性：二傳出手是短促的一拍——蓄勢長、推出快、回位
   overhead: {
     dur: 0.55, jump: 0, land: false, hit: 0.56,
