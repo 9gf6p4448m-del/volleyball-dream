@@ -103,7 +103,9 @@ function build(kind) {
   };
 }
 
-async function show(tech, kind) {
+// cam（選用）＝{ az, el, dist }：以角色為中心的方位角（度，0＝正前方 +Z、−90＝角色右側 −X、
+// 180＝正後方）、仰角（度）、距離（m）。未給＝沿用各技術的預設鏡頭
+async function show(tech, kind, cam = null) {
   const T = TECH[tech];
   if (!T) throw new Error(`未知技術 ${tech}`);
   if (kind === 'real' && !asset) asset = await loadRealPlayerAsset('/models/real/player_20k.glb');
@@ -131,12 +133,19 @@ async function show(tech, kind) {
   camera.aspect = W / H;
   const scale = W / H < 1 ? 1.9 : 1;
   const rootY = c.rig.root.position.y;
-  camera.position.set(T.cam[0] * scale, T.cam[1] + rootY * 0.5, T.cam[2] * scale);
-  camera.lookAt(0, T.look + rootY * 0.7, 0.1);
+  if (cam) {
+    const az = (cam.az * Math.PI) / 180; const el = ((cam.el ?? 8) * Math.PI) / 180;
+    const d = (cam.dist ?? 3.4) * scale; const ty = T.look + rootY * 0.7;
+    camera.position.set(d * Math.sin(az) * Math.cos(el), ty + d * Math.sin(el), d * Math.cos(az) * Math.cos(el));
+    camera.lookAt(0, ty, 0);
+  } else {
+    camera.position.set(T.cam[0] * scale, T.cam[1] + rootY * 0.5, T.cam[2] * scale);
+    camera.lookAt(0, T.look + rootY * 0.7, 0.1);
+  }
   camera.updateProjectionMatrix();
   document.getElementById('tag').textContent = `${T.label}｜${kind === 'geo' ? '幾何' : '寫實'}｜${pk?.type} t=${pk?.t.toFixed(3)}`;
   renderer.render(scene, camera);
-  return { tech, kind, seq: pk?.type ?? null, t: pk?.t ?? null, tNorm: pk?.tNorm ?? null, rootY, label: T.label };
+  return { tech, kind, seq: pk?.type ?? null, t: pk?.t ?? null, tNorm: pk?.tNorm ?? null, rootY, label: T.label, cam };
 }
 window.__poses = { show, techs: Object.keys(TECH) };
 window.__posesReady = true;

@@ -18,7 +18,11 @@ import { execSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const BASE = process.env.SHOTS_BASE || 'http://127.0.0.1:5206';
-const OUT = resolve('docs/experiments/motion-2b-evidence');
+// SHOTS_SET＝輸出子集（例 jp：日本男排參考版，另存 motion-2b-evidence/jp/，不覆蓋第一版）
+const SET = process.env.SHOTS_SET || '';
+const OUT = resolve('docs/experiments/motion-2b-evidence', SET);
+// SHOTS_CAMS＝JSON 檔：{ "<tech>": { "az": -90, "el": 8, "dist": 3.4, "refFile": "spike-1.jpg" } }，讓遊戲鏡頭對齊參考照視角
+const CAMS = process.env.SHOTS_CAMS ? JSON.parse(await readFile(process.env.SHOTS_CAMS, 'utf8')) : {};
 const REF_DIR = process.env.REF_DIR;
 const REF_OUT = process.env.REF_OUT;
 if (!REF_DIR || !REF_OUT) throw new Error('需要 REF_DIR 與 REF_OUT（本機、repo 外）');
@@ -27,6 +31,8 @@ await mkdir(OUT, { recursive: true });
 await mkdir(REF_OUT, { recursive: true });
 
 // 技術 → D0 幀、預期序列、參考照片（manifest 的 technique 與 phase 關鍵字）
+const PLAN_JP = { spikeWind: ['spikeWind', null], spike: ['spike', null], servejump: ['servejump', null], bump: ['bump', null],
+  block: ['block', null], set: ['set', null], servefloat: ['servefloat', null], tip: ['tip', null] };
 const PLAN = [
   { tech: 'bump', d0: 'bump-contact', seq: 'bump', ref: ['bump', null] },
   { tech: 'set', d0: 'set-push', seq: 'overhead', ref: ['set', null] },
@@ -40,7 +46,9 @@ const PLAN = [
 const VIEWPORTS = [{ name: 'desktop', width: 1280, height: 720 }, { name: 'portrait', width: 390, height: 844 }];
 
 const refs = JSON.parse(await readFile(resolve(REF_DIR, 'manifest.json'), 'utf8'));
-function pickRef([technique, phaseKey]) {
+function pickRef(refKey, tech) {
+  const [technique, phaseKey] = SET === 'jp' ? PLAN_JP[tech] : refKey;
+  if (CAMS[tech]?.refFile) return refs.find((r) => r.file === CAMS[tech].refFile) ?? null;
   const c = refs.filter((r) => r.technique === technique && (!phaseKey || String(r.phase).includes(phaseKey)));
   return c[0] ?? null;
 }
@@ -69,14 +77,15 @@ for (const vp of VIEWPORTS) {
   for (const item of PLAN) {
     const files = {};
     for (const kind of ['geo', 'real']) {
-      const meta = await page.evaluate(([t, k]) => window.__poses.show(t, k), [item.tech, kind]);
+      const cam = CAMS[item.tech] ? { az: CAMS[item.tech].az, el: CAMS[item.tech].el, dist: CAMS[item.tech].dist } : null;
+      const meta = await page.evaluate(([t, k, c]) => window.__poses.show(t, k, c), [item.tech, kind, cam]);
       if (meta.seq !== item.seq) errors.push(`${item.tech}/${kind}/${vp.name}：播放中序列 ${meta.seq} ≠ 預期 ${item.seq}`);
       const file = `${item.tech}-${kind}-${vp.name}.png`;
       await page.screenshot({ path: resolve(OUT, file) });
       files[kind] = file;
       manifest.shots.push({ file, tech: item.tech, d0Frame: item.d0, kind, viewport: vp.name, ...meta });
     }
-    const ref = pickRef(item.ref);
+    const ref = pickRef(item.ref, item.tech);
     const imgs = [await dataUrl(resolve(OUT, files.geo)), await dataUrl(resolve(OUT, files.real))];
     const caps = ['幾何', '寫實'];
     const compose = async (list, captions) => {
@@ -105,13 +114,13 @@ for (const vp of VIEWPORTS) {
     };
     const repoFile = `${item.tech}-${vp.name}-geo-real.png`;
     await writeFile(resolve(OUT, repoFile), await compose(imgs, caps));
-    const comp = { tech: item.tech, viewport: vp.name, d0Frame: item.d0, repoFile, reference: null };
+    const comp = { tech: item.tech, viewport: vp.name, d0Frame: item.d0, repoFile, cam: CAMS[item.tech] ?? null, reference: null };
     if (ref) {
       const refPath = resolve(REF_DIR, ref.file);
       if (existsSync(refPath)) {
         const scratchFile = `${item.tech}-${vp.name}-ref-geo-real.png`;
         await writeFile(resolve(REF_OUT, scratchFile), await compose([await dataUrl(refPath), ...imgs], [`真人參考（${ref.phase}）`, ...caps]));
-        comp.reference = { localFile: basename(scratchFile), pageUrl: ref.pageUrl, imageUrl: ref.imageUrl, license: ref.license, author: ref.author, view: ref.view, phase: ref.phase, note: ref.note };
+        comp.reference = { localFile: basename(scratchFile), file: ref.file, player: ref.player ?? null, pageUrl: ref.pageUrl, imageUrl: ref.imageUrl, license: ref.license, author: ref.author, view: ref.view, phase: ref.phase, note: ref.note };
       }
     } else {
       errors.push(`${item.tech}：找不到參考照片`);
@@ -122,7 +131,7 @@ for (const vp of VIEWPORTS) {
 }
 for (const r of refs) {
   manifest.references[r.technique] = manifest.references[r.technique] ?? [];
-  manifest.references[r.technique].push({ phase: r.phase, view: r.view, pageUrl: r.pageUrl, imageUrl: r.imageUrl, license: r.license, author: r.author, note: r.note });
+  manifest.references[r.technique].push({ file: r.file, player: r.player ?? null, phase: r.phase, view: r.view, pageUrl: r.pageUrl, imageUrl: r.imageUrl, license: r.license, author: r.author, note: r.note });
 }
 manifest.errors = errors;
 await writeFile(resolve(OUT, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
