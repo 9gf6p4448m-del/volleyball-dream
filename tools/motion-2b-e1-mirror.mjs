@@ -28,7 +28,29 @@ const SANITY_TOL = 0.5;
 // 例外表（E1：唯一允許的例外＝還原後會違反 E2 文獻範圍〔附 D0 表列號〕或有來源的教學描述〔附 URL〕）。
 // basis:'E2' 的 rows 必須在「純還原版」D0 JSON 中判定為超出（--restore-only-json），否則此例外不成立。
 // 只列真的偏離 >5° 的向量；未列的向量一律照 5° 判。
-export const EXCEPTIONS = {};
+const ARMS = ['rUpperArm', 'lUpperArm', 'rForearm', 'lForearm'];
+const ZH = 'https://pmc.ncbi.nlm.nih.gov/articles/PMC5548173/';
+const KOACH = 'https://www.koachvolleyball.com/guides/overhead-setting-the-setter-s-technique';
+const IYV_SPIKE = 'https://www.improveyourvolley.com/spiking-in-volleyball.html';
+export const EXCEPTIONS = {
+  bumpReady: { vectors: ARMS, rows: ['bump.start.head', 'bump.start.uarm', 'bump.start.elbow'],
+    note: '還原後起始幀肘全直 180°（文獻 158.8±11.6）、上臂 25.8°（9.1±10）；校準為肘彎 −0.36、保留胸椎前傾不補償' },
+  setReach: { vectors: ARMS, rows: ['set.load.elflex'], url: KOACH,
+    note: '還原後雙腕相距 0.748 m（肘屈到 100° 仍 0.60 m），違反教學描述「hands a few centimeters apart、拇指食指成三角、在額頭上方」；保留雙手靠攏（0.297 m）並把肘屈校準到 100°' },
+  setPush: { vectors: ARMS, rows: ['set.push.elflex.fast'], url: KOACH,
+    note: '同上；還原後出手雙腕相距 0.748 m，保留靠攏（0.152 m），肘屈校準到 40°（fast／seven 型）' },
+  spikeWind: { vectors: [...ARMS, 'shoulderLine', 'hipLine'], rows: ['spike.wind.shline', 'spike.wind.sep'],
+    note: '還原後轉體方向已正確但幅度不足（肩線 162.2°、分離 2.9°）；依 Zahálka 加大到肩線 105、髖線 157——胸椎轉動帶著雙臂一起轉，世界方向因此偏離' },
+  spikeUnlock: { vectors: [...ARMS, 'shoulderLine', 'hipLine'], url: ZH,
+    note: 'Zahálka 2017 肩線角自最大後擺 105° 單調增加到擊球 137°；還原值（胸 −0.16）在校準後的引臂（肩線 107.6°）與擊球（136.8°）之間會先超轉到 167.5° 再轉回 136.8°；改為兩者之間（胸 −0.72，肩線 116.1°）' },
+  spikeHit: { vectors: [...ARMS, 'shoulderLine', 'hipLine'],
+    rows: ['spike.hit.abd', 'spike.hit.elflex', 'spike.hit.hadd', 'spike.hit.shline', 'spike.hit.hipline', 'spike.hit.sep'],
+    note: '擊球臂改側上方、肘彎 34°（Reeser 2010）；轉體照 Zahálka；非擊球臂 z 已還原，世界方向偏離來自軀幹轉動與側傾' },
+  spikeFollow: { vectors: ['rUpperArm', 'rForearm'], url: IYV_SPIKE,
+    note: '還原會讓擊球臂收勢往外張；教學描述「spiking arm coming down across your body」，且原註解本意即「跨體收回往左髖」——保留現況跨體（非擊球臂、骨盆已還原 0.00°）' },
+  floatPush: { vectors: ['rUpperArm', 'rForearm'], rows: ['servefloat.hit.abd', 'servefloat.hit.elflex', 'servefloat.hit.hadd'],
+    note: '擊球臂改側上方、肘彎 50°（Reeser 2010 飄球）；非擊球臂已還原（3.40°）' },
+};
 
 function parseArgs() {
   const a = process.argv.slice(2);
@@ -94,9 +116,10 @@ async function main() {
       const within = angCur[k] <= TOL;
       let excOk = null;
       if (!within && exc && exc.vectors.includes(k)) {
-        excOk = exc.basis === 'E2'
-          ? (restoreOnly != null && exc.rows.length > 0 && exc.rows.every((r) => roOut.has(r)))
-          : (typeof exc.url === 'string' && /^https?:\/\//.test(exc.url));
+        // 依據至少一項成立：列號在純還原版 D0 JSON 中確實超出，或附有來源 URL 的教學描述
+        const rowsOk = restoreOnly != null && (exc.rows ?? []).length > 0 && exc.rows.every((r) => roOut.has(r));
+        const urlOk = typeof exc.url === 'string' && /^https?:\/\//.test(exc.url);
+        excOk = rowsOk || urlOk;
       }
       vec[k] = { cur: angCur[k], base: angBase[k], within, exception: excOk };
     }
@@ -132,6 +155,21 @@ async function main() {
     console.log(`  ${p.ok ? 'OK  ' : 'FAIL'} ${p.pose.padEnd(15)} ${cells.join(' ')}`);
   }
   if (missing.length) console.log(`  缺姿勢：${missing.join(', ')}`);
+  // 例外逐條：還原後量值（純還原版 D0）／現況量值（--d0-json）／依據
+  const rowVal = (json, id) => json?.rows?.find((r) => r.id === id);
+  const d0Now = JSON.parse(readFileSync(args.d0Json, 'utf8'));
+  report.exceptionDetail = [];
+  for (const p of report.poses) {
+    if (!p.exception) continue;
+    const rows = (p.exception.rows ?? []).map((id) => {
+      const ro = rowVal(restoreOnly, id); const now = rowVal(d0Now, id);
+      return { id, lit: now?.lit?.mean, tol: now?.tol, restored: ro?.current, restoredOut: ro?.out, now: now?.current, nowOut: now?.out };
+    });
+    report.exceptionDetail.push({ pose: p.pose, vectors: p.exception.vectors, rows, url: p.exception.url ?? null, note: p.exception.note });
+    console.log(`  例外 ${p.pose}：${p.exception.note}`);
+    for (const r of rows) console.log(`    ${r.id}：還原後 ${r.restored}（${r.restoredOut ? '超出' : '範圍內'}）→ 現況 ${r.now}（${r.nowOut ? '超出' : '範圍內'}）；文獻 ${r.lit}±${r.tol}`);
+    if (p.exception.url) console.log(`    來源：${p.exception.url}`);
+  }
   console.log(`[E1] bump.contact.span=${span.toFixed(4)} m（≤0.20）${report.pass.span ? 'OK' : 'FAIL'}；spike.wind.shline=${shline.toFixed(2)}°（<180）${report.pass.shline ? 'OK' : 'FAIL'}`);
   console.log(`[E1] 例外成立＝*、超出且無例外＝!。總判定：${report.pass.all ? 'PASS' : 'FAIL'}`);
   if (args.out) writeFileSync(args.out, `${JSON.stringify(report, null, 2)}\n`);
