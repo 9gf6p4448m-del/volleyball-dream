@@ -427,3 +427,55 @@ E8 過程中出現過一次基準外失敗，已歸因：
 - 關掉所有 dev server 後重跑全套：與基準逐項相同。未加 retry、sleep。
 
 E4 工具的改動：`tools/motion-2b-check.mjs` 的鞋盒角點，有 `rFoot` 時改從腳關節算（鞋盒掛點跟著移過去），否則沿用膝局部的舊掛點。量的是同一個鞋盒（BoxGeometry 0.13×0.09×0.26），判定式未改。
+
+## 七、魚躍 A 併入（2026-09-27，DA1–DA3）
+
+依據：`docs/kickoffs/real-player-stage2-match.md` 修訂紀錄「使用者選魚躍方案 A」。方案 A
+（sprawl 滑撲）原實作在分支 `feat/dive-proposals`（commit ecda0a5 程式、d2297fc 文件），
+基於 f4ccbec，早於本分支（`feat/motion-d0`）2B 對 `geoAnimator.js` 的腿部/下蹲引擎重寫
+（`src/render/geoAnimator.js` f4ccbec..HEAD +401 行：`squatAngle`/`groundKnee`/`footAngle`
+解析式下蹲與腳底保護、`geoCharacter.js` 新增 `rFoot`/`lFoot` 腳關節、`blendKeys` 由兩點線性
+內插改成四點 Hermite C1 連續曲線），不能直接 merge，改為手動移植：
+
+- **姿勢與序列**：`diveA_step`／`diveA_reach`／`diveA_slide`／`diveA_push`／`diveA_rise` 五個
+  姿勢數值逐字照搬進 `src/render/geoAnimator.js` 的 `POSES`；`SEQUENCES.dive` 的 `keys` 換成
+  方案 A 的 8 個關鍵幀（`dur`/`jump`/`land` 不動，逐值同 677516f）。舊 `diveReach`／
+  `diveSprawl`／`divePush` 三個姿勢保留（不再被 `dive` 播放，但 `tools/motion-2b-e1-mirror.mjs`
+  的 E1 鏡像清單仍引用，不清除以免弄壞該治具）。
+- **新增腿部欄位**（`rHipX`/`lHipX`/`rKneeX`/`lKneeX`/`rHipZ`/`lHipZ`，只有 `diveA_*` 姿勢
+  宣告、其餘姿勢缺欄位＝0）併入 `blendKeys` 的 Hermite 曲線（鏡像規則同 `armKeyFor`：
+  HipX/KneeX 對調左右來源、HipZ 另外反號），疊加在既有腿部計算（`groundKnee`/`footAngle`
+  之前）。warp 指數初值沿用既有量級（0.85/1.1）在 DA2 治具的 G 條（貼地段軀幹 ≤0.08 m）
+  以 0.007 m 之差落敗（Hermite 端點切線取自鄰近影格，`diveA_slide` 兩個相鄰同值關鍵幀的
+  「停留」段因此不是純平——曲線在停留段末端已帶有朝下一姿勢的切線速度，提早越過門檻）；
+  改為 1.3/1.3/1.1（同「近端領先、遠端跟隨」原則但方向相反——腿部緊接一段靜止 hold 後
+  再變化，用高於 1 的 warp 讓速度在 hold 剛結束時仍接近 0，抑制切線造成的提前越界）後
+  DA2 全過。此為僅有的一處數值調整，理由：keyframe 端點值不受 warp 影響（u=0/1 時 Hermite
+  基底函式恆回端點值，與 warp 無關），只改變影格之間的曲線形狀，不影響 D0/DA 任何一條
+  已凍結的門檻或姿勢定義本身。
+- **root 曲線與接地補償**：`src/render/diveStyles.js`（新檔，來源同 commit，只保留方案 A：
+  拿掉 B/C 兩支提案、`?dive=` 切換、divelab 預覽頁與 legacy 對照）；`matchView.js` 撲救期間
+  一律走 `diveRootPose(p)`（不再需要 URL 參數）、撲出方向鎖定為「出手瞬間人→球」水平方向
+  （不再追著飛走的球轉身）、接地補償只在魚躍窗內生效。
+- **DA1（世界座標比對）**：`node tools/dive-proposal-check.mjs` 的判定（DA2，見下）在
+  keyframe 端點上與 `feat/dive-proposals` 的 `?dive=a` 逐值相同（Hermite 曲線在 u=0/1 恆回
+  端點值，同既有 armKeyFor 鏡像機制的數學保證）。但**非 keyframe 幀**與**待命底層姿勢
+  （bumpReady 的下蹲量）**因 2B 引擎重寫而有系統性落差：右手探針全序列 45 幀逐關節世界
+  座標比對，最差落在 k=32（p≈0.76，`diveA_push`→`diveA_rise` 過渡）的 lKnee，差 0.307 m；
+  多數幀落在 0.09–0.20 m 量級，遠超過 0.02 m 門檻。歸因（見量測腳本
+  `tools/_da1-dump.mjs`，比對後已刪除、未提交）：
+  1. `bumpReady` 的 `crouch:0.2` 在舊引擎換算成 `-crouch*1.1=-0.22 rad`，在新引擎換算成
+     `-squatAngle(crouch*0.55)=-0.68 rad`（`squatAngle` 是 2B 為了讓鞋底不入地而改的解析式
+     反解，非本次改動）——待命底層本身就不是同一個姿勢，`diveA_rise`（`crouch:0.3`）與
+     `bumpReady` 兩端也有相同量級落差。
+  2. `blendKeys` 從兩點線性內插改成四點 Hermite 曲線（2B 自然度），非 keyframe 幀的中間
+     姿勢形狀本來就不會與舊版線性內插逐值相同。
+  這兩項都是 2B 已凍結驗收（E1–E9）涵蓋、且早於本卷併入的既有改動，不是本次移植引入的
+  誤差；本卷唯一可控的驗證管道是 DA2（移植後的方案 A 幾何治具本身自洽）與 E4（全序列回歸，
+  同一套腿部引擎下不反折/不入地）。
+- **DA2**：`node tools/dive-proposal-check.mjs`（已移植，只保留方案 A 判定，B/C 與 legacy
+  對照已刪除）——左右手 F1/F2/F3/G/H 全 PASS（見下方指令與輸出）。
+- **DA3**：`dur`/`hit`/`airDur`/`jump` 與 677516f 相同（`tools/motion-2b-check.mjs --only e3`
+  OK，29 鍵差異 0）；E2(a) 39/39；E4 OK；E5 A1–A6/A8–A12 全 true；E8 npm test
+  2603/2601/2（A23a/A23b，與基準逐項相同）、`npm run build` 成功。
+- **E7**：改為實機試玩判定（DA1 修訂紀錄），部署後另行請使用者手機試玩，結果待補。

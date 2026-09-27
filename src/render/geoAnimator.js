@@ -231,6 +231,32 @@ const POSES = {
   tipReach: { rSh: [-2.4, -0.5], lSh: [-0.6, 0.2], rEl: -0.4, lEl: -0.3, spine: 0.06, neck: -0.1, spineUp: 0.1, pelvisY: 0.04, lean: -0.2, wrist: -0.25, airTuck: 1.0 },
   tipHit: { rSh: [-2.05, -0.85], lSh: [-0.4, 0.15], rEl: -0.75, lEl: -0.2, spine: 0.16, neck: -0.05, spineUp: 0.15, pelvisY: 0.0, lean: -0.4, wrist: 0.35, airTuck: 0.8 },
   tipFollow: { rSh: [-1.2, 0.14], lSh: [-0.3, 0.1], rEl: -0.3, lEl: -0.15, spine: 0.26, neck: 0.05, spineUp: 0.08, wrist: 0.1 },
+  // 魚躍方案 A「sprawl 貼地滑撲」（使用者裁定，docs/kickoffs/real-player-stage2-match.md
+  // 修訂紀錄 DA1，取代 diveReach/diveSprawl/divePush 播放路徑；來源分支
+  // feat/dive-proposals commit ecda0a5 的 diveStyles.js，數值逐字照搬）：
+  // 弓箭步壓低（慣用側腳在前）→ 雙臂併攏平台斜下伸 → 前腳一推、後腿順勢往後甩直，
+  // 胸腹貼地往前滑、平台貼地前伸 → 雙手撐地、雙膝收到髖下 → 站起。
+  // rHipX/lHipX/rKneeX/lKneeX/rHipZ/lHipZ＝腿部偏移新欄位（見 blendKeys 的鏡像規則）：
+  // 髖 x 負＝大腿前抬、膝 x 正＝小腿往後彎（屈膝）；髖 z＝外展（蛙腿式側收膝）
+  diveA_step: {
+    rSh: [-1.3, 0.3], lSh: [-1.3, -0.3], rEl: 0, lEl: 0, spine: 0.35, neck: -0.55, crouch: 0, spineUp: 0.05,
+    rHipX: -0.95, lHipX: 0.1, rKneeX: 1.0, lKneeX: 0.25,
+  },
+  diveA_reach: {
+    rSh: [-1.95, 0.3], lSh: [-1.95, -0.3], rEl: 0, lEl: 0, spine: 0.2, neck: -0.75, crouch: 0, spineUp: 0,
+    rHipX: -1.3, lHipX: 0.2, rKneeX: 1.35, lKneeX: 0.35,
+  },
+  diveA_slide: {
+    rSh: [-2.95, 0.16], lSh: [-2.95, -0.16], rEl: 0, lEl: 0, spine: -0.06, neck: -0.85, crouch: 0, spineUp: -0.12,
+    rHipX: 0, lHipX: 0.08, rKneeX: 1.1, lKneeX: 0.35, rHipZ: -0.8,
+  },
+  diveA_push: {
+    rSh: [-1.2, -0.1], lSh: [-1.2, 0.1], rEl: -0.35, lEl: -0.35, spine: 0.4, neck: -0.6, crouch: 0, spineUp: 0.1,
+    rHipX: -1.45, lHipX: -1.45, rKneeX: 1.95, lKneeX: 1.95,
+  },
+  diveA_rise: {
+    rSh: [-0.55, -0.18], lSh: [-0.55, 0.18], rEl: -0.5, lEl: -0.5, spine: 0.55, neck: -0.35, crouch: 0.3, spineUp: 0.1,
+  },
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
@@ -417,7 +443,14 @@ const SEQUENCES = {
   // 爬起自然化（Sawmah 07-23 試玩回報「爬起太快」，拍板純視覺調不動 sim 節奏）：
   // 撲出/落地壓前（真實飛撲本就爆發）→ 趴住一拍（0.34-0.52 重量感）→ 撐地→起身；
   // 搭配 matchView 的「先低姿爬回、後起身」曲線（該處緩動同輪調整）
-  dive: { dur: 0.72, jump: 0, land: false, keys: [{ at: 0, p: 'bumpReady' }, { at: 0.14, p: 'diveReach' }, { at: 0.34, p: 'diveSprawl' }, { at: 0.52, p: 'diveSprawl' }, { at: 0.74, p: 'divePush' }, { at: 1, p: 'bumpReady' }] },
+  // 魚躍方案 A（DA1 併入，dur/jump/land 與 677516f 相同——只換 keys/poses，時序不變）：
+  // 舊 keys（diveReach/diveSprawl/divePush，POSES 仍保留供 tools/motion-2b-e1-mirror.mjs
+  // 的 E1 鏡像還原清單核對）不再被本序列播放
+  dive: {
+    dur: 0.72, jump: 0, land: false,
+    keys: [{ at: 0, p: 'bumpReady' }, { at: 0.07, p: 'diveA_step' }, { at: 0.14, p: 'diveA_reach' }, { at: 0.32, p: 'diveA_slide' },
+      { at: 0.5, p: 'diveA_slide' }, { at: 0.7, p: 'diveA_push' }, { at: 0.86, p: 'diveA_rise' }, { at: 1, p: 'bumpReady' }],
+  },
   // 4.5B §4：揮手喊球（舉臂左右擺兩拍）＋攔網手點頭確認（快而小）
   wave: { dur: 0.9, jump: 0, land: false, keys: [{ at: 0, p: 'waveUp' }, { at: 0.25, p: 'waveSide' }, { at: 0.5, p: 'waveUp' }, { at: 0.75, p: 'waveSide' }, { at: 1, p: 'waveUp' }] },
   nod: { dur: 0.45, jump: 0, land: false, keys: [{ at: 0, p: 'nodNeutral' }, { at: 0.4, p: 'nodDown' }, { at: 1, p: 'nodNeutral' }] },
@@ -606,6 +639,18 @@ export function createGeoAnimator(rig) {
     for (const k of ['pelvisY', 'chestY', 'lean']) {
       const v = curve((p) => poseVal(p, k), WARP_Y[k]);
       out[k] = handed === 'l' ? -v : v;
+    }
+    // 魚躍方案 A（DA1）新增：左右腿髖／膝 x 偏移＋髖 z 外展。只有 diveA_* 姿勢宣告這些
+    // 欄位，其餘姿勢缺欄位＝0（curve 對全零控制點恆回 0）——既有動作逐幀值不變。
+    // 鏡像：HipX/KneeX 對調左右來源、不反號（屈曲量不分邊）；HipZ 對調來源後另外反號
+    // （外展方向相反），與 rSh/lSh 的鏡像規則同一套（見上方 armKeyFor 用法）
+    const WARP_LEG = { HipX: 1.3, KneeX: 1.3, HipZ: 1.1 };
+    for (const side of ['r', 'l']) {
+      const src = handed === 'l' ? (side === 'r' ? 'l' : 'r') : side;
+      out[`${side}HipX`] = curve((p) => poseVal(p, `${src}HipX`), WARP_LEG.HipX);
+      out[`${side}KneeX`] = curve((p) => poseVal(p, `${src}KneeX`), WARP_LEG.KneeX);
+      const zs = handed === 'l' ? -1 : 1;
+      out[`${side}HipZ`] = zs * curve((p) => poseVal(p, `${src}HipZ`), WARP_LEG.HipZ);
     }
   }
 
@@ -898,6 +943,16 @@ export function createGeoAnimator(rig) {
       // 膝彎由下面的 groundKnee 連續補到踝不入地、腳關節把鞋底放平
       const stagger = pose ? blended.stagger * w : 0;
       if (stagger) j[handed === 'l' ? 'rHip' : 'lHip'].rotation.x += stagger;
+      // 魚躍方案 A（DA1）：疊加提案腿部偏移（既有姿勢缺欄位＝0，見 blendKeys）——
+      // 加在 groundKnee／footAngle 之前，讓腳底保護與放平鞋底照舊套用這組偏移後的角度
+      if (pose) {
+        j.rHip.rotation.x += blended.rHipX * w;
+        j.lHip.rotation.x += blended.lHipX * w;
+        j.rHip.rotation.z += blended.rHipZ * w;
+        j.lHip.rotation.z += blended.lHipZ * w;
+        j.rKnee.rotation.x += blended.rKneeX * w;
+        j.lKnee.rotation.x += blended.lKneeX * w;
+      }
       // 腳底保護（連續，見 groundKnee）＋著地鞋底放平（footAngle）。兩個分支都套
       for (const side of ['r', 'l']) {
         const hx = j[`${side}Hip`].rotation.x;
