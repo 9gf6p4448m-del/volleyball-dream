@@ -399,6 +399,7 @@ export function createGeoAnimator(rig) {
   let runW = 0;
   let latW = 0;  // 平滑後的橫移分量（見 update 內註解：生的 lateral 會單幀翻號）
   let lastW = 0; // 上一幀的動作層權重——預備段交棒給正式動作時用（見 trigger 的 w0）
+  let lastJumpY = 0; // 上一幀的跳躍弧高度（唯讀窺視用，見 probe()）
   let phase = 0;
   const blended = {};
   // Phase 5 W1 §1b：慣用手只影響助跑步序方向（見檔頭 STEP_ORDER_*）；
@@ -555,6 +556,12 @@ export function createGeoAnimator(rig) {
       };
     },
 
+    // 唯讀窺視（2B 驗收治具 tools/motion-2b-check.mjs 用）：上一幀的動作層權重 w 與
+    // 跳躍弧高度（0＝非滯空幀）。只回數字，不影響任何行為
+    probe() {
+      return { w: lastW, jumpY: lastJumpY };
+    },
+
     // 每幀驅動全部關節；回傳 bodyY（跳躍－下蹲的垂直位移，由呼叫端寫進 root.position.y）。
     // lateral（4.7 根運動）：移動方向相對「朝向」的橫向分量（-1..1）——沿網橫移的
     // 攔網手與防守補位是**側併步**（面向網、雙腿開合），不是前跑擺腿。
@@ -617,6 +624,7 @@ export function createGeoAnimator(rig) {
         w = 1;
       }
       lastW = w;
+      lastJumpY = jumpY;
 
       // 底層：待命（微蹲備戰＋呼吸）↔ 跑動（擺腿擺臂＋前傾＋起伏）
       const breath = Math.sin(phase * 0.35) * 0.02;
