@@ -112,6 +112,11 @@ async function init() {
   const hud = createHud(document.getElementById('hud'), renderer, describeQuality(quality), fullHud);
 
   const ctx = { renderer, scene, camera, quality, ballView, hud, loadingEl, params, court, lights, arena, crowdAnim, officials, moppers, postFx };
+  // 進賽場卷 2A：偵錯把手（同 window.__phase0／__phase1／__realPreview 既有慣例）——
+  // 治具需要在生涯選單階段（startMatchLoop 還沒跑、__phase1 還不存在）就拿到 ctx
+  // 才能在背景直接組一場生涯比賽（B2 SUBSTITUTION 檢查：換人面板只在生涯比賽建立，
+  // 快速比賽沒有板凳），不參與遊戲邏輯。
+  window.__ctx = ctx;
   if (params.get('mode') === 'bench') {
     await runBench(ctx);
   } else if (params.get('mode') === 'direct') {

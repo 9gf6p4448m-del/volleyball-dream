@@ -1,0 +1,43 @@
+
+> volleyball-dream@0.0.1 build
+> vite build
+
+[36mvite v7.3.6 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 219 modules transformed.
+rendering chunks...
+[33m[plugin vite:reporter] 
+(!) C:/Users/shung/worktrees/volleyball-realmatch/src/net/lockstep.js is dynamically imported by C:/Users/shung/worktrees/volleyball-realmatch/src/main.js but also statically imported by C:/Users/shung/worktrees/volleyball-realmatch/src/app/matchLoop.js, dynamic import will not move module into another chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mmanifest.webmanifest                        [39m[1m[2m  0.51 kB[22m[1m[22m
+[2mdist/[22m[32mindex.html                                  [39m[1m[2m  4.46 kB[22m[1m[22m[2m │ gzip:   2.07 kB[22m
+[2mdist/[22m[35massets/directPractice-CUGleO71.css          [39m[1m[2m  7.65 kB[22m[1m[22m[2m │ gzip:   2.39 kB[22m
+[2mdist/[22m[36massets/virtual_pwa-register-DPRutsGb.js     [39m[1m[2m  0.88 kB[22m[1m[22m[2m │ gzip:   0.54 kB[22m[2m │ map:     4.23 kB[22m
+[2mdist/[22m[36massets/debugVault-DMkvi3tc.js               [39m[1m[2m  2.06 kB[22m[1m[22m[2m │ gzip:   1.07 kB[22m[2m │ map:     8.09 kB[22m
+[2mdist/[22m[36massets/kitPreview-CUXDFE_e.js               [39m[1m[2m  3.33 kB[22m[1m[22m[2m │ gzip:   1.71 kB[22m[2m │ map:    11.29 kB[22m
+[2mdist/[22m[36massets/replayStage-CKu4OY06.js              [39m[1m[2m  3.79 kB[22m[1m[22m[2m │ gzip:   2.06 kB[22m[2m │ map:    17.98 kB[22m
+[2mdist/[22m[36massets/realPreview-rNfTZtPn.js              [39m[1m[2m  4.27 kB[22m[1m[22m[2m │ gzip:   2.28 kB[22m[2m │ map:    14.46 kB[22m
+[2mdist/[22m[36massets/workbox-window.prod.es5-BBnX5xw4.js  [39m[1m[2m  5.81 kB[22m[1m[22m[2m │ gzip:   2.40 kB[22m[2m │ map:    13.56 kB[22m
+[2mdist/[22m[36massets/directPractice-CMb-_CTh.js           [39m[1m[2m 30.92 kB[22m[1m[22m[2m │ gzip:  13.23 kB[22m[2m │ map:    98.75 kB[22m
+[2mdist/[22m[36massets/freeballSandbox-BFJDJH97.js          [39m[1m[2m 37.71 kB[22m[1m[22m[2m │ gzip:  12.91 kB[22m[2m │ map:   143.94 kB[22m
+[2mdist/[22m[36massets/sim-BbOdWTc1.js                      [39m[1m[2m107.65 kB[22m[1m[22m[2m │ gzip:  38.99 kB[22m[2m │ map:   790.81 kB[22m
+[2mdist/[22m[36massets/index-DhmCtpEe.js                    [39m[1m[2m203.39 kB[22m[1m[22m[2m │ gzip:  74.38 kB[22m[2m │ map: 1,039.89 kB[22m
+[2mdist/[22m[36massets/ui-EYG-ELvH.js                       [39m[1m[33m529.94 kB[39m[22m[2m │ gzip: 186.07 kB[22m[2m │ map: 2,114.78 kB[22m
+[2mdist/[22m[36massets/three-3GeXJWij.js                    [39m[1m[33m784.21 kB[39m[22m[2m │ gzip: 201.86 kB[22m[2m │ map: 3,360.07 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 5.85s[39m
+
+PWA v1.3.0
+mode      generateSW
+precache  36 entries (2588.99 KiB)
+files generated
+  dist/sw.js.map
+  dist/sw.js
+  dist/workbox-9c191d2f.js.map
+  dist/workbox-9c191d2f.js
+EXIT:0

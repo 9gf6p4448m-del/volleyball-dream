@@ -278,6 +278,7 @@ export async function createMatchView(
       faces: faceVariant,
       realLoadFailed,
       units,
+      THREE, // 治具用（頁內注入的量測程式碼不經 Vite 轉譯，裸 import('three') 解不開）
     },
     triggerPose(playerId, type, opts = null) {
       const u = units[playerId];
