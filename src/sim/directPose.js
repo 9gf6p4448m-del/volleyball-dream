@@ -36,12 +36,24 @@ function kneeBetween(hip, ankle) {
   return knee;
 }
 
+// Does this dive throw the body? A dive pressed at a ball headed into a
+// receive circle (diveTarget.stage 'over' / 'under', judged there as a pressed
+// spray, U2) does not (round 4 NEW-2 丙, 2026-09-28): the body keeps its
+// standing pose and the ball is put on that, so the judgement-frame snap stays
+// short. A dive at the band, or a plain dive (no target), throws as before.
+export function diveThrown(p) {
+  return p.action === 'dive' && (!p.diveTarget || p.diveTarget.stage === 'dive');
+}
+
 // The renderer consumes these exact collision capsules. Fraction is a partial tick,
 // allowing physics to sample the curved action path between displayed frames.
 // `reach: false` leaves out the receive reach toward the judged ball
 // (receiveReach / receiveAhead, direct-v8 Q3): that reach is picture only
-// (U4, 2026-09-27), so the simulation's collision and part choice use this
-// pose, while rendering and the judgement-frame snap use the reached one.
+// (U4, 2026-09-27), so the simulation's collision, part choice and judgement
+// snap use this pose, while rendering uses the reached one. `reach` may also
+// be `{ side, ahead }` (body heights): the picture's own eased values, used
+// by the practice page to bring the arms back over a few frames after the
+// judgement zeroed the reach in one tick (W3, 2026-09-28).
 export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
   const p = state.player,
     h = p.height,
@@ -64,19 +76,20 @@ export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
   const fx = Math.sin(angle),
     fz = -Math.cos(angle);
   const weight = raise * recover;
-  const dive = p.action === 'dive' ? weight : 0;
+  const thrown = diveThrown(p);
+  const dive = thrown ? weight : 0;
   const speed = Math.hypot(p.gaitVx ?? 0, p.gaitVz ?? 0);
   const run = Math.min(1, speed / 5.5) * (p.grounded ? 1 : 0) * (1 - dive);
   const forward = speed ? ((p.gaitVx ?? 0) * fx + (p.gaitVz ?? 0) * fz) / speed : 0;
   const lateral = speed ? ((p.gaitVx ?? 0) * -fz + (p.gaitVz ?? 0) * fx) / speed : 0;
   const gait = p.gaitPhase ?? 0;
-  const landing = p.grounded && p.action !== 'dive' && (p.landingAge ?? 1) < 0.28
+  const landing = p.grounded && !thrown && (p.landingAge ?? 1) < 0.28
     ? Math.sin(Math.PI * p.landingAge / 0.28) * 0.10 : 0;
   const tuck = !p.grounded ? Math.min(1, p.y / (h * 0.15)) * (p.vy > 0 ? 0.07 : 0.035) : 0;
   const crouch =
     (p.action === "receive"
       ? 0.1 * raise * recover
-      : p.action === "dive"
+      : thrown
         ? 0.28 * raise * recover
         : 0) + landing +
     // A passer settles the platform: the running bob fades out with the receive
@@ -129,7 +142,8 @@ export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
     if (p.action === "receive") {
       // Forearm platform (direct-v8: one neutral platform, no swipe choice),
       // reaching sideways/forward toward the coming ball (receiveReachTarget).
-      const side = reach ? p.receiveReach ?? 0 : 0, ahead = reach ? p.receiveAhead ?? 0 : 0;
+      const side = reach === true ? p.receiveReach ?? 0 : reach ? reach.side : 0;
+      const ahead = reach === true ? p.receiveAhead ?? 0 : reach ? reach.ahead : 0;
       const platform = (x, y, f) => point(x + side, y, f + ahead);
       elbow = blend(
         elbow,
@@ -147,7 +161,7 @@ export function getDirectPose(state, fraction = 0, { reach = true } = {}) {
         elbow = blend(elbow, platform(sign * 0.17, 0.87, 0.08), over);
         hand = blend(hand, platform(sign * 0.11, 1.02, 0.15), over);
       }
-    } else if (p.action === 'dive') {
+    } else if (thrown) {
       // direct-v8: the arms extend fully for a far ball, less for one beside the body.
       const reach = p.diveReach ?? 1;
       elbow = blend(elbow, point(sign * 0.12, 0.47, 0.56 * reach), weight);

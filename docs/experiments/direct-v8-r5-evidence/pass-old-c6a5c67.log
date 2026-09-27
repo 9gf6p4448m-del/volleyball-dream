@@ -1,0 +1,19 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: stance (-0.3, 4.8) dive: expected a dive, got {"tick":46,"tier":null,"spray":false,"timing":null,"technique":null,"part":"torso","snap":null}
+
+'body' !== 'dive'
+
+    at file:///C:/Users/shung/OneDrive/%E6%A1%8C%E9%9D%A2/%E6%8E%92%E7%90%83%E5%A4%A2/.claude/worktrees/agent-a17aa1404ed442fb1/tools/direct-play-browser.mjs:297:16
+    at async file:///C:/Users/shung/OneDrive/%E6%A1%8C%E9%9D%A2/%E6%8E%92%E7%90%83%E5%A4%A2/.claude/worktrees/agent-a17aa1404ed442fb1/tools/direct-play-browser.mjs:290:77 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'body',
+  expected: 'dive',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.16.0

@@ -124,22 +124,31 @@ export function diveTargetFor(s) {
 // frame, receiveTurn included), body heights, clamped — so the judgement-frame
 // snap moves the ball less. Picture only: no judgement reads it. Measured from
 // the body where it is now (no run extrapolation; the reach re-aims every tick).
-// Null = hold the current reach: after the touch, and when no judgement is
-// predicted any more (a ball drifting off the circle's edge never pulls the arms back).
+// Null = hold the current reach after the touch (through follow-through; the
+// judgement itself zeroes it, W3). When no judgement is predicted any more
+// (the ball drifted off the circle's edge, or was judged a miss) the arms
+// come back (round 4 NEW-1 甲, 2026-09-28): an arm still held out would be
+// drawn where the ball passes through it, since the collision pose never
+// reaches (U4).
 export function receiveReachTarget(s) {
   const p = s.player, b = s.ball;
   if (p.action !== 'receive') return { reach: 0, ahead: 0 };
-  if (p.receiveTouched || !b.active || s.contactEpisode || s.judge?.done) return null;
+  if (p.receiveTouched || s.contactEpisode) return null;
   // Only a falling ball headed into a circle (the same ball ruleGhost lets through).
-  const j = b.vy < 0 ? nextJudgement(s, { dive: false }) : null;
-  if (!j) return null;
+  const j = b.active && !s.judge?.done && b.vy < 0 ? nextJudgement(s, { dive: false }) : null;
+  if (!j) return { reach: 0, ahead: 0 };
   const angle = Math.atan2(p.aim.x, -p.aim.z) + (p.receiveTurn ?? 0), h = p.height;
   const fx = Math.sin(angle), fz = -Math.cos(angle);
   const forward = j.technique === 'overhand' ? A.overForward : R.underForward;
   const dx = j.ball.x - (p.x + fx * forward * h), dz = j.ball.z - (p.z + fz * forward * h);
   const limit = C.receiveReachLimit;
   const clamp = (v) => Math.max(-limit, Math.min(limit, v / h));
-  return { reach: clamp(dx * -fz + dz * fx), ahead: clamp(dx * fx + dz * fz) };
+  // A ball near the circle's edge is reached for less (down to nothing at the
+  // edge): the judgement measures the ball at the end of its tick, so an edge
+  // ball predicted inside can still be judged outside — and an arm drawn at it
+  // would have nothing to touch.
+  const sure = Math.max(0, Math.min(1, (j.radius - j.d) / C.receiveReachMargin));
+  return { reach: clamp(dx * -fz + dz * fx) * sure, ahead: clamp(dx * fx + dz * fz) * sure };
 }
 // How far the arms extend for a dive at a ball `distance` metres away: fully
 // for a far ball, bent toward a ball right beside the body (never below diveMinReach).
@@ -211,21 +220,22 @@ export function platformCentre(pose) {
 // that hits an athlete who never pressed (Q3, 2026-09-27: it lands where it
 // lands on the body instead of being pulled to the arms). "Nearest" is the
 // part whose SURFACE is nearest (axis distance less the part radius; round 3
-// N4), chosen on `base` — the pose without the picture-only receive reach, so
-// the reach never changes which part the rules pick (U4) — and the ball is
-// placed on that same part of `pose`, the pose being drawn. Returns the
-// part and where the ball was before the snap (picture data: `snapFrom`).
+// N4). `pose` is the collision pose — the pose without the picture-only
+// receive reach (U4; round 4 NEW-3 / W3, 2026-09-28: the ball is placed there
+// too, so the reach never changes where it leaves from, and the judgement
+// zeroes the reach so that pose is also the one drawn). Returns the part and
+// where the ball was before the snap (picture data: `snapFrom`).
 const ARMS = ['forearm', 'hand'];
-function snapToBody(s, pose, parts = ARMS, base = pose) {
+function snapToBody(s, pose, parts = ARMS) {
   const b = s.ball, from = { x: b.x, y: b.y, z: b.z };
   let best = null;
-  for (const q of base) {
+  for (const q of pose) {
     if (parts && !parts.includes(q.part)) continue;
     const c = closestPoint(b, q.a, q.b);
     const d = Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z) - q.radius;
     if (!best || d < best.d) best = { q, d };
   }
-  const q = pose === base ? best.q : pose.find((seg) => seg.id === best.q.id) ?? best.q;
+  const q = best.q;
   const c = closestPoint(b, q.a, q.b), d = Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z);
   const n = d > 1e-9 ? { x: (b.x - c.x) / d, y: (b.y - c.y) / d, z: (b.z - c.z) / d } : { x: 0, y: 1, z: 0 };
   const r = q.radius + b.radius + 1e-5;
@@ -257,9 +267,9 @@ function timingOf(offset, k) {
 function circleTiming(press, k) {
   return press.action === 'dive' ? 'dive' : timingOf(press.offset, k);
 }
-function pass(s, pose, base, { technique, tier, offset, ratio, speed }) {
+function pass(s, pose, { technique, tier, offset, ratio, speed }) {
   const p = s.player, b = s.ball;
-  const snapped = snapToBody(s, pose, ARMS, base);
+  const snapped = snapToBody(s, pose, ARMS);
   const bodySpeed = Math.hypot(p.vx, p.vz);
   // A dive is not a running stance: its error is the dive multiplier alone
   // (stance 1; R.diveErrorMultiplier is the whole factor, 1.05).
@@ -272,15 +282,15 @@ function pass(s, pose, base, { technique, tier, offset, ratio, speed }) {
 // Inside the circle but pressed outside the window, pressed as a dive (U2) or
 // not pressed at all: the ball hits the arms — the body for no press — and
 // trickles off somewhere (Q3).
-function spray(s, pose, base, { technique, offset, timing, speed, ratio }) {
+function spray(s, pose, { technique, offset, timing, speed, ratio }) {
   const p = s.player, b = s.ball;
-  const snapped = snapToBody(s, pose, timing === 'none' ? null : ARMS, base);
+  const snapped = snapToBody(s, pose, timing === 'none' ? null : ARMS);
   const random = rng(s.seed, s.tick, s.stats.contacts + 101);
   const yaw = random() * Math.PI * 2, horizontal = lerp(R.sprayHorizontal, random()), vertical = lerp(R.sprayVertical, random());
   b.vx = Math.sin(yaw) * horizontal; b.vz = -Math.cos(yaw) * horizontal; b.vy = vertical;
   return contact(s, { ...snapped, active: p.action === 'receive' || p.action === 'dive', spray: true, technique, timing, offset, ballSpeed: speed, ratio });
 }
-function judgeStage(s, pose, base, technique) {
+function judgeStage(s, pose, technique) {
   const p = s.player, b = s.ball;
   const point = techniquePoint(p, technique), radius = technique === 'overhand' ? overRadius(s) : underRadius(s);
   const d = Math.hypot(b.x - point.x, b.z - point.z);
@@ -288,8 +298,8 @@ function judgeStage(s, pose, base, technique) {
   const speed = Math.hypot(b.vx, b.vy, b.vz), k = windowScale(speed);
   const press = pressOf(s), offset = press.offset;
   const timing = circleTiming(press, k);
-  if (timing !== 'inside') return spray(s, pose, base, { technique, offset, timing, speed, ratio: d / radius });
-  return pass(s, pose, base, { technique, tier: timingTier(offset, d / radius, speed), offset, ratio: d / radius, speed });
+  if (timing !== 'inside') return spray(s, pose, { technique, offset, timing, speed, ratio: d / radius });
+  return pass(s, pose, { technique, tier: timingTier(offset, d / radius, speed), offset, ratio: d / radius, speed });
 }
 // A dive is never better than GOOD (section 2: 品質上限「普通」).
 const CAP = { PERFECT: 'GOOD', GOOD: 'GOOD', POOR: 'POOR' };
@@ -299,7 +309,7 @@ const CAP = { PERFECT: 'GOOD', GOOD: 'GOOD', POOR: 'POOR' };
 // the sliding body's platform ended up (section 2: 撲救範圍內且有按 → 魚躍).
 // Only a dive press reaches this (Q2, 2026-09-27): a receive pressed at a ball
 // that lands in the band is a stance miss at the underhand judgement, never a dive.
-function judgeDive(s, pose, base) {
+function judgeDive(s, pose) {
   const p = s.player, b = s.ball, j = s.judge, target = p.diveTarget;
   const d = target.d, radius = target.radius;
   const speed = Math.hypot(b.vx, b.vy, b.vz), k = windowScale(speed);
@@ -309,7 +319,7 @@ function judgeDive(s, pose, base) {
     j.miss = { stage: 'dive', d, radius, ...relative(p, b, target.point), pressed: true, offset, timing: d > radius ? null : timing };
     return null;
   }
-  return pass(s, pose, base, { technique: 'dive', tier: CAP[timingTier(offset, d / radius, speed)], offset, ratio: d / radius, speed });
+  return pass(s, pose, { technique: 'dive', tier: CAP[timingTier(offset, d / radius, speed)], offset, ratio: d / radius, speed });
 }
 // Why the ball is going to be missed, measured at the underhand judgement.
 // `ball` is the ball to extrapolate: for a body deflection the caller passes
@@ -335,24 +345,23 @@ export function receiveContactEta(s) {
   return { t: cp.t, technique, miss: Math.hypot(cp.x - point.x, cp.z - point.z), ball: { x: cp.x, z: cp.z } };
 }
 // End-of-tick judgement. Returns the contact event, or null. `pose` is the
-// pose being drawn (the ball is put on it); `base` the same pose without the
-// picture-only receive reach (it picks the part, U4).
-export function judgeTick(s, pose, base = pose) {
+// collision pose (no picture-only receive reach, U4): the ball is put on it.
+export function judgeTick(s, pose) {
   const j = s.judge, b = s.ball, p = s.player;
   if (!j || j.done || !b.active || s.contactEpisode) return null;
   const crossed = (y) => b.py > y && b.y <= y;
   // The dive judgement applies only when the dive was pressed at a ball headed
   // for the band (Q5): a dive at a ball coming into a circle is judged there
   // (as a pressed spray, U2).
-  if (p.action === 'dive' && p.diveTarget?.stage === 'dive') return crossed(R.diveHeight) ? judgeDive(s, pose, base) : null;
+  if (p.action === 'dive' && p.diveTarget?.stage === 'dive') return crossed(R.diveHeight) ? judgeDive(s, pose) : null;
   if (!j.over && crossed(techniquePoint(p, 'overhand').y)) {
     j.over = true;
-    const r = judgeStage(s, pose, base, 'overhand');
+    const r = judgeStage(s, pose, 'overhand');
     if (r) return r;
   }
   if (!j.under && crossed(techniquePoint(p, 'underhand').y)) {
     j.under = true;
-    const r = judgeStage(s, pose, base, 'underhand');
+    const r = judgeStage(s, pose, 'underhand');
     if (r) return r;
     j.miss = missInfo(s, 'under');
     j.done = true;

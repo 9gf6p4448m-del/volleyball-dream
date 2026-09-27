@@ -9,6 +9,7 @@
 - R1–R11 每條都有對應測試或治具且為綠；R12 的 `npm test` 全綠（2581 條、0 skip，只少了第四節核准退場的測試）、四個瀏覽器治具 PASS。R12 的部署與 `--delivery` 對線上版由主對話做，本分支未部署、未 push。
 - 鑑別力：R1、R3、R4、R6 的新測試在舊碼 `3e90288` 上 8/9 條紅（第 9 條「範圍外 0 例救到」新舊皆綠，見 §2），紅的原因全是行為斷言（`docs/experiments/direct-v8-stage1-old-red.tap`）。R9 慢動作觸發 tick 數 > 0、R10 情境切到魚躍次數 > 0（§1 R9／R10）。
 - 版本字串單一來源 `src/sim/directConstants.js:3` → `direct-v8.1`（練習頁 `[data-build]` 與匯出檔 `simulationVersion` 都由它產生）。
+- **2026-09-28 第五輪（第 4 輪覆審 NEW-1～NEW-3 修補＋使用者裁定甲／丙／甲，§13）**：HIGH NEW-1（預測消失手臂收回＋圈邊不伸手：畫面前臂被球穿過後沒接到 76 → **0**/5292，最大深度 0.168 → 0）、HIGH NEW-2（按魚躍而球進圈＝U2 時身體不撲出、球貼站姿：判定格瞬移 max 1.371 → **0.736 m**，> 1.2 m 42 → 0）、MEDIUM NEW-3（球貼無迎球姿勢＋觸球即歸零迎球、畫面緩回：迎球開關雙樹 `differs 0`、觸球後落點差 max 3.545 → **0**、判定後撞看不見手臂 2 → 0）；W1～W3 各有修前碼 `c6a5c67` 行為紅燈。R8 1080/2646 = 40.8%（不變）。`npm test` 與四個瀏覽器治具：見 §13「收尾驗證」。
 - **2026-09-27 第四輪（第三輪覆審 findings 修補＋使用者裁定 U1～U4 全選甲，§12）**：HIGH N1（按魚躍、球在圈內 → 有按的噴球「這球要按接球」）、HIGH N2（魚躍目標用按下當刻朝向；已判定的球按鈕不再標魚躍）、HIGH N3（迎球只改姿勢：碰撞、分離、部位一律用未迎球姿勢）、MEDIUM N4（沒按噴球貼表面最近部位）、U3（判定瞬移只在畫面層平滑，每幀 ≤ 0.12 m、≤ 4 幀收斂）、N6 報告更正四處；V1～V5 各有修前碼 `0e72fd4` 行為紅燈、V3 三組雙樹比對 0 例不同。R8 1080/2646 = 40.8%。`npm test`：2597/2597 過、0 skip（單獨跑）；四個瀏覽器治具 PASS。N5、N7 不修、記錄。
 - **2026-09-27 第三輪（第二輪覆審 findings 修補＋使用者裁定第 2～6 題全選甲，§11）**：HIGH 撲救範圍下界（第 5 題）、HIGH M5 分母（第 4 題）、MEDIUM 魚躍倍率 1.05（第 6 題）、第 2 題（按接球不自動魚躍）、第 3 題（判定格瞬移：迎球姿勢＋沒按貼身體）、R2 分母含噴球，每條都有本樹實跑證據與舊碼（`b06df69`）或突變紅燈；兩條 LOW 未修、列在 §8 第 11／12 點；第二輪報告的四處錯誤已更正（§11「報告更正」）。R8 重量 1062/2646 = 40.1%。`npm test`：2593/2593 過、0 skip（單獨跑）；四個瀏覽器治具：四個治具 PASS。
 - **2026-09-27 第二輪（第一輪 fresh opus 覆審的 12 條 findings 修補，§10）**：C1、H1、H2、H3、M2、M3、M4、L1、L2、L3、L4 修好且各有舊碼或突變紅燈；M5 的四條 B 組測試改寫成獨立測試、門檻原封不動，其中 **A14（b 舉球區 0.478、c 弧頂中位數 1.24 m）與 A16b（舉球區 0.450）不過門檻 0.50／3.0**，依指示沒動門檻、例數、網格，數字交主對話裁定。`npm test` 最終：2588 條、2586 過、**2 敗（就是 A14 與 A16b）**、0 skip；四個瀏覽器治具 PASS。R8 在修補後是 901/2646 = 34.05%，只比 34% 門檻多 1 例（原因見 §10 L4）。
@@ -364,7 +365,7 @@
 
 - 改了什麼：`src/sim/directGame.js` 指令迴圈裡的魚躍分支——`diveTargetFor(s)` 改在 `p.aim` 暫時換回 `s.poseAimStart`（本 tick 開始時的朝向＝按鈕標籤計算時的狀態）下計算，算完還原，所以 sim 記的 `diveTarget.stage` 與標籤的 `nextJudgement` 完全同一個狀態；本 tick 的 aim 指令仍照舊套用到身體。`src/sim/directReceiveRules.js` `contextAction`：這顆球已判定（`judge.done`）就回 null——已判定的球按魚躍不會有目標，按鈕不得再標「魚躍」（覆審 `first` 變體裡 700 例就是這種：沒按的噴球發生後標籤仍寫魚躍）。練習頁 `directPractice.js:238-239` 的送法未動。
 - 網格：`tools/direct-v8-round4-probes.mjs aimFlip`＝覆審 `aim-flip.mjs`（chase 餵球／站位誤差／偏差 × 起點 (±1, 6)、(0, 7.5)、(±2, 6)＝4410 局；接球時送自動朝向、魚躍時送搖桿朝向）。
-- 證據（`node tools/direct-v8-round4-probes.mjs aim-flip`，本樹）：chase 變體 `divePresses 2617、stageMismatch 0、nullTarget 0`（tally 只剩 `label=dive sim=dive` 四種結果：body 1337、dive:GOOD 1048、miss:dive 170、dive:POOR 62）；first 變體 `divePresses 3703、stageMismatch 0、nullTarget 0`（修 `contextAction` 前 700／700）。測試 V2 兩變體都斷言 0 且每例 `labelStage === 'dive'`，綠。
+- 證據（`node tools/direct-v8-round4-probes.mjs aim-flip`，本樹）：chase 變體 `divePresses 2617、stageMismatch 0、nullTarget 0`（tally 只剩 `label=dive sim=dive` 四種結果：body 1337、dive:GOOD 1048、miss:dive 170、dive:POOR 62）；first 變體 `divePresses 3003、stageMismatch 0、nullTarget 0`（修 `contextAction` 前 700／700）。測試 V2 兩變體都斷言 0 且每例 `labelStage === 'dive'`，綠。
 - 修前碼紅燈：`not ok 2 - V2 … chase: 顯示魚躍而 diveTarget 為 null 28/2617，例：feed vx-1.5 vy0 vz5 start(2,6) err(0,0) off-9: aim jump 24.0° label dive -> sim null -> miss:under；…`（覆審員的 28；stage≠dive 的 39 由第二條斷言抓，第一條先紅就停）。
 
 ### N3 HIGH／U4／V3｜迎球只改姿勢，不改判定與碰撞
@@ -424,3 +425,58 @@
 - 修前碼 `0e72fd4` 紅燈：V1～V4 `docs/experiments/direct-v8-stage1-r4-old-red.tap`（`not ok 1`～`not ok 4`，斷言訊息見各段）；V3 雙樹 `reach-diff-old-vs-old-reach0.json` differs 989；V5 `pass-old-0e72fd4.log`。
 - 背景程序：5175（PID 37120）與 5176（PID 30908）兩個 vite 於 npm test 前以 `taskkill //PID … //F //T` 關閉，`netstat -ano | grep -E ":517[56] "` LISTENING 0 筆、`tasklist` 無 `chrome-headless-shell`；探針與 `node --test` 皆已自行結束。副本 `old-0e72fd4`（junction 指向真樹的 node_modules）、`v3-*` 都在 scratchpad，不在 repo。未 push、未部署、`main` 未動。
 - commit 清單：`3e73464`（碼＋測試＋探針＋報告 §12 草稿＋N6 更正）→ `9126c33`（V3 證據、治具視口過濾）→ 第三個 commit＝V5 證據、四治具重跑的 `direct-play-evidence/*`、本節收尾（SHA 見 `git log`）。
+
+## 13. 第 4 輪覆審修補對照（2026-09-28，使用者裁定 NEW-1 甲、NEW-2 丙、NEW-3 甲；第 5 輪驗收 W1～W4）
+
+修補起點 `c6a5c67`（碼＝已部署試玩版；`7f63933` 只多驗收檔修訂）。驗收文件未改（`git diff 7f63933..HEAD -- docs/kickoffs/` 為空）；門檻、例數、案例集、網格一律不動。證據取得路徑：**修前碼紅燈**＝把最終版測試（`tests/direct-v8-round5.test.js`＋`tools/direct-v8-round5-probes.mjs`、`tools/receive-reach-diff.mjs`、瀏覽器治具 `tools/direct-play-browser.mjs`）複製到 `c6a5c67` 的 `git archive` 副本（scratchpad `v8-r5/old`，`node_modules` 為 junction）上跑；**雙樹比對**（W3）＝`tools/receive-reach-diff.mjs <本樹 src+tools 副本> <同副本改 receiveReachLimit=0>`，真樹不動。所有數字都是本樹實跑。探針來源：覆審 `v8-r4-aux/` 的 `pen2.mjs`→`drawnArmPenetration`、`snapdist.mjs`→`snapDistances`、`second.mjs`→`secondContacts`（同網格、同量法，移進 `tools/direct-v8-round5-probes.mjs`），`land.mjs` 的落點比對併進 `receive-reach-diff.mjs`（落點差 > 0.01 m 列為 DIFFERS）。
+
+### NEW-1 HIGH／W1｜預測消失時手臂收回（甲）
+
+- 改了什麼：`src/sim/directReceiveRules.js` `receiveReachTarget`——只有**觸球後**（`receiveTouched`／`contactEpisode`）才回 null（保持）；球不在飛向圈內（`nextJudgement` 為 null、球已判定為失誤、球不再下落）一律回 `{0, 0}`，手臂以原速（`receiveReachSpeed` 3 h/s）收回。另加**邊緣衰減**：迎球量乘上 `sure = clamp((radius − d) / receiveReachMargin)`（`directConstants.js` 新常數 `receiveReachMargin` 0.15 m）——球預測落在圈邊 0.15 m 內時迎球比例線性降到 0。只改畫面姿勢（`getDirectPose` 的 reach），碰撞與判定姿勢（`collisionPose`）本來就不含迎球（U4），判定不變。
+- 為什麼單靠收回不夠（如實）：只做「預測消失即收回」，追球網格的穿透例從 76 降到 29；gate 改用不外推的預測（`run: 0`）降到 20；再加「跑到判定時刻也在圈內」的保守 gate 降到 9。剩下的 9 例都是同一型：預測在判定前 1～3 tick 才翻成「圈內」（判定量的是 tick 末的球位置，圈邊球會差 5～10 cm），手臂剛伸出 0.05～0.15 h 就被判失誤——任何收回速度都來不及。邊緣衰減從源頭不對圈邊球伸手，單獨加上（不需 `run: 0`、不需保守 gate）即為 0 例；最終碼只留「收回」＋「邊緣衰減」兩件。
+- 證據（`node tools/direct-v8-round5-probes.mjs penetration`，本樹）：`runs 5292, penetrateThenNoTouch 0, maxDepth 0`（W1 門檻 ≤ 5、≤ 0.168 m）。測試 W1（`tests/direct-v8-round5.test.js`）綠。迎球仍在動：雙樹比對 `maxReachSeen 0.25`（A 樹）。
+- 修前碼紅燈（`c6a5c67`，`docs/experiments/direct-v8-r5-evidence/round5-old-red-c6a5c67.tap`）：`not ok 1 - W1 … 球穿過畫面上的前臂後沒被接到：76/5292，例：feed(-1.5,1.5,4) start(-1,6) err(0.5,0.3) off-9 auto: tick 45 left-forearm 深 0.038 m reach -0.25/0.02 h；…`（行為斷言；覆審員的 76）。0e72fd4 基準（同探針、scratchpad 副本）：5 例、最大 0.168 m——即 W1 條文的兩個數字。
+- V3 測試（round4）與 W1 不衝突：8 例第一觸仍無觸球、tick 54 落地、`under` 失誤，且 `receiveReach`／`receiveAhead` 仍有伸出（> 0.05 h）——迎球在預測消失前已伸出，收回不影響判定一致性斷言；V3 未改。
+
+### NEW-2 HIGH／W2｜U2 球改貼未撲出的姿勢（丙）
+
+- 改了什麼：`src/sim/directPose.js` 新增 `diveThrown(p)`＝`action === 'dive' && (!diveTarget || diveTarget.stage === 'dive')`。按魚躍時預測球會進高手／低手圈（`diveTarget.stage` 為 `over`／`under`，U2）→ **身體不撲出**：`directGame.js` 不給起撲速度（原本會以 `diveMinSpeed` 朝球撲）、減速改用一般 `friction`、步態相位照常；`directPose.js` 的魚躍變形（下蹲 0.28、前撲傾身、手臂前伸、腿部）全部以 `thrown` 為條件，U2 時是站姿。判定不變：仍在圈內判「有按的噴球」（timing `dive`、原因「這球要按接球，按成魚躍了」），球貼在站姿的手掌／前臂上（V1 量法 `gaps(s)` 在畫面姿勢上 ≤ 0.05 m 照舊綠）。撲救範圍內（stage `dive`）與無目標的魚躍（plain dive）照舊撲出，R4 的 30/30 朝球撲出、倒地 42 tick 不變。
+- 證據（`node tools/direct-v8-round5-probes.mjs snap-distance`，chase 五起點有按＋沒按＋dive-in-circle 網格）：`overhand/dive n 68 p95 0.736 max 0.736 over12 0`、`underhand/dive n 138 p95 0.636 max 0.717 over12 0`（修前 88 例 max 1.371、42 例 > 1.2；118 例 max 0.543）；其餘類別 max：dive/pass 0.437、underhand/none 0.689、underhand/late 0.511、underhand/pass 0.313（W3 後球貼無迎球姿勢，較修前 0.172 大，仍遠低於 1.2）。測試 W2 綠。
+- 修前碼紅燈：`not ok 2 - W2 … overhand/dive: 42/88 例瞬移 > 1.2 m（最大 1.371 m）`。
+- V5 瀏覽器量測納入本類：治具 `--pass` 的 V5 段新增第四類 `dive`（21 站位、判定前 12 tick 注入 `action: 'dive'`，判為 timing `dive` 的噴球），每類 ≥ 20 例——結果見「收尾驗證」。
+
+### NEW-3 MEDIUM／W3｜迎球開關的觸球後軌跡一致（甲）
+
+- 改了什麼：`directGame.js` `judgeTick(s, collisionPose(1))`——球**貼到無迎球的碰撞姿勢**（不再是畫面姿勢），判定有觸球就把 `receiveReach`／`receiveAhead` 歸零，所以判定那一格結束時畫面姿勢＝碰撞姿勢、球就在畫面手臂上（R6 量法 `armGap` 在 `getDirectPose(s, 0)` 上不變，仍 100%）。`judgeTick`／`snapToBody`／`pass`／`spray` 的 `base` 參數移除（只剩一個姿勢）。sim 從此完全不讀迎球：碰撞、部位、貼球位置、出球、後續二次碰撞都與 `receiveReachLimit` 無關。
+- 畫面層（`src/app/directPractice.js`）：`shownReach` 以每幀 ≤ `receiveReachSpeed/60` h（＝sim 自己的每 tick 上限，所以平時零延遲）跟隨 sim 迎球，唯獨判定那一格的瞬間歸零改為幾幀緩回；`view.sync(getDirectPose(state, 0, { reach: shownReach }))`（`directPose.js` 的 `reach` 選項新增可傳 `{ side, ahead }`）。「觸球畫面平滑」關閉時畫面直接用 sim 值。`debug.picture()` 多回 `reach: { shown, sim }` 給治具量。
+- 為什麼不是「球仍貼畫面手臂、出球補償到同一落點」（如實）：先試過該做法（噴球從無迎球位置算落點、再從畫面位置對準它）——落點差 > 0.01 m 剩 16/1663，全是噴球落回身上的**二次碰撞**在兩版路徑不同下一有一無；要 0 例只能讓 sim 路徑本身相同。
+- 證據 W3（`node tools/receive-reach-diff.mjs <new> <new-reach0>`，`docs/experiments/direct-v8-r5-evidence/reach-diff-reach0.json`）：chase 有按 2646＋沒按 2646＋A14 345＋A16 276＋A16b 1150：`differs 0`、`maxLandingDifferenceAfterTouch 0`，tally **連「觸球位置不同（允許）」都是 0**——兩樹事件逐值相同；`A.maxReachSeen 0.25`（迎球確實在動）。`node tools/direct-v8-round5-probes.mjs second-contact`：`judged 1663, second 20, invisible []`（修前 2）、判定那一格 `reachNonZero 0`、球離畫面姿勢與無迎球姿勢的手臂最大 0.00001 m。測試 W3 綠。
+- 修前碼紅燈：雙樹 `reach-diff-old-c6a5c67-vs-reach0.json`：`differs 1094`（chase 有按落點差 > 0.01 m 461、A14 166、A16 113、A16b 354）、`maxLandingDifferenceAfterTouch 3.545`（覆審員的 1046／3.54 m，同一組案例，本工具另計 A14／A16／A16b）；`not ok 3 - W3 … 判定後撞到畫面上沒有的手臂 2/36，例：[{"feed":[-1.5,0,6],"start":[1,6],"err":[0,-0.3],"off":3,"part":"forearm","gap":0.105},…]`。
+- R8 重量（`node tools/receive-assist-probe.mjs chase`，`docs/experiments/direct-v8-r5-evidence/r8-chase.txt`）：`{"n":2646,"whiff":"8.7%","zone":"1080 40.8%","bodyZone":0,"net":0,"out":0,"other":1337,"sprays":525,…}`——與 §12 逐值相同（sim 結果本來就已與迎球無關；U2 不撲出只改噴球的貼球位置，不改判定）。
+
+### 既有測試的改動
+
+- 無。`tests/direct-v8-round4.test.js`（含 V3 的判定一致性斷言）未改；只新增 `tests/direct-v8-round5.test.js`。治具 `tools/direct-play-browser.mjs` 只**加**一類（dive）與一個記錄欄位（`maxDrawnReachLag`），既有斷言與門檻未動；`tools/receive-reach-diff.mjs` 把「觸球後落點不同」從「允許」改為 DIFFERS（加嚴）。
+
+### 收尾驗證（W4）
+
+- `npm test`（單獨跑：四治具、兩個 vite（5175／5176）、舊碼治具全部結束並以 `netstat`（`:5175`／`:5176` LISTENING 0 筆）、`tasklist`（無 `chrome-headless-shell`）確認後才起）：03:03:34 → 03:08:41，**2600 條、2600 過、0 敗、0 skip**（2597 + 本輪新增 3 條 `tests/direct-v8-round5.test.js`）。最後 10 行：
+
+```
+✔ 整場實跑：滿速↔靜止的 stop-go 交替率 < 0.5%（修前 5.92%） (1093.0012ms)
+✔ 決定論：同 seed 兩次整場逐 tick 位置逐值相同（幅值化走位不引入浮點分岔） (715.1575ms)
+ℹ tests 2600
+ℹ suites 0
+ℹ pass 2600
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 306207.8953
+```
+- 四個瀏覽器治具（真樹、vite 5175 `--force`、`PLAYWRIGHT_MODULE` 同 §5，三視口）：`--pass` `PASS pass: 3 viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, judgement snap smoothed in the picture only, tap resting, replay; advanced hides hints`（01:32–02:28）、預設 `PASS 3 viewports: real input, jump, cancel, replay, layout, disposal`（02:28–02:32）、`--assist` `PASS assist: 3 viewports with visible receive turn, contact, replay`（02:32–02:34）、`--motion` `PASS motion: 3 viewports with run, jump, land, set, block, dive captures`（02:34–02:39）；`docs/experiments/direct-play-evidence/*.json` 為本次輸出。第一次起的 vite 因 dep 快取過期回 504（頁面載不進 `__directPractice`，四治具 34 秒內逾時），改以 `--force` 重起後一次全過，沒有加 retry／sleep。
+- V5＋W2 瀏覽器量測（`pass-browser.json` `scenes[desktop].snapSmoothing`）：`cases 84`（none 21、pass 21、spray 21、**dive 21**）；`maxJumpOnJudgementFrame 0`、`maxClosePerFrame 0.1200`、`maxFramesToSettle 4`、`identicalOnOff true`；e(0)：dive 類 min 0.123／中位 0.253／p95 0.392／max 0.423 m，none 0.110–0.394，pass max 0.136，spray max 0.139；畫面手臂緩回對 sim 迎球的最大落後 `maxDrawnReachLag 0.153 h`（只發生在判定那一格的歸零之後，≤ 3 幀收完）。
+- 修前碼 V5 dive 類紅燈（`c6a5c67` 副本、vite 5176、同一支治具、desktop）：`DIRECT_BASE_URL=http://127.0.0.1:5176 DIRECT_VIEWPORTS=desktop node tools/direct-play-browser.mjs --pass`（02:40–03:02）→ `AssertionError [ERR_ASSERTION]: stance (-0.3, 4.8) dive: expected a dive, got {"tick":46,"tier":null,"spray":false,"timing":null,"technique":null,"part":"torso","snap":null}`——行為斷言：舊碼在圈內按魚躍會把身體撲向球、球撞到軀幹判 body（不是有按的噴球）；紀錄 `docs/experiments/direct-v8-r5-evidence/pass-old-c6a5c67.log`。舊碼瞬移 > 1.2 m 的紅燈由 W2 測試（`round5-old-red-c6a5c67.tap`）提供。
+- R8：**1080/2646 = 40.8%** ≥ 34%（`r8-chase.txt`）。
+- 背景程序：5175（`--force` 起的 vite）與 5176 於 npm test 前以 `taskkill //PID … //F //T` 關閉，`netstat -ano | grep -E ":517[56] "` LISTENING 0 筆、`tasklist` 無 `chrome-headless-shell`、無殘留 `direct-play-browser` 行程；探針與 `node --test` 皆自行結束。副本 `old`、`old-reach0`、`old-0e72fd4`、`new`、`new-reach0`（junction 指向真樹 `node_modules`）都在 scratchpad `v8-r5/`，不在 repo。未 push、未部署、`main` 未動。
+- commit 清單：`085d172`（碼＋測試＋探針＋工具＋舊碼紅燈＋§12 更正）→ 第二個 commit＝四治具與舊碼 V5 輸出、§13、§0（SHA 見 `git log`）。

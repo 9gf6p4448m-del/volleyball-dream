@@ -5,7 +5,7 @@ import {
   DIRECT_ACTIONS,
   RECEIVE_ASSIST,
 } from "./directConstants.js";
-import { getDirectPose } from "./directPose.js";
+import { getDirectPose, diveThrown } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
 import { createJudge, judgeTick, ruleGhost, nextJudgement, diveTargetFor, diveLaunchSpeed, diveReachFor, missInfo, receiveReachTarget } from "./directReceiveRules.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
@@ -244,7 +244,11 @@ export function stepDirectGame(s, commands = []) {
     Math.max(-C.turnSpeed * DIRECT_DT, Math.min(C.turnSpeed * DIRECT_DT, turn));
   p.aim = { x: Math.sin(angle), z: -Math.cos(angle) };
   if (startDive) {
-    if (p.diveTarget) {
+    if (p.diveTarget && !diveThrown(p)) {
+      // A dive pressed at a ball headed into a receive circle (U2): judged at
+      // the circle as a pressed spray on the standing pose; the body is not
+      // thrown at it (round 4 NEW-2 丙). The action still runs its course.
+    } else if (p.diveTarget) {
       const dx = p.diveTarget.x - p.x, dz = p.diveTarget.z - p.z, distance = Math.hypot(dx, dz);
       if (distance > 1e-6) p.aim = { x: dx / distance, z: dz / distance };
       p.diveReach = diveReachFor(distance, p.height);
@@ -258,8 +262,10 @@ export function stepDirectGame(s, commands = []) {
   }
   const n = Math.max(1, Math.hypot(move.x, move.z));
   if (p.action === "dive") {
-    p.vx = approach(p.vx, 0, C.diveFriction * DIRECT_DT);
-    p.vz = approach(p.vz, 0, C.diveFriction * DIRECT_DT);
+    // An un-thrown dive (U2) stops like a released stick; the move is ignored either way.
+    const friction = diveThrown(p) ? C.diveFriction : C.friction;
+    p.vx = approach(p.vx, 0, friction * DIRECT_DT);
+    p.vz = approach(p.vz, 0, friction * DIRECT_DT);
   } else {
     p.vx = approach(
       p.vx,
@@ -307,7 +313,7 @@ export function stepDirectGame(s, commands = []) {
     p.gaitVz = approach(p.gaitVz ?? 0, (p.z - oldZ) / dt, 35 * dt);
     if (Math.abs(p.gaitVx) < 1e-8) p.gaitVx = 0;
     if (Math.abs(p.gaitVz) < 1e-8) p.gaitVz = 0;
-    if (p.grounded && p.action !== 'dive')
+    if (p.grounded && !diveThrown(p))
       p.gaitPhase = ((p.gaitPhase ?? 0) + Math.hypot(p.x - oldX, p.z - oldZ) * 5 / p.height) % (Math.PI * 2);
     // Shot intent may switch during windup, but the contact arm must traverse
     // the intermediate poses through the same swept-collision substeps.
@@ -361,8 +367,13 @@ export function stepDirectGame(s, commands = []) {
     }
   }
   // direct-v8: the rule judgement at the end of the tick (position + timing).
-  // The ball is put on the drawn pose; the part is picked on the collision pose.
-  judgeTick(s, getDirectPose(s, 1), collisionPose(1));
+  // The ball is put on the collision pose (round 4 NEW-3 / W3, 2026-09-28:
+  // where it leaves from, and so everything after the touch, is the same with
+  // or without the picture-only reach), and the reach is zeroed on the touch
+  // so the drawn arms are the ones the ball sits on (R6); the picture eases
+  // the arms back on its own. A ball that reaches the body untouched keeps
+  // the receive turn and hands-up blend as before.
+  if (judgeTick(s, collisionPose(1))) { p.receiveReach = 0; p.receiveAhead = 0; }
   if (p.action === 'receive' && s.events.some((e) => e.type === 'contact')) p.receiveTouched = true;
   if (s.contactEpisode) {
     s.separationTicks = bodySeparated(b, collisionPose(1))

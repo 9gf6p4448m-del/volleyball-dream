@@ -20,6 +20,11 @@ const MAX_TAPE_TICKS = 36000;
 // the sim ball by at most this much per rendered frame. Picture only: the sim
 // never reads it, and the recorded tape is the same with it on or off.
 const SNAP_SMOOTH_STEP = 0.12; // metres per rendered frame
+// W3 (2026-09-28): the judgement zeroes the receive reach in one tick (the
+// ball sits on the un-reached arms). The drawn arms follow the sim's reach at
+// the sim's own rate, so they never lag it, except that a one-tick drop eases
+// back over a few frames. Picture only.
+const REACH_EASE_STEP = DIRECT_PHYSICS.receiveReachSpeed / 60; // body heights per rendered frame
 const PART_LABELS = { head: '頭部', hand: '手掌', forearm: '前臂', arm: '上臂', torso: '軀幹', leg: '腿部' };
 const HINT_IDLE = '走到球路上，讓接球圈套住球的觸球點，外圈變金色就按出手；圈外的球出手鍵會自動改成魚躍 · 扣球時上滑吊球、下滑直線、左右滑斜線';
 
@@ -113,6 +118,7 @@ export function runDirectPractice(ctx) {
   // U3: drawn ball = sim ball + snapOffset; set on a judged touch, closed frame by frame.
   let snapOffset = null;
   let shownBall = null; // where the ball was drawn in the last frame
+  let shownReach = { side: 0, ahead: 0 }; // the drawn receive reach (W3 easing)
   // Harness-injected commands; one with `at` waits for that simulation tick.
   const injected = [];
   // Harness event log: every sim event since the last restart, in tick order.
@@ -159,6 +165,7 @@ export function runDirectPractice(ctx) {
     lastContactTick = -1000;
     slowMotionTicks = 0;
     snapOffset = null;
+    shownReach = { side: 0, ahead: 0 };
     rehearsal = { tick: -1, key: null, value: false };
     frameTimes = [];
     simTimes = [];
@@ -337,7 +344,11 @@ export function runDirectPractice(ctx) {
     return { frames: frameTimes.length, fps: average ? 1000 / average : 0, frameP95: percentile(frameTimes), simP95: percentile(simTimes), backlogMs: accumulator * 1000, maxBacklogMs: maxBacklog * 1000, drawCalls: ctx.renderer.info.render.calls, slowMotionTicks };
   }
   function draw(dt = 0) {
-    view.sync(getDirectPose(state));
+    const ease = (from, to) => from + Math.max(-REACH_EASE_STEP, Math.min(REACH_EASE_STEP, to - from));
+    shownReach = $('[data-smooth]').checked
+      ? { side: ease(shownReach.side, state.player.receiveReach ?? 0), ahead: ease(shownReach.ahead, state.player.receiveAhead ?? 0) }
+      : { side: state.player.receiveReach ?? 0, ahead: state.player.receiveAhead ?? 0 };
+    view.sync(getDirectPose(state, 0, { reach: shownReach }));
     // No interpolation of collision-bearing body or ball: both show the same
     // completed tick — except the U3 snap offset, which is picture only.
     const o = snapOffset ?? { x: 0, y: 0, z: 0 };
@@ -442,7 +453,8 @@ export function runDirectPractice(ctx) {
       slowMotion: slowMotion(), message: $('[data-message]').textContent }), pause: () => setPaused(true), resume: () => setPaused(false),
     // U3 (harness): where the ball was drawn in the last frame, the sim ball, and the remaining picture offset.
     picture: () => ({ shown: shownBall ? { ...shownBall } : null, sim: { x: state.ball.x, y: state.ball.y, z: state.ball.z }, tick: state.tick,
-      offset: snapOffset ? Math.hypot(snapOffset.x, snapOffset.y, snapOffset.z) : 0 }),
+      offset: snapOffset ? Math.hypot(snapOffset.x, snapOffset.y, snapOffset.z) : 0,
+      reach: { shown: { ...shownReach }, sim: { side: state.player.receiveReach ?? 0, ahead: state.player.receiveAhead ?? 0 } } }),
     // Inject a command for the next step, or for simulation tick `at`.
     command: command => injected.push(structuredClone(command)),
     events: () => structuredClone(eventLog),
