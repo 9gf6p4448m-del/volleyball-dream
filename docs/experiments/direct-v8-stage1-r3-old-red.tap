@@ -1,0 +1,107 @@
+# direct-v8 stage 1, round 3 (2026-09-27): final tests run on the git-archive copy of b06df69 (the code before the round-3 fixes).
+# Copied in: tests/direct-v8-round3.test.js, tests/direct-v8-rules.test.js, tools/receive-assist-probe.mjs.
+# Command 1: node --test --test-reporter=tap tests/direct-v8-round3.test.js
+TAP version 13
+# Subtest: Q5 撲救下界（斜落球，往平台來）：低手時刻在低手圈外、0.3 m 時刻 d < 0.5 → 情境出手＝魚躍，按下判魚躍（等級最高普通）
+ok 1 - Q5 撲救下界（斜落球，往平台來）：低手時刻在低手圈外、0.3 m 時刻 d < 0.5 → 情境出手＝魚躍，按下判魚躍（等級最高普通）
+  ---
+  duration_ms: 5935.7752
+  type: 'test'
+  ...
+# Subtest: Q5 撲救下界（斜落球，離平台去）：低手時刻在低手圈內 → 不判魚躍：按接球判低手，硬按魚躍也不是魚躍（0.3 m 時刻 d 已 > 0.5 也一樣）
+not ok 2 - Q5 撲救下界（斜落球，離平台去）：低手時刻在低手圈內 → 不判魚躍：按接球判低手，硬按魚躍也不是魚躍（0.3 m 時刻 d 已 > 0.5 也一樣）
+  ---
+  duration_ms: 1789.3702
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\b611e1c3-cb6d-40b3-94b3-ee053003c6ba\\scratchpad\\old-b06df69\\tests\\direct-v8-round3.test.js:96:1'
+  failureType: 'testCodeFailure'
+  error: 'd(平台高)=0.30 d(0.3 m)=0.88 硬按魚躍仍判魚躍 → forearm:GOOD/dive → ground (1.17, 2.59)'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'dive'
+  actual: 'dive'
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/b611e1c3-cb6d-40b3-94b3-ee053003c6ba/scratchpad/old-b06df69/tests/direct-v8-round3.test.js:111:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+    Test.postRun (node:internal/test_runner/test:1447:19)
+    Test.run (node:internal/test_runner/test:1372:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+  ...
+# Subtest: 撲救範圍內的魚躍不看撲出後手臂到球的距離：判定那一格前臂離球 > 0.5 m 的例子也救到（守住 platformDistance 閘門已移除）
+ok 3 - 撲救範圍內的魚躍不看撲出後手臂到球的距離：判定那一格前臂離球 > 0.5 m 的例子也救到（守住 platformDistance 閘門已移除）
+  ---
+  duration_ms: 4000.968
+  type: 'test'
+  ...
+# Subtest: Q6 魚躍落點誤差總倍率 1.05：對基準誤差的比 ≈ 1.05（同一亂數）；同等級、同時機偏差下對站定低手的平均誤差比 ≈ 1.5（= 1.05 / 0.7）
+not ok 4 - Q6 魚躍落點誤差總倍率 1.05：對基準誤差的比 ≈ 1.05（同一亂數）；同等級、同時機偏差下對站定低手的平均誤差比 ≈ 1.5（= 1.05 / 0.7）
+  ---
+  duration_ms: 138714.79
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\b611e1c3-cb6d-40b3-94b3-ee053003c6ba\\scratchpad\\old-b06df69\\tests\\direct-v8-round3.test.js:181:1'
+  failureType: 'testCodeFailure'
+  error: '魚躍對基準誤差的比值 平均 1.500、最大偏離 1.05 為 0.450'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/b611e1c3-cb6d-40b3-94b3-ee053003c6ba/scratchpad/old-b06df69/tests/direct-v8-round3.test.js:204:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+    Test.postRun (node:internal/test_runner/test:1447:19)
+    Test.run (node:internal/test_runner/test:1372:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:897:7)
+  ...
+# Subtest: Q2 按接球、球落撲救範圍：判沒接到（站位原因，附公分）不自動改魚躍；同一球按魚躍才是魚躍
+ok 5 - Q2 按接球、球落撲救範圍：判沒接到（站位原因，附公分）不自動改魚躍；同一球按魚躍才是魚躍
+  ---
+  duration_ms: 3748.5412
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 3
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 158777.1557
+
+# Command 2: node --test --test-reporter=tap --test-name-pattern="R6" tests/direct-v8-rules.test.js
+TAP version 13
+# Subtest: R6 不隔空：R1 案例組＋追球探針的全部規則觸球，判定那一格球面到手掌／前臂表面 ≤ 0.05 m（100%）；沒按的噴球量身體任一部位表面 ≤ 0.05 m
+not ok 1 - R6 不隔空：R1 案例組＋追球探針的全部規則觸球，判定那一格球面到手掌／前臂表面 ≤ 0.05 m（100%）；沒按的噴球量身體任一部位表面 ≤ 0.05 m
+  ---
+  duration_ms: 283441.1847
+  type: 'test'
+  location: 'C:\\Users\\shung\\AppData\\Local\\Temp\\claude\\C--Users-shung\\b611e1c3-cb6d-40b3-94b3-ee053003c6ba\\scratchpad\\old-b06df69\\tests\\direct-v8-rules.test.js:304:1'
+  failureType: 'testCodeFailure'
+  error: '沒按的噴球全部貼在手臂上（身體表面規則沒有被行使）'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/b611e1c3-cb6d-40b3-94b3-ee053003c6ba/scratchpad/old-b06df69/tests/direct-v8-rules.test.js:324:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1306:25)
+    Test.start (node:internal/test_runner/test:1177:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 284246.7754

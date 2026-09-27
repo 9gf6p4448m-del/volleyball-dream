@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-26T05:48:09.277Z",
+  "createdAt": "2026-09-27T13:43:25.024Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -37,13 +37,6 @@
           "height": 284.609375
         },
         {
-          "label": "選擇觸球動作",
-          "x": 1056,
-          "y": 508,
-          "width": 198,
-          "height": 44
-        },
-        {
           "label": "起跳SPACE",
           "x": 1056,
           "y": 592,
@@ -51,7 +44,7 @@
           "height": 76
         },
         {
-          "label": "出手J · 滑動選線",
+          "label": "出手接球 · J",
           "x": 1142,
           "y": 562,
           "width": 112,
@@ -60,28 +53,30 @@
       ],
       "initialPerformance": {
         "frames": 2,
-        "fps": 1.3187392852433073,
+        "fps": 1.3334222281485433,
         "frameP95": 0,
-        "simP95": 0.7999999821186066,
+        "simP95": 0.7999999970197678,
         "backlogMs": 0,
-        "maxBacklogMs": 1316.6000000000008,
-        "drawCalls": 117
+        "maxBacklogMs": 1299.9000000000005,
+        "drawCalls": 117,
+        "slowMotionTicks": 0
       },
       "syntheticPlaybackMetrics": {
-        "frames": 430,
-        "fps": 61.50442688841234,
+        "frames": 435,
+        "fps": 61.34190709875119,
         "frameP95": 33.33333333333576,
-        "simP95": 0.7000000178813934,
+        "simP95": 0.7000000029802322,
         "backlogMs": 0,
         "maxBacklogMs": 16.66666666666424,
-        "drawCalls": 118
+        "drawCalls": 118,
+        "slowMotionTicks": 0
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
       "receiveRepeats": 5,
       "receiveVelocity": {
-        "y": 7.60013750828509,
-        "z": -1.4859407747738052
+        "y": 7.938366087490807,
+        "z": -1.630764802577934
       },
       "spikeVelocity": {
         "y": -3.4157555660576104,
@@ -129,13 +124,6 @@
           "height": 99.203125
         },
         {
-          "label": "選擇觸球動作",
-          "x": 663,
-          "y": 232,
-          "width": 155,
-          "height": 38
-        },
-        {
           "label": "起跳SPACE",
           "x": 663,
           "y": 294,
@@ -143,7 +131,7 @@
           "height": 64
         },
         {
-          "label": "出手J · 滑動選線",
+          "label": "出手接球 · J",
           "x": 733,
           "y": 276,
           "width": 85,
@@ -151,29 +139,31 @@
         }
       ],
       "initialPerformance": {
-        "frames": 55,
-        "fps": 11.744357370118083,
-        "frameP95": 83.40000000000009,
-        "simP95": 0.30000001192092896,
-        "backlogMs": 16.433333333331532,
-        "maxBacklogMs": 849.9999999999998,
-        "drawCalls": 117
+        "frames": 2,
+        "fps": 1.3794054762397405,
+        "frameP95": 0,
+        "simP95": 0.8999999910593033,
+        "backlogMs": 0,
+        "maxBacklogMs": 1249.900000000001,
+        "drawCalls": 117,
+        "slowMotionTicks": 0
       },
       "syntheticPlaybackMetrics": {
-        "frames": 430,
-        "fps": 63.703389119062,
+        "frames": 434,
+        "fps": 66.42891035157888,
         "frameP95": 33.33333333333576,
-        "simP95": 1.399999976158142,
+        "simP95": 0.5,
         "backlogMs": 0,
-        "maxBacklogMs": 16.666666666665453,
-        "drawCalls": 118
+        "maxBacklogMs": 16.66666666666424,
+        "drawCalls": 118,
+        "slowMotionTicks": 0
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
       "receiveRepeats": 5,
       "receiveVelocity": {
-        "y": 7.60013750828509,
-        "z": -1.4859407747738052
+        "y": 7.938366087490807,
+        "z": -1.630764802577934
       },
       "spikeVelocity": {
         "y": -3.4157555660576104,
@@ -221,13 +211,6 @@
           "height": 300.171875
         },
         {
-          "label": "選擇觸球動作",
-          "x": 226,
-          "y": 650,
-          "width": 150,
-          "height": 44
-        },
-        {
           "label": "起跳SPACE",
           "x": 226,
           "y": 724,
@@ -235,7 +218,7 @@
           "height": 60
         },
         {
-          "label": "出手J · 滑動選線",
+          "label": "出手接球 · J",
           "x": 292,
           "y": 700,
           "width": 84,
@@ -243,29 +226,31 @@
         }
       ],
       "initialPerformance": {
-        "frames": 81,
-        "fps": 12.6237045118055,
-        "frameP95": 83.40000000000055,
-        "simP95": 0.30000001192092896,
-        "backlogMs": 16.500000000000565,
-        "maxBacklogMs": 999.9000000000008,
-        "drawCalls": 88
+        "frames": 90,
+        "fps": 18.796207343075068,
+        "frameP95": 50.09999999999991,
+        "simP95": 0.29999999701976776,
+        "backlogMs": 4.866666660705101,
+        "maxBacklogMs": 838.2999999940392,
+        "drawCalls": 88,
+        "slowMotionTicks": 0
       },
       "syntheticPlaybackMetrics": {
-        "frames": 430,
-        "fps": 64.34268214215807,
-        "frameP95": 33.33333333333576,
-        "simP95": 1,
+        "frames": 429,
+        "fps": 66.94443144047796,
+        "frameP95": 33.33333333333212,
+        "simP95": 0.4000000059604645,
         "backlogMs": 0,
-        "maxBacklogMs": 16.66666666666424,
-        "drawCalls": 89
+        "maxBacklogMs": 16.666666666665453,
+        "drawCalls": 91,
+        "slowMotionTicks": 0
       },
       "feed": 1,
       "jumpHeight": 0.6521187500000005,
       "receiveRepeats": 5,
       "receiveVelocity": {
-        "y": 7.60013750828509,
-        "z": -1.4859407747738052
+        "y": 7.938366087490807,
+        "z": -1.630764802577934
       },
       "spikeVelocity": {
         "y": -3.4157555660576104,

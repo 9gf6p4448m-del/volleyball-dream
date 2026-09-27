@@ -1,0 +1,43 @@
+# Mutation red runs of tools/direct-play-browser.mjs --pass (2026-09-27, round 2). Mutations applied to a git-archive copy of HEAD served on 127.0.0.1:5176; restored from backup copies (sha1 checked).
+# apply.mjs mutations: c1-lag = updateHitLabel shows the previous tick's action; c1-wrong = shows receive when the sim would dive; h3-timescale = stepDirectGame substep dt scaled by slowMotion().
+6f3992854a6321745495fa98b601fd9fcdc47acb *src/app/directPractice.js
+11426f1734bb82986f6d1fbd5334b35bfe4fdfc5 *src/sim/directGame.js
+== control (unmutated copy, port 5176) ==
+harness exit 0
+PASS pass: 3 viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, tap resting, replay; advanced hides hints
+== mutation c1-lag ==
+mutated src/app/directPractice.js
+  mutated: src/app/directPractice.js:225:    const action = __lag; __lag = hitActionNow(); // MUTATION C1: the label lags one tick
+harness exit 1
+AssertionError [ERR_ASSERTION]: hit button (data-does/text) vs the action the sim started on a real press, per tick: 2/50 differ [{"tick":34,"does":"receive","label":"接球 · J","started":"dive"},{"tick":43,"does":"dive","label":"魚躍 · J","started":"receive"}]
+restored src/app/directPractice.js from backup copy
+restored: sha1 identical to before
+== mutation c1-wrong ==
+mutated src/app/directPractice.js
+  mutated: src/app/directPractice.js:224:    const action = hitActionNow() === 'dive' ? 'receive' : hitActionNow(); // MUTATION C1: dive is shown as receive
+harness exit 1
+AssertionError [ERR_ASSERTION]: dive: hit button resolves to dive ({"tick":83,"action":"receive","label":"接球 · J"})
+restored src/app/directPractice.js from backup copy
+restored: sha1 identical to before
+== mutation h3-timescale ==
+mutated src/sim/directGame.js
+mutated src/app/directPractice.js
+  mutated: src/app/directPractice.js:258:    stepDirectGame(state, commands, { timeScale: slowMotion() }); // MUTATION H3
+  mutated: src/sim/directGame.js:175:export function stepDirectGame(s, commands = [], { timeScale = 1 } = {}) { // MUTATION H3
+  mutated: src/sim/directGame.js:275:  const dt = DIRECT_DT * timeScale / C.substeps; // MUTATION H3: the picture scale reaches the sim substep time
+harness exit 1
+AssertionError [ERR_ASSERTION]: The serve reaches the passer as a hard ball at the same tick (54 / 48)
+restored src/sim/directGame.js from backup copy
+restored src/app/directPractice.js from backup copy
+restored: sha1 identical to before
+== done ==
+
+# first assertion line of each run
+## control
+PASS pass: 3 viewports with cues, contextual hit button (receive/dive), slow motion 0.5x/1x, tap resting, replay; advanced hides hints
+## c1-lag
+AssertionError [ERR_ASSERTION]: hit button (data-does/text) vs the action the sim started on a real press, per tick: 2/50 differ [{"tick":34,"does":"receive","label":"接球 · J","started":"dive"},{"tick":43,"does":"dive","label":"魚躍 · J","started":"receive"}]
+## c1-wrong
+AssertionError [ERR_ASSERTION]: dive: hit button resolves to dive ({"tick":83,"action":"receive","label":"接球 · J"})
+## h3-timescale
+AssertionError [ERR_ASSERTION]: The serve reaches the passer as a hard ball at the same tick (54 / 48)

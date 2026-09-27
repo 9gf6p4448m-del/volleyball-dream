@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-26T05:51:52.880Z",
+  "createdAt": "2026-09-27T13:11:18.966Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -10,34 +10,114 @@
       "beginner": {
         "timing": true,
         "now": true,
-        "platform": true
+        "platform": true,
+        "reach": true,
+        "touch": true
       },
       "standard": {
         "timing": true,
         "now": true,
-        "platform": true
+        "platform": true,
+        "reach": true,
+        "touch": true
       },
       "advanced": {
         "timing": false,
         "now": false,
-        "platform": false
+        "platform": false,
+        "reach": false,
+        "touch": false
       },
-      "pressReceive": {
-        "choice": "LEFT",
-        "passType": "LEFT",
-        "tapResults": {
-          "0": "11/11",
-          "3": "11/11",
-          "6": "11/11",
-          "9": "10/11"
+      "contextual": {
+        "receive": {
+          "label": "接球 · J",
+          "started": "receive"
+        },
+        "dive": {
+          "label": "魚躍 · J",
+          "started": "dive"
         }
       },
-      "result": {
-        "type": "ground",
-        "hit": true,
-        "dx": -0.010776229683257048,
-        "dz": 0.18339286643569674,
-        "text": "命中目標區！距中心 0.2 m。"
+      "perTick": {
+        "checked": 50,
+        "pressed": 50,
+        "mismatched": 0,
+        "dives": 9,
+        "receives": 41,
+        "rows": []
+      },
+      "tapResults": {
+        "0": "11/11",
+        "3": "11/11",
+        "6": "11/11",
+        "9": "11/11"
+      },
+      "slowMotion": {
+        "on": {
+          "armed": 48,
+          "scale": 0.5,
+          "ticks": 6,
+          "frames": 178,
+          "slowFrames": 23,
+          "tick": 160,
+          "playerZ": 7.191666666666677,
+          "slowMotionTicks": 18,
+          "eventCount": 3,
+          "contacts": [
+            "64:dive/GOOD"
+          ]
+        },
+        "off": {
+          "armed": 48,
+          "scale": 1,
+          "ticks": 12,
+          "frames": 161,
+          "slowFrames": 0,
+          "tick": 160,
+          "playerZ": 7.191666666666677,
+          "slowMotionTicks": 0,
+          "eventCount": 3,
+          "contacts": [
+            "64:dive/GOOD"
+          ]
+        },
+        "identical": true
+      },
+      "snapSmoothing": {
+        "cases": 63,
+        "byClass": {
+          "none": {
+            "n": 21,
+            "e0": {
+              "min": 0.11040666666664123,
+              "median": 0.2525054870421357,
+              "p95": 0.39222388340115016,
+              "max": 0.39373999999997267
+            }
+          },
+          "pass": {
+            "n": 21,
+            "e0": {
+              "min": 0.022601999996617616,
+              "median": 0.022601999996617644,
+              "p95": 0.022601999996617817,
+              "max": 0.05672108083376527
+            }
+          },
+          "spray": {
+            "n": 21,
+            "e0": {
+              "min": 0.004651056677013467,
+              "median": 0.04983480680851689,
+              "p95": 0.0949459702145668,
+              "max": 0.0949459702145668
+            }
+          }
+        },
+        "maxJumpOnJudgementFrame": 0,
+        "maxClosePerFrame": 0.12000000000000066,
+        "maxFramesToSettle": 4,
+        "identicalOnOff": true
       },
       "errors": []
     },
@@ -48,35 +128,80 @@
       "beginner": {
         "timing": true,
         "now": true,
-        "platform": true
+        "platform": true,
+        "reach": true,
+        "touch": true
       },
       "standard": {
         "timing": true,
         "now": true,
-        "platform": true
+        "platform": true,
+        "reach": true,
+        "touch": true
       },
       "advanced": {
         "timing": false,
         "now": false,
-        "platform": false
+        "platform": false,
+        "reach": false,
+        "touch": false
       },
-      "pressReceive": {
-        "choice": "LEFT",
-        "passType": "LEFT",
-        "tapResults": {
-          "0": "11/11",
-          "3": "11/11",
-          "6": "11/11",
-          "9": "10/11"
+      "contextual": {
+        "receive": {
+          "label": "接球 · J",
+          "started": "receive"
+        },
+        "dive": {
+          "label": "魚躍 · J",
+          "started": "dive"
         }
       },
-      "result": {
-        "type": "ground",
-        "hit": true,
-        "dx": -0.010776229683257048,
-        "dz": 0.18339286643569674,
-        "text": "命中目標區！距中心 0.2 m。"
+      "perTick": {
+        "checked": 50,
+        "pressed": 50,
+        "mismatched": 0,
+        "dives": 9,
+        "receives": 41,
+        "rows": []
       },
+      "tapResults": {
+        "0": "11/11",
+        "3": "11/11",
+        "6": "11/11",
+        "9": "11/11"
+      },
+      "slowMotion": {
+        "on": {
+          "armed": 48,
+          "scale": 0.5,
+          "ticks": 6,
+          "frames": 178,
+          "slowFrames": 24,
+          "tick": 160,
+          "playerZ": 7.191666666666677,
+          "slowMotionTicks": 18,
+          "eventCount": 3,
+          "contacts": [
+            "64:dive/GOOD"
+          ]
+        },
+        "off": {
+          "armed": 48,
+          "scale": 1,
+          "ticks": 12,
+          "frames": 160,
+          "slowFrames": 0,
+          "tick": 160,
+          "playerZ": 7.191666666666677,
+          "slowMotionTicks": 0,
+          "eventCount": 3,
+          "contacts": [
+            "64:dive/GOOD"
+          ]
+        },
+        "identical": true
+      },
+      "snapSmoothing": "measured on desktop only",
       "errors": []
     },
     {
@@ -86,35 +211,80 @@
       "beginner": {
         "timing": true,
         "now": true,
-        "platform": true
+        "platform": true,
+        "reach": true,
+        "touch": true
       },
       "standard": {
         "timing": true,
         "now": true,
-        "platform": true
+        "platform": true,
+        "reach": true,
+        "touch": true
       },
       "advanced": {
         "timing": false,
         "now": false,
-        "platform": false
+        "platform": false,
+        "reach": false,
+        "touch": false
       },
-      "pressReceive": {
-        "choice": "LEFT",
-        "passType": "LEFT",
-        "tapResults": {
-          "0": "11/11",
-          "3": "11/11",
-          "6": "11/11",
-          "9": "10/11"
+      "contextual": {
+        "receive": {
+          "label": "接球 · J",
+          "started": "receive"
+        },
+        "dive": {
+          "label": "魚躍 · J",
+          "started": "dive"
         }
       },
-      "result": {
-        "type": "ground",
-        "hit": true,
-        "dx": -0.010776229683257048,
-        "dz": 0.18339286643569674,
-        "text": "命中目標區！距中心 0.2 m。"
+      "perTick": {
+        "checked": 50,
+        "pressed": 50,
+        "mismatched": 0,
+        "dives": 9,
+        "receives": 41,
+        "rows": []
       },
+      "tapResults": {
+        "0": "11/11",
+        "3": "11/11",
+        "6": "11/11",
+        "9": "11/11"
+      },
+      "slowMotion": {
+        "on": {
+          "armed": 48,
+          "scale": 0.5,
+          "ticks": 6,
+          "frames": 178,
+          "slowFrames": 24,
+          "tick": 160,
+          "playerZ": 7.191666666666677,
+          "slowMotionTicks": 18,
+          "eventCount": 3,
+          "contacts": [
+            "64:dive/GOOD"
+          ]
+        },
+        "off": {
+          "armed": 48,
+          "scale": 1,
+          "ticks": 12,
+          "frames": 160,
+          "slowFrames": 0,
+          "tick": 160,
+          "playerZ": 7.191666666666677,
+          "slowMotionTicks": 0,
+          "eventCount": 3,
+          "contacts": [
+            "64:dive/GOOD"
+          ]
+        },
+        "identical": true
+      },
+      "snapSmoothing": "measured on desktop only",
       "errors": []
     }
   ]

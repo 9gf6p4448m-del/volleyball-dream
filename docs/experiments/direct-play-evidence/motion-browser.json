@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-09-26T06:16:10.984Z",
+  "createdAt": "2026-09-27T05:30:07.004Z",
   "base": "http://127.0.0.1:5175",
   "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
   "scenes": [
@@ -22,10 +22,11 @@
         "frames": 0,
         "fps": 0,
         "frameP95": 0,
-        "simP95": 0.4000000059604645,
+        "simP95": 0.29999999701976776,
         "backlogMs": 0,
         "maxBacklogMs": 0,
-        "drawCalls": 117
+        "drawCalls": 117,
+        "slowMotionTicks": 0
       },
       "errors": []
     },
@@ -48,10 +49,11 @@
         "frames": 0,
         "fps": 0,
         "frameP95": 0,
-        "simP95": 0.30000001192092896,
+        "simP95": 0.20000000298023224,
         "backlogMs": 0,
         "maxBacklogMs": 0,
-        "drawCalls": 117
+        "drawCalls": 117,
+        "slowMotionTicks": 0
       },
       "errors": []
     },
@@ -74,10 +76,11 @@
         "frames": 0,
         "fps": 0,
         "frameP95": 0,
-        "simP95": 0.20000001788139343,
+        "simP95": 0.20000000298023224,
         "backlogMs": 0,
         "maxBacklogMs": 0,
-        "drawCalls": 88
+        "drawCalls": 88,
+        "slowMotionTicks": 0
       },
       "errors": []
     }

@@ -1,0 +1,35 @@
+{
+ "A": {
+  "root": "v3-cur",
+  "limit": 0.25,
+  "speed": 3,
+  "maxReachSeen": 0.25
+ },
+ "B": {
+  "root": "v3-reachBig",
+  "limit": 0.6,
+  "speed": 10,
+  "maxReachSeen": 0.6
+ },
+ "differs": 0,
+ "tally": {
+  "chase-auto n": 2646,
+  "chase-auto same first touch, contact position differs (allowed)": 246,
+  "chase-auto same first touch, landing tick/spot after the touch differs (allowed)": 197,
+  "chase-auto same first touch, terminal type/miss after the touch differs": 1,
+  "chase-auto   ground/true/- -> out/true/-": 1,
+  "chase-none n": 2646,
+  "A14 n": 345,
+  "A14 same first touch, contact position differs (allowed)": 5,
+  "A14 same first touch, landing tick/spot after the touch differs (allowed)": 5,
+  "A16 n": 276,
+  "A16 same first touch, contact position differs (allowed)": 4,
+  "A16 same first touch, landing tick/spot after the touch differs (allowed)": 4,
+  "A16b n": 1150,
+  "A16b same first touch, contact position differs (allowed)": 50,
+  "A16b same first touch, landing tick/spot after the touch differs (allowed)": 32
+ },
+ "ex": [
+  "chase-auto {\"kind\":\"chase-auto\",\"f\":[1.5,0,6],\"px\":-1,\"pz\":6,\"ex\":0,\"ez\":-0.3,\"off\":6,\"mode\":\"auto\"}: A {\"tick\":35,\"kind\":\"spray\",\"part\":\"hand\",\"id\":\"right-hand\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-9,\"target\":null} {\"type\":\"ground\",\"tick\":74,\"judged\":true,\"miss\":null} | B {\"tick\":35,\"kind\":\"spray\",\"part\":\"hand\",\"id\":\"right-hand\",\"tier\":null,\"technique\":\"underhand\",\"timing\":\"late\",\"offset\":-9,\"target\":null} {\"type\":\"out\",\"tick\":94,\"judged\":true,\"miss\":null}"
+ ]
+}

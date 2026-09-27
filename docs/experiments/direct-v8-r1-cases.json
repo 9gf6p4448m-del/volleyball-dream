@@ -1,0 +1,1079 @@
+{
+ "generatedOn": "3e90288",
+ "underForward": 0.31,
+ "sweep": {
+  "feeds": [
+   "receive",
+   "spike",
+   "serve"
+  ],
+  "heights": [
+   1.5,
+   1.75,
+   2.1
+  ],
+  "sticks": [
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    -1
+   ],
+   [
+    0.7,
+    -0.7
+   ],
+   [
+    -0.7,
+    -0.7
+   ],
+   [
+    1,
+    0
+   ],
+   [
+    -1,
+    0
+   ],
+   [
+    0,
+    1
+   ]
+  ],
+  "z0": [
+   4.4,
+   4.8,
+   5.2,
+   5.6,
+   6
+  ],
+  "x0": [
+   -0.3,
+   0,
+   0.3
+  ],
+  "m": [
+   0.35,
+   1
+  ],
+  "rt": [
+   14,
+   44
+  ]
+ },
+ "perfectTicks": 2,
+ "edgeRatio": 0.7,
+ "total": 54405,
+ "cases": [
+  {
+   "feed": "receive",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 5.6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 28,
+   "old": {
+    "tick": 42,
+    "part": "torso",
+    "id": "torso",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0,
+    "z": 3.6690863741495345
+   },
+   "stage": "under",
+   "d": 0.3229,
+   "offset": 2,
+   "crossingTick": 42
+  },
+  {
+   "feed": "receive",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 5.6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 29,
+   "old": {
+    "tick": 42,
+    "part": "torso",
+    "id": "torso",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0,
+    "z": 3.6690863741495345
+   },
+   "stage": "under",
+   "d": 0.3229,
+   "offset": 1,
+   "crossingTick": 42
+  },
+  {
+   "feed": "receive",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 5.6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 30,
+   "old": {
+    "tick": 42,
+    "part": "torso",
+    "id": "torso",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0,
+    "z": 3.6690863741495345
+   },
+   "stage": "under",
+   "d": 0.3229,
+   "offset": 0,
+   "crossingTick": 42
+  },
+  {
+   "feed": "receive",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 5.6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 31,
+   "old": {
+    "tick": 42,
+    "part": "torso",
+    "id": "torso",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0,
+    "z": 3.6690863741495345
+   },
+   "stage": "under",
+   "d": 0.3229,
+   "offset": -1,
+   "crossingTick": 42
+  },
+  {
+   "feed": "receive",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 5.6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 32,
+   "old": {
+    "tick": 42,
+    "part": "torso",
+    "id": "torso",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0,
+    "z": 3.6690863741495345
+   },
+   "stage": "under",
+   "d": 0.3229,
+   "offset": -2,
+   "crossingTick": 42
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 33,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.056347411804454337,
+    "z": 3.869117661271944
+   },
+   "stage": "under",
+   "d": 0.2411,
+   "offset": 2,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.056347411804454337,
+    "z": 3.869117661271944
+   },
+   "stage": "under",
+   "d": 0.2411,
+   "offset": 1,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 35,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.056347411804454337,
+    "z": 3.869117661271944
+   },
+   "stage": "under",
+   "d": 0.2411,
+   "offset": 0,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 36,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.056347411804454337,
+    "z": 3.869117661271944
+   },
+   "stage": "under",
+   "d": 0.2411,
+   "offset": -1,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 37,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.056347411804454337,
+    "z": 3.869117661271944
+   },
+   "stage": "under",
+   "d": 0.2411,
+   "offset": -2,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 33,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.5182907524670598,
+    "z": 4.1578217617951365
+   },
+   "stage": "under",
+   "d": 0.0641,
+   "offset": 2,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.5182907524670598,
+    "z": 4.1578217617951365
+   },
+   "stage": "under",
+   "d": 0.0641,
+   "offset": 1,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 35,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.5182907524670598,
+    "z": 4.1578217617951365
+   },
+   "stage": "under",
+   "d": 0.0641,
+   "offset": 0,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 36,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.5182907524670598,
+    "z": 4.1578217617951365
+   },
+   "stage": "under",
+   "d": 0.0641,
+   "offset": -1,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.5,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 37,
+   "old": {
+    "tick": 50,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.5182907524670598,
+    "z": 4.1578217617951365
+   },
+   "stage": "under",
+   "d": 0.0641,
+   "offset": -2,
+   "crossingTick": 47
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 32,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.3378320451927696,
+    "z": 3.4858187167978056
+   },
+   "stage": "under",
+   "d": 0.2494,
+   "offset": 2,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 33,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.3378320451927696,
+    "z": 3.4858187167978056
+   },
+   "stage": "under",
+   "d": 0.2494,
+   "offset": 1,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.3378320451927696,
+    "z": 3.4858187167978056
+   },
+   "stage": "under",
+   "d": 0.2494,
+   "offset": 0,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 35,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.3378320451927696,
+    "z": 3.4858187167978056
+   },
+   "stage": "under",
+   "d": 0.2494,
+   "offset": -1,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 36,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.3378320451927696,
+    "z": 3.4858187167978056
+   },
+   "stage": "under",
+   "d": 0.2494,
+   "offset": -2,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 32,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.8134436759367764,
+    "z": 3.6466779933002087
+   },
+   "stage": "under",
+   "d": 0.0906,
+   "offset": 2,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 33,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.806246268046834,
+    "z": 3.6634091025427398
+   },
+   "stage": "under",
+   "d": 0.0906,
+   "offset": 1,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.8052732271859347,
+    "z": 3.6647559017431703
+   },
+   "stage": "under",
+   "d": 0.0906,
+   "offset": 0,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 35,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.8052732271859347,
+    "z": 3.6647559017431703
+   },
+   "stage": "under",
+   "d": 0.0906,
+   "offset": -1,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 1.75,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 36,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.8052732271859347,
+    "z": 3.6647559017431703
+   },
+   "stage": "under",
+   "d": 0.0906,
+   "offset": -2,
+   "crossingTick": 46
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 30,
+   "old": {
+    "tick": 48,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": -0.5756036988263555,
+    "z": 2.6287251341644606
+   },
+   "stage": "under",
+   "d": 0.265,
+   "offset": 2,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 31,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.0388782850379468,
+    "z": 2.506563924956619
+   },
+   "stage": "under",
+   "d": 0.265,
+   "offset": 1,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 32,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.27016557304718575,
+    "z": 2.6535270975305933
+   },
+   "stage": "under",
+   "d": 0.265,
+   "offset": 0,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 33,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.27016557304718575,
+    "z": 2.6535270975305933
+   },
+   "stage": "under",
+   "d": 0.265,
+   "offset": -1,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "right-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.27016557304718575,
+    "z": 2.6535270975305933
+   },
+   "stage": "under",
+   "d": 0.265,
+   "offset": -2,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 30,
+   "old": {
+    "tick": 48,
+    "part": "leg",
+    "id": "left-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.8680603293150955,
+    "z": 2.838771699701235
+   },
+   "stage": "under",
+   "d": 0.1273,
+   "offset": 2,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 31,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "left-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.4018508321068386,
+    "z": 3.2669842714761117
+   },
+   "stage": "under",
+   "d": 0.1273,
+   "offset": 1,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 32,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "left-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.32030301024772523,
+    "z": 3.326478456008805
+   },
+   "stage": "under",
+   "d": 0.1273,
+   "offset": 0,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 33,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "left-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.28874551809233084,
+    "z": 3.2958707016842985
+   },
+   "stage": "under",
+   "d": 0.1273,
+   "offset": -1,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0,
+    -1
+   ],
+   "z0": 6,
+   "x0": 0.3,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 49,
+    "part": "leg",
+    "id": "left-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.281060364877731,
+    "z": 3.2869225125578443
+   },
+   "stage": "under",
+   "d": 0.1273,
+   "offset": -2,
+   "crossingTick": 44
+  },
+  {
+   "feed": "spike",
+   "height": 2.1,
+   "stick": [
+    0.7,
+    -0.7
+   ],
+   "z0": 5.6,
+   "x0": -0.3,
+   "m": 0.35,
+   "rt": 34,
+   "old": {
+    "tick": 48,
+    "part": "leg",
+    "id": "left-thigh",
+    "tier": null,
+    "technique": null
+   },
+   "oldEnd": {
+    "type": "ground",
+    "x": 0.4674803071227114,
+    "z": 2.6242875294629444
+   },
+   "stage": "under",
+   "d": 0.3029,
+   "offset": -2,
+   "crossingTick": 44
+  }
+ ]
+}
