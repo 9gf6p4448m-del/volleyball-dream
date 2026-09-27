@@ -18,6 +18,8 @@ const assistOnly = process.argv.includes('--assist');
 const passOnly = process.argv.includes('--pass');
 const FEED_DELAY = 90; // direct-v7 A24a countdown, ticks
 const VERSION = 'direct-v8.1';
+// DIRECT_VIEWPORTS=desktop[,landscape,portrait] limits the viewports (round-4 old-code red run only; the evidence runs use all three).
+const VIEWPORTS = [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]].filter(([name]) => (process.env.DIRECT_VIEWPORTS || 'desktop,landscape,portrait').split(',').includes(name));
 // The practice assignment lives in the settings panel (direct-v8, R10).
 async function assign(page, action) {
   await page.locator('.dp-settings > summary').click();
@@ -27,7 +29,7 @@ async function assign(page, action) {
 try {
   if (passOnly) {
     // direct-v4 A8-A10 cues, direct-v8 R9 (slow motion) and R10 (contextual hit button).
-    for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
+    for (const [name, width, height] of VIEWPORTS) {
       const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
       const page = await context.newPage();
       const errors = [];
@@ -346,7 +348,7 @@ try {
   }
   if (assistOnly) {
     const aim = { x: Math.sin(35 * Math.PI / 180), z: -Math.cos(35 * Math.PI / 180) };
-    for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
+    for (const [name, width, height] of VIEWPORTS) {
       const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
       const page = await context.newPage();
       const errors = [];
@@ -389,7 +391,7 @@ try {
     }
   }
   if (motionOnly) {
-    for (const [name, width, height] of [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]]) {
+    for (const [name, width, height] of VIEWPORTS) {
       const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
       const page = await context.newPage();
       const errors = [];
@@ -482,7 +484,7 @@ try {
     report.delivery = { url: page.url(), build, exportMetadata: true, menuNavigation: true, errors };
     await context.close();
   }
-  for (const [name, width, height] of (deliveryOnly || motionOnly || assistOnly || passOnly ? [] : [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]])) {
+  for (const [name, width, height] of (deliveryOnly || motionOnly || assistOnly || passOnly ? [] : VIEWPORTS)) {
     const context = await browser.newContext({ viewport: { width, height }, hasTouch: true, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors = [];

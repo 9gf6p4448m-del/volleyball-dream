@@ -1,0 +1,31 @@
+{
+ "A": {
+  "root": "v3-cur",
+  "limit": 0.25,
+  "speed": 3,
+  "maxReachSeen": 0.25
+ },
+ "B": {
+  "root": "v3-reach0",
+  "limit": 0,
+  "speed": 3,
+  "maxReachSeen": 0
+ },
+ "differs": 0,
+ "tally": {
+  "chase-auto n": 2646,
+  "chase-auto same first touch, contact position differs (allowed)": 1045,
+  "chase-auto same first touch, landing tick/spot after the touch differs (allowed)": 659,
+  "chase-none n": 2646,
+  "A14 n": 345,
+  "A14 same first touch, contact position differs (allowed)": 345,
+  "A14 same first touch, landing tick/spot after the touch differs (allowed)": 199,
+  "A16 n": 276,
+  "A16 same first touch, contact position differs (allowed)": 257,
+  "A16 same first touch, landing tick/spot after the touch differs (allowed)": 167,
+  "A16b n": 1150,
+  "A16b same first touch, contact position differs (allowed)": 724,
+  "A16b same first touch, landing tick/spot after the touch differs (allowed)": 474
+ },
+ "ex": []
+}
