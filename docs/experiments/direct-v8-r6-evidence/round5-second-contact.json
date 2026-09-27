@@ -1,0 +1,15 @@
+{
+ "runs": 2646,
+ "judged": 1663,
+ "second": 20,
+ "invisible": [],
+ "judgement": {
+  "reachNonZero": 0,
+  "maxBaseArmGap": 0.000010000000000606746,
+  "reachedBefore": 956,
+  "maxReachStepPerFrame": 0.05000000000000002,
+  "maxFramesToSettle": 5,
+  "judgementFrameGap": 0.07650698721597242,
+  "maxDrawnArmGap": 0.000010000000000606746
+ }
+}

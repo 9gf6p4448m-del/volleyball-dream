@@ -286,5 +286,7 @@ test('R11 決定論：含接球、噴球、魚躍、慢動作的錄影，整卷�
       assert.equal(serializeDirectState(restored), serializeDirectState(states[t]), `從 ${from} 還原後第 ${t} tick 不同`);
     }
   }
-  assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v8.1', initial, commands, endTick: s.tick })), serializeDirectState(s));
+  assert.equal(serializeDirectState(replayDirectTape({ simulationVersion: 'direct-v8.2', initial, commands, endTick: s.tick })), serializeDirectState(s));
+  // direct-v8.2 (round 6, X2): a tape recorded as direct-v8.1 is refused.
+  assert.throws(() => replayDirectTape({ simulationVersion: 'direct-v8.1', initial, commands, endTick: s.tick }));
 });

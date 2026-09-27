@@ -1,0 +1,56 @@
+{ runs: 2646, judged: 1663 }
+pass|f0 drawnBall(snapFrom)-vs-preReachArm       n=1138 med=0.000 p95=0.134 max=0.437 >0.05: 123
+pass|f0 drawnBall(snapFrom)-vs-shownArm          n=1138 med=0.000 p95=0.167 max=0.437 >0.05: 142
+pass|f0 drawnBall(snapFrom)-vs-zeroArm           n=1138 med=0.000 p95=0.214 max=0.437 >0.05: 235
+pass|f0 simBall-vs-shownArm                      n=1138 med=0.000 p95=0.005 max=0.077 >0.05: 10
+pass|f0 simBall-vs-zeroArm                       n=1138 med=0.000 p95=0.000 max=0.000 >0.05: 0
+pass|f1 drawnBall-vs-shownArm                    n=1138 med=0.019 p95=0.107 max=0.312 >0.05: 265
+pass|f1 shownReachMag                            n=1138 med=0.000 p95=0.114 max=0.151 >0.05: 213
+pass|f2 drawnBall-vs-shownArm                    n=1138 med=0.121 p95=0.222 max=0.287 >0.05: 886
+pass|f2 shownReachMag                            n=1138 med=0.000 p95=0.061 max=0.100 >0.05: 76
+pass|f3 drawnBall-vs-shownArm                    n=1138 med=0.236 p95=0.332 max=0.426 >0.05: 1105
+pass|f3 shownReachMag                            n=1138 med=0.000 p95=0.011 max=0.050 >0.05: 12
+pass|f4 drawnBall-vs-shownArm                    n=1138 med=0.353 p95=0.457 max=0.561 >0.05: 1138
+pass|f4 shownReachMag                            n=1138 med=0.000 p95=0.000 max=0.000 >0.05: 0
+pass|f5 drawnBall-vs-shownArm                    n=1138 med=0.471 p95=0.576 max=0.681 >0.05: 1138
+pass|f5 shownReachMag                            n=1138 med=0.000 p95=0.000 max=0.000 >0.05: 0
+pass|f6 drawnBall-vs-shownArm                    n=1138 med=0.589 p95=0.696 max=0.799 >0.05: 1138
+pass|f6 shownReachMag                            n=1138 med=0.000 p95=0.000 max=0.000 >0.05: 0
+pass|preReachMag                                 n=1138 med=0.000 p95=0.226 max=0.276 >0.05: 435
+spray:early|f0 drawnBall(snapFrom)-vs-preReachArm n=131 med=0.000 p95=0.106 max=0.199 >0.05: 17
+spray:early|f0 drawnBall(snapFrom)-vs-shownArm   n=131 med=0.000 p95=0.140 max=0.199 >0.05: 25
+spray:early|f0 drawnBall(snapFrom)-vs-zeroArm    n=131 med=0.019 p95=0.183 max=0.217 >0.05: 41
+spray:early|f0 simBall-vs-shownArm               n=131 med=0.000 p95=0.022 max=0.055 >0.05: 1
+spray:early|f0 simBall-vs-zeroArm                n=131 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:early|f1 drawnBall-vs-shownArm             n=131 med=0.000 p95=0.069 max=0.139 >0.05: 13
+spray:early|f1 shownReachMag                     n=131 med=0.030 p95=0.126 max=0.150 >0.05: 49
+spray:early|f2 drawnBall-vs-shownArm             n=131 med=0.000 p95=0.131 max=0.188 >0.05: 33
+spray:early|f2 shownReachMag                     n=131 med=0.000 p95=0.076 max=0.100 >0.05: 15
+spray:early|f3 drawnBall-vs-shownArm             n=131 med=0.026 p95=0.186 max=0.266 >0.05: 55
+spray:early|f3 shownReachMag                     n=131 med=0.000 p95=0.026 max=0.050 >0.05: 2
+spray:early|f4 drawnBall-vs-shownArm             n=131 med=0.077 p95=0.238 max=0.327 >0.05: 80
+spray:early|f4 shownReachMag                     n=131 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:early|f5 drawnBall-vs-shownArm             n=131 med=0.137 p95=0.306 max=0.387 >0.05: 99
+spray:early|f5 shownReachMag                     n=131 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:early|f6 drawnBall-vs-shownArm             n=131 med=0.197 p95=0.376 max=0.446 >0.05: 120
+spray:early|f6 shownReachMag                     n=131 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:early|preReachMag                          n=131 med=0.142 p95=0.245 max=0.250 >0.05: 106
+spray:late|f0 drawnBall(snapFrom)-vs-preReachArm n=394 med=0.018 p95=0.316 max=0.511 >0.05: 169
+spray:late|f0 drawnBall(snapFrom)-vs-shownArm    n=394 med=0.027 p95=0.317 max=0.511 >0.05: 180
+spray:late|f0 drawnBall(snapFrom)-vs-zeroArm     n=394 med=0.079 p95=0.317 max=0.511 >0.05: 234
+spray:late|f0 simBall-vs-shownArm                n=394 med=0.000 p95=0.000 max=0.025 >0.05: 0
+spray:late|f0 simBall-vs-zeroArm                 n=394 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:late|f1 drawnBall-vs-shownArm              n=394 med=0.000 p95=0.146 max=0.340 >0.05: 81
+spray:late|f1 shownReachMag                      n=394 med=0.000 p95=0.100 max=0.151 >0.05: 77
+spray:late|f2 drawnBall-vs-shownArm              n=394 med=0.000 p95=0.093 max=0.214 >0.05: 58
+spray:late|f2 shownReachMag                      n=394 med=0.000 p95=0.050 max=0.100 >0.05: 13
+spray:late|f3 drawnBall-vs-shownArm              n=394 med=0.010 p95=0.120 max=0.309 >0.05: 97
+spray:late|f3 shownReachMag                      n=394 med=0.000 p95=0.000 max=0.050 >0.05: 2
+spray:late|f4 drawnBall-vs-shownArm              n=394 med=0.016 p95=0.158 max=0.395 >0.05: 139
+spray:late|f4 shownReachMag                      n=394 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:late|f5 drawnBall-vs-shownArm              n=394 med=0.027 p95=0.200 max=0.473 >0.05: 162
+spray:late|f5 shownReachMag                      n=394 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:late|f6 drawnBall-vs-shownArm              n=394 med=0.034 p95=0.250 max=0.541 >0.05: 173
+spray:late|f6 shownReachMag                      n=394 med=0.000 p95=0.000 max=0.000 >0.05: 0
+spray:late|preReachMag                           n=394 med=0.071 p95=0.210 max=0.274 >0.05: 298
+x3 exit 0

@@ -17,7 +17,7 @@ const motionOnly = process.argv.includes('--motion');
 const assistOnly = process.argv.includes('--assist');
 const passOnly = process.argv.includes('--pass');
 const FEED_DELAY = 90; // direct-v7 A24a countdown, ticks
-const VERSION = 'direct-v8.1';
+const VERSION = 'direct-v8.2';
 // DIRECT_VIEWPORTS=desktop[,landscape,portrait] limits the viewports (round-4 old-code red run only; the evidence runs use all three).
 const VIEWPORTS = [['desktop', 1280, 720], ['landscape', 844, 390], ['portrait', 390, 844]].filter(([name]) => (process.env.DIRECT_VIEWPORTS || 'desktop,landscape,portrait').split(',').includes(name));
 // The practice assignment lives in the settings panel (direct-v8, R10).

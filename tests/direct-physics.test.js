@@ -364,7 +364,7 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
     serializeDirectState(s),
     serializeDirectState(
       replayDirectTape({
-        simulationVersion: "direct-v8.1",
+        simulationVersion: "direct-v8.2",
         initial,
         commands,
         endTick: 100,
@@ -389,6 +389,10 @@ test("replay and mid-flight restore are byte-identical with active input", () =>
   );
   assert.throws(() =>
     restoreDirectGame({ ...initial, simulationVersion: "direct-v7" }),
+  );
+  // direct-v8.2 (round 6, X2): the previous public version is refused too.
+  assert.throws(() =>
+    restoreDirectGame({ ...initial, simulationVersion: "direct-v8.1" }),
   );
   assert.throws(() =>
     replayDirectTape({

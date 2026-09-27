@@ -2,13 +2,15 @@
 // 修訂紀錄 W1–W3 of 2026-09-28). The grids are the reviewer's probes (pen2,
 // snapdist, second) moved into the repo; tests/direct-v8-round5.test.js asserts
 // on what these return. Read-only: fresh games are stepped, nothing is written.
-// The file runs on the archived old code (c6a5c67) too: it imports only what
-// exists there, so a red there comes from behaviour, not from a missing import.
+// The round-5 evidence ran this file on the archived old code (c6a5c67), which
+// it imported nothing new from; since round 6 (X3) secondContacts also uses the
+// practice page's own reach easing (src/app/directPicture.js, new in round 6).
 // Usage: node tools/direct-v8-round5-probes.mjs [penetration|snap-distance|second-contact]
 import { createDirectGame, stepDirectGame, getDirectPose } from '../src/sim/directGame.js';
 import { resolveHitAction } from '../src/sim/directReceiveRules.js';
 import { DIRECT_PHYSICS as C } from '../src/sim/directConstants.js';
 import { closestPoint } from '../src/sim/directPhysics.js';
+import { easeReach } from '../src/app/directPicture.js';
 import { CHASE } from './receive-assist-probe.mjs';
 import { diveInCircle } from './direct-v8-round4-probes.mjs';
 
@@ -93,20 +95,40 @@ export function snapDistances() {
 // (pressed). For each, the gap from the ball to the nearest surface of the
 // DRAWN pose at the collision: > 2 cm means the ball bounced off an arm the
 // picture does not show there (the un-reached collision arm). Also checks the
-// invariant behind it: on the judgement tick the reach is zero and the ball
-// sits on the arms of the drawn pose and of the no-reach pose alike.
+// invariant behind it: on the judgement tick the sim's reach is zero and the
+// ball sits on the arms of the no-reach pose.
+// X3 (round 6, 2026-09-28): what the practice page actually draws after the
+// judgement is not the zeroed sim reach but its own eased value — the last
+// drawn reach (= the sim's reach at the end of the previous tick, `prev`)
+// brought toward the sim's by easeReach, one frame per tick. That sequence is
+// measured on the judgement state: the largest per-frame change, the frames
+// until the drawn reach equals the sim's, and the ball's gap to the arms drawn
+// on the judgement frame and on the frame the drawn reach settles.
 export function secondContacts() {
   const gapTo = (ball, pose) => Math.min(...pose.map((q) => { const c = closestPoint(ball, q.a, q.b); return Math.hypot(ball.x - c.x, ball.y - c.y, ball.z - c.z) - q.radius - ball.radius; }));
   const armGap = (ball, pose) => Math.max(0, gapTo(ball, pose.filter((q) => q.part === 'forearm' || q.part === 'hand')));
+  const pictureReach = (s, prev) => {
+    const sim = { side: s.player.receiveReach ?? 0, ahead: s.player.receiveAhead ?? 0 };
+    const gap = (shown) => armGap(s.ball, getDirectPose(s, 0, { reach: shown }));
+    let shown = prev, maxStep = 0, settled = null, frame0Gap = null;
+    for (let f = 0; f <= 20 && settled === null; f++) {
+      const next = easeReach(shown, sim);
+      maxStep = Math.max(maxStep, Math.abs(next.side - shown.side), Math.abs(next.ahead - shown.ahead));
+      shown = next;
+      if (f === 0) frame0Gap = gap(shown);
+      if (shown.side === sim.side && shown.ahead === sim.ahead) settled = f;
+    }
+    return { reachedBefore: Math.hypot(prev.side, prev.ahead) > 0, maxStep, settled, frame0Gap, settledGap: gap(shown) };
+  };
   let runs = 0, judged = 0, second = 0; const invisible = [], judgementRows = [];
   for (const c of chaseGrid(['auto'], STARTS3)) {
-    let state = 'before';
+    let state = 'before', prev = { side: 0, ahead: 0 };
     chaseRun(c, (s) => {
       for (const e of s.events) {
         if (e.type !== 'contact') continue;
         if (state === 'before' && (e.tier || e.spray)) {
           state = 'judged'; judged++;
-          judgementRows.push({ reach: Math.abs(s.player.receiveReach ?? 0) + Math.abs(s.player.receiveAhead ?? 0), drawn: armGap(s.ball, getDirectPose(s)), base: armGap(s.ball, getDirectPose(s, 0, { reach: false })) });
+          judgementRows.push({ reach: Math.abs(s.player.receiveReach ?? 0) + Math.abs(s.player.receiveAhead ?? 0), base: armGap(s.ball, getDirectPose(s, 0, { reach: false })), ...pictureReach(s, prev) });
           continue;
         }
         if (state === 'judged') {
@@ -115,10 +137,16 @@ export function secondContacts() {
           if (gap > 0.02) invisible.push({ feed: [c.f.vx, c.f.vy, c.f.vz], start: [c.px, c.pz], err: [c.ex, c.ez], off: c.off, part: e.part, gap: +gap.toFixed(3) });
         }
       }
+      prev = { side: s.player.receiveReach ?? 0, ahead: s.player.receiveAhead ?? 0 };
     });
     runs++;
   }
-  return { runs, judged, second, invisible, judgement: { reachNonZero: judgementRows.filter((r) => r.reach > 0).length, maxDrawnArmGap: Math.max(...judgementRows.map((r) => r.drawn)), maxBaseArmGap: Math.max(...judgementRows.map((r) => r.base)) } };
+  const max = (key) => Math.max(...judgementRows.map((r) => r[key]));
+  return { runs, judged, second, invisible, judgement: {
+    reachNonZero: judgementRows.filter((r) => r.reach > 0).length, maxBaseArmGap: max('base'),
+    reachedBefore: judgementRows.filter((r) => r.reachedBefore).length, maxReachStepPerFrame: max('maxStep'),
+    maxFramesToSettle: judgementRows.some((r) => r.settled === null) ? null : max('settled'),
+    judgementFrameGap: max('frame0Gap'), maxDrawnArmGap: max('settledGap') } };
 }
 
 if (process.argv[1]?.endsWith('direct-v8-round5-probes.mjs')) {

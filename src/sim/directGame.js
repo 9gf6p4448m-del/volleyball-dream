@@ -5,7 +5,7 @@ import {
   DIRECT_ACTIONS,
   RECEIVE_ASSIST,
 } from "./directConstants.js";
-import { getDirectPose, diveThrown } from "./directPose.js";
+import { getDirectPose, diveThrown, actionDef } from "./directPose.js";
 import { collideBody, bodySeparated, firstEnvironmentHit } from "./directPhysics.js";
 import { createJudge, judgeTick, ruleGhost, nextJudgement, diveTargetFor, diveLaunchSpeed, diveReachFor, missInfo, receiveReachTarget } from "./directReceiveRules.js";
 export { DIRECT_DT, SIMULATION_VERSION, getDirectPose };
@@ -387,7 +387,9 @@ export function stepDirectGame(s, commands = []) {
   }
   if (p.action) {
     p.actionTick++;
-    const d = DIRECT_ACTIONS[p.action];
+    // An un-thrown dive (U2) runs the receive's 32 ticks (actionDef), so the
+    // stick is back in charge as soon as a receive would be (round 5 NEW-A 甲).
+    const d = actionDef(p);
     if (p.actionTick >= d.windup + d.active + d.recovery) {
       p.action = null;
       p.actionTick = 0;

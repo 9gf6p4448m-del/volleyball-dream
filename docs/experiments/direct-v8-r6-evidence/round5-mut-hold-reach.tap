@@ -1,0 +1,32 @@
+✔ W1 追球網格 5292 局：球與畫面上可見前臂／手掌重疊、之後無觸球落地的局數 ≤ 5（舊碼 0e72fd4 基準），最大重疊深度 ≤ 0.168 m（舊碼最大值） (55738.8094ms)
+✔ W2 判定格瞬移：按魚躍而球在高手／低手圈內（U2）的每一例 snapFrom→position ≤ 1.2 m；其餘類別也 ≤ 1.2 m (93182.9068ms)
+✖ W3 判定後不撞看不見的手臂：追球網格有按 2646 局，第二次身體碰撞時球離畫面姿勢任一表面 ≤ 2 cm 的例外 = 0；判定那一格 sim 迎球為 0、球貼在無迎球姿勢的手臂上（≤ 0.05 m）；X3：畫面自己緩回的迎球每幀變化 ≤ 步長、在迎球上限／步長的幀數內回到 sim 值，回到那一幀球貼在畫面手臂上（≤ 0.05 m） (34084.6009ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 183133.4301
+
+✖ failing tests:
+
+test at tests\direct-v8-round5.test.js:44:1
+✖ W3 判定後不撞看不見的手臂：追球網格有按 2646 局，第二次身體碰撞時球離畫面姿勢任一表面 ≤ 2 cm 的例外 = 0；判定那一格 sim 迎球為 0、球貼在無迎球姿勢的手臂上（≤ 0.05 m）；X3：畫面自己緩回的迎球每幀變化 ≤ 步長、在迎球上限／步長的幀數內回到 sim 值，回到那一幀球貼在畫面手臂上（≤ 0.05 m） (34084.6009ms)
+  AssertionError [ERR_ASSERTION]: 畫面迎球 20+ 幀仍未回到 sim 值（上限 5 幀；保持伸出）
+      at TestContext.<anonymous> (file:///C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/b611e1c3-cb6d-40b3-94b3-ee053003c6ba/scratchpad/v8-r6/mut-hold/tests/direct-v8-round5.test.js:56:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1

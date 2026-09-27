@@ -8,6 +8,8 @@ import { DIRECT_PHYSICS, DIRECT_ACTIONS, RECEIVE_ASSIST } from '../sim/directCon
 import { platformNormal } from '../sim/directPhysics.js';
 import { nextJudgement, resolveHitAction, slowMotionScale, techniquePoint, underRadius } from '../sim/directReceiveRules.js';
 import { contactReason, missReason, GRADE_LABELS } from './directReceiveReasons.js';
+import { actionDef, diveThrown } from '../sim/directPose.js';
+import { easeReach } from './directPicture.js';
 import './directPractice.css';
 
 const FEED_DELAY = 90; // ticks (1.5 s) from pressing feed to the ball
@@ -20,11 +22,9 @@ const MAX_TAPE_TICKS = 36000;
 // the sim ball by at most this much per rendered frame. Picture only: the sim
 // never reads it, and the recorded tape is the same with it on or off.
 const SNAP_SMOOTH_STEP = 0.12; // metres per rendered frame
-// W3 (2026-09-28): the judgement zeroes the receive reach in one tick (the
-// ball sits on the un-reached arms). The drawn arms follow the sim's reach at
-// the sim's own rate, so they never lag it, except that a one-tick drop eases
-// back over a few frames. Picture only.
-const REACH_EASE_STEP = DIRECT_PHYSICS.receiveReachSpeed / 60; // body heights per rendered frame
+// W3 (2026-09-28): the drawn receive reach eases back after the judgement
+// zeroed the sim's in one tick — the rule lives in directPicture.js (easeReach),
+// shared with the test that measures it (round 6, X3). Picture only.
 const PART_LABELS = { head: '頭部', hand: '手掌', forearm: '前臂', arm: '上臂', torso: '軀幹', leg: '腿部' };
 const HINT_IDLE = '走到球路上，讓接球圈套住球的觸球點，外圈變金色就按出手；圈外的球出手鍵會自動改成魚躍 · 扣球時上滑吊球、下滑直線、左右滑斜線';
 
@@ -344,10 +344,8 @@ export function runDirectPractice(ctx) {
     return { frames: frameTimes.length, fps: average ? 1000 / average : 0, frameP95: percentile(frameTimes), simP95: percentile(simTimes), backlogMs: accumulator * 1000, maxBacklogMs: maxBacklog * 1000, drawCalls: ctx.renderer.info.render.calls, slowMotionTicks };
   }
   function draw(dt = 0) {
-    const ease = (from, to) => from + Math.max(-REACH_EASE_STEP, Math.min(REACH_EASE_STEP, to - from));
-    shownReach = $('[data-smooth]').checked
-      ? { side: ease(shownReach.side, state.player.receiveReach ?? 0), ahead: ease(shownReach.ahead, state.player.receiveAhead ?? 0) }
-      : { side: state.player.receiveReach ?? 0, ahead: state.player.receiveAhead ?? 0 };
+    const simReach = { side: state.player.receiveReach ?? 0, ahead: state.player.receiveAhead ?? 0 };
+    shownReach = $('[data-smooth]').checked ? easeReach(shownReach, simReach) : simReach;
     view.sync(getDirectPose(state, 0, { reach: shownReach }));
     // No interpolation of collision-bearing body or ball: both show the same
     // completed tick — except the U3 snap offset, which is picture only.
@@ -436,9 +434,10 @@ export function runDirectPractice(ctx) {
     if (now - lastReport > 300) {
       const m = metrics();
       $('[data-status]').textContent = `${playback ? '回放' : paused ? '暫停' : '訓練'} · 觸球 ${state.stats.contacts} · 餵球 ${state.stats.feeds} · ${m.fps.toFixed(0)} FPS`;
-      const action = DIRECT_ACTIONS[state.player.action];
+      // The phases follow the sim's own durations (an un-thrown dive, U2, runs the receive's 32 ticks; round 6 X1).
+      const action = actionDef(state.player);
       $('[data-hint]').textContent = action
-        ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中' : state.player.action === 'dive' ? '倒地起身中' : '收招中'}`
+        ? `${state.player.action === 'spike' ? SHOT_LABELS[state.player.shotType] ?? '扣球' : ACTION_LABELS[state.player.action]} · ${state.player.actionTick < action.windup ? '準備中' : state.player.actionTick < action.windup + action.active ? '出手中' : diveThrown(state.player) ? '倒地起身中' : '收招中'}`
         : HINT_IDLE;
       $('[data-metrics]').textContent = `frame p95 ${m.frameP95.toFixed(2)} ms\nsim p95 ${m.simP95.toFixed(2)} ms\nbacklog ${m.backlogMs.toFixed(1)} ms / max ${m.maxBacklogMs.toFixed(1)} ms\ndraw calls ${m.drawCalls}\n本裝置短時量測，非整場六對六驗收`;
       lastReport = now;
