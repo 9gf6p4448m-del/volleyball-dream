@@ -332,7 +332,7 @@ npm-test-baseline-ac41969.log`），與本次改動無關。
 
 ### commit
 
-見下方「commit SHA 清單」新增的最後一筆。
+`dacc27a`（見下方「commit SHA 清單」新增的最後一筆）。
 
 `git diff --stat ac41969..HEAD`：**36 files changed, 1426955 insertions(+), 10
 deletions(-)**（大宗為 evidence 截圖 PNG 與 `sessions-raw.json`/`npm-test-final.log`
@@ -353,6 +353,7 @@ real-match-report.md`（本檔）。
 - `2a8464f` fix(real-match): 治具 B2/B6 false-positive／false-negative 修正＋B2/B3/B5/B6 突變驗紅
 - `99c7f62` fix(real-match): 治具排除精華重演狀態污染取樣＋B1 UI 全流程驗證通過
 - `5a2b782` docs(real-match): 2A 驗收 B1-B10/B12 最終產出＋治具 B12 tick 精度修正（本次收尾）
+- `dacc27a` fix(real-match): 身高縮放被每幀寫死 1 蓋掉＋H1 驗收治具檢查＋鑑別力驗證
 
 ## git status
 
