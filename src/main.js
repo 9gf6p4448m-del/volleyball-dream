@@ -124,6 +124,10 @@ async function init() {
     // 寫實球員卷 第一階段：Modly 白模預覽（獨立場景，不碰正式賽場；&faces=5k 切減面版）
     const { runRealPreview } = await import('./app/realPreview.js');
     await runRealPreview(ctx);
+  } else if (params.get('mode') === 'divelab') {
+    // 魚躍提案預覽（feat/dive-proposals）：單人反覆播 ?dive=a|b|c|now，&fig=real 換寫實人
+    const { runDiveLab } = await import('./app/diveLab.js');
+    await runDiveLab(ctx);
   } else if (params.get('devkit') === '1') {
     // 配色卷批 1 治具：?devkit=1 全隊球衣預覽（16 隊卡片＋3D 舞台）——
     // 題 3 色票裁定工具兼驗收 K6 量測工具；動態載入，不進正常路徑的 bundle 熱路

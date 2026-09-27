@@ -2,6 +2,8 @@
 // 取代 Mixamo 疊加層：關節軸向自訂（肩/髖 x 負＝往前擺、spine x 正＝前傾），
 // 動作＝分段關鍵姿勢插值（引臂→觸球→收勢，時長沿用實測調參值）＋跑動/待命循環
 // 【試玩必調】角度全在 POSES、時序全在 SEQUENCES
+import { DIVE_PROPOSAL_POSES, DIVE_PROPOSAL_SEQUENCES } from './diveStyles.js';
+
 const RUN_FULL_SPEED = 4.5;  // 此移速＝跑姿權重 1
 const STRIDE_BASE = 5.0;     // 步頻底速（rad/s）
 const STRIDE_PER_MS = 2.4;   // 每 m/s 增加的步頻
@@ -146,6 +148,8 @@ const POSES = {
   tipReach: { rSh: [-2.85, -0.06], lSh: [-0.6, 0.2], rEl: 0, lEl: -0.3, spine: 0.06, neck: -0.1, spineUp: 0.1, pelvisY: 0.04, wrist: -0.25 },
   tipHit: { rSh: [-2.72, -0.04], lSh: [-0.4, 0.15], rEl: -0.12, lEl: -0.2, spine: 0.16, neck: -0.05, spineUp: 0.15, pelvisY: 0.0, wrist: 0.35 },
   tipFollow: { rSh: [-1.2, 0.14], lSh: [-0.3, 0.1], rEl: -0.3, lEl: -0.15, spine: 0.26, neck: 0.05, spineUp: 0.08, wrist: 0.1 },
+  // 魚躍提案（feat/dive-proposals）：只在 ?dive=a|b|c 下被 matchView 觸發，預設遊戲不會播到
+  ...DIVE_PROPOSAL_POSES,
 };
 
 // 動作序列（at: 0..1；jump=跳高 m；時長為既有實測調參值，勿隨意動）
@@ -332,6 +336,8 @@ const SEQUENCES = {
   // 4.5B §4：揮手喊球（舉臂左右擺兩拍）＋攔網手點頭確認（快而小）
   wave: { dur: 0.9, jump: 0, land: false, keys: [{ at: 0, p: 'waveUp' }, { at: 0.25, p: 'waveSide' }, { at: 0.5, p: 'waveUp' }, { at: 0.75, p: 'waveSide' }, { at: 1, p: 'waveUp' }] },
   nod: { dur: 0.45, jump: 0, land: false, keys: [{ at: 0, p: 'nodNeutral' }, { at: 0.4, p: 'nodDown' }, { at: 1, p: 'nodNeutral' }] },
+  // 魚躍提案序列（dur 0.72／jump 0／無 hit，與 dive 同時序；只在 ?dive=a|b|c 下觸發）
+  ...DIVE_PROPOSAL_SEQUENCES,
 };
 
 // 擊球關鍵幀查表（唯讀導出；matchLoop 的提前量與探針/測試的目標值都吃這一份，
@@ -455,6 +461,18 @@ export function createGeoAnimator(rig) {
     for (const k of ['pelvisY', 'chestY']) {
       const v = lerp(poseVal(pa, k), poseVal(pb, k), f);
       out[k] = handed === 'l' ? -v : v;
+    }
+    // 魚躍提案新增：左右腿髖／膝 x 偏移（疊加在 crouch 換算值上）。只有 DIVE_PROPOSAL_POSES
+    // 宣告，其餘姿勢缺欄位＝0（lerp(0,0,f) 恆為 0，既有姿勢逐值不變）；左手鏡像＝左右對調
+    for (const outKey of ['rHipX', 'lHipX', 'rKneeX', 'lKneeX']) {
+      const srcKey = handed === 'l' ? (outKey[0] === 'r' ? 'l' : 'r') + outKey.slice(1) : outKey;
+      out[outKey] = lerp(poseVal(pa, srcKey), poseVal(pb, srcKey), f);
+    }
+    // 髖 z（外展，蛙腿式側收膝）同上；鏡像時左右對調並取反（外展方向相反）
+    for (const outKey of ['rHipZ', 'lHipZ']) {
+      const srcKey = handed === 'l' ? (outKey[0] === 'r' ? 'lHipZ' : 'rHipZ') : outKey;
+      const v = lerp(poseVal(pa, srcKey), poseVal(pb, srcKey), f);
+      out[outKey] = handed === 'l' ? -v : v;
     }
   }
 
@@ -666,8 +684,8 @@ export function createGeoAnimator(rig) {
         j.lKnee.rotation.x = 0.12 + 0.14 * idleW + crouch * 2.2 + (stepInfo.lead === 'l' ? sw * 0.5 : 0);
       } else {
         // 腿：跑動擺動＋下蹲屈膝（動作層的 crouch 轉成膝/髖角度——蹲得像蹲不像沉地）
-        j.rHip.rotation.x = -legSwing * s - crouch * 1.1;
-        j.lHip.rotation.x = legSwing * s - crouch * 1.1;
+        j.rHip.rotation.x = -legSwing * s - crouch * 1.1 + (pose ? blended.rHipX * w : 0);
+        j.lHip.rotation.x = legSwing * s - crouch * 1.1 + (pose ? blended.lHipX * w : 0);
         // 側併步（07-28 重做；Sawmah 回報「橫移時雙腿很不自然」）：
         // 舊版兩髖 z **同號**＝兩條腿一起倒向同一邊，只是幅度輪流大小——那不是併步。
         // geoCharacter.js:161-162 兩髖同向建立（只差位置 sx*0.095，無鏡像旋轉），
@@ -690,6 +708,12 @@ export function createGeoAnimator(rig) {
           + 0.14 * idleW + crouch * 2.2 + shuffleCrouch;
         j.lKnee.rotation.x = (0.12 + Math.max(0, s) * 0.95 * walkKnee) * runW
           + 0.14 * idleW + crouch * 2.2 + shuffleCrouch;
+        if (pose) { // 魚躍提案的腿部偏移（既有姿勢恆 0，見 blendKeys）
+          j.rKnee.rotation.x += blended.rKneeX * w;
+          j.lKnee.rotation.x += blended.lKneeX * w;
+          j.rHip.rotation.z += blended.rHipZ * w;
+          j.lHip.rotation.z += blended.lHipZ * w;
+        }
       }
 
       // 軀幹/頭（4.7：脊椎兩節＋骨盆獨立轉——髖肩分離與弓身的來源）
