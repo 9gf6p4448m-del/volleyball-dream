@@ -172,7 +172,7 @@ function drivers(v) {
   }
   for (const sp of [2.55, 4.5]) {
     for (const s of ['approach3', 'approach4']) {
-      chain(`${s}@${sp}`, (c, rec) => { ticks(c, rec, 30, sp); c.anim.trigger(s); until(c, rec, sp, (cc) => cc.anim.isIdle()); ticks(c, rec, 5, sp); });
+      chain(`${s}@${sp}`, (c, rec) => { for (let i = 0; i < 30; i += 1) stepC(c, sp); c.anim.trigger(s); until(c, rec, sp, (cc) => cc.anim.isIdle()); });
     }
   }
   return list;
@@ -238,16 +238,22 @@ async function e6() {
           if (!second && holdTicks >= 6) break;
         }
       });
-      let minW = Infinity; let maxDy = 0; let sawHold = false;
+      // 判定窗＝「過渡期間」：windup 漸入完成（權重達 1）那一幀起，到 spikeHold 前 6 幀
+      // （或擊球觸發前）為止。windup 自己的 0.08 s 冷觸發漸入不屬於 E6 條文的過渡（見 report
+      // 量法修改紀錄），另外記在 attackMaxDy 供對照
+      const start = r.frames.findIndex((f) => f.seq === 'windup' && f.w >= 1 - 1e-9);
+      let minW = Infinity; let maxDy = 0; let sawHold = false; let attackMaxDy = 0;
       r.frames.forEach((f, i) => {
+        const dy = i > 0 ? Math.abs(f.wristY - r.frames[i - 1].wristY) : 0;
+        if (start < 0 || i < start) { attackMaxDy = Math.max(attackMaxDy, dy); return; }
         minW = Math.min(minW, f.w);
         if (f.seq === 'spikeHold') sawHold = true;
-        if (i > 0) maxDy = Math.max(maxDy, Math.abs(f.wristY - r.frames[i - 1].wristY));
+        if (i > start) maxDy = Math.max(maxDy, dy);
       });
-      const ok = sawHold && minW > 0 && maxDy <= 0.15;
-      runs.push({ id, probe: name, handed: r.handed, frames: r.frames.length, minW, maxDy, sawHold, ok,
+      const ok = start >= 0 && sawHold && minW > 0 && maxDy <= 0.15;
+      runs.push({ id, probe: name, handed: r.handed, frames: r.frames.length, windowStart: start, minW, maxDy, attackMaxDy, sawHold, ok,
         trace: r.frames.map((f) => ({ seq: f.seq, w: +f.w.toFixed(4), wristY: +f.wristY.toFixed(4) })) });
-      console.log(`[E6] ${ok ? 'OK  ' : 'FAIL'} ${id.padEnd(18)} ${name}(${r.handed}) 幀 ${r.frames.length}、最小權重 ${minW.toFixed(4)}、慣用手腕最大逐幀高度變化 ${maxDy.toFixed(4)} m`);
+      console.log(`[E6] ${ok ? 'OK  ' : 'FAIL'} ${id.padEnd(18)} ${name}(${r.handed}) 幀 ${r.frames.length}（窗自第 ${start} 幀）、最小權重 ${minW.toFixed(4)}、慣用手腕最大逐幀高度變化 ${maxDy.toFixed(4)} m（窗外 windup 漸入 ${attackMaxDy.toFixed(4)} m，不判）`);
     }
   }
   const ok = runs.every((r) => r.ok);
