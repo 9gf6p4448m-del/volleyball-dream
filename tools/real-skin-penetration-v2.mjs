@@ -15,6 +15,9 @@
 //  ・深度（照舊）：p 到「被穿入表面」最近三角形的精確距離（Ericson, Real-Time Collision Detection 5.1.5）。
 //  ・被穿入表面（與舊版相同）：(b) S_b＝lib.bindRegions 的 torsoTris；(e) S_e＝三頂點主骨（skinWeight 最大者）
 //    皆 ∈ {pelvis, rHip, lHip} 的三角形（與 tools/real-skin-thigh.mjs 同規則）。手臂頂點＝R.armVerts。
+//  ・R3 起一律讀**凍結集合** tools/real-skin-frozen-sets.json（8720597 上以上述規則算好、按三角形／頂點索引落檔；
+//    產生器 tools/real-skin-freeze-sets.mjs），不隨實作的新權重或地標重算；完整性（每集合 sha256）、三角形數、
+//    綁定位置雜湊任一不符即報錯。loadSetup(faces, { live: true }) 才用現行規則即時計算（只供產生凍結檔）。
 //  ・分區（照舊）：手臂部位 → 最近 S 三角形的綁定質心高度（胸 ≥1.15、腹 0.95–1.15、臀腿 <0.95）。
 // 姿勢與蒙皮一律走 lib 的 makeReal／driveKey／skinPositions（src/render/realPlayer.js＋geoAnimator 真實路徑），
 // 不重抄蒙皮、不改 lib。同表另列舊量法（lib.metricPenetration）的值供對照。
@@ -233,19 +236,91 @@ export function installNodeFetch() {
   globalThis.__rsV2Fetch = true;
 }
 export const MODS = { THREE, rp, ga, gc };
-export async function loadSetup(faces) {
+export const FROZEN_URL = new URL('./real-skin-frozen-sets.json', import.meta.url);
+// 開口邊：只被一個子集三角形使用的邊（與 lib.bindRegions／hipSurface 同判法）
+export function surfaceBoundary(R, tris) {
+  const count = new Map();
+  for (const t of tris) {
+    for (let e = 0; e < 3; e += 1) {
+      const k = R.ek(R.index[t * 3 + e], R.index[t * 3 + ((e + 1) % 3)]);
+      count.set(k, (count.get(k) || 0) + 1);
+    }
+  }
+  const boundaryEdge = new Set();
+  const boundaryVert = new Uint8Array(R.n);
+  for (const [k, c] of count) {
+    if (c !== 1) continue;
+    boundaryEdge.add(k);
+    boundaryVert[Math.floor(k / 1048576)] = 1; boundaryVert[k % 1048576] = 1;
+  }
+  return { boundaryEdge, boundaryVert };
+}
+// 綁定位置雜湊：前 nVerts 個頂點的 Float32 位元組（splitBridges 若多出複製頂點只會接在尾端）
+export function bindPosSha(P, nVerts) {
+  return createHash('sha256').update(Buffer.from(P.buffer, P.byteOffset, nVerts * 12)).digest('hex').slice(0, 16);
+}
+// 凍結檔每個欄位的 sha256（完整 64 碼）：集合＝排序後 Int32 ID（前 12 碼＝setPrint 的集合指紋）；其餘＝該欄 JSON 字串
+export function frozenShas(F) {
+  const ids = (a) => createHash('sha256').update(Buffer.from(Int32Array.from([...a].sort((x, y) => x - y)).buffer)).digest('hex');
+  const js = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+  return {
+    Sb: ids(F.Sb.tris), Se: ids(F.Se.tris), armR: ids(F.arm.r), armL: ids(F.arm.l), SbVerts: ids(F.SbVerts.ids),
+    armRPart: js(F.arm.rPart), armLPart: js(F.arm.lPart), SbMainBone: js(F.SbVerts.mainBone), SbNormal: js(F.SbVerts.normal), SeVerts: js(F.Se.verts),
+  };
+}
+// 讀凍結檔並驗每個欄位的 sha256（完整性）；任一不符或缺欄即報錯停止
+export async function loadFrozen(url = FROZEN_URL) {
+  const buf = await readFile(fileURLToPath(url));
+  let fz;
+  try { fz = JSON.parse(buf.toString('utf8')); } catch (e) { throw new Error(`凍結檔 ${fileURLToPath(url)} 不是合法 JSON：${e.message}`); }
+  for (const faces of ['20k', '5k']) {
+    const F = fz[faces];
+    if (!F?.sha) throw new Error(`凍結檔缺 ${faces} 或其 sha 欄`);
+    let got;
+    try { got = frozenShas(F); } catch (e) { throw new Error(`凍結檔 ${faces} 缺欄位：${e.message}`); }
+    for (const [k, v] of Object.entries(got)) {
+      if (v !== F.sha[k]) throw new Error(`凍結集合 ${faces}.${k} 的 sha256 與內容不符（檔案被改過？）`);
+    }
+    if (F.SbVerts.normal.length !== F.SbVerts.ids.length * 3 || F.SbVerts.mainBone.length !== F.SbVerts.ids.length
+      || F.arm.rPart.length !== F.arm.r.length || F.arm.lPart.length !== F.arm.l.length) throw new Error(`凍結檔 ${faces} 欄位長度不一致`);
+  }
+  const fileSha = createHash('sha256').update(Buffer.from(buf.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
+  return { fz, fileSha };
+}
+// 把凍結集合套到當前白模：被穿入表面、手臂頂點（含左右與部位）都換成凍結的
+export function applyFrozen(R, F) {
+  if (R.index.length / 3 !== F.tris) throw new Error(`凍結集合與白模不相容：三角形 ${R.index.length / 3} ≠ ${F.tris}`);
+  if (R.n < F.verts || bindPosSha(R.P, F.verts) !== F.bindPosSha) throw new Error('凍結集合與白模不相容：綁定位置不同');
+  const armSide = new Int8Array(R.n); const armPart = new Int8Array(R.n);
+  F.arm.r.forEach((i, k) => { armSide[i] = -1; armPart[i] = F.arm.rPart[k]; });
+  F.arm.l.forEach((i, k) => { armSide[i] = 1; armPart[i] = F.arm.lPart[k]; });
+  const bB = surfaceBoundary(R, F.Sb.tris);
+  const R2 = { ...R, armVerts: { r: F.arm.r, l: F.arm.l }, armSide, armPart, torsoTris: F.Sb.tris, boundaryEdge: bB.boundaryEdge, boundaryVert: bB.boundaryVert };
+  const Sb = torsoSurface(R2);
+  const bE = surfaceBoundary(R2, F.Se.tris);
+  const Se = { name: '(e) 骨盆＋大腿', tris: F.Se.tris, boundaryEdge: bE.boundaryEdge, boundaryVert: bE.boundaryVert, verts: F.Se.verts };
+  return { R: R2, Sb, Se };
+}
+// live＝現行規則即時計算（只供產生凍結檔）；rpMod＝要載入的 realPlayer 模組（預設 src 現行版）
+export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   installNodeFetch();
   const glbUrl = new URL(`../public/models/real/player_${faces}.glb`, import.meta.url);
-  const asset = await rp.loadRealPlayerAsset(glbUrl.href);
-  const R = lib.bindRegions(asset, rp.LANDMARKS);
-  const Sb = torsoSurface(R);
-  const Se = hipSurface(asset, rp.BONES, R);
+  const asset = await rpMod.loadRealPlayerAsset(glbUrl.href);
+  const R0 = lib.bindRegions(asset, rpMod.LANDMARKS);
+  let R; let Sb; let Se; let frozen = null;
+  if (live) {
+    R = R0; Sb = torsoSurface(R); Se = hipSurface(asset, rpMod.BONES, R);
+  } else {
+    frozen = await loadFrozen();
+    ({ R, Sb, Se } = applyFrozen(R0, frozen.fz[faces]));
+  }
   const RH = { ...R, torsoTris: Se.tris, boundaryEdge: Se.boundaryEdge, boundaryVert: Se.boundaryVert }; // 舊量法 (e) 用
-  return { faces, glbUrl, asset, R, Sb, Se, RH };
+  return { faces, glbUrl, asset, R, Sb, Se, RH, frozen, mods: { THREE, rp: rpMod, ga, gc } };
 }
 export function poseKey(setup, key) {
-  const real = lib.makeReal(MODS, setup.asset);
-  const pk = lib.driveKey(MODS, [real], key);
+  const mods = setup.mods ?? MODS;
+  const real = lib.makeReal(mods, setup.asset);
+  const pk = lib.driveKey(mods, [real], key);
   const P1 = lib.skinPositions(THREE, real.p);
   const N1 = lib.vertexNormals(P1, setup.R.index);
   return { real, pk, P1, N1 };
@@ -280,6 +355,7 @@ if (isMain) {
     ['real-skin-lib.mjs', './real-skin-lib.mjs'], ['real-skin-penetration-v2.mjs', './real-skin-penetration-v2.mjs']]) {
     hashes[k] = await sha12(new URL(rel, import.meta.url));
   }
+  hashes['real-skin-frozen-sets.json'] = setup.frozen ? setup.frozen.fileSha.slice(0, 12) : '（live 模式，未讀凍結檔）';
   // 自我檢查：①S 的方向一致 ②綁定姿勢下骨盆地標在內、遠點在外（外法線方向正確）
   const P0 = R.P;
   const T0b = surfaceArrays(P0, R.index, Sb.tris); const T0e = surfaceArrays(P0, R.index, Se.tris);
