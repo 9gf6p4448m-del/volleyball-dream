@@ -1,0 +1,27 @@
+# real-skin-torso-drag (f) 軀幹面被手臂拖動（faces=5k，variant=heatUpper）
+量法：凍結 S_b 頂點中 8720597 主骨屬 pelvis／spine／spineUpper 者；剛性參考＝該骨當幀蒙皮矩陣×綁定位置；往內位移＝(蒙皮後−剛性參考)·(−剛性參考法線)
+輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs bb278a710140、real-skin-torso-drag.mjs 328a3143e694、real-skin-heat.mjs fd4c22829bd4、real-skin-frozen-sets.json 9a8a840b55eb
+頂點（凍結 S_b 669，依 8720597 主骨）：計入 647（pelvis 375、spine 188、spineUpper 84）、主骨非軀幹不計 22（rHip 5、lHip 3、rShoulder 4、lShoulder 10）
+| 幀 | 序列 | 往內 >2 cm 頂點數 | 最大往內位移 cm | 最大處（主骨、綁定 y m） |
+|---|---|---|---|---|
+| K1a | spikeHold | 478 | 17.6 | spine、1.356 |
+| K1b | spike | 302 | 13.1 | spine、1.368 |
+| K2a | 待命 | 258 | 8.5 | spine、1.314 |
+| K2b | serveJump | 387 | 16.4 | spine、1.389 |
+| K3a | 待命 | 226 | 7.0 | pelvis、0.793 |
+| K3b | 待命 | 209 | 7.3 | pelvis、0.767 |
+| K4a | 待命 | 153 | 5.5 | spine、1.26 |
+| K4b | receiveReady | 336 | 7.8 | spine、1.314 |
+| K4c | bump | 323 | 9.3 | spine、1.314 |
+
+## S11 門檻（對照 f-base-5k.json：每幀 >2 cm 點數 ≤ 現況＋30、最大往內位移 ≤ 現況＋1 cm，位移比 0.1 cm）
+- K1a：不過（點數 478 vs 上限 146 ✗；最大 17.6 vs 上限 14.3 cm ✗）
+- K1b：不過（點數 302 vs 上限 96 ✗；最大 13.1 vs 上限 10.2 cm ✗）
+- K2a：不過（點數 258 vs 上限 47 ✗；最大 8.5 vs 上限 5.7 cm ✗）
+- K2b：不過（點數 387 vs 上限 127 ✗；最大 16.4 vs 上限 13.0 cm ✗）
+- K3a：不過（點數 226 vs 上限 52 ✗；最大 7.0 vs 上限 6.9 cm ✗）
+- K3b：不過（點數 209 vs 上限 51 ✗；最大 7.3 vs 上限 7.0 cm ✗）
+- K4a：不過（點數 153 vs 上限 35 ✗；最大 5.5 vs 上限 3.6 cm ✗）
+- K4b：不過（點數 336 vs 上限 67 ✗；最大 7.8 vs 上限 7.4 cm ✗）
+- K4c：不過（點數 323 vs 上限 64 ✗；最大 9.3 vs 上限 5.3 cm ✗）
+- 判定：紅（不過 9 幀）

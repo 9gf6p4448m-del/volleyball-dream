@@ -1,0 +1,109 @@
+{
+ "faces": "5k",
+ "variant": "base",
+ "hashes": {
+  "realPlayer.js": "b1489d7878dc",
+  "geoAnimator.js": "250a1f1cb469",
+  "geoCharacter.js": "5a149abadd3e",
+  "player_5k.glb": "c524616855fa",
+  "real-skin-lib.mjs": "841432f22024",
+  "real-skin-penetration-v2.mjs": "bb278a710140",
+  "real-skin-torso-drag.mjs": "328a3143e694",
+  "real-skin-frozen-sets.json": "9a8a840b55eb"
+ },
+ "used": 647,
+ "excluded": 22,
+ "rows": {
+  "K1a": {
+   "seq": "spikeHold",
+   "over": 116,
+   "max": 0.132538,
+   "arg": {
+    "id": 658,
+    "bone": "spineUpper",
+    "bindY": 1.402
+   }
+  },
+  "K1b": {
+   "seq": "spike",
+   "over": 66,
+   "max": 0.092149,
+   "arg": {
+    "id": 658,
+    "bone": "spineUpper",
+    "bindY": 1.402
+   }
+  },
+  "K2a": {
+   "seq": null,
+   "over": 17,
+   "max": 0.047293,
+   "arg": {
+    "id": 1630,
+    "bone": "pelvis",
+    "bindY": 0.773
+   }
+  },
+  "K2b": {
+   "seq": "serveJump",
+   "over": 97,
+   "max": 0.119512,
+   "arg": {
+    "id": 658,
+    "bone": "spineUpper",
+    "bindY": 1.402
+   }
+  },
+  "K3a": {
+   "seq": null,
+   "over": 22,
+   "max": 0.059482,
+   "arg": {
+    "id": 1768,
+    "bone": "pelvis",
+    "bindY": 0.793
+   }
+  },
+  "K3b": {
+   "seq": null,
+   "over": 21,
+   "max": 0.060423,
+   "arg": {
+    "id": 1630,
+    "bone": "pelvis",
+    "bindY": 0.773
+   }
+  },
+  "K4a": {
+   "seq": null,
+   "over": 5,
+   "max": 0.025589,
+   "arg": {
+    "id": 1630,
+    "bone": "pelvis",
+    "bindY": 0.773
+   }
+  },
+  "K4b": {
+   "seq": "receiveReady",
+   "over": 37,
+   "max": 0.064443,
+   "arg": {
+    "id": 859,
+    "bone": "pelvis",
+    "bindY": 0.801
+   }
+  },
+  "K4c": {
+   "seq": "bump",
+   "over": 34,
+   "max": 0.043153,
+   "arg": {
+    "id": 859,
+    "bone": "pelvis",
+    "bindY": 0.801
+   }
+  }
+ },
+ "gate": null
+}
