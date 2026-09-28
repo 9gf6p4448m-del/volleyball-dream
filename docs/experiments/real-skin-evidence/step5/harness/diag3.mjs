@@ -1,0 +1,24 @@
+import { pathToFileURL } from 'node:url';
+import { makeMod } from './evalh.mjs';
+const WT = 'C:/Users/shung/worktrees/volleyball-skin';
+const BK = await import(pathToFileURL(`${WT}/tools/bake-real-skin-weights.mjs`).href);
+const V2 = await import(pathToFileURL(`${WT}/tools/real-skin-penetration-v2.mjs`).href);
+const lib = await import(pathToFileURL(`${WT}/tools/real-skin-lib.mjs`).href);
+const faces = process.argv[2] || '5k';
+const P = JSON.parse(process.argv[3] || '{}');
+const params = { ...BK.PARAMS, ...P, AUX: { ...BK.PARAMS.AUX, ...(P.AUX || {}) } };
+const rp = await makeMod([["const baked = await loadBakedWeights(url, pos);", "const baked = globalThis.__W(pos, nor, geometry.index.array);"]]);
+globalThis.__W = (pos, nor, index) => BK.bakeWeights(rp, pos, nor, index, params);
+const setup = await V2.loadSetup(faces, { rpMod: rp });
+const { R, Sb } = setup; const G = setup.G; const SI = G.attributes.skinIndex.array; const SW = G.attributes.skinWeight.array;
+const L = rp.LANDMARKS;
+const wstr = (v) => { const a = []; for (let k = 0; k < 4; k++) if (SW[v*4+k] > 0.005) a.push(`${rp.BONES[SI[v*4+k]]}:${SW[v*4+k].toFixed(2)}`); return a.join(','); };
+const key = lib.ALL_KEYS.find((k) => k.id === (process.argv[4] || 'K1a'));
+const { real, P1 } = V2.poseKey(setup, key);
+const J = real.p.rig.joints; const sh = J.lShoulder; const q = sh.quaternion;
+console.log('lShoulder euler', sh.rotation.x.toFixed(2), sh.rotation.y.toFixed(2), sh.rotation.z.toFixed(2));
+const nv = V2.penetrationV2(R, Sb, P1);
+const fl = nv.flagged.filter((f) => f.side === 'l').sort((a, b) => b.depth - a.depth);
+const a = L.lShoulder, e = L.lElbow;
+for (const f of fl.slice(0, 40)) { const i = f.i; const p = [R.P[i*3], R.P[i*3+1], R.P[i*3+2]]; const ab=[e[0]-a[0],e[1]-a[1],e[2]-a[2]]; const t=((p[0]-a[0])*ab[0]+(p[1]-a[1])*ab[1]+(p[2]-a[2])*ab[2])/(ab[0]**2+ab[1]**2+ab[2]**2);
+  console.log(`v${i} d ${(f.depth*100).toFixed(1)} t ${t.toFixed(2)} bind (${p.map((x)=>x.toFixed(3)).join(',')}) ${wstr(i)}`); }

@@ -1,4 +1,53 @@
-# 寫實蒙皮修正：步驟④第二輪停手回報（2026-09-29）
+# 寫實蒙皮修正：步驟⑤停手回報（2026-09-29，驗收修訂 R7／R8 之後）
+
+> 依據：驗收修訂 R7（c075fb7）、R8（8edaa6a）。量尺、判定腳本、baseline 未修改：
+> `tools/real-skin-r7-judge.mjs`、`tools/real-skin-arm-follow.mjs`、`ruler-v2/R7/s1-base-*.json`。
+> 證據在 `docs/experiments/real-skin-evidence/step5/`（下稱 `step5/`）。
+> 候選 H7＝分支 `feat/real-skin-wip3` e669a59a，是在 feat/real-skin ef5d98d 上帶入候選 H 的檔案，再把手臂熱擴散常數 c 由 1 改為 0.7。
+
+## 結論（先讀這段）
+
+主對話交辦的子任務「5k K1b P99 ≤6.0」**已修好**：候選 H7 的 5k K1b 從 6.14 降到 5.28。
+但 **S2(i) K1a 左臂退步仍在**，而且這一條 R7／R8 都沒有改。它在候選 H 就已經紅（上一輪報告 §一、§三 3.3），上次派工沒有提到。
+我試了兩種修法，兩次都更差，所以依規則停手。因此**沒有**整理乾淨 commit 到 feat/real-skin，**沒有**補跑 S7、S9、S8 載入耗時、S6 A8 截圖，也**沒有**拍 S10 對照圖。
+
+### H7 在正式量尺上的結果（20k；5k）
+
+| 條 | 指令 | 結果 | 判定 |
+|---|---|---|---|
+| S1（R7） | `node tools/real-skin-measure.mjs --faces=<f> --variants=base --json=…`，再跑 `node tools/real-skin-r7-judge.mjs --faces=<f> --s1=… --pen=…` | 20k、5k 各 9 幀全過。5k K1b 45 個／P99 5.28（現況 74／31.76，上限 6.0） | 過 |
+| S2(i) | `node tools/real-skin-penetration-v2.mjs --faces=<f> --baseline=…/R3/frozen-rerun/before-<f>.json` | 退步 1 項：**K1a 左 38 點／3.6 cm**，現況 6／1.4；5k **3 點／3.1 cm**，現況 0／0.0 | **不過** |
+| S2(ii)(iii) | 同上 | K3a、K3b、K4a、K4b、K4c 全過 | 過 |
+| S3（R7） | judge | 過 | 過 |
+| S4 | measure 20k | 最大扭跳：K1a 5.18°、K1b 2.12°、K2b 4.55°。蒙皮總扭轉與現況差 1.03／1.05／1.04°。關節扭轉總和與現況相同 | 過 |
+| S11 | `node tools/real-skin-torso-drag.mjs --faces=<f> --baseline=…/R4/f-base-<f>.json` | 9 幀全過 | 過 |
+| S13 | `node tools/real-skin-arm-follow.mjs --faces=<f>` | 右 0.471、左 0.371；5k 右 0.462、左 0.317（門檻 ≤0.50） | 過（右臂餘裕 0.029） |
+| S8 鞋底 | measure 表頭 | 523（5k 125），不變 | 過 |
+
+- S5、S6 沒有在 H7 上重跑。S5 不動 geo 與 sim，在任何候選上都不變；S6 在候選 H 上 A1–A6、A9–A12 全過，H7 只改了手臂權重的熱擴散常數。
+- 完整輸出：`step5/candH7/`（pen、f、m、s13、judge）。
+
+### S2(i) K1a 左臂：兩次修法與結果
+
+- **問題**（`step5/k1a-left-diag-20k.txt`）：
+  - K1a 是引臂，左肩 x 旋轉 −1.90 rad，約舉起 109°。
+  - 穿入點都在上臂內側 t 0.4–0.6。這些頂點帶 0.3–0.45 的 spine／spineUpper 權重，其餘給 lArmAux（舉高時等於上臂）。
+  - 舉臂約 110° 時，軀幹和上臂兩個變換做線性混合，會塌到弦中點附近，所以陷進胸口 3.6 cm。
+  - 現況的權重在 t 0.5 沒有軀幹權重，所以不會穿入。
+- **修法 1**：上臂 t∈[0.3,0.5]（或 [0.2,0.6]）的軀幹權重依 smoothstep 改給半轉骨 ArmHalf（`HALF_T`）。
+  - 結果：K1a 左 20k 20 點／4.4 cm，仍然退步。
+  - 還連帶讓 S1 多幀、S2(ii)(iii) 多幀轉紅：K1b P99 11.57；K3a／K4a 手臂垂下時上臂又穿入。原因是手臂下垂時，把上臂留在胸外的正是這一份軀幹權重。
+- **修法 2**：同一份軀幹權重改給夾角輔助骨 ArmAux（`HALF_BONE: 'ArmAux'`）。
+  - 結果：K1a 左 20k 14 點／5.7 cm，最深值反而增加；S1 六幀轉紅，K1b P99 13.61。
+- 兩次紀錄：`step5/variants.log`。
+- 衝突點：上臂內側那份軀幹權重同時在回答兩個相反的要求——手臂垂下時要它把皮撐在胸外（S2(ii)(iii)），舉高時又不能有它（S2(i) K1a）。LBS 的固定權重做不到依姿勢切換。
+- 可能方向（未實作，供裁定）：
+  - 甲：再加一根依姿勢驅動的輔助骨，垂下時等於軀幹、舉高時等於上臂。這會是第 3 種肩部輔助骨，需確認仍在 R2 的許可範圍內。
+  - 乙：S2(i) 對 K1a 改成有上限的「不比現況差」，比照 R7 對 S1 的做法。
+
+---
+
+# （前一輪）步驟④第二輪停手回報（2026-09-29）
 
 > 驗收檔：`docs/kickoffs/real-skin-acceptance.md`（S1–S12、修訂 R1–R6，本輪未修改）。量尺用 R6 定稿版
 > （`tools/real-skin-penetration-v2.mjs`、`tools/real-skin-torso-drag.mjs`，未修改）；baseline 用 repo 內 8720597 產生的

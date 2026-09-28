@@ -1,0 +1,1 @@
+for P in "$@"; do for f in 5k 20k; do r=$(node run3.mjs $f "$P" 2>&1); echo "$f $P :: $(echo "$r" | tail -1) :: $(echo "$r" | grep '^S13') :: K1b $(echo "$r" | grep '^K1b' | cut -c1-40) :: K1a $(echo "$r" | grep '^K1a' | cut -d'|' -f2)"; done; done
