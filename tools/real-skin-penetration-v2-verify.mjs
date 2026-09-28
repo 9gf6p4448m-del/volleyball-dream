@@ -4,6 +4,8 @@
 // 用法：node tools/real-skin-penetration-v2-verify.mjs --faces=20k|5k --out=<目錄> [--tag=<檔名標籤>] [--only=V0,V1,V2,V3,V4]
 //        [--oldref=<舊證據目錄>] [--oldprefix=before|after-step3]
 //   V0：自我檢查＋舊值重現（新工具內用 lib 算的舊 (b)(e) 對 <oldref>/<oldprefix>-{faces}.json、thigh-<oldprefix>-{faces}.json 逐幀逐臂比對）
+//   V6（修正 2，對抗審查 HIGH-1 後加）：--cli=<量尺 CLI 的 json>，逐幀逐點與獨立重算比對（判內集合、w、深度、最近三角形、點數／>1cm／最深／分區）
+//   內外門檻用本檔自己的 W_IN＝0.5（凍結定義），不讀量尺的常數——量尺的門檻被改壞時 V6 會紅
 //
 // 獨立參考 B_c（不是受測物）：去臂網格（全身三角形中三頂點都不在 R.armVerts 者）＋兩個臂根開口以環頂點質心扇形封口，
 // 固定 3 方向射線（Möller–Trumbore）交點奇偶、3 票多數。與受測的 GWN 是不同演算法、不同表面。
@@ -28,6 +30,7 @@ const only = args.only ? new Set(args.only.split(',')) : new Set(['V0', 'V1', 'V
 await mkdir(outDir, { recursive: true });
 const name = (v, ext) => join(outDir, `${v}${tag}-${faces}.${ext}`);
 
+const W_IN = 0.5; // 凍結定義：w>0.5＝在內（刻意不讀量尺匯出的門檻常數，見表頭）
 const setup = await V2.loadSetup(faces);
 const { R, Sb, Se, RH } = setup;
 const KEY = Object.fromEntries(lib.ALL_KEYS.map((k) => [k.id, k]));
@@ -161,6 +164,21 @@ function segDist(p, a, b) {
   return Math.hypot(p[0] - a[0] - ab[0] * t, p[1] - a[1] - ab[1] * t, p[2] - a[2] - ab[2] * t);
 }
 const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+function distTri(T, k, p) {
+  const o = k * 9;
+  const a = [T[o], T[o + 1], T[o + 2]]; const b = [T[o + 3], T[o + 4], T[o + 5]]; const c = [T[o + 6], T[o + 7], T[o + 8]];
+  const n = cross(sub(b, a), sub(c, a));
+  const nl = Math.hypot(...n);
+  if (nl < 1e-15) return Math.min(segDist(p, a, b), segDist(p, b, c), segDist(p, c, a));
+  const nn = n.map((x) => x / nl); const h = dotv(sub(p, a), nn); const q = sub(p, nn.map((x) => x * h));
+  const s0 = dotv(cross(sub(b, q), sub(c, q)), nn); const s1 = dotv(cross(sub(c, q), sub(a, q)), nn); const s2 = dotv(cross(sub(a, q), sub(b, q)), nn);
+  return s0 >= 0 && s1 >= 0 && s2 >= 0 ? Math.abs(h) : Math.min(segDist(p, a, b), segDist(p, b, c), segDist(p, c, a));
+}
+function distAltArg(T, p) {
+  let best = Infinity; let bk = -1;
+  for (let k = 0; k < T.length / 9; k += 1) { const d = distTri(T, k, p); if (d < best) { best = d; bk = k; } }
+  return { d: best, k: bk };
+}
 function distAlt(T, p) {
   let best = Infinity;
   for (let o = 0; o < T.length; o += 9) {
@@ -218,7 +236,7 @@ function v1Run(S, which, regions, label, mode) {
           const depth = V2.nearestOnSurface(T, bb, pin).d;
           const alt = distAlt(T, pin);
           const bi = bcParity(F.Tbc, pin); const bo = bcParity(F.Tbc, pout);
-          const inOk = wi > V2.W_IN && Math.abs(depth - d) <= 0.003; const outOk = !(wo > V2.W_IN);
+          const inOk = wi > W_IN && Math.abs(depth - d) <= 0.003; const outOk = !(wo > W_IN);
           nIn += 1; nOut += 1;
           const sid = `${mode === 'vertex' ? 'v' : 't'}${sd.id}`;
           if (!inOk) fails.push(`${k.id} ${reg} ${sid} 往內 ${Math.round(d * 100)}cm：w=${wi.toFixed(3)} 深度=${cm(depth)} cm、獨立距離=${cm(alt)} cm（B_c ${bi.inside ? '內' : '外'}）`);
@@ -229,7 +247,7 @@ function v1Run(S, which, regions, label, mode) {
     }
   }
   const mx = (f) => (rows.length ? Math.max(...rows.map(f)) : null);
-  const inMiss = rows.filter((r) => !(r.wIn > V2.W_IN)).length; const outMiss = rows.filter((r) => r.wOut > V2.W_IN).length;
+  const inMiss = rows.filter((r) => !(r.wIn > W_IN)).length; const outMiss = rows.filter((r) => r.wOut > W_IN).length;
   const depthMiss = rows.filter((r) => Math.abs(r.errCm) > 0.3).length;
   return {
     label, mode, pass: fails.length === 0 && rows.length > 0, nIn, nOut, inMiss, outMiss, depthMiss, fails, noSample,
@@ -253,6 +271,14 @@ if (only.has('V1')) {
   const r1v = v1Run(Sb, 'b', regB, 'V1 原構造（凍結時：頂點＋頂點法線）——保留以揭露構造缺陷，不作判定', 'vertex');
   const r1e = v1Run(Se, 'e', regE, 'V1 補充 (e) S_e 臀／大腿前／大腿外側（驗收檔未要求，不計入 V1；面法線構造）', 'face');
   report.V1 = r1; report.V1orig = r1v; report.V1e = r1e;
+  // 修正 2（加嚴，對抗審查 HIGH-2 後加）：正式構造點都在三角形質心正上方，「到最近質心」之類的壞距離算法會碰巧對；
+  // 所以另把「量尺深度＝獨立距離（distAlt）」列為判定條件，涵蓋正式構造與原構造（頂點種子）的全部往內點
+  const ALT_TOL_CM = 1e-6;
+  const altOk = r1.altDiffMaxCm !== null && r1v.altDiffMaxCm !== null && r1.altDiffMaxCm <= ALT_TOL_CM && r1v.altDiffMaxCm <= ALT_TOL_CM;
+  report.V1pass = r1.pass && altOk;
+  say(`# V1 綜合（faces=${faces}${tag}）`);
+  say(`- 判定：${report.V1pass ? '過' : '不過'}＝① 正式構造（內外全對且 |深度−d| ≤0.3 cm）：${r1.pass ? '過' : '不過'}；② 量尺深度＝獨立距離（|差| ≤${ALT_TOL_CM} cm，正式 ${r1.rows.length} 點＋原構造 ${r1v.rows.length} 點）：${altOk ? '過' : '不過'}（最大差 正式 ${r1.altDiffMaxCm} cm、原構造 ${r1v.altDiffMaxCm} cm）`);
+  say('');
   for (const r of [r1, r1v, r1e]) {
     say(`# ${r.label}（faces=${faces}${tag}）`);
     say(`- 判定：${r.mode === 'vertex' ? `（不作判定；照原判準會是${r.pass ? '過' : '不過'}）` : r.pass ? '過' : '不過'}；樣本 ${r.samples}（9 幀×3 區×≤8），往內點 ${r.nIn}、往外點 ${r.nOut}（d＝1／3／5 cm）`);
@@ -280,7 +306,7 @@ if (only.has('V2')) {
   const xd = (M, d) => new THREE.Vector3(d[0], d[1], d[2]).transformDirection(M).toArray();
   const judge = (p) => {
     const wb = V2.windingNumber(F.Tb, p); const we = V2.windingNumber(F.Te, p);
-    return { wb, we, inB: wb > V2.W_IN, inE: we > V2.W_IN, db: V2.nearestOnSurface(F.Tb, F.bbB, p).d, de: V2.nearestOnSurface(F.Te, F.bbE, p).d, bc: bcParity(F.Tbc, p) };
+    return { wb, we, inB: wb > W_IN, inE: we > W_IN, db: V2.nearestOnSurface(F.Tb, F.bbB, p).d, de: V2.nearestOnSurface(F.Te, F.bbE, p).d, bc: bcParity(F.Tbc, p) };
   };
   // (a) 舊量法 >10 cm 點
   const a = {};
@@ -306,21 +332,21 @@ if (only.has('V2')) {
       const bc = bcParity(F.Tbc, p);
       const own = skinOwner(F, p);
       const ownInS = m === 'b' ? own.inSb : own.inSe;
-      // B_c 為外 ⇒ 應判外；B_c 為內 ⇒ 另述：最近身體皮屬 S ⇒ 應判內，否則無法機械定論（null）
-      const expect = !bc.inside ? 'out' : ownInS ? 'in' : null;
-      const ok = expect === 'out' ? !(w > V2.W_IN) : expect === 'in' ? w > V2.W_IN : null;
-      if (expect === 'out') { aOut.n += 1; if (ok) aOut.ok += 1; } else { aIn.n += 1; if (expect === 'in') { aIn.attributed += 1; if (ok) aIn.ok += 1; } }
+      // 凍結規則：B_c 為外 ⇒ 應判外；B_c 為內 ⇒ 另列並說明、不自動算過（最近身體皮歸屬只供說明，修正 2 撤回 ae0b304 加的自動一致路徑）
+      const expect = !bc.inside ? 'out' : null;
+      const ok = expect === 'out' ? !(w > W_IN) : null;
+      if (expect === 'out') { aOut.n += 1; if (ok) aOut.ok += 1; } else { aIn.n += 1; if (ownInS) aIn.attributed += 1; if (w > W_IN) aIn.ok += 1; }
       aCount += 1;
       const c = bindCentroid(t);
-      list.push({ i, side: s, part: ['上臂', '前臂', '手'][R.armPart[i]], oldDepth: Number(nr.d.toFixed(5)), nearestBind: c.map((x) => Number(x.toFixed(3))), zone: zoneOf(c[1]), n: n.map((x) => Number(x.toFixed(3))), cos: Number(cos.toFixed(3)), w: Number(w.toFixed(4)), newInside: w > V2.W_IN, bc: bc.inside, bcVotes: bc.votes, skinOwner: { inS: ownInS, bone: own.bone, d: Number(own.d.toFixed(4)) }, expect, ok });
+      list.push({ i, side: s, part: ['上臂', '前臂', '手'][R.armPart[i]], oldDepth: Number(nr.d.toFixed(5)), nearestBind: c.map((x) => Number(x.toFixed(3))), zone: zoneOf(c[1]), n: n.map((x) => Number(x.toFixed(3))), cos: Number(cos.toFixed(3)), w: Number(w.toFixed(4)), newInside: w > W_IN, bc: bc.inside, bcVotes: bc.votes, skinOwner: { inS: ownInS, bone: own.bone, d: Number(own.d.toFixed(4)) }, expect, ok });
     }
     list.sort((x, y) => y.oldDepth - x.oldDepth || x.i - y.i);
     a[m] = { oldReported: { r: old.r.maxDepth, l: old.l.maxDepth }, oldMaxRecomputed: oldMaxCheck, list };
     say(`### ${m === 'b' ? '(b) 軀幹' : '(e) 骨盆＋大腿'}：${list.length} 點（舊量法本幀最深 右 ${cm(old.r.maxDepth)}／左 ${cm(old.l.maxDepth)} cm；本工具重算舊標記點最近距離最大 右 ${cm(oldMaxCheck.r)}／左 ${cm(oldMaxCheck.l)} cm）`);
     if (list.length) {
-      say('| 頂點 | 臂/部位 | 舊深度 cm | 最近點綁定質心 (x,y,z) | 分區 | 法線 n | cos | 新 w | 新判定 | B_c | 最近身體皮（去臂）| 應判 | 一致 |');
+      say('| 頂點 | 臂/部位 | 舊深度 cm | 最近點綁定質心 (x,y,z) | 分區 | 法線 n | cos | 新 w | 新判定 | B_c | 最近身體皮（去臂，只供說明）| 應判 | 一致 |');
       say('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
-      for (const r of list) say(`| ${r.i} | ${r.side === 'r' ? '右' : '左'}${r.part} | ${cm(r.oldDepth)} | (${r.nearestBind.join(', ')}) | ${r.zone} | (${r.n.join(', ')}) | ${r.cos} | ${r.w.toFixed(3)} | ${r.newInside ? '內' : '外'} | ${r.bc ? '內' : '外'}(${r.bcVotes}) | ${r.skinOwner.inS ? `屬 ${m === 'b' ? 'S_b' : 'S_e'}` : '不屬 S'}（主骨 ${r.skinOwner.bone}，${cm(r.skinOwner.d)} cm）| ${r.expect === 'out' ? '外' : r.expect === 'in' ? '內（B_c 內＋最近皮屬 S）' : '無法機械定論'} | ${r.ok === null ? '—' : r.ok ? '是' : '否'} |`);
+      for (const r of list) say(`| ${r.i} | ${r.side === 'r' ? '右' : '左'}${r.part} | ${cm(r.oldDepth)} | (${r.nearestBind.join(', ')}) | ${r.zone} | (${r.n.join(', ')}) | ${r.cos} | ${r.w.toFixed(3)} | ${r.newInside ? '內' : '外'} | ${r.bc ? '內' : '外'}(${r.bcVotes}) | ${r.skinOwner.inS ? `屬 ${m === 'b' ? 'S_b' : 'S_e'}` : '不屬 S'}（主骨 ${r.skinOwner.bone}，${cm(r.skinOwner.d)} cm）| ${r.expect === 'out' ? '外' : '另述（B_c 內）'} | ${r.ok === null ? '—' : r.ok ? '是' : '否'} |`);
     }
   }
   // (b) 構造點
@@ -390,11 +416,11 @@ if (only.has('V2')) {
   const inSet = bRows.filter((r) => r.expect === 'in');
   const excluded = bRows.filter((r) => !r.counted);
   say('');
-  const aPass = aOut.ok === aOut.n && aIn.ok === aIn.attributed && aIn.attributed === aIn.n;
-  say(`- (a) 判定：${aPass ? '過' : aOut.ok === aOut.n && aIn.ok === aIn.attributed ? '待說明（有 B_c 為內且最近身體皮不屬 S 的點）' : '不過'}（${aCount} 點：B_c 為外 ${aOut.n} 點中新量法判外 ${aOut.ok}；B_c 為內 ${aIn.n} 點另述——其中最近身體皮屬該子集 ${aIn.attributed} 點、新量法判內 ${aIn.ok}）`);
+  const aPass = aOut.ok === aOut.n && aIn.n === 0;
+  say(`- (a) 判定：${aPass ? '過' : aOut.ok === aOut.n ? '待說明（應判外者全部判外；另有 B_c 為內的點須逐點說明）' : '不過'}（${aCount} 點：B_c 為外 ${aOut.n} 點中新量法判外 ${aOut.ok}；B_c 為內 ${aIn.n} 點另述——新量法判內 ${aIn.ok}、最近身體皮屬該子集 ${aIn.attributed}）`);
   say(`- (b) 判定：${bPass ? '過' : '不過'}（應判外 ${outSet.length} 點：${outSet.filter((r) => r.ok).length} 點一致；骨盆軸線 ${inSet.length} 點：${inSet.filter((r) => r.ok).length} 點一致；B_c 為內而不列入「應判外」的構造點 ${excluded.length} 點）`);
 
-  const aStatus = aPass ? '過' : aOut.ok === aOut.n && aIn.ok === aIn.attributed ? '待說明' : '不過';
+  const aStatus = aPass ? '過' : aOut.ok === aOut.n ? '待說明' : '不過';
   say(`- V2 綜合：(a) ${aStatus}、(b) ${bPass ? '過' : '不過'}（「待說明」＝應判外的點全部判外，另有 B_c 為內、無法機械歸屬的點，須逐點說明，不自動算過）`);
   report.V2 = { a, aPass, aStatus, aCount, aOut, aIn, b: bRows, bPass, hemInfo, crotchStart: cf };
   say('');
@@ -414,7 +440,7 @@ if (only.has('V3')) {
       const c = bindCentroid(Sb.tris[nr.k]);
       if (!(c[1] >= 0.95 && c[1] < 1.15 && Math.abs(c[0]) >= 0.12)) continue;
       region.push(i);
-      if (V2.windingNumber(F.Tb, p) > V2.W_IN) N.add(i);
+      if (V2.windingNumber(F.Tb, p) > W_IN) N.add(i);
     }
   }
   const stat = (ids) => {
@@ -432,6 +458,65 @@ if (only.has('V3')) {
   say(`- 兩臂合計：區域內手臂頂點 ${all.region}、舊標記 ${all.old}、新標記 ${all.new}、交集 ${all.both}、聯集 ${all.union}；|O∩N|/|O| ${p(all.oldRecall)}、|O∩N|/|N| ${p(all.newPrecision)}`);
   for (const s of ['r', 'l']) say(`- ${s === 'r' ? '右' : '左'}臂（只供參考）：區域 ${per[s].region}、舊 ${per[s].old}、新 ${per[s].new}、交集 ${per[s].both}、Jaccard ${p(per[s].jaccard)}`);
   say(`- 只有舊標：${all.oldOnly.length ? all.oldOnly.join(', ') : '無'}；只有新標：${all.newOnly.length ? all.newOnly.join(', ') : '無'}`);
+  say('');
+}
+
+// ---------------------------------------------------------------------------
+// V6：量尺 CLI 產物（--cli json）與獨立重算逐點一致（修正 2，對抗審查 HIGH-1 後加）
+// 獨立重算＝本檔的 W_IN＋windingNumber（V1／V2 已對 B_c 驗過）＋distAltArg（另一套距離）＋本檔的分區規則
+if (only.has('V6')) {
+  if (!args.cli || args.cli === '1') throw new Error('V6 需要 --cli=<量尺 json>');
+  const cli = JSON.parse(await readFile(args.cli, 'utf8'));
+  if (cli.faces !== faces) throw new Error(`--cli 面數 ${cli.faces} ≠ ${faces}`);
+  const mism = []; let points = 0; let depthMax = 0; let wMax = 0; let ties = 0;
+  const partName = ['上臂', '前臂', '手'];
+  for (const k of lib.ALL_KEYS) {
+    const { P1 } = V2.poseKey(setup, KEY[k.id]);
+    for (const [m, S] of [['b', Sb], ['e', Se]]) {
+      const T = V2.surfaceArrays(P1, R.index, S.tris);
+      const row = cli.rows?.[k.id]?.[m];
+      if (!row) { mism.push(`${k.id}(${m}) json 缺這一列`); continue; }
+      const jf = new Map(row.newFlagged.map((e) => [e[0], { w: e[1], d: e[2], tri: e[4] }]));
+      const triPos = new Map(S.tris.map((t, i) => [t, i]));
+      for (const s of ['r', 'l']) {
+        const agg = { inside: 0, deeper1cm: 0, maxDepth: 0, zones: {} };
+        for (const i of R.armVerts[s]) {
+          const p = vtx(P1, i);
+          const w = V2.windingNumber(T, p);
+          const inside = w > W_IN;
+          const j = jf.get(i);
+          if (inside !== Boolean(j)) { mism.push(`${k.id}(${m}) 頂點 ${i}：獨立重算${inside ? '判內' : '判外'}、json ${j ? '判內' : '判外'}（w ${w.toFixed(4)}）`); continue; }
+          if (!inside) continue;
+          points += 1;
+          const { d, k: kk } = distAltArg(T, p);
+          depthMax = Math.max(depthMax, Math.abs(j.d - d)); wMax = Math.max(wMax, Math.abs(j.w - w));
+          if (Math.abs(j.d - d) > 6e-6) mism.push(`${k.id}(${m}) 頂點 ${i}：深度 json ${j.d} vs 獨立 ${d.toFixed(6)}`);
+          if (Math.abs(j.w - w) > 6e-5) mism.push(`${k.id}(${m}) 頂點 ${i}：w json ${j.w} vs 獨立 ${w.toFixed(5)}`);
+          let triUse = S.tris[kk];
+          if (j.tri !== triUse) {
+            const pos = triPos.get(j.tri);
+            if (pos === undefined || Math.abs(distTri(T, pos, p) - d) > 1e-9) mism.push(`${k.id}(${m}) 頂點 ${i}：json 最近三角形 ${j.tri} 不是最近（獨立 ${S.tris[kk]}）`);
+            else { ties += 1; triUse = j.tri; }
+          }
+          const c = bindCentroid(triUse);
+          const zk = `${partName[R.armPart[i]]}→${zoneOf(c[1])}`;
+          const zz = agg.zones[zk] || (agg.zones[zk] = { n: 0, max: 0 });
+          zz.n += 1; zz.max = Math.max(zz.max, d);
+          agg.inside += 1; if (d > 0.01) agg.deeper1cm += 1; if (d > agg.maxDepth) agg.maxDepth = d;
+        }
+        const jn = row.new[s];
+        if (jn.inside !== agg.inside || jn.deeper1cm !== agg.deeper1cm || Math.abs(jn.maxDepth - agg.maxDepth) > 1e-9) mism.push(`${k.id}(${m})${s}：彙總 json ${jn.inside}/${jn.deeper1cm}/${jn.maxDepth} vs 獨立 ${agg.inside}/${agg.deeper1cm}/${agg.maxDepth}`);
+        const zkJ = Object.keys(jn.zones).sort().join(','); const zkI = Object.keys(agg.zones).sort().join(',');
+        if (zkJ !== zkI) mism.push(`${k.id}(${m})${s}：分區鍵 json [${zkJ}] vs 獨立 [${zkI}]`);
+        else for (const zk of Object.keys(agg.zones)) if (jn.zones[zk].n !== agg.zones[zk].n || Math.abs(jn.zones[zk].max - agg.zones[zk].max) > 1e-9) mism.push(`${k.id}(${m})${s} ${zk}：json ${jn.zones[zk].n}/${jn.zones[zk].max} vs 獨立 ${agg.zones[zk].n}/${agg.zones[zk].max}`);
+      }
+      for (const i of jf.keys()) if (!R.armVerts.r.includes(i) && !R.armVerts.l.includes(i)) mism.push(`${k.id}(${m}) json 判內的 ${i} 不是手臂頂點`);
+    }
+  }
+  report.V6 = { cli: basename(args.cli), pass: mism.length === 0, points, depthMaxDiffM: depthMax, wMaxDiff: wMax, ties, mismatches: mism.slice(0, 200), mismatchCount: mism.length };
+  say(`# V6 量尺 CLI 產物與獨立重算逐點一致（${basename(args.cli)}；faces=${faces}${tag}）`);
+  say(`- 判定：${mism.length === 0 ? '過' : '不過'}；9 幀×(b)(e)×兩臂，判內點 ${points} 點逐點比對：判內集合、w（差 ≤6e-5，json 取 4 位）、深度（差 ≤6e-6 m，json 取 1e-5 m）、最近三角形（同距離的並列 ${ties} 點）、點數／>1cm／最深（≤1e-9 m）／分區`);
+  say(`- 最大差：深度 ${depthMax.toExponential(2)} m、w ${wMax.toExponential(2)}；不一致 ${mism.length} 項${mism.length ? `：${mism.slice(0, 20).join('；')}${mism.length > 20 ? '…' : ''}` : ''}`);
   say('');
 }
 
@@ -520,7 +605,7 @@ if (only.has('V4')) {
     [['b', Sb, R, F.Tb], ['e', Se, RH, F.Te]].forEach(([m, S, RR, T], row) => {
       const oldS = new Set(lib.metricPenetration(RR, F.P1, F.N1).flagged.arm);
       const newS = new Set();
-      for (const s of ['r', 'l']) for (const i of R.armVerts[s]) if (V2.windingNumber(T, vtx(F.P1, i)) > V2.W_IN) newS.add(i);
+      for (const s of ['r', 'l']) for (const i of R.armVerts[s]) if (V2.windingNumber(T, vtx(F.P1, i)) > W_IN) newS.add(i);
       const both = [...oldS].filter((i) => newS.has(i)).length;
       counts[m] = { old: oldS.size, new: newS.size, both };
       const isS = new Uint8Array(R.index.length / 3); for (const t of S.tris) isS[t] = 1;
@@ -557,6 +642,14 @@ if (only.has('V4')) {
 }
 
 // ---------------------------------------------------------------------------
+report.summary = {
+  V0: report.V0 ? (report.V0.orientBad.all === 0 && report.V0.orientBad.b === 0 && report.V0.orientBad.e === 0 && Math.abs(report.V0.wFullMeshAtPelvis - 1) < 1e-6 && Math.abs(report.V0.wFullMeshFar) < 1e-6 && report.V0.wBindPelvis.b > W_IN && report.V0.wBindPelvis.e > W_IN && (!report.V0.oldReproduce || (report.V0.oldReproduce.same === 36 && report.V0.oldReproduce.hipSurfaceRef.tris === report.V0.oldReproduce.hipSurfaceNow.tris && report.V0.oldReproduce.hipSurfaceRef.verts === report.V0.oldReproduce.hipSurfaceNow.verts && report.V0.oldReproduce.hipSurfaceRef.boundaryEdges === report.V0.oldReproduce.hipSurfaceNow.boundaryEdges)) ? '過' : '不過') : null,
+  V1: report.V1pass === undefined ? null : report.V1pass ? '過' : '不過',
+  V2: report.V2 ? `(a)${report.V2.aStatus}(b)${report.V2.bPass ? '過' : '不過'}` : null,
+  V3: report.V3 ? (report.V3.pass ? '過' : '不過') : null,
+  V6: report.V6 ? (report.V6.pass ? '過' : '不過') : null,
+};
+say(`# 摘要（faces=${faces}${tag}）：${Object.entries(report.summary).filter(([, v]) => v !== null).map(([k, v]) => `${k} ${v}`).join('、')}`);
 const body = `${txt.join('\n')}\n`;
 process.stdout.write(body);
 const stem = [...only].sort().join('');

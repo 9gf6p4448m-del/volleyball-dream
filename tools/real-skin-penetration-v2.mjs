@@ -251,7 +251,16 @@ export function poseKey(setup, key) {
   return { real, pk, P1, N1 };
 }
 export async function sha12(url) {
-  return createHash('sha256').update(await readFile(fileURLToPath(url))).digest('hex').slice(0, 12);
+  let buf = await readFile(fileURLToPath(url));
+  // 文字檔先把 CRLF 換成 LF 再算（repo core.autocrlf=true：不同 checkout 的換行不同，雜湊只該反映內容）；glb 用原位元組
+  if (!/\.glb$/i.test(url.pathname)) buf = Buffer.from(buf.toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
+  return createHash('sha256').update(buf).digest('hex').slice(0, 12);
+}
+// 集合指紋（MEDIUM-4）：被穿入表面與手臂頂點都由 src 的地標／權重決定，修模型時可能跟著變；
+// 輸出排序後的 ID 清單與雜湊，--baseline 時逐集合比對，讓「在不同表面上比較」看得見（定義不變，只揭露）
+export function setPrint(ids) {
+  const a = Int32Array.from([...ids].sort((x, y) => x - y));
+  return { n: a.length, sha: createHash('sha256').update(Buffer.from(a.buffer)).digest('hex').slice(0, 12), ids: Array.from(a) };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +288,7 @@ if (isMain) {
     bindPelvis: { b: windingNumber(T0b, rp.LANDMARKS.pelvis), e: windingNumber(T0e, rp.LANDMARKS.pelvis) },
     farPoint: { b: windingNumber(T0b, [0, 1, 3]), e: windingNumber(T0e, [0, 1, 3]) },
   };
+  const sets = { Sb: setPrint(Sb.tris), Se: setPrint(Se.tris), armR: setPrint(R.armVerts.r), armL: setPrint(R.armVerts.l) };
   const rows = {};
   for (const key of lib.ALL_KEYS) {
     const { pk, P1, N1 } = poseKey(setup, key);
@@ -290,7 +300,7 @@ if (isMain) {
       row[m] = {
         new: { r: { ...pick(nv.r), atOpening: nv.r.atOpening, atOpeningMax: nv.r.atOpeningMax, nearHalf: nv.r.nearHalf }, l: { ...pick(nv.l), atOpening: nv.l.atOpening, atOpeningMax: nv.l.atOpeningMax, nearHalf: nv.l.nearHalf } },
         old: { r: { ...pick(ov.r), undetermined: ov.r.undetermined }, l: { ...pick(ov.l), undetermined: ov.l.undetermined } },
-        newFlagged: nv.flagged.map((f) => [f.i, Number(f.w.toFixed(4)), Number(f.depth.toFixed(5)), f.opening ? 1 : 0]),
+        newFlagged: nv.flagged.map((f) => [f.i, Number(f.w.toFixed(4)), Number(f.depth.toFixed(5)), f.opening ? 1 : 0, f.tri]),
         oldFlagged: [...ov.flagged.arm],
       };
     }
@@ -305,6 +315,7 @@ if (isMain) {
   out.push(`輸入 sha256 前 12 碼：${Object.entries(hashes).map(([k, v]) => `${k} ${v}`).join('、')}`);
   out.push(`自我檢查：子集方向不一致邊 (b) ${selfCheck.orientBad.b}／(e) ${selfCheck.orientBad.e}；綁定姿勢 pelvis 地標 w (b) ${selfCheck.bindPelvis.b.toFixed(3)}／(e) ${selfCheck.bindPelvis.e.toFixed(3)}（應 >0.5）；遠點 (0,1,3) w (b) ${selfCheck.farPoint.b.toFixed(3)}／(e) ${selfCheck.farPoint.e.toFixed(3)}（應 ≈0）`);
   out.push(`表面：(b) 軀幹子集 三角形 ${Sb.tris.length}、開口邊 ${Sb.boundaryEdge.size}；(e) 主骨∈{${HIP_BONES.join(', ')}} 頂點 ${Se.verts}、三角形 ${Se.tris.length}、開口邊 ${Se.boundaryEdge.size}；手臂頂點 右 ${R.armVerts.r.length}／左 ${R.armVerts.l.length}`);
+  out.push(`集合指紋（排序後 ID 的 sha256 前 12 碼）：S_b ${sets.Sb.sha}、S_e ${sets.Se.sha}、手臂 右 ${sets.armR.sha}／左 ${sets.armL.sha}（S_e 依當前權重的主骨、S_b 與手臂依 src 地標選取；--baseline 會逐集合比對）`);
   const zs = (z) => Object.entries(z).map(([k, v]) => `${k} ${v.n}/${cm(v.max)}`).join('、') || '無';
   for (const [m, title] of [['b', '(b) 手臂穿入軀幹'], ['e', '(e) 手臂穿入骨盆＋大腿（手埋短褲）']]) {
     out.push('', `## ${title}`);
@@ -335,6 +346,15 @@ if (isMain) {
   if (args.baseline && args.baseline !== '1') {
     baseline = JSON.parse(await readFile(args.baseline, 'utf8'));
     if (baseline.faces !== faces) throw new Error(`--baseline 面數 ${baseline.faces} ≠ ${faces}`);
+    out.push('', `## 被穿入表面與手臂頂點集合（對照 ${args.baseline}）`);
+    for (const [k, nm] of [['Sb', 'S_b 三角形'], ['Se', 'S_e 三角形'], ['armR', '右臂頂點'], ['armL', '左臂頂點']]) {
+      const z = baseline.sets?.[k];
+      if (!z) { out.push(`- ${nm}：現況檔沒有集合清單，無法比對`); continue; }
+      if (z.sha === sets[k].sha) { out.push(`- ${nm}：與現況相同（${z.n}）`); continue; }
+      const A = new Set(z.ids); const B = new Set(sets[k].ids);
+      const lost = z.ids.filter((x) => !B.has(x)).length; const gained = sets[k].ids.filter((x) => !A.has(x)).length;
+      out.push(`- ${nm}：**與現況不同**（現況 ${z.n}、本次 ${sets[k].n}；少 ${lost}、多 ${gained}）——以下比較是在不同集合上做的`);
+    }
     out.push('', `## S2(i) 不退步（(b) 新量法，對照 ${args.baseline}；點數與最深都要 ≤ 現況，深度比 0.1 cm）`);
     const bad = [];
     for (const id of Object.keys(rows)) {
@@ -353,6 +373,7 @@ if (isMain) {
       faces, method: 'generalized winding number (w>0.5), depth = distance to nearest penetrated-surface triangle', hashes, selfCheck,
       surfaces: { b: { tris: Sb.tris.length, boundaryEdges: Sb.boundaryEdge.size }, e: { verts: Se.verts, tris: Se.tris.length, boundaryEdges: Se.boundaryEdge.size } },
       armVerts: { r: R.armVerts.r.length, l: R.armVerts.l.length },
+      sets,
       rows,
     }, null, 1)}\n`);
   }
