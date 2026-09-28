@@ -55,6 +55,7 @@ for (const k of ['Hip', 'Knee', 'Ankle', 'Toe', 'Shoulder', 'Elbow', 'Wrist', 'H
 export const BONES = [
   'pelvis', 'rHip', 'rKnee', 'lHip', 'lKnee', 'spine', 'spineUpper', 'neck',
   'rShoulder', 'rElbow', 'rWrist', 'lShoulder', 'lElbow', 'lWrist', 'rAnkle', 'lAnkle',
+  'rArmAux', 'lArmAux',
 ];
 const PARENT = {
   pelvis: null, rHip: 'pelvis', rKnee: 'rHip', lHip: 'pelvis', lKnee: 'lHip',
@@ -62,7 +63,11 @@ const PARENT = {
   rShoulder: 'spineUpper', rElbow: 'rShoulder', rWrist: 'rElbow',
   lShoulder: 'spineUpper', lElbow: 'lShoulder', lWrist: 'lElbow',
   rAnkle: 'rKnee', lAnkle: 'lKnee',
+  rArmAux: 'spineUpper', lArmAux: 'spineUpper',
 };
+// 肩部輔助骨（real-skin 修正，驗收修訂 R2）：與肩關節同位置、同綁定朝向，掛在胸節下；不在 geo 關節樹、
+// geoAnimator 不驅動——每幀由 retargetArms 從上臂的旋轉推出（見 AUX_*）。只供寫實皮膚的權重使用
+const AUX = { rArmAux: 'rShoulder', lArmAux: 'lShoulder' };
 // 權重用的骨段（每骨一到兩段線段＋半徑；torso＝橢圓截面 rx/rz）
 const L = LANDMARKS;
 const TORSO = { rx: 0.19, rz: 0.14 };
@@ -133,6 +138,7 @@ export function computeSkinWeights(positions, normals) {
       eff[b] = Infinity;
       if (side && limbSide && limbSide !== side) continue; // ③
       const seg = SEGMENTS[name];
+      if (!seg) continue; // 輔助骨沒有骨段：不參與自動權重
       let best = Infinity;
       let dot = 0;
       for (const [a, bb] of seg.segs) {
@@ -232,8 +238,73 @@ export function computePartLabels(positions, primary) {
   return out;
 }
 
-// 載入白模：縮放到 BASE_H、腳底貼地、補法線、算一次權重與部位（全員共用）
-export async function loadRealPlayerAsset(url) {
+// real-skin 修正：烘焙權重（tools/bake-real-skin-weights.mjs 離線產生；熱擴散求解器只在 tools/，src 不含）。
+// 檔案＝與白模同名的 `.weights.glb`（PWA 預快取的 models/real/*.glb 自動涵蓋），只放權重 accessor：
+// JOINTS_0（UNSIGNED_BYTE VEC4）、WEIGHTS_0（正規化 UNSIGNED_SHORT VEC4）、_PRIMARY（UNSIGNED_BYTE SCALAR＝computeSkinWeights
+// 的主骨，部位上色與接縫拆分沿用它）；extras 帶骨名、頂點數與綁定位置雜湊。讀不到或任一項不符 ⇒ 退回 computeSkinWeights
+export const WEIGHTS_FORMAT = 'real-skin-weights';
+// FNV-1a（32 位元）雜湊縮放、貼地後的綁定位置（Float32 原始位元）：確認烘焙檔對應的是同一個白模
+export function positionHash(pos) {
+  const u = new Uint32Array(pos.buffer, pos.byteOffset, pos.length);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < u.length; i += 1) {
+    let x = u[i];
+    for (let b = 0; b < 4; b += 1) { h ^= x & 0xff; h = Math.imul(h, 0x01000193) >>> 0; x >>>= 8; }
+  }
+  return h >>> 0;
+}
+async function loadBakedWeights(url, pos) {
+  const wurl = url.replace(/\.glb(\?.*)?$/i, '.weights.glb$1');
+  if (wurl === url) return null;
+  const fail = (why) => {
+    // eslint-disable-next-line no-console
+    console.warn(`[real-skin] 烘焙權重不採用（${why}），改用即時計算：${wurl}`);
+    return null;
+  };
+  let buf;
+  try {
+    const res = await fetch(wurl);
+    if (!res.ok) return fail(`HTTP ${res.status}`);
+    buf = await res.arrayBuffer();
+  } catch (e) {
+    return fail(e?.message ?? '讀取失敗');
+  }
+  const dv = new DataView(buf);
+  if (buf.byteLength < 28 || dv.getUint32(0, true) !== 0x46546c67) return fail('不是 GLB');
+  const jsonLen = dv.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+  const binStart = 20 + jsonLen + 8;
+  const ex = json.extras || {};
+  const n = pos.length / 3;
+  if (ex.format !== WEIGHTS_FORMAT) return fail('格式不符');
+  if (!Array.isArray(ex.bones) || ex.bones.join(',') !== BONES.join(',')) return fail('骨名不符');
+  if (ex.vertexCount !== n) return fail('頂點數不符');
+  if (ex.positionHash !== positionHash(pos)) return fail('白模位置雜湊不符');
+  const view = (name, T, comps) => {
+    const a = json.accessors.find((x) => x.name === name);
+    const bv = json.bufferViews[a.bufferView];
+    return new T(buf, binStart + (bv.byteOffset || 0) + (a.byteOffset || 0), a.count * comps);
+  };
+  const J = view('JOINTS_0', Uint8Array, 4);
+  const W = view('WEIGHTS_0', Uint16Array, 4);
+  const P = view('_PRIMARY', Uint8Array, 1);
+  const skinIndex = new Uint16Array(n * 4);
+  const skinWeight = new Float32Array(n * 4);
+  for (let i = 0; i < n; i += 1) {
+    let s = 0;
+    for (let k = 0; k < 4; k += 1) s += W[i * 4 + k];
+    if (!(s > 0)) return fail(`頂點 ${i} 權重和為 0`);
+    for (let k = 0; k < 4; k += 1) {
+      if (J[i * 4 + k] >= BONES.length) return fail(`頂點 ${i} 骨索引越界`);
+      skinIndex[i * 4 + k] = J[i * 4 + k];
+      skinWeight[i * 4 + k] = W[i * 4 + k] / s;
+    }
+  }
+  return { skinIndex, skinWeight, primary: Uint8Array.from(P) };
+}
+
+// 讀白模幾何：縮放到 BASE_H、腳底貼地、補法線（烘焙器 tools/bake-real-skin-weights.mjs 也用這一份）
+export async function loadRealGeometry(url) {
   const gltf = await new GLTFLoader().loadAsync(url);
   let src = null;
   gltf.scene.traverse((o) => { if (!src && o.isMesh) src = o; });
@@ -250,9 +321,16 @@ export async function loadRealPlayerAsset(url) {
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
+  return geometry;
+}
+
+// 載入白模：幾何＋權重（烘焙檔，讀不到則即時計算）＋部位（全員共用）
+export async function loadRealPlayerAsset(url) {
+  const geometry = await loadRealGeometry(url);
   const pos = geometry.attributes.position.array;
   const nor = geometry.attributes.normal.array;
-  const w = computeSkinWeights(pos, nor);
+  const baked = await loadBakedWeights(url, pos);
+  const w = baked ?? computeSkinWeights(pos, nor);
   const parts = computePartLabels(pos, w.primary);
   const split = splitBridges(pos, nor, geometry.index.array, w, parts);
   const out = new THREE.BufferGeometry();
@@ -266,7 +344,7 @@ export async function loadRealPlayerAsset(url) {
   const faces = split.index.length / 3;
   return {
     geometry: out, faces, primary: split.primary, parts: split.parts, url, bridgeTris: split.bridgeTris,
-    sole: collectSole(split),
+    sole: collectSole(split), weightsSource: baked ? 'baked' : 'computed',
   };
 }
 
@@ -362,6 +440,7 @@ function computeBind() {
   const quaternion = {};
   for (const b of BONES) {
     quaternion[b] = new THREE.Quaternion();
+    if (AUX[b]) continue; // 輔助骨：下方照抄對應肩關節
     if (LIMB[b]) {
       position[b] = [0, -v3(L[b]).distanceTo(v3(L[LIMB[b][0]])), 0];
     } else {
@@ -381,6 +460,7 @@ function computeBind() {
     const d = v3(L[next]).sub(v3(L[b])).normalize().applyQuaternion(quaternion[parent].clone().invert());
     quaternion[b].setFromUnitVectors(DOWN, d);
   }
+  for (const [aux, sh] of Object.entries(AUX)) { position[aux] = position[sh].slice(); quaternion[aux].copy(quaternion[sh]); }
   return { position, quaternion };
 }
 const BIND = computeBind();
@@ -397,6 +477,14 @@ const FOOT_AIR = 0.01; // 鞋底離地超過這個高度＝騰空：腳骨跟著
 // 手臂下垂時在肩的局部框架多外展 REST_ABDUCT，隨上臂抬舉角 φ（相對胸節、動畫意圖）以 cos φ 淡出，
 // 舉到水平以上歸零——高舉動作不變。只作用在寫實人（geoAnimator 不動）
 const REST_ABDUCT = (8 * Math.PI) / 180;
+// 胸椎扭轉分段（同上裁定）：animator 的胸扭轉（spineUpper 的 Euler y）移 TWIST_SHARE 到 spine，再反解 spineUpper
+// 使胸節的世界朝向與改前完全相同——總扭轉量、雙臂／頭／背號位置都不變，只有中段多轉，蒙皮扭轉分到兩段
+const TWIST_SHARE = 0.5;
+// 肩部輔助骨（驗收修訂 R2）：跟上臂同轉，但上臂方向離胸側矢狀面的外展角 λ 低於 AUX_MIN 時，把輔助骨的方向
+// 軟性夾到 ≥ AUX_MIN（softplus，寬 AUX_SOFT）。上臂內側皮膚部分綁在輔助骨上：手臂垂下時內側皮貼著胸側滑、
+// 不穿進軀幹；舉臂（λ 遠大於 AUX_MIN）時輔助骨＝上臂，等同沒有。不移肩、不平移，只是另一個繞肩關節的旋轉
+const AUX_MIN = (30 * Math.PI) / 180;
+const AUX_SOFT = (5 * Math.PI) / 180;
 
 const STUB_POOL = { claim: (key) => ({ key, index: 0 }) };
 let MAT = null;
@@ -424,6 +512,9 @@ export function createRealPlayer(asset, {
     const ankle = new THREE.Object3D();
     joints[`${s}Knee`].add(ankle);
     joints[`${s}Ankle`] = ankle;
+    const aux = new THREE.Object3D(); // 肩部輔助骨（掛在胸節下，見 AUX）
+    joints.spineUpper.add(aux);
+    joints[`${s}ArmAux`] = aux;
   }
   for (const b of BONES) {
     const p = BIND.position[b];
@@ -539,8 +630,41 @@ export function createRealPlayer(asset, {
   // animator 每幀都會重寫肩的 x/z，所以偏移不會逐幀累積；同一幀若被呼叫兩次（中間沒有 animator 更新），
   // 先撤銷上一次的偏移再套，結果不變
   const _va = new THREE.Vector3();
+  const _vs = new THREE.Vector3(); const _vt = new THREE.Vector3(); const _qc = new THREE.Quaternion();
   const lastAbduct = { r: null, l: null };
+  let lastSplit = null;
+  function splitTwist() {
+    const sp = joints.spine; const su = joints.spineUpper;
+    // 同一幀重入（中間沒有 animator 更新）：已套過就不再套
+    if (lastSplit && sp.rotation.y === lastSplit.spineY && su.quaternion.equals(lastSplit.chest)) return;
+    const cy = su.rotation.y;
+    _qc.copy(sp.quaternion).multiply(su.quaternion); // 胸節相對骨盆（改前）
+    sp.rotation.y += cy * TWIST_SHARE; // Euler XYZ：spine 的 x／z 不動
+    su.quaternion.copy(sp.quaternion).invert().multiply(_qc); // 反解：spine'·chest' ＝ 改前的 spine·chest
+    lastSplit = { spineY: sp.rotation.y, chest: su.quaternion.clone() };
+  }
+  // 輔助骨：q_aux ＝ C·q_shoulder（皆在胸節框架），C 把上臂方向 d 轉到外展角被軟性夾住的 d'
+  function updateAux(side) {
+    const sh = joints[`${side}Shoulder`]; const aux = joints[`${side}ArmAux`];
+    const ex = side === 'r' ? -1 : 1; // 外側方向（胸節框架 x）
+    _va.set(0, -1, 0).applyQuaternion(sh.quaternion);
+    const a = Math.min(Math.max(_va.x * ex, -1), 1);
+    const lam = Math.asin(a);
+    const lam2 = AUX_MIN + AUX_SOFT * Math.log1p(Math.exp((lam - AUX_MIN) / AUX_SOFT));
+    aux.quaternion.copy(sh.quaternion);
+    if (lam2 - lam > 1e-6) {
+      _vs.set(0, _va.y, _va.z);
+      const sl = _vs.length();
+      if (sl > 1e-6) {
+        _vs.multiplyScalar(Math.cos(lam2) / sl);
+        _vt.set(ex * Math.sin(lam2), 0, 0).add(_vs);
+        _qc.setFromUnitVectors(_va, _vt.normalize());
+        aux.quaternion.premultiply(_qc);
+      }
+    }
+  }
   function retargetArms() {
+    splitTwist();
     for (const side of ['r', 'l']) {
       const sh = joints[`${side}Shoulder`];
       const st = lastAbduct[side];
@@ -549,6 +673,7 @@ export function createRealPlayer(asset, {
       const offset = (side === 'r' ? -1 : 1) * REST_ABDUCT * Math.max(0, -_va.y); // 右臂在 −X：外展＝z 負
       sh.rotation.z += offset;
       lastAbduct[side] = { after: sh.rotation.z, offset };
+      updateAux(side);
     }
     root.updateMatrixWorld(true);
   }
