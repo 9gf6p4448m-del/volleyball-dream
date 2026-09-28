@@ -31,6 +31,7 @@ import * as gc from '../src/render/geoCharacter.js';
 import * as rp from '../src/render/realPlayer.js';
 import * as lib from './real-skin-lib.mjs';
 
+export const BASELINE_REALPLAYER_SHA12 = 'b1489d7878dc'; // 8720597 的 src/render/realPlayer.js（去 CR 後 sha256 前 12 碼）；S2(i)／(f) 的現況必須在此量
 export const W_IN = 0.5; // generalized winding number 的內外門檻（方法本身的定義，不是可調參數）
 export const HIP_BONES = ['pelvis', 'rHip', 'lHip'];
 const ZONE = (y) => (y >= 1.15 ? '胸' : y >= 0.95 ? '腹' : '臀腿'); // 與 lib.metricPenetration 相同
@@ -197,9 +198,9 @@ export function penetrationV2(R, S, P1) {
     let inside = 0; let deeper1cm = 0; let maxDepth = 0; let atOpening = 0; let atOpeningMax = 0; let nearHalf = 0;
     const zones = {};
     for (const i of R.armVerts[s]) {
-      // 以凍結頂點為單位（第 2 輪 N1）：它的每個被畫出的代表點（原頂點＋對回它的複製點）都判內外；
+      // 以凍結頂點為單位（第 2 輪 N1；R5 NF3 只收主骨屬手臂骨的複製點）：它的每個手臂代表點都判內外；
       // 任一代表判內就算一點，深度取判內代表中最深者；近½＝任一代表 w∈(0.4,0.6)。未套凍結集合（live）時代表＝自己
-      const repsI = R.reps ? R.reps.get(i) : [i];
+      const repsI = R.armReps ? R.armReps.get(i) : [i];
       let w = -Infinity; let nr = null; let near = false;
       for (const v of repsI) {
         const pv = [P1[v * 3], P1[v * 3 + 1], P1[v * 3 + 2]];
@@ -315,7 +316,7 @@ export async function loadFrozen(url = FROZEN_URL) {
 }
 // 把凍結集合套到當前白模：被穿入表面、手臂頂點（含左右與部位）都換成凍結的。
 // gi＝glbIndex()：凍結時的索引（8720597 上 R.index 與 glb 原索引逐項相同，雜湊存於 F.indexSha）
-export function applyFrozen(R, F, gi) {
+export function applyFrozen(R, F, gi, { SI = null, SW = null, bones = null } = {}) {
   if (R.index.length / 3 !== F.tris) throw new Error(`凍結集合與白模不相容：三角形 ${R.index.length / 3} ≠ ${F.tris}`);
   if (R.n < F.verts || bindPosSha(R.P, F.verts) !== F.bindPosSha) throw new Error('凍結集合與白模不相容：綁定位置不同');
   if (!gi || gi.verts !== F.verts || u32Sha(gi.index) !== F.indexSha) throw new Error('凍結集合與白模不相容：glb 原索引與凍結時不同');
@@ -348,15 +349,31 @@ export function applyFrozen(R, F, gi) {
   for (let a = F.verts; a < R.n; a += 1) if (used[a] && dupSrc[a] >= 0 && reps.has(dupSrc[a])) reps.get(dupSrc[a]).push(a);
   const orphans = [...frozenVerts].filter((v) => !reps.get(v).length);
   if (orphans.length) throw new Error(`凍結集合與白模不相容：${orphans.length} 個凍結頂點沒有任何被畫出的代表點（原頂點與複製點都不被三角形引用，例 ${orphans.slice(0, 5).join(', ')}）`);
+  // 手臂探針的代表點（R5 NF3）：被畫出的原頂點＋「自身主骨（當前畫面權重 skinWeight 最大者、嚴格 > 取第一個）屬手臂骨」的複製點。
+  // splitBridges 的複製點照抄近端骨權重（例：上臂頂點的複製點主骨＝spineUpper），畫面上是軀幹皮、不是手臂，不列為手臂點；
+  // 它們若在凍結 S_b／S_e 三角形裡被畫出，就經由當前 index 自然屬於被穿入表面（表面一律取畫出來的三角形）；不在其中者兩邊都不算。
+  // 手臂頂點若沒有任何手臂代表點（原頂點未畫、複製點全非手臂骨）＝該手臂點在畫面上已不存在，停止（不默默少算）。
+  const ARM_BONES = ['rShoulder', 'rElbow', 'rWrist', 'lShoulder', 'lElbow', 'lWrist'];
+  const armBone = new Set((bones ?? []).map((b, bi) => (ARM_BONES.includes(b) ? bi : -1)).filter((bi) => bi >= 0));
+  const mainBoneOf = (v) => { let best = -1; let bw = -1; for (let q = 0; q < 4; q += 1) if (SW[v * 4 + q] > bw) { bw = SW[v * 4 + q]; best = SI[v * 4 + q]; } return best; };
+  const armReps = new Map();
+  let armDupDropped = 0;
+  for (const v of [...F.arm.r, ...F.arm.l]) {
+    const all = reps.get(v);
+    const keep = SI && SW ? all.filter((a) => a === v || armBone.has(mainBoneOf(a))) : all;
+    armDupDropped += all.length - keep.length;
+    if (!keep.length) throw new Error(`凍結集合與白模不相容：手臂頂點 ${v} 沒有任何手臂代表點（原頂點未被畫出，複製點主骨都不是手臂骨）`);
+    armReps.set(v, keep);
+  }
   const armSide = new Int8Array(R.n); const armPart = new Int8Array(R.n);
   F.arm.r.forEach((i, k) => { armSide[i] = -1; armPart[i] = F.arm.rPart[k]; });
   F.arm.l.forEach((i, k) => { armSide[i] = 1; armPart[i] = F.arm.lPart[k]; });
   const bB = surfaceBoundary(R, F.Sb.tris);
-  const R2 = { ...R, armVerts: { r: F.arm.r, l: F.arm.l }, armSide, armPart, torsoTris: F.Sb.tris, boundaryEdge: bB.boundaryEdge, boundaryVert: bB.boundaryVert, reps };
+  const R2 = { ...R, armVerts: { r: F.arm.r, l: F.arm.l }, armSide, armPart, torsoTris: F.Sb.tris, boundaryEdge: bB.boundaryEdge, boundaryVert: bB.boundaryVert, reps, armReps };
   const Sb = torsoSurface(R2);
   const bE = surfaceBoundary(R2, F.Se.tris);
   const Se = { name: '(e) 骨盆＋大腿', tris: F.Se.tris, boundaryEdge: bE.boundaryEdge, boundaryVert: bE.boundaryVert, verts: F.Se.verts };
-  return { R: R2, Sb, Se, dupSlots, rotated };
+  return { R: R2, Sb, Se, dupSlots, rotated, armDupDropped };
 }
 // 權重合法性（第 2 輪 N4）：每個頂點權重非負、總和 1±1e-4，不符即停止
 export function weightCheck(g) {
@@ -367,29 +384,52 @@ export function weightCheck(g) {
     if (Math.abs(s - 1) > 1e-4) throw new Error(`權重不合法：頂點 ${i} 權重總和 ${s}（應 1±1e-4）`);
   }
 }
+// 畫面實際使用的幾何（R5 NF1 收斂）：量尺的索引核對、權重檢查、代表點、被穿入表面、蒙皮位置一律只讀 createRealPlayer 產出的
+// mesh.geometry；並斷言它的 index 與 position／normal／skinIndex／skinWeight 和 asset.geometry 逐位元相同（同一份資料），
+// 沒有 morph target，綁定矩陣為單位矩陣（lib.skinPositions 的前提）。不符即停止。
+const MESH_ATTRS = ['position', 'normal', 'skinIndex', 'skinWeight'];
+const sameBytes = (a, b) => a.constructor === b.constructor && a.length === b.length
+  && Buffer.compare(Buffer.from(a.buffer, a.byteOffset, a.byteLength), Buffer.from(b.buffer, b.byteOffset, b.byteLength)) === 0;
+export function assertMeshData(mesh, ref, where) {
+  const G = mesh.geometry;
+  for (const k of MESH_ATTRS) {
+    const a = G.attributes[k]; const b = ref.attributes[k];
+    if (!a || !b || a.itemSize !== b.itemSize || !sameBytes(a.array, b.array)) throw new Error(`畫面幾何與量尺幾何不是同一份資料（${where}：屬性 ${k}）`);
+  }
+  if (!G.index || !ref.index || !sameBytes(G.index.array, ref.index.array)) throw new Error(`畫面幾何與量尺幾何不是同一份資料（${where}：index）`);
+  if (Object.keys(G.morphAttributes).length || mesh.morphTargetInfluences) throw new Error(`畫面幾何有 morph target（${where}），量尺不支援`);
+  if (!mesh.bindMatrix.equals(new THREE.Matrix4())) throw new Error(`畫面網格的綁定矩陣不是單位矩陣（${where}）`);
+}
 // live＝現行規則即時計算（只供產生凍結檔）；rpMod＝要載入的 realPlayer 模組（預設 src 現行版）
 export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   installNodeFetch();
   const glbUrl = new URL(`../public/models/real/player_${faces}.glb`, import.meta.url);
-  const asset = await rpMod.loadRealPlayerAsset(glbUrl.href);
-  weightCheck(asset.geometry);
+  const loaded = await rpMod.loadRealPlayerAsset(glbUrl.href);
+  const mods = { THREE, rp: rpMod, ga, gc };
+  const probe = lib.makeReal(mods, loaded);
+  const G = probe.p.mesh.geometry;
+  assertMeshData(probe.p.mesh, loaded.geometry, '載入');
+  const asset = { ...loaded, geometry: G }; // 之後一律讀畫面那份
+  weightCheck(G);
   const R0 = lib.bindRegions(asset, rpMod.LANDMARKS);
   let R; let Sb; let Se; let frozen = null; let content = null;
   if (live) {
     R = R0; Sb = torsoSurface(R); Se = hipSurface(asset, rpMod.BONES, R);
   } else {
     frozen = await loadFrozen();
-    ({ R, Sb, Se } = applyFrozen(R0, frozen.fz[faces], await glbIndex(glbUrl)));
+    ({ R, Sb, Se } = applyFrozen(R0, frozen.fz[faces], await glbIndex(glbUrl),
+      { SI: G.attributes.skinIndex.array, SW: G.attributes.skinWeight.array, bones: rpMod.BONES }));
     // 內容指紋：凍結三角形在「當前」索引上的頂點三元組（依凍結順序），任何改指都會變
     const tri = (tris) => u32Sha(tris.flatMap((t) => [R.index[t * 3], R.index[t * 3 + 1], R.index[t * 3 + 2]])).slice(0, 12);
     content = { Sb: tri(Sb.tris), Se: tri(Se.tris) };
   }
   const RH = { ...R, torsoTris: Se.tris, boundaryEdge: Se.boundaryEdge, boundaryVert: Se.boundaryVert }; // 舊量法 (e) 用
-  return { faces, glbUrl, asset, R, Sb, Se, RH, frozen, content, mods: { THREE, rp: rpMod, ga, gc } };
+  return { faces, glbUrl, asset, loaded, G, R, Sb, Se, RH, frozen, content, mods };
 }
 export function poseKey(setup, key) {
   const mods = setup.mods ?? MODS;
-  const real = lib.makeReal(mods, setup.asset);
+  const real = lib.makeReal(mods, setup.loaded ?? setup.asset);
+  if (setup.G) assertMeshData(real.p.mesh, setup.G, `幀 ${key.id}`); // 每幀新建的受測者也必須畫同一份資料
   const pk = lib.driveKey(mods, [real], key);
   const P1 = lib.skinPositions(THREE, real.p);
   const N1 = lib.vertexNormals(P1, setup.R.index);
@@ -501,6 +541,12 @@ if (isMain) {
   if (args.baseline && args.baseline !== '1') {
     baseline = JSON.parse(await readFile(args.baseline, 'utf8'));
     if (baseline.faces !== faces) throw new Error(`--baseline 面數 ${baseline.faces} ≠ ${faces}`);
+    // R5 NF2：現況必須在 8720597 上量（realPlayer.js 雜湊鎖定），其餘每個輸入雜湊（含本量尺、凍結檔、glb、lib、geo*）兩邊都要相同
+    if (baseline.hashes?.['realPlayer.js'] !== BASELINE_REALPLAYER_SHA12) throw new Error(`--baseline 的 realPlayer.js 雜湊 ${baseline.hashes?.['realPlayer.js']} ≠ 8720597 的 ${BASELINE_REALPLAYER_SHA12}（現況必須在 8720597 上量）`);
+    for (const k of new Set([...Object.keys(baseline.hashes ?? {}), ...Object.keys(hashes)])) {
+      if (k === 'realPlayer.js') continue;
+      if (baseline.hashes?.[k] !== hashes[k]) throw new Error(`--baseline 的輸入雜湊 ${k} ${baseline.hashes?.[k]} ≠ 本次 ${hashes[k]}，不能比較`);
+    }
     out.push('', `## 被穿入表面與手臂頂點集合（對照 ${args.baseline}）`);
     for (const [k, nm] of [['Sb', 'S_b 三角形'], ['Se', 'S_e 三角形'], ['armR', '右臂頂點'], ['armL', '左臂頂點']]) {
       const z = baseline.sets?.[k];
