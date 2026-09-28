@@ -1,6 +1,6 @@
-# 寫實球員蒙皮修正（real-skin）驗收條件
+# 寫實球員蒙皮修正（real-skin）驗收條件——凍結版
 
-起點：feat/real-match 55cc61b（線上 gh-pages 17b35b7）。分支 feat/real-skin（診斷 3a60a80／2da331f）。
+起點：feat/real-match 55cc61b（線上 gh-pages 17b35b7）。分支 feat/real-skin（診斷 3a60a80／2da331f；草案 45580b2 經 fresh 冷讀後修訂為本版）。
 診斷報告：docs/experiments/real-skin-diagnosis.md；量測：`node tools/real-skin-measure.mjs [--faces=20k|5k]`。
 
 ## 問題（使用者 09-28 實機試玩）
@@ -15,48 +15,75 @@
 - 驗收原則（主對話向使用者承諾）：**每一個取樣幀都不能比現況差**，修不到就不上線。
 
 ## 範圍
-只改寫實外觀：src/render/realPlayer.js、烘焙權重檔（public/models/real/ 下新增）、背號掛法（B5）所需的最小改動。
-幾何外觀與動作資料不動；sim 不動。
+只改寫實外觀：src/render/realPlayer.js、烘焙權重檔（public/models/real/ 下新增）、背號掛法（B5）所需的最小改動；
+matchView 若需接線（例如逐幀外展），只能加呼叫，不得改幾何人路徑。幾何外觀與動作資料不動；sim 不動。
 
 ## 量測基準（凍結）
 - 取樣幀＝tools/real-skin-lib.mjs（2da331f）定義的 9 幀：K1a、K1b、K2a、K2b、K3a、K3b、K4a、K4b、K4c。
 - (a)(b)(c)(d) 的計算邏輯以 2da331f 為準：`git diff 2da331f -- tools/real-skin-lib.mjs tools/real-skin-measure.mjs` 必須為空。
   新指標一律放新檔。改後數字＝在實作分支上跑 `base` 變體（它 import 的是 src/ 現行程式碼）。
-- 「現況值」＝在 2da331f（src＝55cc61b）上跑同一指令的輸出；實作者開工前重跑一次並落檔，作為下列「不退步」的比較基準。
+- **現況值**：開工第一步，在尚未修改的 src 上（＝55cc61b；本分支到 45580b2 為止 src 沒有任何改動）
+  跑 `node tools/real-skin-measure.mjs --variants=base --json=...` 20k、5k 各一次，把輸出（txt＋json）提交到
+  docs/experiments/real-skin-evidence/before-{20k,5k}.*，之後才准動 src/。不得引用 scratchpad 的舊輸出。
+- **比較精度**：點數比整數；深度比 0.1 cm；拉伸倍率比 0.1；角度比 0.1°（都以工具的顯示精度為準）。
+- 任何一條經實測證明做不到：停手回報（附數據），**不得自行修改本檔**。
 
 ## 驗收（每條註明「什麼樣的實作會讓它變紅」）
 - **S1 腋下膜 (a)**：20k 與 5k 的 9 幀，每幀「拉伸 >2× 三角形數」≤ 30，且拉伸 P99 ≤ 2.5。
-  （現況 105–364 個、P99 9.2–31.0；實驗組合最多 27 個、P99 ≤ 2.1）紅：權重沒換或換錯區域。
+  （現況 105–364 個、P99 9.2–31.0；實驗組合 20k 最差 K1b 27 個／P99 2.09、5k 最差 K1a 8 個／P99 2.17）
+  紅：權重沒換或換錯區域。
 - **S2 手臂穿入軀幹 (b)**，20k 與 5k 皆要：
   - (i) 不退步：9 幀 × 左右臂，穿入點數與最深值都 ≤ 現況值。
   - (ii) 站姿與跑步（K3a、K3b、K4a）：每臂穿入 ≤ 10 點，且最深 ≤ 1.0 cm。
   - (iii) 接球（K4b、K4c）：每臂穿入 ≤ 30 點，且最深 ≤ 2.0 cm。
+  - 已知實驗組合沒過、實作時必須解掉的殘留（診斷報告「推薦組合的殘留」一節）：
+    - 扣球引臂上臂→胸 7.5 cm（現況 4.0 cm）；
+    - 揮臂擊球非擊球臂前臂→腹 11.9 cm；
+    - 發球起手腋下摺 13.3 cm（現況 0）；
+    - 接球預備前臂→腹 18.7 cm。
   紅：沒做外展、外展方向錯，或像實驗版那樣讓發球起手、接球預備變深。
 - **S3 手埋短褲（新指標 (e)，使用者點名「接球時手的位置」）**：
-  - 新增量測（放新檔，例如 tools/real-skin-thigh.mjs）：手臂（含手）頂點穿入「骨盆＋大腿」表面的點數與最深值，量法比照 (b)（最近點＋法線定號）。
-  - 這個指標**必須先在 2da331f 量到 K4b 為紅（>0）並提交，之後才准動 src/**；若現況量不到穿入，就代表指標沒有鑑別力，停下回報。
-  - 門檻：K4a、K4b、K4c 每臂 ≤ 10 點，且最深 ≤ 1.0 cm。
+  - 新增量測（放新檔，例如 tools/real-skin-thigh.mjs）：手臂（含手）頂點穿入「骨盆＋左右大腿」表面（主骨為 pelvis、rHip、lHip 的頂點）的點數與最深值，量法比照 (b)（最近點＋法線定號）。
+  - 鑑別力要兩面都驗，而且必須在動 src/ 之前量完並提交：
+    - 在尚未修改的 src 上，K4b 必須 >0（紅），否則指標沒有鑑別力，停下回報；
+    - K1b 右臂（擊球臂高舉、遠離大腿）必須 =0，證明指標不是恆紅。
+  - 門檻：K4a、K4b、K4c，20k 與 5k 都要每臂 ≤ 10 點，且最深 ≤ 1.0 cm。
   紅：手或前臂仍埋在短褲或大腿裡。
-- **S4 胸扭轉折線 (c)**（只量 20k；5k 取樣雜訊過大，見診斷報告）：
-  - 最大扭轉跳變 K1a ≤ 6.0°/2cm、K2b ≤ 6.0°/2cm，其餘幀 ≤ 現況值（K1b 現況 4.3）。
-  - 同一幀的肩線總扭轉角與現況差 ≤ 2°。
+- **S4 胸扭轉折線 (c)**（只量 20k；5k 取樣雜訊過大，見診斷報告）。欄位名稱以診斷報告「表 2 (c) 脊椎旋轉分布」為準：
+  - 「相鄰片最大扭轉跳變」：K1a ≤ 6.0°/2cm、K2b ≤ 6.0°/2cm；其餘有扭轉的幀 ≤ 現況值（K1b 現況 4.3）。
+  - 總量守恆（不得靠縮小扭轉過關）：
+    - 同一幀的「蒙皮總扭轉（頂片−底片）」與現況差 ≤ 2°；
+    - 同一幀「關節扭轉 骨盆／spine／spineUpper」三者總和與現況差 ≤ 0.5°。
   紅：扭轉仍集中在折線上，或靠縮小總扭轉量過關。
 - **S5 幾何與動作不變**：
   - `git diff 55cc61b -- src/render/geoAnimator.js src/render/geoCharacter.js src/sim` 為空。
-  - 2B 檢查（tools/motion-2b-check.mjs，原指令見 docs/experiments/motion-2b-report.md）全過，含 E2(a) 39/39。
+  - E2(a) 39/39：`node tools/motion-d0-measure.mjs`，判讀方式照 docs/experiments/motion-2b-report.md 的 E2 節。
+    注意：此腳本會改寫 docs/experiments/motion-d0-measure.json，跑完要用 `git checkout -- docs/experiments/motion-d0-measure.json` 還原，不得提交該檔的變動。
+  - E2(b)／E3／E4／E6：`node tools/motion-2b-check.mjs`，參數照同報告 E2(b)、E3/E4/E6 節的原指令，exit 0。
   紅：把扭轉分段或外展寫進共用動作層，連幾何人也被改。
-- **S6 A2(d) 手臂方向**：第一階段 A2(d) 手臂四段與幾何人夾角 ≤ 10°，全部取樣點＋待命，門檻不變，原指令見 docs/real-player-stage1-acceptance.md。
-  紅：外展超過容許。
+- **S6 第一階段回歸（2B 的 E5）**：`tools/real-player-browser.mjs` 第一階段 A1–A6、A8–A12 全過（含 A2(d) 手臂四段與幾何人夾角 ≤ 10°、A2(e)、A9、A10），門檻不變。
+  - 先驗：完整實作前，先只做「外展 8°」，用此工具量 A2(d)。超過 10° 就停下回報。
+  紅：外展超過容許、IK 或接地被新權重破壞。
 - **S7 2A 回歸**：B1–B12、H1 全過，含 B5 背號 ≤ 0.06 m（改掛法，不放寬）與 B12 截圖重跑。
   原指令見 docs/kickoffs/real-player-stage2-match.md、docs/experiments/real-match-report.md。
   紅：背號飄離或其他外觀回歸。
 - **S8 執行期成本**：
   - src/ 內不得有熱擴散求解程式（求解器放 tools/，產出烘焙檔），且 20k 與 5k 都要有烘焙檔。
-  - 鞋底 IK 影響頂點數 ≤ 523（現況值）。
+  - 鞋底 IK 影響頂點數 ≤ 523（現況值，診斷報告 §五）。
   - 附寫實模型載入耗時的改前／改後數字（只記錄，不設門檻）。
   紅：執行期現算權重，或每幀 CPU 工作量增加。
-- **S9 全套**：npm test 全綠（基準 2613/2613）；sim hash 與 tools/sim-hash-baseline.json 相同。
+- **S9 全套**：
+  - 開工第一步跑 npm test，輸出落檔到 docs/experiments/real-skin-evidence/npm-before.txt；
+  - 完工時 npm test 全綠，且總測試數 ≥ 開工時的數字（不得刪測試）；
+  - `node tools/sim-hash-probe.mjs` 與 tools/sim-hash-baseline.json 相同。
 - **S10 使用者實機試玩判定自然度**：最終權威，不由任何機械條件取代。
 
 ## 修訂紀錄
-（空。任何讓通過機率上升的修改須先寫明原標準錯在哪、為什麼現在才知道，並取得使用者對該條的明確同意。）
+- 草案 45580b2 → 本版（凍結前，fresh 冷讀後修訂；皆為引用更正、定義釐清或加嚴，沒有放寬任何門檻）：
+  - S5 的 E2(a) 改由 motion-d0-measure.mjs 量測，原草案誤指 motion-2b-check.mjs；
+  - S6 改為完整的 E5（A1–A6、A8–A12），原草案只列 A2(d)，並加上 8° 先驗；
+  - S9 基準 2613 在 repo 裡查無出處，改為開工時重跑落檔；
+  - S4 指定表 2 欄名，並加上關節扭轉總和守恆；
+  - S3 加上反面鑑別（K1b 右臂 =0），並指定 5k 也要量；
+  - 其他：加上比較精度、現況值落檔位置、停手回報規則。
+- 之後任何讓通過機率上升的修改：須先寫明原標準錯在哪、為什麼現在才知道，並取得使用者對該條的明確同意。
