@@ -1,0 +1,12 @@
+import { pathToFileURL } from 'node:url';
+import { makeMod, evaluate } from './evalh.mjs';
+const WT = 'C:/Users/shung/worktrees/volleyball-skin';
+const BK = await import(pathToFileURL(`${WT}/tools/bake-real-skin-weights.mjs`).href);
+const faces = process.argv[2] || '5k';
+const P = JSON.parse(process.argv[3] || '{}');
+const keys = process.argv[4] ? process.argv[4].split(',') : null;
+const params = { ...BK.PARAMS, ...P, AUX: { ...BK.PARAMS.AUX, ...(P.AUX || {}) } };
+const rp = await makeMod([["const baked = await loadBakedWeights(url, pos);", "const baked = globalThis.__W(pos, nor, geometry.index.array);"]]);
+globalThis.__W = (pos, nor, index) => BK.bakeWeights(rp, pos, nor, index, params);
+const r = await evaluate(rp, faces, { keys });
+console.log(r.fails.join('  '));

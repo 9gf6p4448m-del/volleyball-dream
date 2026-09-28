@@ -1,0 +1,66 @@
+[selftest] OK  膝伸直: 預期 180.0000° 量得 180.0000°
+[selftest] OK  膝 90°（2D）: 預期 90.0000° 量得 90.0000°
+[selftest] OK  膝 90°（3D）: 預期 90.0000° 量得 90.0000°
+[selftest] OK  大腿前平舉: 預期 90.0000° 量得 90.0000°
+[selftest] OK  肘 90°（2D 夾角）: 預期 90.0000° 量得 90.0000°
+[selftest] OK  肘屈 90°（3D）: 預期 90.0000° 量得 90.0000°
+[selftest] OK  肘屈 34.4°（3D）: 預期 34.3775° 量得 34.3775°
+[selftest] OK  上臂前平舉（矢狀面）: 預期 90.0000° 量得 90.0000°
+[selftest] OK  肩屈前平舉（相對軀幹）: 預期 90.0000° 量得 90.0000°
+[selftest] OK  肩屈 150°（相對軀幹）: 預期 150.0000° 量得 150.0000°
+[selftest] OK  整體前傾 0.5 rad → 軀幹: 預期 28.6479° 量得 28.6479°
+[selftest] OK  整體前傾 0.5 rad → 頭: 預期 28.6479° 量得 28.6479°
+[selftest] OK  整體前傾 0.5 rad → 大腿（往後）: 預期 -28.6479° 量得 -28.6479°
+[selftest] OK  側平舉 → 肩外展: 預期 90.0000° 量得 90.0000°
+[selftest] OK  側平舉 → 水平內收: 預期 0.0000° 量得 0.0000°
+[selftest] OK  側平舉前移 30° → 肩外展: 預期 90.0000° 量得 90.0000°
+[selftest] OK  側平舉前移 30° → 水平內收: 預期 30.0000° 量得 30.0000°
+[selftest] OK  正上舉 → 肩外展: 預期 180.0000° 量得 180.0000°
+[selftest] OK  骨盆右側後轉 30° → 髖線: 預期 150.0000° 量得 150.0000°
+[selftest] OK  骨盆右側後轉 30° → 肩線: 預期 150.0000° 量得 150.0000°
+[selftest] OK  胸椎再後轉 20° → 肩線: 預期 130.0000° 量得 130.0000°
+[selftest] OK  胸椎再後轉 20° → 髖肩分離: 預期 20.0000° 量得 20.0000°
+[selftest] OK  零姿勢雙腕間距＝肩寬: 預期 0.4500 m 量得 0.4500 m
+[selftest] OK  root 上移 0.1 m → 質心上移: 預期 1.1174 m 量得 1.1175 m
+bump.start.head            現況    5.7  文獻   7.23  差   -1.5  範圍內
+bump.start.trunk           現況   22.6  文獻  28.46  差   -5.9  範圍內
+bump.start.uarm            現況   16.7  文獻   9.06  差   +7.6  範圍內
+bump.start.elbow           現況  158.8  文獻 158.83  差    0.0  範圍內
+bump.start.thigh           現況   42.5  文獻  46.29  差   -3.8  範圍內
+bump.start.knee            現況  137.5  文獻 134.82  差   +2.7  範圍內
+bump.contact.head          現況    7.2  文獻   2.19  差   +5.0  範圍內
+bump.contact.trunk         現況   21.4  文獻  19.84  差   +1.6  範圍內
+bump.contact.uarm          現況   54.1  文獻  50.71  差   +3.4  範圍內
+bump.contact.elbow         現況  180.0  文獻 172.44  差   +7.6  範圍內
+bump.contact.thigh         現況   28.3  文獻  30.68  差   -2.4  範圍內
+bump.contact.knee          現況  151.7  文獻 147.38  差   +4.3  範圍內
+bump.end.head              現況   -6.5  文獻   -6.5  差    0.0  範圍內
+bump.end.trunk             現況   12.9  文獻  20.02  差   -7.1  範圍內
+bump.end.uarm              現況   89.1  文獻  85.66  差   +3.4  範圍內
+bump.end.elbow             現況  172.9  文獻 170.22  差   +2.7  範圍內
+bump.end.thigh             現況   19.9  文獻  18.76  差   +1.1  範圍內
+bump.end.knee              現況  160.1  文獻 158.91  差   +1.2  範圍內
+set.load.elflex            現況  100.3  文獻    100  差   +0.3  範圍內
+set.push.elflex.fast       現況   40.1  文獻     40  差   +0.1  範圍內
+set.push.elflex.quick      現況   40.1  文獻     70  差  -29.9  超出
+set.push.shflex            現況  151.3  文獻    150  差   +1.3  範圍內
+spike.wind.shline          現況  111.0  文獻    105  差   +6.0  範圍內
+spike.wind.hipline         現況  157.1  文獻    157  差   +0.1  範圍內
+spike.wind.sep             現況   46.0  文獻     52  差   -6.0  範圍內
+spike.hit.abd              現況  131.6  文獻    130  差   +1.6  範圍內
+spike.hit.elflex           現況   34.4  文獻     34  差   +0.4  範圍內
+spike.hit.hadd             現況   23.1  文獻     29  差   -5.9  範圍內
+spike.hit.shline           現況  137.5  文獻    137  差   +0.5  範圍內
+spike.hit.hipline          現況  157.1  文獻    157  差   +0.1  範圍內
+spike.hit.sep              現況   19.6  文獻     20  差   -0.4  範圍內
+spike.approach.comdrop     現況   12.9  文獻   12.7  差   +0.2  —
+tip.hit.abd                現況  122.8  文獻    122  差   +0.8  範圍內
+tip.hit.elflex             現況   43.0  文獻     43  差    0.0  範圍內
+tip.hit.hadd               現況   43.9  文獻     43  差   +0.9  範圍內
+servejump.hit.abd          現況  131.5  文獻    129  差   +2.5  範圍內
+servejump.hit.elflex       現況   34.4  文獻     48  差  -13.6  範圍內
+servejump.hit.hadd         現況   23.1  文獻     23  差   +0.1  範圍內
+servefloat.hit.abd         現況  132.1  文獻    133  差   -0.9  範圍內
+servefloat.hit.elflex      現況   49.8  文獻     50  差   -0.2  範圍內
+servefloat.hit.hadd        現況   30.2  文獻     30  差   +0.2  範圍內
+[d0] 寫出 C:\Users\shung\worktrees\volleyball-skin\docs\experiments\motion-d0-measure.json
