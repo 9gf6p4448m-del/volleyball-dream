@@ -140,3 +140,7 @@ matchView 若需接線（例如逐幀外展），只能加呼叫，不得改幾�
   - 量尺收斂：索引核對、權重檢查、代表點、被穿入表面、蒙皮位置一律只讀畫面實際使用的 `mesh.geometry`，並斷言它的 index 與各屬性和 asset 為同一份資料（不符即停止）；S2(i) 的 --baseline 比照 (f) 全雜湊核對；複製點依自身主骨歸類。
   - **新增 S12 程序防線（實作 diff 審查）**：實作者對 `src/**` 的 diff 不得新增或修改 `onBeforeCompile`、自訂頂點著色器、morph target／morphAttributes，以及寫實球員 SkinnedMesh 自身的位置／旋轉／縮放；不得在 createRealPlayer 之後替換 geometry 屬性。以 `git diff 8720597..<實作 HEAD> -- src` 逐項 grep 列出，命中即紅（例外須逐條經使用者同意）。
   - 門檻與既有判準不變；第 4 輪覆審後仍有 CRITICAL／HIGH 未解即停手交使用者。
+- **R6（09-28，使用者同意「甲：拆開，尺補三個便宜防線後定稿」）：量尺與防作弊分工；S12 改為對抗審查。**
+  - 背景：第 4 輪覆審（證據 `ce506562…/scratchpad/r4-out/`）NF1–NF3 真的修好、無退化，但新增 CRITICAL×2（createRealPlayer 依參數分岔換網格；隱藏原網格＋掛壞子網格）與 HIGH×1（帶手臂權重的被排除複製點漏量）。前兩條都需要實作者刻意作弊；以量尺防作弊每輪換形狀回來（03 R4「一個判準回答兩個問題」），故拆開。
+  - 量尺補三項後定稿（皆加嚴、不改現況讀數）：①另以 matchView 型參數（不同身高、有 teamKit、isLibero）建受測者，皆須與量尺網格同一份資料；②網格不得有子物件、material 必須可見、不得設 onBeforeRender／onAfterRender；③被排除的複製點只要帶任何手臂權重（>0）即停止。三項各以第 4 輪現成突變（`__MESHCOND`、`__CHILD`、`zz-dropped`）驗紅，由主對話核對，不再開第 5 輪對抗覆審。
+  - **S12 改寫**：實作完成後，派 fresh opus（無對話史）對 `git diff 8720597..<實作 HEAD> -- src` 做對抗審查，任務是找出「任何會讓畫面所畫與量尺所量不一致」的改動（含原 grep 清單、依參數分岔、子物件、可見性、渲染 hook、GPU 端改動、baseline 偽造）。命中即紅；例外須逐條經使用者同意。baseline 一律由覆審方在 8720597 重產，不採用實作者提供的檔。
