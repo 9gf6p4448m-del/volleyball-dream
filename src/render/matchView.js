@@ -23,6 +23,10 @@ import {
 } from './reachAssist.js';
 import { REACH_ACTION } from '../sim/reach.js';
 import { diveRootPose, geoBodyMinY, diveGroundLift } from './diveStyles.js';
+// 跳躍前飄卷（docs/kickoffs/jump-drift-acceptance.md）：純表現層 root 水平偏移
+import { createJumpDrift, stepJumpDrift } from './jumpDrift.js';
+import { TAKEOFF } from '../sim/approach.js';
+import { BALL } from '../sim/constants.js';
 
 // 提前觸發的有效期（秒）：這麼久還沒觸到球就作廢、放行 TOUCH 重播一次——寧可補一次
 // 動作，也不要整拍沒動作。探針實測「提前觸發→實際觸球」最長 41 tick（0.68s，舉球提前量
@@ -38,6 +42,12 @@ const ROLE_TAG = { setter: 'S', outside: 'OH', middle: 'MB', opposite: 'OPP', li
 // 魚躍方案 A（DA1 併入，使用者裁定）：root 位移/前傾曲線與接地補償見 diveStyles.js，
 // 這裡只留 sim 對齊的倒地恢復時長
 const DIVE_RECOVER = 42;   // 同 sim TUNING.DIVE_RECOVER_TICKS（魚躍倒地恢復＝撲救動畫時長）
+// 跳躍前飄的擊球點估計：扣球觸球高度＝身高 × 1.62（jump-drift-measure 改前實測 3 場
+// n=93：p10 1.595／p50 1.622／p90 1.653——sim 觸球判定本身不變，這只是畫面估計球會在
+// 哪個高度被打到，用來推算「球降到那個高度時的水平位置」與「還剩幾秒」）
+const DRIFT_HIT_H = 1.62;
+// 擊球點估計只給「離它最近、且夠近」的那名滯空攻擊手（誘餌不該往球飄）
+const DRIFT_AIM_NEAR = 2.2;
 // W7.1 #3A：暫停集合帶位（純視覺，不動 sim actors——比照魚躍純視覺位移前例）
 // W8 暫停演出（07-26 拍板 B 案）：幾何改圍圈弧（huddleLayout 單一事實源）、
 // 兩隊各自圍自家教練（真實排球任一方暫停雙方都回板凳圈）、教練＋戰術板道具
@@ -187,7 +197,28 @@ export async function createMatchView(
       contactArm: null,  // 擊球動作提前觸發的登記（見 triggerContact／CONTACT_ARM_TTL）
       numberBack,
       numberFront,
+      jd: createJumpDrift(), // 跳躍前飄狀態（jumpDrift.js）
+      jumpDrift: { x: 0, z: 0 }, // 治具用：本幀前飄偏移（tools/jump-drift-measure.mjs）
+      reachOff: { dx: 0, dz: 0 }, // 治具用：本幀 reachAssist 根位移（改前就有的量，只是外露）
     };
+  }
+  // 跳躍前飄的擊球點估計（每幀一次）：舉球已出手（第二觸、我方持球）時，球降到
+  // 「身高×DRIFT_HIT_H」那一刻的水平位置與剩餘秒數（sim 球只受重力，這裡照同一條拋物線
+  // 往前推，唯讀）。只給離它最近、且在 DRIFT_AIM_NEAR 內的滯空攻擊手——誘餌照名目距離飄。
+  // 快攻在舉球前就起跳，那段沒有估計，先照名目距離（sim 起跳點退的距離 TAKEOFF）飄
+  function driftAimFor(g) {
+    const none = { byId: null };
+    const r = g.rally;
+    if (g.phase !== 'rally' || r.touches !== 2 || !r.possession) return none;
+    let best = null;
+    for (const [id, u] of Object.entries(units)) {
+      if (u.jd.phase !== 'air' || u.jd.kind !== 'attack') continue;
+      if (g.players[id].teamId !== r.possession) continue;
+      const p = ballAtHeight(g.ball, DRIFT_HIT_H * g.players[id].height.current);
+      const d = Math.hypot(p.x - u.jd.px, p.z - u.jd.pz);
+      if (d <= DRIFT_AIM_NEAR && (!best || d < best.d)) best = { byId: id, x: p.x, z: p.z, tLeft: p.t, d };
+    }
+    return best ?? none;
   }
   // 觸發動作＝同時記下這個動作該用哪一組手臂夠球、以及該用哪個可及半徑（表格未列＝沿用上次）
   function setPose(u, type, opts = null) {
@@ -326,6 +357,7 @@ export async function createMatchView(
       const dejectedTeam = gameState.momentum && Math.abs(gameState.momentum.value) === TUNING.MOMENTUM_MAX
         ? (gameState.momentum.value > 0 ? 'B' : 'A')
         : null;
+      const driftAim = driftAimFor(gameState);
       for (const [id, u] of Object.entries(units)) {
         const pTeam = gameState.players[id].teamId;
         // 提前觸發逾時作廢（預測失準、球改道或這球根本不是他碰）：放行後續 TOUCH 重播
@@ -484,6 +516,32 @@ export async function createMatchView(
         // 每幀 animator 更新前先歸零，同 realPlayer.js 註解與 realPreview.js 既有排程
         if (u.real) u.real.resetLegs();
         const bodyY = u.animator.update(dt, speed, lateral, staminaMul);
+        // 跳躍前飄（純視覺，不寫回 sim）：滯空期間 root 自己往擊球點飛、落地後併回 sim。
+        // 之後所有「人在哪」的畫面量（塵土、夠球、朝向、root、標籤）都吃飄過的位置 x/z；
+        // 攔網／歡呼等不前飄的跳躍 jd.x/jd.z 恆為 0（x+0 與原值逐位相同）
+        const pr = u.animator.probe();
+        let hitAt = null;
+        for (const e of frameEvents) {
+          if (e.type === 'TOUCH' && e.playerId === id && (e.kind === 'spike' || e.kind === 'set')) {
+            hitAt = { x: gameState.ball.x, z: gameState.ball.z };
+          }
+        }
+        stepJumpDrift(u.jd, {
+          airborne: pr.jumpY > 0,
+          seqType: u.animator.peek()?.type ?? null,
+          simX: x, simZ: z, side: TEAM_SIDE[pTeam], dt,
+          nominal: isFrontRow(gameState.match.rotations[pTeam], id) ? TAKEOFF.FRONT : TAKEOFF.BACK,
+          aim: driftAim.byId === id ? driftAim : null,
+          hit: hitAt,
+          apexLeft: pr.airDur != null ? Math.max(0, pr.airDur / 2 - pr.airT) : 0,
+          reset: a.divedUntil > gameState.tick || (u.huddleW ?? 0) > 0.001,
+        });
+        const simX = x; const simZ = z; // 玩家光圈仍標 sim 位置（操作判定看的是它）
+        x += u.jd.x;
+        z += u.jd.z;
+        u.tag.sprite.position.set(x, u.tagY, z); // 頭上標籤跟著畫面上的人
+        u.jumpDrift.x = u.jd.x;
+        u.jumpDrift.z = u.jd.z;
         // 魚躍飛撲（純視覺）：dive 期間沿朝向前撲一段＋微騰空落地＋身體前傾接近水平——
         // sim 只有原地觸球＋倒地，往前撲的距離與傾倒全在這裡補（不寫回 sim）。
         // 魚躍方案 A（DA1 併入）：root 曲線改用 diveStyles.diveRootPose（sprawl 滑撲時序）
@@ -533,6 +591,8 @@ export async function createMatchView(
         });
         applyReachBias(u.rig.joints, bias); // 必須無條件呼叫：spine.rotation.z 只有這裡寫
         const rOff = worldReachOffset(bias.rootRight, bias.rootFwd, u.yaw);
+        u.reachOff.dx = rOff.dx;
+        u.reachOff.dz = rOff.dz;
 
         // 垂直伸展加在 dust 判定之後：落地塵土仍只看動畫的跳躍弧，不被伸展誤觸
         u.rig.root.position.set(x + diveX + rOff.dx, totalY + bias.rootUp, z + diveZ + rOff.dz);
@@ -566,8 +626,8 @@ export async function createMatchView(
         }
 
         if (id === highlightId) {
-          ring.position.x = x;
-          ring.position.z = z;
+          ring.position.x = simX;
+          ring.position.z = simZ;
           ring.visible = !huddleViewOn; // W8：圈內第一人稱時光圈一併藏（本體已隱藏）
         }
       }
@@ -626,6 +686,17 @@ function createDust(scene) {
       if (alive) geo.attributes.position.needsUpdate = true;
     },
   };
+}
+
+// 球（只受重力的拋物線）下落到高度 y 的時刻與水平位置；到不了（弧頂低於 y）取弧頂，
+// 已在 y 以下取現在。唯讀推算，不碰 sim 狀態
+function ballAtHeight(b, y) {
+  const g = -BALL.GRAVITY;
+  const disc = b.vy * b.vy - 2 * g * (y - b.y);
+  let t;
+  if (disc < 0) t = Math.max(0, b.vy / g);
+  else t = Math.max(0, (b.vy + Math.sqrt(disc)) / g);
+  return { x: b.x + b.vx * t, z: b.z + b.vz * t, t };
 }
 
 // W7 A4/A6→07-26 定稿：頭上標籤低體力變色——雙方同語意 <50% 黃、<25% 紅

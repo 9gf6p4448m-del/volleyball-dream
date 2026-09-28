@@ -761,8 +761,10 @@ export function createGeoAnimator(rig) {
 
     // 唯讀窺視（2B 驗收治具 tools/motion-2b-check.mjs 用）：上一幀的動作層權重 w 與
     // 跳躍弧高度（0＝非滯空幀）。只回數字，不影響任何行為
+    // 跳躍前飄卷（matchView → jumpDrift.js）另讀跳躍弧進度 airT/airDur（秒；非滯空＝null），
+    // 用來估「還有多久到弧頂」——同樣只回數字
     probe() {
-      return { w: lastW, jumpY: lastJumpY };
+      return { w: lastW, jumpY: lastJumpY, airT: air ? air.t : null, airDur: air ? air.dur : null };
     },
 
     // 每幀驅動全部關節；回傳 bodyY（跳躍－下蹲的垂直位移，由呼叫端寫進 root.position.y）。
