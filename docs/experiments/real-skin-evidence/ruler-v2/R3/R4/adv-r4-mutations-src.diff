@@ -1,0 +1,71 @@
+diff --git a/src/render/realPlayer.js b/src/render/realPlayer.js
+index 1f2686c..437b0b9 100644
+--- a/src/render/realPlayer.js
++++ b/src/render/realPlayer.js
+@@ -255,6 +255,26 @@ export async function loadRealPlayerAsset(url) {
+   const w = computeSkinWeights(pos, nor);
+   const parts = computePartLabels(pos, w.primary);
+   const split = splitBridges(pos, nor, geometry.index.array, w, parts);
++  if (process.env.__EVIL) { const n0 = split.pos.length / 3; const dup = (a) => { const o = new a.constructor(a.length * 2); o.set(a); o.set(a, a.length); return o; };
++    for (const k of ['pos', 'nor', 'skinIndex', 'skinWeight', 'primary', 'parts']) split[k] = dup(split[k]);
++    const RS = BONES.indexOf('rShoulder'); const T = ['pelvis', 'spine', 'spineUpper'].map((b) => BONES.indexOf(b));
++    for (let i = n0; i < 2 * n0; i += 1) if (T.includes(split.primary[i])) for (let k = 0; k < 4; k += 1) { split.skinIndex[i * 4 + k] = k ? 0 : RS; split.skinWeight[i * 4 + k] = k ? 0 : 1; }
++    for (let t = 0; t < split.index.length; t += 1) split.index[t] += n0; }
++  if (process.env.__REVERSE) { const ix = split.index; const nt = ix.length / 3; const c = Uint32Array.from(ix); for (let t = 0; t < nt; t += 1) for (let k = 0; k < 3; k += 1) ix[t * 3 + k] = c[(nt - 1 - t) * 3 + k]; }
++  if (process.env.EVIL2) { const n0 = split.pos.length / 3; const dup = (a) => { const o = new a.constructor(a.length * 2); o.set(a); o.set(a, a.length); return o; };
++    for (const k of ['pos', 'nor', 'skinIndex', 'skinWeight', 'primary', 'parts']) split[k] = dup(split[k]);
++    const RS = BONES.indexOf('rShoulder'); const T = ['pelvis', 'spine', 'spineUpper'].map((b) => BONES.indexOf(b));
++    for (let i = n0; i < 2 * n0; i += 1) if (T.includes(split.primary[i])) for (let k = 0; k < 4; k += 1) { split.skinIndex[i * 4 + k] = k ? 0 : RS; split.skinWeight[i * 4 + k] = k ? 0 : 1; }
++    const seen = new Uint8Array(n0); let kept = 0;
++    for (let t = 0; t < split.index.length; t += 1) { const v = split.index[t]; if (seen[v]) split.index[t] = v + n0; else { seen[v] = 1; kept += 1; } }
++    console.error(`[EVIL2] n0=${n0} slots=${split.index.length} keptOriginalSlots=${kept}`); }
++  if (process.env.__ROT) { const ix = split.index; for (let t = 0; t < ix.length; t += 3) { const a0 = ix[t]; ix[t] = ix[t + 1]; ix[t + 1] = ix[t + 2]; ix[t + 2] = a0; } }
++  if (process.env.__FLIP) { const ix = split.index; for (let t = 0; t < ix.length; t += 3) { const a1 = ix[t + 1]; ix[t + 1] = ix[t + 2]; ix[t + 2] = a1; } }
++  if (process.env.__BADW) { split.skinWeight[4 * 100] *= 2; }
++  if (process.env.__NEGW) { split.skinWeight[4 * 100] += 0.5; split.skinWeight[4 * 100 + 1] -= 0.5; }
++  if (process.env.__NEAR) { const n0 = split.pos.length / 6; const u = new Uint32Array(split.pos.buffer); for (let i = n0 * 3; i < n0 * 6; i += 3) u[i] += 1; console.error('[NEAR] nudged x by 1 ulp for dups ' + n0); }
++  if (process.env.__ADDTRI) { const ix = new Uint32Array(split.index.length + 3); ix.set(split.index); ix.set([split.index[0], split.index[1], split.index[2]], split.index.length); split.index = ix; }
++  if (process.env.__SWAPTRI) { const t0 = Number(process.env.__SWAPTRI); const ix = split.index; const o = ix[t0 * 3]; ix[t0 * 3] = ix[t0 * 3 + 1] === 0 ? 1 : 0; console.error('[SWAPTRI] tri ' + t0 + ' corner0 ' + o + ' -> ' + ix[t0 * 3]); }
+   const out = new THREE.BufferGeometry();
+   out.setAttribute('position', new THREE.Float32BufferAttribute(split.pos, 3));
+   out.setAttribute('normal', new THREE.Float32BufferAttribute(split.nor, 3));
+@@ -316,14 +336,14 @@ function splitBridges(pos, nor, index, w, parts) {
+     const bs = vs.map((v) => BONES[w.primary[v]]);
+     let far = false;
+     for (let a = 0; a < 3; a += 1) {
+-      for (let c = a + 1; c < 3; c += 1) if (treeDist(bs[a], bs[c]) >= 3) far = true;
++      for (let c = a + 1; c < 3; c += 1) if (treeDist(bs[a], bs[c]) >= Number(process.env.__BR || 3)) far = true;
+     }
+     if (!far) continue;
+     bridgeTris += 1;
+     let owner = 0;
+     for (let k = 1; k < 3; k += 1) if (DEPTH[bs[k]] < DEPTH[bs[owner]]) owner = k;
+     for (let k = 0; k < 3; k += 1) {
+-      if (k === owner || treeDist(bs[k], bs[owner]) < 3) continue;
++      if (k === owner || treeDist(bs[k], bs[owner]) < Number(process.env.__BR || 3)) continue;
+       extra.push({ src: vs[k], like: vs[owner] });
+       newIndex[t + k] = pos.length / 3 + extra.length - 1;
+     }
+@@ -456,9 +476,22 @@ export function createRealPlayer(asset, {
+   }
+   geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+ 
++  if (process.env.__MESH && (process.env.__MESHCOND !== "arg" || height !== 1.85 || teamKit != null)) { const g0 = asset.geometry; const n0 = g0.attributes.position.count; const dup = (a) => { const o = new a.constructor(a.length * 2); o.set(a); o.set(a, a.length); return o; };
++    const P = dup(g0.attributes.position.array); const N = dup(g0.attributes.normal.array); const SI = dup(g0.attributes.skinIndex.array); const SW = dup(g0.attributes.skinWeight.array); const C = dup(col);
++    const RS = BONES.indexOf('rShoulder'); const T = ['pelvis', 'spine', 'spineUpper'].map((b) => BONES.indexOf(b)); let moved = 0;
++    for (let i = 0; i < n0; i += 1) if (T.includes(asset.primary[i])) { moved += 1; for (let k = 0; k < 4; k += 1) { SI[(n0 + i) * 4 + k] = k ? 0 : RS; SW[(n0 + i) * 4 + k] = k ? 0 : 1; } }
++    if (process.env.__MESH === 'badw') SW[(n0 + 5) * 4] = 3;
++    geometry.setAttribute('position', new THREE.BufferAttribute(P, 3)); geometry.setAttribute('normal', new THREE.BufferAttribute(N, 3));
++    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); geometry.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); geometry.setAttribute('color', new THREE.BufferAttribute(C, 3));
++    geometry.setIndex(new THREE.BufferAttribute(Uint32Array.from(g0.index.array, (v) => v + n0), 1));
++    if (!globalThis.__meshLogged) { globalThis.__meshLogged = 1; console.error('[MESH] createRealPlayer: n0=' + n0 + ' torsoVertsToRShoulder=' + moved + ' index all -> dups'); } }
+   const mesh = new THREE.SkinnedMesh(geometry, realMaterial());
+   mesh.frustumCulled = false; // 骨架帶著網格跑遍全場，原始包圍球不準
+   mesh.bind(skeleton, new THREE.Matrix4());
++  if (process.env.__CHILD) { const g0 = asset.geometry; const cg = new THREE.BufferGeometry(); const P = g0.attributes.position.array.slice(); const SI = g0.attributes.skinIndex.array.slice(); const SW = g0.attributes.skinWeight.array.slice();
++    const RS = BONES.indexOf('rShoulder'); const T = ['pelvis', 'spine', 'spineUpper'].map((b) => BONES.indexOf(b)); for (let i = 0; i < g0.attributes.position.count; i += 1) if (T.includes(asset.primary[i])) for (let k = 0; k < 4; k += 1) { SI[i * 4 + k] = k ? 0 : RS; SW[i * 4 + k] = k ? 0 : 1; }
++    cg.setAttribute('position', new THREE.BufferAttribute(P, 3)); cg.setAttribute('normal', g0.attributes.normal); cg.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); cg.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); cg.setAttribute('color', geometry.attributes.color); cg.setIndex(g0.index);
++    const child = new THREE.SkinnedMesh(cg, realMaterial()); child.bind(skeleton, new THREE.Matrix4()); mesh.add(child); mesh.material = new THREE.MeshBasicMaterial({ visible: false }); globalThis.__childMesh = child; }
+   const bindQuats = BONES.map((b) => joints[b].quaternion.clone());
+   for (const b of BONES) joints[b].rotation.set(0, 0, 0); // 交給 geoAnimator 的零姿勢
+   const { sole } = asset;

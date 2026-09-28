@@ -1,6 +1,6 @@
 # real-skin-torso-drag (f) 軀幹面被手臂拖動（faces=5k，variant=heatUpper）
 量法（R4）：凍結 S_b 頂點中 8720597 主骨屬 pelvis／spine／spineUpper 者；剛性參考＝受測權重只留三軀幹骨、重新正規化的蒙皮（三骨權重和 0 者退回 8720597 主骨剛體）；往內位移＝(蒙皮後−剛性參考)·(−剛性參考法線)
-輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 40c9d685b601、real-skin-torso-drag.mjs a14036f6b732、real-skin-heat.mjs fd4c22829bd4、real-skin-frozen-sets.json 87122d5a2aa6
+輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 3bbe224678e6、real-skin-torso-drag.mjs a14036f6b732、real-skin-heat.mjs fd4c22829bd4、real-skin-frozen-sets.json 87122d5a2aa6
 頂點（凍結 S_b 669，依 8720597 主骨）：計入 647（pelvis 375、spine 188、spineUpper 84）、主骨非軀幹不計 22（rHip 5、lHip 3、rShoulder 4、lShoulder 10）；計入者中三軀幹骨權重和為 0、退回 R3 剛體 0
 | 幀 | 序列 | 往內 >2 cm 頂點數 | 最大往內位移 cm | 最大處（主骨、綁定 y m） |
 |---|---|---|---|---|
