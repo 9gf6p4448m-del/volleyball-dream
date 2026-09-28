@@ -1,15 +1,19 @@
 // 寫實蒙皮修正 S11：量法 (f)「軀幹面被手臂拖動」。
-// 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R3；操作化定義：docs/experiments/real-skin-evidence/ruler-v2/R3-criteria-frozen.md
+// 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R3、R4（剛性參考改定義）；操作化定義：docs/experiments/real-skin-evidence/ruler-v2/R3-criteria-frozen.md
 //
-// 用法：node tools/real-skin-torso-drag.mjs [--faces=20k|5k] [--variant=base|heat|heatUpper] [--json=<path>] [--txt=<path>] [--baseline=<(f) json>]
+// 用法：node tools/real-skin-torso-drag.mjs [--faces=20k|5k] [--variant=base|heat|heatUpper|heatTorsoOnly|heatNoArm|heatNoLeg] [--json=<path>] [--txt=<path>] [--baseline=<(f) json>]
 //   base      ＝src 現行 realPlayer.js
 //   heat      ＝純熱擴散候選：同 tools/real-skin-measure.mjs 的 heat 變體載入法（OVERRIDE_PATCH＋tools/real-skin-heat.mjs），全身熱擴散、無掛勾
 //   heatUpper ＝同上但小腿中段以下（綁定 y≤0.45）保留現行權重（診斷報告推薦的實作權重，只供參考）
+//   heatTorsoOnly／heatNoArm／heatNoLeg＝heat 權重在 S_b 框內（綁定 |x|≤0.21、0.75≤y≤1.55，同 lib.REGION）把骨名符合
+//     ZERO_RE 的權重歸零、其餘重新正規化（R4 鑑別③「F1 反例」與腿／手臂單獨貢獻參考；歸零法照 R3 對抗審查 zz-legonly.mjs）
 //   --baseline：拿 8720597 上量的 (f) json 當現況值，套 R3 門檻（每幀 >2 cm 點數 ≤ 現況＋30、最大往內位移 ≤ 現況＋1.0 cm；位移比 0.1 cm）
 //
-// 量法：凍結集合（tools/real-skin-frozen-sets.json）的 S_b 頂點中，8720597 主骨屬 pelvis／spine／spineUpper 者；
-//   剛性參考 r＝該骨當幀蒙皮矩陣（bone.matrixWorld × boneInverse，同 lib.skinPositions）× 綁定位置；
-//   剛性參考法線 n＝同矩陣 3×3 × 凍結綁定法線，正規化；蒙皮後 s＝lib.skinPositions（當前權重）；往內位移 d＝(s−r)·(−n)。
+// 量法（R4）：凍結集合（tools/real-skin-frozen-sets.json）的 S_b 頂點中，8720597 主骨屬 pelvis／spine／spineUpper 者（計入規則照 R3）；
+//   剛性參考 r＝受測權重只保留 pelvis／spine／spineUpper、重新正規化後的蒙皮位置（當幀蒙皮矩陣 bone.matrixWorld × boneInverse，
+//   同 lib.skinPositions）；剛性參考法線 n＝同一組軀幹限定權重混合的骨矩陣 3×3 × 凍結綁定法線，正規化。
+//   受測權重在三骨上總和為 0 的頂點退回 R3 原定義（8720597 主骨剛體的矩陣）。
+//   蒙皮後 s＝lib.skinPositions（完整受測權重）；往內位移 d＝(s−r)·(−n)。
 // 不改 tools/real-skin-lib.mjs、tools/real-skin-measure.mjs；變體只把 src/render/realPlayer.js 精確替換後寫到系統暫存再 import。
 // 輸出不含時間戳：同輸入逐位元相同。
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
@@ -26,20 +30,31 @@ export const GATE = { count: 30, mm: 10 }; // R3：現況＋30 點、現況＋1.
 // 現況＝8720597：--baseline 必須是 base 變體、realPlayer.js 雜湊＝8720597 的值（去 CR 後 sha256 前 12 碼；R3 對抗審查 F4）
 export const BASELINE_REALPLAYER_SHA12 = 'b1489d7878dc';
 
-// (f) 核心：F＝凍結集合的一個面數版本；P0＝綁定位置；P1＝蒙皮後位置；skeleton＝當幀骨架；boneNames＝模組的 BONES
-export function torsoDrag(F, P0, P1, skeleton, boneNames) {
+// (f) 核心：F＝凍結集合的一個面數版本；P0＝綁定位置；P1＝蒙皮後位置；skeleton＝當幀骨架；boneNames＝模組的 BONES；
+// SI／SW＝受測（當前）權重的 skinIndex／skinWeight（與 P1 同一份）
+export function torsoDrag(F, P0, P1, skeleton, boneNames, SI, SW) {
   const { ids, mainBone, normal } = F.SbVerts;
-  const M = TORSO.map((b) => {
+  const TI = TORSO.map((b) => {
     const bi = boneNames.indexOf(b);
     if (bi < 0) throw new Error(`骨架裡沒有 ${b}`);
-    return new THREE.Matrix4().multiplyMatrices(skeleton.bones[bi].matrixWorld, skeleton.boneInverses[bi]).elements;
+    return bi;
   });
-  let used = 0; let excluded = 0; let over = 0; let max = -Infinity; let arg = -1;
+  const M = TI.map((bi) => new THREE.Matrix4().multiplyMatrices(skeleton.bones[bi].matrixWorld, skeleton.boneInverses[bi]).elements);
+  let used = 0; let excluded = 0; let fallback = 0; let over = 0; let max = -Infinity; let arg = -1;
+  const e = new Float64Array(16);
   for (let k = 0; k < ids.length; k += 1) {
     const b = TORSO.indexOf(mainBone[k]); // 8720597 的主骨（凍結）；非軀幹骨不計
     if (b < 0) { excluded += 1; continue; }
     used += 1;
-    const i = ids[k]; const e = M[b];
+    const i = ids[k];
+    // R4：受測權重只保留三軀幹骨、重新正規化後的混合矩陣；三骨總和 0 → 退回 R3（8720597 主骨剛體）
+    const wt = [0, 0, 0];
+    for (let q = 0; q < 4; q += 1) { const t = TI.indexOf(SI[i * 4 + q]); if (t >= 0) wt[t] += SW[i * 4 + q]; }
+    const ws = wt[0] + wt[1] + wt[2];
+    if (ws > 0) {
+      e.fill(0);
+      for (let t = 0; t < 3; t += 1) { if (!wt[t]) continue; const m = M[t]; const w = wt[t] / ws; for (let c = 0; c < 16; c += 1) e[c] += w * m[c]; }
+    } else { fallback += 1; e.set(M[b]); }
     const x = P0[i * 3]; const y = P0[i * 3 + 1]; const z = P0[i * 3 + 2];
     const r = [e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]]; // 剛性參考位置
     const a = normal[k * 3]; const c = normal[k * 3 + 1]; const f = normal[k * 3 + 2];
@@ -49,11 +64,17 @@ export function torsoDrag(F, P0, P1, skeleton, boneNames) {
     if (d > DRAG_OVER) over += 1;
     if (d > max) { max = d; arg = k; }
   }
-  return { used, excluded, over, max, arg: arg < 0 ? null : { id: ids[arg], bone: mainBone[arg], bindY: Number(P0[ids[arg] * 3 + 1].toFixed(3)) } };
+  return { used, excluded, fallback, over, max, arg: arg < 0 ? null : { id: ids[arg], bone: mainBone[arg], bindY: Number(P0[ids[arg] * 3 + 1].toFixed(3)) } };
 }
 
 // 熱擴散變體（同 tools/real-skin-measure.mjs 的 patchedRealPlayer＋OVERRIDE_PATCH＋useHeat；每個替換目標必須恰好命中 1 處）
-async function heatModule(keepBelowY) {
+// zeroRe：S_b 框內（綁定 |x|≤0.21、0.75≤y≤1.55）骨名符合者權重歸零、其餘重新正規化（總和 0 則維持原樣，同 zz-legonly.mjs）
+export const ZERO_RE = {
+  heatTorsoOnly: 'Shoulder|Elbow|Wrist|Hip|Knee|Ankle|neck', // R4 鑑別③：F1 反例（框內只剩軀幹骨）
+  heatNoArm: 'Shoulder|Elbow|Wrist', // 參考：只歸零手臂＝腿權重的單獨貢獻
+  heatNoLeg: 'Hip|Knee|Ankle', // 參考：只歸零腿＝手臂權重的單獨貢獻
+};
+async function heatModule(keepBelowY, zeroRe = null) {
   let text = await readFile(new URL('../src/render/realPlayer.js', import.meta.url), 'utf8');
   const reps = [
     ['const w = computeSkinWeights(pos, nor);', 'const w = (globalThis.__realSkinOverride ?? computeSkinWeights)(pos, nor, geometry.index.array);'],
@@ -74,6 +95,17 @@ async function heatModule(keepBelowY) {
   const f = heatWeightsFactory(mod);
   globalThis.__realSkinOverride = (pos, nor, index) => {
     const r = f(pos, nor, index);
+    if (zeroRe) {
+      const re = new RegExp(zeroRe);
+      const Z = new Set(mod.BONES.map((b, bi) => (re.test(b) ? bi : -1)).filter((bi) => bi >= 0));
+      for (let i = 0; i < pos.length / 3; i += 1) {
+        const x = pos[i * 3]; const y = pos[i * 3 + 1];
+        if (Math.abs(x) > lib.REGION.torsoX || y < lib.REGION.torsoY0 || y > lib.REGION.torsoY1) continue;
+        let sw = 0;
+        for (let k = 0; k < 4; k += 1) { if (Z.has(r.skinIndex[i * 4 + k])) r.skinWeight[i * 4 + k] = 0; sw += r.skinWeight[i * 4 + k]; }
+        if (sw > 0) for (let k = 0; k < 4; k += 1) r.skinWeight[i * 4 + k] /= sw;
+      }
+    }
     if (keepBelowY != null) {
       const b = mod.computeSkinWeights(pos, nor);
       for (let i = 0; i < pos.length / 3; i += 1) {
@@ -106,9 +138,9 @@ if (isMain) {
   }));
   const faces = args.faces === '5k' ? '5k' : '20k';
   const variant = args.variant && args.variant !== '1' ? args.variant : 'base';
-  if (!['base', 'heat', 'heatUpper'].includes(variant)) throw new Error(`未知變體 ${variant}`);
+  if (!['base', 'heat', 'heatUpper', ...Object.keys(ZERO_RE)].includes(variant)) throw new Error(`未知變體 ${variant}`);
   let heat = null;
-  if (variant !== 'base') heat = await heatModule(variant === 'heatUpper' ? 0.45 : null);
+  if (variant !== 'base') heat = await heatModule(variant === 'heatUpper' ? 0.45 : null, ZERO_RE[variant] ?? null);
   const setup = await V2.loadSetup(faces, heat ? { rpMod: heat.mod } : {});
   delete globalThis.__realSkinOverride;
   if (heat) await heat.cleanup();
@@ -122,20 +154,21 @@ if (isMain) {
   }
   hashes['real-skin-frozen-sets.json'] = setup.frozen.fileSha.slice(0, 12);
   const rows = {};
-  let used = 0; let excluded = 0;
+  let used = 0; let excluded = 0; let fallback = 0;
   for (const key of lib.ALL_KEYS) {
     const { real, pk, P1 } = V2.poseKey(setup, key);
-    const r = torsoDrag(F, setup.R.P, P1, real.p.mesh.skeleton, setup.mods.rp.BONES);
-    used = r.used; excluded = r.excluded;
+    const ga = real.p.mesh.geometry.attributes;
+    const r = torsoDrag(F, setup.R.P, P1, real.p.mesh.skeleton, setup.mods.rp.BONES, ga.skinIndex.array, ga.skinWeight.array);
+    used = r.used; excluded = r.excluded; fallback = r.fallback;
     rows[key.id] = { seq: pk?.type ?? null, over: r.over, max: Number(r.max.toFixed(6)), arg: r.arg };
   }
   const cm = (m) => (m * 100).toFixed(1);
   const out = [];
   out.push(`# real-skin-torso-drag (f) 軀幹面被手臂拖動（faces=${faces}，variant=${variant}）`);
-  out.push('量法：凍結 S_b 頂點中 8720597 主骨屬 pelvis／spine／spineUpper 者；剛性參考＝該骨當幀蒙皮矩陣×綁定位置；往內位移＝(蒙皮後−剛性參考)·(−剛性參考法線)');
+  out.push('量法（R4）：凍結 S_b 頂點中 8720597 主骨屬 pelvis／spine／spineUpper 者；剛性參考＝受測權重只留三軀幹骨、重新正規化的蒙皮（三骨權重和 0 者退回 8720597 主骨剛體）；往內位移＝(蒙皮後−剛性參考)·(−剛性參考法線)');
   out.push(`輸入 sha256 前 12 碼：${Object.entries(hashes).map(([k, v]) => `${k} ${v}`).join('、')}`);
   const cnt = Object.entries(F.SbVerts.counts);
-  out.push(`頂點（凍結 S_b ${F.SbVerts.ids.length}，依 8720597 主骨）：計入 ${used}（${cnt.filter(([k]) => TORSO.includes(k)).map(([k, v]) => `${k} ${v}`).join('、')}）、主骨非軀幹不計 ${excluded}（${cnt.filter(([k]) => !TORSO.includes(k)).map(([k, v]) => `${k} ${v}`).join('、')}）`);
+  out.push(`頂點（凍結 S_b ${F.SbVerts.ids.length}，依 8720597 主骨）：計入 ${used}（${cnt.filter(([k]) => TORSO.includes(k)).map(([k, v]) => `${k} ${v}`).join('、')}）、主骨非軀幹不計 ${excluded}（${cnt.filter(([k]) => !TORSO.includes(k)).map(([k, v]) => `${k} ${v}`).join('、')}）；計入者中三軀幹骨權重和為 0、退回 R3 剛體 ${fallback}`);
   out.push('| 幀 | 序列 | 往內 >2 cm 頂點數 | 最大往內位移 cm | 最大處（主骨、綁定 y m） |');
   out.push('|---|---|---|---|---|');
   for (const [id, v] of Object.entries(rows)) out.push(`| ${id} | ${v.seq ?? '待命'} | ${v.over} | ${cm(v.max)} | ${v.arg ? `${v.arg.bone}、${v.arg.bindY}` : '—'} |`);
@@ -144,6 +177,7 @@ if (isMain) {
     const base = JSON.parse(await readFile(args.baseline, 'utf8'));
     if (base.faces !== faces) throw new Error(`--baseline 面數 ${base.faces} ≠ ${faces}`);
     if (base.hashes?.['real-skin-frozen-sets.json'] !== hashes['real-skin-frozen-sets.json']) throw new Error('--baseline 用的凍結檔與本次不同，不能比較');
+    if (base.hashes?.['real-skin-torso-drag.mjs'] !== hashes['real-skin-torso-drag.mjs']) throw new Error('--baseline 由不同版本的 (f) 工具產生（量法可能不同），不能比較；請用本工具在 8720597 重產現況');
     if (base.variant !== 'base') throw new Error(`--baseline 必須是現況（variant=base），收到 variant=${base.variant}`);
     if (base.hashes?.['realPlayer.js'] !== BASELINE_REALPLAYER_SHA12) throw new Error(`--baseline 的 realPlayer.js 雜湊 ${base.hashes?.['realPlayer.js']} ≠ 8720597 的 ${BASELINE_REALPLAYER_SHA12}（現況必須在 8720597 上量）`);
     if (base.hashes?.[`player_${faces}.glb`] !== hashes[`player_${faces}.glb`]) throw new Error('--baseline 的白模 glb 與本次不同，不能比較');
@@ -159,6 +193,6 @@ if (isMain) {
   process.stdout.write(text);
   if (args.txt && args.txt !== '1') await writeFile(args.txt, text);
   if (args.json && args.json !== '1') {
-    await writeFile(args.json, `${JSON.stringify({ faces, variant, hashes, used, excluded, rows, gate }, null, 1)}\n`);
+    await writeFile(args.json, `${JSON.stringify({ faces, variant, method: 'R4', hashes, used, excluded, fallback, rows, gate }, null, 1)}\n`);
   }
 }
