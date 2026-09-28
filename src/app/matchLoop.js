@@ -2790,6 +2790,11 @@ export function updateAssistAndPoses(s) {
   // 「這球歸你」：AI 呼叫鎖定指到受控者 → 光圈變橘＋提示
   const myBall = game.phase === 'rally' && aiState.claimId === s.localId;
   stage.matchView.setHot(myBall);
+  // 跳躍前飄卷：告訴表現層「這一球舉給誰」（協調層已定案的 claimId，第二觸之後才有意義）——
+  // 空中飄向擊球點的只該是真攻擊手，誘餌照名目距離飄。唯讀轉交，不影響任何判定
+  stage.matchView.setDriftAttacker?.(
+    game.phase === 'rally' && game.rally.touches === 2 ? aiState.claimId ?? null : null,
+  );
   // 玩家放開起跳／點攔網 → 立即播動作（後續由 sim 事件接手）
   if (stage.controls.consumeJumpSignal()) stage.matchView.triggerPose(s.localId, 'windup');
   if (stage.controls.consumeBlockSignal()) stage.matchView.triggerPose(s.localId, 'block');
