@@ -1,0 +1,236 @@
+{
+ "faces": "20k",
+ "hipSurface": {
+  "verts": 3165,
+  "tris": 6154,
+  "boundaryEdges": 178
+ },
+ "rows": {
+  "K1a": {
+   "seq": "spikeHold",
+   "t": 0.04,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 22,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 7,
+    "zones": {}
+   }
+  },
+  "K1b": {
+   "seq": "spike",
+   "t": 0.18000000000000002,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 1,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0.03741082402086069,
+    "inside": 5,
+    "deeper1cm": 4,
+    "undetermined": 517,
+    "zones": {
+     "前臂→腹": {
+      "n": 5,
+      "max": 0.03741082402086069
+     }
+    }
+   }
+  },
+  "K2a": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 255,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 206,
+    "zones": {}
+   }
+  },
+  "K2b": {
+   "seq": "serveJump",
+   "t": 0.09999999999999999,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 16,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 17,
+    "zones": {}
+   }
+  },
+  "K3a": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 439,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 470,
+    "zones": {}
+   }
+  },
+  "K3b": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0.0031741531684259467,
+    "inside": 1,
+    "deeper1cm": 0,
+    "undetermined": 485,
+    "zones": {
+     "前臂→腹": {
+      "n": 1,
+      "max": 0.0031741531684259467
+     }
+    }
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 418,
+    "zones": {}
+   }
+  },
+  "K4a": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0.08245582737468315,
+    "inside": 376,
+    "deeper1cm": 312,
+    "undetermined": 440,
+    "zones": {
+     "手→臀腿": {
+      "n": 249,
+      "max": 0.08245582737468315
+     },
+     "前臂→臀腿": {
+      "n": 17,
+      "max": 0.06270557245482127
+     },
+     "前臂→腹": {
+      "n": 110,
+      "max": 0.0707386313971793
+     }
+    }
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0.07320887335147729,
+    "inside": 282,
+    "deeper1cm": 236,
+    "undetermined": 405,
+    "zones": {
+     "前臂→腹": {
+      "n": 83,
+      "max": 0.0527400500740416
+     },
+     "手→臀腿": {
+      "n": 189,
+      "max": 0.07320887335147729
+     },
+     "前臂→臀腿": {
+      "n": 10,
+      "max": 0.04041578529438346
+     }
+    }
+   }
+  },
+  "K4b": {
+   "seq": "receiveReady",
+   "t": 0.3,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0.11932589399103691,
+    "inside": 1,
+    "deeper1cm": 1,
+    "undetermined": 499,
+    "zones": {
+     "前臂→臀腿": {
+      "n": 1,
+      "max": 0.11932589399103691
+     }
+    }
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0.17353167485129536,
+    "inside": 5,
+    "deeper1cm": 5,
+    "undetermined": 447,
+    "zones": {
+     "前臂→臀腿": {
+      "n": 5,
+      "max": 0.17353167485129536
+     }
+    }
+   }
+  },
+  "K4c": {
+   "seq": "bump",
+   "t": 0.225,
+   "r": {
+    "armVerts": 1093,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 142,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 1056,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 93,
+    "zones": {}
+   }
+  }
+ }
+}

@@ -1,0 +1,221 @@
+{
+ "faces": "5k",
+ "hipSurface": {
+  "verts": 800,
+  "tris": 1511,
+  "boundaryEdges": 91
+ },
+ "rows": {
+  "K1a": {
+   "seq": "spikeHold",
+   "t": 0.04,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 4,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 1,
+    "zones": {}
+   }
+  },
+  "K1b": {
+   "seq": "spike",
+   "t": 0.18000000000000002,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 0,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0.005280853797769243,
+    "inside": 1,
+    "deeper1cm": 0,
+    "undetermined": 141,
+    "zones": {
+     "前臂→腹": {
+      "n": 1,
+      "max": 0.005280853797769243
+     }
+    }
+   }
+  },
+  "K2a": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 57,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 47,
+    "zones": {}
+   }
+  },
+  "K2b": {
+   "seq": "serveJump",
+   "t": 0.09999999999999999,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 3,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 5,
+    "zones": {}
+   }
+  },
+  "K3a": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 113,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 135,
+    "zones": {}
+   }
+  },
+  "K3b": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 126,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 103,
+    "zones": {}
+   }
+  },
+  "K4a": {
+   "seq": null,
+   "t": null,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0.07835063334316364,
+    "inside": 90,
+    "deeper1cm": 71,
+    "undetermined": 105,
+    "zones": {
+     "手→臀腿": {
+      "n": 61,
+      "max": 0.07835063334316364
+     },
+     "前臂→腹": {
+      "n": 27,
+      "max": 0.0664684746747831
+     },
+     "前臂→臀腿": {
+      "n": 2,
+      "max": 0.028251606948321958
+     }
+    }
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0.07267885905756273,
+    "inside": 74,
+    "deeper1cm": 61,
+    "undetermined": 105,
+    "zones": {
+     "前臂→腹": {
+      "n": 15,
+      "max": 0.05060885288831303
+     },
+     "前臂→臀腿": {
+      "n": 3,
+      "max": 0.03199963949069235
+     },
+     "手→臀腿": {
+      "n": 56,
+      "max": 0.07267885905756273
+     }
+    }
+   }
+  },
+  "K4b": {
+   "seq": "receiveReady",
+   "t": 0.3,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 116,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 106,
+    "zones": {}
+   }
+  },
+  "K4c": {
+   "seq": "bump",
+   "t": 0.225,
+   "r": {
+    "armVerts": 267,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 27,
+    "zones": {}
+   },
+   "l": {
+    "armVerts": 261,
+    "maxDepth": 0,
+    "inside": 0,
+    "deeper1cm": 0,
+    "undetermined": 20,
+    "zones": {}
+   }
+  }
+ }
+}
