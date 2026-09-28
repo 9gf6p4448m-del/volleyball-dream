@@ -6,7 +6,7 @@
 ## 一、被穿入表面凍結
 
 - 產生：`node tools/real-skin-freeze-sets.mjs --out=tools/real-skin-frozen-sets.json`（8720597，live 模式＝現行規則即時計算）。
-  **整檔 sha256 `9a8a840b55ebcc78112ac8e2854818b5038d59474eb8e1182aa845edfbeb2478`**；同指令另開行程再產生一次，逐位元相同。
+  **整檔 sha256 `87122d5a2aa6200b735e63ca0693ff31e151ae46913d2e1c0695738fc743c412`**（對抗審查修補後重產，加了 `indexSha`；集合內容與第一版 9a8a840b… 相同）；同指令另開行程再產生一次，逐位元相同。
 
 | | 20k | 5k |
 |---|---|---|
@@ -14,13 +14,13 @@
 | S_b 頂點與 8720597 主骨 | 2741：pelvis 1481、spine 802、spineUpper 350；非軀幹 108（rHip 26、lHip 31、rShoulder 21、lShoulder 30） | 669：pelvis 375、spine 188、spineUpper 84；非軀幹 22（rHip 5、lHip 3、rShoulder 4、lShoulder 10） |
 | S_e 三角形／主骨頂點數 | 6154（a04194c4e319）／3165 | 1511（e1d1e6cb8b60）／800 |
 | 手臂頂點 右／左（含部位） | 1093（0d964abdccf5）／1056（395e81b110ca） | 267（d289f9558735）／261（c2907d5124d0） |
-| 綁定頂點數＝glb 原頂點數、三角形數、綁定位置雜湊 | 10002、20000、b6188e21f28d3c6a | 2502、5000、921125f1306103b2 |
+| 綁定頂點數＝glb 原頂點數、三角形數、綁定位置雜湊（索引＝glb 原索引，雜湊存 `indexSha`） | 10002、20000、b6188e21f28d3c6a | 2502、5000、921125f1306103b2 |
 
 集合指紋（前 12 碼）與 dbf4ee9 `before-*.txt` 表頭的「集合指紋」逐一相同。
 
-- 每欄完整性 sha256：Sb、Se、armR、armL、SbVerts（排序後 Int32 ID）；armRPart、armLPart、SbMainBone、SbNormal、SeVerts（該欄 JSON 字串）。
-- 量尺（`tools/real-skin-penetration-v2.mjs` 的 `loadSetup`）預設讀凍結檔。完整性、三角形數、綁定位置雜湊任一不符，就報錯停止。開口邊由凍結三角形在當前索引上重算。`loadSetup(faces, { live: true })` 只供產生凍結檔。
-- **驗收 2（改壞→報錯）**：見 `tamper.md`。改一個 S_b 三角形 ID→`20k.Sb sha256 不符`；改一個綁定法線分量→`20k.SbNormal sha256 不符`；三角形數 −1→`三角形 20000 ≠ 19999`；綁定位置雜湊改成 0→`綁定位置不同`。四者都 exit 1；未改壞的對照 exit 0。
+- 每欄完整性 sha256：Sb、Se、armR、armL、SbVerts（排序後 Int32 ID）；armRPart、armLPart、SbMainBone、SbNormal、SeVerts、indexSha（該欄 JSON 字串）。
+- 量尺（`tools/real-skin-penetration-v2.mjs` 的 `loadSetup`）預設讀凍結檔。完整性、三角形數、綁定位置雜湊、glb 原索引雜湊任一不符，就報錯停止；另有索引對應與孤兒檢查（見 §五 F2）。開口邊由凍結三角形在當前索引上重算。`loadSetup(faces, { live: true })` 只供產生凍結檔。
+- **驗收 2（改壞→報錯）**：見 `tamper.md`。改一個 S_b 三角形 ID→`20k.Sb sha256 不符`；改一個綁定法線分量→`20k.SbNormal sha256 不符`；indexSha 改成 0→`20k.indexSha sha256 不符`；三角形數 −1→`三角形 20000 ≠ 19999`；綁定位置雜湊改成 0→`綁定位置不同`。五者都 exit 1；未改壞的對照 exit 0。
 
 ## 二、凍結版重跑 before 與 verify（驗收 3）
 
@@ -29,9 +29,10 @@
 `node tools/real-skin-penetration-v2-verify.mjs --faces=<f> --out=<dir> --label=SRC-8720597 --only=V0,V1,V2,V3,V4,V6 --cli=<dir>/before-<f>.json --oldref=<repo>/docs/experiments/real-skin-evidence --oldprefix=before`
 
 - `git show dbf4ee9:docs/experiments/real-skin-evidence/ruler-v2/before-<f>.<txt|json> | diff - <dir>/…`，四檔的差異都只有下列兩處：
-  - txt 第 3 行（輸入雜湊）：`real-skin-penetration-v2.mjs 48486173ac2e` 改為 `bb278a710140`，並加上 `、real-skin-frozen-sets.json 9a8a840b55eb`；
+  - txt 第 3 行（輸入雜湊）：`real-skin-penetration-v2.mjs 48486173ac2e` 改為現行雜湊，並加上 `、real-skin-frozen-sets.json <凍結檔雜湊>`；
   - json `hashes` 同樣兩處（`10c10,11`）。
-  其餘逐位元相同。重跑產物放在 `frozen-rerun/`。
+  - 對抗審查修補後（§五），多了兩處新增：txt 第 7 行「內容指紋」，json 的 `content` 欄（4 行）。
+  其餘逐位元相同。`frozen-rerun/` 放的是修補後的重跑產物，和 bcb5da7 版相比只差上述雜湊與新增指紋。
 - verify：`git show dbf4ee9:… | cmp - <dir>/…` 共 10 檔逐位元相同，包括 `verify-V0V1V2V3V4V6-{20k,5k}.{txt,json}` 與 `v4-{K1a,K1b,K4b}-{20k,5k}.png`。sha256 與 `../v5-determinism.md` 表中第 1 次的值相同（例如 20k txt `b22fc077…`、5k json `e8ac2902…`）。
 
 ## 三、量法 (f) 軀幹拖動（驗收 4）
@@ -72,7 +73,7 @@
 - **現況綠**：`f-baseGate-{20k,5k}.txt` 判定「綠（9 幀全過）」。構造上一定是綠的。
 - **正式熱擴散候選紅**：`f-heat-{20k,5k}.txt` 判定「紅（不過 9 幀）」，而且每一幀的點數與位移兩項都不過。
   參考值 heatUpper 也是紅（`f-heatUpper-*`），HEAD 9c66afe 綠（`f-head9c66afe-*`）。
-- **突變 r＝s 被抓到**：突變放在拋棄式工作樹的 `tools-mutR3/` 副本，唯一改動是 `real-skin-torso-drag.mjs:42` 的剛性參考改用蒙皮後位置。
+- **突變 r＝s 被抓到**：突變放在拋棄式工作樹的 `tools-mutR3/` 副本，唯一改動是 `real-skin-torso-drag.mjs:44` 的剛性參考改用蒙皮後位置。
   現況基準也用同一份突變工具重產（`f-mutRS-base-*`）。在這個條件下 heat 變成「綠（9 幀全過）」（`f-mutRS-heat-*`，每幀 0／0.0），鑑別的兩面失效，也就是突變被抓到。副本跑完已刪除。
 - 決定性：base 20k／5k 另開行程重跑，txt 與 json 都逐位元相同。
 - HEAD 9c66afe 與現況數字完全相同（到 1e-6 m），這是真的量到了，不是沒量到。探針顯示：K4a／K4b 外展 8° 讓 162 個 S_b 頂點移動，最多 1.3 cm；但這些頂點沒有一個越過 2 cm，也沒有改變最大值。K1a 手臂高舉，淡出後外展為 0，頂點不動。
@@ -89,3 +90,24 @@
 3. 凍結檔多存 **S_b 每頂點的主骨名**（不只軀幹骨序號）與**完整 Float32 綁定法線**（不四捨五入）。完整性雜湊涵蓋每一欄，不只集合 ID。
 4. **綁定位置雜湊的範圍**：只算前 `verts` 個頂點。8720597 的綁定頂點數等於 glb 原頂點數（無接縫拆分複製點，產生器有斷言檢查）。實作若換權重，使 `splitBridges` 多出複製點，它們只會接在尾端，所以仍相容；少於凍結頂點數則報錯。
 5. `--baseline` 另外檢查兩份的凍結檔雜湊相同，不同就報錯。
+6. **量尺表頭那行「S_b 與手臂依 src 地標選取」在凍結模式下已不正確（審查 F5）**：實際讀的是凍結集合。這行被「與 dbf4ee9 逐位元相同」綁住，所以不改；以本註說明為準。凍結模式下的表頭另有「內容指紋」一行。
+
+## 五、對抗審查修補（F2–F4；全部屬加嚴，規格文件不動）——突變實跑見 `adversarial-fixes.md`
+
+- **F2 凍結頂點被孤兒化（CRITICAL）**
+  - 修補：`applyFrozen` 逐一核對每個三角形的每個角，在當前索引上必須符合下列兩者之一：
+    - 就是凍結時的頂點（glb 原索引，雜湊與 `indexSha` 相同）；
+    - 或是接在尾端的複製點：綁定位置逐位元等於來源頂點，而且同一複製點只能對回同一個來源。
+  - 另外，凍結頂點（S_b、S_e、手臂）都不得是孤兒。不符就報錯停止。
+  - 突變 `__EVIL`（20k／5k）的結果：量尺與 (f) 都 exit 1，訊息為「6517／1614 個凍結頂點已不被任何三角形引用」。
+  - 合法拆分不誤殺：把 splitBridges 門檻改成 2，走真實拆分，20k 有 84 個角、5k 有 51 個角改指到複製點。兩者都通過，(f) 綠。
+- **F3 三角形順序反轉（HIGH）**
+  - 第一道：索引對應檢查，報錯「索引被改動（三角形 0 第 0 角…）」。
+  - 第二道：量尺自我檢查改為不過就停止（方向不一致邊 ≠0、pelvis 地標 w ≤0.5、遠點 |w| ≥0.5）。關掉第一道再反轉時，第二道報錯「pelvis 地標 w 0.310／0.283」（5k）與「0.487／0.467」（20k）。
+  - 表頭新增「內容指紋」＝凍結三角形在當前索引上的頂點三元組 sha256，json 同步加 `content` 欄。
+- **F4 baseline 沒有鎖定現況（MEDIUM）**
+  - 修補：`--baseline` 必須同時符合 `variant=base`、realPlayer.js 雜湊＝8720597 的 `b1489d7878dc`、glb 與凍結檔雜湊相同。
+  - 突變測試：拿 heat 輸出當 baseline，報錯「必須是現況」；拿 HEAD src 的 base 輸出當 baseline，報錯「realPlayer.js 雜湊 a0cade19577e ≠ b1489d7878dc」。
+- **殘留（照實記錄）**：孤兒規則區分不了「合法但極端的拆分」和攻擊。
+  - 例：門檻改成 1，每條跨骨三角形都拆，20k 會有 2 個、5k 有 1 個凍結頂點被拆光而成為孤兒，量尺因此停止。
+  - 失敗方向是「停下來」，不是「放行」。現行權重與 heat 權重的 splitBridges 都不拆（bridgeTris 0）。

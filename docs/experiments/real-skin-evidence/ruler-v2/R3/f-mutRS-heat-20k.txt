@@ -1,6 +1,6 @@
 # real-skin-torso-drag (f) 軀幹面被手臂拖動（faces=20k，variant=heat）
 量法：凍結 S_b 頂點中 8720597 主骨屬 pelvis／spine／spineUpper 者；剛性參考＝該骨當幀蒙皮矩陣×綁定位置；往內位移＝(蒙皮後−剛性參考)·(−剛性參考法線)
-輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_20k.glb 5ebc99334bfb、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs bb278a710140、real-skin-torso-drag.mjs 1c08be8cee8d、real-skin-heat.mjs fd4c22829bd4、real-skin-frozen-sets.json 9a8a840b55eb
+輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_20k.glb 5ebc99334bfb、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 07570bbc23e9、real-skin-torso-drag.mjs f304731958ef、real-skin-heat.mjs fd4c22829bd4、real-skin-frozen-sets.json 87122d5a2aa6
 頂點（凍結 S_b 2741，依 8720597 主骨）：計入 2633（pelvis 1481、spine 802、spineUpper 350）、主骨非軀幹不計 108（rHip 26、lHip 31、rShoulder 21、lShoulder 30）
 | 幀 | 序列 | 往內 >2 cm 頂點數 | 最大往內位移 cm | 最大處（主骨、綁定 y m） |
 |---|---|---|---|---|

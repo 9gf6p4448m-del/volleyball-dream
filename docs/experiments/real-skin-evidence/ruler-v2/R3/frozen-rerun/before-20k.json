@@ -7,8 +7,8 @@
   "geoCharacter.js": "5a149abadd3e",
   "player_20k.glb": "5ebc99334bfb",
   "real-skin-lib.mjs": "841432f22024",
-  "real-skin-penetration-v2.mjs": "bb278a710140",
-  "real-skin-frozen-sets.json": "9a8a840b55eb"
+  "real-skin-penetration-v2.mjs": "07570bbc23e9",
+  "real-skin-frozen-sets.json": "87122d5a2aa6"
  },
  "selfCheck": {
   "orientBad": {
@@ -13593,6 +13593,10 @@
     10001
    ]
   }
+ },
+ "content": {
+  "Sb": "f25bc00c67ee",
+  "Se": "32184064a162"
  },
  "rows": {
   "K1a": {
