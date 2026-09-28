@@ -362,6 +362,12 @@ export function applyFrozen(R, F, gi, { SI = null, SW = null, bones = null } = {
     const all = reps.get(v);
     const keep = SI && SW ? all.filter((a) => a === v || armBone.has(mainBoneOf(a))) : all;
     armDupDropped += all.length - keep.length;
+    // R6 ③：被排除（主骨非手臂）的複製點只要帶任何手臂骨權重（>0）就停止——它會被手臂拖著走，卻不在任何探針裡
+    for (const a of all) {
+      if (keep.includes(a)) continue;
+      let aw = 0; for (let q = 0; q < 4; q += 1) if (armBone.has(SI[a * 4 + q])) aw += SW[a * 4 + q];
+      if (aw > 0) throw new Error(`凍結集合與白模不相容：手臂頂點 ${v} 的複製點 ${a} 主骨非手臂骨卻帶手臂骨權重 ${aw}（被排除的複製點不得受手臂影響）`);
+    }
     if (!keep.length) throw new Error(`凍結集合與白模不相容：手臂頂點 ${v} 沒有任何手臂代表點（原頂點未被畫出，複製點主骨都不是手臂骨）`);
     armReps.set(v, keep);
   }
@@ -399,7 +405,21 @@ export function assertMeshData(mesh, ref, where) {
   if (!G.index || !ref.index || !sameBytes(G.index.array, ref.index.array)) throw new Error(`畫面幾何與量尺幾何不是同一份資料（${where}：index）`);
   if (Object.keys(G.morphAttributes).length || mesh.morphTargetInfluences) throw new Error(`畫面幾何有 morph target（${where}），量尺不支援`);
   if (!mesh.bindMatrix.equals(new THREE.Matrix4())) throw new Error(`畫面網格的綁定矩陣不是單位矩陣（${where}）`);
+  // R6 ②：網格本體——不得有子物件、網格與 material（含陣列）必須可見、不得設 onBeforeRender／onAfterRender
+  if (mesh.children.length) throw new Error(`畫面網格有子物件 ${mesh.children.length} 個（${where}），量尺只量網格本身`);
+  if (mesh.visible === false) throw new Error(`畫面網格不可見（${where}）`);
+  for (const m of (Array.isArray(mesh.material) ? mesh.material : [mesh.material])) {
+    if (!m || m.visible === false) throw new Error(`畫面網格的 material 不可見或缺少（${where}）`);
+  }
+  if (mesh.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || mesh.onAfterRender !== THREE.Object3D.prototype.onAfterRender) throw new Error(`畫面網格設了 onBeforeRender／onAfterRender（${where}）`);
 }
+// R6 ①：遊戲型參數（src/render/matchView.js:153 的 createRealPlayer 呼叫形狀：身高取自 sim、teamKit、isLibero、背號）
+const GAME_KIT = { jersey: 0x2e7bff, shorts: 0x1a2b4c, trim: 0xffffff, libero: { jersey: 0xffc531, shorts: 0x1a2b4c, trim: 0xffffff } };
+export const GAME_ARGS = [
+  { playerId: 'A3', teamId: 'A', height: 1.70, isLibero: false, name: 'GameShort', teamKit: null, number: 3 },
+  { playerId: 'B9', teamId: 'B', height: 2.00, isLibero: false, name: 'GameTall', teamKit: GAME_KIT, number: 9 },
+  { playerId: 'A6', teamId: 'A', height: 1.85, isLibero: true, name: 'GameLibero', teamKit: GAME_KIT, number: 6 },
+];
 // live＝現行規則即時計算（只供產生凍結檔）；rpMod＝要載入的 realPlayer 模組（預設 src 現行版）
 export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   installNodeFetch();
@@ -409,6 +429,10 @@ export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   const probe = lib.makeReal(mods, loaded);
   const G = probe.p.mesh.geometry;
   assertMeshData(probe.p.mesh, loaded.geometry, '載入');
+  for (const a of GAME_ARGS) { // 遊戲會用的參數組合也必須畫同一份資料（R6 ①）
+    const g = rpMod.createRealPlayer(loaded, a);
+    assertMeshData(g.mesh, probe.p.mesh.geometry, `遊戲參數 身高 ${a.height}${a.teamKit ? '、teamKit' : ''}${a.isLibero ? '、自由人' : ''}`);
+  }
   const asset = { ...loaded, geometry: G }; // 之後一律讀畫面那份
   weightCheck(G);
   const R0 = lib.bindRegions(asset, rpMod.LANDMARKS);
