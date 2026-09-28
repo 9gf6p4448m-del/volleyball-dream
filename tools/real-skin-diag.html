@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>寫實蒙皮診斷截圖台</title>
+<style>
+  html, body { margin: 0; background: #0d1119; }
+  #wrap { position: relative; display: inline-block; }
+  canvas { display: block; }
+  .lab { position: absolute; color: #e8eef8; font: 600 15px/1.35 system-ui, "Microsoft JhengHei", sans-serif; text-shadow: 0 1px 3px #000, 0 0 2px #000; white-space: pre; pointer-events: none; }
+  .sub { font-weight: 500; font-size: 13px; color: #c9d4e6; }
+  .red { color: #ff5a5a; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<script type="module">
+// 寫實蒙皮診斷（docs/experiments/real-skin-diagnosis.md）的並排截圖台：每個時刻一張圖，
+// 每列一個關鍵幀、左＝寫實（紅＝(a) 肩部拉伸 >2× 的三角形、(b) 手臂穿入軀幹的頂點與其最近的軀幹面）、
+// 右＝同輸入驅動的幾何人。量法與 node 量測腳本共用 tools/real-skin-lib.mjs。只在 dev server 下使用。
+import * as THREE from 'three';
+import * as ga from '/src/render/geoAnimator.js';
+import * as gc from '/src/render/geoCharacter.js';
+import * as rp from '/src/render/realPlayer.js';
+import * as lib from '/tools/real-skin-lib.mjs';
+import { heatWeightsFactory } from '/tools/real-skin-heat.mjs';
+
+const COL_W = 480; const ROW_H = 560; const HEAD = 52;
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.autoClear = false;
+function makeScene() {
+  const s = new THREE.Scene();
+  s.background = new THREE.Color(0x151b27);
+  s.add(new THREE.HemisphereLight(0xc8d6ff, 0x2a2f3a, 1.2));
+  const key = new THREE.DirectionalLight(0xfff1dc, 2.0); key.position.set(-3, 6, 4); s.add(key);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.9); fill.position.set(4, 3, 3); s.add(fill);
+  const rim = new THREE.DirectionalLight(0x9ec4ff, 0.8); rim.position.set(3, 3, -4); s.add(rim);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshStandardMaterial({ color: 0x8a6a4b, roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2; s.add(floor);
+  return s;
+}
+const sceneReal = makeScene();
+const sceneGeo = makeScene();
+const camera = new THREE.PerspectiveCamera(34, COL_W / ROW_H, 0.05, 50);
+const mods = { THREE, rp, ga, gc };
+const assets = {}; let R = null;
+// 變體：base＝現況；heatCombo8＝熱擴散權重＋零姿勢外展 8°＋扭轉分段（與 node 量測的 heatCombo8 同設定）。
+// 瀏覽器端無法像 node 那樣改寫 realPlayer.js 再載入，改為載入後覆寫 skinIndex／skinWeight 並依同一規則
+// （綁定 y ≤ 0.03 的頂點）重建鞋底集合；部位標籤（上色）沿用現況主骨——只影響色塊邊界，不影響形狀
+const HOOKS = lib.makeHooks(THREE);
+const VARIANT_HOOK = { base: null, heatCombo8: HOOKS.chain(HOOKS.restAbduct(8), HOOKS.twistSplit(0.5)) };
+async function loadVariantAsset(variant, faces) {
+  const k = `${variant}-${faces}`;
+  if (assets[k]) return assets[k];
+  const a = await rp.loadRealPlayerAsset(`/models/real/player_${faces}.glb`);
+  if (variant === 'heatCombo8') {
+    const g = a.geometry;
+    const w = heatWeightsFactory(rp)(g.attributes.position.array, g.attributes.normal.array, g.index.array);
+    g.attributes.skinIndex.array.set(w.skinIndex); g.attributes.skinIndex.needsUpdate = true;
+    g.attributes.skinWeight.array.set(w.skinWeight); g.attributes.skinWeight.needsUpdate = true;
+    const P = g.attributes.position.array; const ids = [];
+    for (let i = 0; i < P.length / 3; i += 1) if (P[i * 3 + 1] <= 0.03) ids.push(i);
+    const sole = { n: ids.length, pos: new Float32Array(ids.length * 3), si: new Uint16Array(ids.length * 4), sw: new Float32Array(ids.length * 4), bones: [] };
+    const bones = new Set();
+    ids.forEach((v, j) => {
+      for (let c = 0; c < 3; c += 1) sole.pos[j * 3 + c] = P[v * 3 + c];
+      for (let c = 0; c < 4; c += 1) { sole.si[j * 4 + c] = w.skinIndex[v * 4 + c]; sole.sw[j * 4 + c] = w.skinWeight[v * 4 + c]; if (sole.sw[j * 4 + c] > 0) bones.add(sole.si[j * 4 + c]); }
+    });
+    sole.bones = [...bones];
+    a.sole = sole;
+  }
+  assets[k] = a;
+  return a;
+}
+
+function placeCamera(cam, rootY) {
+  const az = (cam.az * Math.PI) / 180; const el = (cam.el * Math.PI) / 180;
+  const ty = cam.ty + rootY * 0.8;
+  camera.position.set(cam.dist * Math.sin(az) * Math.cos(el), ty + cam.dist * Math.sin(el), cam.dist * Math.cos(az) * Math.cos(el));
+  camera.lookAt(0, ty, 0);
+  camera.updateProjectionMatrix();
+}
+function label(x, y, html) {
+  const d = document.createElement('div');
+  d.className = 'lab'; d.style.left = `${x}px`; d.style.top = `${y}px`; d.innerHTML = html;
+  document.getElementById('wrap').appendChild(d);
+}
+
+async function renderMoment(momentId, { faces = '20k', variant = 'base' } = {}) {
+  const M = lib.MOMENTS.find((m) => m.id === momentId);
+  if (!M) throw new Error(`未知時刻 ${momentId}`);
+  if (!(variant in VARIANT_HOOK)) throw new Error(`未知變體 ${variant}`);
+  const asset = await loadVariantAsset(variant, faces);
+  R = lib.bindRegions(asset, rp.LANDMARKS);
+  for (const el of document.querySelectorAll('.lab')) el.remove();
+  const W = COL_W * 2; const H = HEAD + ROW_H * M.keys.length;
+  renderer.setSize(W, H);
+  renderer.setScissorTest(false);
+  renderer.setClearColor(0x0d1119, 1);
+  renderer.clear();
+  const vName = variant === 'base' ? '現況 55cc61b' : '實驗：熱擴散權重＋零姿勢外展 8°＋扭轉分段（未提交）';
+  label(12, 4, `${M.label}｜${vName}
+<span class="sub">左＝寫實（<span class="red">紅＝(a) 肩部三角形拉伸＞2×、(b) 手臂穿入軀幹</span>）｜右＝幾何（同輸入驅動）</span>`);
+  const summary = [];
+  M.keys.forEach((key, row) => {
+    const geoBefore = new Set(sceneGeo.children);
+    const pool = gc.createGeoPool(sceneGeo, false, 1);
+    const real = lib.makeReal(mods, asset, { hook: VARIANT_HOOK[variant] });
+    const geo = lib.makeGeo(mods, pool);
+    pool.finishColors();
+    sceneReal.add(real.rig.root); sceneReal.add(real.p.mesh);
+    const pk = lib.driveKey(mods, [real, geo], key);
+    const P1 = lib.skinPositions(THREE, real.p);
+    const N1 = lib.vertexNormals(P1, R.index);
+    const a = lib.metricStretch(R, P1);
+    const b = lib.metricPenetration(R, P1, N1);
+    // 上色：(a) 超標三角形三頂點、(b) 穿入的手臂頂點＋其最近軀幹三角形三頂點
+    const col = real.p.mesh.geometry.attributes.color;
+    const red = new Set();
+    for (const t of a.flagged) for (let e = 0; e < 3; e += 1) red.add(R.index[t * 3 + e]);
+    for (const i of b.flagged.arm) red.add(i);
+    for (const i of b.flagged.torso) red.add(i);
+    for (const i of red) col.setXYZ(i, 1, 0.05, 0.05);
+    col.needsUpdate = true;
+    const y0 = HEAD + row * ROW_H;
+    const rootY = real.rig.root.position.y;
+    placeCamera(key.cam, rootY);
+    for (const [ix, scene] of [[0, sceneReal], [1, sceneGeo]]) {
+      renderer.setViewport(ix * COL_W, H - y0 - ROW_H, COL_W, ROW_H);
+      renderer.setScissor(ix * COL_W, H - y0 - ROW_H, COL_W, ROW_H);
+      renderer.setScissorTest(true);
+      renderer.clear();
+      renderer.render(scene, camera);
+    }
+    const txt = `${key.id} ${key.label}\n<span class="sub">(a) σ1＞2×：${a.over2} 個三角形，最大 ${a.maxStretch.toFixed(1)}×、最長邊 ${a.maxEdge.toFixed(2)} m\n(b) 穿入：右 ${b.r.inside} 點（最深 ${(b.r.maxDepth * 100).toFixed(1)} cm）／左 ${b.l.inside} 點（最深 ${(b.l.maxDepth * 100).toFixed(1)} cm）</span>`;
+    label(10, y0 + 6, txt);
+    label(COL_W + 10, y0 + 6, `幾何｜${pk ? `${pk.type} t=${pk.t.toFixed(3)}` : (M.id === 'run' ? '跑步 5 m/s（底層擺臂，無序列）' : key.id === 'K2a' ? 'hold：serveReady（持球預備）' : '待命（無序列）')}`);
+    summary.push({ key: key.id, seq: pk?.type ?? null, t: pk?.t ?? null, a: { over2: a.over2, max: a.maxStretch, maxEdge: a.maxEdge }, b: { r: b.r, l: b.l }, redVerts: red.size });
+    sceneReal.remove(real.rig.root); sceneReal.remove(real.p.mesh);
+    for (const o of [...sceneGeo.children]) if (!geoBefore.has(o)) sceneGeo.remove(o);
+  });
+  renderer.setScissorTest(false);
+  return { moment: momentId, variant, width: W, height: H, summary };
+}
+window.__skinDiag = { renderMoment, moments: lib.MOMENTS.map((m) => m.id) };
+window.__skinDiagReady = true;
+</script>
+</body>
+</html>
