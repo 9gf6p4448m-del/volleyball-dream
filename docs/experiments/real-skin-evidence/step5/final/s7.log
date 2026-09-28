@@ -1,0 +1,298 @@
+[real-match-browser] running 1:geo...
+[real-match-browser] 1:geo done in 185s (tick=11255, errors=0)
+[real-match-browser] running 1:real...
+[real-match-browser] 1:real done in 233s (tick=11250, errors=0)
+[real-match-browser] running 2:geo...
+[real-match-browser] 2:geo done in 168s (tick=10930, errors=0)
+[real-match-browser] running 2:real...
+[real-match-browser] 2:real done in 199s (tick=10933, errors=0)
+[real-match-browser] running 3:geo...
+[real-match-browser] 3:geo done in 187s (tick=11693, errors=0)
+[real-match-browser] running 3:real...
+[real-match-browser] 3:real done in 323s (tick=11692, errors=0)
+[real-match-browser] running B8(b) CPU throttle...
+[real-match-browser] running B9 load-fail...
+[real-match-browser] running B12 screenshots...
+[real-match-browser]   B12 shot receive/desktop/geo...
+[real-match-browser]   B12 shot receive/desktop/geo done in 124s (tick=4015, seq=bump)
+[real-match-browser]   B12 shot receive/desktop/real...
+[real-match-browser]   B12 shot receive/desktop/real done in 153s (tick=4015, seq=bump)
+[real-match-browser]   B12 shot receive/portrait/geo...
+[real-match-browser]   B12 shot receive/portrait/geo done in 125s (tick=4015, seq=bump)
+[real-match-browser]   B12 shot receive/portrait/real...
+[real-match-browser]   B12 shot receive/portrait/real done in 154s (tick=4015, seq=bump)
+[real-match-browser]   B12 shot spike-hit/desktop/geo...
+[real-match-browser]   B12 shot spike-hit/desktop/geo done in 123s (tick=4011, seq=spike)
+[real-match-browser]   B12 shot spike-hit/desktop/real...
+[real-match-browser]   B12 shot spike-hit/desktop/real done in 145s (tick=4011, seq=spike)
+[real-match-browser]   B12 shot spike-hit/portrait/geo...
+[real-match-browser]   B12 shot spike-hit/portrait/geo done in 124s (tick=4011, seq=spike)
+[real-match-browser]   B12 shot spike-hit/portrait/real...
+[real-match-browser]   B12 shot spike-hit/portrait/real done in 160s (tick=4011, seq=spike)
+{
+ "pass": {
+  "B2": true,
+  "B3": true,
+  "B4": true,
+  "B5": true,
+  "B6": true,
+  "B7": true,
+  "B8b": true,
+  "B9": true,
+  "B12": true,
+  "H1": true
+ },
+ "perSeed": {
+  "1": {
+   "b2Pass": true,
+   "b3HandOk": true,
+   "b3SoleOk": true,
+   "b4Ok": true,
+   "b5PlateOk": true,
+   "b6EventsEqual": true,
+   "b6SnapshotEqual": null,
+   "hasLiberoSwap": true,
+   "hasSubstitution": true,
+   "subTick": 3276,
+   "h1Geo": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9909816776191195,
+    "ratioMin": 0.9712784624766996,
+    "ratioSpread": 1.0202858561201675,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9423240881334742
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.7031415467293756
+    },
+    "headDiff": 0.23918254140409867,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   },
+   "h1Real": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9866700078853049,
+    "ratioMin": 0.9678248781662998,
+    "ratioSpread": 1.0194716318459496,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9338732154551976
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.6957254747872141
+    },
+    "headDiff": 0.2381477406679835,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   }
+  },
+  "2": {
+   "b2Pass": true,
+   "b3HandOk": true,
+   "b3SoleOk": true,
+   "b4Ok": true,
+   "b5PlateOk": true,
+   "b6EventsEqual": true,
+   "b6SnapshotEqual": null,
+   "hasLiberoSwap": true,
+   "hasSubstitution": true,
+   "subTick": 3000,
+   "h1Geo": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9909786937081874,
+    "ratioMin": 0.9712718562342186,
+    "ratioSpread": 1.0202897235696455,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9423182396680472
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.703136414402572
+    },
+    "headDiff": 0.23918182526547516,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   },
+   "h1Real": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9866698390211279,
+    "ratioMin": 0.9678240356388146,
+    "ratioSpread": 1.019472344856443,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9338728844814106
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.6957251843408296
+    },
+    "headDiff": 0.23814770014058095,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   }
+  },
+  "3": {
+   "b2Pass": true,
+   "b3HandOk": true,
+   "b3SoleOk": true,
+   "b4Ok": true,
+   "b5PlateOk": true,
+   "b6EventsEqual": true,
+   "b6SnapshotEqual": null,
+   "hasLiberoSwap": true,
+   "hasSubstitution": true,
+   "subTick": 3034,
+   "h1Geo": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9909794402777238,
+    "ratioMin": 0.971273510638045,
+    "ratioSpread": 1.0202887543249621,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9423197029443386
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.7031376985021747
+    },
+    "headDiff": 0.23918200444216398,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   },
+   "h1Real": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9866693301295256,
+    "ratioMin": 0.967821496376883,
+    "ratioSpread": 1.0194744938226739,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9338718870538703
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.6957243090472738
+    },
+    "headDiff": 0.23814757800659647,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   }
+  }
+ },
+ "b3Coverage": {
+  "distinctKeys": [
+   "serve",
+   "receiveReady",
+   "bump",
+   "transitionWait",
+   "setReady",
+   "overhead",
+   "approach3",
+   "windup",
+   "spikeHold",
+   "spike",
+   "blockJump",
+   "landSoft",
+   "cheer",
+   "overheadJump",
+   "approach4",
+   "serveFloat",
+   "highfive",
+   "dive"
+  ],
+  "count": 18,
+  "groupsCovered": {
+   "bump": true,
+   "overhead": true,
+   "spike": true,
+   "block": true,
+   "serve": true,
+   "approach": true
+  },
+  "allGroupsOk": true,
+  "countOk": true
+ },
+ "colorAllOk": true,
+ "b7": {
+  "pass": true,
+  "protectedDiffEmpty": true,
+  "importersOk": true
+ },
+ "b8b": {
+  "seed": 1,
+  "finalTick": 3972,
+  "debug": {
+   "appearance": "real",
+   "faces": 20000
+  },
+  "errors": [],
+  "commonTickCount": 398,
+  "visibleCountMismatches": 0,
+  "appearanceStayedReal": true,
+  "facesStayed20k": true,
+  "pass": true
+ },
+ "b9": {
+  "seed": 1,
+  "toastText": "寫實模型載入失敗，本場改用幾何球員顯示",
+  "debugNow": {
+   "appearance": "real",
+   "realLoadFailed": true,
+   "unitsAllGeo": true
+  },
+  "finalTick": 3972,
+  "stillPlaying": true,
+  "pageerrors": [],
+  "consoleErrors": [
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "[real-match] 寫實模型載入失敗，本場改用幾何球員 HttpError: fetch for \"http://127.0.0.1:5194/models/real/player_20k.glb\" responded with 404: Not Found\n    at http://127.0.0.1:5194/node_modules/.vite/deps/chunk-QOJ3YCJM.js?v=8fb73659:23423:15"
+  ],
+  "toastHasSubstring": true,
+  "pass": true
+ }
+}

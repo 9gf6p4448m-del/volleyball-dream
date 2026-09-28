@@ -1,4 +1,79 @@
-# 寫實蒙皮修正：步驟⑤停手回報（2026-09-29，驗收修訂 R7／R8 之後）
+# 寫實蒙皮修正：最終驗收回報（2026-09-29，驗收修訂 R7／R8／R9 之後）
+
+> 驗收依據：`docs/kickoffs/real-skin-acceptance.md`，含 R1–R9，本卷未修改。
+> 量尺、判定腳本、baseline 都未修改，包括 `real-skin-penetration-v2`、`real-skin-torso-drag`、`real-skin-arm-follow`、`real-skin-r7-judge`、凍結集合、`ruler-v2/R3/frozen-rerun`、`R3/R4/f-base`、`R7/s1-base`。
+> 實作 commit：feat/real-skin **54e8d574**。它的權重和候選 H7（e669a59a）逐位元相同，只拿掉了沒用到的半轉骨，骨表 20→18。
+> 證據：`docs/experiments/real-skin-evidence/step5/final/`（下稱 `final/`）。S10 對照圖在 `step5/compare/`。
+
+## 結論
+
+**S1–S9、S11、S13 在 20k 與 5k 全過**，各條依 R7／R8／R9 判定。S12 待主對話另派對抗審查，本報告 §五 列出 src diff。S10 待使用者看截圖。
+
+**畫面上有一個量尺沒抓到的問題，先請使用者看。**
+- 在接球預備（K4b）與扣球引臂（K1a），上臂內側會出現膚色的薄片：從腋下連到上臂，貼著軀幹。
+  - K4b 見 `step5/compare/5-待命接球-K4b.png` 右圖，兩臂內側都有。
+  - K1a 見 `1b-…左臂胸口近拍-正前.png` 右圖，左胸腋下是一道深色凹陷，這就是 R9 放寬的那塊。
+- 原因是夾角輔助骨：上臂內側有一半的皮綁在它上面，手臂往前下方伸時，這塊內側皮留在胸側。
+- S13 量的是軀幹骨權重；這塊皮綁的是輔助骨，不算軀幹骨，所以 S13 讀不到它。
+- 這是 S10 要判斷的事，我沒有修。
+
+## 各條結果（指令都在 repo 根目錄，HEAD 54e8d574）
+
+| 條 | 指令 | 關鍵數字（20k；5k） | 判定 |
+|---|---|---|---|
+| S1（R7） | `node tools/real-skin-measure.mjs --faces=<f> --variants=base --json=final/m-<f>.json`，再跑 `node tools/real-skin-r7-judge.mjs --faces=<f> --s1=final/m-<f>.json --pen=final/pen-<f>.json --txt=final/judge-<f>.txt` | 拉伸 >2× 數／P99：K1a 183/4.44、K1b 170/4.59、K2a 57/2.51、K2b 191/4.05、K3a 5/1.60、K3b 0/1.57、K4a 0/1.25、K4b 34/2.22、K4c 99/3.05。5k：K1a 63/4.62、K1b 45/5.28、K2b 61/4.84、K4c 33/3.59，其餘更小。都在現況之下，P99 ≤6.0 | 過（9 幀×2） |
+| S2（R9） | `node tools/real-skin-penetration-v2.mjs --faces=<f> --baseline=docs/experiments/real-skin-evidence/ruler-v2/R3/frozen-rerun/before-<f>.json` | (i) K1a 右 4/1.3、左 38/3.6（上限 40／4.0）；5k 右 0、左 3/3.1（上限 5／3.5）。其餘幀量尺列「退步」只有 K1a 左一項，其他 16 項都 ≤ 現況。(ii) K3a、K3b、K4a 兩臂 0。(iii) K4b 右 1/0.0、K4c 右 2/0.6，左都是 0；5k 都是 0 | 過 |
+| S3（R7） | judge | K4a 右 19/1.1（現況 375/8.2）、左 0；5k 右 8/1.3（現況 89/7.8）。K4b、K4c 兩臂 0 | 過 |
+| S4 | measure 20k | 最大扭跳 K1a 5.18°、K2b 4.55°（≤6.0）、K1b 2.12°（≤4.31）。蒙皮總扭轉 K1a −53.91、K1b −26.99、K2b −47.33，現況 −54.94、−28.04、−48.37，差 ≤1.05°。關節扭轉總和 −77.35、−51.98、−71.49，與現況相同 | 過 |
+| S5 | `git diff 55cc61b -- src/render/geoAnimator.js src/render/geoCharacter.js src/sim`；`node tools/motion-d0-measure.mjs`（跑完 `git checkout -- docs/experiments/motion-d0-measure.json`）；`node tools/motion-2b-check.mjs --d0-json final/s5-d0-after.json --out final/s5-check-after.json` | diff 0 bytes；E2(a) 39/39 範圍內；`{"e2b":true,"e3":true,"e4":true,"e6":true,"all":true}`，exit 0 | 過 |
+| S6 | `A7_SKIP_TESTS=1 A7_SKIP_BUILD=1 REPORT_NAME=… node tools/real-skin-with-vite.mjs --port=5193 -- node tools/real-player-browser.mjs` | A1–A6、A8–A12 全 true（A8 有拍截圖，見 `final/s6-shots/`）。A2(d) 手臂 7.95°；A2(a) 0.001 m；A2(e) 0.116／0.115 m。exit 1 只因為 A7 被刻意略過，A7 不屬於 S6 | 過 |
+| S7 | `REPORT_NAME=… node tools/real-skin-with-vite.mjs --port=5194 -- node tools/real-match-browser.mjs`；B1 另跑 `final/b1/b1-ui-check.mjs`；B10 跑 `npm run build` | B2–B9、B12、H1 全 true。B5 三個 seed 的 `b5PlateOk` 都是 true（背號 ≤0.06 m，樣本 15764／15316／16380）。B1：UI 預設幾何→點擊變寫實→localStorage＝real→重整仍寫實→快速比賽 appearance＝real，pass。B10：build 在 41.3 s 完成，`dist/sw.js` 預快取含兩個 `.weights.glb`；npm test 見 S9。B11 依條文由使用者手機量測 | 過（B11 除外，本來就不由本卷判） |
+| S8 | measure 表頭；`node tools/real-skin-loadtime.mjs` | 熱擴散求解只在 `tools/bake-real-skin-weights.mjs`，20k 與 5k 烘焙檔都在。鞋底 IK 影響頂點 523（5k 125），不變。載入耗時中位數：20k 21.7 ms、5k 7.4 ms；改前為 39.8、11.8 ms。兩次在不同時間、不同機器負載下量，只供參考 | 過 |
+| S9 | `node tools/npm-test-with-provenance.mjs final/npm-after.txt`；`node tools/sim-hash-probe.mjs` | tests 2613、pass 2613、fail 0（開工時 2613）。來源紀錄 head 54e8d574、工作區乾淨。sim 雜湊合計 0a948ad2b9895d49，與基準相同 | 過 |
+| S11 | `node tools/real-skin-torso-drag.mjs --faces=<f> --baseline=docs/experiments/real-skin-evidence/ruler-v2/R3/R4/f-base-<f>.json` | 9 幀全過。例如 K1a 82 點／7.5 cm，上限 168／8.5；5k K4b 23 點／6.4 cm，上限 55／7.4 | 過 |
+| S13 | `node tools/real-skin-arm-follow.mjs --faces=<f>` | 右 0.471、左 0.371；5k 右 0.462、左 0.317（門檻 ≤0.50） | 過（右臂只差門檻 0.029） |
+
+## S10 對照截圖（`step5/compare/`）
+
+- 工具：`step5/compare/tool/compare-page.html`、`compare-shots.mjs`、`compose.py`。
+  - 兩邊走同一條真實路徑：`lib.makeReal`，也就是 createRealPlayer 加 geoAnimator 逐幀驅動，再 groundLegs。
+  - 左圖在拋棄式工作樹 8720597 拍，右圖在最終版拍。20k，不加標色。
+  - 原圖在 `raw/`，拍攝參數在 `manifest-*.json`。
+- 並排圖共 8 張：
+  - 1 扣球引臂 K1a；1b、1c 是左臂胸口近拍（正前、左前）；
+  - 2 揮臂 K1b；
+  - 3 發球起手 K2b；
+  - 4、4b 跑步擺臂（後擺、前擺）；
+  - 5 待命接球 K4b。
+
+## 五、src diff（`git diff 9c66afe 54e8d574 -- src`，只動 src/render/realPlayer.js，+129／−4；供 S12 審查）
+
+| 位置（54e8d574） | 改動 | 理由 |
+|---|---|---|
+| :58、:66、:70 | BONES 末尾加 `rArmAux`、`lArmAux`，父骨＝spineUpper；`AUX` 表對應到肩 | 肩部輔助骨（R2）。加在末尾，原 16 骨的索引不變 |
+| :141 | `computeSkinWeights` 遇到沒有骨段的骨就跳過 | 輔助骨不參與舊的自動權重（讀不到烘焙檔時的後備路徑） |
+| :241–304 | `WEIGHTS_FORMAT`、`positionHash`、`loadBakedWeights`：fetch `<glb>.weights.glb`；格式、骨名、頂點數、位置雜湊、骨索引任一不符 → console.warn，退回 computeSkinWeights | S8：熱擴散只在 tools/ 求解，src 只讀烘焙檔。量尺（node）與瀏覽器讀同一個檔 |
+| :306–325 | 幾何讀取拆成 `loadRealGeometry` | 烘焙器重用同一份縮放、貼地、法線 |
+| :328–347 | `loadRealPlayerAsset` 改成「烘焙權重 ?? computeSkinWeights」；回傳加 `weightsSource` | 同上。部位上色與接縫拆分用烘焙檔內存的現行主骨 |
+| :443、:463 | `computeBind`：輔助骨的位置與綁定旋轉照抄對應的肩 | 不移肩、不平移 |
+| :515–517 | `createRealPlayer`：每側建一個 Object3D，掛在 joints.spineUpper | 輔助骨實體。掛在骨架上，不是 mesh 子物件 |
+| :480–487 | 常數 TWIST_SHARE 0.5、AUX_MIN 30°、AUX_SOFT 5° | 扭轉分段；夾角輔助骨 |
+| :636–645 `splitTwist` | 把 spineUpper 的 Euler y 移一半到 spine，再反解 spineUpper，使胸節世界朝向不變；同一幀重入不重套 | 使用者裁定的扭轉分段（S4），總扭轉不變 |
+| :647–664 `updateAux` | 輔助骨＝C·q_shoulder；C 把上臂方向在胸節框架內的外展角軟性夾到 ≥30° | 輔助骨逐幀驅動，只讀肩的旋轉 |
+| :667、:676 | `retargetArms` 開頭呼叫 splitTwist，每側外展後呼叫 updateAux（仍由 groundLegs 開頭既有的呼叫點進入） | 接線 |
+
+- 沒有依參數分岔，沒有 mesh 子物件，沒改可見性或渲染 hook，沒有 onBeforeCompile、morph 或自訂著色器，也沒有在 createRealPlayer 之後換 geometry。
+- 另有工具與資料，都在同一個 commit：`tools/bake-real-skin-weights.mjs`（同指令重跑逐位元相同）、`public/models/real/player_{20k,5k}.weights.glb`。
+
+## 分支
+
+- `feat/real-skin`：54e8d574 是實作，其後一個 commit 是本報告與證據。
+- `feat/real-skin-wip2`、`feat/real-skin-wip3` 只保留歷史，不需合併。
+- 沒有 push、沒有部署。拋棄式工作樹 8720597 已移除，它的 node_modules junction 用 rmdir 拆掉。
+
+---
+
+# （前一輪）步驟⑤停手回報（2026-09-29，驗收修訂 R7／R8 之後）
 
 > 依據：驗收修訂 R7（c075fb7）、R8（8edaa6a）。量尺、判定腳本、baseline 未修改：
 > `tools/real-skin-r7-judge.mjs`、`tools/real-skin-arm-follow.mjs`、`ruler-v2/R7/s1-base-*.json`。

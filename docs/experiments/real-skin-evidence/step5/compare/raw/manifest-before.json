@@ -1,0 +1,69 @@
+{
+ "tag": "before",
+ "root": "C:\\Users\\shung\\worktrees\\vs-8720597",
+ "shots": [
+  {
+   "name": "1-扣球引臂-K1a",
+   "key": "K1a",
+   "cam": null,
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "1b-扣球引臂-K1a-左臂胸口近拍-正前",
+   "key": "K1a",
+   "cam": {
+    "az": 15,
+    "el": 8,
+    "dist": 1.25,
+    "ty": 1.4,
+    "tx": 0.1,
+    "tz": 0.02
+   },
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "1c-扣球引臂-K1a-左臂胸口近拍-左前",
+   "key": "K1a",
+   "cam": {
+    "az": 55,
+    "el": 8,
+    "dist": 1.25,
+    "ty": 1.4,
+    "tx": 0.1,
+    "tz": 0.02
+   },
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "2-揮臂擊球-K1b",
+   "key": "K1b",
+   "cam": null,
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "3-發球起手-K2b",
+   "key": "K2b",
+   "cam": null,
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "4-跑步擺臂-後擺-K3a",
+   "key": "K3a",
+   "cam": null,
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "4b-跑步擺臂-前擺-K3b",
+   "key": "K3b",
+   "cam": null,
+   "weightsSource": "computed（無烘焙檔機制）"
+  },
+  {
+   "name": "5-待命接球-K4b",
+   "key": "K4b",
+   "cam": null,
+   "weightsSource": "computed（無烘焙檔機制）"
+  }
+ ],
+ "errors": []
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><title>real-skin compare</title>
+<style>body{margin:0;background:#151b27}</style></head>
+<body><canvas id="c" width="600" height="760"></canvas>
+<script type="module">
+// S10 對照截圖：同一套真實路徑（lib.makeReal → createRealPlayer＋geoAnimator 逐幀 → groundLegs），不加任何標色。
+// 放在兩個工作樹（8720597、最終版）各跑一次；src 用各自的 src/render/realPlayer.js。
+import * as THREE from 'three';
+import * as ga from '/src/render/geoAnimator.js';
+import * as gc from '/src/render/geoCharacter.js';
+import * as rp from '/src/render/realPlayer.js';
+import * as lib from '/tools/real-skin-lib.mjs';
+const W = 600; const H = 760;
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x151b27);
+scene.add(new THREE.HemisphereLight(0xc8d6ff, 0x2a2f3a, 1.2));
+const k = new THREE.DirectionalLight(0xfff1dc, 2.0); k.position.set(-3, 6, 4); scene.add(k);
+const f = new THREE.DirectionalLight(0xdfe8ff, 0.9); f.position.set(4, 3, 3); scene.add(f);
+const r = new THREE.DirectionalLight(0x9ec4ff, 0.8); r.position.set(3, 3, -4); scene.add(r);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshStandardMaterial({ color: 0x8a6a4b, roughness: 0.95 }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
+const camera = new THREE.PerspectiveCamera(34, W / H, 0.05, 50);
+const mods = { THREE, rp, ga, gc };
+let asset = null;
+async function shot(keyId, cam) {
+  if (!asset) asset = await rp.loadRealPlayerAsset('/models/real/player_20k.glb');
+  const key = lib.ALL_KEYS.find((x) => x.id === keyId);
+  const real = lib.makeReal(mods, asset);
+  lib.driveKey(mods, [real], key);
+  scene.add(real.rig.root); scene.add(real.p.mesh);
+  real.rig.root.updateMatrixWorld(true);
+  const c = cam || key.cam;
+  const az = (c.az * Math.PI) / 180; const el = (c.el * Math.PI) / 180;
+  const ty = c.ty + real.rig.root.position.y * 0.8;
+  const tx = c.tx ?? 0; const tz = c.tz ?? 0; // 近拍：注視點可偏離中軸（角色座標，+X＝左側）
+  camera.position.set(tx + c.dist * Math.sin(az) * Math.cos(el), ty + c.dist * Math.sin(el), tz + c.dist * Math.cos(az) * Math.cos(el));
+  camera.lookAt(tx, ty, tz); camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.remove(real.rig.root); scene.remove(real.p.mesh);
+  return { url, weightsSource: asset.weightsSource ?? 'computed（無烘焙檔機制）' };
+}
+window.__cmp = { shot, ready: true };
+</script></body></html>

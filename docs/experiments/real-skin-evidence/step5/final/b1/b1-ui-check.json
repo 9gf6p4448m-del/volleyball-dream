@@ -1,0 +1,15 @@
+{
+ "steps": [
+  "① 主選單預設",
+  "② 點擊",
+  "③ 重整",
+  "④ 快速比賽"
+ ],
+ "errors": [],
+ "menuDefaultLabel": "球員外觀：幾何",
+ "menuAfterClickLabel": "球員外觀：寫實",
+ "localStorageAfterClick": "real",
+ "menuAfterReloadLabel": "球員外觀：寫實",
+ "quickMatchAppearance": "real",
+ "pass": true
+}

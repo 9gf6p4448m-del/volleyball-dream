@@ -1,0 +1,36 @@
+{
+ "faces": "5k",
+ "method": "S13 arm-follow R7/R8",
+ "band": {
+  "center": 0.5,
+  "half": 0.1
+ },
+ "gate": 0.5,
+ "hashes": {
+  "realPlayer.js": "f039a6b504e3",
+  "geoAnimator.js": "250a1f1cb469",
+  "geoCharacter.js": "5a149abadd3e",
+  "player_5k.glb": "c524616855fa",
+  "player_5k.weights.glb": "a68085371251",
+  "real-skin-lib.mjs": "841432f22024",
+  "real-skin-penetration-v2.mjs": "3bbe224678e6",
+  "real-skin-arm-follow.mjs": "3542ad41b3ba",
+  "real-skin-frozen-sets.json": "87122d5a2aa6"
+ },
+ "weightsSource": "baked",
+ "pass": true,
+ "r": {
+  "n": 27,
+  "mean": 0.462362,
+  "median": 0.369741,
+  "max": 0.999924,
+  "idsSha": "57f7364f1670"
+ },
+ "l": {
+  "n": 31,
+  "mean": 0.316538,
+  "median": 0.266682,
+  "max": 0.893461,
+  "idsSha": "5ca795d158c2"
+ }
+}
