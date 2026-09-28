@@ -93,7 +93,15 @@ function bcParity(Tbc, p) {
 function frame(keyId) {
   const { real, pk, P1, N1 } = V2.poseKey(setup, KEY[keyId]);
   const Tb = V2.surfaceArrays(P1, R.index, Sb.tris); const Te = V2.surfaceArrays(P1, R.index, Se.tris);
-  return { keyId, real, pk, P1, N1, Tb, Te, bbB: V2.triBoxes(Tb), bbE: V2.triBoxes(Te), Tbc: buildBc(P1) };
+  const Tbody = V2.surfaceArrays(P1, R.index, Btris);
+  return { keyId, real, pk, P1, N1, Tb, Te, bbB: V2.triBoxes(Tb), bbE: V2.triBoxes(Te), Tbc: buildBc(P1), Tbody, bbBody: V2.triBoxes(Tbody) };
+}
+// 最近身體皮歸屬（獨立參考的補充說明）：p 到去臂身體表面（不含封口）的最近三角形屬於哪個子集、主骨為何
+const SbSet = new Set(Sb.tris); const SeSet = new Set(Se.tris);
+function skinOwner(F, p) {
+  const nr = V2.nearestOnSurface(F.Tbody, F.bbBody, p);
+  const t = Btris[nr.k];
+  return { d: nr.d, t, inSb: SbSet.has(t), inSe: SeSet.has(t), bone: rp.BONES[setup.asset.primary[R.index[t * 3]]] };
 }
 const bindCentroid = (t) => [0, 1, 2].map((d) => (R.P[R.index[t * 3] * 3 + d] + R.P[R.index[t * 3 + 1] * 3 + d] + R.P[R.index[t * 3 + 2] * 3 + d]) / 3);
 const zoneOf = (y) => (y >= 1.15 ? '胸' : y >= 0.95 ? '腹' : '臀腿');
@@ -279,7 +287,7 @@ if (only.has('V2')) {
   say(`# V2 凹處不誤判（K4b，faces=${faces}${tag}）`);
   say('## (a) 舊量法在 K4b 讀成 >10 cm 的點逐點重判');
   say('欄位：頂點、臂/部位、舊深度（到 S 最近距離）、最近點所在三角形的綁定質心 (x,y,z) 與分區、最近點內插法線 n（姿勢）與 cos∠(p−q, n)（<0＝舊法判內的原因）、新 w、新判定、B_c 奇偶（獨立參考）');
-  let aPass = true; let aCount = 0;
+  let aCount = 0; const aOut = { n: 0, ok: 0 }; const aIn = { n: 0, attributed: 0, ok: 0 };
   for (const [m, S, RR, T, bb] of [['b', Sb, R, F.Tb, F.bbB], ['e', Se, RH, F.Te, F.bbE]]) {
     const old = lib.metricPenetration(RR, F.P1, F.N1);
     const list = [];
@@ -296,21 +304,23 @@ if (only.has('V2')) {
       const pq = sub(p, nr.q); const cos = dotv(pq, n) / Math.hypot(...pq);
       const w = V2.windingNumber(T, p);
       const bc = bcParity(F.Tbc, p);
-      const expectOut = !bc.inside;
-      const ok = expectOut ? !(w > V2.W_IN) : null;
-      if (ok === false) aPass = false;
-      if (ok === null) aPass = false; // B_c 為內：不自動算過，另行說明
+      const own = skinOwner(F, p);
+      const ownInS = m === 'b' ? own.inSb : own.inSe;
+      // B_c 為外 ⇒ 應判外；B_c 為內 ⇒ 另述：最近身體皮屬 S ⇒ 應判內，否則無法機械定論（null）
+      const expect = !bc.inside ? 'out' : ownInS ? 'in' : null;
+      const ok = expect === 'out' ? !(w > V2.W_IN) : expect === 'in' ? w > V2.W_IN : null;
+      if (expect === 'out') { aOut.n += 1; if (ok) aOut.ok += 1; } else { aIn.n += 1; if (expect === 'in') { aIn.attributed += 1; if (ok) aIn.ok += 1; } }
       aCount += 1;
       const c = bindCentroid(t);
-      list.push({ i, side: s, part: ['上臂', '前臂', '手'][R.armPart[i]], oldDepth: Number(nr.d.toFixed(5)), nearestBind: c.map((x) => Number(x.toFixed(3))), zone: zoneOf(c[1]), n: n.map((x) => Number(x.toFixed(3))), cos: Number(cos.toFixed(3)), w: Number(w.toFixed(4)), newInside: w > V2.W_IN, bc: bc.inside, bcVotes: bc.votes, ok });
+      list.push({ i, side: s, part: ['上臂', '前臂', '手'][R.armPart[i]], oldDepth: Number(nr.d.toFixed(5)), nearestBind: c.map((x) => Number(x.toFixed(3))), zone: zoneOf(c[1]), n: n.map((x) => Number(x.toFixed(3))), cos: Number(cos.toFixed(3)), w: Number(w.toFixed(4)), newInside: w > V2.W_IN, bc: bc.inside, bcVotes: bc.votes, skinOwner: { inS: ownInS, bone: own.bone, d: Number(own.d.toFixed(4)) }, expect, ok });
     }
     list.sort((x, y) => y.oldDepth - x.oldDepth || x.i - y.i);
     a[m] = { oldReported: { r: old.r.maxDepth, l: old.l.maxDepth }, oldMaxRecomputed: oldMaxCheck, list };
     say(`### ${m === 'b' ? '(b) 軀幹' : '(e) 骨盆＋大腿'}：${list.length} 點（舊量法本幀最深 右 ${cm(old.r.maxDepth)}／左 ${cm(old.l.maxDepth)} cm；本工具重算舊標記點最近距離最大 右 ${cm(oldMaxCheck.r)}／左 ${cm(oldMaxCheck.l)} cm）`);
     if (list.length) {
-      say('| 頂點 | 臂/部位 | 舊深度 cm | 最近點綁定質心 (x,y,z) | 分區 | 法線 n | cos | 新 w | 新判定 | B_c | 一致 |');
-      say('|---|---|---|---|---|---|---|---|---|---|---|');
-      for (const r of list) say(`| ${r.i} | ${r.side === 'r' ? '右' : '左'}${r.part} | ${cm(r.oldDepth)} | (${r.nearestBind.join(', ')}) | ${r.zone} | (${r.n.join(', ')}) | ${r.cos} | ${r.w.toFixed(3)} | ${r.newInside ? '內' : '外'} | ${r.bc ? '內' : '外'}(${r.bcVotes}) | ${r.ok === null ? 'B_c 內，另述' : r.ok ? '是' : '否'} |`);
+      say('| 頂點 | 臂/部位 | 舊深度 cm | 最近點綁定質心 (x,y,z) | 分區 | 法線 n | cos | 新 w | 新判定 | B_c | 最近身體皮（去臂）| 應判 | 一致 |');
+      say('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+      for (const r of list) say(`| ${r.i} | ${r.side === 'r' ? '右' : '左'}${r.part} | ${cm(r.oldDepth)} | (${r.nearestBind.join(', ')}) | ${r.zone} | (${r.n.join(', ')}) | ${r.cos} | ${r.w.toFixed(3)} | ${r.newInside ? '內' : '外'} | ${r.bc ? '內' : '外'}(${r.bcVotes}) | ${r.skinOwner.inS ? `屬 ${m === 'b' ? 'S_b' : 'S_e'}` : '不屬 S'}（主骨 ${r.skinOwner.bone}，${cm(r.skinOwner.d)} cm）| ${r.expect === 'out' ? '外' : r.expect === 'in' ? '內（B_c 內＋最近皮屬 S）' : '無法機械定論'} | ${r.ok === null ? '—' : r.ok ? '是' : '否'} |`);
     }
   }
   // (b) 構造點
@@ -364,24 +374,29 @@ if (only.has('V2')) {
     else if (!j.bc.inside) ok = !j.inB && !j.inE;
     else { ok = null; counted = false; }
     if (ok === false) bPass = false;
-    bRows.push({ ...q, p: q.p.map((x) => Number(x.toFixed(4))), wb: Number(j.wb.toFixed(4)), we: Number(j.we.toFixed(4)), inB: j.inB, inE: j.inE, db: Number(j.db.toFixed(4)), de: Number(j.de.toFixed(4)), bc: j.bc.inside, bcVotes: j.bc.votes, counted, ok });
+    const own = skinOwner(F, q.p);
+    bRows.push({ ...q, p: q.p.map((x) => Number(x.toFixed(4))), wb: Number(j.wb.toFixed(4)), we: Number(j.we.toFixed(4)), inB: j.inB, inE: j.inE, db: Number(j.db.toFixed(4)), de: Number(j.de.toFixed(4)), bc: j.bc.inside, bcVotes: j.bc.votes, skinOwner: { inSb: own.inSb, inSe: own.inSe, bone: own.bone, d: Number(own.d.toFixed(4)) }, counted, ok });
   }
   say('## (b) 構造點（K4b 姿勢）');
   say(`胯下起點：S_b 頂點 ${cf}（綁定 ${vtx(R.P, cf).map(f3).join(', ')}）；pelvis 前方 (${fwd.map(f3).join(', ')})、下方 (${down.map(f3).join(', ')})；褲管口 R_h 右 ${hemInfo.r.Rh}／左 ${hemInfo.l.Rh} m、t_h ${hemInfo.r.th}`);
-  say('| 組 | 點 | 姿勢座標 | w_b | w_e | (b) | (e) | 到 S_b／S_e 最近 cm | B_c | 應判 | 一致 |');
-  say('|---|---|---|---|---|---|---|---|---|---|---|');
+  say('| 組 | 點 | 姿勢座標 | w_b | w_e | (b) | (e) | 到 S_b／S_e 最近 cm | B_c | 最近身體皮（去臂）| 應判 | 一致 |');
+  say('|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const r of bRows) {
-    const expect = r.expect === 'in' ? '內' : r.counted ? '外' : '（B_c 內：不在「應判外」集合）';
-    say(`| ${r.set} | ${r.desc} | (${r.p.map(f3).join(', ')}) | ${r.wb.toFixed(3)} | ${r.we.toFixed(3)} | ${r.inB ? '內' : '外'} | ${r.inE ? '內' : '外'} | ${cm(r.db)}／${cm(r.de)} | ${r.bc ? '內' : '外'}(${r.bcVotes}) | ${expect} | ${r.ok === null ? '—' : r.ok ? '是' : '否'} |`);
+    const expect = r.expect === 'in' ? '內' : r.counted ? '外' : '（B_c 內：不在「應判外」集合，只供參考）';
+    const own = `${r.skinOwner.inSb ? 'S_b' : ''}${r.skinOwner.inSb && r.skinOwner.inSe ? '＋' : ''}${r.skinOwner.inSe ? 'S_e' : ''}${!r.skinOwner.inSb && !r.skinOwner.inSe ? '非 S_b／S_e' : ''}（主骨 ${r.skinOwner.bone}，${cm(r.skinOwner.d)} cm）`;
+    say(`| ${r.set} | ${r.desc} | (${r.p.map(f3).join(', ')}) | ${r.wb.toFixed(3)} | ${r.we.toFixed(3)} | ${r.inB ? '內' : '外'} | ${r.inE ? '內' : '外'} | ${cm(r.db)}／${cm(r.de)} | ${r.bc ? '內' : '外'}(${r.bcVotes}) | ${own} | ${expect} | ${r.ok === null ? '—' : r.ok ? '是' : '否'} |`);
   }
   const outSet = bRows.filter((r) => r.expect !== 'in' && r.counted);
   const inSet = bRows.filter((r) => r.expect === 'in');
   const excluded = bRows.filter((r) => !r.counted);
   say('');
-  say(`- (a) 判定：${aPass ? '過' : '不過'}（${aCount} 點；B_c 為外者新量法須判外）`);
+  const aPass = aOut.ok === aOut.n && aIn.ok === aIn.attributed && aIn.attributed === aIn.n;
+  say(`- (a) 判定：${aPass ? '過' : aOut.ok === aOut.n && aIn.ok === aIn.attributed ? '待說明（有 B_c 為內且最近身體皮不屬 S 的點）' : '不過'}（${aCount} 點：B_c 為外 ${aOut.n} 點中新量法判外 ${aOut.ok}；B_c 為內 ${aIn.n} 點另述——其中最近身體皮屬該子集 ${aIn.attributed} 點、新量法判內 ${aIn.ok}）`);
   say(`- (b) 判定：${bPass ? '過' : '不過'}（應判外 ${outSet.length} 點：${outSet.filter((r) => r.ok).length} 點一致；骨盆軸線 ${inSet.length} 點：${inSet.filter((r) => r.ok).length} 點一致；B_c 為內而不列入「應判外」的構造點 ${excluded.length} 點）`);
-  report.V2 = { a, aPass, aCount, b: bRows, bPass, hemInfo, crotchStart: cf, pass: aPass && bPass };
-  say(`- V2 綜合：${aPass && bPass ? '過' : '不過'}`);
+
+  const aStatus = aPass ? '過' : aOut.ok === aOut.n && aIn.ok === aIn.attributed ? '待說明' : '不過';
+  say(`- V2 綜合：(a) ${aStatus}、(b) ${bPass ? '過' : '不過'}（「待說明」＝應判外的點全部判外，另有 B_c 為內、無法機械歸屬的點，須逐點說明，不自動算過）`);
+  report.V2 = { a, aPass, aStatus, aCount, aOut, aIn, b: bRows, bPass, hemInfo, crotchStart: cf };
   say('');
 }
 
