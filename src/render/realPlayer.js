@@ -392,6 +392,12 @@ const IK_ITERS = 12;
 const IK_EPS = 1e-4;
 const FOOT_AIR = 0.01; // 鞋底離地超過這個高度＝騰空：腳骨跟著小腿走（不壓平、不做 IK）
 
+// 寫實專用重定向（real-skin 修正，docs/kickoffs/real-skin-acceptance.md；使用者 09-28 裁定 8°）：
+// 寫實白模肩地標 x=0.178（幾何人 0.225）、胸寬 0.19–0.21 m，照幾何人角度下垂的手臂會穿進軀幹。
+// 手臂下垂時在肩的局部框架多外展 REST_ABDUCT，隨上臂抬舉角 φ（相對胸節、動畫意圖）以 cos φ 淡出，
+// 舉到水平以上歸零——高舉動作不變。只作用在寫實人（geoAnimator 不動）
+const REST_ABDUCT = (8 * Math.PI) / 180;
+
 const STUB_POOL = { claim: (key) => ({ key, index: 0 }) };
 let MAT = null;
 function realMaterial() {
@@ -529,14 +535,33 @@ export function createRealPlayer(asset, {
     T.copy(H).addScaledVector(U, c);
     turnBone(knee, d1.subVectors(A, K).normalize(), d2.subVectors(T, K).normalize());
   }
+  // 寫實專用重定向（見 REST_ABDUCT）：animator（與 matchView 的 reachBias）寫完關節之後、接地 IK 之前套用。
+  // animator 每幀都會重寫肩的 x/z，所以偏移不會逐幀累積；同一幀若被呼叫兩次（中間沒有 animator 更新），
+  // 先撤銷上一次的偏移再套，結果不變
+  const _va = new THREE.Vector3();
+  const lastAbduct = { r: null, l: null };
+  function retargetArms() {
+    for (const side of ['r', 'l']) {
+      const sh = joints[`${side}Shoulder`];
+      const st = lastAbduct[side];
+      if (st && sh.rotation.z === st.after) sh.rotation.z -= st.offset;
+      _va.set(0, -1, 0).applyEuler(sh.rotation); // 上臂方向（胸節框架）；−y＝cos φ
+      const offset = (side === 'r' ? -1 : 1) * REST_ABDUCT * Math.max(0, -_va.y); // 右臂在 −X：外展＝z 負
+      sh.rotation.z += offset;
+      lastAbduct[side] = { after: sh.rotation.z, offset };
+    }
+    root.updateMatrixWorld(true);
+  }
   root.scale.setScalar(rootScale);
 
   return {
     rig, mesh, skeleton, kit, skin, hair, playerId, teamId, isLibero, height, rootScale,
     // 接地（A9／A10）：animator 更新、root 高度寫好之後呼叫。鞋底入地的那隻腳用兩骨 IK
     // 抬回地面（骨盆不動＝保留動畫的下蹲深度）；腳在空中不介入。IK 迭代後仍有殘差
-    // （例：蹲到大腿小腿折疊極限、目標比 |大腿−小腿| 還近）才退回抬 root，回傳是否動用
+    // （例：蹲到大腿小腿折疊極限、目標比 |大腿−小腿| 還近）才退回抬 root，回傳是否動用。
+    // real-skin：開頭先套寫實專用重定向（retargetArms），matchView／realPreview 的呼叫點不用改
     groundLegs() {
+      retargetArms();
       // IK 前快照（A2(d) 腿段比的是 animator 寫入後、IK 前的方向）
       joints.rKnee.updateWorldMatrix(true, false);
       joints.lKnee.updateWorldMatrix(true, false);
