@@ -1,0 +1,4 @@
+27c27
+< export const BAND = { center: 0.5, half: 0.10 };
+---
+> export const BAND = { center: 0.95, half: 0.05 }; // 【突變】取帶錯放到肘側 t∈[0.90,1.00]

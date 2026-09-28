@@ -1,0 +1,8 @@
+27c27
+< export const BAND = { center: 0.5, half: 0.10 };
+---
+> export const BAND = { center: 0.95, half: 0.05 }; // 【突變】取帶錯放到肘側 t∈[0.90,1.00]
+72c72
+<     if (bandPrint.sha !== EXPECTED_BAND[faces]?.[s]) throw new Error(`${s === 'r' ? '右' : '左'}臂取帶頂點集合指紋 ${bandPrint.sha} ≠ 鎖定值 ${EXPECTED_BAND[faces]?.[s]}（取帶常數或地標被改動），停止`);
+---
+>     if (false && bandPrint.sha !== EXPECTED_BAND[faces]?.[s]) throw new Error(`${s === 'r' ? '右' : '左'}臂取帶頂點集合指紋 ${bandPrint.sha} ≠ 鎖定值 ${EXPECTED_BAND[faces]?.[s]}（取帶常數或地標被改動），停止`);

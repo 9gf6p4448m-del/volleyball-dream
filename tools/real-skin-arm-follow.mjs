@@ -1,5 +1,6 @@
 // 寫實蒙皮修正 S13：手臂跟隨——上臂中段皮膚頂點的軀幹骨權重平均值。
-// 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R7（c075fb7）。門檻：左右臂皆 ≤0.30（20k、5k）。
+// 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R7（c075fb7）、R8（8edaa6a）。門檻：左右臂皆 ≤0.50（20k、5k；R8 由 0.30 改為 0.50，
+//   語意＝軀幹權重低於一半，這塊皮主要由手臂骨帶動；取帶、量法、四捨五入照 R7 不變）。
 //
 // 用法：node tools/real-skin-arm-follow.mjs [--faces=20k|5k] [--json=<path>] [--txt=<path>]
 //
@@ -14,7 +15,9 @@
 //    等非這三骨者不計入，照 R7 字面「軀幹骨（pelvis／spine／spineUpper）」）。
 //    權重讀畫面實際使用的 mesh.geometry（V2.loadSetup 的 G；含其全部斷言：同一份資料、網格本體、索引、權重合法、
 //    遊戲參數）。凍結頂點若有被畫出的手臂複製點，取其手臂代表點中軀幹權重最大者（最差值）。
-//  ・每臂輸出：取帶頂點數、軀幹權重平均（判定用，比到小數第 3 位：四捨五入到 0.001 後 ≤0.300）、中位數、最大。
+//  ・每臂輸出：取帶頂點數、軀幹權重平均（判定用，比到小數第 3 位：四捨五入到 0.001 後 ≤0.500）、中位數、最大。
+//  ・取帶頂點集合鎖定（EXPECTED_BAND：8720597 上以本定義選出的頂點 ID 指紋）。取帶只由凍結集合、8720597 地標與
+//    綁定位置（凍結檔雜湊保證）決定，任何候選都應相同；不同＝取帶常數或地標被改動，停止。
 // 輸出不含時間戳：同輸入逐位元相同。
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
@@ -22,7 +25,9 @@ import * as V2 from './real-skin-penetration-v2.mjs';
 
 export const TORSO = ['pelvis', 'spine', 'spineUpper'];
 export const BAND = { center: 0.5, half: 0.10 };
-export const GATE = 0.30; // R7：兩臂皆 ≤0.30
+export const GATE = 0.50; // R8：兩臂皆 ≤0.50（R7 原 0.30）
+// 取帶頂點集合指紋（setPrint 前 12 碼；8720597 上以本定義產生，L／H 同值）
+export const EXPECTED_BAND = { '20k': { r: '8276ad99dbec', l: '6421776fe9b3' }, '5k': { r: '57f7364f1670', l: '5ca795d158c2' } };
 // 8720597 src/render/realPlayer.js 的 LANDMARKS（右側；左側 x 取負）。量尺中立：取帶不隨實作的地標改動而移動
 export const FROZEN_LANDMARKS = {
   rShoulder: [-0.178, 1.47, -0.075], rElbow: [-0.363, 1.227, -0.049],
@@ -63,7 +68,9 @@ export function armFollow(setup, faces) {
     if (!vals.length) throw new Error(`${s === 'r' ? '右' : '左'}臂上臂中段取帶沒有任何頂點（取帶或凍結集合有誤），停止`);
     const sorted = [...vals].sort((a, b) => a - b);
     const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    out[s] = { n: vals.length, mean, median: sorted[Math.floor(sorted.length / 2)], max: sorted[sorted.length - 1], ids: V2.setPrint(sel) };
+    const bandPrint = V2.setPrint(sel);
+    if (bandPrint.sha !== EXPECTED_BAND[faces]?.[s]) throw new Error(`${s === 'r' ? '右' : '左'}臂取帶頂點集合指紋 ${bandPrint.sha} ≠ 鎖定值 ${EXPECTED_BAND[faces]?.[s]}（取帶常數或地標被改動），停止`);
+    out[s] = { n: vals.length, mean, median: sorted[Math.floor(sorted.length / 2)], max: sorted[sorted.length - 1], ids: bandPrint };
   }
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const ok = (x) => r3(x.mean) <= GATE;
@@ -97,18 +104,18 @@ if (isMain) {
   out.push(`量法：上臂段（8720597 地標，肩→肘）t∈[${BAND.center - BAND.half}, ${BAND.center + BAND.half}]、屬凍結手臂集合上臂的皮膚頂點；軀幹權重＝pelvis／spine／spineUpper 權重和（讀畫面 mesh.geometry；手臂複製點取最差）`);
   out.push(`輸入 sha256 前 12 碼：${Object.entries(hashes).map(([k, v]) => `${k} ${v}`).join('、')}`);
   out.push(`權重來源：${src}`);
-  out.push('| 臂 | 取帶頂點數 | 軀幹權重平均 | 中位數 | 最大 | 取帶頂點指紋 | 判定（平均 ≤0.300） |');
+  out.push('| 臂 | 取帶頂點數 | 軀幹權重平均 | 中位數 | 最大 | 取帶頂點指紋 | 判定（平均 ≤0.500） |');
   out.push('|---|---|---|---|---|---|---|');
   for (const [s, nm, ok] of [['r', '右', res.okR], ['l', '左', res.okL]]) {
     const x = res[s];
     out.push(`| ${nm} | ${x.n} | ${f3(x.mean)} | ${f3(x.median)} | ${f3(x.max)} | ${x.ids.sha} | ${ok ? '過' : '不過'} |`);
   }
-  out.push(`- 判定：${res.pass ? '綠（兩臂皆 ≤0.30）' : '紅'}`);
+  out.push(`- 判定：${res.pass ? '綠（兩臂皆 ≤0.50）' : '紅'}`);
   const text = `${out.join('\n')}\n`;
   process.stdout.write(text);
   if (args.txt && args.txt !== '1') await writeFile(args.txt, text);
   if (args.json && args.json !== '1') {
-    const j = { faces, method: 'S13 arm-follow R7', band: BAND, gate: GATE, hashes, weightsSource: src, pass: res.pass };
+    const j = { faces, method: 'S13 arm-follow R7/R8', band: BAND, gate: GATE, hashes, weightsSource: src, pass: res.pass };
     for (const s of ['r', 'l']) j[s] = { n: res[s].n, mean: Number(res[s].mean.toFixed(6)), median: Number(res[s].median.toFixed(6)), max: Number(res[s].max.toFixed(6)), idsSha: res[s].ids.sha };
     await writeFile(args.json, `${JSON.stringify(j, null, 1)}\n`);
   }

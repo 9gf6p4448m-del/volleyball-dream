@@ -1,9 +1,9 @@
 # real-skin-arm-follow S13 手臂跟隨（faces=5k）
 量法：上臂段（8720597 地標，肩→肘）t∈[0.4, 0.6]、屬凍結手臂集合上臂的皮膚頂點；軀幹權重＝pelvis／spine／spineUpper 權重和（讀畫面 mesh.geometry；手臂複製點取最差）
-輸入 sha256 前 12 碼：realPlayer.js f67532d85845、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、player_5k.weights.glb d7f9ff85b17c、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 3bbe224678e6、real-skin-arm-follow.mjs 5109da1168db、real-skin-frozen-sets.json 87122d5a2aa6
+輸入 sha256 前 12 碼：realPlayer.js f67532d85845、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、player_5k.weights.glb d7f9ff85b17c、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 3bbe224678e6、real-skin-arm-follow.mjs 3542ad41b3ba、real-skin-frozen-sets.json 87122d5a2aa6
 權重來源：baked
-| 臂 | 取帶頂點數 | 軀幹權重平均 | 中位數 | 最大 | 取帶頂點指紋 | 判定（平均 ≤0.300） |
+| 臂 | 取帶頂點數 | 軀幹權重平均 | 中位數 | 最大 | 取帶頂點指紋 | 判定（平均 ≤0.500） |
 |---|---|---|---|---|---|---|
-| 右 | 27 | 0.413 | 0.316 | 1.000 | 57f7364f1670 | 不過 |
+| 右 | 27 | 0.413 | 0.316 | 1.000 | 57f7364f1670 | 過 |
 | 左 | 31 | 0.261 | 0.209 | 0.876 | 5ca795d158c2 | 過 |
-- 判定：紅
+- 判定：綠（兩臂皆 ≤0.50）

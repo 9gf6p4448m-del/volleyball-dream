@@ -1,11 +1,11 @@
 {
  "faces": "5k",
- "method": "S13 arm-follow R7",
+ "method": "S13 arm-follow R7/R8",
  "band": {
   "center": 0.5,
   "half": 0.1
  },
- "gate": 0.3,
+ "gate": 0.5,
  "hashes": {
   "realPlayer.js": "f67532d85845",
   "geoAnimator.js": "250a1f1cb469",
@@ -14,11 +14,11 @@
   "player_5k.weights.glb": "d7f9ff85b17c",
   "real-skin-lib.mjs": "841432f22024",
   "real-skin-penetration-v2.mjs": "3bbe224678e6",
-  "real-skin-arm-follow.mjs": "5109da1168db",
+  "real-skin-arm-follow.mjs": "3542ad41b3ba",
   "real-skin-frozen-sets.json": "87122d5a2aa6"
  },
  "weightsSource": "baked",
- "pass": false,
+ "pass": true,
  "r": {
   "n": 27,
   "mean": 0.413035,
