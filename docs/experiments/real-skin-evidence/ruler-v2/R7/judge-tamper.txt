@@ -1,0 +1,6 @@
+### S1 現況檔被改（K1b P99 改 99）
+$ node tools/real-skin-r7-judge.mjs --faces=5k --s1=<H> --pen=<H> --s1base=<tampered.json>
+Error: 現況檔 C:/Users/shung/AppData/Local/Temp/claude/C--Users-shung/ce506562-b18a-4ac0-8c2e-663a20246803/scratchpad/r7/tampered.json 的 sha256 866c69adc894e5b8e52f226c6c360cc14af6aba8a782cbbb5dcca62a40994e9b ≠ 量尺方落檔值 8de84cce5159575bcd47c2ab0faa63a9bf63254e3bb4448284f2b1d4973c0b7f（檔案被換過？）
+### S3 現況檔換成候選 H 自己的輸出
+$ node tools/real-skin-r7-judge.mjs --faces=5k --s1=<H> --pen=<H> --penbase=<H 的 pen json>
+Error: S3 現況檔的 realPlayer.js 雜湊 f67532d85845 ≠ 8720597 的 b1489d7878dc
