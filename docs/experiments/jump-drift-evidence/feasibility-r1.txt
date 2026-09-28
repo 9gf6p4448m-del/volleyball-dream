@@ -1,0 +1,4 @@
+{"n":283,"infeasibleJ2vsJ3":3,"infeasibleJ7vsJ3":0,"either":3}
+{"seed":"2","id":"A1","tick":5429,"d":0.774,"hitFrames":0,"j2":true,"gap":0.829,"frames05":42,"j7":false}
+{"seed":"1@iron-mist","id":"B1","tick":12970,"d":0.771,"hitFrames":0,"j2":true,"gap":0.076,"frames05":31,"j7":false}
+{"seed":"2#J8","id":"A1","tick":5429,"d":0.774,"hitFrames":0,"j2":true,"gap":0.827,"frames05":42,"j7":false}

@@ -1,0 +1,81 @@
+== before（正式比賽 6 場）
+[spike] n=166
+  J2 d_render/d_sim 最小 -0.356；不過 166：1/B4@375:0.446<0.8×1.317(起跳→擊球 60 幀)；1/A4@2796:0.732<0.8×1.349(起跳→擊球 23 幀)；1/B4@3219:0.432<0.8×1.283(起跳→擊球 24 幀)；1/A4@3861:0.710<0.8×1.319(起跳→擊球 24 幀)；1/B5@4308:0.768<0.8×1.338(起跳→擊球 25 幀)；1/A5@4743:0.964<0.8×1.452(起跳→擊球 24 幀)
+  J3 單幀最大 0.150 m、沿前進方向最小增量 -1.16e-1；不過 166：1/B4@375:step 0.072 fwd -7.11e-2；1/A4@2796:step 0.080 fwd -7.93e-2；1/B4@3219:step 0.070 fwd -3.42e-2；1/A4@3861:step 0.080 fwd -7.93e-2
+  J5 離網最小 0.600 m、對方側幀 0；不過 0
+  J7 判 92（截斷略過 74）、併回最慢 Infinity s、併回單幀最大 0.169 m；不過 12：1/B5@5187:land 0.007 merged null step 0.047；1/B2@10027:land 0.006 merged null step 0.033；1/B5@15105:land 0.011 merged null step 0.036；3/B2@7863:land 0.008 merged null step 0.031
+[back] n=17
+  J2 d_render/d_sim 最小 0.589；不過 17：1/B4@5879:0.776<0.8×1.316(起跳→擊球 24 幀)；1/A4@9570:1.026<0.8×1.409(起跳→擊球 23 幀)；1/A5@12978:1.042<0.8×1.388(起跳→擊球 24 幀)；1/B2@15317:0.989<0.8×1.363(起跳→擊球 25 幀)；3/A5@1037:1.048<0.8×1.403(起跳→擊球 24 幀)；3/B5@7060:0.960<0.8×1.275(起跳→擊球 25 幀)
+  J3 單幀最大 0.103 m、沿前進方向最小增量 -9.39e-2；不過 17：1/B4@5879:step 0.082 fwd -8.17e-2；1/A4@9570:step 0.100 fwd -8.97e-2；1/A5@12978:step 0.100 fwd -8.00e-2；1/B2@15317:step 0.094 fwd -8.76e-2
+  J5 離網最小 3.106 m、對方側幀 0；不過 0
+  J7 判 17（截斷略過 0）、併回最慢 0.304 s、併回單幀最大 0.149 m；不過 1：2@iron-mist/A5@10382:land 0.095 merged 0.304 step 0.149
+[jumpServe] n=31
+  J2 落地 31、位移 2.079–3.370 m；不過 31：1@iron-mist/B2@1805:2.891；1@iron-mist/B2@2207:2.793；1@iron-mist/B2@2557:3.243；1@iron-mist/B2@3000:3.370；1@iron-mist/B3@5867:2.292；1@iron-mist/B4@7328:2.889
+  J3 單幀最大 0.196 m、沿前進方向最小增量 -1.67e-5；不過 31：1@iron-mist/B2@1805:step 0.157 fwd 1.95e-2；1@iron-mist/B2@2207:step 0.155 fwd 1.90e-2；1@iron-mist/B2@2557:step 0.160 fwd 2.60e-2；1@iron-mist/B2@3000:step 0.153 fwd 3.47e-2
+  J5 離網最小 5.800 m、對方側幀 0；不過 0
+  J7 判 23（截斷略過 8）、併回最慢 0.000 s、併回單幀最大 0.000 m；不過 0
+[J6] 攔網 n=419 前飄全幀恰為 0：（改前無此欄）；跳舉 n=37 最大偏移 NaN m
+[J4] 扣球＋後排 n=183 手球落差 中位 0.863 最大 1.539
+[J8] A2 扣球 n=1（代打次數 1#J8:12 2#J8:9 3#J8:3）
+  {"at":"1#J8@2383","dRender":"0.076","dSim":"0.800","hitFrames":15,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.058","net":"2.887","merged":"0.000","mstep":"0.000"}
+== after（正式比賽 6 場）
+[spike] n=166
+  J2 d_render/d_sim 最小 0.000；不過 4：2/A1@5429:0.000<0.8×0.774(起跳→擊球 0 幀)；3/A1@7660:0.190<0.8×0.630(起跳→擊球 18 幀)；1@iron-mist/B1@12970:0.000<0.8×0.771(起跳→擊球 0 幀)；3@iron-mist/B1@11042:0.193<0.8×0.735(起跳→擊球 18 幀)
+  J3 單幀最大 0.113 m、沿前進方向最小增量 -1.08e-1；不過 2：3/A1@7660:step 0.097 fwd -7.89e-2；3@iron-mist/B1@11042:step 0.113 fwd -1.08e-1
+  J5 離網最小 0.416 m、對方側幀 0；不過 0
+  J7 判 92（截斷略過 74）、併回最慢 0.480 s、併回單幀最大 0.069 m；不過 0
+[back] n=17
+  J2 d_render/d_sim 最小 0.829；不過 0
+  J3 單幀最大 0.069 m、沿前進方向最小增量 -2.12e-16；不過 0
+  J5 離網最小 3.046 m、對方側幀 0；不過 0
+  J7 判 17（截斷略過 0）、併回最慢 0.448 s、併回單幀最大 0.060 m；不過 0
+[jumpServe] n=31
+  J2 落地 31、位移 1.404–1.419 m；不過 0
+  J3 單幀最大 0.069 m、沿前進方向最小增量 -1.23e-15；不過 0
+  J5 離網最小 5.800 m、對方側幀 0；不過 0
+  J7 判 23（截斷略過 8）、併回最慢 0.496 s、併回單幀最大 0.069 m；不過 0
+[J6] 攔網 n=419 前飄全幀恰為 0：true；跳舉 n=37 最大偏移 0.120 m
+[J4] 扣球＋後排 n=183 手球落差 中位 0.631 最大 1.479
+[J8] A2 扣球 n=41（代打次數 1#J8:8 2#J8:10 3#J8:2 4#J8:13 5#J8:9）
+  {"at":"1#J8@817","dRender":"0.845","dSim":"0.907","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.529","merged":"null","mstep":"null"}
+  {"at":"1#J8@7327","dRender":"0.861","dSim":"0.921","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.583","merged":"null","mstep":"null"}
+  {"at":"1#J8@8152","dRender":"0.877","dSim":"0.945","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.654","merged":"0.432","mstep":"0.036"}
+  {"at":"1#J8@8535","dRender":"0.848","dSim":"0.907","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.360","merged":"0.432","mstep":"0.035"}
+  {"at":"1#J8@9190","dRender":"0.874","dSim":"0.937","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.509","merged":"0.432","mstep":"0.036"}
+  {"at":"1#J8@9766","dRender":"0.839","dSim":"0.902","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.575","merged":"null","mstep":"null"}
+  {"at":"1#J8@15291","dRender":"1.059","dSim":"1.053","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.423","merged":"null","mstep":"null"}
+  {"at":"1#J8@16123","dRender":"0.924","dSim":"0.987","hitFrames":20,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.721","merged":"0.432","mstep":"0.038"}
+  {"at":"2#J8@5072","dRender":"0.858","dSim":"0.915","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.563","merged":"null","mstep":"null"}
+  {"at":"2#J8@5914","dRender":"0.883","dSim":"0.941","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.592","merged":"0.432","mstep":"0.036"}
+  {"at":"2#J8@7741","dRender":"0.879","dSim":"0.945","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.482","merged":"0.432","mstep":"0.036"}
+  {"at":"2#J8@14544","dRender":"0.896","dSim":"0.972","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.401","merged":"null","mstep":"null"}
+  {"at":"2#J8@15613","dRender":"0.725","dSim":"0.747","hitFrames":21,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.068","net":"1.510","merged":"0.432","mstep":"0.031"}
+  {"at":"2#J8@16220","dRender":"0.881","dSim":"0.945","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.452","merged":"0.432","mstep":"0.036"}
+  {"at":"2#J8@17273","dRender":"0.887","dSim":"0.949","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.173","merged":"0.432","mstep":"0.036"}
+  {"at":"2#J8@17643","dRender":"0.777","dSim":"0.856","hitFrames":22,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.068","net":"1.445","merged":"0.432","mstep":"0.033"}
+  {"at":"2#J8@18258","dRender":"0.855","dSim":"0.910","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.688","merged":"0.432","mstep":"0.035"}
+  {"at":"2#J8@18860","dRender":"0.898","dSim":"0.968","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.467","merged":"0.432","mstep":"0.037"}
+  {"at":"3#J8@9536","dRender":"0.957","dSim":"0.986","hitFrames":22,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.623","merged":"0.432","mstep":"0.039"}
+  {"at":"3#J8@10509","dRender":"0.880","dSim":"0.947","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.346","merged":"0.432","mstep":"0.036"}
+  {"at":"4#J8@793","dRender":"0.824","dSim":"0.875","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.499","merged":"null","mstep":"null"}
+  {"at":"4#J8@5423","dRender":"1.037","dSim":"1.061","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.836","merged":"null","mstep":"null"}
+  {"at":"4#J8@6253","dRender":"0.986","dSim":"1.027","hitFrames":22,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.702","merged":"0.448","mstep":"0.040"}
+  {"at":"4#J8@6651","dRender":"0.866","dSim":"0.918","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.496","merged":"0.432","mstep":"0.035"}
+  {"at":"4#J8@7268","dRender":"0.912","dSim":"0.973","hitFrames":20,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.522","merged":"0.432","mstep":"0.037"}
+  {"at":"4#J8@7857","dRender":"0.853","dSim":"0.911","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.489","merged":"0.432","mstep":"0.035"}
+  {"at":"4#J8@8875","dRender":"0.875","dSim":"0.944","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.491","merged":"0.432","mstep":"0.036"}
+  {"at":"4#J8@10394","dRender":"0.794","dSim":"0.837","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.354","merged":"0.432","mstep":"0.033"}
+  {"at":"4#J8@11215","dRender":"1.015","dSim":"1.045","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.577","merged":"null","mstep":"null"}
+  {"at":"4#J8@17910","dRender":"0.846","dSim":"0.900","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.381","merged":"null","mstep":"null"}
+  {"at":"4#J8@18720","dRender":"0.945","dSim":"1.007","hitFrames":21,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.686","merged":"0.432","mstep":"0.038"}
+  {"at":"4#J8@19566","dRender":"0.929","dSim":"0.972","hitFrames":21,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.552","merged":"0.432","mstep":"0.038"}
+  {"at":"4#J8@20194","dRender":"0.888","dSim":"0.960","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.212","merged":"0.432","mstep":"0.036"}
+  {"at":"5#J8@591","dRender":"0.830","dSim":"0.912","hitFrames":18,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.069","net":"1.306","merged":"0.432","mstep":"0.035"}
+  {"at":"5#J8@6481","dRender":"1.042","dSim":"1.062","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.435","merged":"null","mstep":"null"}
+  {"at":"5#J8@10635","dRender":"0.864","dSim":"0.924","hitFrames":24,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.409","merged":"null","mstep":"null"}
+  {"at":"5#J8@11726","dRender":"0.826","dSim":"0.891","hitFrames":23,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.422","merged":"null","mstep":"null"}
+  {"at":"5#J8@12591","dRender":"0.737","dSim":"0.767","hitFrames":21,"J2":true,"J3":true,"J5":true,"J7":true,"step":"0.068","net":"1.492","merged":"0.432","mstep":"0.031"}
+  {"at":"5#J8@21191","dRender":"0.797","dSim":"0.841","hitFrames":22,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.318","merged":"null","mstep":"null"}
+  {"at":"5#J8@22130","dRender":"0.915","dSim":"0.983","hitFrames":26,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.525","merged":"null","mstep":"null"}
+  {"at":"5#J8@23764","dRender":"0.849","dSim":"0.914","hitFrames":18,"J2":true,"J3":true,"J5":true,"J7":"skipped","step":"0.069","net":"1.548","merged":"null","mstep":"null"}
+[J4 判定] 改前 中位 0.863／最大 1.539 → 改後 中位 0.631／最大 1.479：過

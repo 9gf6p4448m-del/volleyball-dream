@@ -31,8 +31,9 @@ const base = process.env.JD_BASE_URL || 'http://127.0.0.1:5231';
 // 場次：「種子」或「種子@對手 id」。預設對手＝新生涯第一場（該隊 jumpServeRate＝0，整場沒有跳發），
 // 所以預設另加三場對 iron-mist（src/career/opponents.js：jumpServeRate 0.45）收跳發樣本
 const SEEDS = (process.env.SEEDS || '1,2,3,1@iron-mist,2@iron-mist,3@iron-mist').split(',').map((s) => {
-  const [seed, opp] = s.trim().split('@');
-  return { seed: Number(seed), opp: opp || null };
+  const [head, j8] = s.trim().split('#');
+  const [seed, opp] = head.split('@');
+  return { seed: Number(seed), opp: opp || null, j8: j8 === 'J8' };
 });
 const TARGET_TICKS = Number(process.env.TARGET_TICKS) || 36000;
 const CHUNK_MS = 20000;
@@ -84,8 +85,8 @@ async function bootstrap(page, seed, opp) {
   }, { seed, opp });
 }
 
-async function installRecorder(page) {
-  await page.evaluate(async () => {
+async function installRecorder(page, j8) {
+  await page.evaluate(async ({ j8 }) => {
     const { isBackRow, TEAM_SIDE } = await import('/src/sim/rotation.js');
     const mv = window.__phase1.loop().stage.matchView;
     const THREE = mv.debug.THREE;
@@ -98,6 +99,40 @@ async function installRecorder(page) {
     mv.sync = (g, alpha, dt, frameEvents = []) => {
       origSync(g, alpha, dt, frameEvents);
       if (g !== window.__phase1.game) return; // 精華重演用的是複製狀態，不算
+      // J8（修訂 R2）：玩家本人（A2）扣球。代打＝走遊戲本身的出手入口 controls.chooseAttack
+      // （就是面板按鈕的 handler，matchLoop.js 攻擊面板那段），時機取「距 AI 擊球點 ≤26 tick」——玩家的出手在球一進手點就判定、比 AI 的 hitPoint 早約 8 tick，這樣起跳→擊球約 18 tick，接近 AI 攻擊手的 23 tick；決策窗 0.4× 下起跳→擊球 ≈0.75 s 真實時間，仍在 JUMP_WINDOW_MS 900 內
+      // ——比照真人在決策窗內按下；選第一個攻擊區。其餘（起跳訊號→windup、sim 扣球）全走原路
+      // 走位同樣代打：舉球給 A2 後（claimId＝A2、第二觸已完成）用 WASD（真的鍵盤事件，
+      // matchControls 的 keydown/keyup 監聽）跑向「擊球點往自家後場退 0.68 m」的起跳點——
+      // 與 AI 攻擊手的走位目標同一個定義（ai.js 起跳點分支＋approach.js TAKEOFF.FRONT）；
+      // 不跑位的話 A2 站在原地、球到不了手點，出手全被降級成接球（實測 24 次代打只成 1 球）
+      if (j8) {
+        const s = window.__phase1.loop();
+        const ctl = s.stage.controls; const ai = s.aiState;
+        const want = new Set();
+        if (g.phase === 'rally' && g.rally.touches === 2 && g.rally.possession === 'A'
+          && ai.claimId === 'A2' && ai.hitPoint) {
+          const a = g.actors.A2;
+          const tx = ai.hitPoint.x; const tz = ai.hitPoint.z + 0.68; // A 隊 TEAM_SIDE＝+1：往後場＝+z
+          const dx = tx - a.x; const dz = tz - a.z; const d = Math.hypot(dx, dz);
+          if (d > 0.25) {
+            if (dz < -0.38 * d) want.add('KeyW');
+            if (dz > 0.38 * d) want.add('KeyS');
+            if (dx < -0.38 * d) want.add('KeyA');
+            if (dx > 0.38 * d) want.add('KeyD');
+          }
+        }
+        window.__j8Keys ??= new Set();
+        for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) {
+          if (want.has(k) && !window.__j8Keys.has(k)) { window.dispatchEvent(new KeyboardEvent('keydown', { code: k })); window.__j8Keys.add(k); }
+          if (!want.has(k) && window.__j8Keys.has(k)) { window.dispatchEvent(new KeyboardEvent('keyup', { code: k })); window.__j8Keys.delete(k); }
+        }
+        const zones = ctl.attackZones(g);
+        if (zones && zones.length && !ctl.attackPending() && ai.hitPoint?.ticks != null) {
+          const left = ai.hitPoint.ticks - (g.tick - ai.planTick);
+          if (left <= 26) { ctl.chooseAttack(zones[0]); window.__j8Taps = (window.__j8Taps ?? 0) + 1; }
+        }
+      }
       window.__frameDts.push(dt);
       const units = mv.debug.units;
       for (const [id, u] of Object.entries(units)) {
@@ -108,6 +143,8 @@ async function installRecorder(page) {
         const simZ = a.pz + (a.z - a.pz) * alpha;
         const r = u.rig.root.position;
         let ep = live[id];
+        // 落地後又離地＝新的一跳：前一段收尾、這一幀起算新 episode（不併成同一段）
+        if (ep && ep.landIdx != null && jumpY > 0) { window.__episodes.push(ep); delete live[id]; ep = null; }
         if (!ep && jumpY > 0) {
           const team = g.players[id].teamId;
           ep = live[id] = {
@@ -123,6 +160,7 @@ async function installRecorder(page) {
           tick: g.tick, phase: g.phase, dt, jumpY, seq,
           rx: r.x, ry: r.y, rz: r.z, sx: simX, sz: simZ,
           drift: u.jumpDrift ? [u.jumpDrift.x, u.jumpDrift.z] : null,
+          aimed: u.jumpDrift?.aimed ?? null, aim: u.jumpDrift?.aimX != null ? [u.jumpDrift.aimX, u.jumpDrift.aimZ] : null, touches: g.rally.touches, poss: g.rally.possession,
           reach: u.reachOff ? [u.reachOff.dx, u.reachOff.dz] : null,
           hand: [hand.x, hand.y, hand.z],
           ball: [g.ball.px + (g.ball.x - g.ball.px) * alpha, g.ball.py + (g.ball.y - g.ball.py) * alpha,
@@ -136,15 +174,18 @@ async function installRecorder(page) {
           if (e.type === 'TOUCH') {
             ep.hits.push({
               idx: ep.frames.length - 1, kind: e.kind, routeKind: e.routeKind ?? null,
-              jumpSet: !!e.jumpSet, ballAt: [g.ball.x, g.ball.y, g.ball.z],
+              jumpSet: !!e.jumpSet,
+              // 擊球點＝觸球那一 tick 的球位置 from（game.js performTouch）。觸球後同一 tick 就積分了
+              // 一步、本幀可能又多跑幾 tick——水平速度無阻力，往回推 (g.tick−e.tick) 步即得；
+              // 高度取事件自帶的 ballY（＝from.y 取到 cm）
+              ballAt: [g.ball.x - g.ball.vx * (g.tick - e.tick) / 60, e.ballY, g.ball.z - g.ball.vz * (g.tick - e.tick) / 60],
             });
           } else if (e.type === 'SERVE') {
-            ep.serve = { idx: ep.frames.length - 1, style: e.style ?? null, ballAt: [g.ball.x, g.ball.y, g.ball.z] };
+            ep.serve = { idx: ep.frames.length - 1, style: e.style ?? null, ballAt: [g.ball.x - g.ball.vx * (g.tick - e.tick) / 60, g.ball.y, g.ball.z - g.ball.vz * (g.tick - e.tick) / 60] };
           } else if (e.type === 'BLOCK_TOUCH') ep.block = true;
         }
         if (ep.landIdx == null && jumpY <= 0) ep.landIdx = ep.frames.length - 1;
         if (ep.landIdx != null) {
-          if (jumpY > 0) { ep.landIdx = null; ep.postLand = 0; continue; } // 空中重開弧（罕見）＝延續同一段
           ep.postLand += 1;
           if (ep.postLand > POST_LAND_TICKS) { window.__episodes.push(ep); delete live[id]; }
         }
@@ -153,7 +194,7 @@ async function installRecorder(page) {
       // 下一幀起跳時併進該 episode
       for (const e of frameEvents) {
         if (e.type === 'SERVE' && !live[e.playerId]) {
-          window.__pendingServe = { id: e.playerId, tick: g.tick, style: e.style ?? null, ballAt: [g.ball.x, g.ball.y, g.ball.z] };
+          window.__pendingServe = { id: e.playerId, tick: g.tick, style: e.style ?? null, ballAt: [g.ball.x - g.ball.vx * (g.tick - e.tick) / 60, g.ball.y, g.ball.z - g.ball.vz * (g.tick - e.tick) / 60] };
         }
       }
       const ps = window.__pendingServe;
@@ -162,17 +203,17 @@ async function installRecorder(page) {
         window.__pendingServe = null;
       }
     };
-  });
+  }, { j8 });
 }
 
-async function runSeed({ seed, opp }) {
+async function runSeed({ seed, opp, j8 }) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   await bootstrap(page, seed, opp);
-  await installRecorder(page);
+  await installRecorder(page, j8);
   let last = -1; let stall = 0;
   for (let i = 0; i < 400; i += 1) {
     const st = await page.evaluate(() => ({ tick: window.__phase1.game.tick, phase: window.__phase1.game.phase }));
@@ -183,11 +224,11 @@ async function runSeed({ seed, opp }) {
   }
   const out = await page.evaluate(() => ({
     tick: window.__phase1.game.tick, phase: window.__phase1.game.phase,
-    score: window.__phase1.game.match.score, episodes: window.__episodes,
+    score: window.__phase1.game.match.score, episodes: window.__episodes, j8Taps: window.__j8Taps ?? 0,
     dtStats: (() => { const d = window.__frameDts; const s = [...d].sort((a, b) => a - b); return { n: d.length, p50: s[Math.floor(s.length / 2)], max: s[s.length - 1] }; })(),
   }));
   await context.close();
-  return { seed: opp ? `${seed}@${opp}` : seed, errors, ...out };
+  return { seed: `${seed}${opp ? `@${opp}` : ''}${j8 ? '#J8' : ''}`, errors, ...out };
 }
 
 // ─────────────── 分析（可用 --analyze-raw 離線重跑） ───────────────
@@ -202,6 +243,7 @@ async function runSeed({ seed, opp }) {
 // 窗口截斷：sim 位置單幀跳 >0.3 m（得分後重新佈陣的瞬移，不屬於跳躍本身）之後的幀不算
 const hyp = (x, z) => Math.hypot(x, z);
 const TELEPORT = 0.3;
+const STEP_MAX = 0.07; // J3／J7 每幀上限（修訂 R1：0.05→0.07）
 function classify(ep) {
   const spikeHit = ep.hits.find((h) => h.kind === 'spike');
   if (ep.serve && ep.serve.style === 'power') return 'jumpServe';
@@ -223,6 +265,7 @@ function analyze(ep) {
   const f0 = F[0];
   const land = Math.min(ep.landIdx ?? end, end);
   const res = {
+    a2: ep.id === 'A2',
     id: ep.id, team: ep.team, side: ep.side, takeoffTick: ep.takeoffTick, cat, seq: ep.seqAtTakeoff,
     airFrames: land, truncated: end < F.length - 1, landed: ep.landIdx != null && ep.landIdx <= end,
   };
@@ -250,6 +293,11 @@ function analyze(ep) {
     res.needPerFrame = res.hitFrames > 0 ? (0.8 * res.dSim) / res.hitFrames : null;
   } else if (ep.serve) {
     res.dSim = hyp(ep.serve.ballAt[0] - f0.sx, ep.serve.ballAt[2] - f0.sz); // 跳發：sim 擊球點＝腳下
+    // R3：沿發球方向（發球點→球在第 3 幀的位置，水平）起跳幀→落地幀 root 位移
+    const fb = F[Math.min(3, F.length - 1)].ball;
+    const sx = fb[0] - ep.serve.ballAt[0]; const sz = fb[2] - ep.serve.ballAt[2]; const sd = hyp(sx, sz);
+    if (sd > 1e-6) u = [sx / sd, sz / sd];
+    if (res.landed) res.serveDrift = (F[land].rx - f0.rx) * u[0] + (F[land].rz - f0.rz) * u[1];
   }
   let maxStep = 0; let minDelta = Infinity;
   for (let i = 1; i <= land; i += 1) {
@@ -314,7 +362,10 @@ if (RAW_IN) {
 const rows = [];
 for (const s of sessions) for (const ep of s.episodes) rows.push({ seed: s.seed, ...analyze(ep) });
 const byCat = {};
-for (const r of rows) (byCat[r.cat] ??= []).push(r);
+for (const r of rows) {
+  (byCat[r.cat] ??= []).push(r);
+  if (r.a2 && (r.cat === 'spike' || r.cat === 'back')) (byCat.A2attack ??= []).push(r);
+}
 const summary = {};
 for (const [cat, rs] of Object.entries(byCat)) {
   const h = rs.filter((r) => r.dRender != null);
@@ -328,13 +379,19 @@ for (const [cat, rs] of Object.entries(byCat)) {
     handBall_p50: median(h.map((r) => r.handBall)), handBall_max: maxOf(h.map((r) => r.handBall)),
     infeasible: h.filter((r) => r.needPerFrame > 0.05).length,
     J3_airMaxStep: maxOf(rs.map((r) => r.airMaxStep)), J3_airMinForwardDelta: minOf(rs.map((r) => r.airMinForwardDelta)),
-    J3_fail: rs.filter((r) => r.airMaxStep > 0.05 || r.airMinForwardDelta < -1e-9).length,
+    J3_fail: rs.filter((r) => r.airMaxStep > STEP_MAX || r.airMinForwardDelta < -1e-9).length,
     J5_minNetDist: minOf(rs.map((r) => r.minNetDist)), J5_wrongSideFrames: rs.reduce((a, r) => a + r.wrongSideFrames, 0),
     J6_maxDrift: rs[0]?.maxDrift == null ? null : maxOf(rs.map((r) => r.maxDrift)),
     J6_allZero: rs[0]?.driftAllZero == null ? null : rs.every((r) => r.driftAllZero),
     J7_landed: landed.length, J7_residAt05_max: maxOf(landed.filter((r) => r.residAt05 != null).map((r) => r.residAt05)),
     J7_notMergedBy05: landed.filter((r) => r.postLandSec >= 0.5 && !(r.mergedAtSec != null && r.mergedAtSec <= 0.5)).length,
     J7_mergeMaxStep: maxOf(landed.map((r) => r.mergeMaxStep)),
+    J7_fail: landed.filter((r) => r.mergeMaxStep > STEP_MAX || (r.postLandSec >= 0.5 && !(r.mergedAtSec != null && r.mergedAtSec <= 0.5))).length,
+    J5_fail: rs.filter((r) => r.minNetDist < 0.15 || r.wrongSideFrames > 0).length,
+    serveDrift_min: minOf(rs.filter((r) => r.serveDrift != null).map((r) => r.serveDrift)),
+    serveDrift_max: maxOf(rs.filter((r) => r.serveDrift != null).map((r) => r.serveDrift)),
+    serve_fail: cat === 'jumpServe' ? rs.filter((r) => r.landed && (r.serveDrift == null || r.serveDrift < 0.6 || r.serveDrift > 1.5)).length : null,
+    serve_landed: cat === 'jumpServe' ? rs.filter((r) => r.landed).length : null,
     truncated: rs.filter((r) => r.truncated).length,
   };
 }
@@ -342,7 +399,7 @@ const hb = rows.filter((r) => (r.cat === 'spike' || r.cat === 'back') && r.handB
 const report = {
   label: LABEL, head: sh('git rev-parse --short HEAD'), dirty: sh('git status --porcelain').split('\n').filter(Boolean),
   base, seeds: sessions.map((s) => s.seed), targetTicks: TARGET_TICKS,
-  sessions: sessions.map((s) => ({ seed: s.seed, tick: s.tick, phase: s.phase, score: s.score, episodes: s.episodes.length, errors: s.errors, dtStats: s.dtStats })),
+  sessions: sessions.map((s) => ({ seed: s.seed, tick: s.tick, phase: s.phase, score: s.score, episodes: s.episodes.length, errors: s.errors, dtStats: s.dtStats, j8Taps: s.j8Taps })),
   summary,
   J4: { n: hb.length, median: median(hb), max: maxOf(hb) },
   rows,

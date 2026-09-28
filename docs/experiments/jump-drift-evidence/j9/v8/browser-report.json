@@ -1,0 +1,268 @@
+{
+  "createdAt": "2026-09-28T09:36:54.232Z",
+  "base": "http://127.0.0.1:5175",
+  "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "layout": [
+        {
+          "label": "餵一球 ↗",
+          "x": 904,
+          "y": 18,
+          "width": 96,
+          "height": 44
+        },
+        {
+          "label": "繼續",
+          "x": 1008,
+          "y": 18,
+          "width": 60,
+          "height": 44
+        },
+        {
+          "label": "移動搖桿",
+          "x": 26,
+          "y": 500,
+          "width": 170,
+          "height": 170
+        },
+        {
+          "label": "拖曳調整朝向",
+          "x": 824.8125,
+          "y": 230.390625,
+          "width": 435.1875,
+          "height": 284.609375
+        },
+        {
+          "label": "起跳SPACE",
+          "x": 1056,
+          "y": 592,
+          "width": 76,
+          "height": 76
+        },
+        {
+          "label": "出手接球 · J",
+          "x": 1142,
+          "y": 562,
+          "width": 112,
+          "height": 106
+        }
+      ],
+      "initialPerformance": {
+        "frames": 2,
+        "fps": 1.443626389484189,
+        "frameP95": 2.2000000059606464,
+        "simP95": 1.300000011920929,
+        "backlogMs": 0,
+        "maxBacklogMs": 1185.400000005961,
+        "drawCalls": 117,
+        "slowMotionTicks": 0
+      },
+      "syntheticPlaybackMetrics": {
+        "frames": 436,
+        "fps": 63.65211297763021,
+        "frameP95": 33.33333333333576,
+        "simP95": 0.5,
+        "backlogMs": 0,
+        "maxBacklogMs": 16.66666666666424,
+        "drawCalls": 118,
+        "slowMotionTicks": 0
+      },
+      "feed": 1,
+      "jumpHeight": 0.6521187500000005,
+      "receiveRepeats": 5,
+      "receiveVelocity": {
+        "y": 7.935173462625374,
+        "z": -1.6392101008792614
+      },
+      "spikeVelocity": {
+        "y": -3.4157555660576104,
+        "z": -14.04930035480373
+      },
+      "replayRates": [
+        30,
+        60,
+        120
+      ],
+      "replay": true,
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "layout": [
+        {
+          "label": "餵一球 ↗",
+          "x": 537,
+          "y": 10,
+          "width": 73,
+          "height": 44
+        },
+        {
+          "label": "繼續",
+          "x": 618,
+          "y": 10,
+          "width": 46,
+          "height": 44
+        },
+        {
+          "label": "移動搖桿",
+          "x": 24,
+          "y": 230,
+          "width": 125,
+          "height": 125
+        },
+        {
+          "label": "拖曳調整朝向",
+          "x": 537.046875,
+          "y": 124.796875,
+          "width": 286.953125,
+          "height": 99.203125
+        },
+        {
+          "label": "起跳SPACE",
+          "x": 663,
+          "y": 294,
+          "width": 64,
+          "height": 64
+        },
+        {
+          "label": "出手接球 · J",
+          "x": 733,
+          "y": 276,
+          "width": 85,
+          "height": 82
+        }
+      ],
+      "initialPerformance": {
+        "frames": 2,
+        "fps": 1.4118311449950587,
+        "frameP95": 0,
+        "simP95": 0.5,
+        "backlogMs": 0,
+        "maxBacklogMs": 1216.6000000000006,
+        "drawCalls": 117,
+        "slowMotionTicks": 0
+      },
+      "syntheticPlaybackMetrics": {
+        "frames": 430,
+        "fps": 66.83903192210752,
+        "frameP95": 33.33333333333212,
+        "simP95": 0.5,
+        "backlogMs": 0,
+        "maxBacklogMs": 16.666666666665453,
+        "drawCalls": 118,
+        "slowMotionTicks": 0
+      },
+      "feed": 1,
+      "jumpHeight": 0.6521187500000005,
+      "receiveRepeats": 5,
+      "receiveVelocity": {
+        "y": 7.935173462625374,
+        "z": -1.6392101008792614
+      },
+      "spikeVelocity": {
+        "y": -3.4157555660576104,
+        "z": -14.04930035480373
+      },
+      "replayRates": [
+        30,
+        60,
+        120
+      ],
+      "replay": true,
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "layout": [
+        {
+          "label": "餵一球 ↗",
+          "x": 264.25,
+          "y": 12,
+          "width": 66.75,
+          "height": 44
+        },
+        {
+          "label": "繼續",
+          "x": 336,
+          "y": 12,
+          "width": 42,
+          "height": 44
+        },
+        {
+          "label": "移動搖桿",
+          "x": 14,
+          "y": 649,
+          "width": 135,
+          "height": 135
+        },
+        {
+          "label": "拖曳調整朝向",
+          "x": 229.8125,
+          "y": 303.828125,
+          "width": 148.1875,
+          "height": 300.171875
+        },
+        {
+          "label": "起跳SPACE",
+          "x": 226,
+          "y": 724,
+          "width": 60,
+          "height": 60
+        },
+        {
+          "label": "出手接球 · J",
+          "x": 292,
+          "y": 700,
+          "width": 84,
+          "height": 84
+        }
+      ],
+      "initialPerformance": {
+        "frames": 80,
+        "fps": 17.24918605401091,
+        "frameP95": 50.100000000000364,
+        "simP95": 0.4000000059604645,
+        "backlogMs": 4.566666672625417,
+        "maxBacklogMs": 888.0000000059601,
+        "drawCalls": 88,
+        "slowMotionTicks": 0
+      },
+      "syntheticPlaybackMetrics": {
+        "frames": 430,
+        "fps": 67.18715006692338,
+        "frameP95": 33.33333333333212,
+        "simP95": 0.5,
+        "backlogMs": 0,
+        "maxBacklogMs": 16.666666666666664,
+        "drawCalls": 91,
+        "slowMotionTicks": 0
+      },
+      "feed": 1,
+      "jumpHeight": 0.6521187500000005,
+      "receiveRepeats": 5,
+      "receiveVelocity": {
+        "y": 7.935173462625374,
+        "z": -1.6392101008792614
+      },
+      "spikeVelocity": {
+        "y": -3.4157555660576104,
+        "z": -14.04930035480373
+      },
+      "replayRates": [
+        30,
+        60,
+        120
+      ],
+      "replay": true,
+      "errors": []
+    }
+  ]
+}

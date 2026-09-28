@@ -13,7 +13,8 @@ for (const s of raw) for (const e of s.episodes) {
   n++;
   const f0 = F[0]; const H = [h.ballAt[0], h.ballAt[2]];
   const d = Math.hypot(H[0] - f0.sx, H[1] - f0.sz); const u = [(H[0] - f0.sx) / d, (H[1] - f0.sz) / d];
-  const j2 = 0.8 * d > 0.05 * h.idx; // 起跳→擊球幀數內每幀 ≤0.05 走不到 0.8·d_sim
+  const STEP = Number(process.env.STEP_MAX) || 0.07; // R1：每幀上限 0.07 m（原 0.05，可用 STEP_MAX=0.05 重現改前結論）
+  const j2 = 0.8 * d > STEP * h.idx; // 起跳→擊球幀數內每幀 ≤0.05 走不到 0.8·d_sim
   // J7：擊球幀 root 沿 u 至少在 P0+0.8d；之後滯空只准前進（J3 單調）⇒ 落地時 root·u ≥ 那個值
   let land = e.landIdx != null && e.landIdx <= end ? e.landIdx : null; let j7 = false; let gap = null; let frames05 = null;
   if (land != null) {
@@ -22,7 +23,7 @@ for (const s of raw) for (const e of s.episodes) {
     let t = 0; frames05 = 0;
     for (let i = land + 1; i <= end && t + F[i].dt <= 0.5 + 1e-9; i++) { t += F[i].dt; frames05++; }
     // 落地後 0.5 s 內每幀 ≤0.05 可併回的最大量（sim 那 0.5 s 之後若還在動另計，這裡只算下界）
-    j7 = gap > 0.05 * frames05 + 0.01 && t >= 0.5 - 0.02;
+    j7 = gap > STEP * frames05 + 0.01 && t >= 0.5 - 0.02;
   }
   if (j2) infJ2++; if (j7) infJ7++; if (j2 || j7) infEither++;
   rows.push({ seed: s.seed, id: e.id, tick: e.takeoffTick, d: +d.toFixed(3), hitFrames: h.idx, j2, gap: gap && +gap.toFixed(3), frames05, j7 });

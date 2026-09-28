@@ -1,0 +1,9 @@
+{
+ "menuDefaultLabel": "球員外觀：幾何",
+ "afterClickLabel": "球員外觀：寫實",
+ "storage": "real",
+ "afterReloadLabel": "球員外觀：寫實",
+ "quickAppearance": "real",
+ "errors": [],
+ "pass": true
+}
