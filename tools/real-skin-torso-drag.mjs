@@ -23,6 +23,8 @@ import * as V2 from './real-skin-penetration-v2.mjs';
 export const TORSO = ['pelvis', 'spine', 'spineUpper'];
 export const DRAG_OVER = 0.02; // R3：往內 >2 cm
 export const GATE = { count: 30, mm: 10 }; // R3：現況＋30 點、現況＋1.0 cm
+// 現況＝8720597：--baseline 必須是 base 變體、realPlayer.js 雜湊＝8720597 的值（去 CR 後 sha256 前 12 碼；R3 對抗審查 F4）
+export const BASELINE_REALPLAYER_SHA12 = 'b1489d7878dc';
 
 // (f) 核心：F＝凍結集合的一個面數版本；P0＝綁定位置；P1＝蒙皮後位置；skeleton＝當幀骨架；boneNames＝模組的 BONES
 export function torsoDrag(F, P0, P1, skeleton, boneNames) {
@@ -142,6 +144,9 @@ if (isMain) {
     const base = JSON.parse(await readFile(args.baseline, 'utf8'));
     if (base.faces !== faces) throw new Error(`--baseline 面數 ${base.faces} ≠ ${faces}`);
     if (base.hashes?.['real-skin-frozen-sets.json'] !== hashes['real-skin-frozen-sets.json']) throw new Error('--baseline 用的凍結檔與本次不同，不能比較');
+    if (base.variant !== 'base') throw new Error(`--baseline 必須是現況（variant=base），收到 variant=${base.variant}`);
+    if (base.hashes?.['realPlayer.js'] !== BASELINE_REALPLAYER_SHA12) throw new Error(`--baseline 的 realPlayer.js 雜湊 ${base.hashes?.['realPlayer.js']} ≠ 8720597 的 ${BASELINE_REALPLAYER_SHA12}（現況必須在 8720597 上量）`);
+    if (base.hashes?.[`player_${faces}.glb`] !== hashes[`player_${faces}.glb`]) throw new Error('--baseline 的白模 glb 與本次不同，不能比較');
     gate = gateCheck(rows, base);
     out.push('', `## S11 門檻（對照 ${args.baseline.replace(/\\/g, '/').split('/').slice(-1)[0]}：每幀 >2 cm 點數 ≤ 現況＋${GATE.count}、最大往內位移 ≤ 現況＋${GATE.mm / 10} cm，位移比 0.1 cm）`);
     for (const [id, g] of Object.entries(gate.frames)) {

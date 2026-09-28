@@ -266,8 +266,25 @@ export function frozenShas(F) {
   return {
     Sb: ids(F.Sb.tris), Se: ids(F.Se.tris), armR: ids(F.arm.r), armL: ids(F.arm.l), SbVerts: ids(F.SbVerts.ids),
     armRPart: js(F.arm.rPart), armLPart: js(F.arm.lPart), SbMainBone: js(F.SbVerts.mainBone), SbNormal: js(F.SbVerts.normal), SeVerts: js(F.Se.verts),
+    indexSha: js(F.indexSha),
   };
 }
+// glb 原索引（GLTFLoader 讀進來、loadRealPlayerAsset 接縫拆分前的三角形頂點三元組）與原頂點數
+export async function glbIndex(url) {
+  const buf = await readFile(fileURLToPath(url));
+  const jl = buf.readUInt32LE(12);
+  const j = JSON.parse(buf.subarray(20, 20 + jl).toString('utf8'));
+  if (j.meshes.length !== 1 || j.meshes[0].primitives.length !== 1) throw new Error('glb 不是單一 mesh／primitive');
+  const prim = j.meshes[0].primitives[0];
+  const acc = j.accessors[prim.indices]; const bv = j.bufferViews[acc.bufferView];
+  const off = 20 + jl + 8 + (bv.byteOffset || 0) + (acc.byteOffset || 0);
+  const rd = { 5121: [1, (o) => buf.readUInt8(o)], 5123: [2, (o) => buf.readUInt16LE(o)], 5125: [4, (o) => buf.readUInt32LE(o)] }[acc.componentType];
+  if (!rd) throw new Error(`glb 索引型別 ${acc.componentType} 不支援`);
+  const index = new Uint32Array(acc.count);
+  for (let k = 0; k < acc.count; k += 1) index[k] = rd[1](off + k * rd[0]);
+  return { index, verts: j.accessors[prim.attributes.POSITION].count };
+}
+export const u32Sha = (a) => createHash('sha256').update(Buffer.from(Uint32Array.from(a).buffer)).digest('hex');
 // 讀凍結檔並驗每個欄位的 sha256（完整性）；任一不符或缺欄即報錯停止
 export async function loadFrozen(url = FROZEN_URL) {
   const buf = await readFile(fileURLToPath(url));
@@ -287,10 +304,32 @@ export async function loadFrozen(url = FROZEN_URL) {
   const fileSha = createHash('sha256').update(Buffer.from(buf.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
   return { fz, fileSha };
 }
-// 把凍結集合套到當前白模：被穿入表面、手臂頂點（含左右與部位）都換成凍結的
-export function applyFrozen(R, F) {
+// 把凍結集合套到當前白模：被穿入表面、手臂頂點（含左右與部位）都換成凍結的。
+// gi＝glbIndex()：凍結時的索引（8720597 上 R.index 與 glb 原索引逐項相同，雜湊存於 F.indexSha）
+export function applyFrozen(R, F, gi) {
   if (R.index.length / 3 !== F.tris) throw new Error(`凍結集合與白模不相容：三角形 ${R.index.length / 3} ≠ ${F.tris}`);
   if (R.n < F.verts || bindPosSha(R.P, F.verts) !== F.bindPosSha) throw new Error('凍結集合與白模不相容：綁定位置不同');
+  if (!gi || gi.verts !== F.verts || u32Sha(gi.index) !== F.indexSha) throw new Error('凍結集合與白模不相容：glb 原索引與凍結時不同');
+  // 索引對應（R3 對抗審查 F2／F3）：每個三角形的每個角，在當前索引上要嘛就是凍結時的頂點，
+  // 要嘛是接在尾端的複製點（綁定位置逐位元等於凍結頂點；同一複製點只能對回同一來源＝splitBridges 的合法拆分）
+  const dupSrc = new Int32Array(R.n).fill(-1);
+  const used = new Uint8Array(R.n);
+  let dupSlots = 0;
+  for (let s = 0; s < R.index.length; s += 1) {
+    const a = R.index[s]; const e = gi.index[s];
+    used[a] = 1;
+    if (a === e) continue;
+    const where = `三角形 ${Math.floor(s / 3)} 第 ${s % 3} 角：當前頂點 ${a}、凍結時 ${e}`;
+    if (a < F.verts) throw new Error(`凍結集合與白模不相容：索引被改動（${where}）`);
+    if (R.P[a * 3] !== R.P[e * 3] || R.P[a * 3 + 1] !== R.P[e * 3 + 1] || R.P[a * 3 + 2] !== R.P[e * 3 + 2]) throw new Error(`凍結集合與白模不相容：複製點位置不等於來源（${where}）`);
+    if (dupSrc[a] !== -1 && dupSrc[a] !== e) throw new Error(`凍結集合與白模不相容：複製點 ${a} 對回兩個來源 ${dupSrc[a]}／${e}`);
+    dupSrc[a] = e; dupSlots += 1;
+  }
+  // 凍結頂點不得成為孤兒（量尺讀的是這些頂點；不被任何三角形引用＝畫面上看不到，量了也沒意義）
+  const frozenVerts = new Set([...F.SbVerts.ids, ...F.arm.r, ...F.arm.l]);
+  for (const t of F.Se.tris) for (let k = 0; k < 3; k += 1) frozenVerts.add(gi.index[t * 3 + k]);
+  const orphans = [...frozenVerts].filter((v) => !used[v]);
+  if (orphans.length) throw new Error(`凍結集合與白模不相容：${orphans.length} 個凍結頂點已不被任何三角形引用（孤兒，例 ${orphans.slice(0, 5).join(', ')}）`);
   const armSide = new Int8Array(R.n); const armPart = new Int8Array(R.n);
   F.arm.r.forEach((i, k) => { armSide[i] = -1; armPart[i] = F.arm.rPart[k]; });
   F.arm.l.forEach((i, k) => { armSide[i] = 1; armPart[i] = F.arm.lPart[k]; });
@@ -299,7 +338,7 @@ export function applyFrozen(R, F) {
   const Sb = torsoSurface(R2);
   const bE = surfaceBoundary(R2, F.Se.tris);
   const Se = { name: '(e) 骨盆＋大腿', tris: F.Se.tris, boundaryEdge: bE.boundaryEdge, boundaryVert: bE.boundaryVert, verts: F.Se.verts };
-  return { R: R2, Sb, Se };
+  return { R: R2, Sb, Se, dupSlots };
 }
 // live＝現行規則即時計算（只供產生凍結檔）；rpMod＝要載入的 realPlayer 模組（預設 src 現行版）
 export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
@@ -307,15 +346,18 @@ export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   const glbUrl = new URL(`../public/models/real/player_${faces}.glb`, import.meta.url);
   const asset = await rpMod.loadRealPlayerAsset(glbUrl.href);
   const R0 = lib.bindRegions(asset, rpMod.LANDMARKS);
-  let R; let Sb; let Se; let frozen = null;
+  let R; let Sb; let Se; let frozen = null; let content = null;
   if (live) {
     R = R0; Sb = torsoSurface(R); Se = hipSurface(asset, rpMod.BONES, R);
   } else {
     frozen = await loadFrozen();
-    ({ R, Sb, Se } = applyFrozen(R0, frozen.fz[faces]));
+    ({ R, Sb, Se } = applyFrozen(R0, frozen.fz[faces], await glbIndex(glbUrl)));
+    // 內容指紋：凍結三角形在「當前」索引上的頂點三元組（依凍結順序），任何改指都會變
+    const tri = (tris) => u32Sha(tris.flatMap((t) => [R.index[t * 3], R.index[t * 3 + 1], R.index[t * 3 + 2]])).slice(0, 12);
+    content = { Sb: tri(Sb.tris), Se: tri(Se.tris) };
   }
   const RH = { ...R, torsoTris: Se.tris, boundaryEdge: Se.boundaryEdge, boundaryVert: Se.boundaryVert }; // 舊量法 (e) 用
-  return { faces, glbUrl, asset, R, Sb, Se, RH, frozen, mods: { THREE, rp: rpMod, ga, gc } };
+  return { faces, glbUrl, asset, R, Sb, Se, RH, frozen, content, mods: { THREE, rp: rpMod, ga, gc } };
 }
 export function poseKey(setup, key) {
   const mods = setup.mods ?? MODS;
@@ -364,6 +406,14 @@ if (isMain) {
     bindPelvis: { b: windingNumber(T0b, rp.LANDMARKS.pelvis), e: windingNumber(T0e, rp.LANDMARKS.pelvis) },
     farPoint: { b: windingNumber(T0b, [0, 1, 3]), e: windingNumber(T0e, [0, 1, 3]) },
   };
+  // 自我檢查不過就停止（R3 對抗審查 F3）：方向不一致、綁定姿勢骨盆地標不在內、遠點不在外＝表面或索引已壞
+  const selfBad = [];
+  for (const m of ['b', 'e']) {
+    if (selfCheck.orientBad[m] !== 0) selfBad.push(`(${m}) 方向不一致邊 ${selfCheck.orientBad[m]}`);
+    if (!(selfCheck.bindPelvis[m] > W_IN)) selfBad.push(`(${m}) pelvis 地標 w ${selfCheck.bindPelvis[m].toFixed(3)}（應 >0.5）`);
+    if (!(Math.abs(selfCheck.farPoint[m]) < W_IN)) selfBad.push(`(${m}) 遠點 w ${selfCheck.farPoint[m].toFixed(3)}（應 ≈0）`);
+  }
+  if (selfBad.length) throw new Error(`量尺自我檢查不過，停止：${selfBad.join('；')}`);
   const sets = { Sb: setPrint(Sb.tris), Se: setPrint(Se.tris), armR: setPrint(R.armVerts.r), armL: setPrint(R.armVerts.l) };
   const rows = {};
   for (const key of lib.ALL_KEYS) {
@@ -392,6 +442,7 @@ if (isMain) {
   out.push(`自我檢查：子集方向不一致邊 (b) ${selfCheck.orientBad.b}／(e) ${selfCheck.orientBad.e}；綁定姿勢 pelvis 地標 w (b) ${selfCheck.bindPelvis.b.toFixed(3)}／(e) ${selfCheck.bindPelvis.e.toFixed(3)}（應 >0.5）；遠點 (0,1,3) w (b) ${selfCheck.farPoint.b.toFixed(3)}／(e) ${selfCheck.farPoint.e.toFixed(3)}（應 ≈0）`);
   out.push(`表面：(b) 軀幹子集 三角形 ${Sb.tris.length}、開口邊 ${Sb.boundaryEdge.size}；(e) 主骨∈{${HIP_BONES.join(', ')}} 頂點 ${Se.verts}、三角形 ${Se.tris.length}、開口邊 ${Se.boundaryEdge.size}；手臂頂點 右 ${R.armVerts.r.length}／左 ${R.armVerts.l.length}`);
   out.push(`集合指紋（排序後 ID 的 sha256 前 12 碼）：S_b ${sets.Sb.sha}、S_e ${sets.Se.sha}、手臂 右 ${sets.armR.sha}／左 ${sets.armL.sha}（S_e 依當前權重的主骨、S_b 與手臂依 src 地標選取；--baseline 會逐集合比對）`);
+  if (setup.content) out.push(`內容指紋（凍結三角形在當前索引上的頂點三元組 sha256 前 12 碼；索引改指即變）：S_b ${setup.content.Sb}、S_e ${setup.content.Se}`);
   const zs = (z) => Object.entries(z).map(([k, v]) => `${k} ${v.n}/${cm(v.max)}`).join('、') || '無';
   for (const [m, title] of [['b', '(b) 手臂穿入軀幹'], ['e', '(e) 手臂穿入骨盆＋大腿（手埋短褲）']]) {
     out.push('', `## ${title}`);
@@ -450,6 +501,7 @@ if (isMain) {
       surfaces: { b: { tris: Sb.tris.length, boundaryEdges: Sb.boundaryEdge.size }, e: { verts: Se.verts, tris: Se.tris.length, boundaryEdges: Se.boundaryEdge.size } },
       armVerts: { r: R.armVerts.r.length, l: R.armVerts.l.length },
       sets,
+      ...(setup.content ? { content: setup.content } : {}),
       rows,
     }, null, 1)}\n`);
   }

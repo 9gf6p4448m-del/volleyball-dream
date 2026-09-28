@@ -31,7 +31,7 @@ const out = {
       arm: 'lib.bindRegions 的 armVerts／armPart（距臂軸 ≤9 cm，上臂 t≥0.3）',
       SbVerts: 'S_b 三角形用到的頂點（遞增）；mainBone＝該頂點的主骨名（skinWeight 最大者、嚴格 > 取第一個）；normal＝lib.vertexNormals（綁定幾何，Float32 原值，每頂點 3 個）',
       sha: '完整性：Sb／Se／armR／armL／SbVerts＝排序後 Int32 ID 的 sha256（前 12 碼＝量尺表頭「集合指紋」）；armRPart／armLPart／SbMainBone／SbNormal／SeVerts＝該欄 JSON 字串的 sha256',
-      compat: 'tris＝三角形數；verts＝綁定頂點數（8720597 上等於 glb 原頂點數、無接縫拆分複製點）；bindPosSha＝前 verts 個綁定位置 Float32 位元組的 sha256 前 16 碼',
+      compat: 'tris＝三角形數；verts＝綁定頂點數（8720597 上等於 glb 原頂點數、無接縫拆分複製點）；bindPosSha＝前 verts 個綁定位置 Float32 位元組的 sha256 前 16 碼；indexSha＝索引（＝glb 原索引）Uint32 位元組的 sha256，量尺據此逐角核對當前索引（複製點須對回來源）並檢查孤兒',
     },
     torsoBones: TORSO,
   },
@@ -53,11 +53,13 @@ for (const faces of ['20k', '5k']) {
   const N0 = lib.vertexNormals(R.P, R.index);
   const n0 = await glbVertCount(setup.glbUrl);
   if (R.n !== n0) throw new Error(`${faces}：綁定頂點 ${R.n} ≠ glb 原頂點 ${n0}（有接縫拆分複製點，凍結索引會依賴權重）`);
+  const gi = await V2.glbIndex(setup.glbUrl);
+  if (gi.index.length !== R.index.length || gi.index.some((v, k) => v !== R.index[k])) throw new Error(`${faces}：當前索引與 glb 原索引不同（凍結時必須逐項相同）`);
   const mb = sbIds.map((i) => mainBone(i));
   const normal = sbIds.flatMap((i) => [0, 1, 2].map((d) => N0[i * 3 + d]));
   const sortedTris = (a) => [...a].sort((x, y) => x - y);
   const F = {
-    verts: R.n, tris: R.index.length / 3, bindPosSha: V2.bindPosSha(R.P, R.n), bridgeTris: asset.bridgeTris,
+    verts: R.n, tris: R.index.length / 3, bindPosSha: V2.bindPosSha(R.P, R.n), indexSha: V2.u32Sha(R.index), bridgeTris: asset.bridgeTris,
     Sb: { tris: sortedTris(Sb.tris) },
     Se: { tris: sortedTris(Se.tris), verts: Se.verts },
     arm: { r: [...R.armVerts.r], rPart: R.armVerts.r.map((i) => R.armPart[i]), l: [...R.armVerts.l], lPart: R.armVerts.l.map((i) => R.armPart[i]) },
