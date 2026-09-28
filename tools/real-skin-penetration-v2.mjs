@@ -197,11 +197,20 @@ export function penetrationV2(R, S, P1) {
     let inside = 0; let deeper1cm = 0; let maxDepth = 0; let atOpening = 0; let atOpeningMax = 0; let nearHalf = 0;
     const zones = {};
     for (const i of R.armVerts[s]) {
-      const p = [P1[i * 3], P1[i * 3 + 1], P1[i * 3 + 2]];
-      const w = windingNumber(T, p);
-      if (w > 0.4 && w < 0.6) nearHalf += 1;
-      if (!(w > W_IN)) continue;
-      const nr = nearestOnSurface(T, bb, p);
+      // 以凍結頂點為單位（第 2 輪 N1）：它的每個被畫出的代表點（原頂點＋對回它的複製點）都判內外；
+      // 任一代表判內就算一點，深度取判內代表中最深者；近½＝任一代表 w∈(0.4,0.6)。未套凍結集合（live）時代表＝自己
+      const repsI = R.reps ? R.reps.get(i) : [i];
+      let w = -Infinity; let nr = null; let near = false;
+      for (const v of repsI) {
+        const pv = [P1[v * 3], P1[v * 3 + 1], P1[v * 3 + 2]];
+        const wv = windingNumber(T, pv);
+        if (wv > 0.4 && wv < 0.6) near = true;
+        if (!(wv > W_IN)) continue;
+        const nv = nearestOnSurface(T, bb, pv);
+        if (!nr || nv.d > nr.d) { nr = nv; w = wv; }
+      }
+      if (near) nearHalf += 1;
+      if (!nr) continue;
       const t = S.tris[nr.k];
       const ia = R.index[t * 3]; const ib = R.index[t * 3 + 1]; const ic = R.index[t * 3 + 2];
       const by = (R.P[ia * 3 + 1] + R.P[ib * 3 + 1] + R.P[ic * 3 + 1]) / 3;
@@ -310,41 +319,60 @@ export function applyFrozen(R, F, gi) {
   if (R.index.length / 3 !== F.tris) throw new Error(`凍結集合與白模不相容：三角形 ${R.index.length / 3} ≠ ${F.tris}`);
   if (R.n < F.verts || bindPosSha(R.P, F.verts) !== F.bindPosSha) throw new Error('凍結集合與白模不相容：綁定位置不同');
   if (!gi || gi.verts !== F.verts || u32Sha(gi.index) !== F.indexSha) throw new Error('凍結集合與白模不相容：glb 原索引與凍結時不同');
-  // 索引對應（R3 對抗審查 F2／F3）：每個三角形的每個角，在當前索引上要嘛就是凍結時的頂點，
-  // 要嘛是接在尾端的複製點（綁定位置逐位元等於凍結頂點；同一複製點只能對回同一來源＝splitBridges 的合法拆分）
+  // 索引對應（R3 對抗審查 F2／F3，第 2 輪 N1／N2）：每個三角形在當前索引上必須是凍結時的同一個三角形——
+  // 允許角序旋轉（繞行方向不變＝同一個三角形）；每個角要嘛就是凍結時的頂點，要嘛是接在尾端的複製點
+  // （綁定位置逐位元等於來源、同一複製點只能對回同一來源＝splitBridges 的合法拆分）。反轉繞行方向或換頂點即停止。
   const dupSrc = new Int32Array(R.n).fill(-1);
   const used = new Uint8Array(R.n);
-  let dupSlots = 0;
-  for (let s = 0; s < R.index.length; s += 1) {
-    const a = R.index[s]; const e = gi.index[s];
-    used[a] = 1;
-    if (a === e) continue;
-    const where = `三角形 ${Math.floor(s / 3)} 第 ${s % 3} 角：當前頂點 ${a}、凍結時 ${e}`;
-    if (a < F.verts) throw new Error(`凍結集合與白模不相容：索引被改動（${where}）`);
-    if (R.P[a * 3] !== R.P[e * 3] || R.P[a * 3 + 1] !== R.P[e * 3 + 1] || R.P[a * 3 + 2] !== R.P[e * 3 + 2]) throw new Error(`凍結集合與白模不相容：複製點位置不等於來源（${where}）`);
-    if (dupSrc[a] !== -1 && dupSrc[a] !== e) throw new Error(`凍結集合與白模不相容：複製點 ${a} 對回兩個來源 ${dupSrc[a]}／${e}`);
-    dupSrc[a] = e; dupSlots += 1;
+  const samePos = (a, e) => R.P[a * 3] === R.P[e * 3] && R.P[a * 3 + 1] === R.P[e * 3 + 1] && R.P[a * 3 + 2] === R.P[e * 3 + 2];
+  const cornerOk = (a, e) => a === e || (a >= F.verts && samePos(a, e) && (dupSrc[a] === -1 || dupSrc[a] === e));
+  let dupSlots = 0; let rotated = 0;
+  for (let t = 0; t < R.index.length / 3; t += 1) {
+    const A = [R.index[t * 3], R.index[t * 3 + 1], R.index[t * 3 + 2]];
+    const E = [gi.index[t * 3], gi.index[t * 3 + 1], gi.index[t * 3 + 2]];
+    let rot = -1;
+    for (let r = 0; r < 3 && rot < 0; r += 1) if ([0, 1, 2].every((k) => cornerOk(A[(k + r) % 3], E[k]))) rot = r;
+    if (rot < 0) throw new Error(`凍結集合與白模不相容：索引被改動（三角形 ${t}：當前 ${A.join(',')}、凍結時 ${E.join(',')}；只容許角序旋轉與對回來源的複製點）`);
+    if (rot) rotated += 1;
+    for (let k = 0; k < 3; k += 1) {
+      const a = A[(k + rot) % 3]; used[a] = 1;
+      if (a !== E[k]) { dupSrc[a] = E[k]; dupSlots += 1; }
+    }
   }
-  // 凍結頂點不得成為孤兒（量尺讀的是這些頂點；不被任何三角形引用＝畫面上看不到，量了也沒意義）
+  // 代表點：凍結頂點 v 的代表＝當前被畫出的 v 本身＋所有對回 v 的被畫出的複製點。量尺對每個代表都量、取最差（N1）。
+  // 每個凍結頂點至少要有一個被畫出的代表點，否則停止（N2：原頂點被合法拆光時由複製點代表，不再誤停）
+  const reps = new Map();
   const frozenVerts = new Set([...F.SbVerts.ids, ...F.arm.r, ...F.arm.l]);
   for (const t of F.Se.tris) for (let k = 0; k < 3; k += 1) frozenVerts.add(gi.index[t * 3 + k]);
-  const orphans = [...frozenVerts].filter((v) => !used[v]);
-  if (orphans.length) throw new Error(`凍結集合與白模不相容：${orphans.length} 個凍結頂點已不被任何三角形引用（孤兒，例 ${orphans.slice(0, 5).join(', ')}）`);
+  for (const v of frozenVerts) reps.set(v, used[v] ? [v] : []);
+  for (let a = F.verts; a < R.n; a += 1) if (used[a] && dupSrc[a] >= 0 && reps.has(dupSrc[a])) reps.get(dupSrc[a]).push(a);
+  const orphans = [...frozenVerts].filter((v) => !reps.get(v).length);
+  if (orphans.length) throw new Error(`凍結集合與白模不相容：${orphans.length} 個凍結頂點沒有任何被畫出的代表點（原頂點與複製點都不被三角形引用，例 ${orphans.slice(0, 5).join(', ')}）`);
   const armSide = new Int8Array(R.n); const armPart = new Int8Array(R.n);
   F.arm.r.forEach((i, k) => { armSide[i] = -1; armPart[i] = F.arm.rPart[k]; });
   F.arm.l.forEach((i, k) => { armSide[i] = 1; armPart[i] = F.arm.lPart[k]; });
   const bB = surfaceBoundary(R, F.Sb.tris);
-  const R2 = { ...R, armVerts: { r: F.arm.r, l: F.arm.l }, armSide, armPart, torsoTris: F.Sb.tris, boundaryEdge: bB.boundaryEdge, boundaryVert: bB.boundaryVert };
+  const R2 = { ...R, armVerts: { r: F.arm.r, l: F.arm.l }, armSide, armPart, torsoTris: F.Sb.tris, boundaryEdge: bB.boundaryEdge, boundaryVert: bB.boundaryVert, reps };
   const Sb = torsoSurface(R2);
   const bE = surfaceBoundary(R2, F.Se.tris);
   const Se = { name: '(e) 骨盆＋大腿', tris: F.Se.tris, boundaryEdge: bE.boundaryEdge, boundaryVert: bE.boundaryVert, verts: F.Se.verts };
-  return { R: R2, Sb, Se, dupSlots };
+  return { R: R2, Sb, Se, dupSlots, rotated };
+}
+// 權重合法性（第 2 輪 N4）：每個頂點權重非負、總和 1±1e-4，不符即停止
+export function weightCheck(g) {
+  const SW = g.attributes.skinWeight.array; const n = SW.length / 4;
+  for (let i = 0; i < n; i += 1) {
+    let s = 0;
+    for (let k = 0; k < 4; k += 1) { const w = SW[i * 4 + k]; if (!(w >= 0)) throw new Error(`權重不合法：頂點 ${i} 第 ${k} 個權重 ${w} < 0 或非數`); s += w; }
+    if (Math.abs(s - 1) > 1e-4) throw new Error(`權重不合法：頂點 ${i} 權重總和 ${s}（應 1±1e-4）`);
+  }
 }
 // live＝現行規則即時計算（只供產生凍結檔）；rpMod＝要載入的 realPlayer 模組（預設 src 現行版）
 export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   installNodeFetch();
   const glbUrl = new URL(`../public/models/real/player_${faces}.glb`, import.meta.url);
   const asset = await rpMod.loadRealPlayerAsset(glbUrl.href);
+  weightCheck(asset.geometry);
   const R0 = lib.bindRegions(asset, rpMod.LANDMARKS);
   let R; let Sb; let Se; let frozen = null; let content = null;
   if (live) {

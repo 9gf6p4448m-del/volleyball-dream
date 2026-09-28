@@ -32,7 +32,8 @@ export const BASELINE_REALPLAYER_SHA12 = 'b1489d7878dc';
 
 // (f) 核心：F＝凍結集合的一個面數版本；P0＝綁定位置；P1＝蒙皮後位置；skeleton＝當幀骨架；boneNames＝模組的 BONES；
 // SI／SW＝受測（當前）權重的 skinIndex／skinWeight（與 P1 同一份）
-export function torsoDrag(F, P0, P1, skeleton, boneNames, SI, SW) {
+// reps＝applyFrozen 的代表點表（凍結頂點 → 被畫出的原頂點＋複製點）；每個凍結頂點取所有代表中最大的 d（第 2 輪 N1）
+export function torsoDrag(F, P0, P1, skeleton, boneNames, SI, SW, reps = null) {
   const { ids, mainBone, normal } = F.SbVerts;
   const TI = TORSO.map((b) => {
     const bi = boneNames.indexOf(b);
@@ -46,7 +47,8 @@ export function torsoDrag(F, P0, P1, skeleton, boneNames, SI, SW) {
     const b = TORSO.indexOf(mainBone[k]); // 8720597 的主骨（凍結）；非軀幹骨不計
     if (b < 0) { excluded += 1; continue; }
     used += 1;
-    const i = ids[k];
+    let dk = -Infinity; let fb = false;
+    for (const i of (reps ? reps.get(ids[k]) : [ids[k]])) {
     // R4：受測權重只保留三軀幹骨、重新正規化後的混合矩陣；三骨總和 0 → 退回 R3（8720597 主骨剛體）
     const wt = [0, 0, 0];
     for (let q = 0; q < 4; q += 1) { const t = TI.indexOf(SI[i * 4 + q]); if (t >= 0) wt[t] += SW[i * 4 + q]; }
@@ -54,15 +56,18 @@ export function torsoDrag(F, P0, P1, skeleton, boneNames, SI, SW) {
     if (ws > 0) {
       e.fill(0);
       for (let t = 0; t < 3; t += 1) { if (!wt[t]) continue; const m = M[t]; const w = wt[t] / ws; for (let c = 0; c < 16; c += 1) e[c] += w * m[c]; }
-    } else { fallback += 1; e.set(M[b]); }
+    } else { fb = true; e.set(M[b]); }
     const x = P0[i * 3]; const y = P0[i * 3 + 1]; const z = P0[i * 3 + 2];
     const r = [e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]]; // 剛性參考位置
     const a = normal[k * 3]; const c = normal[k * 3 + 1]; const f = normal[k * 3 + 2];
     let nx = e[0] * a + e[4] * c + e[8] * f; let ny = e[1] * a + e[5] * c + e[9] * f; let nz = e[2] * a + e[6] * c + e[10] * f;
     const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
     const d = -((P1[i * 3] - r[0]) * nx + (P1[i * 3 + 1] - r[1]) * ny + (P1[i * 3 + 2] - r[2]) * nz);
-    if (d > DRAG_OVER) over += 1;
-    if (d > max) { max = d; arg = k; }
+    if (d > dk) dk = d;
+    }
+    if (fb) fallback += 1;
+    if (dk > DRAG_OVER) over += 1;
+    if (dk > max) { max = dk; arg = k; }
   }
   return { used, excluded, fallback, over, max, arg: arg < 0 ? null : { id: ids[arg], bone: mainBone[arg], bindY: Number(P0[ids[arg] * 3 + 1].toFixed(3)) } };
 }
@@ -158,7 +163,7 @@ if (isMain) {
   for (const key of lib.ALL_KEYS) {
     const { real, pk, P1 } = V2.poseKey(setup, key);
     const ga = real.p.mesh.geometry.attributes;
-    const r = torsoDrag(F, setup.R.P, P1, real.p.mesh.skeleton, setup.mods.rp.BONES, ga.skinIndex.array, ga.skinWeight.array);
+    const r = torsoDrag(F, setup.R.P, P1, real.p.mesh.skeleton, setup.mods.rp.BONES, ga.skinIndex.array, ga.skinWeight.array, setup.R.reps);
     used = r.used; excluded = r.excluded; fallback = r.fallback;
     rows[key.id] = { seq: pk?.type ?? null, over: r.over, max: Number(r.max.toFixed(6)), arg: r.arg };
   }
@@ -181,6 +186,12 @@ if (isMain) {
     if (base.variant !== 'base') throw new Error(`--baseline 必須是現況（variant=base），收到 variant=${base.variant}`);
     if (base.hashes?.['realPlayer.js'] !== BASELINE_REALPLAYER_SHA12) throw new Error(`--baseline 的 realPlayer.js 雜湊 ${base.hashes?.['realPlayer.js']} ≠ 8720597 的 ${BASELINE_REALPLAYER_SHA12}（現況必須在 8720597 上量）`);
     if (base.hashes?.[`player_${faces}.glb`] !== hashes[`player_${faces}.glb`]) throw new Error('--baseline 的白模 glb 與本次不同，不能比較');
+    // 第 2 輪 N3：除 realPlayer.js（受測物，已鎖 8720597）與 real-skin-heat.mjs（變體專用）外，兩邊記錄的每個輸入雜湊都要相同
+    const hk = new Set([...Object.keys(base.hashes ?? {}), ...Object.keys(hashes)]);
+    for (const k of hk) {
+      if (k === 'realPlayer.js' || k === 'real-skin-heat.mjs') continue;
+      if (base.hashes?.[k] !== hashes[k]) throw new Error(`--baseline 的輸入雜湊 ${k} ${base.hashes?.[k]} ≠ 本次 ${hashes[k]}，不能比較`);
+    }
     gate = gateCheck(rows, base);
     out.push('', `## S11 門檻（對照 ${args.baseline.replace(/\\/g, '/').split('/').slice(-1)[0]}：每幀 >2 cm 點數 ≤ 現況＋${GATE.count}、最大往內位移 ≤ 現況＋${GATE.mm / 10} cm，位移比 0.1 cm）`);
     for (const [id, g] of Object.entries(gate.frames)) {
