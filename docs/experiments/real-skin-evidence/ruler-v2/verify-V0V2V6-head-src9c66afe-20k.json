@@ -1973,5 +1973,22 @@
    }
   },
   "crotchStart": 5239
+ },
+ "V6": {
+  "cli": "head-src9c66afe-20k.json",
+  "pass": true,
+  "points": 1563,
+  "depthMaxDiffM": 0.000004998436407360751,
+  "wMaxDiff": 0.000049924427151792905,
+  "ties": 30,
+  "mismatches": [],
+  "mismatchCount": 0
+ },
+ "summary": {
+  "V0": "過",
+  "V1": null,
+  "V2": "(a)過(b)過",
+  "V3": null,
+  "V6": "過"
  }
 }

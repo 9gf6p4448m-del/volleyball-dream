@@ -1,8 +1,9 @@
 # real-skin-penetration-v2（faces=5k）
 量法：內外＝generalized winding number（w>0.5 在內；Jacobson 2013，立體角 Van Oosterom–Strackee 1983）；深度＝到最近「被穿入表面」三角形的距離（照舊）；分區照舊
-輸入 sha256 前 12 碼：realPlayer.js 5b14e82a1d8f、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、real-skin-lib.mjs 404f0160bdf3、real-skin-penetration-v2.mjs c600445a42af
+輸入 sha256 前 12 碼：realPlayer.js 5b14e82a1d8f、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 48486173ac2e
 自我檢查：子集方向不一致邊 (b) 0／(e) 0；綁定姿勢 pelvis 地標 w (b) 0.840／(e) 0.693（應 >0.5）；遠點 (0,1,3) w (b) -0.000／(e) -0.000（應 ≈0）
 表面：(b) 軀幹子集 三角形 1218、開口邊 120；(e) 主骨∈{pelvis, rHip, lHip} 頂點 800、三角形 1511、開口邊 91；手臂頂點 右 267／左 261
+集合指紋（排序後 ID 的 sha256 前 12 碼）：S_b 51795153f668、S_e e1d1e6cb8b60、手臂 右 d289f9558735／左 c2907d5124d0（S_e 依當前權重的主骨、S_b 與手臂依 src 地標選取；--baseline 會逐集合比對）
 
 ## (b) 手臂穿入軀幹
 格式：穿入點/>1cm/最深 cm。「新」＝本尺；「舊」＝lib.metricPenetration（凹處會誤判，只供對照；舊「不定」＝最近點落在開口邊未計）。
@@ -61,3 +62,12 @@
 - S2(iii) (b) K4b／K4c 每臂 ≤30 點且 ≤2.0 cm：K4b 不過、K4c 不過
 - S3 (e) K4a／K4b／K4c 每臂 ≤10 點且 ≤1.0 cm：K4a 不過、K4b 過、K4c 過
 - S3 鑑別（未改 src 時應 K4b >0、K1b 右臂 =0）：K4b (e) 右＋左＝0；K1b 右臂 (e)＝0
+
+## 被穿入表面與手臂頂點集合（對照 docs/experiments/real-skin-evidence/ruler-v2/before-5k.json）
+- S_b 三角形：與現況相同（1218）
+- S_e 三角形：與現況相同（1511）
+- 右臂頂點：與現況相同（267）
+- 左臂頂點：與現況相同（261）
+
+## S2(i) 不退步（(b) 新量法，對照 docs/experiments/real-skin-evidence/ruler-v2/before-5k.json；點數與最深都要 ≤ 現況，深度比 0.1 cm）
+- 18 項（9 幀×左右臂）全部 ≤ 現況
