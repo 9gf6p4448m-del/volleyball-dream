@@ -1,0 +1,1134 @@
+{
+ "faces": "5k",
+ "tag": "head-src9c66afe",
+ "V0": {
+  "orientBad": {
+   "b": 0,
+   "e": 0,
+   "all": 0
+  },
+  "wFullMeshAtPelvis": 1.0000000000000002,
+  "wFullMeshFar": -1.9629069220190126e-17,
+  "wBindPelvis": {
+   "b": 0.8402557595435146,
+   "e": 0.6931784099030114
+  },
+  "Bc": {
+   "tris": 3906,
+   "loops": [
+    19,
+    23
+   ]
+  },
+  "oldReproduce": {
+   "ref": [
+    "after-step3-5k.json",
+    "thigh-after-step3-5k.json"
+   ],
+   "same": 36,
+   "diff": [],
+   "hipSurfaceRef": {
+    "verts": 800,
+    "tris": 1511,
+    "boundaryEdges": 91
+   },
+   "hipSurfaceNow": {
+    "verts": 800,
+    "tris": 1511,
+    "boundaryEdges": 91
+   }
+  }
+ },
+ "V2": {
+  "a": {
+   "b": {
+    "oldReported": {
+     "r": 0.0920455200406537,
+     "l": 0.06768883619686901
+    },
+    "oldMaxRecomputed": {
+     "r": 0.0920455200406537,
+     "l": 0.06768883619686901
+    },
+    "list": []
+   },
+   "e": {
+    "oldReported": {
+     "r": 0,
+     "l": 0
+    },
+    "oldMaxRecomputed": {
+     "r": 0,
+     "l": 0
+    },
+    "list": []
+   }
+  },
+  "aPass": true,
+  "aStatus": "過",
+  "aCount": 0,
+  "aOut": {
+   "n": 0,
+   "ok": 0
+  },
+  "aIn": {
+   "n": 0,
+   "attributed": 0,
+   "ok": 0
+  },
+  "b": [
+   {
+    "set": "胯下前方",
+    "desc": "下傾 0° 5 cm",
+    "p": [
+     0.0126,
+     0.6623,
+     0.1507
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0274,
+    "we": -0.0926,
+    "inB": false,
+    "inE": false,
+    "db": 0.0359,
+    "de": 0.0136,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "pelvis",
+     "d": 0.0136
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 0° 10 cm",
+    "p": [
+     0.0126,
+     0.6623,
+     0.2007
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0156,
+    "we": -0.0958,
+    "inB": false,
+    "inE": false,
+    "db": 0.0763,
+    "de": 0.0077,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0077
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 0° 15 cm",
+    "p": [
+     0.0126,
+     0.6623,
+     0.2507
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0076,
+    "we": -0.0925,
+    "inB": false,
+    "inE": false,
+    "db": 0.1176,
+    "de": 0.0144,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0144
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 0° 20 cm",
+    "p": [
+     0.0126,
+     0.6623,
+     0.3007
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0033,
+    "we": -0.0777,
+    "inB": false,
+    "inE": false,
+    "db": 0.163,
+    "de": 0.0443,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0443
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 0° 25 cm",
+    "p": [
+     0.0126,
+     0.6623,
+     0.3507
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0011,
+    "we": -0.0548,
+    "inB": false,
+    "inE": false,
+    "db": 0.2105,
+    "de": 0.0728,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0728
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 30° 5 cm",
+    "p": [
+     0.0126,
+     0.6373,
+     0.144
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0946,
+    "we": 0.9042,
+    "inB": false,
+    "inE": true,
+    "db": 0.0438,
+    "de": 0.0069,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0069
+    },
+    "counted": false,
+    "ok": null
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 30° 10 cm",
+    "p": [
+     0.0126,
+     0.6123,
+     0.1873
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0653,
+    "we": 0.8855,
+    "inB": false,
+    "inE": true,
+    "db": 0.0907,
+    "de": 0.0033,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0033
+    },
+    "counted": false,
+    "ok": null
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 30° 15 cm",
+    "p": [
+     0.0126,
+     0.5873,
+     0.2306
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0452,
+    "we": -0.1323,
+    "inB": false,
+    "inE": false,
+    "db": 0.1375,
+    "de": 0.0139,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0139
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 30° 20 cm",
+    "p": [
+     0.0126,
+     0.5623,
+     0.2739
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0324,
+    "we": -0.0794,
+    "inB": false,
+    "inE": false,
+    "db": 0.1859,
+    "de": 0.0249,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0249
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 30° 25 cm",
+    "p": [
+     0.0126,
+     0.5373,
+     0.3172
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0241,
+    "we": 0.0266,
+    "inB": false,
+    "inE": false,
+    "db": 0.235,
+    "de": 0.0478,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "rKnee",
+     "d": 0.0363
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 60° 5 cm",
+    "p": [
+     0.0126,
+     0.619,
+     0.1257
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.1395,
+    "we": 0.9063,
+    "inB": false,
+    "inE": true,
+    "db": 0.0399,
+    "de": 0.0106,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0106
+    },
+    "counted": false,
+    "ok": null
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 60° 10 cm",
+    "p": [
+     0.0126,
+     0.5757,
+     0.1507
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0984,
+    "we": 0.8844,
+    "inB": false,
+    "inE": true,
+    "db": 0.0891,
+    "de": 0.015,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.015
+    },
+    "counted": false,
+    "ok": null
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 60° 15 cm",
+    "p": [
+     0.0126,
+     0.5324,
+     0.1757
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0703,
+    "we": 0.8175,
+    "inB": false,
+    "inE": true,
+    "db": 0.1389,
+    "de": 0.0167,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0167
+    },
+    "counted": false,
+    "ok": null
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 60° 20 cm",
+    "p": [
+     0.0126,
+     0.4891,
+     0.2007
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0516,
+    "we": 0.4669,
+    "inB": false,
+    "inE": false,
+    "db": 0.1888,
+    "de": 0.0152,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.0144
+    },
+    "counted": false,
+    "ok": null
+   },
+   {
+    "set": "胯下前方",
+    "desc": "下傾 60° 25 cm",
+    "p": [
+     0.0126,
+     0.4458,
+     0.2257
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.039,
+    "we": 0.1778,
+    "inB": false,
+    "inE": false,
+    "db": 0.2388,
+    "de": 0.045,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.0081
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 前 5 cm",
+    "p": [
+     -0.084,
+     0.6759,
+     0.3403
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0023,
+    "we": -0.079,
+    "inB": false,
+    "inE": false,
+    "db": 0.1803,
+    "de": 0.0262,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0262
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 前 10 cm",
+    "p": [
+     -0.084,
+     0.6403,
+     0.3754
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0069,
+    "we": -0.0731,
+    "inB": false,
+    "inE": false,
+    "db": 0.2245,
+    "de": 0.0393,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0393
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 前 15 cm",
+    "p": [
+     -0.084,
+     0.6046,
+     0.4105
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0085,
+    "we": -0.0329,
+    "inB": false,
+    "inE": false,
+    "db": 0.2708,
+    "de": 0.0547,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0547
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 前 20 cm",
+    "p": [
+     -0.084,
+     0.569,
+     0.4455
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0088,
+    "we": -0.0006,
+    "inB": false,
+    "inE": false,
+    "db": 0.3182,
+    "de": 0.0838,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "rHip",
+     "d": 0.0838
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 前 25 cm",
+    "p": [
+     -0.084,
+     0.5334,
+     0.4806
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0085,
+    "we": 0.0068,
+    "inB": false,
+    "inE": false,
+    "db": 0.3663,
+    "de": 0.1227,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "rKnee",
+     "d": 0.115
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 外側 5 cm",
+    "p": [
+     -0.2195,
+     0.5809,
+     0.2438
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0393,
+    "we": -0.0488,
+    "inB": false,
+    "inE": false,
+    "db": 0.1738,
+    "de": 0.0521,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0521
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 外側 10 cm",
+    "p": [
+     -0.2195,
+     0.5453,
+     0.2788
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0301,
+    "we": -0.0146,
+    "inB": false,
+    "inE": false,
+    "db": 0.2189,
+    "de": 0.0605,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "rHip",
+     "d": 0.0605
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 外側 15 cm",
+    "p": [
+     -0.2195,
+     0.5096,
+     0.3139
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0238,
+    "we": 0.0173,
+    "inB": false,
+    "inE": false,
+    "db": 0.2657,
+    "de": 0.0778,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "rKnee",
+     "d": 0.062
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 外側 20 cm",
+    "p": [
+     -0.2195,
+     0.474,
+     0.349
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0193,
+    "we": 0.022,
+    "inB": false,
+    "inE": false,
+    "db": 0.3135,
+    "de": 0.1119,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "rKnee",
+     "d": 0.0695
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "右腿 外側 25 cm",
+    "p": [
+     -0.2195,
+     0.4383,
+     0.384
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0159,
+    "we": 0.0179,
+    "inB": false,
+    "inE": false,
+    "db": 0.3619,
+    "de": 0.1498,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "rKnee",
+     "d": 0.0926
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 前 5 cm",
+    "p": [
+     0.084,
+     0.5832,
+     0.2761
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0278,
+    "we": -0.082,
+    "inB": false,
+    "inE": false,
+    "db": 0.1724,
+    "de": 0.0254,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0254
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 前 10 cm",
+    "p": [
+     0.084,
+     0.5395,
+     0.3004
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0254,
+    "we": -0.0649,
+    "inB": false,
+    "inE": false,
+    "db": 0.2199,
+    "de": 0.0339,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0339
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 前 15 cm",
+    "p": [
+     0.084,
+     0.4958,
+     0.3247
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0222,
+    "we": -0.0169,
+    "inB": false,
+    "inE": false,
+    "db": 0.268,
+    "de": 0.0521,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0521
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 前 20 cm",
+    "p": [
+     0.084,
+     0.4521,
+     0.349
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0191,
+    "we": 0.0178,
+    "inB": false,
+    "inE": false,
+    "db": 0.3165,
+    "de": 0.0808,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.0808
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 前 25 cm",
+    "p": [
+     0.084,
+     0.4084,
+     0.3733
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0163,
+    "we": 0.022,
+    "inB": false,
+    "inE": false,
+    "db": 0.3651,
+    "de": 0.1196,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.118
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 外側 5 cm",
+    "p": [
+     0.2146,
+     0.5197,
+     0.162
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0439,
+    "we": -0.0408,
+    "inB": false,
+    "inE": false,
+    "db": 0.191,
+    "de": 0.062,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.062
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 外側 10 cm",
+    "p": [
+     0.2146,
+     0.476,
+     0.1863
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0338,
+    "we": -0.016,
+    "inB": false,
+    "inE": false,
+    "db": 0.2364,
+    "de": 0.0719,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": true,
+     "bone": "lHip",
+     "d": 0.0719
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 外側 15 cm",
+    "p": [
+     0.2146,
+     0.4323,
+     0.2106
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0267,
+    "we": 0.0097,
+    "inB": false,
+    "inE": false,
+    "db": 0.2824,
+    "de": 0.0878,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.0747
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 外側 20 cm",
+    "p": [
+     0.2146,
+     0.3886,
+     0.2349
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0216,
+    "we": 0.0166,
+    "inB": false,
+    "inE": false,
+    "db": 0.3294,
+    "de": 0.1186,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.0819
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "褲管口下方",
+    "desc": "左腿 外側 25 cm",
+    "p": [
+     0.2146,
+     0.3449,
+     0.2593
+    ],
+    "expect": "outIfBcOut",
+    "wb": 0.0177,
+    "we": 0.015,
+    "inB": false,
+    "inE": false,
+    "db": 0.3772,
+    "de": 0.1567,
+    "bc": false,
+    "bcVotes": "000",
+    "skinOwner": {
+     "inSb": false,
+     "inSe": false,
+     "bone": "lKnee",
+     "d": 0.1057
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "骨盆軸線",
+    "desc": "t=0",
+    "p": [
+     0,
+     0.772,
+     -0.02
+    ],
+    "expect": "in",
+    "wb": 0.7293,
+    "we": 0.8669,
+    "inB": true,
+    "inE": true,
+    "db": 0.1038,
+    "de": 0.1038,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": true,
+     "inSe": true,
+     "bone": "pelvis",
+     "d": 0.1038
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "骨盆軸線",
+    "desc": "t=0.25",
+    "p": [
+     0,
+     0.802,
+     -0.0203
+    ],
+    "expect": "in",
+    "wb": 0.7667,
+    "we": 0.8394,
+    "inB": true,
+    "inE": true,
+    "db": 0.123,
+    "de": 0.123,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": true,
+     "inSe": true,
+     "bone": "pelvis",
+     "d": 0.123
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "骨盆軸線",
+    "desc": "t=0.5",
+    "p": [
+     0,
+     0.832,
+     -0.0205
+    ],
+    "expect": "in",
+    "wb": 0.7977,
+    "we": 0.8031,
+    "inB": true,
+    "inE": true,
+    "db": 0.1336,
+    "de": 0.1336,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": true,
+     "inSe": true,
+     "bone": "pelvis",
+     "d": 0.1336
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "骨盆軸線",
+    "desc": "t=0.75",
+    "p": [
+     0,
+     0.862,
+     -0.0208
+    ],
+    "expect": "in",
+    "wb": 0.8233,
+    "we": 0.7557,
+    "inB": true,
+    "inE": true,
+    "db": 0.1404,
+    "de": 0.1404,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": true,
+     "inSe": true,
+     "bone": "pelvis",
+     "d": 0.1404
+    },
+    "counted": true,
+    "ok": true
+   },
+   {
+    "set": "骨盆軸線",
+    "desc": "t=1",
+    "p": [
+     0,
+     0.892,
+     -0.021
+    ],
+    "expect": "in",
+    "wb": 0.8439,
+    "we": 0.6959,
+    "inB": true,
+    "inE": true,
+    "db": 0.1382,
+    "de": 0.1382,
+    "bc": true,
+    "bcVotes": "111",
+    "skinOwner": {
+     "inSb": true,
+     "inSe": true,
+     "bone": "pelvis",
+     "d": 0.1382
+    },
+    "counted": true,
+    "ok": true
+   }
+  ],
+  "bPass": true,
+  "hemInfo": {
+   "r": {
+    "Rh": 0.1355,
+    "th": 0.7371
+   },
+   "l": {
+    "Rh": 0.1306,
+    "th": 0.7371
+   }
+  },
+  "crotchStart": 1338
+ }
+}
