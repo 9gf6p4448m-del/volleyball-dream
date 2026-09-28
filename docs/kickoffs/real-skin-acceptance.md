@@ -135,3 +135,8 @@ matchView 若需接線（例如逐幀外展），只能加呼叫，不得改幾�
   - 門檻、幀、面數、「現況在 8720597 上量」一律不變（每幀 >2 cm 點數 ≤ 現況＋30、最大往內位移 ≤ 現況＋1.0 cm）。
   - 鑑別（改後須全部成立，否則停手回報）：①現況 8720597 綠；②純熱擴散候選紅；③上述「S_b 框內非軀幹骨歸零」的熱擴散變體綠（F1 的反面）；④突變 r＝s 後②不再紅。另列腿權重單獨貢獻供參考。
   - 此修改會讓通過機率上升（③由紅轉綠），依 02 §2.1 經使用者對本條明確同意。
+- **R5（09-28，使用者同意「甲：收斂成量畫出來的那份＋加第 4 輪」）：量尺覆審延長到第 4 輪，並加一條程序防線（加嚴）。**
+  - 背景：修補送審第 3 輪（02 §6.1 附則上限）仍有未解 finding：NF1 CRITICAL（量尺量 asset.geometry，畫面畫 mesh.geometry，在 createRealPlayer 換頂點可全綠）、NF2 HIGH（S2(i) --baseline 未核對雜湊）、NF3 HIGH（splitBridges 複製點照抄近端骨卻被記為手臂穿入）、GPU 端改動未驗。證據 `ce506562…/scratchpad/r3-out/`。
+  - 量尺收斂：索引核對、權重檢查、代表點、被穿入表面、蒙皮位置一律只讀畫面實際使用的 `mesh.geometry`，並斷言它的 index 與各屬性和 asset 為同一份資料（不符即停止）；S2(i) 的 --baseline 比照 (f) 全雜湊核對；複製點依自身主骨歸類。
+  - **新增 S12 程序防線（實作 diff 審查）**：實作者對 `src/**` 的 diff 不得新增或修改 `onBeforeCompile`、自訂頂點著色器、morph target／morphAttributes，以及寫實球員 SkinnedMesh 自身的位置／旋轉／縮放；不得在 createRealPlayer 之後替換 geometry 屬性。以 `git diff 8720597..<實作 HEAD> -- src` 逐項 grep 列出，命中即紅（例外須逐條經使用者同意）。
+  - 門檻與既有判準不變；第 4 輪覆審後仍有 CRITICAL／HIGH 未解即停手交使用者。
