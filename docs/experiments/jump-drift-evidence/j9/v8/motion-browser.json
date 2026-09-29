@@ -1,0 +1,88 @@
+{
+  "createdAt": "2026-09-28T09:40:02.674Z",
+  "base": "http://127.0.0.1:5175",
+  "device": "Desktop Chromium, emulated viewports; NOT a physical phone",
+  "scenes": [
+    {
+      "name": "desktop",
+      "width": 1280,
+      "height": 720,
+      "actions": [
+        "run",
+        "jump",
+        "land",
+        "set",
+        "block",
+        "dive",
+        "tip",
+        "cross-left",
+        "cross-right"
+      ],
+      "metrics": {
+        "frames": 0,
+        "fps": 0,
+        "frameP95": 0,
+        "simP95": 0.19999998807907104,
+        "backlogMs": 0,
+        "maxBacklogMs": 0,
+        "drawCalls": 117,
+        "slowMotionTicks": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "landscape",
+      "width": 844,
+      "height": 390,
+      "actions": [
+        "run",
+        "jump",
+        "land",
+        "set",
+        "block",
+        "dive",
+        "tip",
+        "cross-left",
+        "cross-right"
+      ],
+      "metrics": {
+        "frames": 0,
+        "fps": 0,
+        "frameP95": 0,
+        "simP95": 0.5999999940395355,
+        "backlogMs": 0,
+        "maxBacklogMs": 0,
+        "drawCalls": 117,
+        "slowMotionTicks": 0
+      },
+      "errors": []
+    },
+    {
+      "name": "portrait",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        "run",
+        "jump",
+        "land",
+        "set",
+        "block",
+        "dive",
+        "tip",
+        "cross-left",
+        "cross-right"
+      ],
+      "metrics": {
+        "frames": 0,
+        "fps": 0,
+        "frameP95": 0,
+        "simP95": 0.20000001788139343,
+        "backlogMs": 0,
+        "maxBacklogMs": 0,
+        "drawCalls": 88,
+        "slowMotionTicks": 0
+      },
+      "errors": []
+    }
+  ]
+}

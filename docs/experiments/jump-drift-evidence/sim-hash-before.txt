@@ -1,0 +1,18 @@
+== sim 逐值雜湊 ==  14 局（七隊 × 2）　種子基底 1　耗時 14.1s
+  north-tech     seed=      1  a8e1eeb6b818591e    22311 tick  25-16
+  north-tech     seed=    102  8dffa733b01ac037    24885 tick  25-20
+  white-wave     seed=   7920  5707b8cb52b621a8    25843 tick  25-20
+  white-wave     seed=   8021  00f8d6fc87ccd7a2    22995 tick  25-12
+  obsidian       seed=  15839  aa0fe8b4df1829b4    19674 tick  25-15
+  obsidian       seed=  15940  0e71e23396bf8bd1    26545 tick  27-25
+  gale-shore     seed=  23758  7e1645691e75e65e    28393 tick  26-24
+  gale-shore     seed=  23859  7c24f6c676fe77de    22808 tick  25-15
+  iron-mist      seed=  31677  dfa3e6e76a1d6153    26240 tick  21-25
+  iron-mist      seed=  31778  9ca2c9b0bbb6f11e    19670 tick  17-25
+  black-pine     seed=  39596  8a1ee70db31790d1    22239 tick  19-25
+  black-pine     seed=  39697  7b9426acf8c19890    22895 tick  20-25
+  sky-hawk       seed=  47515  6ea53667cf18d234    19922 tick  13-25
+  sky-hawk       seed=  47616  9cfc8b5134871b27    24103 tick  18-25
+  合計                        0a948ad2b9895d49
+
+✅ 行為逐值相同（合計 0a948ad2b9895d49 ＝ 基準）

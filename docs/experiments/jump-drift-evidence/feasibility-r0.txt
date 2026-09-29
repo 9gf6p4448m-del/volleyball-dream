@@ -1,0 +1,1 @@
+{"n":283,"infeasibleJ2vsJ3":14,"infeasibleJ7vsJ3":18,"either":32}

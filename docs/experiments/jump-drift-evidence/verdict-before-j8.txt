@@ -1,0 +1,60 @@
+== after（正式比賽 0 場）
+[spike] n=0
+  J2 d_render/d_sim 最小 Infinity；不過 0
+  J3 單幀最大 -Infinity m、沿前進方向最小增量 Infinity；不過 0
+  J5 離網最小 Infinity m、對方側幀 0；不過 0
+  J7 判 0（截斷略過 0）、併回最慢 -Infinity s、併回單幀最大 -Infinity m；不過 0
+[back] n=0
+  J2 d_render/d_sim 最小 Infinity；不過 0
+  J3 單幀最大 -Infinity m、沿前進方向最小增量 Infinity；不過 0
+  J5 離網最小 Infinity m、對方側幀 0；不過 0
+  J7 判 0（截斷略過 0）、併回最慢 -Infinity s、併回單幀最大 -Infinity m；不過 0
+[jumpServe] n=0
+  J2 落地 0、位移 Infinity–-Infinity m；不過 0
+  J3 單幀最大 -Infinity m、沿前進方向最小增量 Infinity；不過 0
+  J5 離網最小 Infinity m、對方側幀 0；不過 0
+  J7 判 0（截斷略過 0）、併回最慢 -Infinity s、併回單幀最大 -Infinity m；不過 0
+[J6] 攔網 n=0 前飄全幀恰為 0：true；跳舉 n=0 最大偏移 null m
+[J4] 扣球＋後排 n=0 手球落差 中位 null 最大 -Infinity
+[J8] A2 扣球 n=41（代打次數 1#J8:8 2#J8:10 3#J8:2 4#J8:13 5#J8:9）
+  {"at":"1#J8@817","dRender":"0.177","dSim":"0.907","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.073","net":"2.118","merged":"null","mstep":"null"}
+  {"at":"1#J8@7327","dRender":"0.142","dSim":"0.921","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.063","net":"2.181","merged":"null","mstep":"null"}
+  {"at":"1#J8@8152","dRender":"0.182","dSim":"0.945","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.063","net":"2.276","merged":"0.000","mstep":"0.000"}
+  {"at":"1#J8@8535","dRender":"0.146","dSim":"0.907","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.055","net":"2.043","merged":"0.000","mstep":"0.000"}
+  {"at":"1#J8@9190","dRender":"0.141","dSim":"0.937","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.053","net":"2.175","merged":"0.000","mstep":"0.000"}
+  {"at":"1#J8@9766","dRender":"0.179","dSim":"0.902","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.074","net":"2.167","merged":"null","mstep":"null"}
+  {"at":"1#J8@15291","dRender":"0.193","dSim":"1.053","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.046","net":"2.066","merged":"null","mstep":"null"}
+  {"at":"1#J8@16123","dRender":"0.196","dSim":"0.987","hitFrames":20,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.062","net":"2.217","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@5072","dRender":"0.148","dSim":"0.915","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.062","net":"2.205","merged":"null","mstep":"null"}
+  {"at":"2#J8@5914","dRender":"0.199","dSim":"0.941","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.065","net":"2.169","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@7741","dRender":"0.191","dSim":"0.945","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.064","net":"2.099","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@14544","dRender":"0.124","dSim":"0.972","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.045","net":"2.104","merged":"null","mstep":"null"}
+  {"at":"2#J8@15613","dRender":"0.114","dSim":"0.747","hitFrames":21,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.076","net":"2.021","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@16220","dRender":"0.190","dSim":"0.945","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.064","net":"2.034","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@17273","dRender":"0.136","dSim":"0.949","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.052","net":"1.867","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@17643","dRender":"0.146","dSim":"0.856","hitFrames":22,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.084","net":"1.830","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@18258","dRender":"0.193","dSim":"0.910","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.068","net":"2.274","merged":"0.000","mstep":"0.000"}
+  {"at":"2#J8@18860","dRender":"0.193","dSim":"0.968","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.063","net":"2.053","merged":"0.000","mstep":"0.000"}
+  {"at":"3#J8@9536","dRender":"0.108","dSim":"0.986","hitFrames":22,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.045","net":"2.247","merged":"0.000","mstep":"0.000"}
+  {"at":"3#J8@10509","dRender":"0.135","dSim":"0.947","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.054","net":"2.026","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@793","dRender":"0.178","dSim":"0.875","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.080","net":"2.085","merged":"null","mstep":"null"}
+  {"at":"4#J8@5423","dRender":"0.074","dSim":"1.061","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.031","net":"2.556","merged":"null","mstep":"null"}
+  {"at":"4#J8@6253","dRender":"0.200","dSim":"1.027","hitFrames":22,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.044","net":"2.340","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@6651","dRender":"0.194","dSim":"0.918","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.081","net":"1.981","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@7268","dRender":"0.204","dSim":"0.973","hitFrames":20,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.059","net":"2.063","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@7857","dRender":"0.184","dSim":"0.911","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.068","net":"2.105","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@8875","dRender":"0.181","dSim":"0.944","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.063","net":"2.113","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@10394","dRender":"0.158","dSim":"0.837","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.089","net":"1.903","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@11215","dRender":"0.197","dSim":"1.045","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.052","net":"2.138","merged":"null","mstep":"null"}
+  {"at":"4#J8@17910","dRender":"0.154","dSim":"0.900","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.062","net":"2.022","merged":"null","mstep":"null"}
+  {"at":"4#J8@18720","dRender":"0.207","dSim":"1.007","hitFrames":21,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.050","net":"2.285","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@19566","dRender":"0.208","dSim":"0.972","hitFrames":21,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.062","net":"2.104","merged":"0.000","mstep":"0.000"}
+  {"at":"4#J8@20194","dRender":"0.127","dSim":"0.960","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.050","net":"1.922","merged":"0.000","mstep":"0.000"}
+  {"at":"5#J8@591","dRender":"0.171","dSim":"0.912","hitFrames":18,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.086","net":"1.781","merged":"0.000","mstep":"0.000"}
+  {"at":"5#J8@6481","dRender":"0.074","dSim":"1.062","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.030","net":"2.198","merged":"null","mstep":"null"}
+  {"at":"5#J8@10635","dRender":"0.143","dSim":"0.924","hitFrames":24,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.060","net":"2.058","merged":"null","mstep":"null"}
+  {"at":"5#J8@11726","dRender":"0.172","dSim":"0.891","hitFrames":23,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.073","net":"1.986","merged":"null","mstep":"null"}
+  {"at":"5#J8@12591","dRender":"0.135","dSim":"0.767","hitFrames":21,"J2":false,"J3":false,"J5":true,"J7":true,"step":"0.082","net":"2.015","merged":"0.000","mstep":"0.000"}
+  {"at":"5#J8@21191","dRender":"0.162","dSim":"0.841","hitFrames":22,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.085","net":"1.853","merged":"null","mstep":"null"}
+  {"at":"5#J8@22130","dRender":"0.117","dSim":"0.983","hitFrames":25,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.046","net":"2.236","merged":"null","mstep":"null"}
+  {"at":"5#J8@23764","dRender":"0.136","dSim":"0.914","hitFrames":18,"J2":false,"J3":false,"J5":true,"J7":"skipped","step":"0.074","net":"2.013","merged":"null","mstep":"null"}

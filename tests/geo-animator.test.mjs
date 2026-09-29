@@ -886,3 +886,61 @@ test('§4 不重播：同一次接觸不得播兩次擊球動畫，型別不同�
   assert.equal(contactSeqFor('spike', 3.1, null), 'spike');
   assert.equal(contactSeqFor('dive', 0.4, null), null, '魚躍觸球由 divedUntil 偵測負責');
 });
+
+// ---- 跳躍前飄卷 J11（修訂 R5）：落地不瞬降 ----
+// 三段鏈的跳躍弧沿用段① windup 的 airDur 0.9 s，比擊球弧 spike（land:true，0.45 s）
+// 從觸發到播完長；舊版 spike 播完那一幀直接 air=null 接 landSoft，人從 0.3–0.4 m 高單幀
+// 掉回地面。契約：起跳→落地後 0.2 s，bodyY 單幀下降 ≤0.08 m，且落地緩衝照樣接上。
+test('J11：扣球序列播完不得截斷跳躍弧（單幀下降 ≤0.08 m，落地後仍接 landSoft）', () => {
+  const { anim, bodyY } = spikeChain(23);
+  const types = [];
+  const jumpYs = [];
+  for (let i = 0; i < 90; i += 1) {
+    bodyY.push(anim.update(TICK, 0));
+    types.push(anim.peek()?.type ?? null);
+    jumpYs.push(anim.probe().jumpY);
+  }
+  let worst = 0; let at = -1;
+  for (let i = 1; i < bodyY.length; i += 1) {
+    const d = bodyY[i - 1] - bodyY[i];
+    if (d > worst) { worst = d; at = i; }
+  }
+  assert.ok(worst <= 0.08, `單幀最大下降 ${worst.toFixed(3)} m（第 ${at} 幀 ${bodyY[at - 1]?.toFixed(3)}→${bodyY[at]?.toFixed(3)}）`);
+  assert.ok(types.includes('landSoft'), '落地後應接落地緩衝 landSoft');
+  // 接 landSoft 之前那一幀人必須已經落到地面附近（≤0.08 m）：還在半空就接＝弧被截斷
+  const k = types.indexOf('landSoft');
+  assert.ok(k > 0 && jumpYs[k - 1] <= 0.08, `landSoft 接上前一幀跳躍高度 ${jumpYs[k - 1]?.toFixed(3)} m`);
+});
+
+test('J11：人還在弧上被非跳躍動作接手（攔網→receiveReady），接自由落體不瞬降', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  const bodyY = [];
+  anim.trigger('blockJump');
+  for (let i = 0; i < 12; i += 1) bodyY.push(anim.update(TICK, 0)); // 弧頂附近（airDur 0.4 s＝24 tick）
+  anim.trigger('receiveReady');
+  for (let i = 0; i < 40; i += 1) bodyY.push(anim.update(TICK, 0));
+  let worst = 0; let at = -1;
+  for (let i = 1; i < bodyY.length; i += 1) {
+    const d = bodyY[i - 1] - bodyY[i];
+    if (d > worst) { worst = d; at = i; }
+  }
+  assert.ok(worst <= 0.08, `單幀最大下降 ${worst.toFixed(3)} m（第 ${at} 幀 ${bodyY[at - 1]?.toFixed(3)}→${bodyY[at]?.toFixed(3)}）`);
+  assert.equal(anim.peek()?.type, 'receiveReady', '姿勢照新動作播');
+});
+
+test('J11：誘餌滯空中被接球預備接手（spikeHold→receiveReady），下蹲不得單幀套滿', () => {
+  const rig = mkRig();
+  const anim = createGeoAnimator(rig);
+  const bodyY = [];
+  anim.trigger('windup');
+  for (let i = 0; i < 20; i += 1) bodyY.push(anim.update(TICK, 0)); // 已進段② spikeHold
+  anim.trigger('receiveReady');
+  for (let i = 0; i < 50; i += 1) bodyY.push(anim.update(TICK, 0));
+  let worst = 0; let at = -1;
+  for (let i = 1; i < bodyY.length; i += 1) {
+    const d = bodyY[i - 1] - bodyY[i];
+    if (d > worst) { worst = d; at = i; }
+  }
+  assert.ok(worst <= 0.08, `單幀最大下降 ${worst.toFixed(3)} m（第 ${at} 幀 ${bodyY[at - 1]?.toFixed(3)}→${bodyY[at]?.toFixed(3)}）`);
+});
