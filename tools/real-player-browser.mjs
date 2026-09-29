@@ -34,7 +34,54 @@ const report = {
   pass: {},
 };
 
-// ---- 頁內量測（全部走 window.__realPreview 暴露的真實 SkinnedMesh；期望值另外 import 正式模組）----
+// ---- 驗收修訂 R12：量尺改讀畫面實際畫出的網格 ----
+// 頁內安裝 window.__rulerRead：
+//  ・SkinnedMesh（舊錨點）：蒙皮位置＝mesh.getVertexPosition；綁定位置／權重＝mesh.geometry；骨架＝mesh.skeleton。
+//  ・一般 Mesh（R12 起，CPU 蒙皮）：蒙皮位置＝mesh.geometry.attributes.position（畫面這一幀的陣列）×mesh.matrixWorld；
+//    綁定位置／權重／骨架：預覽頁沒有對外暴露 bindGeometry／skeleton，改在頁內用同一個模組
+//    （/src/render/realPlayer.js 的 loadRealPlayerAsset＋createRealPlayer）重建一份，並斷言它的 index 與每位球員
+//    畫面網格的 index 逐值相同；畫面網格須為一般 Mesh、屬性只有 position／normal／color、無 morph、無子物件、可見、
+//    自身變換為單位。不符即丟錯（量測中止）。
+async function installRulerRead(page) {
+  return page.evaluate(async () => {
+    const rp = window.__realPreview;
+    const { THREE } = rp;
+    const m0 = rp.players[0].mesh;
+    const rendered = !m0.isSkinnedMesh;
+    const R = { rendered };
+    if (rendered) {
+      const mod = await import('/src/render/realPlayer.js');
+      const asset = await mod.loadRealPlayerAsset(new URL(`models/real/player_${rp.variant}.glb`, location.href).href);
+      const bindGeo = asset.geometry;
+      // S12 審查 MEDIUM（加嚴）：同模組重建的資產必須讀到烘焙權重與距離場（頁面本身的讀取失敗另由 console 警告攔截）
+      if (asset.weightsSource !== 'baked' || asset.sdfSource !== 'baked' || !asset.collide) throw new Error(`[ruler] 權重來源 ${asset.weightsSource}／距離場來源 ${asset.sdfSource}（應皆為 baked）`);
+      const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+      for (const pl of rp.players) {
+        const m = pl.mesh; const G = m.geometry;
+        if (!m.isMesh || m.isSkinnedMesh || m.isInstancedMesh) throw new Error(`[ruler] ${pl.playerId} 不是一般 Mesh`);
+        if (Object.keys(G.attributes).sort().join(',') !== 'color,normal,position') throw new Error(`[ruler] ${pl.playerId} 屬性 ${Object.keys(G.attributes)}`);
+        if (Object.keys(G.morphAttributes).length || m.morphTargetInfluences) throw new Error(`[ruler] ${pl.playerId} 有 morph`);
+        if (m.children.length || m.visible === false || (Array.isArray(m.material) ? m.material : [m.material]).some((x) => !x || x.visible === false)) throw new Error(`[ruler] ${pl.playerId} 子物件或不可見`);
+        if (m.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || m.onAfterRender !== THREE.Object3D.prototype.onAfterRender) throw new Error(`[ruler] ${pl.playerId} 有渲染 hook`);
+        m.updateMatrixWorld(true);
+        if (!m.matrixWorld.equals(new THREE.Matrix4())) throw new Error(`[ruler] ${pl.playerId} 網格自身變換非單位`);
+        if (!same(G.index.array, bindGeo.index.array) || G.attributes.position.count !== bindGeo.attributes.position.count) throw new Error(`[ruler] ${pl.playerId} index／頂點數與重建的綁定幾何不同`);
+      }
+      const fresh = mod.createRealPlayer(asset, { playerId: rp.players[0].playerId, teamId: rp.players[0].teamId, height: rp.players[0].height, isLibero: rp.players[0].isLibero });
+      if (fresh.skinStats().collide !== true) throw new Error('[ruler] 碰撞修正未啟用（skinStats().collide≠true）');
+      window.__rulerBind = { mod, asset, bindGeo, skeleton: fresh.skeleton };
+    }
+    window.__rulerRead = {
+      rendered,
+      bindAttrs: (mesh) => (rendered ? window.__rulerBind.bindGeo.attributes : mesh.geometry.attributes),
+      skeleton: (mesh) => (rendered ? window.__rulerBind.skeleton : mesh.skeleton),
+      getV: (mesh, i, v) => (rendered ? v.fromBufferAttribute(mesh.geometry.attributes.position, i).applyMatrix4(mesh.matrixWorld) : mesh.getVertexPosition(i, v)),
+    };
+    return R;
+  });
+}
+
+// ---- 頁內量測（走 window.__realPreview 暴露的真實網格；讀法見 installRulerRead；期望值另外 import 正式模組）----
 async function measureStatic(page) {
   return page.evaluate(async () => {
     const rp = window.__realPreview;
@@ -44,8 +91,9 @@ async function measureStatic(page) {
     // 綁定姿勢的關節世界座標：由 skeleton.boneInverses 反推（不讀實作宣稱的地標表）
     const p0 = rp.players[0].mesh;
     const bindPos = {};
-    p0.skeleton.bones.forEach((bone, bi) => {
-      const m = p0.skeleton.boneInverses[bi].clone().invert();
+    const sk0 = window.__rulerRead.skeleton(p0);
+    sk0.bones.forEach((bone, bi) => {
+      const m = sk0.boneInverses[bi].clone().invert();
       const v = new THREE.Vector3().setFromMatrixPosition(m);
       bindPos[rp.boneNames[bi]] = [v.x, v.y, v.z];
     });
@@ -73,9 +121,10 @@ async function measureStatic(page) {
     const contra = /^(r|l)(Shoulder|Elbow|Wrist|Hip|Knee|Ankle)$/; // 含本卷自加的腳骨（加嚴紀錄・第四批）
     for (const pl of rp.players) {
       const g = pl.mesh.geometry;
-      const pos = g.attributes.position;
-      const si = g.attributes.skinIndex;
-      const sw = g.attributes.skinWeight;
+      const ba = window.__rulerRead.bindAttrs(pl.mesh);
+      const pos = ba.position;
+      const si = ba.skinIndex;
+      const sw = ba.skinWeight;
       const col = g.attributes.color;
       const n = pos.count;
       let sumBad = 0; let sumMaxErr = 0; let contraBad = 0; let sideVerts = 0;
@@ -146,7 +195,7 @@ async function measureMotion(page, playerIndex, seq, samples) {
     rp.resetAll();
     const pl = rp.players[playerIndex];
     const mesh = pl.mesh;
-    const g = mesh.geometry;
+    const g = { attributes: window.__rulerRead.bindAttrs(mesh) }; // 綁定位置／權重（讀法見 installRulerRead）
     const pos = g.attributes.position;
     const bonesToCheck = ['rWrist', 'lWrist', 'rKnee'];
     // A2(a)(b)：靜止綁定時主權重屬於該骨的頂點群
@@ -179,12 +228,12 @@ async function measureMotion(page, playerIndex, seq, samples) {
     const wp = (o) => new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
     const centroid = (idx) => {
       const c = new THREE.Vector3();
-      for (const i of idx) { mesh.getVertexPosition(i, v); c.add(v); } // CPU 蒙皮
+      for (const i of idx) { window.__rulerRead.getV(mesh, i, v); c.add(v); } // CPU 蒙皮
       return c.divideScalar(idx.length);
     };
     const soleMin = () => {
       let m = Infinity;
-      for (const i of soles) { mesh.getVertexPosition(i, v); if (v.y < m) m = v.y; }
+      for (const i of soles) { window.__rulerRead.getV(mesh, i, v); if (v.y < m) m = v.y; }
       return m;
     };
     const measure = () => {
@@ -255,7 +304,7 @@ async function measureMotion(page, playerIndex, seq, samples) {
     const checkAirFoot = () => {
       for (const s of ['r', 'l']) {
         let m = Infinity;
-        for (const i of solesBy[s]) { mesh.getVertexPosition(i, v); if (v.y < m) m = v.y; }
+        for (const i of solesBy[s]) { window.__rulerRead.getV(mesh, i, v); if (v.y < m) m = v.y; }
         if (m > 0.01) {
           const q = pl.joints[`${s}Ankle`].quaternion; // 父＝膝骨：局部旋轉即相對小腿
           const ang = THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(q.w))));
@@ -414,11 +463,21 @@ async function measureBindRestore(page) {
       const footAngle = Math.max(...['rAnkle', 'lAnkle'].map((b) => (j[b]
         ? THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(j[b].quaternion.w)))) : 0)));
       rp.bindPose(i, true);
-      const mesh = rp.players[i].mesh;
-      const pos = mesh.geometry.attributes.position;
+      let mesh = rp.players[i].mesh;
+      let pos = mesh.geometry.attributes.position;
+      if (window.__rulerRead.rendered) {
+        // R12：預覽頁沒有對外暴露 updateSkin，畫面網格在下一次 groundLegs 前不會重算；改用同模組重建的同參數球員
+        // 擺回綁定姿勢（含 root 單位變換）後呼叫 updateSkin，量 CPU 蒙皮輸出（renderedPositions）＝綁定位置
+        const B = window.__rulerBind; const pl = rp.players[i];
+        const f = B.mod.createRealPlayer(B.asset, { playerId: pl.playerId, teamId: pl.teamId, height: pl.height, isLibero: pl.isLibero });
+        f.applyBindPose({ atOrigin: true });
+        f.rig.root.updateMatrixWorld(true);
+        f.updateSkin();
+        mesh = f.mesh; pos = B.bindGeo.attributes.position;
+      }
       let maxErr = 0; let minY = Infinity; let maxY = -Infinity;
       for (let k = 0; k < pos.count; k += 1) {
-        mesh.getVertexPosition(k, v);
+        window.__rulerRead.getV(mesh, k, v);
         maxErr = Math.max(maxErr, Math.hypot(v.x - pos.getX(k), v.y - pos.getY(k), v.z - pos.getZ(k)));
         minY = Math.min(minY, pos.getY(k)); maxY = Math.max(maxY, pos.getY(k));
       }
@@ -491,7 +550,11 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(`pageerror: ${e}`));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+      // S12 審查 MEDIUM（加嚴）：頁面讀烘焙權重／距離場失敗時 src 只發 [real-skin] 警告，這裡當錯誤攔下
+      if (m.type() === 'warning' && m.text().includes('[real-skin]')) errors.push(`console warn: ${m.text()}`);
+    });
     await page.goto(`${base}/${query}&quality=high&dpr=1`, { timeout: 120000 });
     await page.waitForFunction(() => Boolean(window.__realPreview), null, { timeout: 60000 });
     await page.evaluate(() => window.__realPreview.pause());
@@ -510,6 +573,7 @@ try {
       return m && Number(m[1]) > 0;
     }, null, { timeout: 20000 }).catch(() => {});
     const hud = await page.evaluate(() => document.getElementById('real-hud')?.textContent ?? '');
+    const rulerRead = await installRulerRead(page);
     const stat = await measureStatic(page);
     const bindRestore = await measureBindRestore(page);
     const continuity = await measureContinuity(page);
@@ -622,7 +686,7 @@ try {
     // A10：bump／spike／block 骨盆最大下沉 ≥ 參考 geo 人的 80%（且 A9 同時過）
     const a10 = a9 && motion.every((m) => m.a10.maxRefSink > 0 && m.a10.maxSink >= 0.8 * m.a10.maxRefSink);
     report.variants[variant] = {
-      info, hud, hudFps, errors, ikStats: ikAfter && ikBefore && { ikFrames: ikAfter.ikFrames - ikBefore.ikFrames, liftFrames: ikAfter.liftFrames - ikBefore.liftFrames, maxLift: ikAfter.maxLift }, teamCounts: stat.teamCounts, bindPos: stat.bindPos, zone: stat.zone,
+      info, rulerRead, hud, hudFps, errors, ikStats: ikAfter && ikBefore && { ikFrames: ikAfter.ikFrames - ikBefore.ikFrames, liftFrames: ikAfter.liftFrames - ikBefore.liftFrames, maxLift: ikAfter.maxLift }, teamCounts: stat.teamCounts, bindPos: stat.bindPos, zone: stat.zone,
       a2: motion.map((m) => ({ seq: m.seq, player: m.playerIndex, samples: m.samples, times: m.times, ...m.summary })),
       a2MaxDev: Math.max(...motion.flatMap((m) => ['rWrist', 'lWrist', 'rKnee'].map((bn) => m.summary[bn].maxDev))),
       a2MinWristMove: Math.min(...motion.flatMap((m) => ['rWrist', 'lWrist'].map((bn) => m.summary[bn].maxMove))),

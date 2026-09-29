@@ -162,8 +162,8 @@ if (isMain) {
   let used = 0; let excluded = 0; let fallback = 0;
   for (const key of lib.ALL_KEYS) {
     const { real, pk, P1 } = V2.poseKey(setup, key);
-    const ga = real.p.mesh.geometry.attributes;
-    const r = torsoDrag(F, setup.R.P, P1, real.p.mesh.skeleton, setup.mods.rp.BONES, ga.skinIndex.array, ga.skinWeight.array, setup.R.reps);
+    const ga = setup.G.attributes; // 受測權重（舊：畫面 SkinnedMesh 幾何；R12：綁定幾何，與畫面網格同一物件已斷言）
+    const r = torsoDrag(F, setup.R.P, P1, real.p.skeleton, setup.mods.rp.BONES, ga.skinIndex.array, ga.skinWeight.array, setup.R.reps);
     used = r.used; excluded = r.excluded; fallback = r.fallback;
     rows[key.id] = { seq: pk?.type ?? null, over: r.over, max: Number(r.max.toFixed(6)), arg: r.arg };
   }

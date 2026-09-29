@@ -1,9 +1,9 @@
-// 寫實蒙皮修正：驗收修訂 R7 的 S1、S3 判定（量尺方提供；只讀量測輸出、不重算量測）。
+// 寫實蒙皮修正：驗收修訂 R7 的 S1、S3 判定，R12 起另含 R9 的 S2 判定（量尺方提供；只讀量測輸出、不重算量測）。
 // 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R7（c075fb7）。
 //
 // 用法：node tools/real-skin-r7-judge.mjs --faces=20k|5k --s1=<候選 real-skin-measure json> --pen=<候選 real-skin-penetration-v2 json>
 //        [--s1base=<現況 measure json>] [--penbase=<現況 penetration-v2 json>] [--txt=<path>]
-//   現況檔預設讀 docs/experiments/real-skin-evidence/ruler-v2/R7/（量尺方在 8720597 產生並落檔），並核對其 sha256
+//   現況檔預設讀 docs/experiments/real-skin-evidence/ruler-v2/R7/（S1）與 R12/baseline/（S2／S3，R12 讀法重產），並核對 S1 的 sha256
 //   （BASELINE_SHA256，寫死；檔案被換掉即停止）。
 //
 // S1（R7）：每幀（9 幀）滿足 (i) 或 (ii) 即過：
@@ -47,6 +47,24 @@ export function judgeS1(cand, base) {
   }
   return { rows, pass: rows.every((r) => r.ok) };
 }
+// S2（R9 起；R12 加入本腳本）：(b) 新量法每臂——
+//   (i) K1a：20k「≤40 點且 ≤4.0 cm」、5k「≤5 點且 ≤3.5 cm」（R9）；其餘 8 幀「點數 ≤ 現況 且 最深 ≤ 現況」（深度比 0.1 cm）。
+//   (ii) K3a、K3b、K4a：≤10 點且 ≤1.0 cm；(iii) K4b、K4c：≤30 點且 ≤2.0 cm。
+export function judgeS2(cand, base, faces) {
+  const rows = [];
+  const cap = faces === '5k' ? { n: 5, d: 3.5 } : { n: 40, d: 4.0 };
+  for (const id of KEYS) {
+    for (const s of ['r', 'l']) {
+      const c = cand.rows[id].b.new[s]; const z = base.rows[id].b.new[s];
+      const d = cm1(c.maxDepth); const zd = cm1(z.maxDepth);
+      const i = id === 'K1a' ? (c.inside <= cap.n && d <= cap.d) : (c.inside <= z.inside && d <= zd);
+      const ii = ['K3a', 'K3b', 'K4a'].includes(id) ? (c.inside <= 10 && d <= 1.0) : null;
+      const iii = ['K4b', 'K4c'].includes(id) ? (c.inside <= 30 && d <= 2.0) : null;
+      rows.push({ id, s, inside: c.inside, depth: d, base: { inside: z.inside, depth: zd }, i, ii, iii, ok: i && ii !== false && iii !== false });
+    }
+  }
+  return { rows, pass: rows.every((r) => r.ok), cap };
+}
 export function judgeS3(cand, base) {
   const rows = [];
   for (const id of ['K4a', 'K4b', 'K4c']) {
@@ -70,7 +88,7 @@ if (isMain) {
   if (!args.s1 || !args.pen) throw new Error('需要 --s1=<候選 measure json> 與 --pen=<候選 penetration-v2 json>');
   const s1baseName = `s1-base-${faces}.json`;
   const s1base = await readJson(args.s1base ?? fileURLToPath(new URL(s1baseName, R7DIR)), BASELINE_SHA256[s1baseName]);
-  const penbase = await readJson(args.penbase ?? fileURLToPath(new URL(`../R3/frozen-rerun/before-${faces}.json`, R7DIR)));
+  const penbase = await readJson(args.penbase ?? fileURLToPath(new URL(`../R12/baseline/before-${faces}.json`, R7DIR)));
   const s1 = await readJson(args.s1); const pen = await readJson(args.pen);
   if (s1.faces !== faces || s1base.faces !== faces || pen.faces !== faces || penbase.faces !== faces) throw new Error('面數不一致');
   if (penbase.hashes?.['realPlayer.js'] !== REALPLAYER_8720597) throw new Error(`S3 現況檔的 realPlayer.js 雜湊 ${penbase.hashes?.['realPlayer.js']} ≠ 8720597 的 ${REALPLAYER_8720597}`);
@@ -78,7 +96,7 @@ if (isMain) {
     if (k === 'realPlayer.js') continue;
     if (penbase.hashes?.[k] !== pen.hashes?.[k]) throw new Error(`S3 現況檔與候選的輸入雜湊 ${k} 不同（${penbase.hashes?.[k]} ≠ ${pen.hashes?.[k]}），不能比較`);
   }
-  const a = judgeS1(s1, s1base); const b = judgeS3(pen, penbase);
+  const a = judgeS1(s1, s1base); const b = judgeS3(pen, penbase); const c2 = judgeS2(pen, penbase, faces);
   const out = [];
   out.push(`# R7 判定（faces=${faces}）`);
   out.push(`輸入：S1 候選 ${args.s1.replace(/\\/g, '/').split('/').pop()}、S3 候選 ${args.pen.replace(/\\/g, '/').split('/').pop()}（realPlayer.js ${pen.hashes?.['realPlayer.js']}）`);
@@ -88,6 +106,10 @@ if (isMain) {
   out.push('', '## S3 (e)（K4a ≤現況；K4b、K4c 原門檻）', '| 幀臂 | 點數 | 最深 cm | 現況 點數／最深 | 規則 | 判定 |', '|---|---|---|---|---|---|');
   for (const r of b.rows) out.push(`| ${r.id}${r.s === 'r' ? '右' : '左'} | ${r.inside} | ${r.depth.toFixed(1)} | ${r.base.inside}／${r.base.depth.toFixed(1)} | ${r.rule} | ${r.ok ? '過' : '不過'} |`);
   out.push(`- S3 判定：${b.pass ? '過' : `不過（${b.rows.filter((r) => !r.ok).map((r) => r.id + (r.s === 'r' ? '右' : '左')).join('、')}）`}`);
+  out.push('', `## S2 (b)（(i) K1a 上限 ${c2.cap.n} 點／${c2.cap.d.toFixed(1)} cm、其餘幀 ≤現況；(ii) K3a／K3b／K4a ≤10／1.0；(iii) K4b／K4c ≤30／2.0）`, '| 幀臂 | 點數 | 最深 cm | 現況 點數／最深 | (i) | (ii) | (iii) | 判定 |', '|---|---|---|---|---|---|---|---|');
+  const yn = (x) => (x == null ? '—' : x ? '是' : '否');
+  for (const r of c2.rows) out.push(`| ${r.id}${r.s === 'r' ? '右' : '左'} | ${r.inside} | ${r.depth.toFixed(1)} | ${r.base.inside}／${r.base.depth.toFixed(1)} | ${yn(r.i)} | ${yn(r.ii)} | ${yn(r.iii)} | ${r.ok ? '過' : '不過'} |`);
+  out.push(`- S2 判定：${c2.pass ? '過' : `不過（${c2.rows.filter((r) => !r.ok).map((r) => r.id + (r.s === 'r' ? '右' : '左')).join('、')}）`}`);
   const text = `${out.join('\n')}\n`;
   process.stdout.write(text);
   if (args.txt && args.txt !== '1') await writeFile(args.txt, text);

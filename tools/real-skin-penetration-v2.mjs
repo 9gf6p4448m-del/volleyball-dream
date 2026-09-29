@@ -397,6 +397,7 @@ const MESH_ATTRS = ['position', 'normal', 'skinIndex', 'skinWeight'];
 const sameBytes = (a, b) => a.constructor === b.constructor && a.length === b.length
   && Buffer.compare(Buffer.from(a.buffer, a.byteOffset, a.byteLength), Buffer.from(b.buffer, b.byteOffset, b.byteLength)) === 0;
 export function assertMeshData(mesh, ref, where) {
+  if (!mesh.isSkinnedMesh) throw new Error(`畫面網格不是 SkinnedMesh（${where}）：請走 assertRenderedMesh`);
   const G = mesh.geometry;
   for (const k of MESH_ATTRS) {
     const a = G.attributes[k]; const b = ref.attributes[k];
@@ -413,6 +414,57 @@ export function assertMeshData(mesh, ref, where) {
   }
   if (mesh.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || mesh.onAfterRender !== THREE.Object3D.prototype.onAfterRender) throw new Error(`畫面網格設了 onBeforeRender／onAfterRender（${where}）`);
 }
+// 網格本體（R6 ②；R12 起兩種網格共用）：沒有子物件、網格與 material（含陣列）可見、沒有 onBeforeRender／onAfterRender，
+// 網格不掛在任何父層（畫面座標＝網格自身座標），球員骨架樹（rig.root）底下沒有任何可畫物件（堵「另掛一個 mesh」）
+export function assertMeshBody(p, where) {
+  const mesh = p.mesh;
+  if (mesh.children.length) throw new Error(`畫面網格有子物件 ${mesh.children.length} 個（${where}），量尺只量網格本身`);
+  if (mesh.visible === false) throw new Error(`畫面網格不可見（${where}）`);
+  for (const m of (Array.isArray(mesh.material) ? mesh.material : [mesh.material])) {
+    if (!m || m.visible === false) throw new Error(`畫面網格的 material 不可見或缺少（${where}）`);
+  }
+  if (mesh.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || mesh.onAfterRender !== THREE.Object3D.prototype.onAfterRender) throw new Error(`畫面網格設了 onBeforeRender／onAfterRender（${where}）`);
+  if (mesh.parent) throw new Error(`畫面網格掛在父層 ${mesh.parent.type} 底下（${where}），量尺讀的座標不是畫面座標`);
+  let extra = 0;
+  p.rig.root.traverse((o) => { if (o !== mesh && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) extra += 1; });
+  if (extra) throw new Error(`球員骨架樹底下另有 ${extra} 個可畫物件（${where}），量尺只量寫實網格`);
+}
+// R12（S12 例外）：CPU 蒙皮寫一般 Mesh 的新介面。量到的陣列必須就是 mesh.geometry.attributes.position.array
+// （＝renderedPositions()），一般 Mesh（非 SkinnedMesh／InstancedMesh）、無 morph、index 與綁定幾何為同一物件、
+// 屬性只有 position／normal／color、網格自身變換為單位、網格本體見 assertMeshBody
+export function isRenderedMode(p) { return !p.mesh.isSkinnedMesh && typeof p.renderedPositions === 'function'; }
+export function assertRenderedMesh(p, bindGeo, where) {
+  const mesh = p.mesh; const G = mesh.geometry;
+  if (!mesh.isMesh || mesh.isSkinnedMesh || mesh.isInstancedMesh) throw new Error(`畫面網格不是一般 Mesh（${where}：${mesh.type}）`);
+  if (p.bindGeometry !== bindGeo) throw new Error(`bindGeometry 不是量尺載入的那一份綁定幾何（${where}）`);
+  if (!G.index || G.index !== bindGeo.index) throw new Error(`畫面網格的 index 與綁定幾何不是同一物件（${where}）`);
+  const pos = G.attributes.position;
+  if (!pos || pos.itemSize !== 3 || pos.count !== bindGeo.attributes.position.count) throw new Error(`畫面網格的 position 屬性形狀不符（${where}）`);
+  if (p.renderedPositions() !== pos.array) throw new Error(`renderedPositions() 不是 mesh.geometry.attributes.position.array（${where}）`);
+  // S12 審查 MEDIUM（加嚴）：碰撞修正必須啟用——部署端 .sdf.glb 讀失敗時只會 console.warn、畫出沒修正的版本
+  if (typeof p.skinStats !== 'function' || p.skinStats().collide !== true) throw new Error(`碰撞修正未啟用（skinStats().collide≠true）（${where}）：.sdf.glb 可能未載入`);
+  const keys = Object.keys(G.attributes).sort().join(',');
+  if (keys !== 'color,normal,position') throw new Error(`畫面網格屬性為 ${keys}（${where}），量尺只接受 position／normal／color`);
+  if (Object.keys(G.morphAttributes).length || mesh.morphTargetInfluences) throw new Error(`畫面幾何有 morph target（${where}），量尺不支援`);
+  mesh.updateMatrixWorld(true);
+  if (!mesh.matrixWorld.equals(new THREE.Matrix4())) throw new Error(`畫面網格自身的位置／旋轉／縮放不是單位變換（${where}）`);
+  assertMeshBody(p, where);
+}
+// R12：遊戲參數的受測者與量尺受測者同姿勢時，畫面位置在各自根節點座標下必須相同（堵依參數分岔的蒙皮）。
+// 把 src 受測者 real 的所有關節局部變換與根節點位置／旋轉抄到 g（g 保留自己的根縮放），重算 g 的蒙皮後逐點比對
+export function assertSameSkinning(real, g, THREE_, where, tol = 1e-5) {
+  const js = real.p.rig.joints; const jg = g.rig.joints;
+  for (const k of Object.keys(js)) { if (!jg[k]) continue; jg[k].position.copy(js[k].position); jg[k].quaternion.copy(js[k].quaternion); jg[k].scale.copy(js[k].scale); }
+  g.rig.root.position.copy(real.p.rig.root.position); g.rig.root.quaternion.copy(real.p.rig.root.quaternion);
+  g.rig.root.updateMatrixWorld(true);
+  g.updateSkin();
+  const A = real.p.renderedPositions(); const B = g.renderedPositions();
+  const ia = new THREE_.Matrix4().copy(real.p.rig.root.matrixWorld).invert(); const ib = new THREE_.Matrix4().copy(g.rig.root.matrixWorld).invert();
+  const u = new THREE_.Vector3(); const w = new THREE_.Vector3(); let mx = 0;
+  for (let i = 0; i < A.length / 3; i += 1) { u.fromArray(A, i * 3).applyMatrix4(ia); w.fromArray(B, i * 3).applyMatrix4(ib); mx = Math.max(mx, u.distanceTo(w)); }
+  if (!(mx <= tol)) throw new Error(`遊戲參數受測者與量尺受測者同姿勢時畫面位置不同（${where}：最大差 ${mx} m），疑依參數分岔`);
+  return mx;
+}
 // R6 ①：遊戲型參數（src/render/matchView.js:153 的 createRealPlayer 呼叫形狀：身高取自 sim、teamKit、isLibero、背號）
 const GAME_KIT = { jersey: 0x2e7bff, shorts: 0x1a2b4c, trim: 0xffffff, libero: { jersey: 0xffc531, shorts: 0x1a2b4c, trim: 0xffffff } };
 export const GAME_ARGS = [
@@ -427,13 +479,31 @@ export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
   const loaded = await rpMod.loadRealPlayerAsset(glbUrl.href);
   const mods = { THREE, rp: rpMod, ga, gc };
   const probe = lib.makeReal(mods, loaded);
-  const G = probe.p.mesh.geometry;
-  assertMeshData(probe.p.mesh, loaded.geometry, '載入');
-  for (const a of GAME_ARGS) { // 遊戲會用的參數組合也必須畫同一份資料（R6 ①）
-    const g = rpMod.createRealPlayer(loaded, a);
-    assertMeshData(g.mesh, probe.p.mesh.geometry, `遊戲參數 身高 ${a.height}${a.teamKit ? '、teamKit' : ''}${a.isLibero ? '、自由人' : ''}`);
+  const rendered = isRenderedMode(probe.p); // R12：一般 Mesh＋CPU 蒙皮（新）或 SkinnedMesh（舊錨點）
+  let G; const game = [];
+  const tag = (a) => `遊戲參數 身高 ${a.height}${a.teamKit ? '、teamKit' : ''}${a.isLibero ? '、自由人' : ''}`;
+  if (rendered) {
+    // S12 審查 MEDIUM（加嚴）：權重必須來自烘焙檔、距離場必須載入成功（讀失敗 src 只 warn 並退回即時計算／不做碰撞修正）
+    if (loaded.weightsSource !== 'baked') throw new Error(`權重來源為 ${loaded.weightsSource}（應為 baked：.weights.glb 未載入或不符）`);
+    if (loaded.sdfSource !== 'baked' || !loaded.collide) throw new Error(`距離場來源為 ${loaded.sdfSource}（應為 baked：.sdf.glb 未載入或不符）`);
+    G = loaded.geometry; // 綁定位置／權重／index（與畫面網格共用同一物件，下方斷言）
+    assertRenderedMesh(probe.p, G, '載入');
+    for (const a of GAME_ARGS) { // 遊戲參數：bindGeometry 與 index 為同一物件＋同姿勢畫面一致（R12）
+      const g = rpMod.createRealPlayer(loaded, a);
+      assertRenderedMesh(g, G, tag(a));
+      game.push({ args: a, p: g });
+    }
+  } else {
+    G = probe.p.mesh.geometry;
+    assertMeshData(probe.p.mesh, loaded.geometry, '載入');
+    assertMeshBody(probe.p, '載入');
+    for (const a of GAME_ARGS) { // 遊戲會用的參數組合也必須畫同一份資料（R6 ①）
+      const g = rpMod.createRealPlayer(loaded, a);
+      assertMeshData(g.mesh, probe.p.mesh.geometry, tag(a));
+      assertMeshBody(g, tag(a));
+    }
   }
-  const asset = { ...loaded, geometry: G }; // 之後一律讀畫面那份
+  const asset = { ...loaded, geometry: G }; // 之後一律讀這一份（舊：畫面 SkinnedMesh 的幾何；新：綁定幾何）
   weightCheck(G);
   const R0 = lib.bindRegions(asset, rpMod.LANDMARKS);
   let R; let Sb; let Se; let frozen = null; let content = null;
@@ -448,14 +518,23 @@ export async function loadSetup(faces, { live = false, rpMod = rp } = {}) {
     content = { Sb: tri(Sb.tris), Se: tri(Se.tris) };
   }
   const RH = { ...R, torsoTris: Se.tris, boundaryEdge: Se.boundaryEdge, boundaryVert: Se.boundaryVert }; // 舊量法 (e) 用
-  return { faces, glbUrl, asset, loaded, G, R, Sb, Se, RH, frozen, content, mods };
+  return { faces, glbUrl, asset, loaded, G, R, Sb, Se, RH, frozen, content, mods, rendered, game };
 }
 export function poseKey(setup, key) {
   const mods = setup.mods ?? MODS;
   const real = lib.makeReal(mods, setup.loaded ?? setup.asset);
-  if (setup.G) assertMeshData(real.p.mesh, setup.G, `幀 ${key.id}`); // 每幀新建的受測者也必須畫同一份資料
-  const pk = lib.driveKey(mods, [real], key);
-  const P1 = lib.skinPositions(THREE, real.p);
+  let P1;
+  if (setup.rendered) { // R12：量畫面實際畫出的一般 Mesh 在當幀的 position（同一個陣列）
+    assertRenderedMesh(real.p, setup.G, `幀 ${key.id}（驅動前）`);
+    var pk = lib.driveKey(mods, [real], key);
+    assertRenderedMesh(real.p, setup.G, `幀 ${key.id}`);
+    P1 = real.p.mesh.geometry.attributes.position.array;
+    for (const g of setup.game ?? []) assertSameSkinning(real, g.p, THREE, `幀 ${key.id} ${g.args.playerId}`);
+  } else {
+    if (setup.G) { assertMeshData(real.p.mesh, setup.G, `幀 ${key.id}`); assertMeshBody(real.p, `幀 ${key.id}`); } // 每幀新建的受測者也必須畫同一份資料
+    var pk = lib.driveKey(mods, [real], key);
+    P1 = lib.skinPositions(THREE, real.p);
+  }
   const N1 = lib.vertexNormals(P1, setup.R.index);
   return { real, pk, P1, N1 };
 }

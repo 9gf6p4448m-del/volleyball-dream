@@ -147,9 +147,36 @@ async function installSampler(page, { subAtTick }) {
     const v = new V3(); const wp = new V3();
     function worldPos(o) { o.updateWorldMatrix(true, false); return o.getWorldPosition(wp).clone(); }
 
+    // 驗收修訂 R12：量尺改讀畫面實際畫出的網格。SkinnedMesh（舊）＝getVertexPosition；一般 Mesh（CPU 蒙皮）＝
+    // mesh.geometry.attributes.position（畫面這一幀的陣列，須與 u.real.renderedPositions() 為同一陣列）×matrixWorld。
+    // 綁定位置：舊＝mesh.geometry；新＝u.real.bindGeometry（須與畫面網格共用同一個 index 物件）。不符即記入 rulerErrors。
+    window.__rulerErrors = window.__rulerErrors || [];
+    function rulerCheck(u, id) {
+      const m = u.real.mesh;
+      if (m.isSkinnedMesh) return;
+      const G = m.geometry; const T = window.__phase1.loop().stage.matchView.debug.THREE;
+      const bad = [];
+      if (!m.isMesh || m.isInstancedMesh) bad.push('非一般 Mesh');
+      if (typeof u.real.renderedPositions !== 'function' || u.real.renderedPositions() !== G.attributes.position.array) bad.push('renderedPositions≠畫面陣列');
+      if (typeof u.real.skinStats !== 'function' || u.real.skinStats().collide !== true) bad.push('碰撞修正未啟用（skinStats().collide≠true）'); // S12 審查 MEDIUM
+      if (!u.real.bindGeometry || G.index !== u.real.bindGeometry.index) bad.push('index 非綁定幾何同一物件');
+      if (Object.keys(G.attributes).sort().join(',') !== 'color,normal,position') bad.push(`屬性 ${Object.keys(G.attributes)}`);
+      if (Object.keys(G.morphAttributes).length || m.morphTargetInfluences) bad.push('morph');
+      if (m.children.length) bad.push('子物件');
+      if (m.visible === false || (Array.isArray(m.material) ? m.material : [m.material]).some((x) => !x || x.visible === false)) bad.push('不可見');
+      if (T && (m.onBeforeRender !== T.Object3D.prototype.onBeforeRender || m.onAfterRender !== T.Object3D.prototype.onAfterRender)) bad.push('渲染 hook');
+      m.updateMatrixWorld(true);
+      if (T && !m.matrixWorld.equals(new T.Matrix4())) bad.push('網格自身變換非單位');
+      if (bad.length && window.__rulerErrors.length < 50) window.__rulerErrors.push(`${id}: ${bad.join('、')}`);
+    }
+    function getV(mesh, i, out) {
+      if (mesh.isSkinnedMesh) return mesh.getVertexPosition(i, out);
+      return out.fromBufferAttribute(mesh.geometry.attributes.position, i).applyMatrix4(mesh.matrixWorld);
+    }
+    function bindPosOf(u) { return u.real.mesh.isSkinnedMesh ? u.real.mesh.geometry.attributes.position : u.real.bindGeometry.attributes.position; }
     function buildVertexSets(u) {
       const mesh = u.real.mesh;
-      const pos = mesh.geometry.attributes.position;
+      const pos = bindPosOf(u);
       const n = pos.count;
       let maxR = 0; let maxL = 0;
       for (let i = 0; i < n; i += 1) {
@@ -173,12 +200,12 @@ async function installSampler(page, { subAtTick }) {
     // 背號面片附近的候選頂點（半徑 0.25m，取樣當下的目前姿勢量一次、之後沿用同一批索引）
     function buildPlateCandidates(u, slotNode) {
       const mesh = u.real.mesh;
-      const pos = mesh.geometry.attributes.position;
+      const pos = bindPosOf(u);
       const n = pos.count;
       const center = worldPos(slotNode);
       const out = [];
       for (let i = 0; i < n; i += 1) {
-        mesh.getVertexPosition(i, v);
+        getV(mesh, i, v);
         if (v.distanceTo(center) <= 0.25) out.push(i);
       }
       return out;
@@ -186,12 +213,12 @@ async function installSampler(page, { subAtTick }) {
 
     function centroidOf(mesh, idx) {
       const c = new V3();
-      for (const i of idx) { mesh.getVertexPosition(i, v); c.add(v); }
+      for (const i of idx) { getV(mesh, i, v); c.add(v); }
       return idx.length ? c.divideScalar(idx.length) : c;
     }
     function minDist(mesh, idx, target) {
       let m = Infinity;
-      for (const i of idx) { mesh.getVertexPosition(i, v); const d = v.distanceTo(target); if (d < m) m = d; }
+      for (const i of idx) { getV(mesh, i, v); const d = v.distanceTo(target); if (d < m) m = d; }
       return idx.length ? m : null;
     }
 
@@ -245,6 +272,7 @@ async function installSampler(page, { subAtTick }) {
           }
         }
         if (u.real && visible) {
+          rulerCheck(u, id);
           if (!window.__vertexSets[id]) window.__vertexSets[id] = buildVertexSets(u);
           const vs = window.__vertexSets[id];
           const mesh = u.real.mesh;
@@ -253,7 +281,7 @@ async function installSampler(page, { subAtTick }) {
             l: centroidOf(mesh, vs.hand.l).distanceTo(worldPos(u.rig.joints.lWrist)),
           };
           let soleMin = Infinity;
-          for (const i of vs.sole) { mesh.getVertexPosition(i, v); if (v.y < soleMin) soleMin = v.y; }
+          for (const i of vs.sole) { getV(mesh, i, v); if (v.y < soleMin) soleMin = v.y; }
           entry.soleMin = vs.sole.length ? soleMin : null;
 
           const ref = ensureRefRig(id, p.teamId, p.height.current, p.currentRole === 'libero');
@@ -267,7 +295,7 @@ async function installSampler(page, { subAtTick }) {
           const headPart = ref.parts.find((pt) => pt.key === 'head');
           const refHeadTopY = headPart ? worldPos(headPart.node).y + 0.125 * ref.root.scale.y : null;
           let topY = -Infinity;
-          for (const i of vs.topCandidates) { mesh.getVertexPosition(i, v); if (v.y > topY) topY = v.y; }
+          for (const i of vs.topCandidates) { getV(mesh, i, v); if (v.y > topY) topY = v.y; }
           entry.headTopDiff = refHeadTopY != null ? Math.abs(topY - refHeadTopY) : null;
 
           if (u.numberBack && u.rig.numberSlots) {
@@ -384,7 +412,9 @@ async function checkColors(page) {
     for (const [id, u] of Object.entries(units)) {
       if (!u.real) continue;
       const g = u.real.mesh.geometry;
-      const pos = g.attributes.position; const col = g.attributes.color;
+      // R12：一般 Mesh 的 position 是畫面蒙皮後的世界座標，軀幹範圍改用綁定位置（u.real.bindGeometry，與畫面網格共用 index）選取；
+      // 頂點色仍讀畫面網格自己的 color
+      const pos = u.real.mesh.isSkinnedMesh ? g.attributes.position : u.real.bindGeometry.attributes.position; const col = g.attributes.color;
       const n = pos.count;
       // 軀幹範圍近似：綁定姿勢下 |x|<=0.16 且 y 在髖(≈0.97)~肩(≈1.47)之間（BASE_H 空間，
       // 與 realPlayer.js 的 WAIST_Y/TORSO 常數同量級，不重新讀那些非 export 常數）
@@ -470,15 +500,22 @@ async function runSession(seed, appearance) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e}`));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+    // S12 審查 MEDIUM（加嚴）：寫實外觀讀烘焙權重／距離場失敗時 src 只發 [real-skin] 警告，這裡當錯誤攔下
+    if (m.type() === 'warning' && m.text().includes('[real-skin]')) errors.push(`console warn: ${m.text()}`);
+  });
 
-  const boot = await bootstrapCareerMatch(page, { seed, appearance });
+  // R12：REALMATCH_FACES＝'20k' 時帶 &faces=20k（R14 起預設 5k）；未設＝預設面數。B8(b) 一律用預設
+  const boot = await bootstrapCareerMatch(page, { seed, appearance, faces: process.env.REALMATCH_FACES || null });
   await installSampler(page, { subAtTick: SUB_AT_TICK });
   const finalTick = await runUntilTick(page, TARGET_TICKS);
   const subResult = await page.evaluate(() => window.__subFired);
   const colors = appearance === 'real' ? await checkColors(page) : null;
   const geoPoolCheck = appearance === 'real' ? await checkGeoPoolEmpty(page) : null;
   const samples = await page.evaluate(() => window.__samples);
+  const rulerErrors = await page.evaluate(() => window.__rulerErrors || []);
+  const facesNow = await page.evaluate(() => window.__phase1.loop().stage.matchView.debug.faces); // R12：記錄本 session 實際面數
   const seqLog = await page.evaluate(() => window.__seqLog);
   const seqCoverage = await page.evaluate(() => [...window.__seqCoverage]);
   const final = await pullFinalState(page);
@@ -490,7 +527,7 @@ async function runSession(seed, appearance) {
   await context.close();
   return {
     seed, appearance, boot, subResult, finalTick, colors, geoPoolCheck, samples, seqLog, seqCoverage, final,
-    plateMeshCount, errors,
+    plateMeshCount, errors, rulerErrors, facesNow,
   };
 }
 
@@ -752,9 +789,11 @@ if (!skipB8b) {
     seed, finalTick: throttled.finalTick, debug: throttled.debug, errors: throttled.errors,
     commonTickCount: common.length, visibleCountMismatches: mismatches.length,
     appearanceStayedReal: throttled.debug.appearance === 'real',
-    facesStayed20k: throttled.debug.faces === 20000,
+    // 驗收修訂 R14 把寫實模式預設面數改為 5k（使用者裁定，20k 只能用 &faces=20k 手動開）：本條原意是「節流下面數不被
+    // 程式自動降級、維持預設值」，預設值由 20000 變 5000，判準本身不變（不是放寬）。本 session 沒帶 faces 參數＝預設。
+    facesStayedDefault5k: throttled.debug.faces === 5000,
     pass: throttled.errors.length === 0 && throttled.debug.appearance === 'real'
-      && throttled.debug.faces === 20000 && common.length > 0 && mismatches.length === 0,
+      && throttled.debug.faces === 5000 && common.length > 0 && mismatches.length === 0,
   };
 }
 
@@ -839,7 +878,7 @@ report.b8b = b8b;
 report.b9 = b9;
 report.b12 = b12;
 report.sessionsSummary = Object.fromEntries(Object.entries(sessions).map(([k, s]) => [k, {
-  finalTick: s.finalTick, sampleCount: s.samples.length, errors: s.errors,
+  finalTick: s.finalTick, sampleCount: s.samples.length, errors: s.errors, faces: s.facesNow,
   subResult: s.subResult, eventsLen: s.final.events.length,
   eventCounts: s.final.events.reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc; }, {}),
 }]));
@@ -869,6 +908,9 @@ report.pass = {
   H1: Object.values(perSeed).every((p) => p.h1Geo.ok && p.h1Real.ok),
 };
 report.vacuousGuard = { b3SamplesOk, b4SamplesOk, b5PlateSamplesOk };
+// R12：量尺讀法斷言（一般 Mesh 時 renderedPositions＝畫面陣列、index 同一物件、無 morph／子物件／hook、可見、自身單位變換）
+report.rulerRead = Object.fromEntries(Object.entries(sessions).map(([k, x]) => [k, x.rulerErrors ?? []]));
+report.pass.rulerRead = Object.values(report.rulerRead).every((e) => e.length === 0);
 
 await writeFile(resolve(output, reportName), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ pass: report.pass, perSeed: Object.fromEntries(Object.entries(perSeed).map(([k, v]) => [k, {

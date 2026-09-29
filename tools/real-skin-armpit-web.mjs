@@ -96,7 +96,7 @@ if (isMain) {
   const rows = {};
   for (const key of lib.ALL_KEYS) {
     const { real, pk, P1 } = V2.poseKey(setup, key);
-    const r = armpitWeb(setup, faces, real.p.mesh.skeleton, P1);
+    const r = armpitWeb(setup, faces, real.p.skeleton, P1);
     rows[key.id] = { seq: pk?.type ?? null };
     for (const s of ['r', 'l']) rows[key.id][s] = { n: r[s].n, off: r[s].off, max: Number(r[s].max.toFixed(6)), arg: r[s].arg };
   }
