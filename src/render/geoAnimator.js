@@ -522,6 +522,23 @@ export function createGeoAnimator(rig) {
   let latW = 0;  // 平滑後的橫移分量（見 update 內註解：生的 lateral 會單幀翻號）
   let lastW = 0; // 上一幀的動作層權重——預備段交棒給正式動作時用（見 trigger 的 w0）
   let lastJumpY = 0; // 上一幀的跳躍弧高度（唯讀窺視用，見 probe()）
+  let lastStaminaMul = 1; // 上一幀的體力係數（J11 自由落體接手時算當下垂直速度用）
+  // ★ J11 落地不瞬降（跳躍前飄卷 R5）★ 弧被「截斷」的兩個時機——①帶 land 的序列
+  // （spike/tip/block…）比弧先播完 ②人還在弧上就被非跳躍動作接手——舊版都是 air=null，
+  // 人從 0.3–0.4 m 高單幀掉回地面。改為從當下高度與垂直速度接**自由落體**（真實重力）
+  // 落地：不瞬降，也不把人吊在空中等 sin 弧慢慢飛完（弧的等效重力只有 ~6 m/s²，
+  // 飛完會多滯空 0.3 s 以上，落地時 sim 早已跑遠）。air.dur 改寫成預估落地時刻，
+  // 其餘讀 air.dur−air.t 的地方（sustain:'air'、落地延後）語意不變
+  const FALL_G = 9.8;
+  function startFall(y0) {
+    if (!air || air.fall) return;
+    const k = Math.PI / air.dur;
+    const v0 = air.jump * lastStaminaMul * k * Math.cos(k * air.t);
+    const y = Math.max(y0, 0);
+    const T = (v0 + Math.sqrt(v0 * v0 + 2 * FALL_G * y)) / FALL_G;
+    air.fall = { y0: y, v0, t0: air.t };
+    air.dur = air.t + T;
+  }
   let phase = 0;
   const blended = {};
   // 慣性過渡（2B 自然度）：冷觸發（w0＝0）的新動作，由「上一幀實際輸出的全身關節角」平滑過渡
@@ -712,6 +729,11 @@ export function createGeoAnimator(rig) {
             : baseDur;
           air = { jump: seq.jump, dur: airDur, t: airProg != null ? Math.min(airProg, cap) * airDur : 0 };
         }
+      } else if (air && airProg != null && airProg < 1) {
+        // J11：人還在弧上被非跳躍動作接手（攔網後 receiveReady、扣球後 transitionWait、
+        // 誘餌 spikeHold 被 receiveReady 接手…）——從當下高度自由落體落地（見 startFall），
+        // 姿勢照新動作播
+        startFall(lastJumpY);
       } else {
         air = null; // 落地/非跳躍動作接手＝弧結束（改制前「jump 0 的序列 jumpY=0」同義）
       }
@@ -721,7 +743,11 @@ export function createGeoAnimator(rig) {
       // 段落交棒（預備段與三段式共用）：預備序列撐住的權重直接交給正式動作，不從 0
       // 重跑 ATTACK 漸入。接縫的姿勢刻意設計成同一個（setReach／bumpReady；三段式則是
       // windup 末幀＝spikeWind＝spikeHold＝擊球弧首幀），所以滿權重接手不會跳幀
-      const w0 = current && (current.seq.sustain
+      // J11：人還在弧上被地面動作接手（誘餌 spikeHold→receiveReady）不走滿權重交棒——
+      // 交棒會讓地面動作的下蹲（crouch）單幀套滿，人在空中一幀沉 0.1 m 以上；
+      // 改從 0 漸入（ATTACK_MS），上半身照舊走慣性過渡。地面上的交棒不受影響
+      const midAirGround = !seq.airborne && !(seq.jump > 0) && air && airProg != null && airProg < 1;
+      const w0 = !midAirGround && current && (current.seq.sustain
         || ((current.seq.chain || current.seq.airborne) && seq.airborne)) ? lastW : 0;
       startSeq(seq, type, { t: carry, w0, hitInTicks: opts?.hitInTicks ?? null });
       // windup 例外：時長 0.1 s 被 E3 鎖住，雙臂得從助跑後擺甩到頭上；從上一幀輸出過渡反而更遠
@@ -790,7 +816,10 @@ export function createGeoAnimator(rig) {
       if (air) {
         air.t += dt;
         if (air.t >= air.dur) air = null;
-        else jumpY = air.jump * Math.sin((air.t / air.dur) * Math.PI) * staminaMul;
+        else if (air.fall) {
+          const tt = air.t - air.fall.t0;
+          jumpY = Math.max(air.fall.y0 + air.fall.v0 * tt - 0.5 * FALL_G * tt * tt, 0);
+        } else jumpY = air.jump * Math.sin((air.t / air.dur) * Math.PI) * staminaMul;
       }
       if (current) {
         const { seq } = current;
@@ -800,7 +829,15 @@ export function createGeoAnimator(rig) {
         current.t += dt * (current.t < hitT ? current.rate : 1);
         // sustain＝末幀「撐住」的秒數（預備姿勢等球用）：撐住期間停在末幀滿權重，
         // 撐完才走 RELEASE 漸出。沒宣告 sustain 的序列 total===dur＝行為完全不變
-        if (current.t >= seq.dur + current.sustain) {
+        // ★ J11 落地不瞬降（跳躍前飄卷 R5）★ 帶 land 的序列（spike/tip/block…）播完時，
+        // 跳躍弧（air，與序列解耦）可能還沒飛完——舊版在這裡 air=null＋接 landSoft，
+        // 人從 0.3–0.4 m 高單幀掉回地面。改為：播到原結束時刻時弧還在空中＝接自由落體
+        // （startFall），序列的結束時刻延到落地那一刻（landEnd），期間不出姿勢（見下）。
+        // 弧先落地（airLeft 使 landEnd≤原結束時刻）＝landEnd 取原值，行為逐值不變
+        if (seq.land && air && !air.fall && current.t >= seq.dur + current.sustain) startFall(jumpY);
+        const airLeft = seq.land && air ? air.dur - air.t : 0;
+        const landEnd = Math.max(seq.dur + current.sustain, current.t + airLeft);
+        if (current.t >= landEnd) {
           // §P5：跳躍類動作落地後自動接緩衝（不得瞬間回站姿）
           // chain＝三段式的段落自動接續（段①→段②）：滿權重交棒、不重跑漸入
           if (seq.land) { air = null; startSeq(SEQUENCES.landSoft, 'landSoft', {}); }
@@ -810,7 +847,11 @@ export function createGeoAnimator(rig) {
         // 2B E6：接續那一幀**當場**由新段落產生姿勢（原本這一幀 w=0、pose=null，windup→
         // spikeHold 每次起跳都有一幀手臂掉回待命：腕高 1.93→1.09→1.98 m）。新段落 t=0 的
         // 權重＝w0（chain 交棒＝上一幀的滿權重；landSoft w0=0＝與修前同為 0，外觀不變）
-        if (current) {
+        // J11：延到落地的那一段（current.t 已過原結束時刻、還在空中）不出姿勢——等同舊版
+        // 序列結束後 current＝null 的外觀（動作層已在 RELEASE 漸出到 0），只是人不再瞬間落地；
+        // 落地那一刻才接 landSoft。不把末幀姿勢滿權重撐在空中：那是舊版從未出現過的姿勢
+        // （寫實人頭頂偏差 2A B4 會超過 0.05 m）
+        if (current && !(current.t >= current.seq.dur + current.sustain)) {
           const { seq } = current;
           const total = seq.dur + current.sustain;
           const t = Math.min(current.t / seq.dur, 1);
@@ -835,6 +876,7 @@ export function createGeoAnimator(rig) {
       }
       lastW = w;
       lastJumpY = jumpY;
+      lastStaminaMul = staminaMul;
 
       // 底層：待命（微蹲備戰＋呼吸）↔ 跑動（擺腿擺臂＋前傾＋起伏）
       const breath = Math.sin(phase * 0.35) * 0.02;
