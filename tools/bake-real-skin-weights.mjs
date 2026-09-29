@@ -12,9 +12,9 @@
 //  ④ 四肢頂點：bone heat（Baran & Popović 2007；Blender「Automatic Weights」同一演算法）——(L + M·H) w_j = M·H·p_j，
 //     L＝餘切拉普拉斯（負權夾 0）、M＝集中面積、H_ii＝c/d_i²（d＝到最近可見骨骨段的距離）、p_j＝最近可見骨指示；
 //     ②③ 的頂點當 Dirichlet 邊界（值固定），所以軀幹與四肢之間的過渡全部落在四肢這一側。
-//  ⑤ 上臂剛性（驗收修訂 R12，方案 3）：上臂（主骨 r/lShoulder）綁定臂段參數 t ≥ UPPER_RIGID_T 的頂點沿用現行權重、當邊界——
-//     上臂皮跟著上臂骨走（S13／S14）；手臂垂下貼胸時的穿入改由執行期碰撞修正處理（realPlayer.js updateSkin、SDF 見
-//     tools/bake-real-skin-sdf.mjs）。原本的肩部輔助骨（R2／R10）已移除。
+//  ⑤ 上臂剛性選項 UPPER_RIGID_T（R12 方案 3 用 0.7）：上臂（主骨 r/lShoulder）綁定臂段參數 t ≥ 此值的頂點沿用現行權重、當邊界。
+//     R13 主線（DQS＋碰撞修正）設 null＝不做：上臂整段走熱擴散（同 step7 比較原型），手臂垂下貼胸的穿入由執行期
+//     碰撞修正處理（realPlayer.js collideArms、SDF 見 tools/bake-real-skin-sdf.mjs）。原本的肩部輔助骨（R2／R10）已移除。
 //  最後：夾 [0,1]、對側四肢骨歸零、取前 4、正規化。
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -29,7 +29,7 @@ export const PARAMS = {
   HAND_KEEP: true, // 手（主骨 r/lWrist）沿用現行權重、當邊界（第一階段 A2(a)(e)：手須與腕關節剛性同動）
   TORSO_LIMB_KEEP: true, // ③ 的軀幹頂點若（去掉手臂份額後）仍帶腿骨權重，整組沿用現行權重（連軀幹骨間分配也不改）
   MIN_D: 0.01, // d 的下限（m）
-  UPPER_RIGID_T: 0.7, // ⑤：上臂 t ≥ 此值者沿用現行權重（技術調查 docs/experiments/real-skin-survey-report.md 的 rigid07）
+  UPPER_RIGID_T: null, // ⑤：上臂 t ≥ 此值者沿用現行權重；null＝不做（R13 主線 DQS＋碰撞修正：上臂不剛性，同 step7 比較原型；R12 方案 3 用 0.7）
 };
 
 const TORSO_NAMES = ['pelvis', 'spine', 'spineUpper', 'neck'];

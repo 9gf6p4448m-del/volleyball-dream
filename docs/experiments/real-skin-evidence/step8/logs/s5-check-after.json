@@ -1,0 +1,996 @@
+{
+  "root": "C:\\Users\\shung\\worktrees\\volleyball-skin",
+  "pass": {
+    "e2b": true,
+    "e3": true,
+    "e4": true,
+    "e6": true,
+    "all": true
+  },
+  "e2b": {
+    "d0Json": "docs/experiments/real-skin-evidence/step8/logs/s5-d0-after.json",
+    "speed": 2.55,
+    "drop": 0.2394,
+    "range": [
+      0.2,
+      0.3
+    ],
+    "ok": true
+  },
+  "e3": {
+    "diffs": [],
+    "extra": [],
+    "textSame": true,
+    "testOk": true,
+    "testTail": "ℹ tests 50 | ℹ pass 50 | ℹ fail 0",
+    "ok": true
+  },
+  "e4": {
+    "ok": true,
+    "frames": 4830,
+    "grounded": 3292,
+    "worstKnee": 177.38991303771726,
+    "worstFwd": 0.010231151599959167,
+    "worstElbow": 180,
+    "worstFoot": -0.025000000000000328,
+    "failCount": 0,
+    "fails": [],
+    "perDriver": [
+      {
+        "driver": "cold:bump",
+        "probe": "D0Probe",
+        "frames": 47,
+        "worstFoot": -0.025000000000000258
+      },
+      {
+        "driver": "cold:overhead",
+        "probe": "D0Probe",
+        "frames": 38,
+        "worstFoot": -0.02500000000000014
+      },
+      {
+        "driver": "cold:overheadJump",
+        "probe": "D0Probe",
+        "frames": 59,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:windup",
+        "probe": "D0Probe",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:spikeHold",
+        "probe": "D0Probe",
+        "frames": 10,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:spike",
+        "probe": "D0Probe",
+        "frames": 49,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:tip",
+        "probe": "D0Probe",
+        "frames": 47,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:serve",
+        "probe": "D0Probe",
+        "frames": 49,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:serveJump",
+        "probe": "D0Probe",
+        "frames": 72,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:serveFloat",
+        "probe": "D0Probe",
+        "frames": 36,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:serveReady",
+        "probe": "D0Probe",
+        "frames": 65,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:gasp",
+        "probe": "D0Probe",
+        "frames": 65,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:gaspHeavy",
+        "probe": "D0Probe",
+        "frames": 65,
+        "worstFoot": -0.025000000000000196
+      },
+      {
+        "driver": "cold:dejected",
+        "probe": "D0Probe",
+        "frames": 65,
+        "worstFoot": -0.025000000000000133
+      },
+      {
+        "driver": "cold:block",
+        "probe": "D0Probe",
+        "frames": 63,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:blockJump",
+        "probe": "D0Probe",
+        "frames": 52,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:blockJumpGraze",
+        "probe": "D0Probe",
+        "frames": 52,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:approach3",
+        "probe": "D0Probe",
+        "frames": 50,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:approach4",
+        "probe": "D0Probe",
+        "frames": 65,
+        "worstFoot": -0.025000000000000133
+      },
+      {
+        "driver": "cold:windupHesitant",
+        "probe": "D0Probe",
+        "frames": 50,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:receiveReady",
+        "probe": "D0Probe",
+        "frames": 71,
+        "worstFoot": -0.02500000000000025
+      },
+      {
+        "driver": "cold:setReady",
+        "probe": "D0Probe",
+        "frames": 68,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:transitionWait",
+        "probe": "D0Probe",
+        "frames": 114,
+        "worstFoot": -0.02500000000000014
+      },
+      {
+        "driver": "cold:landSoft",
+        "probe": "D0Probe",
+        "frames": 21,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:cheer",
+        "probe": "D0Probe",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:highfive",
+        "probe": "D0Probe",
+        "frames": 83,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:dive",
+        "probe": "D0Probe",
+        "frames": 49,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:wave",
+        "probe": "D0Probe",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:nod",
+        "probe": "D0Probe",
+        "frames": 33,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "chain:receiveReady→bump",
+        "probe": "D0Probe",
+        "frames": 65,
+        "worstFoot": -0.025000000000000258
+      },
+      {
+        "driver": "chain:setReady→overhead",
+        "probe": "D0Probe",
+        "frames": 56,
+        "worstFoot": -0.02500000000000014
+      },
+      {
+        "driver": "chain:windup→spike",
+        "probe": "D0Probe",
+        "frames": 60,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:windup→tip",
+        "probe": "D0Probe",
+        "frames": 59,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:windup(hold 到落地)",
+        "probe": "D0Probe",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "chain:serveReady hold→serveJump",
+        "probe": "D0Probe",
+        "frames": 78,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:serveReady hold→serveFloat",
+        "probe": "D0Probe",
+        "frames": 42,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:serveReady hold→serve",
+        "probe": "D0Probe",
+        "frames": 55,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "chain:block hold→blockJump",
+        "probe": "D0Probe",
+        "frames": 58,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:block hold→blockJumpGraze",
+        "probe": "D0Probe",
+        "frames": 58,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:approach3@2.55",
+        "probe": "D0Probe",
+        "frames": 45,
+        "worstFoot": -0.025000000000000272
+      },
+      {
+        "driver": "chain:approach4@2.55",
+        "probe": "D0Probe",
+        "frames": 60,
+        "worstFoot": -0.025000000000000307
+      },
+      {
+        "driver": "chain:approach3@4.5",
+        "probe": "D0Probe",
+        "frames": 45,
+        "worstFoot": -0.025000000000000203
+      },
+      {
+        "driver": "chain:approach4@4.5",
+        "probe": "D0Probe",
+        "frames": 60,
+        "worstFoot": -0.025000000000000328
+      },
+      {
+        "driver": "cold:bump",
+        "probe": "L2BProbe0",
+        "frames": 47,
+        "worstFoot": -0.025000000000000258
+      },
+      {
+        "driver": "cold:overhead",
+        "probe": "L2BProbe0",
+        "frames": 38,
+        "worstFoot": -0.02500000000000014
+      },
+      {
+        "driver": "cold:overheadJump",
+        "probe": "L2BProbe0",
+        "frames": 59,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:windup",
+        "probe": "L2BProbe0",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:spikeHold",
+        "probe": "L2BProbe0",
+        "frames": 10,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:spike",
+        "probe": "L2BProbe0",
+        "frames": 49,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:tip",
+        "probe": "L2BProbe0",
+        "frames": 47,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:serve",
+        "probe": "L2BProbe0",
+        "frames": 49,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:serveJump",
+        "probe": "L2BProbe0",
+        "frames": 72,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:serveFloat",
+        "probe": "L2BProbe0",
+        "frames": 36,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:serveReady",
+        "probe": "L2BProbe0",
+        "frames": 65,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:gasp",
+        "probe": "L2BProbe0",
+        "frames": 65,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:gaspHeavy",
+        "probe": "L2BProbe0",
+        "frames": 65,
+        "worstFoot": -0.025000000000000196
+      },
+      {
+        "driver": "cold:dejected",
+        "probe": "L2BProbe0",
+        "frames": 65,
+        "worstFoot": -0.025000000000000133
+      },
+      {
+        "driver": "cold:block",
+        "probe": "L2BProbe0",
+        "frames": 63,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:blockJump",
+        "probe": "L2BProbe0",
+        "frames": 52,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:blockJumpGraze",
+        "probe": "L2BProbe0",
+        "frames": 52,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:approach3",
+        "probe": "L2BProbe0",
+        "frames": 50,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:approach4",
+        "probe": "L2BProbe0",
+        "frames": 65,
+        "worstFoot": -0.025000000000000133
+      },
+      {
+        "driver": "cold:windupHesitant",
+        "probe": "L2BProbe0",
+        "frames": 50,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:receiveReady",
+        "probe": "L2BProbe0",
+        "frames": 71,
+        "worstFoot": -0.02500000000000025
+      },
+      {
+        "driver": "cold:setReady",
+        "probe": "L2BProbe0",
+        "frames": 68,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "cold:transitionWait",
+        "probe": "L2BProbe0",
+        "frames": 114,
+        "worstFoot": -0.02500000000000014
+      },
+      {
+        "driver": "cold:landSoft",
+        "probe": "L2BProbe0",
+        "frames": 21,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:cheer",
+        "probe": "L2BProbe0",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:highfive",
+        "probe": "L2BProbe0",
+        "frames": 83,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:dive",
+        "probe": "L2BProbe0",
+        "frames": 49,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "cold:wave",
+        "probe": "L2BProbe0",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "cold:nod",
+        "probe": "L2BProbe0",
+        "frames": 33,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "chain:receiveReady→bump",
+        "probe": "L2BProbe0",
+        "frames": 65,
+        "worstFoot": -0.025000000000000258
+      },
+      {
+        "driver": "chain:setReady→overhead",
+        "probe": "L2BProbe0",
+        "frames": 56,
+        "worstFoot": -0.02500000000000014
+      },
+      {
+        "driver": "chain:windup→spike",
+        "probe": "L2BProbe0",
+        "frames": 60,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:windup→tip",
+        "probe": "L2BProbe0",
+        "frames": 59,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:windup(hold 到落地)",
+        "probe": "L2BProbe0",
+        "frames": 59,
+        "worstFoot": -0.025000000000000078
+      },
+      {
+        "driver": "chain:serveReady hold→serveJump",
+        "probe": "L2BProbe0",
+        "frames": 78,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:serveReady hold→serveFloat",
+        "probe": "L2BProbe0",
+        "frames": 42,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:serveReady hold→serve",
+        "probe": "L2BProbe0",
+        "frames": 55,
+        "worstFoot": -0.025000000000000085
+      },
+      {
+        "driver": "chain:block hold→blockJump",
+        "probe": "L2BProbe0",
+        "frames": 58,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:block hold→blockJumpGraze",
+        "probe": "L2BProbe0",
+        "frames": 58,
+        "worstFoot": -0.025000000000000147
+      },
+      {
+        "driver": "chain:approach3@2.55",
+        "probe": "L2BProbe0",
+        "frames": 45,
+        "worstFoot": -0.025000000000000272
+      },
+      {
+        "driver": "chain:approach4@2.55",
+        "probe": "L2BProbe0",
+        "frames": 60,
+        "worstFoot": -0.025000000000000307
+      },
+      {
+        "driver": "chain:approach3@4.5",
+        "probe": "L2BProbe0",
+        "frames": 45,
+        "worstFoot": -0.025000000000000203
+      },
+      {
+        "driver": "chain:approach4@4.5",
+        "probe": "L2BProbe0",
+        "frames": 60,
+        "worstFoot": -0.025000000000000328
+      }
+    ]
+  },
+  "e6": {
+    "ok": true,
+    "runs": [
+      {
+        "id": "windup→spikeHold",
+        "probe": "D0Probe",
+        "handed": "r",
+        "frames": 12,
+        "windowStart": 4,
+        "minW": 1,
+        "maxDy": 0.026564786744728952,
+        "attackMaxDy": 0.4702877455887631,
+        "sawHold": true,
+        "ok": true,
+        "trace": [
+          {
+            "seq": "windup",
+            "w": 0.2083,
+            "wristY": 1.1429
+          },
+          {
+            "seq": "windup",
+            "w": 0.4167,
+            "wristY": 1.6132
+          },
+          {
+            "seq": "windup",
+            "w": 0.625,
+            "wristY": 1.975
+          },
+          {
+            "seq": "windup",
+            "w": 0.8333,
+            "wristY": 1.9857
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7652
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7446
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.7711
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.797
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8221
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8464
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8697
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.892
+          }
+        ]
+      },
+      {
+        "id": "windup→spike",
+        "probe": "D0Probe",
+        "handed": "r",
+        "frames": 11,
+        "windowStart": 4,
+        "minW": 1,
+        "maxDy": 0.026564786744728952,
+        "attackMaxDy": 0.4702877455887631,
+        "sawHold": true,
+        "ok": true,
+        "trace": [
+          {
+            "seq": "windup",
+            "w": 0.2083,
+            "wristY": 1.1429
+          },
+          {
+            "seq": "windup",
+            "w": 0.4167,
+            "wristY": 1.6132
+          },
+          {
+            "seq": "windup",
+            "w": 0.625,
+            "wristY": 1.975
+          },
+          {
+            "seq": "windup",
+            "w": 0.8333,
+            "wristY": 1.9857
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7652
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7446
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.7711
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.797
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8221
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8464
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8697
+          }
+        ]
+      },
+      {
+        "id": "windup→tip",
+        "probe": "D0Probe",
+        "handed": "r",
+        "frames": 12,
+        "windowStart": 4,
+        "minW": 1,
+        "maxDy": 0.026564786744728952,
+        "attackMaxDy": 0.4702877455887631,
+        "sawHold": true,
+        "ok": true,
+        "trace": [
+          {
+            "seq": "windup",
+            "w": 0.2083,
+            "wristY": 1.1429
+          },
+          {
+            "seq": "windup",
+            "w": 0.4167,
+            "wristY": 1.6132
+          },
+          {
+            "seq": "windup",
+            "w": 0.625,
+            "wristY": 1.975
+          },
+          {
+            "seq": "windup",
+            "w": 0.8333,
+            "wristY": 1.9857
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7652
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7446
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.7711
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.797
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8221
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8464
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8697
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.892
+          }
+        ]
+      },
+      {
+        "id": "windup→spikeHold",
+        "probe": "L2BProbe0",
+        "handed": "l",
+        "frames": 12,
+        "windowStart": 4,
+        "minW": 1,
+        "maxDy": 0.026564786744728952,
+        "attackMaxDy": 0.4702877455887631,
+        "sawHold": true,
+        "ok": true,
+        "trace": [
+          {
+            "seq": "windup",
+            "w": 0.2083,
+            "wristY": 1.1429
+          },
+          {
+            "seq": "windup",
+            "w": 0.4167,
+            "wristY": 1.6132
+          },
+          {
+            "seq": "windup",
+            "w": 0.625,
+            "wristY": 1.975
+          },
+          {
+            "seq": "windup",
+            "w": 0.8333,
+            "wristY": 1.9857
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7652
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7446
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.7711
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.797
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8221
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8464
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8697
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.892
+          }
+        ]
+      },
+      {
+        "id": "windup→spike",
+        "probe": "L2BProbe0",
+        "handed": "l",
+        "frames": 11,
+        "windowStart": 4,
+        "minW": 1,
+        "maxDy": 0.026564786744728952,
+        "attackMaxDy": 0.4702877455887631,
+        "sawHold": true,
+        "ok": true,
+        "trace": [
+          {
+            "seq": "windup",
+            "w": 0.2083,
+            "wristY": 1.1429
+          },
+          {
+            "seq": "windup",
+            "w": 0.4167,
+            "wristY": 1.6132
+          },
+          {
+            "seq": "windup",
+            "w": 0.625,
+            "wristY": 1.975
+          },
+          {
+            "seq": "windup",
+            "w": 0.8333,
+            "wristY": 1.9857
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7652
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7446
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.7711
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.797
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8221
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8464
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8697
+          }
+        ]
+      },
+      {
+        "id": "windup→tip",
+        "probe": "L2BProbe0",
+        "handed": "l",
+        "frames": 12,
+        "windowStart": 4,
+        "minW": 1,
+        "maxDy": 0.026564786744728952,
+        "attackMaxDy": 0.4702877455887631,
+        "sawHold": true,
+        "ok": true,
+        "trace": [
+          {
+            "seq": "windup",
+            "w": 0.2083,
+            "wristY": 1.1429
+          },
+          {
+            "seq": "windup",
+            "w": 0.4167,
+            "wristY": 1.6132
+          },
+          {
+            "seq": "windup",
+            "w": 0.625,
+            "wristY": 1.975
+          },
+          {
+            "seq": "windup",
+            "w": 0.8333,
+            "wristY": 1.9857
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7652
+          },
+          {
+            "seq": "windup",
+            "w": 1,
+            "wristY": 1.7446
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.7711
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.797
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8221
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8464
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.8697
+          },
+          {
+            "seq": "spikeHold",
+            "w": 1,
+            "wristY": 1.892
+          }
+        ]
+      }
+    ]
+  }
+}

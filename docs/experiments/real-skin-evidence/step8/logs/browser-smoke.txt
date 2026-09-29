@@ -1,0 +1,4 @@
+# 瀏覽器冒煙（vite dev＋playwright swiftshader；realPreview 14 人；1.5 秒前後比 players[0] 的 position 陣列）
+?devreal=1&quality=high&dpr=1 {"type":"Mesh","players":14,"faces":20000,"moved":11701,"n":30006,"hud":"FPS 4.2\n面數 20,000／人（20k）\n14 人"} errors []
+?devreal=1&faces=5k&quality=high&dpr=1 {"type":"Mesh","players":14,"faces":5000,"moved":6347,"n":7506,"hud":"FPS 6.7\n面數 5,000／人（5k）\n14 人"} errors []
+# 量測時 npm test 在背景同時跑，FPS 只證明「有在跑」，不代表效能

@@ -367,7 +367,15 @@ function buildCollide(pos, index, primary, sdf) {
     for (let a = 0; a < na; a += 1) for (const x of lists[a]) { idx[o] = f(x); o += 1; }
     return { ptr, idx };
   };
-  const adj = csr(nbr, (q) => local[q]);
+  const adjAll = csr(nbr, (q) => local[q]);
+  // 平滑用鄰接：只留手臂鄰居（非手臂鄰居位移恆 0，加總時本來就跳過；先後順序不變），分母＝全部鄰居數＋1
+  const adjDen = new Float64Array(na); const aptr = new Int32Array(na + 1); const aidx = [];
+  for (let a = 0; a < na; a += 1) {
+    adjDen[a] = adjAll.ptr[a + 1] - adjAll.ptr[a] + 1;
+    for (let k = adjAll.ptr[a]; k < adjAll.ptr[a + 1]; k += 1) if (adjAll.idx[k] >= 0) aidx.push(adjAll.idx[k]);
+    aptr[a + 1] = aidx.length;
+  }
+  const adj = { ptr: aptr, idx: Int32Array.from(aidx), den: adjDen };
   const tri = csr(triOf, (t) => t);
   const vl = Array.from({ length: na }, () => []);
   for (let i = 0; i < n; i += 1) if (local[g[i]] >= 0) vl[local[g[i]]].push(i);
@@ -633,21 +641,23 @@ export function collideArms(C, MB, outP, outN, index, work) {
   if (!stats.hits) return stats;
   // 平滑（Jacobi）：每輪先把作用範圍擴一圈鄰居，只更新範圍內的群組——範圍外的群組鄰居全為 0、平均仍為 0，
   // 結果與對全體手臂群組做 Jacobi 逐值相同
-  const { ptr: ap, idx: ai } = C.adj;
+  const { ptr: ap, idx: ai, den } = C.adj;
   let src = D; let dst = D2;
+  let front = 0; // 上一輪新加入者的起點：更早的群組其鄰居都已在範圍內，只需從新邊界往外擴
   for (let it = 0; it < COLLIDE.SMOOTH; it += 1) {
     const n0 = na;
-    for (let q = 0; q < n0; q += 1) {
+    for (let q = front; q < n0; q += 1) {
       const a = act[q];
-      for (let k = ap[a]; k < ap[a + 1]; k += 1) { const j = ai[k]; if (j >= 0 && !inAct[j]) { inAct[j] = 1; act[na] = j; na += 1; } }
+      for (let k = ap[a]; k < ap[a + 1]; k += 1) { const j = ai[k]; if (!inAct[j]) { inAct[j] = 1; act[na] = j; na += 1; } }
     }
+    front = n0;
     for (let q = 0; q < na; q += 1) {
-      const a = act[q];
-      if (hit[a]) { dst[a * 3] = src[a * 3]; dst[a * 3 + 1] = src[a * 3 + 1]; dst[a * 3 + 2] = src[a * 3 + 2]; continue; }
-      let sx = src[a * 3]; let sy = src[a * 3 + 1]; let sz = src[a * 3 + 2];
-      for (let k = ap[a]; k < ap[a + 1]; k += 1) { const j = ai[k]; if (j >= 0) { sx += src[j * 3]; sy += src[j * 3 + 1]; sz += src[j * 3 + 2]; } }
-      const c = ap[a + 1] - ap[a] + 1;
-      dst[a * 3] = sx / c; dst[a * 3 + 1] = sy / c; dst[a * 3 + 2] = sz / c;
+      const a = act[q]; const a3 = a * 3;
+      if (hit[a]) { dst[a3] = src[a3]; dst[a3 + 1] = src[a3 + 1]; dst[a3 + 2] = src[a3 + 2]; continue; }
+      let sx = src[a3]; let sy = src[a3 + 1]; let sz = src[a3 + 2];
+      for (let k = ap[a]; k < ap[a + 1]; k += 1) { const j3 = ai[k] * 3; sx += src[j3]; sy += src[j3 + 1]; sz += src[j3 + 2]; }
+      const c = den[a];
+      dst[a3] = sx / c; dst[a3 + 1] = sy / c; dst[a3 + 2] = sz / c;
     }
     const tmp = src; src = dst; dst = tmp;
   }
@@ -842,10 +852,15 @@ export function createRealPlayer(asset, {
     }
     root.updateMatrixWorld(true);
   }
-  // ---- 每幀蒙皮（驗收修訂 R12）：LBS → 手臂碰撞修正 → 寫進 mesh 的 position／normal ----
+  // ---- 每幀蒙皮（驗收修訂 R13）：CPU 雙四元數蒙皮（DQS）→ 手臂碰撞修正 → 寫進 mesh 的 position／normal ----
+  // DQS＝Kavan et al. 2008：各骨剛體變換換成單位對偶四元數，逐頂點加權（以權重最大骨為符號參考，避免對蹠）、正規化後
+  // 套用——混合結果仍是剛體，舉臂時腋下不塌。M＝matrixWorld·boneInverse＝s·[R|t/s]（s＝根節點等比縮放，全骨相同）：
+  // 先以 (R, t/s) 做 DQS，再乘 s。法線只受混合後的旋轉。每骨每幀只算一次對偶四元數（DQ），緩衝全部預先配置
   const nb = BONES.length;
-  const MB = new Float64Array(nb * 16); // 各骨 matrixWorld·boneInverse
+  const MB = new Float64Array(nb * 16); // 各骨 matrixWorld·boneInverse（碰撞修正要用）
+  const DQ = new Float64Array(nb * 8); // 各骨 [rx, ry, rz, rw, dx, dy, dz, dw]
   const _m = new THREE.Matrix4();
+  const _dp = new THREE.Vector3(); const _dq = new THREE.Quaternion(); const _ds = new THREE.Vector3();
   const bP = bindGeo.attributes.position.array; const bN = bindGeo.attributes.normal.array;
   const SI = bindGeo.attributes.skinIndex.array; const SW = bindGeo.attributes.skinWeight.array;
   const outP = posAttr.array; const outN = norAttr.array;
@@ -854,26 +869,47 @@ export function createRealPlayer(asset, {
   const stats = work ? work.stats : { hits: 0, maxPush: 0 };
   function updateSkin() {
     root.updateMatrixWorld(true);
+    let s0 = 1;
     for (let b = 0; b < nb; b += 1) {
       _m.multiplyMatrices(bones[b].matrixWorld, skeleton.boneInverses[b]);
       MB.set(_m.elements, b * 16);
+      _m.decompose(_dp, _dq, _ds);
+      if (b === 0) s0 = _ds.x;
+      const tx = _dp.x / s0; const ty = _dp.y / s0; const tz = _dp.z / s0;
+      const x = _dq.x; const y = _dq.y; const z = _dq.z; const w = _dq.w; const o = b * 8;
+      DQ[o] = x; DQ[o + 1] = y; DQ[o + 2] = z; DQ[o + 3] = w;
+      DQ[o + 4] = 0.5 * (tx * w + ty * z - tz * y); DQ[o + 5] = 0.5 * (-tx * z + ty * w + tz * x);
+      DQ[o + 6] = 0.5 * (tx * y - ty * x + tz * w); DQ[o + 7] = -0.5 * (tx * x + ty * y + tz * z);
     }
     for (let i = 0; i < nv; i += 1) {
-      const x = bP[i * 3]; const y = bP[i * 3 + 1]; const z = bP[i * 3 + 2];
-      const u = bN[i * 3]; const v = bN[i * 3 + 1]; const w = bN[i * 3 + 2];
-      let px = 0; let py = 0; let pz = 0; let nx = 0; let ny = 0; let nz = 0;
+      const i4 = i * 4;
+      let km = 0;
+      for (let k = 1; k < 4; k += 1) if (SW[i4 + k] > SW[i4 + km]) km = k;
+      const r = SI[i4 + km] * 8;
+      const r0x = DQ[r]; const r0y = DQ[r + 1]; const r0z = DQ[r + 2]; const r0w = DQ[r + 3];
+      let bx = 0; let by = 0; let bz = 0; let bw = 0; let ex = 0; let ey = 0; let ez = 0; let ew = 0;
       for (let k = 0; k < 4; k += 1) {
-        const wt = SW[i * 4 + k];
+        let wt = SW[i4 + k];
         if (!wt) continue;
-        const e = SI[i * 4 + k] * 16;
-        px += wt * (MB[e] * x + MB[e + 4] * y + MB[e + 8] * z + MB[e + 12]);
-        py += wt * (MB[e + 1] * x + MB[e + 5] * y + MB[e + 9] * z + MB[e + 13]);
-        pz += wt * (MB[e + 2] * x + MB[e + 6] * y + MB[e + 10] * z + MB[e + 14]);
-        nx += wt * (MB[e] * u + MB[e + 4] * v + MB[e + 8] * w);
-        ny += wt * (MB[e + 1] * u + MB[e + 5] * v + MB[e + 9] * w);
-        nz += wt * (MB[e + 2] * u + MB[e + 6] * v + MB[e + 10] * w);
+        const e = SI[i4 + k] * 8;
+        if (DQ[e] * r0x + DQ[e + 1] * r0y + DQ[e + 2] * r0z + DQ[e + 3] * r0w < 0) wt = -wt;
+        bx += wt * DQ[e]; by += wt * DQ[e + 1]; bz += wt * DQ[e + 2]; bw += wt * DQ[e + 3];
+        ex += wt * DQ[e + 4]; ey += wt * DQ[e + 5]; ez += wt * DQ[e + 6]; ew += wt * DQ[e + 7];
       }
-      outP[i * 3] = px; outP[i * 3 + 1] = py; outP[i * 3 + 2] = pz;
+      const len = Math.sqrt(bx * bx + by * by + bz * bz + bw * bw);
+      bx /= len; by /= len; bz /= len; bw /= len; ex /= len; ey /= len; ez /= len; ew /= len;
+      // 位置：旋轉 p＋2·r×(r×p＋w·p)，再加平移 t＝2·(w·e_v − e_w·r_v＋r_v×e_v)，最後乘 s0
+      const x = bP[i * 3]; const y = bP[i * 3 + 1]; const z = bP[i * 3 + 2];
+      let cx = by * z - bz * y + bw * x; let cy = bz * x - bx * z + bw * y; let cz = bx * y - by * x + bw * z;
+      const px = x + 2 * (by * cz - bz * cy); const py = y + 2 * (bz * cx - bx * cz); const pz = z + 2 * (bx * cy - by * cx);
+      const tx = 2 * (bw * ex - ew * bx + (by * ez - bz * ey));
+      const ty = 2 * (bw * ey - ew * by + (bz * ex - bx * ez));
+      const tz = 2 * (bw * ez - ew * bz + (bx * ey - by * ex));
+      outP[i * 3] = s0 * (px + tx); outP[i * 3 + 1] = s0 * (py + ty); outP[i * 3 + 2] = s0 * (pz + tz);
+      // 法線：只旋轉
+      const u = bN[i * 3]; const v = bN[i * 3 + 1]; const t = bN[i * 3 + 2];
+      cx = by * t - bz * v + bw * u; cy = bz * u - bx * t + bw * v; cz = bx * v - by * u + bw * t;
+      const nx = u + 2 * (by * cz - bz * cy); const ny = v + 2 * (bz * cx - bx * cz); const nz = t + 2 * (bx * cy - by * cx);
       const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       outN[i * 3] = nx / l; outN[i * 3 + 1] = ny / l; outN[i * 3 + 2] = nz / l;
     }
