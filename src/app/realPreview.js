@@ -30,7 +30,7 @@ const HEIGHTS = [1.92, 1.86, 1.98, 1.8, 1.9, 1.95, 1.76];
 
 export async function runRealPreview(ctx) {
   const { renderer, scene, camera, loadingEl, params } = ctx;
-  const variant = params.get('faces') === '5k' ? '5k' : '20k';
+  const variant = params.get('faces') === '20k' ? '20k' : '5k'; // R14：寫實預設 5k，與比賽一致
   const url = `${import.meta.env.BASE_URL}models/real/player_${variant}.glb`;
   const asset = await loadRealPlayerAsset(url);
   if (loadingEl) loadingEl.remove();
@@ -173,6 +173,7 @@ export async function runRealPreview(ctx) {
         p.rig.root.position.set(p.home.x, 0, p.home.z);
         p.rig.root.rotation.set(0, p.home.ry, 0);
         p.rig.root.scale.setScalar(p.rootScale);
+        p.updateSkin(); // S12 審查 HIGH：CPU 蒙皮要在擺完姿勢後重算
       }
       scene.updateMatrixWorld(true);
     },

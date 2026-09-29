@@ -545,7 +545,7 @@ async function checkA11() {
 
 try {
   report.a11 = await checkA11();
-  for (const [variant, query, expectFaces] of (a11Only ? [] : [['20k', '?mode=realpreview', 20000], ['5k', '?mode=realpreview&faces=5k', 5000]])) {
+  for (const [variant, query, expectFaces] of (a11Only ? [] : [['20k', '?mode=realpreview&faces=20k', 20000], ['5k', '?mode=realpreview&faces=5k', 5000]])) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors = [];

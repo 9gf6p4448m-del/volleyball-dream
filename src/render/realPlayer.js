@@ -992,6 +992,7 @@ export function createRealPlayer(asset, {
         root.rotation.set(0, 0, 0);
         root.scale.setScalar(1);
       }
+      updateSkin(); // S12 審查 HIGH：CPU 蒙皮不會隨骨架自動更新，擺完姿勢要重算，畫面與量尺才是這個姿勢
     },
   };
 }
