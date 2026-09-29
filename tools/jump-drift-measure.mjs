@@ -98,7 +98,9 @@ async function installRecorder(page, j8) {
     const origSync = mv.sync.bind(mv);
     mv.sync = (g, alpha, dt, frameEvents = []) => {
       origSync(g, alpha, dt, frameEvents);
-      if (g !== window.__phase1.game) return; // 精華重演用的是複製狀態，不算
+      // 精華重演用的是複製狀態，不算——但記下次數（J11：兩個相鄰的比賽幀之間若夾了重演畫面，
+      // 畫面上它們不是相鄰幀，frame.nl 差值 >0 即可辨認）
+      if (g !== window.__phase1.game) { window.__nonLive = (window.__nonLive ?? 0) + 1; return; }
       // J8（修訂 R2）：玩家本人（A2）扣球。代打＝走遊戲本身的出手入口 controls.chooseAttack
       // （就是面板按鈕的 handler，matchLoop.js 攻擊面板那段），時機取「距 AI 擊球點 ≤26 tick」——玩家的出手在球一進手點就判定、比 AI 的 hitPoint 早約 8 tick，這樣起跳→擊球約 18 tick，接近 AI 攻擊手的 23 tick；決策窗 0.4× 下起跳→擊球 ≈0.75 s 真實時間，仍在 JUMP_WINDOW_MS 900 內
       // ——比照真人在決策窗內按下；選第一個攻擊區。其餘（起跳訊號→windup、sim 扣球）全走原路
@@ -157,7 +159,7 @@ async function installRecorder(page, j8) {
         if (!ep) continue;
         const hand = u.rig.joints[`${u.rig.handed === 'l' ? 'l' : 'r'}Wrist`].getWorldPosition(wp);
         const f = {
-          tick: g.tick, phase: g.phase, dt, jumpY, seq,
+          tick: g.tick, phase: g.phase, dt, jumpY, seq, nl: window.__nonLive ?? 0,
           rx: r.x, ry: r.y, rz: r.z, sx: simX, sz: simZ,
           drift: u.jumpDrift ? [u.jumpDrift.x, u.jumpDrift.z] : null,
           aimed: u.jumpDrift?.aimed ?? null, aim: u.jumpDrift?.aimX != null ? [u.jumpDrift.aimX, u.jumpDrift.aimZ] : null, touches: g.rally.touches, poss: g.rally.possession,
@@ -244,6 +246,7 @@ async function runSeed({ seed, opp, j8 }) {
 const hyp = (x, z) => Math.hypot(x, z);
 const TELEPORT = 0.3;
 const STEP_MAX = 0.07; // J3／J7 每幀上限（修訂 R1：0.05→0.07）
+const J7_WIN = 0.6; // J7 檢查窗：落地後秒數（修訂 R6 時限、R7 步長範圍）
 function classify(ep) {
   const spikeHit = ep.hits.find((h) => h.kind === 'spike');
   if (ep.serve && ep.serve.style === 'power') return 'jumpServe';
@@ -322,12 +325,21 @@ function analyze(ep) {
   const resid = (f) => [f.rx - f.sx - (f.reach ? f.reach[0] : 0), f.rz - f.sz - (f.reach ? f.reach[1] : 0)];
   if (res.landed) {
     let t = 0; let mergedAt = null; let mergeMaxStep = 0; let maxResid = 0; let residAt05 = null;
+    // 修訂 R7：J7 只看落地後 J7_WIN 秒內（含併回期間）——之後才開始的魚躍等動作不列入。
+    // 窗內版另存 *In 欄位；原欄位（整個錄製窗）照舊輸出，供對照
+    let mergedAtIn = null; let mergeMaxStepIn = 0;
     for (let i = ep.landIdx; i <= end; i += 1) {
       const rr = resid(F[i]); const m = hyp(rr[0], rr[1]);
+      let step = 0;
       if (i > ep.landIdx) {
         t += F[i].dt;
         const rp = resid(F[i - 1]);
-        mergeMaxStep = Math.max(mergeMaxStep, hyp(rr[0] - rp[0], rr[1] - rp[1]));
+        step = hyp(rr[0] - rp[0], rr[1] - rp[1]);
+        mergeMaxStep = Math.max(mergeMaxStep, step);
+      }
+      if (t <= J7_WIN + 1e-9) {
+        mergeMaxStepIn = Math.max(mergeMaxStepIn, step);
+        if (m < 0.01) { if (mergedAtIn == null) mergedAtIn = t; } else mergedAtIn = null;
       }
       if (m < 0.01) { if (mergedAt == null) mergedAt = t; } else mergedAt = null;
       if (residAt05 == null && t >= 0.5) residAt05 = m;
@@ -336,6 +348,7 @@ function analyze(ep) {
     res.residAtLand = hyp(...resid(F[ep.landIdx]));
     res.mergedAtSec = mergedAt; res.mergeMaxStep = mergeMaxStep; res.maxResidAfterLand = maxResid;
     res.residAt05 = residAt05; res.postLandSec = t;
+    res.mergedAtSecIn = mergedAtIn; res.mergeMaxStepIn = mergeMaxStepIn;
   }
   return res;
 }

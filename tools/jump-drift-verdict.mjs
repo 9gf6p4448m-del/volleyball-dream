@@ -14,9 +14,16 @@ const f3 = (v) => (v == null ? 'null' : Number(v).toFixed(3));
 const j2Fail = (r) => r.dRender == null || r.dRender < 0.8 * r.dSim;
 const j3Fail = (r) => r.airMaxStep > STEP || r.airMinForwardDelta < -1e-9;
 const j5Fail = (r) => r.minNetDist < 0.15 || r.wrongSideFrames > 0;
-// J7：只判落地後有看滿 0.5 s 的樣本（得分後重新佈陣的瞬移截斷者列 skipped）
-const j7Judged = (r) => r.landed && r.postLandSec >= 0.5;
-const j7Fail = (r) => r.mergeMaxStep > STEP || !(r.mergedAtSec != null && r.mergedAtSec <= 0.5);
+// J7：只判落地後有看滿時限的樣本（得分後重新佈陣的瞬移截斷者列 skipped）
+// 時限：修訂 R6 起 0.5 s → 0.6 s（步長 ≤0.07、無瞬移不變）；J7_LIMIT=0.5 可重現 R6 前的判法
+const J7_LIMIT = Number(process.env.J7_LIMIT) || 0.6;
+const j7Judged = (r) => r.landed && r.postLandSec >= J7_LIMIT;
+// 修訂 R7：步長與併回都只看落地後 J7_LIMIT 秒內（量測檔的 *In 欄位，窗＝0.6 s）；
+// 舊量測檔沒有 *In 欄位＝退回整個錄製窗（R7 之前的判法）。J7_WINDOW=all 可強制用整個錄製窗重現舊判法
+const J7_ALL = process.env.J7_WINDOW === 'all';
+const j7Step = (r) => (!J7_ALL && r.mergeMaxStepIn != null ? r.mergeMaxStepIn : r.mergeMaxStep);
+const j7Merged = (r) => (!J7_ALL && 'mergedAtSecIn' in r ? r.mergedAtSecIn : r.mergedAtSec);
+const j7Fail = (r) => j7Step(r) > STEP || !(j7Merged(r) != null && j7Merged(r) <= J7_LIMIT);
 
 function verdict(rep, label) {
   const main = rep.rows.filter((r) => !String(r.seed).includes('#J8'));
@@ -37,8 +44,8 @@ function verdict(rep, label) {
         fail: rs.filter(j3Fail).map((r) => `${r.seed}/${r.id}@${r.takeoffTick}:step ${f3(r.airMaxStep)} fwd ${r.airMinForwardDelta.toExponential(2)}`) },
       J5: { minNet: Math.min(...rs.map((r) => r.minNetDist)), wrongSide: rs.reduce((a, r) => a + r.wrongSideFrames, 0), fail: rs.filter(j5Fail).length },
       J7: { judged: judged7.length, skipped: rs.length - judged7.length,
-        mergedMax: Math.max(...judged7.map((r) => r.mergedAtSec ?? Infinity)), stepMax: Math.max(...judged7.map((r) => r.mergeMaxStep)),
-        fail: judged7.filter(j7Fail).map((r) => `${r.seed}/${r.id}@${r.takeoffTick}:land ${f3(r.residAtLand)} merged ${f3(r.mergedAtSec)} step ${f3(r.mergeMaxStep)}`) },
+        mergedMax: Math.max(...judged7.map((r) => j7Merged(r) ?? Infinity)), stepMax: Math.max(...judged7.map(j7Step)),
+        fail: judged7.filter(j7Fail).map((r) => `${r.seed}/${r.id}@${r.takeoffTick}:land ${f3(r.residAtLand)} merged ${f3(j7Merged(r))} step ${f3(j7Step(r))}`) },
     };
     out.cats[cat] = o;
   }
@@ -59,7 +66,7 @@ function verdict(rep, label) {
     rows: a2.map((r) => ({
       at: `${r.seed}@${r.takeoffTick}`, dRender: f3(r.dRender), dSim: f3(r.dSim), hitFrames: r.hitFrames,
       J2: !j2Fail(r), J3: !j3Fail(r), J5: !j5Fail(r), J7: j7Judged(r) ? !j7Fail(r) : 'skipped',
-      step: f3(r.airMaxStep), net: f3(r.minNetDist), merged: f3(r.mergedAtSec), mstep: f3(r.mergeMaxStep),
+      step: f3(r.airMaxStep), net: f3(r.minNetDist), merged: f3(j7Merged(r)), mstep: f3(j7Step(r)),
     })),
   };
   return out;
