@@ -1,0 +1,478 @@
+{
+  "createdAt": "2026-09-29T06:45:46.202Z",
+  "base": "http://127.0.0.1:5322",
+  "head": "9f176360ad7635b7ccfe4e14c70044faabb17f9f",
+  "dirty": [
+    "D public/models/real/player_5k.sdf.glb",
+    " M tools/real-match-browser.mjs",
+    " M tools/real-player-browser.mjs",
+    " M tools/real-skin-armpit-web.mjs",
+    " M tools/real-skin-penetration-v2.mjs",
+    " M tools/real-skin-torso-drag.mjs",
+    "?? tools/real-skin-measure-rendered.mjs"
+  ],
+  "method": "生涯比賽（直接呼叫 resolveMatchConfig/buildMatchStage/startMatchLoop，跳過新生涯精靈與出戰按鈕的選單導航；換人走 stage.handlers.requestSub 正式路徑）＋ page.clock 虛擬時間 ＋ no-op 渲染（CPU 側量測不依賴實際 render()）",
+  "device": "Desktop headless Chromium（SwiftShader/WebGL）；非真機 FPS（B11 由使用者手機另測）",
+  "seeds": [
+    1
+  ],
+  "sampleEvery": 10,
+  "targetTicks": 10800,
+  "subAtTick": 3000,
+  "sessions": {},
+  "pass": {
+    "B2": false,
+    "B3": true,
+    "B4": true,
+    "B5": true,
+    "B6": true,
+    "B7": true,
+    "B8b": null,
+    "B9": null,
+    "B12": null,
+    "H1": true,
+    "rulerRead": false
+  },
+  "perSeed": {
+    "1": {
+      "matchEntryId": "group-1",
+      "finalTickGeo": 11251,
+      "finalTickReal": 11250,
+      "commonTickCount": 1126,
+      "visibleCountMismatches": 0,
+      "b2Pass": true,
+      "geoPoolCheck": {
+        "playerCount": 19,
+        "candidateCount": 12,
+        "nonEmptyPools": [],
+        "allEmpty": true
+      },
+      "b3HandOk": true,
+      "b3SoleOk": true,
+      "b3SampleCount": 21394,
+      "b4Ok": true,
+      "b4SampleCount": 21394,
+      "b5PlateOk": true,
+      "b5PlateSampleCount": 15764,
+      "b6EventsEqual": true,
+      "b6SnapshotEqual": null,
+      "b6ActivityOk": true,
+      "b6StateSigEqual": true,
+      "b6CommonStateTick": 11250,
+      "b6FinalTickAligned": false,
+      "hasLiberoSwap": true,
+      "hasSubstitution": true,
+      "subTick": 3276,
+      "h1Geo": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9909771993995383,
+        "ratioMin": 0.9712685419523872,
+        "ratioSpread": 1.0202916666152224,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.942315310823095
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.7031338441916957
+        },
+        "headDiff": 0.2391814666313994,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "h1Real": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9866710129845135,
+        "ratioMin": 0.967829891150991,
+        "ratioSpread": 1.0194673898851334,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.9338751854496465
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.6957272035578532
+        },
+        "headDiff": 0.23814798189179331,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "colorCheck": [
+        {
+          "id": "A1",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A2",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A3",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A4",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A5",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A6",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "AL",
+          "teamId": "A",
+          "isLibero": true,
+          "sampled": 248,
+          "torsoMode": 16762161,
+          "expected": 16762161,
+          "ok": true
+        },
+        {
+          "id": "A7",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "B1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B5",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B6",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BL",
+          "teamId": "B",
+          "isLibero": true,
+          "sampled": 248,
+          "torsoMode": 14209736,
+          "expected": 14209736,
+          "ok": true
+        },
+        {
+          "id": "BR1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 248,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        }
+      ],
+      "seqCoverage": [
+        "serve",
+        "receiveReady",
+        "bump",
+        "transitionWait",
+        "setReady",
+        "overhead",
+        "approach3",
+        "windup",
+        "spikeHold",
+        "spike",
+        "blockJump",
+        "landSoft",
+        "cheer",
+        "overheadJump",
+        "approach4",
+        "serveFloat",
+        "highfive"
+      ],
+      "errors": [
+        "console warn: [real-skin] 軀幹距離場不採用（不是 GLB），不做手臂碰撞修正：/models/real/player_5k.sdf.glb"
+      ]
+    }
+  },
+  "b3Coverage": {
+    "distinctKeys": [
+      "serve",
+      "receiveReady",
+      "bump",
+      "transitionWait",
+      "setReady",
+      "overhead",
+      "approach3",
+      "windup",
+      "spikeHold",
+      "spike",
+      "blockJump",
+      "landSoft",
+      "cheer",
+      "overheadJump",
+      "approach4",
+      "serveFloat",
+      "highfive"
+    ],
+    "count": 17,
+    "groupsCovered": {
+      "bump": true,
+      "overhead": true,
+      "spike": true,
+      "block": true,
+      "serve": true,
+      "approach": true
+    },
+    "allGroupsOk": true,
+    "countOk": true
+  },
+  "colorAllOk": true,
+  "n4Ok": true,
+  "plateMeshCounts": {
+    "1": 28
+  },
+  "b7": {
+    "protectedDiff": "",
+    "protectedDiffEmpty": true,
+    "importers": [
+      "src/app/realPreview.js",
+      "src/render/matchView.js"
+    ],
+    "extraImporters": [],
+    "importersOk": true,
+    "pass": true
+  },
+  "b8b": null,
+  "b9": null,
+  "b12": null,
+  "sessionsSummary": {
+    "1:geo": {
+      "finalTick": 11251,
+      "sampleCount": 1126,
+      "errors": [],
+      "faces": 5000,
+      "subResult": {
+        "tick": 3276,
+        "inId": "A7",
+        "outId": "A3",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 235,
+      "eventCounts": {
+        "LIBERO_SWAP": 8,
+        "SERVE": 27,
+        "BALL_OVER_NET": 40,
+        "TOUCH": 73,
+        "DEAD_BALL": 26,
+        "SCORE": 26,
+        "ROTATE": 14,
+        "MOMENTUM": 12,
+        "BLOCK_TOUCH": 8,
+        "SUBSTITUTION": 1
+      }
+    },
+    "1:real": {
+      "finalTick": 11250,
+      "sampleCount": 1126,
+      "errors": [
+        "console warn: [real-skin] 軀幹距離場不採用（不是 GLB），不做手臂碰撞修正：/models/real/player_5k.sdf.glb"
+      ],
+      "faces": 5000,
+      "subResult": {
+        "tick": 3276,
+        "inId": "A7",
+        "outId": "A3",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 235,
+      "eventCounts": {
+        "LIBERO_SWAP": 8,
+        "SERVE": 27,
+        "BALL_OVER_NET": 40,
+        "TOUCH": 73,
+        "DEAD_BALL": 26,
+        "SCORE": 26,
+        "ROTATE": 14,
+        "MOMENTUM": 12,
+        "BLOCK_TOUCH": 8,
+        "SUBSTITUTION": 1
+      }
+    }
+  },
+  "vacuousGuard": {
+    "b3SamplesOk": true,
+    "b4SamplesOk": true,
+    "b5PlateSamplesOk": true
+  },
+  "rulerRead": {
+    "1:geo": [],
+    "1:real": [
+      "A1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A5: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A6: 碰撞修正未啟用（skinStats().collide≠true）",
+      "AL: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A7: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B5: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B6: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BL: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A5: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A6: 碰撞修正未啟用（skinStats().collide≠true）",
+      "AL: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A7: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B5: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B6: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BL: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "BR4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A4: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A5: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A6: 碰撞修正未啟用（skinStats().collide≠true）",
+      "AL: 碰撞修正未啟用（skinStats().collide≠true）",
+      "A7: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B1: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B2: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B3: 碰撞修正未啟用（skinStats().collide≠true）",
+      "B4: 碰撞修正未啟用（skinStats().collide≠true）"
+    ]
+  }
+}

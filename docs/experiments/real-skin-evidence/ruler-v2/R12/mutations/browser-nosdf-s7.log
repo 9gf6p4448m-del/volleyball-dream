@@ -1,0 +1,122 @@
+[real-match-browser] running 1:geo...
+[real-match-browser] 1:geo done in 183s (tick=11251, errors=0)
+[real-match-browser] running 1:real...
+[real-match-browser] 1:real done in 266s (tick=11250, errors=1)
+{
+ "pass": {
+  "B2": false,
+  "B3": true,
+  "B4": true,
+  "B5": true,
+  "B6": true,
+  "B7": true,
+  "B8b": null,
+  "B9": null,
+  "B12": null,
+  "H1": true,
+  "rulerRead": false
+ },
+ "perSeed": {
+  "1": {
+   "b2Pass": true,
+   "b3HandOk": true,
+   "b3SoleOk": true,
+   "b4Ok": true,
+   "b5PlateOk": true,
+   "b6EventsEqual": true,
+   "b6SnapshotEqual": null,
+   "hasLiberoSwap": true,
+   "hasSubstitution": true,
+   "subTick": 3276,
+   "h1Geo": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9909771993995383,
+    "ratioMin": 0.9712685419523872,
+    "ratioSpread": 1.0202916666152224,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.942315310823095
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.7031338441916957
+    },
+    "headDiff": 0.2391814666313994,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   },
+   "h1Real": {
+    "ok": true,
+    "tick": 0,
+    "entryCount": 19,
+    "heightSpread": 0.24,
+    "ratioMax": 0.9866710129845135,
+    "ratioMin": 0.967829891150991,
+    "ratioSpread": 1.0194673898851334,
+    "tallest": {
+     "id": "A3",
+     "height": 1.96,
+     "headTopY": 1.9338751854496465
+    },
+    "shortest": {
+     "id": "BL",
+     "height": 1.72,
+     "headTopY": 1.6957272035578532
+    },
+    "headDiff": 0.23814798189179331,
+    "heightDiff": 0.24,
+    "spreadOk": true,
+    "ratioOk": true,
+    "propOk": true
+   }
+  }
+ },
+ "b3Coverage": {
+  "distinctKeys": [
+   "serve",
+   "receiveReady",
+   "bump",
+   "transitionWait",
+   "setReady",
+   "overhead",
+   "approach3",
+   "windup",
+   "spikeHold",
+   "spike",
+   "blockJump",
+   "landSoft",
+   "cheer",
+   "overheadJump",
+   "approach4",
+   "serveFloat",
+   "highfive"
+  ],
+  "count": 17,
+  "groupsCovered": {
+   "bump": true,
+   "overhead": true,
+   "spike": true,
+   "block": true,
+   "serve": true,
+   "approach": true
+  },
+  "allGroupsOk": true,
+  "countOk": true
+ },
+ "colorAllOk": true,
+ "b7": {
+  "pass": true,
+  "protectedDiffEmpty": true,
+  "importersOk": true
+ },
+ "b8b": null,
+ "b9": null
+}
+exit 0

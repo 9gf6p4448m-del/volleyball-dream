@@ -1,0 +1,27 @@
+{
+  "head": "9f176360ad7635b7ccfe4e14c70044faabb17f9f",
+  "clean": false,
+  "dirty": [
+    "M docs/experiments/real-player-evidence/desktop-spike-hit.png",
+    " M docs/experiments/real-player-evidence/desktop-still.png",
+    " M docs/experiments/real-player-evidence/portrait-spike-hit.png",
+    " M docs/experiments/real-player-evidence/portrait-still.png",
+    " M docs/experiments/real-player-evidence/side-bump-deepest.png",
+    " M docs/experiments/real-player-evidence/side-spike-land-deepest.png",
+    " M tools/real-match-browser.mjs",
+    " M tools/real-player-browser.mjs",
+    " M tools/real-skin-armpit-web.mjs",
+    " M tools/real-skin-penetration-v2.mjs",
+    " M tools/real-skin-r7-judge.mjs",
+    " M tools/real-skin-torso-drag.mjs",
+    "?? docs/experiments/real-player-evidence/R12-s6-report.json",
+    "?? docs/experiments/real-skin-evidence/ruler-v2/R12/",
+    "?? tools/real-skin-measure-rendered.mjs",
+    "?? tools/zz-r12-s11-diag.mjs"
+  ],
+  "headAfter": "9f176360ad7635b7ccfe4e14c70044faabb17f9f",
+  "startedAt": "2026-09-29T03:03:31.618Z",
+  "finishedAt": "2026-09-29T03:18:20.776Z",
+  "seconds": 889,
+  "exitCode": 0
+}

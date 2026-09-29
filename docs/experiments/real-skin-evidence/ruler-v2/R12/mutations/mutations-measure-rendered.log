@@ -1,0 +1,20 @@
+### 對照（無突變） 5k measure-rendered
+$ X=1 node tools/real-skin-measure-rendered.mjs --faces=5k
+exit=0
+# real-skin-measure-rendered（faces=5k；讀法 rendered）
+### 依參數分岔（身高≠1.85 關掉碰撞修正） 5k measure-rendered
+$ __PARAM=nocollide node tools/real-skin-measure-rendered.mjs --faces=5k
+exit=1
+Error: 遊戲參數受測者與量尺受測者同姿勢時畫面位置不同（幀 K1a A3：最大差 0.023333675280794268 m），疑依參數分岔
+### 依參數分岔（自由人改一個頂點） 5k measure-rendered
+$ __PARAM=libero node tools/real-skin-measure-rendered.mjs --faces=5k
+exit=1
+Error: 遊戲參數受測者與量尺受測者同姿勢時畫面位置不同（幀 K1a A6：最大差 0.009999990463256836 m），疑依參數分岔
+### EVIL2 5k measure-rendered
+$ EVIL2=1 node tools/real-skin-measure-rendered.mjs --faces=5k
+exit=1
+Error: 凍結集合與白模不相容：手臂頂點 305 的複製點 2807 主骨非手臂骨卻帶手臂骨權重 0.35681697726249695（被排除的複製點不得受手臂影響）
+### 三角形順序反轉 5k measure-rendered
+$ __REVERSE=1 node tools/real-skin-measure-rendered.mjs --faces=5k
+exit=1
+Error: 凍結集合與白模不相容：索引被改動（三角形 0：當前 2501,2498,2490、凍結時 3,2,4；只容許角序旋轉與對回來源的複製點）

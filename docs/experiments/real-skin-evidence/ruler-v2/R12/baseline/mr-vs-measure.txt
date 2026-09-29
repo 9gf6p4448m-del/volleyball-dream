@@ -1,0 +1,2 @@
+20k keys:同 weights:同 sole:同 region:同 faces:同 verts:同
+5k keys:同 weights:同 sole:同 region:同 faces:同 verts:同

@@ -1,0 +1,15 @@
+[E2b] 助跑重心下降 v=2.55：0.2394 m（須 ∈ [0.20, 0.30]）OK
+[E3] SEQUENCES 比 677516f：29 鍵，差異 0 處；新增鍵（不判）：無
+[E3] hitLeadTicks 斷言區塊與 677516f 逐字相同：true；tests/geo-animator.test.mjs：ℹ tests 50 | ℹ pass 50 | ℹ fail 0
+[E3] OK
+[E4] 驅動 86 條、幀 4830（非滯空 3292）；最大膝角 177.39°、最小膝前距 0.0102 m、最大肘有號角 180.00°、非滯空最低腳底 -0.0250 m
+[E4] OK
+[E6] OK   windup→spikeHold   D0Probe(r) 幀 12（窗自第 4 幀）、最小權重 1.0000、慣用手腕最大逐幀高度變化 0.0266 m（窗外 windup 漸入 0.4703 m，不判）
+[E6] OK   windup→spike       D0Probe(r) 幀 11（窗自第 4 幀）、最小權重 1.0000、慣用手腕最大逐幀高度變化 0.0266 m（窗外 windup 漸入 0.4703 m，不判）
+[E6] OK   windup→tip         D0Probe(r) 幀 12（窗自第 4 幀）、最小權重 1.0000、慣用手腕最大逐幀高度變化 0.0266 m（窗外 windup 漸入 0.4703 m，不判）
+[E6] OK   windup→spikeHold   L2BProbe0(l) 幀 12（窗自第 4 幀）、最小權重 1.0000、慣用手腕最大逐幀高度變化 0.0266 m（窗外 windup 漸入 0.4703 m，不判）
+[E6] OK   windup→spike       L2BProbe0(l) 幀 11（窗自第 4 幀）、最小權重 1.0000、慣用手腕最大逐幀高度變化 0.0266 m（窗外 windup 漸入 0.4703 m，不判）
+[E6] OK   windup→tip         L2BProbe0(l) 幀 12（窗自第 4 幀）、最小權重 1.0000、慣用手腕最大逐幀高度變化 0.0266 m（窗外 windup 漸入 0.4703 m，不判）
+[E6] OK
+[2B check] {"e2b":true,"e3":true,"e4":true,"e6":true,"all":true}
+exit 0

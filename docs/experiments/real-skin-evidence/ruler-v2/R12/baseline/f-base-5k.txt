@@ -1,0 +1,15 @@
+# real-skin-torso-drag (f) 軀幹面被手臂拖動（faces=5k，variant=base）
+量法（R4）：凍結 S_b 頂點中 8720597 主骨屬 pelvis／spine／spineUpper 者；剛性參考＝受測權重只留三軀幹骨、重新正規化的蒙皮（三骨權重和 0 者退回 8720597 主骨剛體）；往內位移＝(蒙皮後−剛性參考)·(−剛性參考法線)
+輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_5k.glb c524616855fa、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs e5b1973d2baf、real-skin-torso-drag.mjs effaca772303、real-skin-frozen-sets.json 87122d5a2aa6
+頂點（凍結 S_b 669，依 8720597 主骨）：計入 647（pelvis 375、spine 188、spineUpper 84）、主骨非軀幹不計 22（rHip 5、lHip 3、rShoulder 4、lShoulder 10）；計入者中三軀幹骨權重和為 0、退回 R3 剛體 0
+| 幀 | 序列 | 往內 >2 cm 頂點數 | 最大往內位移 cm | 最大處（主骨、綁定 y m） |
+|---|---|---|---|---|
+| K1a | spikeHold | 41 | 6.9 | pelvis、0.773 |
+| K1b | spike | 26 | 5.7 | spineUpper、1.535 |
+| K2a | 待命 | 16 | 4.7 | pelvis、0.773 |
+| K2b | serveJump | 34 | 6.3 | pelvis、0.773 |
+| K3a | 待命 | 22 | 5.9 | pelvis、0.793 |
+| K3b | 待命 | 21 | 6.0 | pelvis、0.773 |
+| K4a | 待命 | 5 | 2.6 | pelvis、0.773 |
+| K4b | receiveReady | 25 | 6.4 | pelvis、0.801 |
+| K4c | bump | 17 | 4.3 | pelvis、0.801 |

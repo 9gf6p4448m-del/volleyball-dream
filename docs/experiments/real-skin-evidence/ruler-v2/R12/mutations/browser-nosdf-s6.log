@@ -1,0 +1,14 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Error: [ruler] 權重來源 baked／距離場來源 none（應皆為 baked）
+    at eval (eval at evaluate (:311:30), <anonymous>:12:99)
+    at async <anonymous>:337:30
+    at installRulerRead (C:\Users\shung\AppData\Local\Temp\claude\C--Users-shung\ce506562-b18a-4ac0-8c2e-663a20246803\scratchpad\mut-r12\tools\real-player-browser.mjs:46:15)
+    at C:\Users\shung\AppData\Local\Temp\claude\C--Users-shung\ce506562-b18a-4ac0-8c2e-663a20246803\scratchpad\mut-r12\tools\real-player-browser.mjs:576:29 {
+  log: []
+}
+
+Node.js v24.16.0
+exit 1

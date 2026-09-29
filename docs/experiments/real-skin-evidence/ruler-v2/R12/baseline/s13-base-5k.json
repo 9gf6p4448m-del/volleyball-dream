@@ -1,0 +1,36 @@
+{
+ "faces": "5k",
+ "method": "S13 arm-follow R7/R8/R10 non-arm",
+ "band": {
+  "center": 0.5,
+  "half": 0.1
+ },
+ "gate": 0.5,
+ "hashes": {
+  "realPlayer.js": "b1489d7878dc",
+  "geoAnimator.js": "250a1f1cb469",
+  "geoCharacter.js": "5a149abadd3e",
+  "player_5k.glb": "c524616855fa",
+  "player_5k.weights.glb": "（無此檔）",
+  "real-skin-lib.mjs": "841432f22024",
+  "real-skin-penetration-v2.mjs": "e5b1973d2baf",
+  "real-skin-arm-follow.mjs": "c56ab61bddda",
+  "real-skin-frozen-sets.json": "87122d5a2aa6"
+ },
+ "weightsSource": "computed（此版 src 無 weightsSource 欄位）",
+ "pass": true,
+ "r": {
+  "n": 27,
+  "mean": 0.076793,
+  "median": 0,
+  "max": 1,
+  "idsSha": "57f7364f1670"
+ },
+ "l": {
+  "n": 31,
+  "mean": 0.005606,
+  "median": 0,
+  "max": 0.173773,
+  "idsSha": "5ca795d158c2"
+ }
+}

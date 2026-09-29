@@ -1,0 +1,153 @@
+{
+ "faces": "5k",
+ "method": "S14 armpit-web R10",
+ "hashes": {
+  "realPlayer.js": "b1489d7878dc",
+  "geoAnimator.js": "250a1f1cb469",
+  "geoCharacter.js": "5a149abadd3e",
+  "player_5k.glb": "c524616855fa",
+  "player_5k.weights.glb": "（無此檔）",
+  "real-skin-lib.mjs": "841432f22024",
+  "real-skin-penetration-v2.mjs": "e5b1973d2baf",
+  "real-skin-armpit-web.mjs": "8b46fd4b6f59",
+  "real-skin-frozen-sets.json": "87122d5a2aa6"
+ },
+ "rows": {
+  "K1a": {
+   "seq": "spikeHold",
+   "r": {
+    "n": 93,
+    "off": 4,
+    "max": 0.102259,
+    "arg": 500
+   },
+   "l": {
+    "n": 94,
+    "off": 5,
+    "max": 0.087037,
+    "arg": 2025
+   }
+  },
+  "K1b": {
+   "seq": "spike",
+   "r": {
+    "n": 93,
+    "off": 4,
+    "max": 0.130922,
+    "arg": 497
+   },
+   "l": {
+    "n": 94,
+    "off": 3,
+    "max": 0.049414,
+    "arg": 2059
+   }
+  },
+  "K2a": {
+   "seq": null,
+   "r": {
+    "n": 93,
+    "off": 3,
+    "max": 0.067698,
+    "arg": 476
+   },
+   "l": {
+    "n": 94,
+    "off": 5,
+    "max": 0.056608,
+    "arg": 2025
+   }
+  },
+  "K2b": {
+   "seq": "serveJump",
+   "r": {
+    "n": 93,
+    "off": 4,
+    "max": 0.11103,
+    "arg": 497
+   },
+   "l": {
+    "n": 94,
+    "off": 5,
+    "max": 0.077204,
+    "arg": 2025
+   }
+  },
+  "K3a": {
+   "seq": null,
+   "r": {
+    "n": 93,
+    "off": 2,
+    "max": 0.035519,
+    "arg": 500
+   },
+   "l": {
+    "n": 94,
+    "off": 0,
+    "max": 0.012504,
+    "arg": 2059
+   }
+  },
+  "K3b": {
+   "seq": null,
+   "r": {
+    "n": 93,
+    "off": 0,
+    "max": 0.007988,
+    "arg": 476
+   },
+   "l": {
+    "n": 94,
+    "off": 0,
+    "max": 0.0127,
+    "arg": 2058
+   }
+  },
+  "K4a": {
+   "seq": null,
+   "r": {
+    "n": 93,
+    "off": 0,
+    "max": 0.001922,
+    "arg": 166
+   },
+   "l": {
+    "n": 94,
+    "off": 0,
+    "max": 0.002126,
+    "arg": 2328
+   }
+  },
+  "K4b": {
+   "seq": "receiveReady",
+   "r": {
+    "n": 93,
+    "off": 3,
+    "max": 0.058457,
+    "arg": 476
+   },
+   "l": {
+    "n": 94,
+    "off": 5,
+    "max": 0.049165,
+    "arg": 2059
+   }
+  },
+  "K4c": {
+   "seq": "bump",
+   "r": {
+    "n": 93,
+    "off": 3,
+    "max": 0.076328,
+    "arg": 497
+   },
+   "l": {
+    "n": 94,
+    "off": 5,
+    "max": 0.063224,
+    "arg": 2057
+   }
+  }
+ },
+ "gate": null
+}

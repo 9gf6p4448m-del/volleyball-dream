@@ -1,0 +1,59 @@
+diff --git a/src/render/realPlayer.js b/src/render/realPlayer.js
+index d1595420..a2f7742c 100644
+--- a/src/render/realPlayer.js
++++ b/src/render/realPlayer.js
+@@ -418,6 +418,15 @@ export async function loadRealPlayerAsset(url, { sdf = true } = {}) {
+   const w = baked ?? computeSkinWeights(pos, nor);
+   const parts = computePartLabels(pos, w.primary);
+   const split = splitBridges(pos, nor, geometry.index.array, w, parts);
++  if (process.env.EVIL2) { const n0 = split.pos.length / 3; const dup = (a) => { const o = new a.constructor(a.length * 2); o.set(a); o.set(a, a.length); return o; };
++    for (const k of ['pos', 'nor', 'skinIndex', 'skinWeight', 'primary', 'parts']) split[k] = dup(split[k]);
++    const RS = BONES.indexOf('rShoulder'); const T = ['pelvis', 'spine', 'spineUpper'].map((b) => BONES.indexOf(b));
++    for (let i = n0; i < 2 * n0; i += 1) if (T.includes(split.primary[i])) for (let k = 0; k < 4; k += 1) { split.skinIndex[i * 4 + k] = k ? 0 : RS; split.skinWeight[i * 4 + k] = k ? 0 : 1; }
++    const seen = new Uint8Array(n0); let kept = 0;
++    for (let t = 0; t < split.index.length; t += 1) { const v = split.index[t]; if (seen[v]) split.index[t] = v + n0; else { seen[v] = 1; kept += 1; } }
++    console.error(`[EVIL2] n0=${n0} slots=${split.index.length} keptOriginalSlots=${kept}`); }
++  if (process.env.__REVERSE) { const ix = split.index; const nt = ix.length / 3; const c = Uint32Array.from(ix); for (let t = 0; t < nt; t += 1) for (let k = 0; k < 3; k += 1) ix[t * 3 + k] = c[(nt - 1 - t) * 3 + k]; }
++  if (process.env.__BADW) { split.skinWeight[4 * 100] *= 2; }
+   const out = new THREE.BufferGeometry();
+   out.setAttribute('position', new THREE.Float32BufferAttribute(split.pos, 3));
+   out.setAttribute('normal', new THREE.Float32BufferAttribute(split.nor, 3));
+@@ -745,6 +754,11 @@ export function createRealPlayer(asset, {
+   geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+ 
+   const mesh = new THREE.Mesh(geometry, realMaterial());
++  if (process.env.__CHILD) mesh.add(new THREE.Mesh(geometry, realMaterial()));
++  if (process.env.__ROOTMESH) root.add(new THREE.Mesh(geometry, realMaterial()));
++  if (process.env.__MESHOFF) mesh.position.x = 0.01;
++  if (process.env.__HIDE) mesh.visible = false;
++  if (process.env.__MORPH) { geometry.morphAttributes.position = [new THREE.BufferAttribute(new Float32Array(nv * 3), 3)]; mesh.updateMorphTargets(); }
+   mesh.frustumCulled = false; // 頂點是世界座標、帶著球員跑遍全場，原始包圍球不準
+   const bindQuats = BONES.map((b) => joints[b].quaternion.clone());
+   for (const b of BONES) joints[b].rotation.set(0, 0, 0); // 交給 geoAnimator 的零姿勢
+@@ -864,7 +878,7 @@ export function createRealPlayer(asset, {
+   const bP = bindGeo.attributes.position.array; const bN = bindGeo.attributes.normal.array;
+   const SI = bindGeo.attributes.skinIndex.array; const SW = bindGeo.attributes.skinWeight.array;
+   const outP = posAttr.array; const outN = norAttr.array;
+-  const C = asset.collide;
++  const C = (process.env.__PARAM === 'nocollide' && height !== BASE_H) ? null : asset.collide;
+   const work = C ? collideWork(C) : null;
+   const stats = work ? work.stats : { hits: 0, maxPush: 0 };
+   function updateSkin() {
+@@ -914,6 +928,8 @@ export function createRealPlayer(asset, {
+       outN[i * 3] = nx / l; outN[i * 3 + 1] = ny / l; outN[i * 3 + 2] = nz / l;
+     }
+     if (C) collideArms(C, MB, outP, outN, bindGeo.index.array, work);
++    if (process.env.__PARAM === 'libero' && isLibero) outP[0] += 0.01;
++    if (process.env.__SWAPPOS) geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(bP), 3));
+     posAttr.needsUpdate = true;
+     norAttr.needsUpdate = true;
+   }
+@@ -927,7 +943,7 @@ export function createRealPlayer(asset, {
+     //  updateSkin()：以目前骨架重算 position／normal（groundLegs 結尾已自動呼叫；量尺自己改姿勢後再呼叫）；
+     //  skinStats()：最近一次 updateSkin 的碰撞群組數與最大推出量（m）
+     bindGeometry: bindGeo,
+-    renderedPositions: () => outP,
++    renderedPositions: () => (process.env.__LIE ? Float32Array.from(outP) : outP),
+     renderedNormals: () => outN,
+     updateSkin,
+     skinStats: () => ({ ...stats, collide: Boolean(C) }),

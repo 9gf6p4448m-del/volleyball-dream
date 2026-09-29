@@ -1,0 +1,2 @@
+20k 綁定姿勢 CPU 蒙皮 vs 綁定位置：最大差 0.844 mm 於頂點 1903 綁定位置 -0.204,1.324,-0.087 ；差>1µm 頂點 42 ；skinStats {"hits":1,"maxPush":0.0008444404079880246,"collide":true}
+5k 綁定姿勢 CPU 蒙皮 vs 綁定位置：最大差 0.000 mm 於頂點 357 綁定位置 -0.221,0.000,0.069 ；差>1µm 頂點 0 ；skinStats {"hits":0,"maxPush":0,"collide":true}
