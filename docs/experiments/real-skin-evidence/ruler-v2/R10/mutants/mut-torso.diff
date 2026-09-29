@@ -1,0 +1,12 @@
+54,57c54,59
+<       let d = -Infinity;
+<       for (const v of R.armReps.get(i)) d = Math.max(d, segDist([P1[v * 3], P1[v * 3 + 1], P1[v * 3 + 2]], S1, E1) / sc - r0);
+<       if (d > OFF) off += 1;
+<       if (d > max) { max = d; arg = i; }
+---
+>       // 【突變 M-torso】只算軀幹骨權重：頂點的 pelvis／spine／spineUpper 權重和 >0.5 即計入；δ 最大固定 0
+>       const G = setup.G; const SI = G.attributes.skinIndex.array; const SW = G.attributes.skinWeight.array;
+>       const TI = ['pelvis', 'spine', 'spineUpper'].map((b) => BONES.indexOf(b));
+>       let tw = 0; for (const v of R.armReps.get(i)) { let t = 0; for (let q = 0; q < 4; q += 1) if (TI.includes(SI[v * 4 + q])) t += SW[v * 4 + q]; tw = Math.max(tw, t); }
+>       if (tw > 0.5) off += 1;
+>       max = 0; arg = i;

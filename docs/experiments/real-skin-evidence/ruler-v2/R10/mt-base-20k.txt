@@ -1,0 +1,15 @@
+# real-skin-armpit-web S14 腋下薄片（上臂皮脫離臂軸）（faces=20k）
+量法：凍結上臂頂點（手臂代表點取最差）離當幀上臂骨軸的距離（÷臂段長度比）減去綁定時離軸距離＝δ；列 δ>2 cm 頂點數／δ 最大
+輸入 sha256 前 12 碼：realPlayer.js b1489d7878dc、geoAnimator.js 250a1f1cb469、geoCharacter.js 5a149abadd3e、player_20k.glb 5ebc99334bfb、player_20k.weights.glb （無此檔）、real-skin-lib.mjs 841432f22024、real-skin-penetration-v2.mjs 3bbe224678e6、real-skin-armpit-web.mjs 2df532f99dd1、real-skin-frozen-sets.json 87122d5a2aa6
+權重來源：computed（此版 src 無 weightsSource 欄位）；上臂頂點 右 392／左 370
+| 幀 | 序列 | 右 δ>2cm 數 | 右 δ 最大 cm | 左 δ>2cm 數 | 左 δ 最大 cm |
+|---|---|---|---|---|---|
+| K1a | spikeHold | 20 | 0.0 | 18 | 0.0 |
+| K1b | spike | 20 | 0.0 | 18 | 0.0 |
+| K2a | 待命 | 20 | 0.0 | 18 | 0.0 |
+| K2b | serveJump | 20 | 0.0 | 18 | 0.0 |
+| K3a | 待命 | 20 | 0.0 | 18 | 0.0 |
+| K3b | 待命 | 20 | 0.0 | 18 | 0.0 |
+| K4a | 待命 | 20 | 0.0 | 18 | 0.0 |
+| K4b | receiveReady | 20 | 0.0 | 18 | 0.0 |
+| K4c | bump | 20 | 0.0 | 18 | 0.0 |
