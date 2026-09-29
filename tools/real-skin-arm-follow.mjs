@@ -1,6 +1,6 @@
 // 寫實蒙皮修正 S13：手臂跟隨——上臂中段皮膚頂點的軀幹骨權重平均值。
-// 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R7（c075fb7）、R8（8edaa6a）。門檻：左右臂皆 ≤0.50（20k、5k；R8 由 0.30 改為 0.50，
-//   語意＝軀幹權重低於一半，這塊皮主要由手臂骨帶動；取帶、量法、四捨五入照 R7 不變）。
+// 驗收：docs/kickoffs/real-skin-acceptance.md 修訂紀錄 R7（c075fb7）、R8（8edaa6a）、R10（551f7f80）。門檻：左右臂皆 ≤0.50（20k、5k；R8 由 0.30 改為 0.50，
+//   語意＝非手臂骨權重低於一半，這塊皮主要由手臂骨帶動；取帶、四捨五入照 R7 不變；R10 起改計非手臂骨權重）。
 //
 // 用法：node tools/real-skin-arm-follow.mjs [--faces=20k|5k] [--json=<path>] [--txt=<path>]
 //
@@ -11,11 +11,12 @@
 //    該段參數 t 落在帶內。
 //    半寬 0.10 的理由：上臂段長 ≈0.31 m，±0.10＝±3.1 cm，帶的兩端離肩地標 ≥9.2 cm、離肘地標 ≥12.3 cm——
 //    避開肩頭／腋下（凍結手臂集合本就排除 t<0.30）與肘窩的權重過渡區，又讓 5k 每臂仍有足夠頂點（實數見輸出）。
-//  ・每個取帶頂點的軀幹權重＝其 skinWeight 中骨名屬 pelvis／spine／spineUpper 者的總和（輔助骨 ArmAux／ArmHalf
-//    等非這三骨者不計入，照 R7 字面「軀幹骨（pelvis／spine／spineUpper）」）。
+//  ・每個取帶頂點的「非手臂骨權重」＝1 減去手臂骨（r/lShoulder、Elbow、Wrist）權重和，也就是軀幹骨＋輔助骨（ArmAux／ArmHalf 等）
+//    ＋其他一切非手臂骨的權重和（R10：S13 改計非手臂骨權重，堵「綁在輔助骨上的上臂皮不計入」；R7／R8 原為只計
+//    pelvis／spine／spineUpper）。
 //    權重讀畫面實際使用的 mesh.geometry（V2.loadSetup 的 G；含其全部斷言：同一份資料、網格本體、索引、權重合法、
-//    遊戲參數）。凍結頂點若有被畫出的手臂複製點，取其手臂代表點中軀幹權重最大者（最差值）。
-//  ・每臂輸出：取帶頂點數、軀幹權重平均（判定用，比到小數第 3 位：四捨五入到 0.001 後 ≤0.500）、中位數、最大。
+//    遊戲參數）。凍結頂點若有被畫出的手臂複製點，取其手臂代表點中非手臂骨權重最大者（最差值）。
+//  ・每臂輸出：取帶頂點數、非手臂骨權重平均（判定用，比到小數第 3 位：四捨五入到 0.001 後 ≤0.500）、中位數、最大。
 //  ・取帶頂點集合鎖定（EXPECTED_BAND：8720597 上以本定義選出的頂點 ID 指紋）。取帶只由凍結集合、8720597 地標與
 //    綁定位置（凍結檔雜湊保證）決定，任何候選都應相同；不同＝取帶常數或地標被改動，停止。
 // 輸出不含時間戳：同輸入逐位元相同。
@@ -23,7 +24,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import * as V2 from './real-skin-penetration-v2.mjs';
 
-export const TORSO = ['pelvis', 'spine', 'spineUpper'];
+export const TORSO = ['pelvis', 'spine', 'spineUpper']; // R7／R8 舊定義（保留匯出供診斷）
+export const ARM = ['rShoulder', 'rElbow', 'rWrist', 'lShoulder', 'lElbow', 'lWrist']; // R10：非手臂骨＝不屬於這六骨者
 export const BAND = { center: 0.5, half: 0.10 };
 export const GATE = 0.50; // R8：兩臂皆 ≤0.50（R7 原 0.30）
 // 取帶頂點集合指紋（setPrint 前 12 碼；8720597 上以本定義產生，L／H 同值）
@@ -48,9 +50,9 @@ export function armFollow(setup, faces) {
   const { R, G } = setup;
   const F = setup.frozen.fz[faces];
   const BONES = setup.mods.rp.BONES;
-  const TI = new Set(TORSO.map((b) => { const i = BONES.indexOf(b); if (i < 0) throw new Error(`骨架裡沒有 ${b}`); return i; }));
+  const AI = new Set(ARM.map((b) => { const i = BONES.indexOf(b); if (i < 0) throw new Error(`骨架裡沒有 ${b}`); return i; }));
   const SI = G.attributes.skinIndex.array; const SW = G.attributes.skinWeight.array;
-  const torsoW = (v) => { let s = 0; for (let q = 0; q < 4; q += 1) if (TI.has(SI[v * 4 + q])) s += SW[v * 4 + q]; return s; };
+  const torsoW = (v) => { let s = 0; for (let q = 0; q < 4; q += 1) if (!AI.has(SI[v * 4 + q])) s += SW[v * 4 + q]; return s; }; // R10：非手臂骨權重
   const out = {};
   for (const [s, ids, parts] of [['r', F.arm.r, F.arm.rPart], ['l', F.arm.l, F.arm.lPart]]) {
     const sh = s === 'r' ? FROZEN_LANDMARKS.rShoulder : mirror(FROZEN_LANDMARKS.rShoulder);
@@ -101,10 +103,10 @@ if (isMain) {
   const f3 = (x) => x.toFixed(3);
   const out = [];
   out.push(`# real-skin-arm-follow S13 手臂跟隨（faces=${faces}）`);
-  out.push(`量法：上臂段（8720597 地標，肩→肘）t∈[${BAND.center - BAND.half}, ${BAND.center + BAND.half}]、屬凍結手臂集合上臂的皮膚頂點；軀幹權重＝pelvis／spine／spineUpper 權重和（讀畫面 mesh.geometry；手臂複製點取最差）`);
+  out.push(`量法：上臂段（8720597 地標，肩→肘）t∈[${BAND.center - BAND.half}, ${BAND.center + BAND.half}]、屬凍結手臂集合上臂的皮膚頂點；非手臂骨權重＝軀幹骨＋輔助骨等非 r/lShoulder／Elbow／Wrist 的權重和（R10；讀畫面 mesh.geometry；手臂複製點取最差）`);
   out.push(`輸入 sha256 前 12 碼：${Object.entries(hashes).map(([k, v]) => `${k} ${v}`).join('、')}`);
   out.push(`權重來源：${src}`);
-  out.push('| 臂 | 取帶頂點數 | 軀幹權重平均 | 中位數 | 最大 | 取帶頂點指紋 | 判定（平均 ≤0.500） |');
+  out.push('| 臂 | 取帶頂點數 | 非手臂骨權重平均 | 中位數 | 最大 | 取帶頂點指紋 | 判定（平均 ≤0.500） |');
   out.push('|---|---|---|---|---|---|---|');
   for (const [s, nm, ok] of [['r', '右', res.okR], ['l', '左', res.okL]]) {
     const x = res[s];
@@ -115,7 +117,7 @@ if (isMain) {
   process.stdout.write(text);
   if (args.txt && args.txt !== '1') await writeFile(args.txt, text);
   if (args.json && args.json !== '1') {
-    const j = { faces, method: 'S13 arm-follow R7/R8', band: BAND, gate: GATE, hashes, weightsSource: src, pass: res.pass };
+    const j = { faces, method: 'S13 arm-follow R7/R8/R10 non-arm', band: BAND, gate: GATE, hashes, weightsSource: src, pass: res.pass };
     for (const s of ['r', 'l']) j[s] = { n: res[s].n, mean: Number(res[s].mean.toFixed(6)), median: Number(res[s].median.toFixed(6)), max: Number(res[s].max.toFixed(6)), idsSha: res[s].ids.sha };
     await writeFile(args.json, `${JSON.stringify(j, null, 1)}\n`);
   }
