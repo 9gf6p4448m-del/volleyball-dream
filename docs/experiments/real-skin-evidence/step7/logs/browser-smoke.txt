@@ -1,0 +1,4 @@
+# 瀏覽器冒煙（vite dev＋playwright swiftshader；realPreview 14 人；1.5 秒前後比 players[0] 的 position 陣列）
+?devreal=1&quality=high&dpr=1 {"type":"Mesh","players":14,"faces":20000,"moved":21806,"n":30006,"hud":"FPS 17\n面數 20,000／人（20k）\n14 人"} errors []
+?devreal=1&faces=5k&quality=high&dpr=1 {"type":"Mesh","players":14,"faces":5000,"moved":7506,"n":7506,"hud":"FPS 11\n面數 5,000／人（5k）\n14 人"} errors []
+# FPS 為 swiftshader 軟體算圖，不代表手機效能（B11 由使用者手機量）

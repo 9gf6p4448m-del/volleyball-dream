@@ -12,7 +12,9 @@
 //  ④ 四肢頂點：bone heat（Baran & Popović 2007；Blender「Automatic Weights」同一演算法）——(L + M·H) w_j = M·H·p_j，
 //     L＝餘切拉普拉斯（負權夾 0）、M＝集中面積、H_ii＝c/d_i²（d＝到最近可見骨骨段的距離）、p_j＝最近可見骨指示；
 //     ②③ 的頂點當 Dirichlet 邊界（值固定），所以軀幹與四肢之間的過渡全部落在四肢這一側。
-//  ⑤ 肩部輔助骨（驗收修訂 R2）：上臂內側頂點把上臂那一份權重的一部分轉給 r/lArmAux（見 realPlayer.js AUX_*）。
+//  ⑤ 上臂剛性（驗收修訂 R12，方案 3）：上臂（主骨 r/lShoulder）綁定臂段參數 t ≥ UPPER_RIGID_T 的頂點沿用現行權重、當邊界——
+//     上臂皮跟著上臂骨走（S13／S14）；手臂垂下貼胸時的穿入改由執行期碰撞修正處理（realPlayer.js updateSkin、SDF 見
+//     tools/bake-real-skin-sdf.mjs）。原本的肩部輔助骨（R2／R10）已移除。
 //  最後：夾 [0,1]、對側四肢骨歸零、取前 4、正規化。
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -27,11 +29,11 @@ export const PARAMS = {
   HAND_KEEP: true, // 手（主骨 r/lWrist）沿用現行權重、當邊界（第一階段 A2(a)(e)：手須與腕關節剛性同動）
   TORSO_LIMB_KEEP: true, // ③ 的軀幹頂點若（去掉手臂份額後）仍帶腿骨權重，整組沿用現行權重（連軀幹骨間分配也不改）
   MIN_D: 0.01, // d 的下限（m）
-  AUX: { c0: -0.2, c1: 0.6, W0: 1.0 }, // 上臂內側 → 輔助骨：內側度 smoothstep(c0,c1) × W0
+  UPPER_RIGID_T: 0.7, // ⑤：上臂 t ≥ 此值者沿用現行權重（技術調查 docs/experiments/real-skin-survey-report.md 的 rigid07）
 };
 
 const TORSO_NAMES = ['pelvis', 'spine', 'spineUpper', 'neck'];
-const SIDE_BONE = /^([rl])(Shoulder|Elbow|Wrist|Hip|Knee|Ankle|ArmAux)$/;
+const SIDE_BONE = /^([rl])(Shoulder|Elbow|Wrist|Hip|Knee|Ankle)$/;
 
 function segDist(p, a, b) {
   const abx = b[0] - a[0]; const aby = b[1] - a[1]; const abz = b[2] - a[2];
@@ -54,7 +56,11 @@ function boneSegs(L) {
   }
   return seg;
 }
-function smooth(e0, e1, x) { const t = Math.min(Math.max((x - e0) / (e1 - e0), 0), 1); return t * t * (3 - 2 * t); }
+// 上臂段參數 t（綁定）：p 投影到 a→b 的比例（不夾）
+function segT(p, a, b) {
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  return ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2);
+}
 
 // 餘切拉普拉斯（CSR，負權夾 0）與集中面積
 function laplacian(pos, index) {
@@ -147,7 +153,7 @@ export function bakeWeights(rp, pos, nor, index, params = PARAMS) {
   const bi = (b) => BONES.indexOf(b);
   const TORSO = new Set(TORSO_NAMES.map(bi));
   const HAND = new Set([bi('rWrist'), bi('lWrist')]);
-  const ARM = new Set(BONES.map((b, j) => (/^[rl](Shoulder|Elbow|Wrist|ArmAux)$/.test(b) ? j : -1)).filter((j) => j >= 0));
+  const ARM = new Set(BONES.map((b, j) => (/^[rl](Shoulder|Elbow|Wrist)$/.test(b) ? j : -1)).filter((j) => j >= 0));
   const c = rp.computeSkinWeights(pos, nor);
   const segs = boneSegs(L);
   const P = (i) => [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]];
@@ -167,7 +173,10 @@ export function bakeWeights(rp, pos, nor, index, params = PARAMS) {
   const fixed = new Uint8Array(n);
   const W0 = Array.from({ length: nb }, () => new Float64Array(n));
   for (let i = 0; i < n; i += 1) {
-    const low = pos[i * 3 + 1] <= params.LOW_Y || (params.HAND_KEEP && HAND.has(c.primary[i]));
+    const pb = BONES[c.primary[i]];
+    const rigidUpper = params.UPPER_RIGID_T != null && /^[rl]Shoulder$/.test(pb)
+      && segT(P(i), L[`${pb[0]}Shoulder`], L[`${pb[0]}Elbow`]) >= params.UPPER_RIGID_T;
+    const low = pos[i * 3 + 1] <= params.LOW_Y || (params.HAND_KEEP && HAND.has(c.primary[i])) || rigidUpper;
     const torso = TORSO.has(c.primary[i]);
     if (!low && !torso) continue;
     fixed[i] = 1;
@@ -190,8 +199,6 @@ export function bakeWeights(rp, pos, nor, index, params = PARAMS) {
   // 收尾：夾 [0,1]、對側歸零、取前 4、正規化（固定頂點照 W0）
   const sideOf = BONES.map((b) => (SIDE_BONE.test(b) ? b[0] : null));
   const skinIndex = new Uint16Array(n * 4); const skinWeight = new Float32Array(n * 4);
-  const auxI = { r: bi('rArmAux'), l: bi('lArmAux') };
-  const shI = { r: bi('rShoulder'), l: bi('lShoulder') };
   for (let i = 0; i < n; i += 1) {
     const x = pos[i * 3];
     const opp = (s) => (x < -0.02 && s === 'l') || (x > 0.02 && s === 'r');
@@ -202,17 +209,6 @@ export function bakeWeights(rp, pos, nor, index, params = PARAMS) {
       cand.push([j, w]);
     }
     if (!cand.length) cand.push([c.primary[i], 1]);
-    // ⑤ 上臂內側 → 輔助骨
-    for (const s of ['r', 'l']) {
-      if (auxI[s] < 0 || fixed[i]) continue;
-      const k = cand.findIndex(([j]) => j === shI[s]);
-      if (k < 0) continue;
-      const f = auxFraction(L, s, P(i), params.AUX);
-      if (f <= 0) continue;
-      const w = cand[k][1];
-      cand[k][1] = w * (1 - f);
-      cand.push([auxI[s], w * f]);
-    }
     cand.sort((a, b) => b[1] - a[1]);
     cand = cand.slice(0, 4);
     const s = cand.reduce((acc, e) => acc + e[1], 0);
@@ -220,21 +216,6 @@ export function bakeWeights(rp, pos, nor, index, params = PARAMS) {
   }
   return { skinIndex, skinWeight, primary: c.primary, stats: { iters: [heat0.worst, heat.worst], fixed: fixed.reduce((a, b) => a + b, 0) } };
 }
-// 上臂內側度：綁定姿勢下，頂點相對上臂軸的徑向與「朝軀幹」方向的夾角餘弦
-function auxFraction(L, s, p, A) {
-  const ex = s === 'r' ? -1 : 1;
-  const a = L[`${s}Shoulder`]; const b = L[`${s}Elbow`];
-  const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]; const ul = Math.hypot(...u);
-  for (let k = 0; k < 3; k += 1) u[k] /= ul;
-  const m = [-ex - (-ex * u[0]) * u[0], -(-ex * u[0]) * u[1], -(-ex * u[0]) * u[2]]; const ml = Math.hypot(...m);
-  for (let k = 0; k < 3; k += 1) m[k] /= ml;
-  const q = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
-  const t = q[0] * u[0] + q[1] * u[1] + q[2] * u[2];
-  const r = [q[0] - t * u[0], q[1] - t * u[1], q[2] - t * u[2]]; const rl = Math.hypot(...r) || 1;
-  const cth = (r[0] * m[0] + r[1] * m[1] + r[2] * m[2]) / rl;
-  return A.W0 * smooth(A.c0, A.c1, cth);
-}
-
 // 寫權重 GLB（格式見 realPlayer.js WEIGHTS_FORMAT）；權重量化成正規化 UNSIGNED_SHORT（每頂點和＝65535）
 export async function writeWeightsGlb(path, rp, pos, w, meta = {}) {
   const n = pos.length / 3;

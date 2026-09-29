@@ -55,7 +55,6 @@ for (const k of ['Hip', 'Knee', 'Ankle', 'Toe', 'Shoulder', 'Elbow', 'Wrist', 'H
 export const BONES = [
   'pelvis', 'rHip', 'rKnee', 'lHip', 'lKnee', 'spine', 'spineUpper', 'neck',
   'rShoulder', 'rElbow', 'rWrist', 'lShoulder', 'lElbow', 'lWrist', 'rAnkle', 'lAnkle',
-  'rArmAux', 'lArmAux',
 ];
 const PARENT = {
   pelvis: null, rHip: 'pelvis', rKnee: 'rHip', lHip: 'pelvis', lKnee: 'lHip',
@@ -63,11 +62,7 @@ const PARENT = {
   rShoulder: 'spineUpper', rElbow: 'rShoulder', rWrist: 'rElbow',
   lShoulder: 'spineUpper', lElbow: 'lShoulder', lWrist: 'lElbow',
   rAnkle: 'rKnee', lAnkle: 'lKnee',
-  rArmAux: 'spineUpper', lArmAux: 'spineUpper',
 };
-// 肩部輔助骨（real-skin 修正，驗收修訂 R2）：與肩關節同位置、同綁定朝向，掛在胸節下；不在 geo 關節樹、
-// geoAnimator 不驅動——每幀由 retargetArms 從上臂的旋轉推出（見 AUX_*）。只供寫實皮膚的權重使用
-const AUX = { rArmAux: 'rShoulder', lArmAux: 'lShoulder' };
 // 權重用的骨段（每骨一到兩段線段＋半徑；torso＝橢圓截面 rx/rz）
 const L = LANDMARKS;
 const TORSO = { rx: 0.19, rz: 0.14 };
@@ -138,7 +133,6 @@ export function computeSkinWeights(positions, normals) {
       eff[b] = Infinity;
       if (side && limbSide && limbSide !== side) continue; // ③
       const seg = SEGMENTS[name];
-      if (!seg) continue; // 輔助骨沒有骨段：不參與自動權重
       let best = Infinity;
       let dot = 0;
       for (const [a, bb] of seg.segs) {
@@ -303,6 +297,89 @@ async function loadBakedWeights(url, pos) {
   return { skinIndex, skinWeight, primary: Uint8Array.from(P) };
 }
 
+// real-skin 修正（驗收修訂 R12，方案 3）：綁定姿勢軀幹符號距離場（tools/bake-real-skin-sdf.mjs 離線產生；
+// 距離場求解只在 tools/，src 只讀檔）。檔案＝與白模同名的 `.sdf.glb`：單一 FLOAT accessor `_SDF`（格點值，x 最快），
+// extras 帶格點原點 min、格距 h、dims、頂點數與（接縫拆分後）綁定位置雜湊。讀不到或不符 ⇒ 不做碰撞修正（console.warn）
+export const SDF_FORMAT = 'real-skin-sdf';
+async function loadBakedSdf(url, pos) {
+  const surl = url.replace(/\.glb(\?.*)?$/i, '.sdf.glb$1');
+  if (surl === url) return null;
+  const fail = (why) => {
+    // eslint-disable-next-line no-console
+    console.warn(`[real-skin] 軀幹距離場不採用（${why}），不做手臂碰撞修正：${surl}`);
+    return null;
+  };
+  let buf;
+  try {
+    const res = await fetch(surl);
+    if (!res.ok) return fail(`HTTP ${res.status}`);
+    buf = await res.arrayBuffer();
+  } catch (e) {
+    return fail(e?.message ?? '讀取失敗');
+  }
+  const dv = new DataView(buf);
+  if (buf.byteLength < 28 || dv.getUint32(0, true) !== 0x46546c67) return fail('不是 GLB');
+  const jsonLen = dv.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+  const ex = json.extras || {};
+  if (ex.format !== SDF_FORMAT) return fail('格式不符');
+  if (ex.vertexCount !== pos.length / 3) return fail('頂點數不符');
+  if (ex.positionHash !== positionHash(pos)) return fail('白模位置雜湊不符');
+  const a = json.accessors.find((x) => x.name === '_SDF');
+  const bv = json.bufferViews[a.bufferView];
+  const [dx, dy, dz] = ex.dims;
+  if (a.count !== dx * dy * dz) return fail('格點數不符');
+  const data = new Float32Array(buf.slice(20 + jsonLen + 8 + (bv.byteOffset || 0), 20 + jsonLen + 8 + (bv.byteOffset || 0) + a.count * 4));
+  return { data, min: ex.min, h: ex.h, dims: ex.dims };
+}
+
+// 碰撞修正的靜態資料（全員共用）：焊接群組（接縫拆分的複製點共用一個位移）、手臂群組（主骨＝肩／肘／腕，且焊接點
+// 不含軀幹主骨）、手臂群組的鄰接（CSR；非手臂鄰居記 -1＝位移恆 0）、各群組的頂點與相鄰三角形（重算法線用）
+const COLLIDE_TORSO = ['pelvis', 'spine', 'spineUpper'];
+function buildCollide(pos, index, primary, sdf) {
+  const n = pos.length / 3;
+  const armB = new Set(BONES.map((b, i) => (/^[rl](Shoulder|Elbow|Wrist)$/.test(b) ? i : -1)).filter((i) => i >= 0));
+  const torsoB = new Set(COLLIDE_TORSO.map((b) => BONES.indexOf(b)));
+  const map = new Map(); const g = new Int32Array(n); let ng = 0;
+  for (let i = 0; i < n; i += 1) {
+    const k = `${Math.round(pos[i * 3] * 1e5)},${Math.round(pos[i * 3 + 1] * 1e5)},${Math.round(pos[i * 3 + 2] * 1e5)}`;
+    let v = map.get(k);
+    if (v === undefined) { v = ng; ng += 1; map.set(k, v); }
+    g[i] = v;
+  }
+  const armG = new Uint8Array(ng); const torsoG = new Uint8Array(ng);
+  for (let i = 0; i < n; i += 1) { if (armB.has(primary[i])) armG[g[i]] = 1; if (torsoB.has(primary[i])) torsoG[g[i]] = 1; }
+  const local = new Int32Array(ng).fill(-1); let na = 0;
+  for (let q = 0; q < ng; q += 1) if (armG[q] && !torsoG[q]) { local[q] = na; na += 1; }
+  const nbr = Array.from({ length: na }, () => new Set());
+  const triOf = Array.from({ length: na }, () => []);
+  for (let t = 0; t < index.length; t += 3) {
+    for (let e = 0; e < 3; e += 1) {
+      const a = g[index[t + e]]; const b = g[index[t + (e + 1) % 3]];
+      if (a !== b) { if (local[a] >= 0) nbr[local[a]].add(b); if (local[b] >= 0) nbr[local[b]].add(a); }
+      if (local[a] >= 0) { const l = triOf[local[a]]; if (l[l.length - 1] !== t) l.push(t); }
+    }
+  }
+  const csr = (lists, f) => {
+    const ptr = new Int32Array(na + 1); let m = 0;
+    for (let a = 0; a < na; a += 1) { m += lists[a].size ?? lists[a].length; ptr[a + 1] = m; }
+    const idx = new Int32Array(m); let o = 0;
+    for (let a = 0; a < na; a += 1) for (const x of lists[a]) { idx[o] = f(x); o += 1; }
+    return { ptr, idx };
+  };
+  const adj = csr(nbr, (q) => local[q]);
+  const tri = csr(triOf, (t) => t);
+  const vl = Array.from({ length: na }, () => []);
+  for (let i = 0; i < n; i += 1) if (local[g[i]] >= 0) vl[local[g[i]]].push(i);
+  const verts = csr(vl, (i) => i);
+  const L = LANDMARKS;
+  return {
+    sdf, n: na, adj, tri, verts, torso: COLLIDE_TORSO.map((b) => BONES.indexOf(b)),
+    // 各軀幹骨負責的綁定高度帶（y）：點轉回該骨綁定空間後落在帶內才查距離場
+    bands: [[-Infinity, L.spine[1] + COLLIDE.BAND], [L.spine[1] - COLLIDE.BAND, L.spineUpper[1] + COLLIDE.BAND], [L.spineUpper[1] - COLLIDE.BAND, Infinity]],
+  };
+}
+
 // 讀白模幾何：縮放到 BASE_H、腳底貼地、補法線（烘焙器 tools/bake-real-skin-weights.mjs 也用這一份）
 export async function loadRealGeometry(url) {
   const gltf = await new GLTFLoader().loadAsync(url);
@@ -325,7 +402,7 @@ export async function loadRealGeometry(url) {
 }
 
 // 載入白模：幾何＋權重（烘焙檔，讀不到則即時計算）＋部位（全員共用）
-export async function loadRealPlayerAsset(url) {
+export async function loadRealPlayerAsset(url, { sdf = true } = {}) {
   const geometry = await loadRealGeometry(url);
   const pos = geometry.attributes.position.array;
   const nor = geometry.attributes.normal.array;
@@ -342,9 +419,13 @@ export async function loadRealPlayerAsset(url) {
   out.computeBoundingBox();
   out.computeBoundingSphere();
   const faces = split.index.length / 3;
+  // sdf:false 只給烘焙器 tools/bake-real-skin-sdf.mjs 用（產生距離場時還沒有距離場）
+  const field = sdf ? await loadBakedSdf(url, split.pos) : null;
   return {
     geometry: out, faces, primary: split.primary, parts: split.parts, url, bridgeTris: split.bridgeTris,
     sole: collectSole(split), weightsSource: baked ? 'baked' : 'computed',
+    collide: field ? buildCollide(split.pos, split.index, split.primary, field) : null,
+    sdfSource: field ? 'baked' : 'none',
   };
 }
 
@@ -440,7 +521,6 @@ function computeBind() {
   const quaternion = {};
   for (const b of BONES) {
     quaternion[b] = new THREE.Quaternion();
-    if (AUX[b]) continue; // 輔助骨：下方照抄對應肩關節
     if (LIMB[b]) {
       position[b] = [0, -v3(L[b]).distanceTo(v3(L[LIMB[b][0]])), 0];
     } else {
@@ -460,7 +540,6 @@ function computeBind() {
     const d = v3(L[next]).sub(v3(L[b])).normalize().applyQuaternion(quaternion[parent].clone().invert());
     quaternion[b].setFromUnitVectors(DOWN, d);
   }
-  for (const [aux, sh] of Object.entries(AUX)) { position[aux] = position[sh].slice(); quaternion[aux].copy(quaternion[sh]); }
   return { position, quaternion };
 }
 const BIND = computeBind();
@@ -480,17 +559,121 @@ const REST_ABDUCT = (8 * Math.PI) / 180;
 // 胸椎扭轉分段（同上裁定）：animator 的胸扭轉（spineUpper 的 Euler y）移 TWIST_SHARE 到 spine，再反解 spineUpper
 // 使胸節的世界朝向與改前完全相同——總扭轉量、雙臂／頭／背號位置都不變，只有中段多轉，蒙皮扭轉分到兩段
 const TWIST_SHARE = 0.5;
-// 肩部輔助骨（驗收修訂 R2）：跟上臂同轉，但上臂方向離胸側矢狀面的外展角 λ 低於 AUX_MIN 時，把輔助骨的方向
-// 軟性夾到 ≥ AUX_MIN（softplus，寬 AUX_SOFT）。上臂內側皮膚部分綁在輔助骨上：手臂垂下時內側皮貼著胸側滑、
-// 不穿進軀幹；舉臂（λ 遠大於 AUX_MIN）時輔助骨＝上臂，等同沒有。不移肩、不平移，只是另一個繞肩關節的旋轉
-const AUX_MIN = (30 * Math.PI) / 180;
-const AUX_SOFT = (5 * Math.PI) / 180;
+// 手臂碰撞修正（驗收修訂 R12，方案 3；implicit skinning〔Vaillant et al. 2013〕接觸處理的簡化版）：
+// 每幀 CPU 蒙皮後，手臂頂點轉回軀幹骨綁定空間查距離場，穿入（距離 < MARGIN）者沿梯度推到表面外 MARGIN，
+// 再在手臂群組上做 SMOOTH 輪鄰居平均（穿入者固定、非手臂鄰居＝0），讓凹痕有過渡。軀幹頂點一律不動（S11）
+const COLLIDE = { MARGIN: 0.004, SMOOTH: 6, BAND: 0.03 };
 
 const STUB_POOL = { claim: (key) => ({ key, index: 0 }) };
 let MAT = null;
 function realMaterial() {
   if (!MAT) MAT = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.8, metalness: 0.02 });
   return MAT;
+}
+
+// 手臂碰撞修正本體（驗收修訂 R12；見 COLLIDE）。C＝asset.collide、MB＝各骨 matrixWorld·boneInverse（16×骨數，行優先同 three）、
+// outP／outN＝已蒙皮的世界座標位置／法線（就地修改）、work＝collideWork(C)。匯出只為實驗治具可在別種蒙皮結果上套同一份修正
+export function collideWork(C) {
+  return { IT: new Float64Array(3 * 16), D: new Float64Array(C.n * 3), D2: new Float64Array(C.n * 3), hit: new Uint8Array(C.n),
+    act: new Int32Array(C.n), inAct: new Uint8Array(C.n), m: new THREE.Matrix4(), stats: { hits: 0, maxPush: 0 } };
+}
+function sdfAt(f, x, y, z) { // 三線性；格外＝+1（外）
+  const nx = f.dims[0]; const ny = f.dims[1]; const nz = f.dims[2];
+  const fx = (x - f.min[0]) / f.h; const fy = (y - f.min[1]) / f.h; const fz = (z - f.min[2]) / f.h;
+  const i = Math.floor(fx); const j = Math.floor(fy); const k = Math.floor(fz);
+  if (i < 0 || j < 0 || k < 0 || i >= nx - 1 || j >= ny - 1 || k >= nz - 1) return 1;
+  const u = fx - i; const v = fy - j; const w = fz - k; const a = f.data;
+  const o = (k * ny + j) * nx + i; const oy = nx; const oz = nx * ny;
+  const c00 = a[o] * (1 - u) + a[o + 1] * u; const c10 = a[o + oy] * (1 - u) + a[o + oy + 1] * u;
+  const c01 = a[o + oz] * (1 - u) + a[o + oz + 1] * u; const c11 = a[o + oz + oy] * (1 - u) + a[o + oz + oy + 1] * u;
+  return (c00 * (1 - v) + c10 * v) * (1 - w) + (c01 * (1 - v) + c11 * v) * w;
+}
+export function collideArms(C, MB, outP, outN, index, work) {
+  const { IT, D, D2, hit, act, inAct, m: _m, stats } = work;
+  stats.hits = 0; stats.maxPush = 0;
+  const { MARGIN } = COLLIDE; const hh = C.sdf.h * 0.5;
+  let s = 1;
+  C.torso.forEach((b, t) => {
+    _m.fromArray(MB, b * 16);
+    if (t === 0) s = Math.cbrt(_m.determinant());
+    _m.invert();
+    IT.set(_m.elements, t * 16);
+  });
+  D.fill(0); D2.fill(0); hit.fill(0); inAct.fill(0);
+  let na = 0;
+  const { ptr: vp, idx: vi } = C.verts;
+  for (let a = 0; a < C.n; a += 1) {
+    const v = vi[vp[a]]; const x = outP[v * 3]; const y = outP[v * 3 + 1]; const z = outP[v * 3 + 2];
+    let bestD = MARGIN; let bt = -1; let bx = 0; let by = 0; let bz = 0;
+    for (let t = 0; t < 3; t += 1) {
+      const e = t * 16;
+      const qy = IT[e + 1] * x + IT[e + 5] * y + IT[e + 9] * z + IT[e + 13];
+      if (qy < C.bands[t][0] || qy > C.bands[t][1]) continue;
+      const qx = IT[e] * x + IT[e + 4] * y + IT[e + 8] * z + IT[e + 12];
+      const qz = IT[e + 2] * x + IT[e + 6] * y + IT[e + 10] * z + IT[e + 14];
+      const d = sdfAt(C.sdf, qx, qy, qz);
+      if (d < bestD) { bestD = d; bt = t; bx = qx; by = qy; bz = qz; }
+    }
+    if (bt < 0) continue;
+    const gx = (sdfAt(C.sdf, bx + hh, by, bz) - sdfAt(C.sdf, bx - hh, by, bz)) / (2 * hh);
+    const gy = (sdfAt(C.sdf, bx, by + hh, bz) - sdfAt(C.sdf, bx, by - hh, bz)) / (2 * hh);
+    const gz = (sdfAt(C.sdf, bx, by, bz + hh) - sdfAt(C.sdf, bx, by, bz - hh)) / (2 * hh);
+    const e = C.torso[bt] * 16;
+    let nx = MB[e] * gx + MB[e + 4] * gy + MB[e + 8] * gz;
+    let ny = MB[e + 1] * gx + MB[e + 5] * gy + MB[e + 9] * gz;
+    let nz = MB[e + 2] * gx + MB[e + 6] * gy + MB[e + 10] * gz;
+    const ln = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (ln < 1e-9) continue;
+    nx /= ln; ny /= ln; nz /= ln;
+    const push = (MARGIN - bestD) * s;
+    D[a * 3] = nx * push; D[a * 3 + 1] = ny * push; D[a * 3 + 2] = nz * push;
+    hit[a] = 1; stats.hits += 1; if (push > stats.maxPush) stats.maxPush = push;
+    act[na] = a; na += 1; inAct[a] = 1;
+  }
+  if (!stats.hits) return stats;
+  // 平滑（Jacobi）：每輪先把作用範圍擴一圈鄰居，只更新範圍內的群組——範圍外的群組鄰居全為 0、平均仍為 0，
+  // 結果與對全體手臂群組做 Jacobi 逐值相同
+  const { ptr: ap, idx: ai } = C.adj;
+  let src = D; let dst = D2;
+  for (let it = 0; it < COLLIDE.SMOOTH; it += 1) {
+    const n0 = na;
+    for (let q = 0; q < n0; q += 1) {
+      const a = act[q];
+      for (let k = ap[a]; k < ap[a + 1]; k += 1) { const j = ai[k]; if (j >= 0 && !inAct[j]) { inAct[j] = 1; act[na] = j; na += 1; } }
+    }
+    for (let q = 0; q < na; q += 1) {
+      const a = act[q];
+      if (hit[a]) { dst[a * 3] = src[a * 3]; dst[a * 3 + 1] = src[a * 3 + 1]; dst[a * 3 + 2] = src[a * 3 + 2]; continue; }
+      let sx = src[a * 3]; let sy = src[a * 3 + 1]; let sz = src[a * 3 + 2];
+      for (let k = ap[a]; k < ap[a + 1]; k += 1) { const j = ai[k]; if (j >= 0) { sx += src[j * 3]; sy += src[j * 3 + 1]; sz += src[j * 3 + 2]; } }
+      const c = ap[a + 1] - ap[a] + 1;
+      dst[a * 3] = sx / c; dst[a * 3 + 1] = sy / c; dst[a * 3 + 2] = sz / c;
+    }
+    const tmp = src; src = dst; dst = tmp;
+  }
+  const { ptr: tp, idx: ti } = C.tri; const ix = index;
+  for (let q = 0; q < na; q += 1) {
+    const a = act[q];
+    const dx = src[a * 3]; const dy = src[a * 3 + 1]; const dz = src[a * 3 + 2];
+    if (dx === 0 && dy === 0 && dz === 0) continue;
+    for (let k = vp[a]; k < vp[a + 1]; k += 1) { const v = vi[k] * 3; outP[v] += dx; outP[v + 1] += dy; outP[v + 2] += dz; }
+  }
+  // 位移過的群組：法線改由相鄰三角形（位移後位置）面積加權重算，同群組的複製點共用
+  for (let q = 0; q < na; q += 1) {
+    const a = act[q];
+    if (src[a * 3] === 0 && src[a * 3 + 1] === 0 && src[a * 3 + 2] === 0) continue;
+    let sx = 0; let sy = 0; let sz = 0;
+    for (let k = tp[a]; k < tp[a + 1]; k += 1) {
+      const t = ti[k]; const i0 = ix[t] * 3; const i1 = ix[t + 1] * 3; const i2 = ix[t + 2] * 3;
+      const ux = outP[i1] - outP[i0]; const uy = outP[i1 + 1] - outP[i0 + 1]; const uz = outP[i1 + 2] - outP[i0 + 2];
+      const wx = outP[i2] - outP[i0]; const wy = outP[i2 + 1] - outP[i0 + 1]; const wz = outP[i2 + 2] - outP[i0 + 2];
+      sx += uy * wz - uz * wy; sy += uz * wx - ux * wz; sz += ux * wy - uy * wx;
+    }
+    const l = Math.sqrt(sx * sx + sy * sy + sz * sz);
+    if (l < 1e-12) continue;
+    for (let k = vp[a]; k < vp[a + 1]; k += 1) { const v = vi[k] * 3; outN[v] = sx / l; outN[v + 1] = sy / l; outN[v + 2] = sz / l; }
+  }
+  return stats;
 }
 
 // 一名寫實球員：geo 關節樹（搬到白模地標）＋SkinnedMesh（共用位置/權重，獨立頂點色）
@@ -512,9 +695,6 @@ export function createRealPlayer(asset, {
     const ankle = new THREE.Object3D();
     joints[`${s}Knee`].add(ankle);
     joints[`${s}Ankle`] = ankle;
-    const aux = new THREE.Object3D(); // 肩部輔助骨（掛在胸節下，見 AUX）
-    joints.spineUpper.add(aux);
-    joints[`${s}ArmAux`] = aux;
   }
   for (const b of BONES) {
     const p = BIND.position[b];
@@ -531,11 +711,18 @@ export function createRealPlayer(asset, {
   // 腳掌平放用：綁定時（root 單位變換）腳骨的世界朝向＝白模腳掌平貼地面的朝向
   const footBindQ = { r: joints.rAnkle.getWorldQuaternion(new THREE.Quaternion()), l: joints.lAnkle.getWorldQuaternion(new THREE.Quaternion()) };
 
+  // 驗收修訂 R12（S12 例外）：CPU 蒙皮＋碰撞修正後寫進一般 Mesh——每人一份 position／normal（世界座標，
+  // 每幀由 updateSkin 覆寫）；綁定位置／法線／權重留在 asset.geometry（全員共用，見回傳的 bindGeometry）
+  const bindGeo = asset.geometry;
+  const nv = bindGeo.attributes.position.count;
   const geometry = new THREE.BufferGeometry();
-  for (const k of ['position', 'normal', 'skinIndex', 'skinWeight']) {
-    geometry.setAttribute(k, asset.geometry.attributes[k]);
-  }
-  geometry.setIndex(asset.geometry.index);
+  const posAttr = new THREE.BufferAttribute(Float32Array.from(bindGeo.attributes.position.array), 3);
+  const norAttr = new THREE.BufferAttribute(Float32Array.from(bindGeo.attributes.normal.array), 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  norAttr.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('position', posAttr);
+  geometry.setAttribute('normal', norAttr);
+  geometry.setIndex(bindGeo.index);
   geometry.boundingBox = asset.geometry.boundingBox;
   geometry.boundingSphere = asset.geometry.boundingSphere;
   const palette = [skin, hair, kit.jersey, kit.shorts, SHOE, PAD_COLOR].map((hex) => new THREE.Color().setHex(hex));
@@ -547,9 +734,8 @@ export function createRealPlayer(asset, {
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
 
-  const mesh = new THREE.SkinnedMesh(geometry, realMaterial());
-  mesh.frustumCulled = false; // 骨架帶著網格跑遍全場，原始包圍球不準
-  mesh.bind(skeleton, new THREE.Matrix4());
+  const mesh = new THREE.Mesh(geometry, realMaterial());
+  mesh.frustumCulled = false; // 頂點是世界座標、帶著球員跑遍全場，原始包圍球不準
   const bindQuats = BONES.map((b) => joints[b].quaternion.clone());
   for (const b of BONES) joints[b].rotation.set(0, 0, 0); // 交給 geoAnimator 的零姿勢
   const { sole } = asset;
@@ -630,7 +816,7 @@ export function createRealPlayer(asset, {
   // animator 每幀都會重寫肩的 x/z，所以偏移不會逐幀累積；同一幀若被呼叫兩次（中間沒有 animator 更新），
   // 先撤銷上一次的偏移再套，結果不變
   const _va = new THREE.Vector3();
-  const _vs = new THREE.Vector3(); const _vt = new THREE.Vector3(); const _qc = new THREE.Quaternion();
+  const _qc = new THREE.Quaternion();
   const lastAbduct = { r: null, l: null };
   let lastSplit = null;
   function splitTwist() {
@@ -643,26 +829,6 @@ export function createRealPlayer(asset, {
     su.quaternion.copy(sp.quaternion).invert().multiply(_qc); // 反解：spine'·chest' ＝ 改前的 spine·chest
     lastSplit = { spineY: sp.rotation.y, chest: su.quaternion.clone() };
   }
-  // 輔助骨：q_aux ＝ C·q_shoulder（皆在胸節框架），C 把上臂方向 d 轉到外展角被軟性夾住的 d'
-  function updateAux(side) {
-    const sh = joints[`${side}Shoulder`]; const aux = joints[`${side}ArmAux`];
-    const ex = side === 'r' ? -1 : 1; // 外側方向（胸節框架 x）
-    _va.set(0, -1, 0).applyQuaternion(sh.quaternion);
-    const a = Math.min(Math.max(_va.x * ex, -1), 1);
-    const lam = Math.asin(a);
-    const lam2 = AUX_MIN + AUX_SOFT * Math.log1p(Math.exp((lam - AUX_MIN) / AUX_SOFT));
-    aux.quaternion.copy(sh.quaternion);
-    if (lam2 - lam > 1e-6) {
-      _vs.set(0, _va.y, _va.z);
-      const sl = _vs.length();
-      if (sl > 1e-6) {
-        _vs.multiplyScalar(Math.cos(lam2) / sl);
-        _vt.set(ex * Math.sin(lam2), 0, 0).add(_vs);
-        _qc.setFromUnitVectors(_va, _vt.normalize());
-        aux.quaternion.premultiply(_qc);
-      }
-    }
-  }
   function retargetArms() {
     splitTwist();
     for (const side of ['r', 'l']) {
@@ -673,14 +839,62 @@ export function createRealPlayer(asset, {
       const offset = (side === 'r' ? -1 : 1) * REST_ABDUCT * Math.max(0, -_va.y); // 右臂在 −X：外展＝z 負
       sh.rotation.z += offset;
       lastAbduct[side] = { after: sh.rotation.z, offset };
-      updateAux(side);
     }
     root.updateMatrixWorld(true);
+  }
+  // ---- 每幀蒙皮（驗收修訂 R12）：LBS → 手臂碰撞修正 → 寫進 mesh 的 position／normal ----
+  const nb = BONES.length;
+  const MB = new Float64Array(nb * 16); // 各骨 matrixWorld·boneInverse
+  const _m = new THREE.Matrix4();
+  const bP = bindGeo.attributes.position.array; const bN = bindGeo.attributes.normal.array;
+  const SI = bindGeo.attributes.skinIndex.array; const SW = bindGeo.attributes.skinWeight.array;
+  const outP = posAttr.array; const outN = norAttr.array;
+  const C = asset.collide;
+  const work = C ? collideWork(C) : null;
+  const stats = work ? work.stats : { hits: 0, maxPush: 0 };
+  function updateSkin() {
+    root.updateMatrixWorld(true);
+    for (let b = 0; b < nb; b += 1) {
+      _m.multiplyMatrices(bones[b].matrixWorld, skeleton.boneInverses[b]);
+      MB.set(_m.elements, b * 16);
+    }
+    for (let i = 0; i < nv; i += 1) {
+      const x = bP[i * 3]; const y = bP[i * 3 + 1]; const z = bP[i * 3 + 2];
+      const u = bN[i * 3]; const v = bN[i * 3 + 1]; const w = bN[i * 3 + 2];
+      let px = 0; let py = 0; let pz = 0; let nx = 0; let ny = 0; let nz = 0;
+      for (let k = 0; k < 4; k += 1) {
+        const wt = SW[i * 4 + k];
+        if (!wt) continue;
+        const e = SI[i * 4 + k] * 16;
+        px += wt * (MB[e] * x + MB[e + 4] * y + MB[e + 8] * z + MB[e + 12]);
+        py += wt * (MB[e + 1] * x + MB[e + 5] * y + MB[e + 9] * z + MB[e + 13]);
+        pz += wt * (MB[e + 2] * x + MB[e + 6] * y + MB[e + 10] * z + MB[e + 14]);
+        nx += wt * (MB[e] * u + MB[e + 4] * v + MB[e + 8] * w);
+        ny += wt * (MB[e + 1] * u + MB[e + 5] * v + MB[e + 9] * w);
+        nz += wt * (MB[e + 2] * u + MB[e + 6] * v + MB[e + 10] * w);
+      }
+      outP[i * 3] = px; outP[i * 3 + 1] = py; outP[i * 3 + 2] = pz;
+      const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      outN[i * 3] = nx / l; outN[i * 3 + 1] = ny / l; outN[i * 3 + 2] = nz / l;
+    }
+    if (C) collideArms(C, MB, outP, outN, bindGeo.index.array, work);
+    posAttr.needsUpdate = true;
+    norAttr.needsUpdate = true;
   }
   root.scale.setScalar(rootScale);
 
   return {
     rig, mesh, skeleton, kit, skin, hair, playerId, teamId, isLibero, height, rootScale,
+    // 驗收修訂 R12：量尺介面（唯讀）——
+    //  bindGeometry：綁定位置／法線／skinIndex／skinWeight（全員共用，與 asset.geometry 同一物件）；
+    //  renderedPositions()／renderedNormals()：畫面這一幀實際送進 GPU 的世界座標（mesh.geometry 的同一個陣列，不得寫入）；
+    //  updateSkin()：以目前骨架重算 position／normal（groundLegs 結尾已自動呼叫；量尺自己改姿勢後再呼叫）；
+    //  skinStats()：最近一次 updateSkin 的碰撞群組數與最大推出量（m）
+    bindGeometry: bindGeo,
+    renderedPositions: () => outP,
+    renderedNormals: () => outN,
+    updateSkin,
+    skinStats: () => ({ ...stats, collide: Boolean(C) }),
     // 接地（A9／A10）：animator 更新、root 高度寫好之後呼叫。鞋底入地的那隻腳用兩骨 IK
     // 抬回地面（骨盆不動＝保留動畫的下蹲深度）；腳在空中不介入。IK 迭代後仍有殘差
     // （例：蹲到大腿小腿折疊極限、目標比 |大腿−小腿| 還近）才退回抬 root，回傳是否動用。
@@ -719,6 +933,7 @@ export function createRealPlayer(asset, {
       const low = soleMin(null);
       const lifted = low < -IK_EPS;
       if (lifted) { root.position.y -= low; root.updateMatrixWorld(true); }
+      updateSkin(); // 驗收修訂 R12：接地之後才蒙皮，mesh 畫的就是這一幀的最終姿勢
       return { ik, lifted, residual: lifted ? -low : 0 };
     },
     legPreIK() {
