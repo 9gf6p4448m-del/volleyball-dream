@@ -39,13 +39,13 @@ test('loadAppearancePref／resolvePlayerAppearance：storage 缺失或拋錯不�
   assert.doesNotThrow(() => saveAppearancePref(throwingSet, 'real'));
 });
 
-test('resolvePlayerAppearance：faces 只認 &faces=5k，其餘一律 20000', () => {
+test('resolvePlayerAppearance：faces 只認 &faces=20k，其餘一律 5000（R14 預設 5k）', () => {
   const s = fakeStorage();
-  assert.equal(resolvePlayerAppearance({ storage: s, params: fakeParams({}) }).faces, 20000);
+  assert.equal(resolvePlayerAppearance({ storage: s, params: fakeParams({}) }).faces, 5000);
   assert.equal(resolvePlayerAppearance({ storage: s, params: fakeParams({ faces: '5k' }) }).faces, 5000);
   assert.equal(resolvePlayerAppearance({ storage: s, params: fakeParams({ faces: '20k' }) }).faces, 20000);
-  assert.equal(resolvePlayerAppearance({ storage: s, params: fakeParams({ faces: 'bogus' }) }).faces, 20000);
-  assert.equal(resolvePlayerAppearance({ storage: s, params: null }).faces, 20000);
+  assert.equal(resolvePlayerAppearance({ storage: s, params: fakeParams({ faces: 'bogus' }) }).faces, 5000);
+  assert.equal(resolvePlayerAppearance({ storage: s, params: null }).faces, 5000);
 });
 
 test('resolvePlayerAppearance：appearance 隨 storage 而定，與 params 無關', () => {
