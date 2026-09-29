@@ -1,0 +1,1085 @@
+{
+  "createdAt": "2026-09-28T16:14:59.993Z",
+  "base": "http://127.0.0.1:5232",
+  "head": "d143b260172e59abebdeb0c5a2df455d2afb7564",
+  "dirty": [],
+  "method": "生涯比賽（直接呼叫 resolveMatchConfig/buildMatchStage/startMatchLoop，跳過新生涯精靈與出戰按鈕的選單導航；換人走 stage.handlers.requestSub 正式路徑）＋ page.clock 虛擬時間 ＋ no-op 渲染（CPU 側量測不依賴實際 render()）",
+  "device": "Desktop headless Chromium（SwiftShader/WebGL）；非真機 FPS（B11 由使用者手機另測）",
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "sampleEvery": 10,
+  "targetTicks": 10800,
+  "subAtTick": 3000,
+  "sessions": {},
+  "pass": {
+    "B2": true,
+    "B3": true,
+    "B4": true,
+    "B5": true,
+    "B6": true,
+    "B7": true,
+    "B8b": true,
+    "B9": true,
+    "B12": null,
+    "H1": true
+  },
+  "perSeed": {
+    "1": {
+      "matchEntryId": "group-1",
+      "finalTickGeo": 11253,
+      "finalTickReal": 11254,
+      "commonTickCount": 1126,
+      "visibleCountMismatches": 0,
+      "b2Pass": true,
+      "geoPoolCheck": {
+        "playerCount": 19,
+        "candidateCount": 12,
+        "nonEmptyPools": [],
+        "allEmpty": true
+      },
+      "b3HandOk": true,
+      "b3SoleOk": true,
+      "b3SampleCount": 21394,
+      "b4Ok": true,
+      "b4SampleCount": 21394,
+      "b5PlateOk": true,
+      "b5PlateSampleCount": 15764,
+      "b6EventsEqual": true,
+      "b6SnapshotEqual": null,
+      "b6ActivityOk": true,
+      "b6StateSigEqual": true,
+      "b6CommonStateTick": 11250,
+      "b6FinalTickAligned": false,
+      "hasLiberoSwap": true,
+      "hasSubstitution": true,
+      "subTick": 3276,
+      "h1Geo": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9909839113608285,
+        "ratioMin": 0.9712833965217305,
+        "ratioSpread": 1.020282972930092,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.9423284662672238
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.703145388765115
+        },
+        "headDiff": 0.23918307750210888,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "h1Real": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9866701763653623,
+        "ratioMin": 0.9678257187158451,
+        "ratioSpread": 1.019470920523295,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.93387354567611
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.695725764572913
+        },
+        "headDiff": 0.23814778110319712,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "colorCheck": [
+        {
+          "id": "A1",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A2",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A3",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A4",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A5",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A6",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "AL",
+          "teamId": "A",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 16762161,
+          "expected": 16762161,
+          "ok": true
+        },
+        {
+          "id": "A7",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "B1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B5",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B6",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BL",
+          "teamId": "B",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 14209736,
+          "expected": 14209736,
+          "ok": true
+        },
+        {
+          "id": "BR1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        }
+      ],
+      "seqCoverage": [
+        "serve",
+        "receiveReady",
+        "bump",
+        "transitionWait",
+        "setReady",
+        "overhead",
+        "approach3",
+        "windup",
+        "spikeHold",
+        "spike",
+        "blockJump",
+        "landSoft",
+        "cheer",
+        "overheadJump",
+        "approach4",
+        "serveFloat",
+        "highfive"
+      ],
+      "errors": []
+    },
+    "2": {
+      "matchEntryId": "group-1",
+      "finalTickGeo": 10933,
+      "finalTickReal": 10931,
+      "commonTickCount": 1094,
+      "visibleCountMismatches": 0,
+      "b2Pass": true,
+      "geoPoolCheck": {
+        "playerCount": 19,
+        "candidateCount": 12,
+        "nonEmptyPools": [],
+        "allEmpty": true
+      },
+      "b3HandOk": true,
+      "b3SoleOk": true,
+      "b3SampleCount": 20786,
+      "b4Ok": true,
+      "b4SampleCount": 20786,
+      "b5PlateOk": true,
+      "b5PlateSampleCount": 15316,
+      "b6EventsEqual": true,
+      "b6SnapshotEqual": null,
+      "b6ActivityOk": true,
+      "b6StateSigEqual": true,
+      "b6CommonStateTick": 10930,
+      "b6FinalTickAligned": false,
+      "hasLiberoSwap": true,
+      "hasSubstitution": true,
+      "subTick": 3000,
+      "h1Geo": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9909801864542803,
+        "ratioMin": 0.9712751631698637,
+        "ratioSpread": 1.0202877866454518,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.9423211654503894
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.7031389819258518
+        },
+        "headDiff": 0.23918218352453757,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "h1Real": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.986670679495267,
+        "ratioMin": 0.9678282283121235,
+        "ratioSpread": 1.019468796871119,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.9338745318107233
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.695726629956349
+        },
+        "headDiff": 0.2381479018543744,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "colorCheck": [
+        {
+          "id": "A1",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A2",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A3",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A4",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A5",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A6",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "AL",
+          "teamId": "A",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 16762161,
+          "expected": 16762161,
+          "ok": true
+        },
+        {
+          "id": "A7",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "B1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B5",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B6",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BL",
+          "teamId": "B",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 14209736,
+          "expected": 14209736,
+          "ok": true
+        },
+        {
+          "id": "BR1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        }
+      ],
+      "seqCoverage": [
+        "serve",
+        "receiveReady",
+        "bump",
+        "transitionWait",
+        "setReady",
+        "overhead",
+        "approach3",
+        "windup",
+        "spikeHold",
+        "spike",
+        "blockJump",
+        "landSoft",
+        "cheer",
+        "serveFloat",
+        "overheadJump",
+        "dive",
+        "approach4"
+      ],
+      "errors": []
+    },
+    "3": {
+      "matchEntryId": "group-1",
+      "finalTickGeo": 11694,
+      "finalTickReal": 11693,
+      "commonTickCount": 1170,
+      "visibleCountMismatches": 0,
+      "b2Pass": true,
+      "geoPoolCheck": {
+        "playerCount": 19,
+        "candidateCount": 12,
+        "nonEmptyPools": [],
+        "allEmpty": true
+      },
+      "b3HandOk": true,
+      "b3SoleOk": true,
+      "b3SampleCount": 22230,
+      "b4Ok": true,
+      "b4SampleCount": 22230,
+      "b5PlateOk": true,
+      "b5PlateSampleCount": 16380,
+      "b6EventsEqual": true,
+      "b6SnapshotEqual": null,
+      "b6ActivityOk": true,
+      "b6StateSigEqual": true,
+      "b6CommonStateTick": 11690,
+      "b6FinalTickAligned": false,
+      "hasLiberoSwap": true,
+      "hasSubstitution": true,
+      "subTick": 3034,
+      "h1Geo": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9909831671840896,
+        "ratioMin": 0.9712817538749579,
+        "ratioSpread": 1.0202839322683994,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.9423270076808157
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.703144108781124
+        },
+        "headDiff": 0.23918289889969158,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "h1Real": {
+        "ok": true,
+        "tick": 0,
+        "entryCount": 19,
+        "heightSpread": 0.24,
+        "ratioMax": 0.9866700078853049,
+        "ratioMin": 0.9678248781662998,
+        "ratioSpread": 1.0194716318459496,
+        "tallest": {
+          "id": "A3",
+          "height": 1.96,
+          "headTopY": 1.9338732154551976
+        },
+        "shortest": {
+          "id": "BL",
+          "height": 1.72,
+          "headTopY": 1.6957254747872141
+        },
+        "headDiff": 0.2381477406679835,
+        "heightDiff": 0.24,
+        "spreadOk": true,
+        "ratioOk": true,
+        "propOk": true
+      },
+      "colorCheck": [
+        {
+          "id": "A1",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A2",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A3",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A4",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A5",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "A6",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "AL",
+          "teamId": "A",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 16762161,
+          "expected": 16762161,
+          "ok": true
+        },
+        {
+          "id": "A7",
+          "teamId": "A",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 3046399,
+          "expected": 3046399,
+          "ok": true
+        },
+        {
+          "id": "B1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B5",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "B6",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BL",
+          "teamId": "B",
+          "isLibero": true,
+          "sampled": 1051,
+          "torsoMode": 14209736,
+          "expected": 14209736,
+          "ok": true
+        },
+        {
+          "id": "BR1",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR2",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR3",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        },
+        {
+          "id": "BR4",
+          "teamId": "B",
+          "isLibero": false,
+          "sampled": 1051,
+          "torsoMode": 7031342,
+          "expected": 7031342,
+          "ok": true
+        }
+      ],
+      "seqCoverage": [
+        "serve",
+        "receiveReady",
+        "bump",
+        "transitionWait",
+        "approach3",
+        "setReady",
+        "overheadJump",
+        "windup",
+        "spikeHold",
+        "landSoft",
+        "spike",
+        "blockJump",
+        "cheer",
+        "overhead",
+        "approach4",
+        "serveFloat",
+        "highfive"
+      ],
+      "errors": []
+    }
+  },
+  "b3Coverage": {
+    "distinctKeys": [
+      "serve",
+      "receiveReady",
+      "bump",
+      "transitionWait",
+      "setReady",
+      "overhead",
+      "approach3",
+      "windup",
+      "spikeHold",
+      "spike",
+      "blockJump",
+      "landSoft",
+      "cheer",
+      "overheadJump",
+      "approach4",
+      "serveFloat",
+      "highfive",
+      "dive"
+    ],
+    "count": 18,
+    "groupsCovered": {
+      "bump": true,
+      "overhead": true,
+      "spike": true,
+      "block": true,
+      "serve": true,
+      "approach": true
+    },
+    "allGroupsOk": true,
+    "countOk": true
+  },
+  "colorAllOk": true,
+  "n4Ok": true,
+  "plateMeshCounts": {
+    "1": 28,
+    "2": 28,
+    "3": 28
+  },
+  "b7": {
+    "protectedDiff": "",
+    "protectedDiffEmpty": true,
+    "importers": [
+      "src/app/realPreview.js",
+      "src/render/matchView.js"
+    ],
+    "extraImporters": [],
+    "importersOk": true,
+    "pass": true
+  },
+  "b8b": {
+    "seed": 1,
+    "finalTick": 3971,
+    "debug": {
+      "appearance": "real",
+      "faces": 20000
+    },
+    "errors": [],
+    "commonTickCount": 398,
+    "visibleCountMismatches": 0,
+    "appearanceStayedReal": true,
+    "facesStayed20k": true,
+    "pass": true
+  },
+  "b9": {
+    "seed": 1,
+    "toastText": "寫實模型載入失敗，本場改用幾何球員顯示",
+    "debugNow": {
+      "appearance": "real",
+      "realLoadFailed": true,
+      "unitsAllGeo": true
+    },
+    "finalTick": 3971,
+    "stillPlaying": true,
+    "pageerrors": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "[real-match] 寫實模型載入失敗，本場改用幾何球員 HttpError: fetch for \"http://127.0.0.1:5232/models/real/player_20k.glb\" responded with 404: Not Found\n    at http://127.0.0.1:5232/node_modules/.vite/deps/chunk-QSMTSKNO.js?v=b3f14e18:23423:15"
+    ],
+    "toastHasSubstring": true,
+    "pass": true
+  },
+  "b12": null,
+  "sessionsSummary": {
+    "1:geo": {
+      "finalTick": 11253,
+      "sampleCount": 1126,
+      "errors": [],
+      "subResult": {
+        "tick": 3276,
+        "inId": "A7",
+        "outId": "A3",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 235,
+      "eventCounts": {
+        "LIBERO_SWAP": 8,
+        "SERVE": 27,
+        "BALL_OVER_NET": 40,
+        "TOUCH": 73,
+        "DEAD_BALL": 26,
+        "SCORE": 26,
+        "ROTATE": 14,
+        "MOMENTUM": 12,
+        "BLOCK_TOUCH": 8,
+        "SUBSTITUTION": 1
+      }
+    },
+    "1:real": {
+      "finalTick": 11254,
+      "sampleCount": 1126,
+      "errors": [],
+      "subResult": {
+        "tick": 3276,
+        "inId": "A7",
+        "outId": "A3",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 235,
+      "eventCounts": {
+        "LIBERO_SWAP": 8,
+        "SERVE": 27,
+        "BALL_OVER_NET": 40,
+        "TOUCH": 73,
+        "DEAD_BALL": 26,
+        "SCORE": 26,
+        "ROTATE": 14,
+        "MOMENTUM": 12,
+        "BLOCK_TOUCH": 8,
+        "SUBSTITUTION": 1
+      }
+    },
+    "2:geo": {
+      "finalTick": 10933,
+      "sampleCount": 1094,
+      "errors": [],
+      "subResult": {
+        "tick": 3000,
+        "inId": "A7",
+        "outId": "A4",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 239,
+      "eventCounts": {
+        "LIBERO_SWAP": 13,
+        "SERVE": 25,
+        "BALL_OVER_NET": 49,
+        "TOUCH": 80,
+        "DEAD_BALL": 24,
+        "SCORE": 24,
+        "ROTATE": 17,
+        "SUBSTITUTION": 1,
+        "BLOCK_TOUCH": 4,
+        "MOMENTUM": 2
+      }
+    },
+    "2:real": {
+      "finalTick": 10931,
+      "sampleCount": 1094,
+      "errors": [],
+      "subResult": {
+        "tick": 3000,
+        "inId": "A7",
+        "outId": "A4",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 239,
+      "eventCounts": {
+        "LIBERO_SWAP": 13,
+        "SERVE": 25,
+        "BALL_OVER_NET": 49,
+        "TOUCH": 80,
+        "DEAD_BALL": 24,
+        "SCORE": 24,
+        "ROTATE": 17,
+        "SUBSTITUTION": 1,
+        "BLOCK_TOUCH": 4,
+        "MOMENTUM": 2
+      }
+    },
+    "3:geo": {
+      "finalTick": 11694,
+      "sampleCount": 1170,
+      "errors": [],
+      "subResult": {
+        "tick": 3034,
+        "inId": "A7",
+        "outId": "A3",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 244,
+      "eventCounts": {
+        "LIBERO_SWAP": 7,
+        "SERVE": 25,
+        "BALL_OVER_NET": 46,
+        "TOUCH": 88,
+        "BLOCK_TOUCH": 8,
+        "DEAD_BALL": 24,
+        "SCORE": 24,
+        "ROTATE": 11,
+        "MOMENTUM": 10,
+        "SUBSTITUTION": 1
+      }
+    },
+    "3:real": {
+      "finalTick": 11693,
+      "sampleCount": 1170,
+      "errors": [],
+      "subResult": {
+        "tick": 3034,
+        "inId": "A7",
+        "outId": "A3",
+        "ok": true,
+        "reason": ""
+      },
+      "eventsLen": 244,
+      "eventCounts": {
+        "LIBERO_SWAP": 7,
+        "SERVE": 25,
+        "BALL_OVER_NET": 46,
+        "TOUCH": 88,
+        "BLOCK_TOUCH": 8,
+        "DEAD_BALL": 24,
+        "SCORE": 24,
+        "ROTATE": 11,
+        "MOMENTUM": 10,
+        "SUBSTITUTION": 1
+      }
+    }
+  },
+  "vacuousGuard": {
+    "b3SamplesOk": true,
+    "b4SamplesOk": true,
+    "b5PlateSamplesOk": true
+  }
+}

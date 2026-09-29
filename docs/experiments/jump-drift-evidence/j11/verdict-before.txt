@@ -1,0 +1,40 @@
+== J11 改前 d143b26（6 場：1, 2, 3, 1@iron-mist, 2@iron-mist, 3@iron-mist；上限 0.08 m／幀，落地後 0.2 s）
+[R5:spike] n=162（6 場）單幀最大下降 0.546 m（2@iron-mist/A6@8936 第 64 幀 tick 8979，落地後 0 幀，landSoft→landSoft，ry 0.589→0.043，jumpY 0.500→0.000）；>0.08 共 158 筆
+    1/B4@375 drop 0.410 第 91 幀（落地後 0）landSoft→landSoft jumpY 0.363→0.000
+    1/A4@2796 drop 0.437 第 60 幀（落地後 0）landSoft→landSoft jumpY 0.405→0.000
+    1/B4@3219 drop 0.407 第 61 幀（落地後 0）landSoft→landSoft jumpY 0.369→0.000
+    1/A4@3861 drop 0.402 第 62 幀（落地後 0）landSoft→landSoft jumpY 0.370→0.000
+    1/B5@4308 drop 0.383 第 62 幀（落地後 0）landSoft→landSoft jumpY 0.349→0.000
+[R5:back] n=17（5 場）單幀最大下降 0.502 m（2@iron-mist/A5@10382 第 27 幀 tick 10406，落地後 0 幀，spike→transitionWait，ry 0.651→0.150，jumpY 0.492→0.000）；>0.08 共 17 筆
+    1/B4@5879 drop 0.397 第 61 幀（落地後 0）landSoft→landSoft jumpY 0.369→0.000
+    1/A4@9570 drop 0.435 第 60 幀（落地後 0）landSoft→landSoft jumpY 0.387→0.000
+    1/A5@12978 drop 0.396 第 61 幀（落地後 0）landSoft→landSoft jumpY 0.369→0.000
+    1/B2@15317 drop 0.397 第 62 幀（落地後 0）landSoft→landSoft jumpY 0.349→0.000
+    3/A5@1037 drop 0.410 第 61 幀（落地後 0）landSoft→landSoft jumpY 0.369→0.000
+[R5:jumpServe] n=31（3 場）單幀最大下降 0.050 m（2@iron-mist/B2@1358 第 57 幀 tick 1413，落地後 4 幀，landSoft→landSoft，ry -0.114→-0.164，jumpY 0.000→0.000）；>0.08 共 0 筆
+[R5:jumpSet] n=37（6 場）單幀最大下降 0.139 m（3@iron-mist/B1@13508 第 35 幀 tick 13542，落地後 0 幀，landSoft→landSoft，ry 0.110→-0.029，jumpY 0.096→0.000）；>0.08 共 17 筆
+    1/A1@7866 drop 0.083 第 37 幀（落地後 0）landSoft→landSoft jumpY 0.045→0.000
+    1/A1@12070 drop 0.086 第 37 幀（落地後 0）landSoft→landSoft jumpY 0.045→0.000
+    2/A1@719 drop 0.104 第 37 幀（落地後 0）landSoft→landSoft jumpY 0.045→0.000
+    2/A1@11577 drop 0.090 第 37 幀（落地後 0）landSoft→landSoft jumpY 0.045→0.000
+    2/A1@13483 drop 0.084 第 37 幀（落地後 0）landSoft→landSoft jumpY 0.045→0.000
+[R5:block] n=419（6 場）單幀最大下降 0.224 m（3/B2@9926 第 23 幀 tick 9945，落地後 0 幀，blockJump→receiveReady，ry 0.191→-0.033，jumpY 0.200→0.000）；>0.08 共 3 筆
+    2/B2@6623 drop 0.144 第 25 幀（落地後 0）blockJump→receiveReady jumpY 0.125→0.000
+    2/A4@11817 drop 0.142 第 35 幀（落地後 0）blockJump→transitionWait jumpY 0.134→0.000
+    3/B2@9926 drop 0.224 第 23 幀（落地後 0）blockJump→receiveReady jumpY 0.200→0.000
+[R5:setterAtk] n=4（4 場）單幀最大下降 0.078 m（1@iron-mist/B1@12970 第 23 幀 tick 12990，落地後 -10 幀，spike→spike，ry 0.460→0.382，jumpY 0.393→0.348）；>0.08 共 0 筆
+[其他:other:serve] n=142（6 場）單幀最大下降 0.028 m（3@iron-mist/A5@11624 第 44 幀 tick 11666，落地後 0 幀，serve→null，ry 0.010→-0.018，jumpY 0.021→0.000）；>0.08 共 0 筆
+[其他:decoy] n=309（6 場）單幀最大下降 0.507 m（3/B2@8941 第 61 幀 tick 8980，落地後 0 幀，spikeHold→receiveReady，ry 0.390→-0.118，jumpY 0.396→0.000）；>0.08 共 5 筆
+    2/B2@5440 drop 0.394 第 11 幀（落地後 0）spikeHold→receiveReady jumpY 0.288→0.000
+    3/B6@7686 drop 0.448 第 15 幀（落地後 0）spikeHold→receiveReady jumpY 0.372→0.000
+    3/B2@8941 drop 0.507 第 61 幀（落地後 0）spikeHold→receiveReady jumpY 0.396→0.000
+    1@iron-mist/A6@12977 drop 0.507 第 19 幀（落地後 0）spikeHold→receiveReady jumpY 0.436→0.000
+    3@iron-mist/A5@11069 drop 0.354 第 9 幀（落地後 0）spikeHold→receiveReady jumpY 0.241→0.000
+[其他:other:cheer] n=896（6 場）單幀最大下降 0.033 m（1@iron-mist/B3@6171 第 57 幀 tick 6225，落地後 1 幀，null→null，ry -0.011→-0.044，jumpY 0.000→0.000）；>0.08 共 0 筆
+[其他:other:highfive] n=196（6 場）單幀最大下降 0.033 m（3/B3@3034 第 82 幀 tick 3112，落地後 1 幀，null→null，ry -0.011→-0.044，jumpY 0.000→0.000）；>0.08 共 0 筆
+[其他:other:overheadJump] n=2（1 場）單幀最大下降 0.216 m（1/B1@13335 第 27 幀 tick 13361，落地後 0 幀，overheadJump→overhead，ry 0.249→0.034，jumpY 0.261→0.000）；>0.08 共 2 筆
+    1/A1@13129 drop 0.149 第 27 幀（落地後 0）overheadJump→overhead jumpY 0.261→0.000
+    1/B1@13335 drop 0.216 第 27 幀（落地後 0）overheadJump→overhead jumpY 0.261→0.000
+[重演剪接] 窗口內夾精華重演的幀對 204 處（不算單幀，另列）：1/A1@2876[other:cheer] 第 1 幀 落差 0.012 m（中間 176 個重演畫面）；1/A2@2876[other:cheer] 第 1 幀 落差 0.048 m（中間 176 個重演畫面）；1/A3@2876[other:cheer] 第 1 幀 落差 0.014 m（中間 176 個重演畫面）；1/A4@2876[other:cheer] 第 1 幀 落差 0.015 m（中間 176 個重演畫面）；1/A5@2876[other:cheer] 第 1 幀 落差 0.013 m（中間 176 個重演畫面）；1/AL@2876[other:cheer] 第 1 幀 落差 0.014 m（中間 176 個重演畫面）；1/A1@3938[other:cheer] 第 1 幀 落差 0.011 m（中間 164 個重演畫面）；1/A2@3938[other:cheer] 第 1 幀 落差 0.015 m（中間 164 個重演畫面）
+[J11] R5 六類合計 n=670，單幀最大下降 0.546 m，>0.08 共 195 筆；每類 ≥5 筆：不足 setterAtk=4
+[J11 判定] 不過（有 >0.08）
