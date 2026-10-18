@@ -39,6 +39,7 @@ import { resolveMatchConfig, resolveTechGates } from './app/matchConfig.js';
 import { buildMatchStage } from './app/matchStage.js';
 import { startMatchLoop } from './app/matchLoop.js';
 import { markMatchStarted } from './app/matchCareer.js';
+import { installUpdateBar, isFreshUpdateLoad } from './app/updateBar.js';
 
 const PLAYER_ID = 'A2'; // 開局受控者；全隊輪控會依球權自動切換（07-21 Sawmah 拍板）
 
@@ -423,6 +424,9 @@ async function runBench(ctx) {
 
 init().catch(showFatalError);
 
+// 「🆕 有新版，點這裡更新」更新列：不依賴 init 成功（開機當掉時新版可能就是解藥）
+installUpdateBar();
+
 // PWA service worker（僅存在於 vite 建置環境；測試直接 import sim 模組不經過這裡）
 // autoUpdate 的更新在「下次重整」才生效＝玩家永遠慢一版；改為新 SW 接管瞬間
 // 自動重載一次拿到最新版。只在載入初期（<15s）重載——絕不打斷進行中的比賽
@@ -433,12 +437,17 @@ if ('serviceWorker' in navigator) {
   // 只剩 FPS 角標）——這段只該在「真的有舊版本被取代」時才觸發。
   const hadController = !!navigator.serviceWorker.controller;
   let swRefreshed = false;
+  // 2026-10-18：按更新列導過來的頁（isFreshUpdateLoad）是直接從網路拿的新版，
+  // 新 SW 接管時不必再重載（兩條重載路徑都要擋：這裡＋registerSW 的 onNeedReload）
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || swRefreshed || performance.now() > 15000) return;
+    if (!hadController || swRefreshed || performance.now() > 15000 || isFreshUpdateLoad()) return;
     swRefreshed = true;
     window.location.reload();
   });
   import('virtual:pwa-register')
-    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .then(({ registerSW }) => registerSW({
+      immediate: true,
+      onNeedReload: () => { if (!isFreshUpdateLoad()) window.location.reload(); },
+    }))
     .catch(() => { /* dev 模式無 SW，忽略 */ });
 }

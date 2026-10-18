@@ -31,6 +31,14 @@ export default defineConfig({
     },
   },
   plugins: [
+    // 2026-10-18 更新列（src/app/updateBar.js）：同一個 BUILD_ID 也寫進 index.html，
+    // 開著的舊頁面抓線上 index.html 讀這個 meta 就知道有沒有新版（版本來源仍只有 BUILD_ID）
+    {
+      name: 'vd-build-meta',
+      transformIndexHtml: () => [
+        { tag: 'meta', attrs: { name: 'vd-build', content: BUILD_ID }, injectTo: 'head-prepend' },
+      ],
+    },
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
@@ -40,6 +48,9 @@ export default defineConfig({
         // 進賽場卷 2A（B10）：寫實模式的 glb 白模要離線可用——PWA 開寫實模式不能因為
         // 沒網路就叫不到模型；20k／5k 兩檔都收（使用者可能切 &faces=5k 重量）
         globPatterns: ['**/*.{js,css,html,png,webmanifest}', 'audio/sfx/*.m4a', 'models/real/*.glb'],
+        // 2026-10-18 更新列：按「有新版」導到 ?v=<新版>——這種導覽不給 SW 用預快取的舊
+        // index.html 回應，一律走網路拿新版；就算新 SW 安裝失敗也不會卡在舊版。其餘導覽照舊離線可用
+        navigateFallbackDenylist: [/[?&]v=/],
       },
       manifest: {
         name: '排球夢',

@@ -74,12 +74,24 @@
       #loading .ld-msg { font-size: 14px; opacity: 0.65; animation: ldPulse 1.6s ease-in-out infinite; }
       @keyframes ldBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
       @keyframes ldPulse { 0%, 100% { opacity: 0.65; } 50% { opacity: 0.25; } }
+      /* 2026-10-18 更新列（src/app/updateBar.js，比照妖市 #updBar）：有新版才亮，點了才重載；
+         z-index 壓過所有面板（含 fatal-error 999）——當掉時新版可能就是解藥 */
+      #updBar {
+        display: none; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 6px); left: 50%;
+        transform: translateX(-50%); z-index: 1000; padding: 6px 14px; border-radius: 20px;
+        background: #2a2344; color: #ffd166; border: 1px solid #ffd166;
+        font: 13px/1.4 system-ui, sans-serif; white-space: nowrap; cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); pointer-events: auto;
+      }
+      #updBar.on { display: block; animation: updPop 0.25s ease-out; }
+      @keyframes updPop { from { transform: translateX(-50%) scale(0.8); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="hud"></div>
     <div id="loading"><div class="ld-logo">排球夢</div><div class="ld-sub">VOLLEYBALL DREAM</div><div class="ld-ball">🏐</div><div class="ld-msg">載入模型中…</div></div>
+    <div id="updBar" role="button"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
